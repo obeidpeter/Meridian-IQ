@@ -30,6 +30,35 @@ export const GetMeResponse = zod.object({
 })
 
 
+/**
+ * @summary Email + password sign-in; sets the HttpOnly session cookie
+ */
+export const loginBodyEmailMin = 3;
+
+
+
+
+export const LoginBody = zod.object({
+  "email": zod.string().min(loginBodyEmailMin),
+  "password": zod.string().min(1)
+})
+
+export const LoginResponse = zod.object({
+  "userId": zod.string(),
+  "role": zod.string(),
+  "firmId": zod.string().nullish(),
+  "clientPartyId": zod.string().nullish(),
+  "buyerPartyId": zod.string().nullish(),
+  "capabilities": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Clear the session cookie
+ */
+export const LogoutResponse = zod.void()
+
+
 export const ListFirmsResponseItem = zod.object({
   "id": zod.string(),
   "name": zod.string(),

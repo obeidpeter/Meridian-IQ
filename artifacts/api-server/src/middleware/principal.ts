@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
 import { getDb, usersTable, membershipsTable, type Role } from "@workspace/db";
 import type { Principal } from "../modules/auth/rbac";
+import { SESSION_COOKIE, verifySessionToken } from "../modules/auth/session";
 
 // Principal resolution.
 //
@@ -31,12 +32,14 @@ const VALID_ROLES: Role[] = [
 ];
 
 // Routes reachable without a principal (health probe, public stamp
-// verification, and subdomain branding resolution — the white-label shell needs
-// its theme before any login).
+// verification, subdomain branding resolution — the white-label shell needs
+// its theme before any login — and the session endpoints themselves).
 const PUBLIC_PATHS = new Set([
   "/api/healthz",
   "/api/verify-stamp",
   "/api/public/theme",
+  "/api/auth/login",
+  "/api/auth/logout",
 ]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
@@ -102,6 +105,41 @@ function resolveDevPrincipal(req: Request): Principal | null {
   };
 }
 
+// First-party cookie session (see modules/auth/session.ts): a signed token in
+// an HttpOnly cookie resolves to a platform user; tenancy and role come from
+// the membership table exactly as in the Clerk path. Multi-membership users
+// disambiguate with x-firm-id.
+async function resolveSessionPrincipal(req: Request): Promise<Principal | null> {
+  const token = (req as Request & { cookies?: Record<string, string> }).cookies?.[
+    SESSION_COOKIE
+  ];
+  if (!token) return null;
+  const userId = await verifySessionToken(token);
+  if (!userId) return null;
+  const memberships = await getDb()
+    .select({
+      firmId: membershipsTable.firmId,
+      role: membershipsTable.role,
+      clientPartyId: membershipsTable.clientPartyId,
+      buyerPartyId: membershipsTable.buyerPartyId,
+    })
+    .from(membershipsTable)
+    .where(eq(membershipsTable.userId, userId));
+  if (memberships.length === 0) return null;
+  const requestedFirm = header(req, "x-firm-id");
+  const membership = requestedFirm
+    ? memberships.find((m) => m.firmId === requestedFirm)
+    : memberships[0];
+  if (!membership) return null;
+  return {
+    userId,
+    role: membership.role,
+    firmId: membership.firmId,
+    clientPartyId: membership.clientPartyId,
+    buyerPartyId: membership.buyerPartyId,
+  };
+}
+
 export function resolvePrincipal(
   req: Request,
   res: Response,
@@ -111,9 +149,19 @@ export function resolvePrincipal(
     next();
     return;
   }
-  const resolve = IS_PRODUCTION
-    ? resolveClerkPrincipal(req)
-    : Promise.resolve(resolveDevPrincipal(req));
+  // Resolution order: explicit dev headers (never honoured in production) win
+  // for tests and tooling; then the first-party session cookie; then a
+  // Clerk-verified session in production.
+  const resolve = (async (): Promise<Principal | null> => {
+    if (!IS_PRODUCTION) {
+      const dev = resolveDevPrincipal(req);
+      if (dev) return dev;
+    }
+    const session = await resolveSessionPrincipal(req);
+    if (session) return session;
+    if (IS_PRODUCTION) return resolveClerkPrincipal(req);
+    return null;
+  })();
   resolve
     .then((principal) => {
       if (!principal) {

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -23,6 +23,7 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { seedCatalogue } from "../modules/catalogue/catalogue";
+import { hashPassword } from "../modules/auth/session";
 
 // Release-tagged feature flags (PL-02). Everything past R0 ships dark; a dark
 // feature is unreachable until an operator flips the flag (or a per-firm
@@ -77,6 +78,7 @@ export async function seedPlatform(): Promise<void> {
     await seedConsoleDemo();
     await seedBuyerDemo();
     await seedCpdCourses();
+    await seedDemoPasswords();
   });
   logger.info(
     { flags: FLAGS.length, schemaVersions: SCHEMA_VERSIONS.length },
@@ -435,6 +437,20 @@ async function seedBuyerDemo(): Promise<void> {
       },
     ])
     .onConflictDoNothing();
+}
+
+// --- Demo login credentials ---------------------------------------------------
+// Every seeded demo user can sign in through the first-party session login with
+// this shared demo password. Hashes are set only where absent, so a changed
+// password in a real deployment is never overwritten by a reseed.
+export const DEMO_PASSWORD = "meridian2027";
+
+async function seedDemoPasswords(): Promise<void> {
+  const hash = hashPassword(DEMO_PASSWORD);
+  await getDb()
+    .update(usersTable)
+    .set({ passwordHash: hash })
+    .where(isNull(usersTable.passwordHash));
 }
 
 // --- CPD certification content (CON-05) --------------------------------------

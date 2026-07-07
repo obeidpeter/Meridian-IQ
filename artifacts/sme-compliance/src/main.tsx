@@ -2,33 +2,11 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Dev principal — the seeded demo SME's firm_staff user (Adaeze Foods retainer).
-// In production a real session replaces these; here we inject the demo tenant
-// identity so every API call resolves to the same client without a login step.
-const DEV_HEADERS: Record<string, string> = {
-  "x-mock-role": "firm_staff",
-  "x-mock-user": "44444444-4444-4444-8444-444444444444",
-  "x-mock-firm": "11111111-1111-4111-8111-111111111111",
-  "x-mock-client-party": "22222222-2222-4222-8222-222222222222",
-};
-
-const originalFetch = window.fetch.bind(window);
-window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-  const url =
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url;
-  if (!url.includes("/api/")) return originalFetch(input, init);
-  const headers = new Headers(
-    init?.headers ?? (input instanceof Request ? input.headers : undefined),
-  );
-  for (const [key, value] of Object.entries(DEV_HEADERS)) {
-    if (!headers.has(key)) headers.set(key, value);
-  }
-  return originalFetch(input, { ...init, headers });
-};
+// Authentication is the shared first-party session (see the landing portal at
+// "/"): the HttpOnly, origin-wide session cookie is sent automatically with
+// every same-origin /api call, so no principal is injected here. A request
+// without a valid session gets 401 and the session guard bounces the user to
+// the portal to sign in.
 
 // Offline PWA shell (NFR-05).
 if ("serviceWorker" in navigator) {

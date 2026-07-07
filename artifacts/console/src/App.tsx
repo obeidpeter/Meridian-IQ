@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import { errorStatus } from "@/lib/errors";
 
 import { Layout } from "@/components/layout";
+import { RequireSession } from "@/components/require-session";
 import { Portfolio } from "@/pages/portfolio";
 import { ClientDetail } from "@/pages/client-detail";
 import { ClientImport } from "@/pages/client-import";
@@ -56,9 +57,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <RequireSession allowedRoles={["firm_admin", "operator", "firm_staff"]}>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+        </RequireSession>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

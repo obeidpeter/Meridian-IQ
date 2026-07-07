@@ -16,7 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Clock, Zap, ShieldCheck } from "lucide-react";
+import { isForbidden } from "@/lib/errors";
+import { Clock, Zap, ShieldCheck, Lock } from "lucide-react";
 
 function formatDuration(seconds?: number | null): string {
   if (seconds == null) return "—";
@@ -156,8 +157,8 @@ function CaseCard({
 
 export function OperatorQueue() {
   const [status, setStatus] = useState<ListOperatorCasesStatus>("open");
-  const { data, isLoading } = useListOperatorCases({ status });
-  const { data: allCases } = useListOperatorCases();
+  const { data, isLoading, error } = useListOperatorCases({ status });
+  const { data: allCases, error: allCasesError } = useListOperatorCases();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -216,6 +217,37 @@ export function OperatorQueue() {
       },
     );
   };
+
+  // The operator endpoints answer 403 unless the signed-in principal is an
+  // operator. A firm_admin/firm_staff reaching this page should see a friendly
+  // prompt instead of an infinite spinner or a crash.
+  if (isForbidden(error) || isForbidden(allCasesError)) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+          Operator work queue
+        </h1>
+        <Card data-testid="card-operator-access-required">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <Lock className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium">Operator access required</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  This queue is for operator accounts. Sign in as an operator
+                  from the portal at{" "}
+                  <a href="/" className="underline" data-testid="link-portal">
+                    /
+                  </a>
+                  .
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

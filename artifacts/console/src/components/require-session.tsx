@@ -1,0 +1,79 @@
+import { ReactNode } from "react";
+import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+
+// Full navigation back to the origin landing page. The session cookie is
+// origin-wide (Path=/), so signing in there re-authenticates every app.
+const PORTAL_URL = "/";
+
+function BrandSplash({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-6 text-center">
+      <h1 className="text-2xl font-bold text-primary">MeridianIQ</h1>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Gates the routed app behind the real first-party session.
+ *  • loading    → centered brand + spinner
+ *  • error/401  → not signed in; full-navigate to the landing page
+ *  • wrong role → centered card explaining which account type is required
+ *  • allowed    → render children
+ */
+export function RequireSession({
+  allowedRoles,
+  children,
+}: {
+  allowedRoles: string[];
+  children: ReactNode;
+}) {
+  const { data: me, isLoading, isError } = useGetMe({
+    query: { retry: false, queryKey: getGetMeQueryKey() },
+  });
+
+  if (isLoading) {
+    return (
+      <BrandSplash>
+        <Spinner className="size-6 text-muted-foreground" />
+      </BrandSplash>
+    );
+  }
+
+  if (isError || !me) {
+    // Not signed in (or the session expired) — send them to the portal to
+    // authenticate. A full navigation, not a wouter push.
+    window.location.href = PORTAL_URL;
+    return null;
+  }
+
+  if (!allowedRoles.includes(me.role)) {
+    const list = allowedRoles.join(", ");
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="max-w-md w-full" data-testid="card-wrong-role">
+          <CardContent className="pt-6 space-y-4 text-center">
+            <h1 className="text-lg font-bold text-primary">MeridianIQ</h1>
+            <p className="text-sm text-muted-foreground">
+              Signed in as {me.role}. This workspace needs a {list} account.
+            </p>
+            <Button
+              className="w-full"
+              onClick={() => {
+                window.location.href = PORTAL_URL;
+              }}
+              data-testid="button-back-to-portal"
+            >
+              Back to the MeridianIQ portal
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
