@@ -53,6 +53,21 @@ DELETE FROM memberships a
     AND a.firm_id IS NOT DISTINCT FROM b.firm_id
     AND a.client_party_id IS NOT DISTINCT FROM b.client_party_id;
 
+-- ============ memberships binding uniqueness (owned here, not by push) ======
+-- The 5-column NULLS NOT DISTINCT unique index keeps re-seeding the same
+-- binding (with null firm/party columns) from silently duplicating. It lives
+-- here — not in the Drizzle schema — because drizzle-kit push (0.31.x) cannot
+-- introspect NULLS NOT DISTINCT and therefore re-proposed it on every run,
+-- hitting an interactive "truncate?" prompt that hangs the non-TTY post-merge
+-- push on a non-empty table. Idempotent via IF NOT EXISTS: on databases that
+-- already have the constraint (created by the old schema) the name matches its
+-- backing index and this is a no-op; on fresh databases push creates the table
+-- without it and this creates the index. Explicit short name because the
+-- auto-generated one would exceed Postgres's 63-char identifier limit.
+CREATE UNIQUE INDEX IF NOT EXISTS memberships_binding_unique
+  ON memberships (user_id, firm_id, role, client_party_id, buyer_party_id)
+  NULLS NOT DISTINCT;
+
 -- ============ CORE-07: retention purge covers the R2 spine ============
 -- The R2 tables reference invoices (match_proposals.invoice_id,
 -- b2c_report_items.invoice_id, invoices.related_invoice_id self-FK), so the

@@ -5,7 +5,6 @@ import {
   timestamp,
   jsonb,
   pgEnum,
-  unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -64,32 +63,26 @@ export const roleEnum = pgEnum("role", [
 // (operator, auditor) and bank users are cross-tenant and may have a null firmId.
 // client_user additionally scopes to a single client Party; buyer_user scopes to
 // a single buyer Party (Buyer Rails) and carries no firm.
-export const membershipsTable = pgTable(
-  "memberships",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => usersTable.id),
-    firmId: uuid("firm_id").references(() => firmsTable.id),
-    role: roleEnum("role").notNull(),
-    clientPartyId: uuid("client_party_id").references(() => partiesTable.id),
-    buyerPartyId: uuid("buyer_party_id").references(() => partiesTable.id),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  // nullsNotDistinct so re-seeding the same binding (with null firm/party
-  // columns) conflicts instead of silently duplicating. The constraint carries
-  // an explicit name because the auto-generated one (built from all five
-  // columns) exceeds Postgres's 63-char identifier limit and would be silently
-  // truncated, leaving the schema name and the stored name out of sync.
-  (t) => [
-    unique("memberships_binding_unique")
-      .on(t.userId, t.firmId, t.role, t.clientPartyId, t.buyerPartyId)
-      .nullsNotDistinct(),
-  ],
-);
+// The 5-column `nullsNotDistinct` unique index (memberships_binding_unique) is
+// deliberately NOT declared here. drizzle-kit push (0.31.x) cannot introspect
+// NULLS NOT DISTINCT, so it re-proposed the constraint on every run and — on a
+// non-empty table — hit an interactive "truncate?" prompt that hangs the
+// non-TTY post-merge push. The index is instead created idempotently in the
+// boot migration (see lib/db/src/migrations/0002_r2_guardrails.ts), out of
+// push's purview. See .agents/memory/db-migrations-drizzle-push.md.
+export const membershipsTable = pgTable("memberships", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => usersTable.id),
+  firmId: uuid("firm_id").references(() => firmsTable.id),
+  role: roleEnum("role").notNull(),
+  clientPartyId: uuid("client_party_id").references(() => partiesTable.id),
+  buyerPartyId: uuid("buyer_party_id").references(() => partiesTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 export const insertFirmSchema = createInsertSchema(firmsTable).omit({
   id: true,

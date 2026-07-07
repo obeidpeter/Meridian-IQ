@@ -43,8 +43,24 @@ didn't finish.
 `memberships` accumulated duplicate rows because the old unique index used the
 default NULLS DISTINCT (NULL firm/party columns never conflicted, so repeated
 `seedPlatform` inserts with bare `onConflictDoNothing()` kept adding rows). The
-tightened 5-col `nullsNotDistinct` index fixes this going forward. **Ordering
-trap:** the dedupe that clears the way for the tightened index lives in a *boot*
-SQL migration, but the tightened index is applied by *post-merge* push (earlier)
-— so on a pre-existing dup'd DB, push fails until you dedupe first (keep the
-earliest row per user_id/role/firm_id/client_party_id).
+tightened 5-col `nullsNotDistinct` index fixes this going forward.
+
+## memberships_binding_unique is owned by the boot migration, NOT push
+The 5-col `nullsNotDistinct` unique index is **not** in the Drizzle schema. It is
+created idempotently in migration 0002 (`CREATE UNIQUE INDEX IF NOT EXISTS ...
+NULLS NOT DISTINCT`, right after the memberships dedupe). This was moved out of
+the schema because push (0.31.x) can't represent NULLS NOT DISTINCT and hung the
+non-TTY post-merge push with a "truncate?" prompt.
+- **Churn is expected and harmless:** with the index absent from schema, each
+  `drizzle push` DROPS the standalone unique index (no prompt, exits 0), and the
+  next api-server boot recreates it via `applyMigrations` (which runs every 0002
+  up on boot, idempotently). So between push and boot the uniqueness guard is
+  briefly gone — fine because the app isn't serving writes in that window.
+- The dedupe DELETE runs in the same 0002 up immediately before the CREATE, so
+  recreation never fails on leftover duplicates.
+- Do NOT drop the index in 0002 `down`: on a legacy DB the object is a
+  constraint-backed index (`DROP INDEX` would error "constraint requires it"),
+  and rollback intentionally only reverses guardrails, not schema objects.
+- Bare `onConflictDoNothing()` (no named target) in seed.ts infers the arbiter
+  from any unique index, so a standalone unique index works the same as the old
+  table constraint — no `ON CONFLICT ON CONSTRAINT <name>` dependency exists.
