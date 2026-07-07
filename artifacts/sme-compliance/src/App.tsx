@@ -10,6 +10,8 @@ import { Invoices } from "@/pages/invoices";
 import { InvoiceNew } from "@/pages/invoice-new";
 import { InvoiceDetail } from "@/pages/invoice-detail";
 import { Import } from "@/pages/import";
+import { Reconciliation } from "@/pages/reconciliation";
+import { B2cReports } from "@/pages/b2c";
 import { Calendar } from "@/pages/calendar";
 import { Alerts } from "@/pages/alerts";
 
@@ -24,6 +26,8 @@ function Router() {
         <Route path="/invoices/new" component={InvoiceNew} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
         <Route path="/import" component={Import} />
+        <Route path="/reconciliation" component={Reconciliation} />
+        <Route path="/b2c" component={B2cReports} />
         <Route path="/calendar" component={Calendar} />
         <Route path="/alerts" component={Alerts} />
         <Route component={NotFound} />

@@ -7,6 +7,9 @@ import {
   CreditCard,
   ListChecks,
   FileText,
+  Palette,
+  Upload,
+  GraduationCap,
   Menu,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -20,8 +23,11 @@ export function Layout({ children }: { children: ReactNode }) {
   const links = [
     { href: "/", label: "Portfolio", icon: Users },
     { href: "/pipeline", label: "Onboarding", icon: GitBranch },
+    { href: "/clients/import", label: "Client import", icon: Upload },
     { href: "/unearned-income", label: "Unearned income", icon: TrendingUp },
     { href: "/billing", label: "Plans & billing", icon: CreditCard },
+    { href: "/whitelabel", label: "White-label", icon: Palette },
+    { href: "/certification", label: "Certification", icon: GraduationCap },
     { href: "/operator-queue", label: "Operator queue", icon: ListChecks },
     { href: "/statements", label: "Statements", icon: FileText },
   ];

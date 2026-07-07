@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, FileText, Calendar as CalendarIcon, Bell, Upload, Menu } from "lucide-react";
+import { LayoutDashboard, FileText, Calendar as CalendarIcon, Bell, Upload, Landmark, Store, Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useGetMe } from "@workspace/api-client-react";
@@ -13,6 +13,8 @@ export function Layout({ children }: { children: ReactNode }) {
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/invoices", label: "Invoices", icon: FileText },
     { href: "/import", label: "Import", icon: Upload },
+    { href: "/reconciliation", label: "Reconciliation", icon: Landmark },
+    { href: "/b2c", label: "B2C Reports", icon: Store },
     { href: "/calendar", label: "Calendar", icon: CalendarIcon },
     { href: "/alerts", label: "Alerts", icon: Bell },
   ];

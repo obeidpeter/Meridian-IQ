@@ -19,13 +19,21 @@ export function formatDate(value: string | Date | null | undefined): string {
   });
 }
 
-type StatusTone = "draft" | "pending" | "stamped" | "failed" | "cancelled";
+type StatusTone =
+  | "draft"
+  | "pending"
+  | "stamped"
+  | "settled"
+  | "credited"
+  | "failed"
+  | "cancelled";
 
 export function statusTone(status: string): StatusTone {
   if (status === "draft" || status === "validated") return "draft";
   if (status === "submitted") return "pending";
-  if (status === "stamped" || status === "confirmed" || status === "settled")
-    return "stamped";
+  if (status === "stamped" || status === "confirmed") return "stamped";
+  if (status === "settled") return "settled";
+  if (status === "credited") return "credited";
   if (status === "failed") return "failed";
   return "cancelled";
 }
@@ -35,6 +43,8 @@ export function statusLabel(status: string): string {
   if (tone === "draft") return status === "validated" ? "Validated" : "Draft";
   if (tone === "pending") return "Pending stamp";
   if (tone === "stamped") return "Stamped";
+  if (tone === "settled") return "Settled";
+  if (tone === "credited") return "Credited";
   if (tone === "failed") return "Failed";
   return "Cancelled";
 }
@@ -44,6 +54,10 @@ export function badgeClasses(status: string): string {
   switch (tone) {
     case "stamped":
       return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    case "settled":
+      return "bg-teal-100 text-teal-800 border-teal-200";
+    case "credited":
+      return "bg-violet-100 text-violet-800 border-violet-200";
     case "pending":
       return "bg-amber-100 text-amber-800 border-amber-200";
     case "failed":

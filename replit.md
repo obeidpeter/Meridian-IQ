@@ -1,6 +1,8 @@
-# [Project name]
+# MeridianIQ
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Nigeria-first e-invoicing compliance and verified-receivables platform: one data
+spine serving SMEs, accountant firms and anchor buyers (Business Plan v3.2,
+Roadmap R0–R2 built; R3+ dormant behind gates).
 
 ## Run & Operate
 
@@ -9,6 +11,9 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm --filter @workspace/api-server run test` — api-server unit suites (node --test, no DB needed)
+- `pnpm --filter @workspace/db run test` — migration rollback test (needs DATABASE_URL)
+- `pnpm --filter @workspace/api-server run benchmark [N]` — NFR-03 pipeline throughput evidence (needs DATABASE_URL)
 - Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
@@ -22,15 +27,28 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/api-spec/openapi.yaml` — the API contract, source of truth; codegen fills `lib/api-zod` (route validation) and `lib/api-client-react` (frontend hooks)
+- `lib/db/src/schema/*.ts` — one Drizzle file per domain, barrel-exported; `lib/db/src/migrations/` — versioned SQL guardrails (triggers, RLS) with reversible down + rollback test
+- `artifacts/api-server/src/modules/<domain>/` — domain logic; `src/routes/<tag>.ts` — HTTP surface registered in `routes/index.ts`
+- Key R2 modules: `modules/statements` (INT-05 parser abstraction + ingestion), `modules/reconciliation` (SME-07 matcher), `modules/buyer` (BR-01/05 exposure + scoreboard), `modules/b2c` (SME-08 clocks), `modules/connectors` (PL-03 contract + SagePro/QuickLite)
+- Frontends: `artifacts/sme-compliance` (SME app, "/"), `artifacts/console` (accountant console + operator, "/console/"), `artifacts/buyer-portal` (Buyer Rails, "/buyer/"), `artifacts/penalty-calculator` (public static, never wired to the app)
+- `artifacts/api-server/src/bootstrap/seed.ts` — flags (release-tagged), demo tenant, buyer principals, CPD content
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **Append-only invoice ledger**: lifecycle immutability begins at submission (CORE-02); state transitions append to `invoice_lifecycle_events`; DB triggers block UPDATE/DELETE on lifecycle tables. Reset demo data with `TRUNCATE ... CASCADE`, never DELETE.
+- **State machine is code**: `modules/invoice/lifecycle.ts` TRANSITIONS map is the single source of truth; `settled` is reached only via settlement observation (statement match accept / buyer paid flag), `credited` only via a stamped credit note, and cancelled/credited invoices are never presentable as eligible (CORE-09) — `verify-stamp` reports `eligible` live.
+- **Everything async goes through the transactional outbox** (`modules/pipeline`): submission, statement reconcile, ERP sync. Feature modules contribute handlers via `registerHandler` and periodic jobs via `registerSweep` (B2C clocks every minute, buyer exposure daily-window).
+- **Tenancy**: firm-keyed RLS via per-request transactions and GUCs; `buyer_user` principals carry no firm and run RLS-bypassed with mandatory route-level `assertBuyerPartyAccess` scoping (same pattern as operator/auditor).
+- **Release gating (PL-02)**: every R2 surface checks its flag (`reconciliation`, `b2c_reporting`, `buyer_rails`, `white_label`, `erp_connectors`) and 404s while dark; all five seed dark — flip via `PATCH /feature-flags/{key}` as operator.
+- **External systems behind one interface**: APP rails (INT-01), bank-statement formats (INT-05 `StatementParser`), ERP systems (INT-06 `Connector`) — adding a bank/ERP is a new implementation, never a core change.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- SME app: guided invoicing, bulk import (5,000-row bulk path), submission + vault, deadline/penalty alerts, reconciliation upload with match proposals, B2C 24-hour report clocks, confirmation timeline.
+- Accountant console: portfolio risk, onboarding pipeline, unearned income, billing/revenue share, operator queue; R2 adds white-label branding + subdomain, bulk client import, CPD certification portal.
+- Buyer portal (`/buyer/`): confirmation queue and responses (method + no-set-off captured), payment flags, supplier verification with daily input-VAT exposure, exportable compliance scoreboard.
+- Credit layer (R3+) remains dormant: schema exists, flags dark, no user-facing surface.
 
 ## User preferences
 
@@ -38,8 +56,15 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Run `pnpm --filter @workspace/api-spec run codegen` after ANY change to `openapi.yaml`, then root `pnpm run typecheck`.
+- lib/db and api-server modules use explicit `.ts` extensions on relative imports so `node --test` strip-mode works; keep new files consistent.
+- The dev DB pool is lazy — the server fail-fasts via `requireDatabaseUrl()` at boot; pure-function tests import schema without a database.
+- Clerk middleware mounts only when `CLERK_SECRET_KEY` is set; otherwise the dev-header shim (`x-mock-role`, `x-mock-user`, `x-mock-firm`, `x-mock-client-party`, `x-mock-buyer-party`) is the only identity path.
+- `memberships` unique index is NULLS NOT DISTINCT — seed inserts dedupe correctly; extend the index if you add another scoping column.
+- express JSON body limit is 8mb (5,000-row imports, statement uploads).
+- See `.agents/memory/` for DB guardrails, RBAC, artifact base-path and service-worker invariants.
 
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Requirement IDs in code comments (CORE-xx, SME-xx, BR-xx, PL-xx, INT-xx, NFR-xx, SEC-xx) refer to the MeridianIQ Technical Requirements Document v1.1
