@@ -20,9 +20,14 @@ const router: IRouter = Router();
 function cookieOptions(req: { secure?: boolean; headers: Record<string, unknown> }) {
   const forwardedProto = String(req.headers["x-forwarded-proto"] ?? "");
   const secure = Boolean(req.secure) || forwardedProto.includes("https");
+  // The web apps are served inside a cross-site iframe (the Replit preview and
+  // any other embed), so the session cookie must be SameSite=None to be sent
+  // back on subsequent API calls. SameSite=None requires Secure; fall back to
+  // Lax on plain http (e.g. a direct localhost hit) where None+Secure would be
+  // rejected by the browser.
   return {
     httpOnly: true,
-    sameSite: "lax" as const,
+    sameSite: (secure ? "none" : "lax") as "none" | "lax",
     path: "/",
     secure,
     maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -78,7 +83,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 });
 
 router.post("/auth/logout", (req, res): void => {
-  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  // Clear with the same attributes the cookie was set with so the browser
+  // matches and deletes it in the cross-site iframe context.
+  const { maxAge: _maxAge, ...clearOpts } = cookieOptions(req);
+  res.clearCookie(SESSION_COOKIE, clearOpts);
   res.sendStatus(204);
 });
 

@@ -1,3 +1,17 @@
+- [Iframe cookie auth](iframe-cookie-auth.md) — web apps run in a cross-site iframe; session cookies need SameSite=None+Secure AND client credentials:include, else login 200 then /api/me 401. Notes the CSRF tradeoff.
 - [Cross-artifact navigation](cross-artifact-navigation.md) — to link BETWEEN path-routed artifacts (incl. back to landing at origin `/`), use a plain `<a href="/...">`, never wouter `<Link>` (Links are base-prefixed and stay inside the app).
+- [MeridianIQ platform](meridianiq-platform.md) — overview of the product, artifacts, and domain.
+- [Artifact base path](artifact-base-path.md) — how each artifact's base path prefix works and how to build URLs correctly.
+- [Artifact workflow naming](artifact-workflow-naming.md) — convention for artifact/workflow names.
+- [Service worker scope](service-worker-scope.md) — the `/` (landing) service worker controls the whole origin; keep it a pass-through no-op.
+- [PWA SW stale cache](pwa-sw-stale-cache.md) — avoiding stale service-worker cache serving old shells.
+- [Console RBAC](console-rbac.md) — role/capability model for the accountant console.
+- [Dev principal shim](dev-principal-shim.md) — how the dev auth header injects a principal for local/testing.
 - [DB migrations vs drizzle push](db-migrations-drizzle-push.md) — who owns schema changes (boot migrations vs `pnpm --filter db push`) and post-merge reconciliation gotchas.
+- [Drizzle migrations](drizzle-migrations.md) — migration authoring/ordering conventions.
+- [Meridian DB guardrails](meridian-db-guardrails.md) — safety rules for touching the database.
+- [Request tx boundary](request-tx-boundary.md) — transaction boundary conventions per request.
 - [R2 lifecycle & tenancy](r2-lifecycle-tenancy.md) — invariants for the receivables/R2 lifecycle and multi-tenant scoping.
+- [Stamp verification](stamp-verification.md) — invoice stamp/QR verification invariants.
+- [API server testing](api-server-testing.md) — how to run/verify api-server tests.
+- [Shell UUID capture](shell-uuid-capture.md) — capturing generated UUIDs in shell for scripted checks.
