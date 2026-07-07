@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Grid2x2 } from "lucide-react";
 import {
   calculatePenalty,
   formatNaira,
@@ -141,6 +142,13 @@ export default function App() {
               Nigerian e-invoicing compliance
             </p>
           </div>
+          <a
+            href="/"
+            className="ml-auto inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
+          >
+            <Grid2x2 className="h-4 w-4" />
+            All apps
+          </a>
         </div>
       </header>
 
