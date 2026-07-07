@@ -928,6 +928,245 @@ export interface AuditBundle {
   exportedAt: string;
 }
 
+export type ActivityItemKind = typeof ActivityItemKind[keyof typeof ActivityItemKind];
+
+
+export const ActivityItemKind = {
+  draft: 'draft',
+  submitted: 'submitted',
+  stamped: 'stamped',
+  failed: 'failed',
+  cancelled: 'cancelled',
+  escalated: 'escalated',
+} as const;
+
+export interface ActivityItem {
+  id: string;
+  /** @nullable */
+  invoiceId?: string | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
+  kind: ActivityItemKind;
+  label: string;
+  /** @nullable */
+  status?: string | null;
+  at: string;
+}
+
+export type DashboardSummaryPenaltyRisk = typeof DashboardSummaryPenaltyRisk[keyof typeof DashboardSummaryPenaltyRisk];
+
+
+export const DashboardSummaryPenaltyRisk = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type ComplianceDeadlineKind = typeof ComplianceDeadlineKind[keyof typeof ComplianceDeadlineKind];
+
+
+export const ComplianceDeadlineKind = {
+  vat_return: 'vat_return',
+  b2c_report: 'b2c_report',
+  invoice_submission: 'invoice_submission',
+  penalty_watch: 'penalty_watch',
+} as const;
+
+export type ComplianceDeadlineStatus = typeof ComplianceDeadlineStatus[keyof typeof ComplianceDeadlineStatus];
+
+
+export const ComplianceDeadlineStatus = {
+  upcoming: 'upcoming',
+  due_soon: 'due_soon',
+  overdue: 'overdue',
+  met: 'met',
+} as const;
+
+export type ComplianceDeadlineSeverity = typeof ComplianceDeadlineSeverity[keyof typeof ComplianceDeadlineSeverity];
+
+
+export const ComplianceDeadlineSeverity = {
+  info: 'info',
+  warning: 'warning',
+  critical: 'critical',
+} as const;
+
+export interface ComplianceDeadline {
+  id: string;
+  clientPartyId: string;
+  kind: ComplianceDeadlineKind;
+  title: string;
+  /** @nullable */
+  description?: string | null;
+  dueDate: string;
+  status: ComplianceDeadlineStatus;
+  severity: ComplianceDeadlineSeverity;
+  /** @nullable */
+  invoiceId?: string | null;
+}
+
+export interface DashboardSummary {
+  clientPartyId: string;
+  totalInvoices: number;
+  draftCount: number;
+  pendingCount: number;
+  stampedCount: number;
+  failedCount: number;
+  cancelledCount: number;
+  unsubmittedCount: number;
+  unsubmittedValue: string;
+  stampedValue: string;
+  atRiskCount: number;
+  upcomingDeadlineCount: number;
+  nextDeadline?: ComplianceDeadline | null;
+  penaltyRisk: DashboardSummaryPenaltyRisk;
+  recentActivity: ActivityItem[];
+}
+
+export interface InvoiceImportRow {
+  rowNumber: number;
+  invoiceNumber?: string;
+  buyerName?: string;
+  buyerTin?: string;
+  issueDate?: string;
+  dueDate?: string;
+  description?: string;
+  quantity?: string;
+  unitPrice?: string;
+  vatRate?: string;
+  currency?: string;
+}
+
+export interface InvoiceImportInput {
+  clientPartyId: string;
+  commit?: boolean;
+  rows: InvoiceImportRow[];
+}
+
+export type InvoiceImportRowResultStatus = typeof InvoiceImportRowResultStatus[keyof typeof InvoiceImportRowResultStatus];
+
+
+export const InvoiceImportRowResultStatus = {
+  valid: 'valid',
+  invalid: 'invalid',
+  created: 'created',
+} as const;
+
+export interface InvoiceImportRowResult {
+  rowNumber: number;
+  status: InvoiceImportRowResultStatus;
+  /** @nullable */
+  invoiceId?: string | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
+  errors: FieldError[];
+}
+
+export interface InvoiceImportResult {
+  total: number;
+  validCount: number;
+  invalidCount: number;
+  createdCount: number;
+  committed: boolean;
+  rows: InvoiceImportRowResult[];
+}
+
+export interface AlertPreferences {
+  clientPartyId: string;
+  whatsappEnabled: boolean;
+  smsEnabled: boolean;
+  emailEnabled: boolean;
+  /** @nullable */
+  whatsappTo?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  email?: string | null;
+  deadlineAlerts: boolean;
+  failureAlerts: boolean;
+  penaltyAlerts: boolean;
+  updatedAt: string;
+}
+
+export interface AlertPreferencesInput {
+  whatsappEnabled?: boolean;
+  smsEnabled?: boolean;
+  emailEnabled?: boolean;
+  /** @nullable */
+  whatsappTo?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  email?: string | null;
+  deadlineAlerts?: boolean;
+  failureAlerts?: boolean;
+  penaltyAlerts?: boolean;
+}
+
+export type AlertDeliveryResultChannel = typeof AlertDeliveryResultChannel[keyof typeof AlertDeliveryResultChannel];
+
+
+export const AlertDeliveryResultChannel = {
+  whatsapp: 'whatsapp',
+  sms: 'sms',
+  email: 'email',
+} as const;
+
+export type AlertDeliveryResultStatus = typeof AlertDeliveryResultStatus[keyof typeof AlertDeliveryResultStatus];
+
+
+export const AlertDeliveryResultStatus = {
+  sent: 'sent',
+  delivered: 'delivered',
+  failed: 'failed',
+  skipped: 'skipped',
+} as const;
+
+export interface AlertDeliveryResult {
+  channel: AlertDeliveryResultChannel;
+  /** @nullable */
+  messageId?: string | null;
+  status: AlertDeliveryResultStatus;
+  /** @nullable */
+  detail?: string | null;
+}
+
+export type EscalationStatus = typeof EscalationStatus[keyof typeof EscalationStatus];
+
+
+export const EscalationStatus = {
+  open: 'open',
+  acknowledged: 'acknowledged',
+  resolved: 'resolved',
+} as const;
+
+/**
+ * @nullable
+ */
+export type EscalationContext = { [key: string]: unknown } | null;
+
+export interface Escalation {
+  id: string;
+  invoiceId: string;
+  firmId: string;
+  clientPartyId: string;
+  reason: string;
+  /** @nullable */
+  errorCode?: string | null;
+  status: EscalationStatus;
+  /** @nullable */
+  context?: EscalationContext;
+  createdAt: string;
+}
+
+export type EscalationInputContext = { [key: string]: unknown };
+
+export interface EscalationInput {
+  reason: string;
+  errorCode?: string;
+  context?: EscalationInputContext;
+}
+
 /**
  * Bad request
  */
@@ -955,5 +1194,13 @@ export type ConflictResponse = Error;
 
 export type ListInvoicesParams = {
 status?: string;
+};
+
+export type GetDashboardSummaryParams = {
+clientPartyId: string;
+};
+
+export type GetComplianceCalendarParams = {
+clientPartyId: string;
 };
 

@@ -1066,3 +1066,218 @@ export const AnalyzeVatRiskResponse = zod.object({
 })
 
 
+/**
+ * @summary Compliance dashboard summary for an SME client
+ */
+export const GetDashboardSummaryQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const GetDashboardSummaryResponse = zod.object({
+  "clientPartyId": zod.string(),
+  "totalInvoices": zod.number(),
+  "draftCount": zod.number(),
+  "pendingCount": zod.number(),
+  "stampedCount": zod.number(),
+  "failedCount": zod.number(),
+  "cancelledCount": zod.number(),
+  "unsubmittedCount": zod.number(),
+  "unsubmittedValue": zod.string(),
+  "stampedValue": zod.string(),
+  "atRiskCount": zod.number(),
+  "upcomingDeadlineCount": zod.number(),
+  "nextDeadline": zod.union([zod.object({
+  "id": zod.string(),
+  "clientPartyId": zod.string(),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "dueDate": zod.coerce.date(),
+  "status": zod.enum(['upcoming', 'due_soon', 'overdue', 'met']),
+  "severity": zod.enum(['info', 'warning', 'critical']),
+  "invoiceId": zod.string().nullish()
+}),zod.null()]).optional(),
+  "penaltyRisk": zod.enum(['low', 'medium', 'high']),
+  "recentActivity": zod.array(zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "kind": zod.enum(['draft', 'submitted', 'stamped', 'failed', 'cancelled', 'escalated']),
+  "label": zod.string(),
+  "status": zod.string().nullish(),
+  "at": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Bulk validate (and optionally commit) invoices from a spreadsheet
+ */
+export const ImportInvoicesBody = zod.object({
+  "clientPartyId": zod.string(),
+  "commit": zod.boolean().optional(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "invoiceNumber": zod.string().optional(),
+  "buyerName": zod.string().optional(),
+  "buyerTin": zod.string().optional(),
+  "issueDate": zod.string().optional(),
+  "dueDate": zod.string().optional(),
+  "description": zod.string().optional(),
+  "quantity": zod.string().optional(),
+  "unitPrice": zod.string().optional(),
+  "vatRate": zod.string().optional(),
+  "currency": zod.string().optional()
+}))
+})
+
+export const ImportInvoicesResponse = zod.object({
+  "total": zod.number(),
+  "validCount": zod.number(),
+  "invalidCount": zod.number(),
+  "createdCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['valid', 'invalid', 'created']),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+}))
+}))
+})
+
+
+/**
+ * @summary Per-entity compliance calendar with computed deadlines
+ */
+export const GetComplianceCalendarQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const GetComplianceCalendarResponseItem = zod.object({
+  "id": zod.string(),
+  "clientPartyId": zod.string(),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "dueDate": zod.coerce.date(),
+  "status": zod.enum(['upcoming', 'due_soon', 'overdue', 'met']),
+  "severity": zod.enum(['info', 'warning', 'critical']),
+  "invoiceId": zod.string().nullish()
+})
+export const GetComplianceCalendarResponse = zod.array(GetComplianceCalendarResponseItem)
+
+
+export const GetAlertPreferencesParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetAlertPreferencesResponse = zod.object({
+  "clientPartyId": zod.string(),
+  "whatsappEnabled": zod.boolean(),
+  "smsEnabled": zod.boolean(),
+  "emailEnabled": zod.boolean(),
+  "whatsappTo": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "deadlineAlerts": zod.boolean(),
+  "failureAlerts": zod.boolean(),
+  "penaltyAlerts": zod.boolean(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const UpdateAlertPreferencesParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateAlertPreferencesBody = zod.object({
+  "whatsappEnabled": zod.boolean().optional(),
+  "smsEnabled": zod.boolean().optional(),
+  "emailEnabled": zod.boolean().optional(),
+  "whatsappTo": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "deadlineAlerts": zod.boolean().optional(),
+  "failureAlerts": zod.boolean().optional(),
+  "penaltyAlerts": zod.boolean().optional()
+})
+
+export const UpdateAlertPreferencesResponse = zod.object({
+  "clientPartyId": zod.string(),
+  "whatsappEnabled": zod.boolean(),
+  "smsEnabled": zod.boolean(),
+  "emailEnabled": zod.boolean(),
+  "whatsappTo": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "deadlineAlerts": zod.boolean(),
+  "failureAlerts": zod.boolean(),
+  "penaltyAlerts": zod.boolean(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Send a test alert across the client's enabled channels
+ */
+export const SendTestAlertParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const SendTestAlertResponseItem = zod.object({
+  "channel": zod.enum(['whatsapp', 'sms', 'email']),
+  "messageId": zod.string().nullish(),
+  "status": zod.enum(['sent', 'delivered', 'failed', 'skipped']),
+  "detail": zod.string().nullish()
+})
+export const SendTestAlertResponse = zod.array(SendTestAlertResponseItem)
+
+
+export const ListEscalationsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListEscalationsResponseItem = zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "reason": zod.string(),
+  "errorCode": zod.string().nullish(),
+  "status": zod.enum(['open', 'acknowledged', 'resolved']),
+  "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListEscalationsResponse = zod.array(ListEscalationsResponseItem)
+
+
+/**
+ * @summary Escalate a failed invoice to a human operator
+ */
+export const EscalateInvoiceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const EscalateInvoiceBody = zod.object({
+  "reason": zod.string(),
+  "errorCode": zod.string().optional(),
+  "context": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const EscalateInvoiceResponse = zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "reason": zod.string(),
+  "errorCode": zod.string().nullish(),
+  "status": zod.enum(['open', 'acknowledged', 'resolved']),
+  "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+

@@ -866,6 +866,151 @@ paths:
               schema:
                 $ref: "#/components/schemas/VatRiskReport"
 
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [sme]
+      summary: Compliance dashboard summary for an SME client
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /invoices/import:
+    post:
+      operationId: importInvoices
+      tags: [sme]
+      summary: Bulk validate (and optionally commit) invoices from a spreadsheet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceImportInput"
+      responses:
+        "200":
+          description: Per-row import results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceImportResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /compliance/calendar:
+    get:
+      operationId: getComplianceCalendar
+      tags: [sme]
+      summary: Per-entity compliance calendar with computed deadlines
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Compliance deadlines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ComplianceDeadline"
+
+  /clients/{id}/alert-preferences:
+    get:
+      operationId: getAlertPreferences
+      tags: [sme]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Alert preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertPreferences"
+    put:
+      operationId: updateAlertPreferences
+      tags: [sme]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertPreferencesInput"
+      responses:
+        "200":
+          description: Updated alert preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertPreferences"
+
+  /clients/{id}/alerts/test:
+    post:
+      operationId: sendTestAlert
+      tags: [sme]
+      summary: Send a test alert across the client's enabled channels
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Per-channel delivery results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AlertDeliveryResult"
+
+  /invoices/{id}/escalations:
+    get:
+      operationId: listEscalations
+      tags: [sme]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Escalations for this invoice
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Escalation"
+    post:
+      operationId: escalateInvoice
+      tags: [sme]
+      summary: Escalate a failed invoice to a human operator
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EscalationInput"
+      responses:
+        "201":
+          description: Escalation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Escalation"
+
 components:
   parameters:
     IdParam:
@@ -2082,3 +2227,286 @@ components:
         exportedAt:
           type: string
           format: date-time
+
+    ActivityItem:
+      type: object
+      required: [id, kind, label, at]
+      properties:
+        id:
+          type: string
+        invoiceId:
+          type: ["string", "null"]
+        invoiceNumber:
+          type: ["string", "null"]
+        kind:
+          type: string
+          enum: [draft, submitted, stamped, failed, cancelled, escalated]
+        label:
+          type: string
+        status:
+          type: ["string", "null"]
+        at:
+          type: string
+          format: date-time
+    DashboardSummary:
+      type: object
+      required:
+        [
+          clientPartyId,
+          totalInvoices,
+          draftCount,
+          pendingCount,
+          stampedCount,
+          failedCount,
+          cancelledCount,
+          unsubmittedCount,
+          unsubmittedValue,
+          stampedValue,
+          atRiskCount,
+          upcomingDeadlineCount,
+          penaltyRisk,
+          recentActivity,
+        ]
+      properties:
+        clientPartyId:
+          type: string
+        totalInvoices:
+          type: integer
+        draftCount:
+          type: integer
+        pendingCount:
+          type: integer
+        stampedCount:
+          type: integer
+        failedCount:
+          type: integer
+        cancelledCount:
+          type: integer
+        unsubmittedCount:
+          type: integer
+        unsubmittedValue:
+          type: string
+        stampedValue:
+          type: string
+        atRiskCount:
+          type: integer
+        upcomingDeadlineCount:
+          type: integer
+        nextDeadline:
+          oneOf:
+            - $ref: "#/components/schemas/ComplianceDeadline"
+            - type: "null"
+        penaltyRisk:
+          type: string
+          enum: [low, medium, high]
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+    InvoiceImportRow:
+      type: object
+      required: [rowNumber]
+      properties:
+        rowNumber:
+          type: integer
+        invoiceNumber:
+          type: string
+        buyerName:
+          type: string
+        buyerTin:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: string
+        description:
+          type: string
+        quantity:
+          type: string
+        unitPrice:
+          type: string
+        vatRate:
+          type: string
+        currency:
+          type: string
+    InvoiceImportInput:
+      type: object
+      required: [clientPartyId, rows]
+      properties:
+        clientPartyId:
+          type: string
+        commit:
+          type: boolean
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceImportRow"
+    InvoiceImportRowResult:
+      type: object
+      required: [rowNumber, status, errors]
+      properties:
+        rowNumber:
+          type: integer
+        status:
+          type: string
+          enum: [valid, invalid, created]
+        invoiceId:
+          type: ["string", "null"]
+        invoiceNumber:
+          type: ["string", "null"]
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+    InvoiceImportResult:
+      type: object
+      required: [total, validCount, invalidCount, createdCount, committed, rows]
+      properties:
+        total:
+          type: integer
+        validCount:
+          type: integer
+        invalidCount:
+          type: integer
+        createdCount:
+          type: integer
+        committed:
+          type: boolean
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceImportRowResult"
+    ComplianceDeadline:
+      type: object
+      required: [id, clientPartyId, kind, title, dueDate, status, severity]
+      properties:
+        id:
+          type: string
+        clientPartyId:
+          type: string
+        kind:
+          type: string
+          enum: [vat_return, b2c_report, invoice_submission, penalty_watch]
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        dueDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [upcoming, due_soon, overdue, met]
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        invoiceId:
+          type: ["string", "null"]
+    AlertPreferences:
+      type: object
+      required:
+        [
+          clientPartyId,
+          whatsappEnabled,
+          smsEnabled,
+          emailEnabled,
+          deadlineAlerts,
+          failureAlerts,
+          penaltyAlerts,
+          updatedAt,
+        ]
+      properties:
+        clientPartyId:
+          type: string
+        whatsappEnabled:
+          type: boolean
+        smsEnabled:
+          type: boolean
+        emailEnabled:
+          type: boolean
+        whatsappTo:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        deadlineAlerts:
+          type: boolean
+        failureAlerts:
+          type: boolean
+        penaltyAlerts:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+    AlertPreferencesInput:
+      type: object
+      properties:
+        whatsappEnabled:
+          type: boolean
+        smsEnabled:
+          type: boolean
+        emailEnabled:
+          type: boolean
+        whatsappTo:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        deadlineAlerts:
+          type: boolean
+        failureAlerts:
+          type: boolean
+        penaltyAlerts:
+          type: boolean
+    AlertDeliveryResult:
+      type: object
+      required: [channel, status]
+      properties:
+        channel:
+          type: string
+          enum: [whatsapp, sms, email]
+        messageId:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [sent, delivered, failed, skipped]
+        detail:
+          type: ["string", "null"]
+    Escalation:
+      type: object
+      required: [id, invoiceId, firmId, clientPartyId, reason, status, createdAt]
+      properties:
+        id:
+          type: string
+        invoiceId:
+          type: string
+        firmId:
+          type: string
+        clientPartyId:
+          type: string
+        reason:
+          type: string
+        errorCode:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, acknowledged, resolved]
+        context:
+          type: ["object", "null"]
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+    EscalationInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+        errorCode:
+          type: string
+        context:
+          type: object
+          additionalProperties: true

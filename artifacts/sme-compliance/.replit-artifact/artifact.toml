@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "MeridianIQ"
+version = "1.0.0"
+id = "artifacts/sme-compliance"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25883
+
+[services.development]
+run = "pnpm --filter @workspace/sme-compliance run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sme-compliance", "run", "build" ]
+publicDir = "artifacts/sme-compliance/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25883"
+BASE_PATH = "/"

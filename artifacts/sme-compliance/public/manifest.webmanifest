@@ -1,0 +1,19 @@
+{
+  "name": "MeridianIQ Compliance",
+  "short_name": "MeridianIQ",
+  "description": "Nigerian e-invoicing compliance for small businesses.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

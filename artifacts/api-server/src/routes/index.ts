@@ -12,6 +12,7 @@ import operatorRouter from "./operator";
 import auditRouter from "./audit";
 import advisoryRouter from "./advisory";
 import catalogueRouter from "./catalogue";
+import smeRouter from "./sme";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(operatorRouter);
 router.use(auditRouter);
 router.use(advisoryRouter);
 router.use(catalogueRouter);
+router.use(smeRouter);
 
 export default router;

@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/"
+previewPath = "/penalty-calculator/"
 title = "MeridianIQ Penalty Calculator"
 version = "1.0.0"
 id = "artifacts/penalty-calculator"
@@ -11,7 +11,7 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ "/penalty-calculator/" ]
 localPort = 21831
 
 [services.development]
@@ -28,4 +28,4 @@ to = "/index.html"
 
 [services.env]
 PORT = "21831"
-BASE_PATH = "/"
+BASE_PATH = "/penalty-calculator/"

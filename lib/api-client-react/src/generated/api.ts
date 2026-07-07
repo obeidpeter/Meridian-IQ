@@ -20,34 +20,45 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AlertDeliveryResult,
+  AlertPreferences,
+  AlertPreferencesInput,
   AssessmentReport,
   AuditBundle,
   AuditVerification,
   BadRequestResponse,
   CacCheckInput,
   CanonicalInvoice,
+  ComplianceDeadline,
   Confirmation,
   ConfirmationInput,
   ConflictResponse,
   ConsentDecision,
   ConsentInput,
   ConsentRecord,
+  DashboardSummary,
   Engagement,
   EngagementInput,
   EngagementUpdate,
   ErrorCatalogueEntry,
   ErrorCatalogueUpdate,
   ErrorCatalogueUpsertInput,
+  Escalation,
+  EscalationInput,
   FeatureFlag,
   FeatureFlagOverrideInput,
   FeatureFlagUpdate,
   Firm,
   FirmInput,
   ForbiddenResponse,
+  GetComplianceCalendarParams,
+  GetDashboardSummaryParams,
   HealthStatus,
   IdentifierCheck,
   Invoice,
   InvoiceDetail,
+  InvoiceImportInput,
+  InvoiceImportResult,
   InvoiceInput,
   ListInvoicesParams,
   Me,
@@ -3848,5 +3859,591 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getAnalyzeVatRiskMutationOptions(options));
+    }
+
+export const getGetDashboardSummaryUrl = (params: GetDashboardSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/summary?${stringifiedParams}` : `/api/dashboard/summary`
+}
+
+/**
+ * @summary Compliance dashboard summary for an SME client
+ */
+export const getDashboardSummary = async (params: GetDashboardSummaryParams, options?: RequestInit): Promise<DashboardSummary> => {
+
+  return customFetch<DashboardSummary>(getGetDashboardSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDashboardSummaryQueryKey = (params?: GetDashboardSummaryParams,) => {
+    return [
+    `/api/dashboard/summary`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDashboardSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardSummary>>, TError = ErrorType<unknown>>(params: GetDashboardSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDashboardSummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardSummary>>> = ({ signal }) => getDashboardSummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDashboardSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardSummary>>>
+export type GetDashboardSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Compliance dashboard summary for an SME client
+ */
+
+export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDashboardSummary>>, TError = ErrorType<unknown>>(
+ params: GetDashboardSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDashboardSummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getImportInvoicesUrl = () => {
+
+
+
+
+  return `/api/invoices/import`
+}
+
+/**
+ * @summary Bulk validate (and optionally commit) invoices from a spreadsheet
+ */
+export const importInvoices = async (invoiceImportInput: InvoiceImportInput, options?: RequestInit): Promise<InvoiceImportResult> => {
+
+  return customFetch<InvoiceImportResult>(getImportInvoicesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceImportInput)
+  }
+);}
+
+
+
+
+export const getImportInvoicesMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importInvoices>>, TError,{data: BodyType<InvoiceImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importInvoices>>, TError,{data: BodyType<InvoiceImportInput>}, TContext> => {
+
+const mutationKey = ['importInvoices'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importInvoices>>, {data: BodyType<InvoiceImportInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importInvoices(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportInvoicesMutationResult = NonNullable<Awaited<ReturnType<typeof importInvoices>>>
+    export type ImportInvoicesMutationBody = BodyType<InvoiceImportInput>
+    export type ImportInvoicesMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Bulk validate (and optionally commit) invoices from a spreadsheet
+ */
+export const useImportInvoices = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importInvoices>>, TError,{data: BodyType<InvoiceImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importInvoices>>,
+        TError,
+        {data: BodyType<InvoiceImportInput>},
+        TContext
+      > => {
+      return useMutation(getImportInvoicesMutationOptions(options));
+    }
+
+export const getGetComplianceCalendarUrl = (params: GetComplianceCalendarParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/compliance/calendar?${stringifiedParams}` : `/api/compliance/calendar`
+}
+
+/**
+ * @summary Per-entity compliance calendar with computed deadlines
+ */
+export const getComplianceCalendar = async (params: GetComplianceCalendarParams, options?: RequestInit): Promise<ComplianceDeadline[]> => {
+
+  return customFetch<ComplianceDeadline[]>(getGetComplianceCalendarUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetComplianceCalendarQueryKey = (params?: GetComplianceCalendarParams,) => {
+    return [
+    `/api/compliance/calendar`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetComplianceCalendarQueryOptions = <TData = Awaited<ReturnType<typeof getComplianceCalendar>>, TError = ErrorType<unknown>>(params: GetComplianceCalendarParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceCalendar>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetComplianceCalendarQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComplianceCalendar>>> = ({ signal }) => getComplianceCalendar(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getComplianceCalendar>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetComplianceCalendarQueryResult = NonNullable<Awaited<ReturnType<typeof getComplianceCalendar>>>
+export type GetComplianceCalendarQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-entity compliance calendar with computed deadlines
+ */
+
+export function useGetComplianceCalendar<TData = Awaited<ReturnType<typeof getComplianceCalendar>>, TError = ErrorType<unknown>>(
+ params: GetComplianceCalendarParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceCalendar>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetComplianceCalendarQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAlertPreferencesUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}/alert-preferences`
+}
+
+export const getAlertPreferences = async (id: string, options?: RequestInit): Promise<AlertPreferences> => {
+
+  return customFetch<AlertPreferences>(getGetAlertPreferencesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAlertPreferencesQueryKey = (id: string,) => {
+    return [
+    `/api/clients/${id}/alert-preferences`
+    ] as const;
+    }
+
+
+export const getGetAlertPreferencesQueryOptions = <TData = Awaited<ReturnType<typeof getAlertPreferences>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAlertPreferences>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAlertPreferencesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAlertPreferences>>> = ({ signal }) => getAlertPreferences(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAlertPreferences>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAlertPreferencesQueryResult = NonNullable<Awaited<ReturnType<typeof getAlertPreferences>>>
+export type GetAlertPreferencesQueryError = ErrorType<unknown>
+
+
+
+export function useGetAlertPreferences<TData = Awaited<ReturnType<typeof getAlertPreferences>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAlertPreferences>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAlertPreferencesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAlertPreferencesUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}/alert-preferences`
+}
+
+export const updateAlertPreferences = async (id: string,
+    alertPreferencesInput: AlertPreferencesInput, options?: RequestInit): Promise<AlertPreferences> => {
+
+  return customFetch<AlertPreferences>(getUpdateAlertPreferencesUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(alertPreferencesInput)
+  }
+);}
+
+
+
+
+export const getUpdateAlertPreferencesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAlertPreferences>>, TError,{id: string;data: BodyType<AlertPreferencesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAlertPreferences>>, TError,{id: string;data: BodyType<AlertPreferencesInput>}, TContext> => {
+
+const mutationKey = ['updateAlertPreferences'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAlertPreferences>>, {id: string;data: BodyType<AlertPreferencesInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAlertPreferences(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAlertPreferencesMutationResult = NonNullable<Awaited<ReturnType<typeof updateAlertPreferences>>>
+    export type UpdateAlertPreferencesMutationBody = BodyType<AlertPreferencesInput>
+    export type UpdateAlertPreferencesMutationError = ErrorType<unknown>
+
+    export const useUpdateAlertPreferences = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAlertPreferences>>, TError,{id: string;data: BodyType<AlertPreferencesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAlertPreferences>>,
+        TError,
+        {id: string;data: BodyType<AlertPreferencesInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateAlertPreferencesMutationOptions(options));
+    }
+
+export const getSendTestAlertUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}/alerts/test`
+}
+
+/**
+ * @summary Send a test alert across the client's enabled channels
+ */
+export const sendTestAlert = async (id: string, options?: RequestInit): Promise<AlertDeliveryResult[]> => {
+
+  return customFetch<AlertDeliveryResult[]>(getSendTestAlertUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSendTestAlertMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTestAlert>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendTestAlert>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['sendTestAlert'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendTestAlert>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  sendTestAlert(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendTestAlertMutationResult = NonNullable<Awaited<ReturnType<typeof sendTestAlert>>>
+
+    export type SendTestAlertMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send a test alert across the client's enabled channels
+ */
+export const useSendTestAlert = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTestAlert>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendTestAlert>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getSendTestAlertMutationOptions(options));
+    }
+
+export const getListEscalationsUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/escalations`
+}
+
+export const listEscalations = async (id: string, options?: RequestInit): Promise<Escalation[]> => {
+
+  return customFetch<Escalation[]>(getListEscalationsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListEscalationsQueryKey = (id: string,) => {
+    return [
+    `/api/invoices/${id}/escalations`
+    ] as const;
+    }
+
+
+export const getListEscalationsQueryOptions = <TData = Awaited<ReturnType<typeof listEscalations>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEscalations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListEscalationsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEscalations>>> = ({ signal }) => listEscalations(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEscalations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListEscalationsQueryResult = NonNullable<Awaited<ReturnType<typeof listEscalations>>>
+export type ListEscalationsQueryError = ErrorType<unknown>
+
+
+
+export function useListEscalations<TData = Awaited<ReturnType<typeof listEscalations>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEscalations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListEscalationsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getEscalateInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/escalations`
+}
+
+/**
+ * @summary Escalate a failed invoice to a human operator
+ */
+export const escalateInvoice = async (id: string,
+    escalationInput: EscalationInput, options?: RequestInit): Promise<Escalation> => {
+
+  return customFetch<Escalation>(getEscalateInvoiceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(escalationInput)
+  }
+);}
+
+
+
+
+export const getEscalateInvoiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof escalateInvoice>>, TError,{id: string;data: BodyType<EscalationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof escalateInvoice>>, TError,{id: string;data: BodyType<EscalationInput>}, TContext> => {
+
+const mutationKey = ['escalateInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof escalateInvoice>>, {id: string;data: BodyType<EscalationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  escalateInvoice(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EscalateInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof escalateInvoice>>>
+    export type EscalateInvoiceMutationBody = BodyType<EscalationInput>
+    export type EscalateInvoiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Escalate a failed invoice to a human operator
+ */
+export const useEscalateInvoice = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof escalateInvoice>>, TError,{id: string;data: BodyType<EscalationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof escalateInvoice>>,
+        TError,
+        {id: string;data: BodyType<EscalationInput>},
+        TContext
+      > => {
+      return useMutation(getEscalateInvoiceMutationOptions(options));
     }
 
