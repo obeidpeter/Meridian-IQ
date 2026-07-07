@@ -13,7 +13,12 @@ import {
   CreateMembershipBody,
   CreateMembershipResponse,
 } from "@workspace/api-zod";
-import { ROLE_CAPABILITIES, assertCan } from "../modules/auth/rbac";
+import {
+  ROLE_CAPABILITIES,
+  assertCan,
+  assertSameTenant,
+  tenantFirmId,
+} from "../modules/auth/rbac";
 
 const router: IRouter = Router();
 
@@ -32,7 +37,13 @@ router.get("/me", (req, res): void => {
 
 router.get("/firms", async (req, res): Promise<void> => {
   assertCan(req.principal, "identity.read");
-  const rows = await db.select().from(firmsTable).orderBy(firmsTable.createdAt);
+  // Cross-tenant staff (operator, auditor) enumerate all firms; a firm-scoped
+  // principal only ever sees its own firm.
+  const tenant = tenantFirmId(req.principal);
+  const rows =
+    tenant === null
+      ? await db.select().from(firmsTable).orderBy(firmsTable.createdAt)
+      : await db.select().from(firmsTable).where(eq(firmsTable.id, tenant));
   res.json(ListFirmsResponse.parse(rows));
 });
 
@@ -61,6 +72,7 @@ router.get("/firms/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  assertSameTenant(req.principal, params.data.id);
   const [row] = await db
     .select()
     .from(firmsTable)

@@ -218,6 +218,44 @@ export async function reconcile(): Promise<number> {
   return requeued;
 }
 
+// Duplicate-stamp reconciliation (INT-09): a crash between the stamp insert and
+// the outbox row being marked done can double-process an event and write two
+// stamp rows for one invoice. Keep the earliest stamp, remove the extras, and
+// append an audit entry for each removal so the collapse is traceable.
+export async function reconcileDuplicateStamps(): Promise<number> {
+  const dupes = await db.execute<{ invoice_id: string }>(sql`
+    SELECT invoice_id FROM stamp_records
+    GROUP BY invoice_id HAVING count(*) > 1
+  `);
+  const list =
+    (dupes as unknown as { rows?: { invoice_id: string }[] }).rows ??
+    (dupes as unknown as { invoice_id: string }[]);
+  let collapsed = 0;
+  for (const { invoice_id: invoiceId } of list) {
+    const stamps = await db
+      .select()
+      .from(stampRecordsTable)
+      .where(eq(stampRecordsTable.invoiceId, invoiceId))
+      .orderBy(asc(stampRecordsTable.createdAt));
+    const [keep, ...extras] = stamps;
+    if (!keep) continue;
+    for (const extra of extras) {
+      await db
+        .delete(stampRecordsTable)
+        .where(eq(stampRecordsTable.id, extra.id));
+      await appendAudit({
+        action: "invoice.stamp_deduplicated",
+        entityType: "stamp_record",
+        entityId: extra.id,
+        before: { invoiceId, irn: extra.irn, csid: extra.csid },
+        after: { keptStampId: keep.id },
+      });
+      collapsed++;
+    }
+  }
+  return collapsed;
+}
+
 // Replay a dead-lettered event (operator action).
 export async function replayDead(outboxId: string): Promise<void> {
   await db
@@ -235,8 +273,15 @@ export async function listDeadLetters(): Promise<OutboxEvent[]> {
 }
 
 let timer: NodeJS.Timeout | null = null;
+let reconcileTimer: NodeJS.Timeout | null = null;
+
+// Reconciliation runs on a slower cadence than the drain loop.
+const RECONCILE_INTERVAL_MS = 30_000;
 
 // In-process polling worker (modular monolith). Guarded against double-start.
+// A fast loop drains the outbox; a slower loop runs the scheduled
+// reconciliation sweeps (stuck-submission re-enqueue + duplicate-stamp
+// collapse) so INT-09 recovery does not depend on a manual operator trigger.
 export function startWorker(intervalMs = 1_500): void {
   if (timer) return;
   timer = setInterval(() => {
@@ -244,11 +289,21 @@ export function startWorker(intervalMs = 1_500): void {
   }, intervalMs);
   // Do not keep the event loop alive solely for the worker.
   timer.unref?.();
+
+  reconcileTimer = setInterval(() => {
+    void reconcile().catch(() => {});
+    void reconcileDuplicateStamps().catch(() => {});
+  }, RECONCILE_INTERVAL_MS);
+  reconcileTimer.unref?.();
 }
 
 export function stopWorker(): void {
   if (timer) {
     clearInterval(timer);
     timer = null;
+  }
+  if (reconcileTimer) {
+    clearInterval(reconcileTimer);
+    reconcileTimer = null;
   }
 }

@@ -7,6 +7,7 @@ import {
   submissionAttemptsTable,
   confirmationsTable,
   settlementEventsTable,
+  partiesTable,
 } from "@workspace/db";
 import {
   ListInvoicesQueryParams,
@@ -260,11 +261,35 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
     return;
   }
   const { invoice } = await loadForTenant(req, params.data.id);
+  // The confirmation always belongs to the invoice's own buyer; a mismatched
+  // body buyerPartyId must never be trusted (it would bypass the TIN gate and
+  // could reference a cross-tenant party).
+  if (parsed.data.buyerPartyId !== invoice.buyerPartyId) {
+    throw new DomainError(
+      "BUYER_PARTY_MISMATCH",
+      "Confirmation buyerPartyId must match the invoice buyer",
+      409,
+    );
+  }
+  // A party without a validated TIN cannot enter the confirmation workflow
+  // (CORE-08 / BR-02): confirmations feed VAT protection and financeability.
+  const [buyer] = await db
+    .select({ tinValidated: partiesTable.tinValidated })
+    .from(partiesTable)
+    .where(eq(partiesTable.id, invoice.buyerPartyId))
+    .limit(1);
+  if (!buyer?.tinValidated) {
+    throw new DomainError(
+      "TIN_NOT_VALIDATED",
+      "Buyer TIN must be validated before entering the confirmation workflow",
+      422,
+    );
+  }
   const [row] = await db
     .insert(confirmationsTable)
     .values({
       invoiceId: params.data.id,
-      buyerPartyId: parsed.data.buyerPartyId,
+      buyerPartyId: invoice.buyerPartyId,
       state: parsed.data.state,
       method: parsed.data.method ?? null,
       noSetOff: parsed.data.noSetOff ?? false,
