@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/console/"
+title = "MeridianIQ Console"
+version = "1.0.0"
+id = "artifacts/console"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/console/" ]
+localPort = 23876
+
+[services.development]
+run = "pnpm --filter @workspace/console run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/console", "run", "build" ]
+publicDir = "artifacts/console/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23876"
+BASE_PATH = "/console/"

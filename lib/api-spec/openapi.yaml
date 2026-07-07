@@ -20,6 +20,8 @@ tags:
   - name: platform
   - name: operator
   - name: audit
+  - name: console
+  - name: billing
 paths:
   /healthz:
     get:
@@ -1010,6 +1012,331 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Escalation"
+
+  /console/portfolio:
+    get:
+      operationId: getPortfolio
+      tags: [console]
+      summary: Multi-client portfolio dashboard with penalty risk per client
+      responses:
+        "200":
+          description: Portfolio summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioSummary"
+
+  /console/clients/{id}:
+    get:
+      operationId: getClientPortfolio
+      tags: [console]
+      summary: Per-client risk breakdown with invoice-level drill-down
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Client portfolio detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientPortfolioDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /console/team:
+    get:
+      operationId: listFirmTeam
+      tags: [console]
+      summary: Firm users with their roles and capabilities
+      responses:
+        "200":
+          description: Firm team members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FirmMember"
+
+  /console/pipeline:
+    get:
+      operationId: listPipeline
+      tags: [console]
+      summary: Client onboarding pipeline for the firm
+      responses:
+        "200":
+          description: Onboarding prospects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OnboardingProspect"
+    post:
+      operationId: createProspect
+      tags: [console]
+      summary: Add a prospect to the onboarding pipeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProspectInput"
+      responses:
+        "201":
+          description: Prospect created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingProspect"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /console/pipeline/{id}:
+    patch:
+      operationId: updateProspect
+      tags: [console]
+      summary: Advance or edit a pipeline prospect
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProspectUpdate"
+      responses:
+        "200":
+          description: Updated prospect
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingProspect"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /console/unearned-income:
+    get:
+      operationId: getUnearnedIncome
+      tags: [console]
+      summary: Unconverted eligible clients and the revenue share implied at current tiers
+      responses:
+        "200":
+          description: Unearned income view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnearnedIncome"
+
+  /billing/tiers:
+    get:
+      operationId: listTiers
+      tags: [billing]
+      summary: Configurable commercial tiers
+      responses:
+        "200":
+          description: Billing tiers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BillingTier"
+
+  /billing/tiers/{id}:
+    put:
+      operationId: updateTier
+      tags: [billing]
+      summary: Update tier config (price review — writes an audit entry)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TierUpdate"
+      responses:
+        "200":
+          description: Updated tier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingTier"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /billing/tiers/{id}/price-reviews:
+    get:
+      operationId: listPriceReviews
+      tags: [billing]
+      summary: Price-review history for a tier
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Price reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PriceReview"
+
+  /billing/subscription:
+    get:
+      operationId: getSubscription
+      tags: [billing]
+      summary: The firm's current subscription and tier
+      responses:
+        "200":
+          description: Subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionView"
+    put:
+      operationId: updateSubscription
+      tags: [billing]
+      summary: Change the firm's tier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionUpdate"
+      responses:
+        "200":
+          description: Updated subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionView"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /billing/statements:
+    get:
+      operationId: listStatements
+      tags: [billing]
+      summary: Monthly revenue-share statements
+      parameters:
+        - name: firmId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Statements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RevenueShareStatement"
+
+  /billing/statements/generate:
+    post:
+      operationId: generateStatements
+      tags: [billing]
+      summary: Generate/refresh per-firm statements for a period
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateStatementsInput"
+      responses:
+        "200":
+          description: Generated statements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RevenueShareStatement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /operator/cases:
+    get:
+      operationId: listOperatorCases
+      tags: [operator]
+      summary: Cross-tenant operator work queue with playbook prompts
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, in_progress, resolved]
+      responses:
+        "200":
+          description: Operator cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OperatorCaseView"
+
+  /operator/cases/stats:
+    get:
+      operationId: getOperatorQueueStats
+      tags: [operator]
+      summary: Queue throughput and handling-time stats
+      responses:
+        "200":
+          description: Queue stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorQueueStats"
+
+  /operator/cases/{id}/claim:
+    post:
+      operationId: claimOperatorCase
+      tags: [operator]
+      summary: Claim a case (starts handling-time tracking)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Claimed case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorCaseView"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /operator/cases/{id}/resolve:
+    post:
+      operationId: resolveOperatorCase
+      tags: [operator]
+      summary: One-click catalogue resolution for a case
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveCaseInput"
+      responses:
+        "200":
+          description: Resolved case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorCaseView"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
   parameters:
@@ -2510,3 +2837,521 @@ components:
         context:
           type: object
           additionalProperties: true
+
+    ClientRisk:
+      type: object
+      required:
+        [
+          clientPartyId,
+          legalName,
+          totalInvoices,
+          unsubmittedCount,
+          unsubmittedValue,
+          failedCount,
+          pendingCount,
+          stampedCount,
+          overdueCount,
+          penaltyRisk,
+          failingInvoiceIds,
+        ]
+      properties:
+        clientPartyId:
+          type: string
+        legalName:
+          type: string
+        totalInvoices:
+          type: integer
+        unsubmittedCount:
+          type: integer
+        unsubmittedValue:
+          type: string
+        failedCount:
+          type: integer
+        pendingCount:
+          type: integer
+        stampedCount:
+          type: integer
+        overdueCount:
+          type: integer
+        penaltyRisk:
+          type: string
+          enum: [low, medium, high]
+        nextDeadline:
+          oneOf:
+            - $ref: "#/components/schemas/ComplianceDeadline"
+            - type: "null"
+        failingInvoiceIds:
+          type: array
+          items:
+            type: string
+    PortfolioSummary:
+      type: object
+      required:
+        [
+          firmId,
+          clientCount,
+          highRiskCount,
+          totalUnsubmittedCount,
+          totalUnsubmittedValue,
+          totalFailedCount,
+          totalOverdueCount,
+          clients,
+        ]
+      properties:
+        firmId:
+          type: string
+        clientCount:
+          type: integer
+        highRiskCount:
+          type: integer
+        totalUnsubmittedCount:
+          type: integer
+        totalUnsubmittedValue:
+          type: string
+        totalFailedCount:
+          type: integer
+        totalOverdueCount:
+          type: integer
+        clients:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientRisk"
+    ConsoleInvoice:
+      type: object
+      required:
+        [id, invoiceNumber, status, category, issueDate, grandTotal, buyerName]
+      properties:
+        id:
+          type: string
+        invoiceNumber:
+          type: string
+        status:
+          type: string
+        category:
+          type: string
+        issueDate:
+          type: string
+        grandTotal:
+          type: string
+        buyerName:
+          type: string
+        failing:
+          type: boolean
+    ClientPortfolioDetail:
+      type: object
+      required: [client, invoices, deadlines]
+      properties:
+        client:
+          $ref: "#/components/schemas/ClientRisk"
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConsoleInvoice"
+        deadlines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComplianceDeadline"
+    FirmMember:
+      type: object
+      required: [userId, role, capabilities]
+      properties:
+        userId:
+          type: string
+        fullName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        role:
+          type: string
+        clientPartyId:
+          type: ["string", "null"]
+        capabilities:
+          type: array
+          items:
+            type: string
+    OnboardingProspect:
+      type: object
+      required:
+        [
+          id,
+          firmId,
+          name,
+          stage,
+          estimatedMonthlyInvoices,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        name:
+          type: string
+        contactEmail:
+          type: ["string", "null"]
+        stage:
+          type: string
+          enum: [lead, contacted, proposal, onboarding, active, lost]
+        estimatedMonthlyInvoices:
+          type: integer
+        clientPartyId:
+          type: ["string", "null"]
+        note:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProspectInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        contactEmail:
+          type: string
+        stage:
+          type: string
+          enum: [lead, contacted, proposal, onboarding, active, lost]
+        estimatedMonthlyInvoices:
+          type: integer
+        note:
+          type: string
+    ProspectUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        contactEmail:
+          type: ["string", "null"]
+        stage:
+          type: string
+          enum: [lead, contacted, proposal, onboarding, active, lost]
+        estimatedMonthlyInvoices:
+          type: integer
+        clientPartyId:
+          type: ["string", "null"]
+        note:
+          type: ["string", "null"]
+    UnearnedProspect:
+      type: object
+      required:
+        [
+          id,
+          name,
+          stage,
+          estimatedMonthlyInvoices,
+          impliedMonthlyBilling,
+          impliedMonthlyRevenueShare,
+        ]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        stage:
+          type: string
+        estimatedMonthlyInvoices:
+          type: integer
+        impliedMonthlyBilling:
+          type: string
+        impliedMonthlyRevenueShare:
+          type: string
+    UnearnedIncome:
+      type: object
+      required:
+        [
+          firmId,
+          tierKey,
+          revenueSharePct,
+          eligibleCount,
+          impliedMonthlyBilling,
+          impliedMonthlyRevenueShare,
+          impliedAnnualRevenueShare,
+          prospects,
+        ]
+      properties:
+        firmId:
+          type: string
+        tierKey:
+          type: string
+        revenueSharePct:
+          type: string
+        eligibleCount:
+          type: integer
+        impliedMonthlyBilling:
+          type: string
+        impliedMonthlyRevenueShare:
+          type: string
+        impliedAnnualRevenueShare:
+          type: string
+        prospects:
+          type: array
+          items:
+            $ref: "#/components/schemas/UnearnedProspect"
+    BillingTier:
+      type: object
+      required:
+        [
+          id,
+          key,
+          name,
+          monthlyPrice,
+          includedInvoices,
+          overagePrice,
+          revenueSharePct,
+          operatorManaged,
+          active,
+          sortOrder,
+        ]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+          enum: [essential, compliance_desk, professional, enterprise_lite]
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        monthlyPrice:
+          type: string
+        includedInvoices:
+          type: integer
+        overagePrice:
+          type: string
+        revenueSharePct:
+          type: string
+        operatorManaged:
+          type: boolean
+        active:
+          type: boolean
+        sortOrder:
+          type: integer
+    TierUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        monthlyPrice:
+          type: string
+        includedInvoices:
+          type: integer
+        overagePrice:
+          type: string
+        revenueSharePct:
+          type: string
+        active:
+          type: boolean
+        effectiveDate:
+          type: string
+        note:
+          type: string
+    PriceReview:
+      type: object
+      required: [id, tierId, field, newValue, effectiveDate, createdAt]
+      properties:
+        id:
+          type: string
+        tierId:
+          type: string
+        field:
+          type: string
+        oldValue:
+          type: ["string", "null"]
+        newValue:
+          type: string
+        note:
+          type: ["string", "null"]
+        effectiveDate:
+          type: string
+        actorId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    SubscriptionView:
+      type: object
+      required: [firmId, status, tier]
+      properties:
+        firmId:
+          type: string
+        status:
+          type: string
+          enum: [active, paused, cancelled]
+        startedAt:
+          type: ["string", "null"]
+          format: date-time
+        tier:
+          $ref: "#/components/schemas/BillingTier"
+    SubscriptionUpdate:
+      type: object
+      required: [tierKey]
+      properties:
+        tierKey:
+          type: string
+          enum: [essential, compliance_desk, professional, enterprise_lite]
+        status:
+          type: string
+          enum: [active, paused, cancelled]
+    RevenueShareStatement:
+      type: object
+      required:
+        [
+          id,
+          firmId,
+          period,
+          tierKey,
+          billedInvoices,
+          includedInvoices,
+          overageInvoices,
+          subscriptionAmount,
+          overageAmount,
+          billingAmount,
+          revenueSharePct,
+          revenueShareAmount,
+          generatedAt,
+        ]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        firmName:
+          type: ["string", "null"]
+        period:
+          type: string
+        tierKey:
+          type: string
+        billedInvoices:
+          type: integer
+        includedInvoices:
+          type: integer
+        overageInvoices:
+          type: integer
+        subscriptionAmount:
+          type: string
+        overageAmount:
+          type: string
+        billingAmount:
+          type: string
+        revenueSharePct:
+          type: string
+        revenueShareAmount:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+    GenerateStatementsInput:
+      type: object
+      required: [period]
+      properties:
+        period:
+          type: string
+        firmId:
+          type: string
+    CasePlaybook:
+      type: object
+      required: [code, category, cause, fix, retriable]
+      properties:
+        code:
+          type: string
+        category:
+          type: string
+        cause:
+          type: string
+        fix:
+          type: string
+        retriable:
+          type: boolean
+    OperatorCaseView:
+      type: object
+      required:
+        [
+          id,
+          firmId,
+          title,
+          priority,
+          status,
+          openedAt,
+        ]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        firmName:
+          type: ["string", "null"]
+        clientPartyId:
+          type: ["string", "null"]
+        clientName:
+          type: ["string", "null"]
+        invoiceId:
+          type: ["string", "null"]
+        invoiceNumber:
+          type: ["string", "null"]
+        title:
+          type: string
+        errorCode:
+          type: ["string", "null"]
+        priority:
+          type: string
+          enum: [low, medium, high]
+        status:
+          type: string
+          enum: [open, in_progress, resolved]
+        assignedOperatorId:
+          type: ["string", "null"]
+        resolutionCode:
+          type: ["string", "null"]
+        resolutionNote:
+          type: ["string", "null"]
+        openedAt:
+          type: string
+          format: date-time
+        firstActionAt:
+          type: ["string", "null"]
+          format: date-time
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+        handleSeconds:
+          type: ["integer", "null"]
+        playbook:
+          oneOf:
+            - $ref: "#/components/schemas/CasePlaybook"
+            - type: "null"
+    ResolveCaseInput:
+      type: object
+      required: [resolutionCode]
+      properties:
+        resolutionCode:
+          type: string
+        note:
+          type: string
+    OperatorQueueStats:
+      type: object
+      required:
+        [
+          openCount,
+          inProgressCount,
+          resolvedCount,
+          clientsServed,
+          avgHandleSeconds,
+        ]
+      properties:
+        openCount:
+          type: integer
+        inProgressCount:
+          type: integer
+        resolvedCount:
+          type: integer
+        clientsServed:
+          type: integer
+        avgHandleSeconds:
+          type: ["integer", "null"]

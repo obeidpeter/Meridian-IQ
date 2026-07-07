@@ -1167,6 +1167,353 @@ export interface EscalationInput {
   context?: EscalationInputContext;
 }
 
+export type ClientRiskPenaltyRisk = typeof ClientRiskPenaltyRisk[keyof typeof ClientRiskPenaltyRisk];
+
+
+export const ClientRiskPenaltyRisk = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export interface ClientRisk {
+  clientPartyId: string;
+  legalName: string;
+  totalInvoices: number;
+  unsubmittedCount: number;
+  unsubmittedValue: string;
+  failedCount: number;
+  pendingCount: number;
+  stampedCount: number;
+  overdueCount: number;
+  penaltyRisk: ClientRiskPenaltyRisk;
+  nextDeadline?: ComplianceDeadline | null;
+  failingInvoiceIds: string[];
+}
+
+export interface PortfolioSummary {
+  firmId: string;
+  clientCount: number;
+  highRiskCount: number;
+  totalUnsubmittedCount: number;
+  totalUnsubmittedValue: string;
+  totalFailedCount: number;
+  totalOverdueCount: number;
+  clients: ClientRisk[];
+}
+
+export interface ConsoleInvoice {
+  id: string;
+  invoiceNumber: string;
+  status: string;
+  category: string;
+  issueDate: string;
+  grandTotal: string;
+  buyerName: string;
+  failing?: boolean;
+}
+
+export interface ClientPortfolioDetail {
+  client: ClientRisk;
+  invoices: ConsoleInvoice[];
+  deadlines: ComplianceDeadline[];
+}
+
+export interface FirmMember {
+  userId: string;
+  /** @nullable */
+  fullName?: string | null;
+  /** @nullable */
+  email?: string | null;
+  role: string;
+  /** @nullable */
+  clientPartyId?: string | null;
+  capabilities: string[];
+}
+
+export type OnboardingProspectStage = typeof OnboardingProspectStage[keyof typeof OnboardingProspectStage];
+
+
+export const OnboardingProspectStage = {
+  lead: 'lead',
+  contacted: 'contacted',
+  proposal: 'proposal',
+  onboarding: 'onboarding',
+  active: 'active',
+  lost: 'lost',
+} as const;
+
+export interface OnboardingProspect {
+  id: string;
+  firmId: string;
+  name: string;
+  /** @nullable */
+  contactEmail?: string | null;
+  stage: OnboardingProspectStage;
+  estimatedMonthlyInvoices: number;
+  /** @nullable */
+  clientPartyId?: string | null;
+  /** @nullable */
+  note?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProspectInputStage = typeof ProspectInputStage[keyof typeof ProspectInputStage];
+
+
+export const ProspectInputStage = {
+  lead: 'lead',
+  contacted: 'contacted',
+  proposal: 'proposal',
+  onboarding: 'onboarding',
+  active: 'active',
+  lost: 'lost',
+} as const;
+
+export interface ProspectInput {
+  name: string;
+  contactEmail?: string;
+  stage?: ProspectInputStage;
+  estimatedMonthlyInvoices?: number;
+  note?: string;
+}
+
+export type ProspectUpdateStage = typeof ProspectUpdateStage[keyof typeof ProspectUpdateStage];
+
+
+export const ProspectUpdateStage = {
+  lead: 'lead',
+  contacted: 'contacted',
+  proposal: 'proposal',
+  onboarding: 'onboarding',
+  active: 'active',
+  lost: 'lost',
+} as const;
+
+export interface ProspectUpdate {
+  name?: string;
+  /** @nullable */
+  contactEmail?: string | null;
+  stage?: ProspectUpdateStage;
+  estimatedMonthlyInvoices?: number;
+  /** @nullable */
+  clientPartyId?: string | null;
+  /** @nullable */
+  note?: string | null;
+}
+
+export interface UnearnedProspect {
+  id: string;
+  name: string;
+  stage: string;
+  estimatedMonthlyInvoices: number;
+  impliedMonthlyBilling: string;
+  impliedMonthlyRevenueShare: string;
+}
+
+export interface UnearnedIncome {
+  firmId: string;
+  tierKey: string;
+  revenueSharePct: string;
+  eligibleCount: number;
+  impliedMonthlyBilling: string;
+  impliedMonthlyRevenueShare: string;
+  impliedAnnualRevenueShare: string;
+  prospects: UnearnedProspect[];
+}
+
+export type BillingTierKey = typeof BillingTierKey[keyof typeof BillingTierKey];
+
+
+export const BillingTierKey = {
+  essential: 'essential',
+  compliance_desk: 'compliance_desk',
+  professional: 'professional',
+  enterprise_lite: 'enterprise_lite',
+} as const;
+
+export interface BillingTier {
+  id: string;
+  key: BillingTierKey;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  monthlyPrice: string;
+  includedInvoices: number;
+  overagePrice: string;
+  revenueSharePct: string;
+  operatorManaged: boolean;
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface TierUpdate {
+  name?: string;
+  /** @nullable */
+  description?: string | null;
+  monthlyPrice?: string;
+  includedInvoices?: number;
+  overagePrice?: string;
+  revenueSharePct?: string;
+  active?: boolean;
+  effectiveDate?: string;
+  note?: string;
+}
+
+export interface PriceReview {
+  id: string;
+  tierId: string;
+  field: string;
+  /** @nullable */
+  oldValue?: string | null;
+  newValue: string;
+  /** @nullable */
+  note?: string | null;
+  effectiveDate: string;
+  /** @nullable */
+  actorId?: string | null;
+  createdAt: string;
+}
+
+export type SubscriptionViewStatus = typeof SubscriptionViewStatus[keyof typeof SubscriptionViewStatus];
+
+
+export const SubscriptionViewStatus = {
+  active: 'active',
+  paused: 'paused',
+  cancelled: 'cancelled',
+} as const;
+
+export interface SubscriptionView {
+  firmId: string;
+  status: SubscriptionViewStatus;
+  /** @nullable */
+  startedAt?: string | null;
+  tier: BillingTier;
+}
+
+export type SubscriptionUpdateTierKey = typeof SubscriptionUpdateTierKey[keyof typeof SubscriptionUpdateTierKey];
+
+
+export const SubscriptionUpdateTierKey = {
+  essential: 'essential',
+  compliance_desk: 'compliance_desk',
+  professional: 'professional',
+  enterprise_lite: 'enterprise_lite',
+} as const;
+
+export type SubscriptionUpdateStatus = typeof SubscriptionUpdateStatus[keyof typeof SubscriptionUpdateStatus];
+
+
+export const SubscriptionUpdateStatus = {
+  active: 'active',
+  paused: 'paused',
+  cancelled: 'cancelled',
+} as const;
+
+export interface SubscriptionUpdate {
+  tierKey: SubscriptionUpdateTierKey;
+  status?: SubscriptionUpdateStatus;
+}
+
+export interface RevenueShareStatement {
+  id: string;
+  firmId: string;
+  /** @nullable */
+  firmName?: string | null;
+  period: string;
+  tierKey: string;
+  billedInvoices: number;
+  includedInvoices: number;
+  overageInvoices: number;
+  subscriptionAmount: string;
+  overageAmount: string;
+  billingAmount: string;
+  revenueSharePct: string;
+  revenueShareAmount: string;
+  generatedAt: string;
+}
+
+export interface GenerateStatementsInput {
+  period: string;
+  firmId?: string;
+}
+
+export interface CasePlaybook {
+  code: string;
+  category: string;
+  cause: string;
+  fix: string;
+  retriable: boolean;
+}
+
+export type OperatorCaseViewPriority = typeof OperatorCaseViewPriority[keyof typeof OperatorCaseViewPriority];
+
+
+export const OperatorCaseViewPriority = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type OperatorCaseViewStatus = typeof OperatorCaseViewStatus[keyof typeof OperatorCaseViewStatus];
+
+
+export const OperatorCaseViewStatus = {
+  open: 'open',
+  in_progress: 'in_progress',
+  resolved: 'resolved',
+} as const;
+
+export interface OperatorCaseView {
+  id: string;
+  firmId: string;
+  /** @nullable */
+  firmName?: string | null;
+  /** @nullable */
+  clientPartyId?: string | null;
+  /** @nullable */
+  clientName?: string | null;
+  /** @nullable */
+  invoiceId?: string | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
+  title: string;
+  /** @nullable */
+  errorCode?: string | null;
+  priority: OperatorCaseViewPriority;
+  status: OperatorCaseViewStatus;
+  /** @nullable */
+  assignedOperatorId?: string | null;
+  /** @nullable */
+  resolutionCode?: string | null;
+  /** @nullable */
+  resolutionNote?: string | null;
+  openedAt: string;
+  /** @nullable */
+  firstActionAt?: string | null;
+  /** @nullable */
+  resolvedAt?: string | null;
+  /** @nullable */
+  handleSeconds?: number | null;
+  playbook?: CasePlaybook | null;
+}
+
+export interface ResolveCaseInput {
+  resolutionCode: string;
+  note?: string;
+}
+
+export interface OperatorQueueStats {
+  openCount: number;
+  inProgressCount: number;
+  resolvedCount: number;
+  clientsServed: number;
+  /** @nullable */
+  avgHandleSeconds: number | null;
+}
+
 /**
  * Bad request
  */
@@ -1203,4 +1550,21 @@ clientPartyId: string;
 export type GetComplianceCalendarParams = {
 clientPartyId: string;
 };
+
+export type ListStatementsParams = {
+firmId?: string;
+};
+
+export type ListOperatorCasesParams = {
+status?: ListOperatorCasesStatus;
+};
+
+export type ListOperatorCasesStatus = typeof ListOperatorCasesStatus[keyof typeof ListOperatorCasesStatus];
+
+
+export const ListOperatorCasesStatus = {
+  open: 'open',
+  in_progress: 'in_progress',
+  resolved: 'resolved',
+} as const;
 

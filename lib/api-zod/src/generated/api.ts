@@ -1281,3 +1281,510 @@ export const EscalateInvoiceResponse = zod.object({
 })
 
 
+/**
+ * @summary Multi-client portfolio dashboard with penalty risk per client
+ */
+export const GetPortfolioResponse = zod.object({
+  "firmId": zod.string(),
+  "clientCount": zod.number(),
+  "highRiskCount": zod.number(),
+  "totalUnsubmittedCount": zod.number(),
+  "totalUnsubmittedValue": zod.string(),
+  "totalFailedCount": zod.number(),
+  "totalOverdueCount": zod.number(),
+  "clients": zod.array(zod.object({
+  "clientPartyId": zod.string(),
+  "legalName": zod.string(),
+  "totalInvoices": zod.number(),
+  "unsubmittedCount": zod.number(),
+  "unsubmittedValue": zod.string(),
+  "failedCount": zod.number(),
+  "pendingCount": zod.number(),
+  "stampedCount": zod.number(),
+  "overdueCount": zod.number(),
+  "penaltyRisk": zod.enum(['low', 'medium', 'high']),
+  "nextDeadline": zod.union([zod.object({
+  "id": zod.string(),
+  "clientPartyId": zod.string(),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "dueDate": zod.coerce.date(),
+  "status": zod.enum(['upcoming', 'due_soon', 'overdue', 'met']),
+  "severity": zod.enum(['info', 'warning', 'critical']),
+  "invoiceId": zod.string().nullish()
+}),zod.null()]).optional(),
+  "failingInvoiceIds": zod.array(zod.string())
+}))
+})
+
+
+/**
+ * @summary Per-client risk breakdown with invoice-level drill-down
+ */
+export const GetClientPortfolioParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetClientPortfolioResponse = zod.object({
+  "client": zod.object({
+  "clientPartyId": zod.string(),
+  "legalName": zod.string(),
+  "totalInvoices": zod.number(),
+  "unsubmittedCount": zod.number(),
+  "unsubmittedValue": zod.string(),
+  "failedCount": zod.number(),
+  "pendingCount": zod.number(),
+  "stampedCount": zod.number(),
+  "overdueCount": zod.number(),
+  "penaltyRisk": zod.enum(['low', 'medium', 'high']),
+  "nextDeadline": zod.union([zod.object({
+  "id": zod.string(),
+  "clientPartyId": zod.string(),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "dueDate": zod.coerce.date(),
+  "status": zod.enum(['upcoming', 'due_soon', 'overdue', 'met']),
+  "severity": zod.enum(['info', 'warning', 'critical']),
+  "invoiceId": zod.string().nullish()
+}),zod.null()]).optional(),
+  "failingInvoiceIds": zod.array(zod.string())
+}),
+  "invoices": zod.array(zod.object({
+  "id": zod.string(),
+  "invoiceNumber": zod.string(),
+  "status": zod.string(),
+  "category": zod.string(),
+  "issueDate": zod.string(),
+  "grandTotal": zod.string(),
+  "buyerName": zod.string(),
+  "failing": zod.boolean().optional()
+})),
+  "deadlines": zod.array(zod.object({
+  "id": zod.string(),
+  "clientPartyId": zod.string(),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "dueDate": zod.coerce.date(),
+  "status": zod.enum(['upcoming', 'due_soon', 'overdue', 'met']),
+  "severity": zod.enum(['info', 'warning', 'critical']),
+  "invoiceId": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Firm users with their roles and capabilities
+ */
+export const ListFirmTeamResponseItem = zod.object({
+  "userId": zod.string(),
+  "fullName": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "role": zod.string(),
+  "clientPartyId": zod.string().nullish(),
+  "capabilities": zod.array(zod.string())
+})
+export const ListFirmTeamResponse = zod.array(ListFirmTeamResponseItem)
+
+
+/**
+ * @summary Client onboarding pipeline for the firm
+ */
+export const ListPipelineResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "name": zod.string(),
+  "contactEmail": zod.string().nullish(),
+  "stage": zod.enum(['lead', 'contacted', 'proposal', 'onboarding', 'active', 'lost']),
+  "estimatedMonthlyInvoices": zod.number(),
+  "clientPartyId": zod.string().nullish(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListPipelineResponse = zod.array(ListPipelineResponseItem)
+
+
+/**
+ * @summary Add a prospect to the onboarding pipeline
+ */
+export const CreateProspectBody = zod.object({
+  "name": zod.string(),
+  "contactEmail": zod.string().optional(),
+  "stage": zod.enum(['lead', 'contacted', 'proposal', 'onboarding', 'active', 'lost']).optional(),
+  "estimatedMonthlyInvoices": zod.number().optional(),
+  "note": zod.string().optional()
+})
+
+export const CreateProspectResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "name": zod.string(),
+  "contactEmail": zod.string().nullish(),
+  "stage": zod.enum(['lead', 'contacted', 'proposal', 'onboarding', 'active', 'lost']),
+  "estimatedMonthlyInvoices": zod.number(),
+  "clientPartyId": zod.string().nullish(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Advance or edit a pipeline prospect
+ */
+export const UpdateProspectParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateProspectBody = zod.object({
+  "name": zod.string().optional(),
+  "contactEmail": zod.string().nullish(),
+  "stage": zod.enum(['lead', 'contacted', 'proposal', 'onboarding', 'active', 'lost']).optional(),
+  "estimatedMonthlyInvoices": zod.number().optional(),
+  "clientPartyId": zod.string().nullish(),
+  "note": zod.string().nullish()
+})
+
+export const UpdateProspectResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "name": zod.string(),
+  "contactEmail": zod.string().nullish(),
+  "stage": zod.enum(['lead', 'contacted', 'proposal', 'onboarding', 'active', 'lost']),
+  "estimatedMonthlyInvoices": zod.number(),
+  "clientPartyId": zod.string().nullish(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Unconverted eligible clients and the revenue share implied at current tiers
+ */
+export const GetUnearnedIncomeResponse = zod.object({
+  "firmId": zod.string(),
+  "tierKey": zod.string(),
+  "revenueSharePct": zod.string(),
+  "eligibleCount": zod.number(),
+  "impliedMonthlyBilling": zod.string(),
+  "impliedMonthlyRevenueShare": zod.string(),
+  "impliedAnnualRevenueShare": zod.string(),
+  "prospects": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "stage": zod.string(),
+  "estimatedMonthlyInvoices": zod.number(),
+  "impliedMonthlyBilling": zod.string(),
+  "impliedMonthlyRevenueShare": zod.string()
+}))
+})
+
+
+/**
+ * @summary Configurable commercial tiers
+ */
+export const ListTiersResponseItem = zod.object({
+  "id": zod.string(),
+  "key": zod.enum(['essential', 'compliance_desk', 'professional', 'enterprise_lite']),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "monthlyPrice": zod.string(),
+  "includedInvoices": zod.number(),
+  "overagePrice": zod.string(),
+  "revenueSharePct": zod.string(),
+  "operatorManaged": zod.boolean(),
+  "active": zod.boolean(),
+  "sortOrder": zod.number()
+})
+export const ListTiersResponse = zod.array(ListTiersResponseItem)
+
+
+/**
+ * @summary Update tier config (price review — writes an audit entry)
+ */
+export const UpdateTierParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateTierBody = zod.object({
+  "name": zod.string().optional(),
+  "description": zod.string().nullish(),
+  "monthlyPrice": zod.string().optional(),
+  "includedInvoices": zod.number().optional(),
+  "overagePrice": zod.string().optional(),
+  "revenueSharePct": zod.string().optional(),
+  "active": zod.boolean().optional(),
+  "effectiveDate": zod.string().optional(),
+  "note": zod.string().optional()
+})
+
+export const UpdateTierResponse = zod.object({
+  "id": zod.string(),
+  "key": zod.enum(['essential', 'compliance_desk', 'professional', 'enterprise_lite']),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "monthlyPrice": zod.string(),
+  "includedInvoices": zod.number(),
+  "overagePrice": zod.string(),
+  "revenueSharePct": zod.string(),
+  "operatorManaged": zod.boolean(),
+  "active": zod.boolean(),
+  "sortOrder": zod.number()
+})
+
+
+/**
+ * @summary Price-review history for a tier
+ */
+export const ListPriceReviewsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListPriceReviewsResponseItem = zod.object({
+  "id": zod.string(),
+  "tierId": zod.string(),
+  "field": zod.string(),
+  "oldValue": zod.string().nullish(),
+  "newValue": zod.string(),
+  "note": zod.string().nullish(),
+  "effectiveDate": zod.string(),
+  "actorId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListPriceReviewsResponse = zod.array(ListPriceReviewsResponseItem)
+
+
+/**
+ * @summary The firm's current subscription and tier
+ */
+export const GetSubscriptionResponse = zod.object({
+  "firmId": zod.string(),
+  "status": zod.enum(['active', 'paused', 'cancelled']),
+  "startedAt": zod.coerce.date().nullish(),
+  "tier": zod.object({
+  "id": zod.string(),
+  "key": zod.enum(['essential', 'compliance_desk', 'professional', 'enterprise_lite']),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "monthlyPrice": zod.string(),
+  "includedInvoices": zod.number(),
+  "overagePrice": zod.string(),
+  "revenueSharePct": zod.string(),
+  "operatorManaged": zod.boolean(),
+  "active": zod.boolean(),
+  "sortOrder": zod.number()
+})
+})
+
+
+/**
+ * @summary Change the firm's tier
+ */
+export const UpdateSubscriptionBody = zod.object({
+  "tierKey": zod.enum(['essential', 'compliance_desk', 'professional', 'enterprise_lite']),
+  "status": zod.enum(['active', 'paused', 'cancelled']).optional()
+})
+
+export const UpdateSubscriptionResponse = zod.object({
+  "firmId": zod.string(),
+  "status": zod.enum(['active', 'paused', 'cancelled']),
+  "startedAt": zod.coerce.date().nullish(),
+  "tier": zod.object({
+  "id": zod.string(),
+  "key": zod.enum(['essential', 'compliance_desk', 'professional', 'enterprise_lite']),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "monthlyPrice": zod.string(),
+  "includedInvoices": zod.number(),
+  "overagePrice": zod.string(),
+  "revenueSharePct": zod.string(),
+  "operatorManaged": zod.boolean(),
+  "active": zod.boolean(),
+  "sortOrder": zod.number()
+})
+})
+
+
+/**
+ * @summary Monthly revenue-share statements
+ */
+export const ListStatementsQueryParams = zod.object({
+  "firmId": zod.coerce.string().optional()
+})
+
+export const ListStatementsResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "firmName": zod.string().nullish(),
+  "period": zod.string(),
+  "tierKey": zod.string(),
+  "billedInvoices": zod.number(),
+  "includedInvoices": zod.number(),
+  "overageInvoices": zod.number(),
+  "subscriptionAmount": zod.string(),
+  "overageAmount": zod.string(),
+  "billingAmount": zod.string(),
+  "revenueSharePct": zod.string(),
+  "revenueShareAmount": zod.string(),
+  "generatedAt": zod.coerce.date()
+})
+export const ListStatementsResponse = zod.array(ListStatementsResponseItem)
+
+
+/**
+ * @summary Generate/refresh per-firm statements for a period
+ */
+export const GenerateStatementsBody = zod.object({
+  "period": zod.string(),
+  "firmId": zod.string().optional()
+})
+
+export const GenerateStatementsResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "firmName": zod.string().nullish(),
+  "period": zod.string(),
+  "tierKey": zod.string(),
+  "billedInvoices": zod.number(),
+  "includedInvoices": zod.number(),
+  "overageInvoices": zod.number(),
+  "subscriptionAmount": zod.string(),
+  "overageAmount": zod.string(),
+  "billingAmount": zod.string(),
+  "revenueSharePct": zod.string(),
+  "revenueShareAmount": zod.string(),
+  "generatedAt": zod.coerce.date()
+})
+export const GenerateStatementsResponse = zod.array(GenerateStatementsResponseItem)
+
+
+/**
+ * @summary Cross-tenant operator work queue with playbook prompts
+ */
+export const ListOperatorCasesQueryParams = zod.object({
+  "status": zod.enum(['open', 'in_progress', 'resolved']).optional()
+})
+
+export const ListOperatorCasesResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "firmName": zod.string().nullish(),
+  "clientPartyId": zod.string().nullish(),
+  "clientName": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "title": zod.string(),
+  "errorCode": zod.string().nullish(),
+  "priority": zod.enum(['low', 'medium', 'high']),
+  "status": zod.enum(['open', 'in_progress', 'resolved']),
+  "assignedOperatorId": zod.string().nullish(),
+  "resolutionCode": zod.string().nullish(),
+  "resolutionNote": zod.string().nullish(),
+  "openedAt": zod.coerce.date(),
+  "firstActionAt": zod.coerce.date().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "handleSeconds": zod.number().nullish(),
+  "playbook": zod.union([zod.object({
+  "code": zod.string(),
+  "category": zod.string(),
+  "cause": zod.string(),
+  "fix": zod.string(),
+  "retriable": zod.boolean()
+}),zod.null()]).optional()
+})
+export const ListOperatorCasesResponse = zod.array(ListOperatorCasesResponseItem)
+
+
+/**
+ * @summary Queue throughput and handling-time stats
+ */
+export const GetOperatorQueueStatsResponse = zod.object({
+  "openCount": zod.number(),
+  "inProgressCount": zod.number(),
+  "resolvedCount": zod.number(),
+  "clientsServed": zod.number(),
+  "avgHandleSeconds": zod.number().nullable()
+})
+
+
+/**
+ * @summary Claim a case (starts handling-time tracking)
+ */
+export const ClaimOperatorCaseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ClaimOperatorCaseResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "firmName": zod.string().nullish(),
+  "clientPartyId": zod.string().nullish(),
+  "clientName": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "title": zod.string(),
+  "errorCode": zod.string().nullish(),
+  "priority": zod.enum(['low', 'medium', 'high']),
+  "status": zod.enum(['open', 'in_progress', 'resolved']),
+  "assignedOperatorId": zod.string().nullish(),
+  "resolutionCode": zod.string().nullish(),
+  "resolutionNote": zod.string().nullish(),
+  "openedAt": zod.coerce.date(),
+  "firstActionAt": zod.coerce.date().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "handleSeconds": zod.number().nullish(),
+  "playbook": zod.union([zod.object({
+  "code": zod.string(),
+  "category": zod.string(),
+  "cause": zod.string(),
+  "fix": zod.string(),
+  "retriable": zod.boolean()
+}),zod.null()]).optional()
+})
+
+
+/**
+ * @summary One-click catalogue resolution for a case
+ */
+export const ResolveOperatorCaseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ResolveOperatorCaseBody = zod.object({
+  "resolutionCode": zod.string(),
+  "note": zod.string().optional()
+})
+
+export const ResolveOperatorCaseResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "firmName": zod.string().nullish(),
+  "clientPartyId": zod.string().nullish(),
+  "clientName": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "title": zod.string(),
+  "errorCode": zod.string().nullish(),
+  "priority": zod.enum(['low', 'medium', 'high']),
+  "status": zod.enum(['open', 'in_progress', 'resolved']),
+  "assignedOperatorId": zod.string().nullish(),
+  "resolutionCode": zod.string().nullish(),
+  "resolutionNote": zod.string().nullish(),
+  "openedAt": zod.coerce.date(),
+  "firstActionAt": zod.coerce.date().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "handleSeconds": zod.number().nullish(),
+  "playbook": zod.union([zod.object({
+  "code": zod.string(),
+  "category": zod.string(),
+  "cause": zod.string(),
+  "fix": zod.string(),
+  "retriable": zod.boolean()
+}),zod.null()]).optional()
+})
+
+

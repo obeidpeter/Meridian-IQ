@@ -27,7 +27,9 @@ export type Capability =
   | "buyer.verify"
   | "settlement.write"
   | "console.portfolio.read"
+  | "pipeline.write"
   | "billing.read"
+  | "billing.write"
   | "operator.queue.read"
   | "operator.queue.act"
   | "catalogue.write"
@@ -55,7 +57,9 @@ const ALL: Capability[] = [
   "buyer.verify",
   "settlement.write",
   "console.portfolio.read",
+  "pipeline.write",
   "billing.read",
+  "billing.write",
   "operator.queue.read",
   "operator.queue.act",
   "catalogue.write",
@@ -88,7 +92,9 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "confirmation.write",
     "settlement.write",
     "console.portfolio.read",
+    "pipeline.write",
     "billing.read",
+    "billing.write",
     "consent.read",
     "consent.write",
     "flags.read",
