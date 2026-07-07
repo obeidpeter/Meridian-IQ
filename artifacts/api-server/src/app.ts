@@ -217,13 +217,19 @@ app.use(
   }),
 );
 app.use(cors());
-app.use(express.json());
+// 5,000-row imports (NFR-03) and full bank-statement uploads (INT-05) arrive
+// as JSON bodies well beyond the 100kb express default.
+app.use(express.json({ limit: "8mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Verify the Clerk session (if any) from cookie/Bearer token and attach auth to
 // the request. resolvePrincipal reads getAuth(req) to build the tenant-scoped
 // principal in production; the dev-header shim is used only outside production.
-app.use(clerkMiddleware());
+// Mounted only when Clerk keys are provisioned: a keyless dev environment
+// (local smoke, CI) authenticates through the dev-header shim alone.
+if (process.env.CLERK_SECRET_KEY) {
+  app.use(clerkMiddleware());
+}
 app.use(resolvePrincipal);
 app.use(tenantContext);
 app.use("/api", router);

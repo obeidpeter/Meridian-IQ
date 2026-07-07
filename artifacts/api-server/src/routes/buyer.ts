@@ -1,0 +1,202 @@
+import { Router, type IRouter } from "express";
+import { eq, inArray } from "drizzle-orm";
+import { getDb, invoicesTable, partiesTable, settlementEventsTable } from "@workspace/db";
+import {
+  ListBuyerInvoicesQueryParams,
+  ListBuyerInvoicesResponse,
+  FlagPaymentParams,
+  FlagPaymentBody,
+  FlagPaymentResponse,
+  ListBuyerSuppliersResponse,
+  GetBuyerExposureResponse,
+  GetBuyerScoreboardResponse,
+} from "@workspace/api-zod";
+import {
+  assertCan,
+  assertBuyerPartyAccess,
+  buyerPartyId,
+} from "../modules/auth/rbac";
+import { isFeatureEnabled } from "../modules/flags/flags";
+import { DomainError } from "../modules/errors";
+import { appendAudit } from "../modules/audit/audit";
+import {
+  canTransition,
+  recordTransition,
+} from "../modules/invoice/lifecycle";
+import {
+  loadBuyerBook,
+  getOrRefreshExposure,
+  computeScoreboard,
+} from "../modules/buyer/service";
+
+// Buyer Rails v1 (BR-01, BR-02, BR-04, BR-05). Every surface is scoped to the
+// caller's buyer Party (buyer principals run RLS-bypassed, so this route-level
+// scoping is the tenancy boundary) and gated by the R2 `buyer_rails` flag.
+
+const router: IRouter = Router();
+
+async function gate(): Promise<boolean> {
+  // Buyer principals carry no firm; the flag is evaluated globally.
+  return isFeatureEnabled("buyer_rails", null);
+}
+
+router.get("/buyer/invoices", async (req, res): Promise<void> => {
+  if (!(await gate())) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "buyer.rails.read");
+  const party = buyerPartyId(req.principal);
+  const query = ListBuyerInvoicesQueryParams.safeParse(req.query);
+  const stateFilter = query.success ? query.data.confirmationState : undefined;
+
+  const book = await loadBuyerBook(party);
+  const supplierIds = [...new Set(book.map((f) => f.invoice.supplierPartyId))];
+  const suppliers = supplierIds.length
+    ? await getDb()
+        .select({ id: partiesTable.id, legalName: partiesTable.legalName })
+        .from(partiesTable)
+        .where(inArray(partiesTable.id, supplierIds))
+    : [];
+  const nameById = new Map(suppliers.map((s) => [s.id, s.legalName]));
+  res.json(
+    ListBuyerInvoicesResponse.parse(
+      book
+        .filter((f) =>
+          stateFilter
+            ? (f.latestConfirmation ?? "none") === stateFilter
+            : true,
+        )
+        .map((f) => ({
+          id: f.invoice.id,
+          invoiceNumber: f.invoice.invoiceNumber,
+          supplierPartyId: f.invoice.supplierPartyId,
+          supplierName:
+            nameById.get(f.invoice.supplierPartyId) ?? "Unknown supplier",
+          status: f.invoice.status,
+          grandTotal: f.invoice.grandTotal,
+          vatTotal: f.invoice.vatTotal,
+          issueDate: f.invoice.issueDate,
+          dueDate: f.invoice.dueDate,
+          confirmationState: f.latestConfirmation ?? "none",
+          stampValid: f.stamped,
+          eligible: f.stamped && f.eligible,
+        })),
+    ),
+  );
+});
+
+// BR-04: buyer marks an invoice payment as scheduled or paid. Each flag is one
+// append-only SettlementEvent with source=buyer_flag and the flagging user
+// recorded; a `paid` flag settles the invoice (an allowed settlement source in
+// the mandatory-source hierarchy, Plan 7.4).
+router.post("/invoices/:id/payment-flags", async (req, res): Promise<void> => {
+  if (!(await gate())) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "settlement.flag");
+  const params = FlagPaymentParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const body = FlagPaymentBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const [invoice] = await getDb()
+    .select()
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, params.data.id))
+    .limit(1);
+  if (!invoice) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
+  assertBuyerPartyAccess(req.principal, invoice.buyerPartyId);
+  if (!["stamped", "confirmed", "settled"].includes(invoice.status)) {
+    throw new DomainError(
+      "NOT_FLAGGABLE",
+      `Invoice is ${invoice.status}; only stamped, confirmed or settled invoices carry payment flags`,
+      409,
+    );
+  }
+  const occurredAt = body.data.occurredAt
+    ? new Date(body.data.occurredAt)
+    : new Date();
+  const [event] = await getDb()
+    .insert(settlementEventsTable)
+    .values({
+      invoiceId: invoice.id,
+      source: "buyer_flag",
+      amount: body.data.amount ?? invoice.grandTotal,
+      paymentStatus: body.data.paymentStatus,
+      actorId: req.principal.userId,
+      occurredAt,
+    })
+    .returning();
+  if (
+    body.data.paymentStatus === "paid" &&
+    canTransition(invoice.status, "settled")
+  ) {
+    await getDb()
+      .update(invoicesTable)
+      .set({ status: "settled" })
+      .where(eq(invoicesTable.id, invoice.id));
+    await recordTransition({
+      invoiceId: invoice.id,
+      firmId: invoice.firmId,
+      fromStatus: invoice.status,
+      toStatus: "settled",
+      actorId: req.principal.userId,
+      actorRole: req.principal.role,
+      reason: "buyer_flag:paid",
+    });
+  }
+  await appendAudit({
+    actorId: req.principal.userId,
+    firmId: invoice.firmId,
+    action: "invoice.payment_flag",
+    entityType: "settlement_event",
+    entityId: event.id,
+    after: { paymentStatus: event.paymentStatus, amount: event.amount },
+  });
+  res.status(201).json(FlagPaymentResponse.parse(event));
+});
+
+// BR-01: supplier verification view — per-supplier stamp validity and
+// input-VAT exposure, served from the (at least daily) snapshot.
+router.get("/buyer/suppliers", async (req, res): Promise<void> => {
+  if (!(await gate())) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "buyer.rails.read");
+  const party = buyerPartyId(req.principal);
+  const exposure = await getOrRefreshExposure(party);
+  res.json(ListBuyerSuppliersResponse.parse(exposure.breakdown));
+});
+
+router.get("/buyer/exposure", async (req, res): Promise<void> => {
+  if (!(await gate())) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "buyer.rails.read");
+  const party = buyerPartyId(req.principal);
+  const exposure = await getOrRefreshExposure(party);
+  res.json(GetBuyerExposureResponse.parse(exposure));
+});
+
+// BR-05: the supplier compliance scoreboard.
+router.get("/buyer/scoreboard", async (req, res): Promise<void> => {
+  if (!(await gate())) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "buyer.rails.read");
+  const party = buyerPartyId(req.principal);
+  const scoreboard = await computeScoreboard(party);
+  res.json(GetBuyerScoreboardResponse.parse(scoreboard));
+});
+
+export default router;

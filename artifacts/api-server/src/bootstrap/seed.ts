@@ -19,6 +19,7 @@ import {
   onboardingProspectsTable,
   operatorCasesTable,
   revenueShareStatementsTable,
+  cpdCoursesTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { seedCatalogue } from "../modules/catalogue/catalogue";
@@ -75,6 +76,7 @@ export async function seedPlatform(): Promise<void> {
     await seedDemo();
     await seedConsoleDemo();
     await seedBuyerDemo();
+    await seedCpdCourses();
   });
   logger.info(
     { flags: FLAGS.length, schemaVersions: SCHEMA_VERSIONS.length },
@@ -433,6 +435,75 @@ async function seedBuyerDemo(): Promise<void> {
       },
     ])
     .onConflictDoNothing();
+}
+
+// --- CPD certification content (CON-05) --------------------------------------
+// Platform course content for the certification portal; keyed so re-seeding is
+// idempotent. Deliberately compact — the portal needs real content, not an LMS.
+async function seedCpdCourses(): Promise<void> {
+  await getDb()
+    .insert(cpdCoursesTable)
+    .values([
+      {
+        key: "mbs-onboarding-101",
+        title: "MBS Onboarding Essentials",
+        summary:
+          "The mandatory e-invoicing model, IRN/CSID stamping, and how to move a client book onto MeridianIQ.",
+        cpdHours: 2,
+        sortOrder: 1,
+        modules: [
+          {
+            title: "The pre-clearance model",
+            body: "B2B and B2G invoices are validated by the national MBS platform before reaching the buyer; validated invoices carry an IRN, a CSID and a QR code. Issuance is measured in hours — every client workflow must treat stamping as asynchronous.",
+          },
+          {
+            title: "Onboarding a client book",
+            body: "Capture the client's entity profile and TIN, validate against the registry, obtain layer-1 consent, and bulk-import open invoices from the published template before the first live submission.",
+          },
+          {
+            title: "Resolving validation failures",
+            body: "Every rejection maps to a catalogue entry with a plain-language cause and fix. Escalate to the Compliance Desk only when the catalogue guidance does not resolve the failure.",
+          },
+        ],
+      },
+      {
+        key: "penalty-exposure-201",
+        title: "Penalty Exposure and the Compliance Calendar",
+        summary:
+          "s.103/s.104 exposure, the B2C 24-hour rule, and using deadline clocks to keep a portfolio penalty-free.",
+        cpdHours: 1,
+        sortOrder: 2,
+        modules: [
+          {
+            title: "Where penalties come from",
+            body: "Late or missing submissions attract per-invoice penalties; B2C transactions above NGN 50,000 must be reported within 24 hours with a daily penalty for late reporting.",
+          },
+          {
+            title: "Working the calendar",
+            body: "The console surfaces per-client deadline clocks. Anything marked due-soon needs action today; anything overdue is accruing penalties now.",
+          },
+        ],
+      },
+      {
+        key: "buyer-rails-301",
+        title: "Buyer Confirmation and VAT Protection",
+        summary:
+          "Why buyers confirm invoices, how confirmation protects input VAT, and what it means for client financeability.",
+        cpdHours: 2,
+        sortOrder: 3,
+        modules: [
+          {
+            title: "Input-VAT protection",
+            body: "A buyer's input-VAT claim rests on valid supplier stamps. Supplier verification shows exposure across the supplier base, refreshed daily.",
+          },
+          {
+            title: "The confirmation workflow",
+            body: "A supplier requests confirmation on a stamped invoice; the buyer confirms, queries or rejects with a recorded method. A confirmation recorded for VAT protection is the same event that makes the supplier financeable later.",
+          },
+        ],
+      },
+    ])
+    .onConflictDoNothing({ target: cpdCoursesTable.key });
 }
 
 // --- Console / accountant tooling demo data (Task #4) -----------------------

@@ -3,6 +3,7 @@ import {
   getDb,
   invoicesTable,
   invoiceLinesTable,
+  invoiceLifecycleEventsTable,
   partiesTable,
   outboxTable,
   type Invoice,
@@ -167,6 +168,104 @@ export async function createDraft(
     after: { invoiceNumber: invoice.invoiceNumber, status: invoice.status },
   });
   return { invoice, lines };
+}
+
+export interface BulkDraftRow {
+  rowNumber: number;
+  supplierPartyId: string;
+  buyerPartyId: string;
+  invoiceNumber: string;
+  currency?: string;
+  issueDate: string;
+  dueDate?: string | null;
+  line: LineInput;
+}
+
+// Bulk draft creation for large imports (NFR-03: a 5,000-row import must fit
+// inside the request-transaction budget). Instead of per-row createDraft calls
+// (~6 statements each), rows land in chunked multi-row inserts — invoices,
+// lines and lifecycle events — with ONE audit entry for the whole batch. Every
+// invoice still gets its creation transition row (CORE-02 lineage).
+const BULK_CHUNK = 500;
+
+export async function bulkCreateDrafts(
+  firmId: string,
+  rows: BulkDraftRow[],
+  actorId?: string,
+): Promise<{ rowNumber: number; invoiceId: string; invoiceNumber: string }[]> {
+  const out: { rowNumber: number; invoiceId: string; invoiceNumber: string }[] =
+    [];
+  for (let i = 0; i < rows.length; i += BULK_CHUNK) {
+    const chunk = rows.slice(i, i + BULK_CHUNK);
+    const computed = chunk.map((r) => {
+      const fin = computeLineFinancials(r.line);
+      const subtotal = Number(fin.lineExtension);
+      const vatTotal = Number(fin.vatAmount);
+      return { r, fin, subtotal, vatTotal };
+    });
+    const inserted = await getDb()
+      .insert(invoicesTable)
+      .values(
+        computed.map(({ r, subtotal, vatTotal }) => ({
+          firmId,
+          supplierPartyId: r.supplierPartyId,
+          buyerPartyId: r.buyerPartyId,
+          invoiceNumber: r.invoiceNumber,
+          currency: r.currency ?? "NGN",
+          issueDate: r.issueDate,
+          dueDate: r.dueDate ?? null,
+          subtotal: money(subtotal),
+          vatTotal: money(vatTotal),
+          grandTotal: money(subtotal + vatTotal),
+        })),
+      )
+      .returning({
+        id: invoicesTable.id,
+        invoiceNumber: invoicesTable.invoiceNumber,
+        status: invoicesTable.status,
+      });
+    await getDb()
+      .insert(invoiceLinesTable)
+      .values(
+        inserted.map((inv, idx) => ({
+          invoiceId: inv.id,
+          lineNo: 1,
+          description: computed[idx].r.line.description,
+          quantity: computed[idx].r.line.quantity,
+          unitPrice: computed[idx].r.line.unitPrice,
+          vatRate: computed[idx].r.line.vatRate,
+          lineExtension: computed[idx].fin.lineExtension,
+          vatAmount: computed[idx].fin.vatAmount,
+        })),
+      );
+    await getDb()
+      .insert(invoiceLifecycleEventsTable)
+      .values(
+        inserted.map((inv) => ({
+          invoiceId: inv.id,
+          firmId,
+          fromStatus: null,
+          toStatus: inv.status,
+          actorId: actorId ?? null,
+        })),
+      );
+    inserted.forEach((inv, idx) => {
+      out.push({
+        rowNumber: computed[idx].r.rowNumber,
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+      });
+    });
+  }
+  await appendAudit({
+    actorId,
+    firmId,
+    action: "invoice.bulk_import",
+    entityType: "firm",
+    entityId: firmId,
+    after: { count: out.length },
+  });
+  return out;
 }
 
 export async function getInvoiceWithLines(

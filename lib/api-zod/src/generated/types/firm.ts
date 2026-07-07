@@ -5,6 +5,7 @@
  * MeridianIQ platform API — data spine, compliance rails and consent.
  * OpenAPI spec version: 0.1.0
  */
+import type { FirmThemeProperty } from './firmThemeProperty';
 
 export interface Firm {
   id: string;
@@ -15,6 +16,8 @@ export interface Firm {
   clerkOrgId?: string | null;
   /** @nullable */
   partyId?: string | null;
+  /** @nullable */
+  theme?: FirmThemeProperty;
   createdAt: Date;
   updatedAt: Date;
 }

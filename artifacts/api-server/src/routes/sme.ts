@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   getDb,
   invoicesTable,
@@ -7,6 +7,7 @@ import {
   escalationsTable,
   alertPreferencesTable,
   type Invoice,
+  type B2cReportBatch,
 } from "@workspace/db";
 import {
   GetDashboardSummaryQueryParams,
@@ -34,7 +35,9 @@ import {
   assertPartyAccess,
   tenantFirmId,
 } from "../modules/auth/rbac";
-import { createDraft, getInvoiceWithLines } from "../modules/invoice/service";
+import { createDraft, bulkCreateDrafts, getInvoiceWithLines } from "../modules/invoice/service";
+import { isFeatureEnabled } from "../modules/flags/flags";
+import { openBatchesFor } from "../modules/b2c/service";
 import { sendMessage } from "../modules/messaging/messaging";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
@@ -63,8 +66,14 @@ type Deadline = {
 };
 
 // Deadlines are computed dynamically from the invoice book plus the statutory
-// filing calendar — there is no deadlines table (SME-05).
-function computeDeadlines(clientPartyId: string, invoices: Invoice[]): Deadline[] {
+// filing calendar — there is no deadlines table (SME-05). B2C clocks come from
+// the live report batches when the R2 module is on (SME-08); while it is dark,
+// the legacy consolidated-monthly placeholder row stands in.
+function computeDeadlines(
+  clientPartyId: string,
+  invoices: Invoice[],
+  b2cBatches: B2cReportBatch[] | null,
+): Deadline[] {
   const now = new Date();
   const deadlines: Deadline[] = [];
 
@@ -85,22 +94,46 @@ function computeDeadlines(clientPartyId: string, invoices: Invoice[]): Deadline[
     invoiceId: null,
   });
 
-  // Consolidated B2C report: due the 10th of the following month.
-  const b2cDue = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 10),
-  );
-  const b2cDays = daysUntil(b2cDue, now);
-  deadlines.push({
-    id: `b2c-${b2cDue.toISOString().slice(0, 10)}`,
-    clientPartyId,
-    kind: "b2c_report",
-    title: "Consolidated B2C sales report",
-    description: "Aggregated business-to-consumer sales report for the period.",
-    dueDate: b2cDue.toISOString(),
-    status: b2cDays <= 5 ? "due_soon" : "upcoming",
-    severity: b2cDays <= 5 ? "warning" : "info",
-    invoiceId: null,
-  });
+  if (b2cBatches === null) {
+    // Legacy placeholder: consolidated B2C report due the 10th of next month.
+    const b2cDue = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 10),
+    );
+    const b2cDays = daysUntil(b2cDue, now);
+    deadlines.push({
+      id: `b2c-${b2cDue.toISOString().slice(0, 10)}`,
+      clientPartyId,
+      kind: "b2c_report",
+      title: "Consolidated B2C sales report",
+      description: "Aggregated business-to-consumer sales report for the period.",
+      dueDate: b2cDue.toISOString(),
+      status: b2cDays <= 5 ? "due_soon" : "upcoming",
+      severity: b2cDays <= 5 ? "warning" : "info",
+      invoiceId: null,
+    });
+  } else {
+    // SME-08: per-client 24-hour compliance clocks from open/breached batches.
+    for (const batch of b2cBatches) {
+      const breached = batch.status === "breached";
+      const hoursLeft =
+        (batch.deadlineAt.getTime() - now.getTime()) / (60 * 60 * 1000);
+      deadlines.push({
+        id: `b2c-batch-${batch.id}`,
+        clientPartyId,
+        kind: "b2c_report",
+        title: breached
+          ? `Overdue: B2C report (${batch.itemCount} sale${batch.itemCount === 1 ? "" : "s"})`
+          : `B2C 24-hour report (${batch.itemCount} sale${batch.itemCount === 1 ? "" : "s"})`,
+        description: breached
+          ? "The 24-hour reporting window has passed; a daily penalty accrues until reported."
+          : "Qualifying B2C sales above NGN 50,000 must be reported within 24 hours.",
+        dueDate: batch.deadlineAt.toISOString(),
+        status: breached ? "overdue" : hoursLeft <= 4 ? "due_soon" : "upcoming",
+        severity: breached ? "critical" : hoursLeft <= 4 ? "warning" : "info",
+        invoiceId: null,
+      });
+    }
+  }
 
   // Per-invoice submission deadlines: unsubmitted invoices approaching or past
   // their submission window.
@@ -183,7 +216,10 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     }
   }
 
-  const deadlines = computeDeadlines(clientPartyId, invoices);
+  const b2cBatches = (await isFeatureEnabled("b2c_reporting", req.principal.firmId))
+    ? await openBatchesFor(clientPartyId, tenant)
+    : null;
+  const deadlines = computeDeadlines(clientPartyId, invoices, b2cBatches);
   const overdue = deadlines.filter((d) => d.status === "overdue");
   const upcoming = deadlines.filter((d) => d.status !== "met");
   const nextDeadline = upcoming[0] ?? null;
@@ -276,7 +312,10 @@ router.get("/compliance/calendar", async (req, res): Promise<void> => {
   await assertPartyAccess(req.principal, clientPartyId);
   const tenant = tenantFirmId(req.principal);
   const invoices = await loadClientInvoices(clientPartyId, tenant);
-  const deadlines = computeDeadlines(clientPartyId, invoices);
+  const b2cBatches = (await isFeatureEnabled("b2c_reporting", req.principal.firmId))
+    ? await openBatchesFor(clientPartyId, tenant)
+    : null;
+  const deadlines = computeDeadlines(clientPartyId, invoices, b2cBatches);
   res.json(GetComplianceCalendarResponse.parse(deadlines));
 });
 
@@ -356,6 +395,98 @@ router.post("/invoices/import", async (req, res): Promise<void> => {
   let validCount = 0;
   let invalidCount = 0;
   let createdCount = 0;
+
+  // NFR-03: large committed imports take the bulk path — chunked multi-row
+  // inserts instead of ~6 statements per row — so a 5,000-row import completes
+  // well inside the request-transaction budget.
+  const BULK_THRESHOLD = 100;
+  if (commit && rows.length > BULK_THRESHOLD) {
+    const valid: typeof rows = [];
+    for (const row of rows) {
+      const errors = validateImportRow(row as Record<string, unknown>);
+      if (errors.length > 0) {
+        invalidCount += 1;
+        results.push({
+          rowNumber: row.rowNumber,
+          status: "invalid",
+          invoiceId: null,
+          invoiceNumber: row.invoiceNumber ?? null,
+          errors,
+        });
+        continue;
+      }
+      valid.push(row);
+    }
+    // Resolve every buyer TIN in one pass; create missing buyers in one insert.
+    const tins = [...new Set(valid.map((r) => String(r.buyerTin)))];
+    const existingBuyers = tins.length
+      ? await getDb()
+          .select({ id: partiesTable.id, tin: partiesTable.tin })
+          .from(partiesTable)
+          .where(inArray(partiesTable.tin, tins))
+      : [];
+    const buyerByTin = new Map(existingBuyers.map((b) => [b.tin, b.id]));
+    const missing = valid.filter((r) => !buyerByTin.has(String(r.buyerTin)));
+    const missingByTin = new Map(
+      missing.map((r) => [String(r.buyerTin), String(r.buyerName)]),
+    );
+    if (missingByTin.size > 0) {
+      const createdBuyers = await getDb()
+        .insert(partiesTable)
+        .values(
+          [...missingByTin.entries()].map(([tin, legalName]) => ({
+            type: "buyer" as const,
+            legalName,
+            tin,
+            countryCode: "NG",
+          })),
+        )
+        .returning({ id: partiesTable.id, tin: partiesTable.tin });
+      for (const b of createdBuyers) buyerByTin.set(b.tin, b.id);
+    }
+    const created = await bulkCreateDrafts(
+      firmId,
+      valid.map((row) => ({
+        rowNumber: row.rowNumber,
+        supplierPartyId: clientPartyId,
+        buyerPartyId: buyerByTin.get(String(row.buyerTin))!,
+        invoiceNumber: String(row.invoiceNumber),
+        issueDate: String(row.issueDate),
+        dueDate: row.dueDate ? String(row.dueDate) : null,
+        currency: row.currency ? String(row.currency) : "NGN",
+        line: {
+          description: String(row.description),
+          quantity: String(row.quantity),
+          unitPrice: String(row.unitPrice),
+          vatRate: String(row.vatRate),
+        },
+      })),
+      req.principal.userId,
+    );
+    for (const c of created) {
+      createdCount += 1;
+      validCount += 1;
+      results.push({
+        rowNumber: c.rowNumber,
+        status: "created",
+        invoiceId: c.invoiceId,
+        invoiceNumber: c.invoiceNumber,
+        errors: [],
+      });
+    }
+    results.sort((a, b) => a.rowNumber - b.rowNumber);
+    res.json(
+      ImportInvoicesResponse.parse({
+        total: rows.length,
+        validCount,
+        invalidCount,
+        createdCount,
+        committed: true,
+        rows: results,
+      }),
+    );
+    return;
+  }
 
   for (const row of rows) {
     const errors = validateImportRow(row as Record<string, unknown>);

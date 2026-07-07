@@ -479,14 +479,28 @@ export async function listDeadLetters(): Promise<OutboxEvent[]> {
 
 let timer: NodeJS.Timeout | null = null;
 let reconcileTimer: NodeJS.Timeout | null = null;
+let sweepTimer: NodeJS.Timeout | null = null;
 
 // Reconciliation runs on a slower cadence than the drain loop.
 const RECONCILE_INTERVAL_MS = 30_000;
+// R2 compliance sweeps: B2C clocks are minute-sensitive (SME-08 pre-breach
+// alerts must land >= 4h before the deadline), so the sweep runs every minute;
+// buyer exposure snapshots refresh inside the same pass but self-limit to a
+// 24-hour window (BR-01), so the frequent cadence costs nothing.
+const SWEEP_INTERVAL_MS = 60_000;
+
+// Registered by R2 modules at import time (b2c, buyer) so the worker core does
+// not import feature modules.
+const SWEEPS: (() => Promise<unknown>)[] = [];
+export function registerSweep(sweep: () => Promise<unknown>): void {
+  SWEEPS.push(sweep);
+}
 
 // In-process polling worker (modular monolith). Guarded against double-start.
 // A fast loop drains the outbox; a slower loop runs the scheduled
 // reconciliation sweeps (stuck-submission re-enqueue + duplicate-stamp
-// collapse) so INT-09 recovery does not depend on a manual operator trigger.
+// collapse) so INT-09 recovery does not depend on a manual operator trigger;
+// a third loop runs the registered R2 compliance sweeps.
 export function startWorker(intervalMs = 1_500): void {
   if (timer) return;
   timer = setInterval(() => {
@@ -500,6 +514,13 @@ export function startWorker(intervalMs = 1_500): void {
     void reconcileDuplicateStamps().catch(() => {});
   }, RECONCILE_INTERVAL_MS);
   reconcileTimer.unref?.();
+
+  sweepTimer = setInterval(() => {
+    for (const sweep of SWEEPS) {
+      void sweep().catch(() => {});
+    }
+  }, SWEEP_INTERVAL_MS);
+  sweepTimer.unref?.();
 }
 
 export function stopWorker(): void {
@@ -510,5 +531,9 @@ export function stopWorker(): void {
   if (reconcileTimer) {
     clearInterval(reconcileTimer);
     reconcileTimer = null;
+  }
+  if (sweepTimer) {
+    clearInterval(sweepTimer);
+    sweepTimer = null;
   }
 }

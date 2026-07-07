@@ -14,6 +14,12 @@ import advisoryRouter from "./advisory";
 import catalogueRouter from "./catalogue";
 import smeRouter from "./sme";
 import consoleRouter from "./console";
+import statementsRouter from "./statements";
+import buyerRouter from "./buyer";
+import b2cRouter from "./b2c";
+import whitelabelRouter from "./whitelabel";
+import certificationRouter from "./certification";
+import connectorsRouter from "./connectors";
 
 const router: IRouter = Router();
 
@@ -32,5 +38,11 @@ router.use(advisoryRouter);
 router.use(catalogueRouter);
 router.use(smeRouter);
 router.use(consoleRouter);
+router.use(statementsRouter);
+router.use(buyerRouter);
+router.use(b2cRouter);
+router.use(whitelabelRouter);
+router.use(certificationRouter);
+router.use(connectorsRouter);
 
 export default router;

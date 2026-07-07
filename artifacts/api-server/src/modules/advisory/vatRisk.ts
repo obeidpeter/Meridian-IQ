@@ -1,3 +1,5 @@
+import { parseCsv } from "../../lib/csv.ts";
+
 // VAT-risk check engine (ADV-02). Ingests a buyer's supplier ledger (CSV or
 // structured rows), verifies each invoice's stamp status via CORE-04, computes
 // input-VAT at risk, and produces an exposure report plus a buyer-supplier
@@ -64,49 +66,6 @@ function money(n: number): number {
 
 export function stampKey(irn: string, csid: string): string {
   return `${irn}|${csid}`;
-}
-
-// Minimal, dependency-free CSV parser: handles quoted fields, escaped quotes
-// ("") and embedded commas/newlines. Header row maps to known ledger columns
-// (case- and separator-insensitive: supplierTin / supplier_tin / "Supplier TIN").
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let field = "";
-  let row: string[] = [];
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += c;
-      }
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ",") {
-      row.push(field);
-      field = "";
-    } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-    } else {
-      field += c;
-    }
-  }
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
 }
 
 const COLUMN_ALIASES: Record<string, keyof LedgerRow> = {

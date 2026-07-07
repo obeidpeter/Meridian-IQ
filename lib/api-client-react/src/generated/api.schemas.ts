@@ -25,6 +25,11 @@ export interface Me {
   capabilities: string[];
 }
 
+/**
+ * @nullable
+ */
+export type FirmThemeProperty = { [key: string]: unknown } | null;
+
 export interface Firm {
   id: string;
   name: string;
@@ -34,6 +39,8 @@ export interface Firm {
   clerkOrgId?: string | null;
   /** @nullable */
   partyId?: string | null;
+  /** @nullable */
+  theme?: FirmThemeProperty;
   createdAt: string;
   updatedAt: string;
 }
@@ -1548,6 +1555,513 @@ export interface OperatorQueueStats {
   avgHandleSeconds: number | null;
 }
 
+export type BankStatementStatus = typeof BankStatementStatus[keyof typeof BankStatementStatus];
+
+
+export const BankStatementStatus = {
+  validated: 'validated',
+  committed: 'committed',
+  reconciled: 'reconciled',
+} as const;
+
+export interface BankStatement {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  formatKey: string;
+  /** @nullable */
+  filename?: string | null;
+  /** @nullable */
+  accountRef?: string | null;
+  /** @nullable */
+  uploadedByUserId?: string | null;
+  status: BankStatementStatus;
+  lineCount: number;
+  parsedCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * @nullable
+ */
+export type BankStatementLineDirection = typeof BankStatementLineDirection[keyof typeof BankStatementLineDirection] | null;
+
+
+export const BankStatementLineDirection = {
+  credit: 'credit',
+  debit: 'debit',
+} as const;
+
+export type BankStatementLineParseStatus = typeof BankStatementLineParseStatus[keyof typeof BankStatementLineParseStatus];
+
+
+export const BankStatementLineParseStatus = {
+  parsed: 'parsed',
+  invalid: 'invalid',
+} as const;
+
+export interface BankStatementLine {
+  id: string;
+  statementId: string;
+  lineNo: number;
+  /** @nullable */
+  valueDate?: string | null;
+  /** @nullable */
+  amount?: string | null;
+  /** @nullable */
+  direction?: BankStatementLineDirection;
+  /** @nullable */
+  narration?: string | null;
+  /** @nullable */
+  counterpartyRef?: string | null;
+  parseStatus: BankStatementLineParseStatus;
+  /** @nullable */
+  parseError?: string | null;
+  rawLine: string;
+  createdAt: string;
+}
+
+export interface StatementImportInput {
+  clientPartyId: string;
+  /** @minLength 1 */
+  csv: string;
+  formatKey?: string;
+  filename?: string;
+  commit: boolean;
+}
+
+export type StatementRowResultParseStatus = typeof StatementRowResultParseStatus[keyof typeof StatementRowResultParseStatus];
+
+
+export const StatementRowResultParseStatus = {
+  parsed: 'parsed',
+  invalid: 'invalid',
+} as const;
+
+/**
+ * @nullable
+ */
+export type StatementRowResultDirection = typeof StatementRowResultDirection[keyof typeof StatementRowResultDirection] | null;
+
+
+export const StatementRowResultDirection = {
+  credit: 'credit',
+  debit: 'debit',
+} as const;
+
+export interface StatementRowResult {
+  lineNo: number;
+  parseStatus: StatementRowResultParseStatus;
+  /** @nullable */
+  valueDate?: string | null;
+  /** @nullable */
+  amount?: string | null;
+  /** @nullable */
+  direction?: StatementRowResultDirection;
+  /** @nullable */
+  narration?: string | null;
+  /** @nullable */
+  error?: string | null;
+}
+
+export interface StatementImportResult {
+  /** @nullable */
+  statementId: string | null;
+  committed: boolean;
+  /** @nullable */
+  formatKey: string | null;
+  /** @nullable */
+  accountRef?: string | null;
+  lineCount: number;
+  parsedCount: number;
+  parseRate: number;
+  rows: StatementRowResult[];
+}
+
+/**
+ * @nullable
+ */
+export type MatchProposalViewFeatures = { [key: string]: unknown } | null;
+
+export type MatchProposalViewStatus = typeof MatchProposalViewStatus[keyof typeof MatchProposalViewStatus];
+
+
+export const MatchProposalViewStatus = {
+  proposed: 'proposed',
+  accepted: 'accepted',
+  rejected: 'rejected',
+  superseded: 'superseded',
+} as const;
+
+export interface MatchProposalView {
+  id: string;
+  statementId: string;
+  statementLineId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  invoiceStatus: string;
+  invoiceTotal: string;
+  buyerName: string;
+  lineNo?: number;
+  /** @nullable */
+  lineAmount?: string | null;
+  /** @nullable */
+  lineDate?: string | null;
+  /** @nullable */
+  narration?: string | null;
+  confidence: string;
+  /** @nullable */
+  features?: MatchProposalViewFeatures;
+  status: MatchProposalViewStatus;
+  createdAt: string;
+}
+
+export type MatchDecisionResultStatus = typeof MatchDecisionResultStatus[keyof typeof MatchDecisionResultStatus];
+
+
+export const MatchDecisionResultStatus = {
+  accepted: 'accepted',
+  rejected: 'rejected',
+} as const;
+
+export interface MatchDecisionResult {
+  proposalId: string;
+  status: MatchDecisionResultStatus;
+  invoiceId: string;
+  invoiceStatus: string;
+  /** @nullable */
+  settlementEventId: string | null;
+}
+
+export type BuyerInvoiceConfirmationState = typeof BuyerInvoiceConfirmationState[keyof typeof BuyerInvoiceConfirmationState];
+
+
+export const BuyerInvoiceConfirmationState = {
+  none: 'none',
+  requested: 'requested',
+  confirmed: 'confirmed',
+  queried: 'queried',
+  rejected: 'rejected',
+} as const;
+
+export interface BuyerInvoice {
+  id: string;
+  invoiceNumber: string;
+  supplierPartyId: string;
+  supplierName: string;
+  status: string;
+  grandTotal: string;
+  vatTotal: string;
+  issueDate: string;
+  /** @nullable */
+  dueDate?: string | null;
+  confirmationState: BuyerInvoiceConfirmationState;
+  /** @nullable */
+  stampValid?: boolean | null;
+  /** @nullable */
+  eligible?: boolean | null;
+}
+
+export type PaymentFlagInputPaymentStatus = typeof PaymentFlagInputPaymentStatus[keyof typeof PaymentFlagInputPaymentStatus];
+
+
+export const PaymentFlagInputPaymentStatus = {
+  scheduled: 'scheduled',
+  paid: 'paid',
+} as const;
+
+export interface PaymentFlagInput {
+  paymentStatus: PaymentFlagInputPaymentStatus;
+  occurredAt?: string;
+  amount?: string;
+}
+
+export interface BuyerSupplier {
+  supplierPartyId: string;
+  supplierName: string;
+  /** @nullable */
+  supplierTin?: string | null;
+  /** @nullable */
+  tinValidated?: boolean | null;
+  invoiceCount: number;
+  stampedCount: number;
+  eligibleCount: number;
+  totalAmount: string;
+  vatProtected: string;
+  vatAtRisk: string;
+}
+
+export interface BuyerExposure {
+  buyerPartyId: string;
+  supplierCount: number;
+  invoiceCount: number;
+  protectedVat: string;
+  atRiskVat: string;
+  computedAt: string;
+  breakdown: BuyerSupplier[];
+}
+
+export interface ScoreboardRow {
+  rank: number;
+  supplierPartyId: string;
+  supplierName: string;
+  complianceScore: number;
+  stampedRate: number;
+  confirmedRate: number;
+  invoiceCount: number;
+  confirmedCount: number;
+  outstandingCount: number;
+  queriedCount: number;
+  vatAtRisk: string;
+}
+
+export type B2cReportBatchStatus = typeof B2cReportBatchStatus[keyof typeof B2cReportBatchStatus];
+
+
+export const B2cReportBatchStatus = {
+  open: 'open',
+  reported: 'reported',
+  breached: 'breached',
+} as const;
+
+export interface B2cReportBatch {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  status: B2cReportBatchStatus;
+  windowStart: string;
+  deadlineAt: string;
+  itemCount: number;
+  totalAmount: string;
+  /** @nullable */
+  reportedAt?: string | null;
+  /** @nullable */
+  reportedByUserId?: string | null;
+  /** @nullable */
+  preBreachAlertAt?: string | null;
+  /** @nullable */
+  breachedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface B2cReportItem {
+  id: string;
+  batchId: string;
+  invoiceId: string;
+  amount: string;
+  createdAt: string;
+}
+
+/**
+ * @nullable
+ */
+export type FirmThemeTheme = { [key: string]: unknown } | null;
+
+export interface FirmTheme {
+  firmId: string;
+  name: string;
+  /** @nullable */
+  subdomain: string | null;
+  /** @nullable */
+  theme: FirmThemeTheme;
+}
+
+export type FirmThemeInputTheme = { [key: string]: unknown };
+
+export interface FirmThemeInput {
+  /** @pattern ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$ */
+  subdomain?: string;
+  theme: FirmThemeInputTheme;
+}
+
+export interface ClientImportRow {
+  /** @minLength 1 */
+  legalName: string;
+  tin?: string;
+  cacNumber?: string;
+  email?: string;
+  street?: string;
+  city?: string;
+  engagementTitle?: string;
+}
+
+export interface ClientImportInput {
+  /**
+     * @minItems 1
+     * @maxItems 1000
+     */
+  rows: ClientImportRow[];
+  commit: boolean;
+}
+
+export type ClientImportRowResultStatus = typeof ClientImportRowResultStatus[keyof typeof ClientImportRowResultStatus];
+
+
+export const ClientImportRowResultStatus = {
+  created: 'created',
+  exists: 'exists',
+  invalid: 'invalid',
+} as const;
+
+export interface ClientImportRowResult {
+  rowNumber: number;
+  status: ClientImportRowResultStatus;
+  /** @nullable */
+  partyId?: string | null;
+  /** @nullable */
+  engagementId?: string | null;
+  errors?: FieldError[];
+}
+
+export interface ClientImportResult {
+  rowCount: number;
+  createdCount: number;
+  existsCount: number;
+  invalidCount: number;
+  committed: boolean;
+  rows: ClientImportRowResult[];
+}
+
+export interface CpdCourseModule {
+  title: string;
+  body: string;
+}
+
+export interface CpdCourse {
+  id: string;
+  key: string;
+  title: string;
+  /** @nullable */
+  summary?: string | null;
+  cpdHours: number;
+  /** @nullable */
+  modules?: CpdCourseModule[] | null;
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export type CpdEnrollmentStatus = typeof CpdEnrollmentStatus[keyof typeof CpdEnrollmentStatus];
+
+
+export const CpdEnrollmentStatus = {
+  enrolled: 'enrolled',
+  completed: 'completed',
+} as const;
+
+export interface CpdEnrollment {
+  id: string;
+  courseId: string;
+  firmId: string;
+  userId: string;
+  status: CpdEnrollmentStatus;
+  /** @nullable */
+  completedAt?: string | null;
+  /** @nullable */
+  certificateSerial?: string | null;
+  createdAt: string;
+}
+
+export type CpdEnrollmentViewStatus = typeof CpdEnrollmentViewStatus[keyof typeof CpdEnrollmentViewStatus];
+
+
+export const CpdEnrollmentViewStatus = {
+  enrolled: 'enrolled',
+  completed: 'completed',
+} as const;
+
+export interface CpdEnrollmentView {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  cpdHours: number;
+  userId: string;
+  /** @nullable */
+  userName?: string | null;
+  status: CpdEnrollmentViewStatus;
+  /** @nullable */
+  completedAt?: string | null;
+  /** @nullable */
+  certificateSerial?: string | null;
+  createdAt: string;
+}
+
+export interface ConnectorInfo {
+  key: string;
+  name: string;
+  description: string;
+}
+
+export type ErpConnectionStatus = typeof ErpConnectionStatus[keyof typeof ErpConnectionStatus];
+
+
+export const ErpConnectionStatus = {
+  active: 'active',
+  paused: 'paused',
+  error: 'error',
+} as const;
+
+export interface ErpConnection {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  connectorKey: string;
+  /** @nullable */
+  cursor?: string | null;
+  status: ErpConnectionStatus;
+  /** @nullable */
+  lastSyncAt?: string | null;
+  /** @nullable */
+  lastError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ErpConnectionInputAuthConfig = { [key: string]: unknown };
+
+export type ErpConnectionInputFieldMap = {[key: string]: string};
+
+export interface ErpConnectionInput {
+  clientPartyId: string;
+  connectorKey: string;
+  authConfig?: ErpConnectionInputAuthConfig;
+  fieldMap?: ErpConnectionInputFieldMap;
+}
+
+export type ErpSyncRunStatus = typeof ErpSyncRunStatus[keyof typeof ErpSyncRunStatus];
+
+
+export const ErpSyncRunStatus = {
+  running: 'running',
+  succeeded: 'succeeded',
+  failed: 'failed',
+} as const;
+
+export type ErpSyncRunRowResultsItem = { [key: string]: unknown };
+
+export interface ErpSyncRun {
+  id: string;
+  connectionId: string;
+  status: ErpSyncRunStatus;
+  /** @nullable */
+  fromCursor?: string | null;
+  /** @nullable */
+  toCursor?: string | null;
+  pulledCount: number;
+  importedCount: number;
+  skippedCount: number;
+  errorCount: number;
+  /** @nullable */
+  rowResults?: ErpSyncRunRowResultsItem[] | null;
+  /** @nullable */
+  error?: string | null;
+  startedAt: string;
+  /** @nullable */
+  finishedAt?: string | null;
+}
+
 /**
  * Bad request
  */
@@ -1601,4 +2115,45 @@ export const ListOperatorCasesStatus = {
   in_progress: 'in_progress',
   resolved: 'resolved',
 } as const;
+
+export type ListBankStatementsParams = {
+clientPartyId?: string;
+};
+
+export type ListBuyerInvoicesParams = {
+confirmationState?: ListBuyerInvoicesConfirmationState;
+};
+
+export type ListBuyerInvoicesConfirmationState = typeof ListBuyerInvoicesConfirmationState[keyof typeof ListBuyerInvoicesConfirmationState];
+
+
+export const ListBuyerInvoicesConfirmationState = {
+  none: 'none',
+  requested: 'requested',
+  confirmed: 'confirmed',
+  queried: 'queried',
+  rejected: 'rejected',
+} as const;
+
+export type ListB2cReportsParams = {
+clientPartyId?: string;
+status?: ListB2cReportsStatus;
+};
+
+export type ListB2cReportsStatus = typeof ListB2cReportsStatus[keyof typeof ListB2cReportsStatus];
+
+
+export const ListB2cReportsStatus = {
+  open: 'open',
+  reported: 'reported',
+  breached: 'breached',
+} as const;
+
+export type GetPublicThemeParams = {
+subdomain: string;
+};
+
+export type ListErpConnectionsParams = {
+clientPartyId?: string;
+};
 

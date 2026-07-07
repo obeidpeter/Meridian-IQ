@@ -30,9 +30,14 @@ const VALID_ROLES: Role[] = [
   "auditor",
 ];
 
-// Routes reachable without a principal (health probe + public stamp
-// verification, which any buyer/bank/auditor may call).
-const PUBLIC_PATHS = new Set(["/api/healthz", "/api/verify-stamp"]);
+// Routes reachable without a principal (health probe, public stamp
+// verification, and subdomain branding resolution — the white-label shell needs
+// its theme before any login).
+const PUBLIC_PATHS = new Set([
+  "/api/healthz",
+  "/api/verify-stamp",
+  "/api/public/theme",
+]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 

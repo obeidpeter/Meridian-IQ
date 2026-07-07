@@ -1,0 +1,294 @@
+import { Router, type IRouter } from "express";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import {
+  getDb,
+  bankStatementsTable,
+  bankStatementLinesTable,
+  matchProposalsTable,
+  invoicesTable,
+  partiesTable,
+} from "@workspace/db";
+import {
+  ImportBankStatementBody,
+  ImportBankStatementResponse,
+  ListBankStatementsQueryParams,
+  ListBankStatementsResponse,
+  GetBankStatementParams,
+  GetBankStatementResponse,
+  ListBankStatementLinesParams,
+  ListBankStatementLinesResponse,
+  ListBankStatementProposalsParams,
+  ListBankStatementProposalsResponse,
+  AcceptMatchProposalParams,
+  AcceptMatchProposalResponse,
+  RejectMatchProposalParams,
+  RejectMatchProposalResponse,
+} from "@workspace/api-zod";
+import {
+  assertCan,
+  assertPartyAccess,
+  assertSameTenant,
+  tenantFirmId,
+} from "../modules/auth/rbac";
+import { isFeatureEnabled } from "../modules/flags/flags";
+import { DomainError } from "../modules/errors";
+import {
+  ingestStatement,
+  acceptProposal,
+  rejectProposal,
+} from "../modules/statements/service";
+
+// Bank-statement ingestion and reconciliation v1 (INT-05, SME-07). All surfaces
+// are gated by the R2 `reconciliation` flag: unreachable while dark (PL-02).
+
+const router: IRouter = Router();
+
+async function gate(req: { principal: import("../modules/auth/rbac").Principal }): Promise<boolean> {
+  return isFeatureEnabled("reconciliation", req.principal.firmId);
+}
+
+router.post("/statements", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "statement.write");
+  const firmId = tenantFirmId(req.principal);
+  if (!firmId) {
+    res.status(403).json({ error: "A firm-scoped principal is required" });
+    return;
+  }
+  const parsed = ImportBankStatementBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  await assertPartyAccess(req.principal, parsed.data.clientPartyId);
+  const result = await ingestStatement({
+    firmId,
+    clientPartyId: parsed.data.clientPartyId,
+    csv: parsed.data.csv,
+    formatKey: parsed.data.formatKey ?? null,
+    filename: parsed.data.filename ?? null,
+    commit: parsed.data.commit,
+    actorId: req.principal.userId,
+  });
+  res.json(ImportBankStatementResponse.parse(result));
+});
+
+router.get("/statements", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "statement.read");
+  const query = ListBankStatementsQueryParams.safeParse(req.query);
+  const clientPartyId = query.success ? query.data.clientPartyId : undefined;
+  const tenant = tenantFirmId(req.principal);
+  const conditions = [];
+  if (tenant) conditions.push(eq(bankStatementsTable.firmId, tenant));
+  if (clientPartyId)
+    conditions.push(eq(bankStatementsTable.clientPartyId, clientPartyId));
+  const rows = conditions.length
+    ? await getDb()
+        .select()
+        .from(bankStatementsTable)
+        .where(and(...conditions))
+        .orderBy(desc(bankStatementsTable.createdAt))
+    : await getDb()
+        .select()
+        .from(bankStatementsTable)
+        .orderBy(desc(bankStatementsTable.createdAt));
+  res.json(ListBankStatementsResponse.parse(rows));
+});
+
+async function loadStatementForTenant(
+  req: { principal: import("../modules/auth/rbac").Principal },
+  id: string,
+) {
+  const [statement] = await getDb()
+    .select()
+    .from(bankStatementsTable)
+    .where(eq(bankStatementsTable.id, id))
+    .limit(1);
+  if (!statement) throw new DomainError("NOT_FOUND", "Statement not found", 404);
+  assertSameTenant(req.principal, statement.firmId);
+  return statement;
+}
+
+router.get("/statements/:id", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "statement.read");
+  const params = GetBankStatementParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const statement = await loadStatementForTenant(req, params.data.id);
+  res.json(GetBankStatementResponse.parse(statement));
+});
+
+router.get("/statements/:id/lines", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "statement.read");
+  const params = ListBankStatementLinesParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  await loadStatementForTenant(req, params.data.id);
+  const rows = await getDb()
+    .select()
+    .from(bankStatementLinesTable)
+    .where(eq(bankStatementLinesTable.statementId, params.data.id))
+    .orderBy(asc(bankStatementLinesTable.lineNo));
+  res.json(ListBankStatementLinesResponse.parse(rows));
+});
+
+router.get("/statements/:id/proposals", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "reconciliation.read");
+  const params = ListBankStatementProposalsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  await loadStatementForTenant(req, params.data.id);
+  const lines = await getDb()
+    .select({
+      id: bankStatementLinesTable.id,
+      lineNo: bankStatementLinesTable.lineNo,
+      valueDate: bankStatementLinesTable.valueDate,
+      amount: bankStatementLinesTable.amount,
+      narration: bankStatementLinesTable.narration,
+    })
+    .from(bankStatementLinesTable)
+    .where(eq(bankStatementLinesTable.statementId, params.data.id));
+  const lineById = new Map(lines.map((l) => [l.id, l]));
+  if (lines.length === 0) {
+    res.json(ListBankStatementProposalsResponse.parse([]));
+    return;
+  }
+  const proposals = await getDb()
+    .select({
+      id: matchProposalsTable.id,
+      statementLineId: matchProposalsTable.statementLineId,
+      invoiceId: matchProposalsTable.invoiceId,
+      confidence: matchProposalsTable.confidence,
+      features: matchProposalsTable.features,
+      status: matchProposalsTable.status,
+      createdAt: matchProposalsTable.createdAt,
+      invoiceNumber: invoicesTable.invoiceNumber,
+      invoiceStatus: invoicesTable.status,
+      invoiceTotal: invoicesTable.grandTotal,
+      buyerName: partiesTable.legalName,
+    })
+    .from(matchProposalsTable)
+    .innerJoin(invoicesTable, eq(invoicesTable.id, matchProposalsTable.invoiceId))
+    .innerJoin(partiesTable, eq(partiesTable.id, invoicesTable.buyerPartyId))
+    .where(
+      inArray(
+        matchProposalsTable.statementLineId,
+        lines.map((l) => l.id),
+      ),
+    )
+    .orderBy(desc(matchProposalsTable.confidence));
+  const view = proposals.map((p) => {
+    const line = lineById.get(p.statementLineId);
+    return {
+      id: p.id,
+      statementId: params.data.id,
+      statementLineId: p.statementLineId,
+      invoiceId: p.invoiceId,
+      invoiceNumber: p.invoiceNumber,
+      invoiceStatus: p.invoiceStatus,
+      invoiceTotal: p.invoiceTotal,
+      buyerName: p.buyerName,
+      lineNo: line?.lineNo,
+      lineAmount: line?.amount ?? null,
+      lineDate: line?.valueDate ?? null,
+      narration: line?.narration ?? null,
+      confidence: p.confidence,
+      features: p.features,
+      status: p.status,
+      createdAt: p.createdAt,
+    };
+  });
+  res.json(ListBankStatementProposalsResponse.parse(view));
+});
+
+// ---- reconciliation decisions ----
+
+router.post(
+  "/reconciliation/proposals/:id/accept",
+  async (req, res): Promise<void> => {
+    if (!(await gate(req))) {
+      res.sendStatus(404);
+      return;
+    }
+    assertCan(req.principal, "reconciliation.act");
+    const params = AcceptMatchProposalParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    // Tenant guard: the proposal row itself carries the firm.
+    const [proposal] = await getDb()
+      .select({ firmId: matchProposalsTable.firmId })
+      .from(matchProposalsTable)
+      .where(eq(matchProposalsTable.id, params.data.id))
+      .limit(1);
+    if (!proposal) {
+      res.status(404).json({ error: "Proposal not found" });
+      return;
+    }
+    assertSameTenant(req.principal, proposal.firmId);
+    const result = await acceptProposal(params.data.id, {
+      userId: req.principal.userId,
+      role: req.principal.role,
+    });
+    res.json(AcceptMatchProposalResponse.parse(result));
+  },
+);
+
+router.post(
+  "/reconciliation/proposals/:id/reject",
+  async (req, res): Promise<void> => {
+    if (!(await gate(req))) {
+      res.sendStatus(404);
+      return;
+    }
+    assertCan(req.principal, "reconciliation.act");
+    const params = RejectMatchProposalParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const [proposal] = await getDb()
+      .select({ firmId: matchProposalsTable.firmId })
+      .from(matchProposalsTable)
+      .where(eq(matchProposalsTable.id, params.data.id))
+      .limit(1);
+    if (!proposal) {
+      res.status(404).json({ error: "Proposal not found" });
+      return;
+    }
+    assertSameTenant(req.principal, proposal.firmId);
+    const result = await rejectProposal(params.data.id, {
+      userId: req.principal.userId,
+      role: req.principal.role,
+    });
+    res.json(RejectMatchProposalResponse.parse(result));
+  },
+);
+
+export default router;
