@@ -3,13 +3,23 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: identity
+  - name: parties
+  - name: engagements
+  - name: invoices
+  - name: lifecycle
+  - name: consent
+  - name: verification
+  - name: messaging
+  - name: platform
+  - name: operator
+  - name: audit
 paths:
   /healthz:
     get:
@@ -24,7 +34,771 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /me:
+    get:
+      operationId: getMe
+      tags: [identity]
+      summary: Resolve the current principal and capabilities
+      responses:
+        "200":
+          description: Current principal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /firms:
+    get:
+      operationId: listFirms
+      tags: [identity]
+      responses:
+        "200":
+          description: Firms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Firm"
+    post:
+      operationId: createFirm
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FirmInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Firm"
+  /firms/{id}:
+    get:
+      operationId: getFirm
+      tags: [identity]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Firm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Firm"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /users:
+    post:
+      operationId: createUser
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /memberships:
+    post:
+      operationId: createMembership
+      tags: [identity]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MembershipInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+
+  /parties:
+    get:
+      operationId: listParties
+      tags: [parties]
+      responses:
+        "200":
+          description: Parties
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Party"
+    post:
+      operationId: createParty
+      tags: [parties]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartyInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Party"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /parties/{id}:
+    get:
+      operationId: getParty
+      tags: [parties]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Party
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Party"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /parties/merge:
+    post:
+      operationId: mergeParties
+      tags: [parties]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartyMergeInput"
+      responses:
+        "204":
+          description: Merged
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /parties/{id}/split:
+    post:
+      operationId: splitParty
+      tags: [parties]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Split
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /parties/validate-tin:
+    post:
+      operationId: validateTin
+      tags: [parties]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TinCheckInput"
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentifierCheck"
+  /parties/validate-cac:
+    post:
+      operationId: validateCac
+      tags: [parties]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CacCheckInput"
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentifierCheck"
+
+  /parties/{id}/consent:
+    get:
+      operationId: listConsent
+      tags: [consent]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Consent history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConsentRecord"
+    post:
+      operationId: recordConsent
+      tags: [consent]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsentInput"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentRecord"
+  /parties/{id}/consent/check/{purpose}:
+    get:
+      operationId: checkConsent
+      tags: [consent]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: purpose
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Permission decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentDecision"
+
+  /engagements:
+    get:
+      operationId: listEngagements
+      tags: [engagements]
+      responses:
+        "200":
+          description: Engagements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Engagement"
+    post:
+      operationId: createEngagement
+      tags: [engagements]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EngagementInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Engagement"
+  /engagements/{id}:
+    get:
+      operationId: getEngagement
+      tags: [engagements]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Engagement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Engagement"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateEngagement
+      tags: [engagements]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EngagementUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Engagement"
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Invoice with lines
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /invoices/{id}/validate:
+    post:
+      operationId: validateInvoice
+      tags: [invoices]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+  /invoices/{id}/submit:
+    post:
+      operationId: submitInvoice
+      tags: [invoices]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "202":
+          description: Accepted for async submission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /invoices/{id}/ubl:
+    get:
+      operationId: getInvoiceUbl
+      tags: [invoices]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: UBL representation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UblDocument"
+  /invoices/{id}/canonical:
+    get:
+      operationId: getInvoiceCanonical
+      tags: [invoices]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Canonical representation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanonicalInvoice"
+  /invoices/{id}/stamp:
+    get:
+      operationId: getInvoiceStamp
+      tags: [lifecycle]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Stamp record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StampRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /invoices/{id}/attempts:
+    get:
+      operationId: listSubmissionAttempts
+      tags: [lifecycle]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Submission attempts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubmissionAttempt"
+  /invoices/{id}/cancel:
+    post:
+      operationId: cancelInvoice
+      tags: [lifecycle]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /invoices/{id}/confirmations:
+    get:
+      operationId: listConfirmations
+      tags: [lifecycle]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Confirmations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Confirmation"
+    post:
+      operationId: createConfirmation
+      tags: [lifecycle]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmationInput"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Confirmation"
+
+  /invoices/{id}/settlements:
+    get:
+      operationId: listSettlements
+      tags: [lifecycle]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Settlement events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SettlementEvent"
+    post:
+      operationId: createSettlement
+      tags: [lifecycle]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettlementInput"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettlementEvent"
+
+  /verify-stamp:
+    post:
+      operationId: verifyStamp
+      tags: [verification]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StampVerifyInput"
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StampVerifyResult"
+
+  /messages:
+    post:
+      operationId: sendMessage
+      tags: [messaging]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /messages/{id}/delivery:
+    post:
+      operationId: recordMessageDelivery
+      tags: [messaging]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageDeliveryInput"
+      responses:
+        "204":
+          description: Recorded
+
+  /feature-flags:
+    get:
+      operationId: listFeatureFlags
+      tags: [platform]
+      responses:
+        "200":
+          description: Flags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeatureFlag"
+  /feature-flags/{key}:
+    patch:
+      operationId: updateFeatureFlag
+      tags: [platform]
+      parameters:
+        - $ref: "#/components/parameters/KeyParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeatureFlagUpdate"
+      responses:
+        "204":
+          description: Updated
+  /feature-flags/{key}/override:
+    post:
+      operationId: setFeatureFlagOverride
+      tags: [platform]
+      parameters:
+        - $ref: "#/components/parameters/KeyParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeatureFlagOverrideInput"
+      responses:
+        "204":
+          description: Set
+
+  /error-catalogue:
+    get:
+      operationId: listErrorCatalogue
+      tags: [operator]
+      responses:
+        "200":
+          description: Error catalogue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ErrorCatalogueEntry"
+  /operator/dead-letters:
+    get:
+      operationId: listDeadLetters
+      tags: [operator]
+      responses:
+        "200":
+          description: Dead-lettered events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OutboxEvent"
+  /operator/dead-letters/{id}/replay:
+    post:
+      operationId: replayDeadLetter
+      tags: [operator]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Replayed
+  /operator/reconcile:
+    post:
+      operationId: reconcilePipeline
+      tags: [operator]
+      responses:
+        "200":
+          description: Reconciliation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconcileResult"
+  /operator/rails:
+    get:
+      operationId: listRailStates
+      tags: [operator]
+      responses:
+        "200":
+          description: Rail states
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RailState"
+
+  /audit/verify:
+    get:
+      operationId: verifyAudit
+      tags: [audit]
+      responses:
+        "200":
+          description: Chain verification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditVerification"
+  /audit/export:
+    get:
+      operationId: exportAudit
+      tags: [audit]
+      responses:
+        "200":
+          description: Verifiable audit bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditBundle"
+
 components:
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    KeyParam:
+      name: key
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +807,854 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
 
+    Me:
+      type: object
+      required: [userId, role, capabilities]
+      properties:
+        userId:
+          type: string
+        role:
+          type: string
+        firmId:
+          type: ["string", "null"]
+        clientPartyId:
+          type: ["string", "null"]
+        capabilities:
+          type: array
+          items:
+            type: string
+
+    Firm:
+      type: object
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        subdomain:
+          type: ["string", "null"]
+        clerkOrgId:
+          type: ["string", "null"]
+        partyId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    FirmInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        subdomain:
+          type: string
+        partyId:
+          type: string
+
+    User:
+      type: object
+      required: [id, email, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        fullName:
+          type: ["string", "null"]
+        clerkUserId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    UserInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          minLength: 3
+        fullName:
+          type: string
+        clerkUserId:
+          type: string
+
+    Membership:
+      type: object
+      required: [id, userId, role, createdAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        firmId:
+          type: ["string", "null"]
+        role:
+          type: string
+        clientPartyId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    MembershipInput:
+      type: object
+      required: [userId, role]
+      properties:
+        userId:
+          type: string
+        firmId:
+          type: string
+        role:
+          type: string
+          enum:
+            [firm_admin, firm_staff, client_user, operator, bank_user, auditor]
+        clientPartyId:
+          type: string
+
+    Party:
+      type: object
+      required: [id, type, legalName, tinValidated, countryCode, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [client_business, buyer, firm, bank]
+        legalName:
+          type: string
+        tin:
+          type: ["string", "null"]
+        tinValidated:
+          type: boolean
+        cacNumber:
+          type: ["string", "null"]
+        street:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        countryCode:
+          type: string
+        mergedIntoId:
+          type: ["string", "null"]
+        schemaVersion:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PartyInput:
+      type: object
+      required: [type, legalName]
+      properties:
+        type:
+          type: string
+          enum: [client_business, buyer, firm, bank]
+        legalName:
+          type: string
+          minLength: 1
+        tin:
+          type: string
+        cacNumber:
+          type: string
+        street:
+          type: string
+        city:
+          type: string
+        countryCode:
+          type: string
+    PartyMergeInput:
+      type: object
+      required: [survivorId, duplicateId]
+      properties:
+        survivorId:
+          type: string
+        duplicateId:
+          type: string
+    TinCheckInput:
+      type: object
+      required: [tin]
+      properties:
+        tin:
+          type: string
+    CacCheckInput:
+      type: object
+      required: [cac]
+      properties:
+        cac:
+          type: string
+    IdentifierCheck:
+      type: object
+      required: [valid, normalized]
+      properties:
+        valid:
+          type: boolean
+        normalized:
+          type: string
+
+    ConsentRecord:
+      type: object
+      required: [id, partyId, layer, action, scope, basis, channel, createdAt]
+      properties:
+        id:
+          type: string
+        partyId:
+          type: string
+        layer:
+          type: integer
+        action:
+          type: string
+          enum: [grant, revoke]
+        scope:
+          type: string
+        basis:
+          type: string
+        channel:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ConsentInput:
+      type: object
+      required: [layer, action, scope, basis, channel]
+      properties:
+        layer:
+          type: integer
+        action:
+          type: string
+          enum: [grant, revoke]
+        scope:
+          type: string
+        basis:
+          type: string
+        channel:
+          type: string
+    ConsentDecision:
+      type: object
+      required: [purpose, permitted]
+      properties:
+        purpose:
+          type: string
+        permitted:
+          type: boolean
+        layer:
+          type: ["integer", "null"]
+
+    Engagement:
+      type: object
+      required: [id, firmId, clientPartyId, type, status, title, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        clientPartyId:
+          type: string
+        type:
+          type: string
+          enum: [readiness_assessment, vat_risk_check, integration, retainer]
+        status:
+          type: string
+          enum: [open, in_progress, completed, archived]
+        title:
+          type: string
+        findings:
+          type: ["object", "null"]
+          additionalProperties: true
+        schemaVersion:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    EngagementInput:
+      type: object
+      required: [clientPartyId, type, title]
+      properties:
+        clientPartyId:
+          type: string
+        type:
+          type: string
+          enum: [readiness_assessment, vat_risk_check, integration, retainer]
+        title:
+          type: string
+          minLength: 1
+        findings:
+          type: object
+          additionalProperties: true
+    EngagementUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, in_progress, completed, archived]
+        title:
+          type: string
+        findings:
+          type: object
+          additionalProperties: true
+
+    Invoice:
+      type: object
+      required:
+        [id, firmId, supplierPartyId, buyerPartyId, kind, category, invoiceNumber, currency, issueDate, status, subtotal, vatTotal, grandTotal, legalHold, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        supplierPartyId:
+          type: string
+        buyerPartyId:
+          type: string
+        kind:
+          type: string
+          enum: [invoice, credit_note, correction]
+        category:
+          type: string
+          enum: [b2b, b2g, b2c]
+        relatedInvoiceId:
+          type: ["string", "null"]
+        invoiceNumber:
+          type: string
+        currency:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum:
+            [draft, validated, submitted, stamped, confirmed, settled, failed, cancelled, credited]
+        subtotal:
+          type: string
+        vatTotal:
+          type: string
+        grandTotal:
+          type: string
+        notes:
+          type: ["string", "null"]
+        legalHold:
+          type: boolean
+        retentionUntil:
+          type: ["string", "null"]
+        schemaVersion:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    InvoiceLine:
+      type: object
+      required: [id, invoiceId, lineNo, description, quantity, unitPrice, vatRate, lineExtension, vatAmount]
+      properties:
+        id:
+          type: string
+        invoiceId:
+          type: string
+        lineNo:
+          type: integer
+        description:
+          type: string
+        quantity:
+          type: string
+        unitPrice:
+          type: string
+        vatRate:
+          type: string
+        lineExtension:
+          type: string
+        vatAmount:
+          type: string
+    InvoiceDetail:
+      type: object
+      required: [invoice, lines]
+      properties:
+        invoice:
+          $ref: "#/components/schemas/Invoice"
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLine"
+    InvoiceLineInput:
+      type: object
+      required: [description, quantity, unitPrice, vatRate]
+      properties:
+        description:
+          type: string
+          minLength: 1
+        quantity:
+          type: string
+        unitPrice:
+          type: string
+        vatRate:
+          type: string
+    InvoiceInput:
+      type: object
+      required: [supplierPartyId, buyerPartyId, invoiceNumber, issueDate, lines]
+      properties:
+        supplierPartyId:
+          type: string
+        buyerPartyId:
+          type: string
+        invoiceNumber:
+          type: string
+          minLength: 1
+        currency:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: string
+        kind:
+          type: string
+          enum: [invoice, credit_note, correction]
+        category:
+          type: string
+          enum: [b2b, b2g, b2c]
+        relatedInvoiceId:
+          type: string
+        notes:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLineInput"
+
+    CanonicalParty:
+      type: object
+      required: [legalName, tin, street, city, countryCode]
+      properties:
+        legalName:
+          type: string
+        tin:
+          type: string
+        cacNumber:
+          type: ["string", "null"]
+        street:
+          type: string
+        city:
+          type: string
+        countryCode:
+          type: string
+    CanonicalLine:
+      type: object
+      required: [id, description, quantity, unitCode, unitPrice, vatRate, lineExtension, vatAmount]
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        quantity:
+          type: string
+        unitCode:
+          type: string
+        unitPrice:
+          type: string
+        vatRate:
+          type: string
+        lineExtension:
+          type: string
+        vatAmount:
+          type: string
+    CanonicalInvoice:
+      type: object
+      required:
+        [invoiceNumber, issueDate, dueDate, invoiceTypeCode, currencyCode, supplier, buyer, lines, lineExtensionAmount, taxExclusiveAmount, taxAmount, taxInclusiveAmount, payableAmount]
+      properties:
+        invoiceNumber:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: string
+        invoiceTypeCode:
+          type: string
+        currencyCode:
+          type: string
+        supplier:
+          $ref: "#/components/schemas/CanonicalParty"
+        buyer:
+          $ref: "#/components/schemas/CanonicalParty"
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/CanonicalLine"
+        lineExtensionAmount:
+          type: string
+        taxExclusiveAmount:
+          type: string
+        taxAmount:
+          type: string
+        taxInclusiveAmount:
+          type: string
+        payableAmount:
+          type: string
+    UblDocument:
+      type: object
+      required: [xml]
+      properties:
+        xml:
+          type: string
+
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+    ValidationResult:
+      type: object
+      required: [ok, errors]
+      properties:
+        ok:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+
+    StampRecord:
+      type: object
+      required: [id, invoiceId, irn, csid, qrPayload, signedArtifactRef, rail, createdAt]
+      properties:
+        id:
+          type: string
+        invoiceId:
+          type: string
+        irn:
+          type: string
+        csid:
+          type: string
+        qrPayload:
+          type: string
+        signedArtifactRef:
+          type: string
+        rail:
+          type: string
+          enum: [rail_primary, rail_secondary]
+        createdAt:
+          type: string
+          format: date-time
+    SubmissionAttempt:
+      type: object
+      required: [id, invoiceId, rail, attemptNo, idempotencyKey, status, createdAt]
+      properties:
+        id:
+          type: string
+        invoiceId:
+          type: string
+        rail:
+          type: string
+          enum: [rail_primary, rail_secondary]
+        attemptNo:
+          type: integer
+        idempotencyKey:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted, rejected, error]
+        errorCode:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    Confirmation:
+      type: object
+      required: [id, invoiceId, buyerPartyId, state, noSetOff, createdAt]
+      properties:
+        id:
+          type: string
+        invoiceId:
+          type: string
+        buyerPartyId:
+          type: string
+        state:
+          type: string
+          enum: [requested, confirmed, queried, rejected]
+        method:
+          type: ["string", "null"]
+        noSetOff:
+          type: boolean
+        confirmingUserId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    ConfirmationInput:
+      type: object
+      required: [buyerPartyId, state]
+      properties:
+        buyerPartyId:
+          type: string
+        state:
+          type: string
+          enum: [requested, confirmed, queried, rejected]
+        method:
+          type: string
+        noSetOff:
+          type: boolean
+
+    SettlementEvent:
+      type: object
+      required: [id, invoiceId, source, amount, occurredAt, createdAt]
+      properties:
+        id:
+          type: string
+        invoiceId:
+          type: string
+        source:
+          type: string
+          enum: [statement_match, buyer_flag, collection_account, uploaded_evidence]
+        amount:
+          type: string
+        confidence:
+          type: ["string", "null"]
+        occurredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    SettlementInput:
+      type: object
+      required: [source, amount, occurredAt]
+      properties:
+        source:
+          type: string
+          enum: [statement_match, buyer_flag, collection_account, uploaded_evidence]
+        amount:
+          type: string
+        confidence:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+
+    StampVerifyInput:
+      type: object
+      required: [irn, csid]
+      properties:
+        irn:
+          type: string
+        csid:
+          type: string
+    StampVerifyResult:
+      type: object
+      required: [valid, rail, cached]
+      properties:
+        valid:
+          type: boolean
+        rail:
+          type: string
+        cached:
+          type: boolean
+
+    Message:
+      type: object
+      required: [id, channel, recipientRef, templateKey, status, createdAt]
+      properties:
+        id:
+          type: string
+        channel:
+          type: string
+          enum: [whatsapp, sms, email]
+        recipientRef:
+          type: string
+        templateKey:
+          type: string
+        entityType:
+          type: ["string", "null"]
+        entityId:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [queued, sent, delivered, failed]
+        providerMessageId:
+          type: ["string", "null"]
+        failoverFrom:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    MessageInput:
+      type: object
+      required: [channel, recipientRef, templateKey]
+      properties:
+        channel:
+          type: string
+          enum: [whatsapp, sms, email]
+        recipientRef:
+          type: string
+        templateKey:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+    MessageDeliveryInput:
+      type: object
+      required: [delivered]
+      properties:
+        delivered:
+          type: boolean
+
+    FeatureFlag:
+      type: object
+      required: [key, enabled, releaseTag, updatedAt]
+      properties:
+        key:
+          type: string
+        enabled:
+          type: boolean
+        releaseTag:
+          type: string
+        description:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+          format: date-time
+    FeatureFlagUpdate:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+    FeatureFlagOverrideInput:
+      type: object
+      required: [firmId, enabled]
+      properties:
+        firmId:
+          type: string
+        enabled:
+          type: boolean
+
+    ErrorCatalogueEntry:
+      type: object
+      required: [code, cause, fix, retriable]
+      properties:
+        code:
+          type: string
+        cause:
+          type: string
+        fix:
+          type: string
+        retriable:
+          type: boolean
+
+    OutboxEvent:
+      type: object
+      required: [id, aggregateType, aggregateId, type, status, attempts, maxAttempts, createdAt]
+      properties:
+        id:
+          type: string
+        aggregateType:
+          type: string
+        aggregateId:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, done, dead]
+        attempts:
+          type: integer
+        maxAttempts:
+          type: integer
+        lastError:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    ReconcileResult:
+      type: object
+      required: [requeued]
+      properties:
+        requeued:
+          type: integer
+    RailState:
+      type: object
+      required: [rail, state, failureCount, updatedAt]
+      properties:
+        rail:
+          type: string
+        state:
+          type: string
+          enum: [closed, open, half_open]
+        failureCount:
+          type: integer
+        openedAt:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+          format: date-time
+
+    AuditEvent:
+      type: object
+      required: [seq, action, entityType, entityId, hash, prevHash, createdAt]
+      properties:
+        seq:
+          type: integer
+        actorId:
+          type: ["string", "null"]
+        actorRole:
+          type: ["string", "null"]
+        firmId:
+          type: ["string", "null"]
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        hash:
+          type: string
+        prevHash:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    AuditVerification:
+      type: object
+      required: [valid, count]
+      properties:
+        valid:
+          type: boolean
+        count:
+          type: integer
+        brokenAtSeq:
+          type: ["integer", "null"]
+    AuditBundle:
+      type: object
+      required: [events, verification, exportedAt]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEvent"
+        verification:
+          $ref: "#/components/schemas/AuditVerification"
+        exportedAt:
+          type: string
+          format: date-time

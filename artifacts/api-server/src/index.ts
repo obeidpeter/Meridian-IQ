@@ -1,5 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startWorker, stopWorker } from "./modules/pipeline/pipeline";
+import { seedPlatform } from "./bootstrap/seed";
 
 const rawPort = process.env["PORT"];
 
@@ -15,11 +17,28 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+async function main(): Promise<void> {
+  await seedPlatform();
+  startWorker();
 
-  logger.info({ port }, "Server listening");
+  const server = app.listen(port, (err) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
+    logger.info({ port }, "Server listening");
+  });
+
+  const shutdown = (signal: string) => {
+    logger.info({ signal }, "Shutting down");
+    stopWorker();
+    server.close(() => process.exit(0));
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
+
+main().catch((err) => {
+  logger.error({ err }, "Fatal startup error");
+  process.exit(1);
 });

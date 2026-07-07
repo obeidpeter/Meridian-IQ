@@ -1,0 +1,153 @@
+import { eq } from "drizzle-orm";
+import { db, messagesTable, type Message, type MessageChannel } from "@workspace/db";
+import { DomainError } from "../errors";
+
+// Messaging abstraction with a strict data boundary (PL-04, SEC-12): the
+// gateway carries pointers only — never amounts, names, TINs or documents. The
+// API only accepts a template key + opaque entity pointer; a registry defines
+// which templates exist and which channels they may use.
+
+export interface MessageTemplate {
+  key: string;
+  channels: MessageChannel[];
+  description: string;
+}
+
+export const TEMPLATES: Record<string, MessageTemplate> = {
+  deadline_reminder: {
+    key: "deadline_reminder",
+    channels: ["whatsapp", "sms", "email"],
+    description: "A filing/payment deadline is approaching.",
+  },
+  invoice_stamped: {
+    key: "invoice_stamped",
+    channels: ["whatsapp", "email"],
+    description: "An invoice has been stamped.",
+  },
+  confirmation_request: {
+    key: "confirmation_request",
+    channels: ["whatsapp", "sms", "email"],
+    description: "A buyer is asked to confirm an invoice.",
+  },
+};
+
+// Channel failover order when a provider fails.
+const FAILOVER: Record<MessageChannel, MessageChannel | null> = {
+  whatsapp: "sms",
+  sms: "email",
+  email: null,
+};
+
+export interface SendInput {
+  channel: MessageChannel;
+  recipientRef: string; // opaque pointer (user id / hashed contact), never raw PII
+  templateKey: string;
+  entityType?: string;
+  entityId?: string;
+}
+
+// Structural boundary check: reject anything that looks like a raw contact,
+// monetary amount or TIN slipping into the pointer fields.
+function assertPointerOnly(value: string, field: string): void {
+  if (/@/.test(value)) {
+    throw new DomainError(
+      "DATA_BOUNDARY",
+      `${field} must be an opaque reference, not a raw contact`,
+      400,
+    );
+  }
+  const digits = value.replace(/\D/g, "");
+  if (digits.length >= 8) {
+    throw new DomainError(
+      "DATA_BOUNDARY",
+      `${field} must not embed phone numbers, amounts or TINs`,
+      400,
+    );
+  }
+}
+
+function simulateProviderSend(channel: MessageChannel): {
+  ok: boolean;
+  providerMessageId?: string;
+} {
+  // Simulated provider: email always succeeds; whatsapp/sms occasionally do not
+  // (used to exercise failover in tests via the flag below).
+  if (forcedFailChannels.has(channel)) return { ok: false };
+  return { ok: true, providerMessageId: `prov_${channel}_${Date.now()}` };
+}
+
+const forcedFailChannels = new Set<MessageChannel>();
+export function forceChannelFailure(channel: MessageChannel): void {
+  forcedFailChannels.add(channel);
+}
+export function resetMessaging(): void {
+  forcedFailChannels.clear();
+}
+
+export async function sendMessage(input: SendInput): Promise<Message> {
+  const template = TEMPLATES[input.templateKey];
+  if (!template) {
+    throw new DomainError("UNKNOWN_TEMPLATE", "No such message template", 400);
+  }
+  if (!template.channels.includes(input.channel)) {
+    throw new DomainError(
+      "CHANNEL_NOT_ALLOWED",
+      `Template ${template.key} cannot use ${input.channel}`,
+      400,
+    );
+  }
+  assertPointerOnly(input.recipientRef, "recipientRef");
+  if (input.entityId) assertPointerOnly(input.entityId, "entityId");
+
+  let channel: MessageChannel | null = input.channel;
+  let failoverFrom: MessageChannel | null = null;
+
+  while (channel) {
+    if (!template.channels.includes(channel)) break;
+    const send = simulateProviderSend(channel);
+    if (send.ok) {
+      const [row] = await db
+        .insert(messagesTable)
+        .values({
+          channel,
+          recipientRef: input.recipientRef,
+          templateKey: input.templateKey,
+          entityType: input.entityType ?? null,
+          entityId: input.entityId ?? null,
+          status: "sent",
+          providerMessageId: send.providerMessageId,
+          failoverFrom,
+        })
+        .returning();
+      return row;
+    }
+    failoverFrom = channel;
+    channel = FAILOVER[channel];
+  }
+
+  const [row] = await db
+    .insert(messagesTable)
+    .values({
+      channel: input.channel,
+      recipientRef: input.recipientRef,
+      templateKey: input.templateKey,
+      entityType: input.entityType ?? null,
+      entityId: input.entityId ?? null,
+      status: "failed",
+      error: "all channels failed",
+      failoverFrom,
+    })
+    .returning();
+  return row;
+}
+
+// Provider webhook: advance delivery status (queued/sent -> delivered/failed).
+export async function markDelivery(
+  messageId: string,
+  delivered: boolean,
+): Promise<void> {
+  await db
+    .update(messagesTable)
+    .set({ status: delivered ? "delivered" : "failed" })
+    .where(eq(messagesTable.id, messageId));
+}

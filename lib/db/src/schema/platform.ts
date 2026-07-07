@@ -1,0 +1,178 @@
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  unique,
+} from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+import { firmsTable } from "./organizations";
+
+// Feature flags gate every release-tagged capability (PL-02). A dark feature is
+// unreachable. Per-firm overrides allow layer-three surfaces to activate per
+// client on recorded consent.
+export const featureFlagsTable = pgTable("feature_flags", {
+  key: text("key").primaryKey(),
+  enabled: boolean("enabled").notNull().default(false),
+  releaseTag: text("release_tag").notNull().default("R0"),
+  description: text("description"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export const featureFlagOverridesTable = pgTable(
+  "feature_flag_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    flagKey: text("flag_key")
+      .notNull()
+      .references(() => featureFlagsTable.key),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    enabled: boolean("enabled").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique().on(t.flagKey, t.firmId)],
+);
+
+export const messageChannelEnum = pgEnum("message_channel", [
+  "whatsapp",
+  "sms",
+  "email",
+]);
+
+export const messageStatusEnum = pgEnum("message_status", [
+  "queued",
+  "sent",
+  "delivered",
+  "failed",
+]);
+
+// Messaging carries pointers only — never amounts, names, TINs or documents
+// (SEC-12, PL-04). recipientRef and entity pointers are opaque references.
+export const messagesTable = pgTable("messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  channel: messageChannelEnum("channel").notNull(),
+  recipientRef: text("recipient_ref").notNull(),
+  templateKey: text("template_key").notNull(),
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  status: messageStatusEnum("status").notNull().default("queued"),
+  providerMessageId: text("provider_message_id"),
+  failoverFrom: messageChannelEnum("failover_from"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+// Transactional outbox: written in the same transaction as the domain change,
+// drained by the worker (INT-09). status=dead is the dead-letter queue.
+export const outboxStatusEnum = pgEnum("outbox_status", [
+  "pending",
+  "processing",
+  "done",
+  "dead",
+]);
+
+export const outboxTable = pgTable("outbox_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  aggregateType: text("aggregate_type").notNull(),
+  aggregateId: text("aggregate_id").notNull(),
+  type: text("type").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  status: outboxStatusEnum("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(6),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  lockedAt: timestamp("locked_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+// Circuit-breaker state per rail, persisted so it survives restarts and can be
+// reconciled by the scheduled rail-state job (INT-09).
+export const circuitStateEnum = pgEnum("circuit_state", [
+  "closed",
+  "open",
+  "half_open",
+]);
+
+export const railStatesTable = pgTable("rail_states", {
+  rail: text("rail").primaryKey(),
+  state: circuitStateEnum("state").notNull().default("closed"),
+  failureCount: integer("failure_count").notNull().default(0),
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+// Stamp-verification cache with a configurable freshness window (CORE-04).
+export const stampVerificationsTable = pgTable("stamp_verifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  irn: text("irn").notNull(),
+  csid: text("csid").notNull(),
+  valid: boolean("valid").notNull(),
+  rail: text("rail").notNull(),
+  raw: jsonb("raw").$type<Record<string, unknown>>(),
+  checkedAt: timestamp("checked_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  freshUntil: timestamp("fresh_until", { withTimezone: true }).notNull(),
+});
+
+// CORE-06: every migration/schema version recorded; records declare their
+// writing version via per-entity schemaVersion columns.
+export const schemaVersionsTable = pgTable("schema_versions", {
+  version: integer("version").primaryKey(),
+  description: text("description").notNull(),
+  appliedAt: timestamp("applied_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const insertFeatureFlagSchema = createInsertSchema(featureFlagsTable);
+export const insertMessageSchema = createInsertSchema(messagesTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertOutboxSchema = createInsertSchema(outboxTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type FeatureFlag = typeof featureFlagsTable.$inferSelect;
+export type FeatureFlagOverride = typeof featureFlagOverridesTable.$inferSelect;
+export type Message = typeof messagesTable.$inferSelect;
+export type OutboxEvent = typeof outboxTable.$inferSelect;
+export type RailState = typeof railStatesTable.$inferSelect;
+export type StampVerification = typeof stampVerificationsTable.$inferSelect;
+export type MessageChannel = (typeof messageChannelEnum.enumValues)[number];
+export type OutboxStatus = (typeof outboxStatusEnum.enumValues)[number];
+export type CircuitState = (typeof circuitStateEnum.enumValues)[number];
