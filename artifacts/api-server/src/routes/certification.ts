@@ -69,13 +69,15 @@ router.post(
       res.status(404).json({ error: "Course not found" });
       return;
     }
-    // Idempotent per (course, user): re-enrolling returns the existing row.
+    // Idempotent per (course, firm, user): re-enrolling returns the existing
+    // row. The firm filter mirrors the unique constraint and the RLS scope.
     const [existing] = await getDb()
       .select()
       .from(cpdEnrollmentsTable)
       .where(
         and(
           eq(cpdEnrollmentsTable.courseId, course.id),
+          eq(cpdEnrollmentsTable.firmId, firmId),
           eq(cpdEnrollmentsTable.userId, req.principal.userId),
         ),
       )
@@ -129,6 +131,7 @@ router.post(
       .where(
         and(
           eq(cpdEnrollmentsTable.courseId, params.data.id),
+          eq(cpdEnrollmentsTable.firmId, firmId),
           eq(cpdEnrollmentsTable.userId, req.principal.userId),
         ),
       )

@@ -101,6 +101,23 @@ export async function createDraft(
         409,
       );
     }
+    // One live adjustment per original: a second credit note would stamp but
+    // silently fail to credit (the original is already credited), leaving an
+    // orphan adjustment. Cancelled or failed adjustments free the slot.
+    const adjustments = await getDb()
+      .select({ id: invoicesTable.id, status: invoicesTable.status })
+      .from(invoicesTable)
+      .where(eq(invoicesTable.relatedInvoiceId, input.relatedInvoiceId));
+    const live = adjustments.find(
+      (a) => a.status !== "cancelled" && a.status !== "failed",
+    );
+    if (live) {
+      throw new DomainError(
+        "ADJUSTMENT_EXISTS",
+        `Invoice already has an active adjustment (${live.id}, ${live.status})`,
+        409,
+      );
+    }
   } else if (input.relatedInvoiceId) {
     throw new DomainError(
       "UNEXPECTED_RELATED_INVOICE",

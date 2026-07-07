@@ -197,6 +197,11 @@ export function InvoiceRespond() {
       { id: invoice.id, data: { paymentStatus } },
       {
         onSuccess: () => {
+          // A `paid` flag settles the invoice server-side — refetch so the
+          // status badge does not go stale.
+          void queryClient.invalidateQueries({
+            queryKey: getListBuyerInvoicesQueryKey(),
+          });
           toast({
             title:
               paymentStatus === "scheduled"

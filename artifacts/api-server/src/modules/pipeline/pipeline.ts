@@ -186,10 +186,28 @@ async function creditOriginal(
     });
     return;
   }
-  await getDb()
+  // Compare-and-set: a concurrent cancel between the read and this write must
+  // not be overwritten (CORE-09: terminal states never resurrect).
+  const [moved] = await getDb()
     .update(invoicesTable)
     .set({ status: "credited" })
-    .where(eq(invoicesTable.id, originalId));
+    .where(
+      and(
+        eq(invoicesTable.id, originalId),
+        eq(invoicesTable.status, original.status),
+      ),
+    )
+    .returning({ id: invoicesTable.id });
+  if (!moved) {
+    await appendAudit({
+      firmId: original.firmId,
+      action: "invoice.credit_skipped",
+      entityType: "invoice",
+      entityId: originalId,
+      after: { adjustmentId, reason: "concurrent transition" },
+    });
+    return;
+  }
   await recordTransition({
     invoiceId: originalId,
     firmId: original.firmId,

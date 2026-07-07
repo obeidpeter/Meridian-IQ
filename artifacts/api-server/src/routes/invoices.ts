@@ -58,7 +58,8 @@ import {
 } from "../modules/invoice/service";
 import {
   canTransition,
-  assertTransition,
+  applyTransition,
+  isPresentableAsEligible,
   recordTransition,
 } from "../modules/invoice/lifecycle";
 import { serializeToUbl } from "../modules/invoice/canonical";
@@ -162,12 +163,9 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
     return;
   }
   const { invoice } = await loadForTenant(req, params.data.id);
-  assertTransition(invoice.status, "cancelled");
-  const [row] = await getDb()
-    .update(invoicesTable)
-    .set({ status: "cancelled" })
-    .where(eq(invoicesTable.id, params.data.id))
-    .returning();
+  // Compare-and-set: a concurrent transition (e.g. the worker crediting this
+  // invoice) rejects the cancel instead of being overwritten.
+  const row = await applyTransition(invoice.id, invoice.status, "cancelled");
   await recordTransition({
     invoiceId: invoice.id,
     firmId: invoice.firmId,
@@ -382,6 +380,16 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
         400,
       );
     }
+    // CORE-09: an invoice cancelled or credited after the request was raised
+    // can no longer collect a confirmation (a confirmed dead invoice would
+    // read as financeable evidence).
+    if (!isPresentableAsEligible(invoice.status)) {
+      throw new DomainError(
+        "INVOICE_NOT_ELIGIBLE",
+        `Invoice is ${invoice.status}; the confirmation request is void`,
+        409,
+      );
+    }
   }
 
   const [row] = await getDb()
@@ -398,18 +406,28 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
     })
     .returning();
   if (parsed.data.state === "confirmed" && canTransition(invoice.status, "confirmed")) {
-    await getDb()
+    // Compare-and-set: if the invoice moved concurrently (cancel/credit), the
+    // confirmation row stands as lineage but the status transition is skipped.
+    const [moved] = await getDb()
       .update(invoicesTable)
       .set({ status: "confirmed" })
-      .where(eq(invoicesTable.id, params.data.id));
-    await recordTransition({
-      invoiceId: invoice.id,
-      firmId: invoice.firmId,
-      fromStatus: invoice.status,
-      toStatus: "confirmed",
-      actorId: req.principal.userId,
-      actorRole: req.principal.role,
-    });
+      .where(
+        and(
+          eq(invoicesTable.id, params.data.id),
+          eq(invoicesTable.status, invoice.status),
+        ),
+      )
+      .returning({ id: invoicesTable.id });
+    if (moved) {
+      await recordTransition({
+        invoiceId: invoice.id,
+        firmId: invoice.firmId,
+        fromStatus: invoice.status,
+        toStatus: "confirmed",
+        actorId: req.principal.userId,
+        actorRole: req.principal.role,
+      });
+    }
   }
   await appendAudit({
     actorId: req.principal.userId,

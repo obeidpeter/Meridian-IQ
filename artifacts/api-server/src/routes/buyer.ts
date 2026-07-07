@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb, invoicesTable, partiesTable, settlementEventsTable } from "@workspace/db";
 import {
   ListBuyerInvoicesQueryParams,
@@ -120,6 +120,18 @@ router.post("/invoices/:id/payment-flags", async (req, res): Promise<void> => {
       409,
     );
   }
+  // The contract types amount as a bare string; reject anything that is not a
+  // plain decimal before it reaches the numeric column (400, not a DB 500).
+  if (
+    body.data.amount !== undefined &&
+    !/^\d+(\.\d{1,2})?$/.test(body.data.amount)
+  ) {
+    throw new DomainError(
+      "INVALID_AMOUNT",
+      "amount must be a plain decimal string (e.g. 120000.00)",
+      400,
+    );
+  }
   const occurredAt = body.data.occurredAt
     ? new Date(body.data.occurredAt)
     : new Date();
@@ -138,19 +150,29 @@ router.post("/invoices/:id/payment-flags", async (req, res): Promise<void> => {
     body.data.paymentStatus === "paid" &&
     canTransition(invoice.status, "settled")
   ) {
-    await getDb()
+    // Compare-and-set: a concurrent cancel/credit wins; the flag event stands
+    // as lineage but the settled transition is skipped.
+    const [moved] = await getDb()
       .update(invoicesTable)
       .set({ status: "settled" })
-      .where(eq(invoicesTable.id, invoice.id));
-    await recordTransition({
-      invoiceId: invoice.id,
-      firmId: invoice.firmId,
-      fromStatus: invoice.status,
-      toStatus: "settled",
-      actorId: req.principal.userId,
-      actorRole: req.principal.role,
-      reason: "buyer_flag:paid",
-    });
+      .where(
+        and(
+          eq(invoicesTable.id, invoice.id),
+          eq(invoicesTable.status, invoice.status),
+        ),
+      )
+      .returning({ id: invoicesTable.id });
+    if (moved) {
+      await recordTransition({
+        invoiceId: invoice.id,
+        firmId: invoice.firmId,
+        fromStatus: invoice.status,
+        toStatus: "settled",
+        actorId: req.principal.userId,
+        actorRole: req.principal.role,
+        reason: "buyer_flag:paid",
+      });
+    }
   }
   await appendAudit({
     actorId: req.principal.userId,

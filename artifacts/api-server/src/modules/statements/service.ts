@@ -17,7 +17,7 @@ import { DomainError } from "../errors.ts";
 import { appendAudit } from "../audit/audit";
 import { isPurposePermitted } from "../consent/consent";
 import {
-  assertTransition,
+  applyTransition,
   isPresentableAsEligible,
   recordTransition,
 } from "../invoice/lifecycle.ts";
@@ -350,7 +350,10 @@ export async function acceptProposal(
       409,
     );
   }
-  assertTransition(invoice.status, "settled");
+  // Compare-and-set FIRST: if a concurrent cancel/credit moved the invoice
+  // after the read above, this rejects instead of resurrecting a dead invoice,
+  // and no settlement event is written.
+  const updated = await applyTransition(invoice.id, invoice.status, "settled");
 
   const occurredAt = line.valueDate
     ? new Date(`${line.valueDate}T00:00:00Z`)
@@ -386,11 +389,6 @@ export async function acceptProposal(
         eq(matchProposalsTable.status, "proposed"),
       ),
     );
-  const [updated] = await getDb()
-    .update(invoicesTable)
-    .set({ status: "settled" })
-    .where(eq(invoicesTable.id, invoice.id))
-    .returning();
   await recordTransition({
     invoiceId: invoice.id,
     firmId: invoice.firmId,

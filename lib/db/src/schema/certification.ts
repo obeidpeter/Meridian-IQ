@@ -67,7 +67,11 @@ export const cpdEnrollmentsTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [unique().on(t.courseId, t.userId)],
+  // Firm-scoped uniqueness: enrollments (and their RLS) are per firm, and a
+  // user holding memberships in two firms earns CPD in each independently. A
+  // global (courseId, userId) unique would 500 on the second firm's enroll —
+  // its RLS-scoped existence check cannot see the first firm's row.
+  (t) => [unique().on(t.courseId, t.firmId, t.userId)],
 );
 
 export const insertCpdCourseSchema = createInsertSchema(cpdCoursesTable).omit({

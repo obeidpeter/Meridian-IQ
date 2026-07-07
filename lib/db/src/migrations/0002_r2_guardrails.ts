@@ -39,6 +39,52 @@ const SCOPED: { table: string; match: string }[] = [
 ];
 
 const up = `
+-- ============ Legacy membership dedupe ============
+-- The memberships unique index is being tightened to five columns with NULLS
+-- NOT DISTINCT (see lib/db/src/schema/organizations.ts). Databases seeded
+-- before the tightening accumulated duplicate rows (NULLS DISTINCT never
+-- conflicted), which would make the new index impossible to create. Keep the
+-- earliest row of each binding. Idempotent and safe on fresh databases.
+DELETE FROM memberships a
+  USING memberships b
+  WHERE a.created_at > b.created_at
+    AND a.user_id = b.user_id
+    AND a.role = b.role
+    AND a.firm_id IS NOT DISTINCT FROM b.firm_id
+    AND a.client_party_id IS NOT DISTINCT FROM b.client_party_id;
+
+-- ============ CORE-07: retention purge covers the R2 spine ============
+-- The R2 tables reference invoices (match_proposals.invoice_id,
+-- b2c_report_items.invoice_id, invoices.related_invoice_id self-FK), so the
+-- 0001 purge would now fail on FK violations. Extend it: purge R2 children
+-- first, detach surviving adjustments from purged originals, then delete the
+-- original chain.
+CREATE OR REPLACE FUNCTION meridian_purge_expired() RETURNS integer AS $$
+DECLARE ids uuid[];
+BEGIN
+  PERFORM set_config('app.allow_purge', 'on', true);
+  PERFORM set_config('app.bypass', 'on', true);
+  SELECT array_agg(id) INTO ids FROM invoices
+    WHERE legal_hold = false
+      AND retention_until IS NOT NULL
+      AND retention_until <= now()::date;
+  IF ids IS NULL THEN RETURN 0; END IF;
+  DELETE FROM match_proposals WHERE invoice_id = ANY(ids);
+  DELETE FROM b2c_report_items WHERE invoice_id = ANY(ids);
+  -- An adjustment (credit note/correction) may outlive its original's
+  -- retention window; detach it rather than blocking the purge.
+  UPDATE invoices SET related_invoice_id = NULL
+    WHERE related_invoice_id = ANY(ids) AND NOT (id = ANY(ids));
+  DELETE FROM settlement_events WHERE invoice_id = ANY(ids);
+  DELETE FROM confirmations WHERE invoice_id = ANY(ids);
+  DELETE FROM stamp_records WHERE invoice_id = ANY(ids);
+  DELETE FROM submission_attempts WHERE invoice_id = ANY(ids);
+  DELETE FROM invoice_lifecycle_events WHERE invoice_id = ANY(ids);
+  DELETE FROM invoice_lines WHERE invoice_id = ANY(ids);
+  DELETE FROM invoices WHERE id = ANY(ids);
+  RETURN array_length(ids, 1);
+END; $$ LANGUAGE plpgsql;
+
 ${R2_TENANT_TABLES.map(
   (t) => `ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ${t} FORCE ROW LEVEL SECURITY;
@@ -66,6 +112,27 @@ ${ALL_TABLES.map(
 ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE ${t} DISABLE ROW LEVEL SECURITY;`,
 ).join("\n")}
+
+-- Restore the 0001 purge function (without R2-table coverage).
+CREATE OR REPLACE FUNCTION meridian_purge_expired() RETURNS integer AS $$
+DECLARE ids uuid[];
+BEGIN
+  PERFORM set_config('app.allow_purge', 'on', true);
+  PERFORM set_config('app.bypass', 'on', true);
+  SELECT array_agg(id) INTO ids FROM invoices
+    WHERE legal_hold = false
+      AND retention_until IS NOT NULL
+      AND retention_until <= now()::date;
+  IF ids IS NULL THEN RETURN 0; END IF;
+  DELETE FROM settlement_events WHERE invoice_id = ANY(ids);
+  DELETE FROM confirmations WHERE invoice_id = ANY(ids);
+  DELETE FROM stamp_records WHERE invoice_id = ANY(ids);
+  DELETE FROM submission_attempts WHERE invoice_id = ANY(ids);
+  DELETE FROM invoice_lifecycle_events WHERE invoice_id = ANY(ids);
+  DELETE FROM invoice_lines WHERE invoice_id = ANY(ids);
+  DELETE FROM invoices WHERE id = ANY(ids);
+  RETURN array_length(ids, 1);
+END; $$ LANGUAGE plpgsql;
 `;
 
 export const migration0002 = {

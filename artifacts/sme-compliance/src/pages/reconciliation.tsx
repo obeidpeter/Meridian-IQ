@@ -93,16 +93,29 @@ export function Reconciliation() {
         enabled: !!clientPartyId,
         queryKey: getListBankStatementsQueryKey({ clientPartyId }),
         retry: false,
+        // Proposal generation runs async in the worker after a commit; keep
+        // polling until every committed statement reports `reconciled`.
+        refetchInterval: (query) =>
+          (query.state.data ?? []).some((s) => s.status === "committed")
+            ? 3000
+            : false,
       },
     },
   );
 
+  const selectedStatement = (statements ?? []).find((s) => s.id === selectedId);
   const { data: proposals, isLoading: proposalsLoading } =
     useListBankStatementProposals(selectedId || "", {
       query: {
         enabled: !!selectedId,
         queryKey: getListBankStatementProposalsQueryKey(selectedId || ""),
         retry: false,
+        // A just-committed statement has no proposals yet — poll until the
+        // reconcile job finishes instead of freezing on an empty first fetch.
+        refetchInterval:
+          selectedStatement && selectedStatement.status !== "reconciled"
+            ? 3000
+            : false,
       },
     });
 
@@ -214,8 +227,6 @@ export function Reconciliation() {
       </div>
     );
   }
-
-  const selectedStatement = (statements || []).find((s) => s.id === selectedId);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -445,10 +456,22 @@ export function Reconciliation() {
             ) : (proposals || []).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <ScanSearch className="w-10 h-10 text-muted-foreground mb-3" />
-                <p className="font-medium">No match proposals</p>
-                <p className="text-sm text-muted-foreground">
-                  Commit the statement first, or none of its credits matched an open invoice.
-                </p>
+                {selectedStatement && selectedStatement.status !== "reconciled" ? (
+                  <>
+                    <p className="font-medium">Matching in progress…</p>
+                    <p className="text-sm text-muted-foreground">
+                      The statement is committed; proposals appear here as soon as
+                      matching finishes (a few seconds).
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium">No match proposals</p>
+                    <p className="text-sm text-muted-foreground">
+                      None of this statement's credits matched an open invoice.
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               (proposals || []).map((p) => (

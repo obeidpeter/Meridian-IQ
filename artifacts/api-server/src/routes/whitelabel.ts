@@ -17,6 +17,7 @@ import {
 } from "../modules/auth/rbac";
 import { isFeatureEnabled } from "../modules/flags/flags";
 import { appendAudit } from "../modules/audit/audit";
+import { DomainError } from "../modules/errors";
 import { validateTin, validateCac } from "../modules/party/party";
 
 // White-label at scale (CON-05): firm theming resolved by subdomain from one
@@ -80,6 +81,22 @@ router.put("/firms/:id/theme", async (req, res): Promise<void> => {
   if (!existing) {
     res.status(404).json({ error: "Firm not found" });
     return;
+  }
+  // Subdomains are unique across firms; answer a taken name with a 409 rather
+  // than letting the DB constraint surface as a 500.
+  if (body.data.subdomain && body.data.subdomain !== existing.subdomain) {
+    const [taken] = await getDb()
+      .select({ id: firmsTable.id })
+      .from(firmsTable)
+      .where(eq(firmsTable.subdomain, body.data.subdomain))
+      .limit(1);
+    if (taken) {
+      throw new DomainError(
+        "SUBDOMAIN_TAKEN",
+        "That subdomain is already in use",
+        409,
+      );
+    }
   }
   const [row] = await getDb()
     .update(firmsTable)
@@ -160,13 +177,25 @@ router.post("/clients/import", async (req, res): Promise<void> => {
       continue;
     }
 
-    // Existing client detection: by validated TIN first, then by exact legal
-    // name among this firm's engaged clients.
+    // Existing-client detection is scoped to THIS firm's engaged clients (by
+    // TIN, then exact legal name). Parties are shared reference data, so an
+    // unscoped TIN lookup would be a cross-tenant oracle: any firm could probe
+    // arbitrary TINs and harvest other organizations' party ids. A TIN that
+    // exists elsewhere on the platform simply creates a new party here; the
+    // operator-driven merge workflow (CORE-08) reconciles duplicates with
+    // lineage.
     let existingPartyId: string | null = null;
     if (tin) {
       const [byTin] = await getDb()
         .select({ id: partiesTable.id })
         .from(partiesTable)
+        .innerJoin(
+          engagementsTable,
+          and(
+            eq(engagementsTable.clientPartyId, partiesTable.id),
+            eq(engagementsTable.firmId, firmId),
+          ),
+        )
         .where(eq(partiesTable.tin, tin))
         .limit(1);
       existingPartyId = byTin?.id ?? null;
@@ -236,16 +265,16 @@ router.post("/clients/import", async (req, res): Promise<void> => {
   const createdCount = results.filter((r) => r.status === "created").length;
   const existsCount = results.filter((r) => r.status === "exists").length;
   const invalidCount = results.filter((r) => r.status === "invalid").length;
-  if (parsed.data.commit) {
-    await appendAudit({
-      actorId: req.principal.userId,
-      firmId,
-      action: "clients.import",
-      entityType: "firm",
-      entityId: firmId,
-      after: { rows: results.length, created: createdCount, exists: existsCount, invalid: invalidCount },
-    });
-  }
+  // Validate-only probes are audited too: bulk lookups against party data must
+  // never be silent (CORE-05).
+  await appendAudit({
+    actorId: req.principal.userId,
+    firmId,
+    action: parsed.data.commit ? "clients.import" : "clients.import_validate",
+    entityType: "firm",
+    entityId: firmId,
+    after: { rows: results.length, created: createdCount, exists: existsCount, invalid: invalidCount },
+  });
   res.json(
     ImportClientsResponse.parse({
       rowCount: results.length,

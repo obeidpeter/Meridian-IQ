@@ -57,9 +57,13 @@ async function collectIntoBatches(): Promise<number> {
       ),
     )
     .orderBy(asc(invoicesTable.createdAt));
+  const now = new Date();
   let added = 0;
   for (const invoice of qualifying) {
-    // One open batch per client; the first transaction anchors the clock.
+    // One open batch per client; the first transaction anchors the clock. A
+    // batch whose deadline has already passed never collects new sales — a
+    // fresh sale has its own full 24-hour window and must open a new batch,
+    // not inherit an expired clock (and an instant breach) from a stale one.
     const [open] = await getDb()
       .select()
       .from(b2cReportBatchesTable)
@@ -68,6 +72,7 @@ async function collectIntoBatches(): Promise<number> {
           eq(b2cReportBatchesTable.clientPartyId, invoice.supplierPartyId),
           eq(b2cReportBatchesTable.firmId, invoice.firmId),
           eq(b2cReportBatchesTable.status, "open"),
+          gt(b2cReportBatchesTable.deadlineAt, now),
         ),
       )
       .orderBy(asc(b2cReportBatchesTable.createdAt))
@@ -207,9 +212,11 @@ export async function sweepB2c(): Promise<{
       return { collected: 0, alerted: 0, breached: 0 };
     }
     const now = new Date();
+    // Breaches are marked BEFORE collection so a sale captured after a
+    // deadline never lands in the just-expired batch.
+    const breached = await markBreaches(now);
     const collected = await collectIntoBatches();
     const alerted = await firePreBreachAlerts(now);
-    const breached = await markBreaches(now);
     return { collected, alerted, breached };
   });
 }
@@ -234,12 +241,18 @@ export async function submitBatch(
     throw new DomainError("ALREADY_REPORTED", "Batch already reported", 409);
   }
   const now = new Date();
+  // The statutory clock decides compliance, not the sweep's bookkeeping lag: a
+  // submit after deadlineAt is a breach even if the sweep has not flipped the
+  // batch yet.
+  const insideWindow = batch.status === "open" && now <= batch.deadlineAt;
+  const breachedLate = batch.status === "open" && !insideWindow;
   const [updated] = await getDb()
     .update(b2cReportBatchesTable)
     .set({
-      status: batch.status === "breached" ? "breached" : "reported",
+      status: insideWindow ? "reported" : "breached",
       reportedAt: now,
       reportedByUserId: actor.userId,
+      ...(breachedLate ? { breachedAt: now } : {}),
     })
     .where(eq(b2cReportBatchesTable.id, batchId))
     .returning();
@@ -252,7 +265,7 @@ export async function submitBatch(
     after: {
       status: updated.status,
       reportedAt: now.toISOString(),
-      insideWindow: batch.status === "open",
+      insideWindow,
     },
   });
   return updated;

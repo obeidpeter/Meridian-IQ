@@ -57,6 +57,20 @@ interface InvoiceFacts {
   latestConfirmation: string | null;
 }
 
+// Statuses visible to the buyer organization. Drafts (and locally-validated
+// drafts) are the supplier firm's private mutable working state — an invoice
+// only exists outside its firm once submitted (CORE-02) — so they must never
+// leak into another organization's portal, exposure or scoreboard.
+const BUYER_VISIBLE_STATUSES = [
+  "submitted",
+  "stamped",
+  "confirmed",
+  "settled",
+  "failed",
+  "cancelled",
+  "credited",
+] as const;
+
 // Load the buyer's invoice book with stamp and confirmation facts resolved in
 // three indexed selects (never per-invoice queries — the batch discipline of
 // verifyStampBatch).
@@ -66,7 +80,12 @@ export async function loadBuyerBook(
   const invoices = await getDb()
     .select()
     .from(invoicesTable)
-    .where(eq(invoicesTable.buyerPartyId, buyerPartyId))
+    .where(
+      and(
+        eq(invoicesTable.buyerPartyId, buyerPartyId),
+        inArray(invoicesTable.status, [...BUYER_VISIBLE_STATUSES]),
+      ),
+    )
     .orderBy(desc(invoicesTable.createdAt));
   if (invoices.length === 0) return [];
   const ids = invoices.map((i) => i.id);

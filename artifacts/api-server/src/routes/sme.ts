@@ -339,6 +339,13 @@ function validateImportRow(
   if (issueDate && Number.isNaN(new Date(issueDate).getTime())) {
     errors.push({ field: "issueDate", message: "Issue date is not a valid date" });
   }
+  // dueDate is optional but must be a real date when present — the bulk path
+  // inserts rows in one statement, so one bad date would otherwise abort the
+  // whole import with a DB error instead of a per-row result.
+  const dueDate = str(row.dueDate);
+  if (dueDate && Number.isNaN(new Date(dueDate).getTime())) {
+    errors.push({ field: "dueDate", message: "Due date is not a valid date" });
+  }
   const num = (field: string, label: string, min: number) => {
     const raw = str(row[field]);
     if (!raw) {
