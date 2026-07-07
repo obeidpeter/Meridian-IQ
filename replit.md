@@ -31,8 +31,9 @@ Roadmap R0–R2 built; R3+ dormant behind gates).
 - `lib/db/src/schema/*.ts` — one Drizzle file per domain, barrel-exported; `lib/db/src/migrations/` — versioned SQL guardrails (triggers, RLS) with reversible down + rollback test
 - `artifacts/api-server/src/modules/<domain>/` — domain logic; `src/routes/<tag>.ts` — HTTP surface registered in `routes/index.ts`
 - Key R2 modules: `modules/statements` (INT-05 parser abstraction + ingestion), `modules/reconciliation` (SME-07 matcher), `modules/buyer` (BR-01/05 exposure + scoreboard), `modules/b2c` (SME-08 clocks), `modules/connectors` (PL-03 contract + SagePro/QuickLite)
-- Frontends: `artifacts/sme-compliance` (SME app, "/"), `artifacts/console` (accountant console + operator, "/console/"), `artifacts/buyer-portal` (Buyer Rails, "/buyer/"), `artifacts/penalty-calculator` (public static, never wired to the app)
-- `artifacts/api-server/src/bootstrap/seed.ts` — flags (release-tagged), demo tenant, buyer principals, CPD content
+- Auth: `modules/auth/session.ts` (scrypt passwords + HMAC cookie session), `routes/auth.ts` (login/logout), `middleware/principal.ts` (resolves dev headers → session cookie → Clerk)
+- Frontends (path-routed, one origin): `artifacts/landing` (portal + central login, "/"), `artifacts/sme-compliance` (SME app, "/app/"), `artifacts/console` (accountant console + operator, "/console/"), `artifacts/buyer-portal` (Buyer Rails, "/buyer/"), `artifacts/penalty-calculator` (public static, "/penalty-calculator/")
+- `artifacts/api-server/src/bootstrap/seed.ts` — flags (release-tagged), demo tenant, buyer principals, CPD content, demo passwords (`DEMO_PASSWORD = "meridian2027"` for every seeded user)
 
 ## Architecture decisions
 
@@ -45,6 +46,7 @@ Roadmap R0–R2 built; R3+ dormant behind gates).
 
 ## Product
 
+- Portal (`/`): the front door. Central email+password sign-in sets an origin-wide session cookie, then role-aware tiles route to each workspace (Compliance App, Console, Buyer Rails) or straight into the public Penalty Calculator. One sign-in unlocks every workspace the account's role allows.
 - SME app: guided invoicing, bulk import (5,000-row bulk path), submission + vault, deadline/penalty alerts, reconciliation upload with match proposals, B2C 24-hour report clocks, confirmation timeline.
 - Accountant console: portfolio risk, onboarding pipeline, unearned income, billing/revenue share, operator queue; R2 adds white-label branding + subdomain, bulk client import, CPD certification portal.
 - Buyer portal (`/buyer/`): confirmation queue and responses (method + no-set-off captured), payment flags, supplier verification with daily input-VAT exposure, exportable compliance scoreboard.
@@ -59,7 +61,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 - Run `pnpm --filter @workspace/api-spec run codegen` after ANY change to `openapi.yaml`, then root `pnpm run typecheck`.
 - lib/db and api-server modules use explicit `.ts` extensions on relative imports so `node --test` strip-mode works; keep new files consistent.
 - The dev DB pool is lazy — the server fail-fasts via `requireDatabaseUrl()` at boot; pure-function tests import schema without a database.
-- Clerk middleware mounts only when `CLERK_SECRET_KEY` is set; otherwise the dev-header shim (`x-mock-role`, `x-mock-user`, `x-mock-firm`, `x-mock-client-party`, `x-mock-buyer-party`) is the only identity path.
+- Identity resolution order (`middleware/principal.ts`): dev `x-mock-*` headers (never honoured in production) → first-party session cookie → Clerk (production). The browser apps send NO mock headers — they authenticate purely via the shared session cookie set by the portal login; automated tests/curl use `x-mock-*`. Clerk middleware mounts only when `CLERK_SECRET_KEY` is set.
+- Path-routed origin: the portal owns `/` and its `public/sw.js` is a no-op self-healing worker that evicts the stale root service worker returning browsers cached when the SME app lived at `/`. Adding/moving an app at `/` needs the same self-heal, and any app-scoped service worker must not reach outside its own path prefix.
 - `memberships` unique index is NULLS NOT DISTINCT — seed inserts dedupe correctly; extend the index if you add another scoping column.
 - express JSON body limit is 8mb (5,000-row imports, statement uploads).
 - See `.agents/memory/` for DB guardrails, RBAC, artifact base-path and service-worker invariants.

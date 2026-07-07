@@ -149,6 +149,7 @@ export * from './listInvoicesParams';
 export * from './listOperatorCasesParams';
 export * from './listOperatorCasesStatus';
 export * from './listStatementsParams';
+export * from './loginInput';
 export * from './matchDecisionResult';
 export * from './matchDecisionResultStatus';
 export * from './matchProposalView';

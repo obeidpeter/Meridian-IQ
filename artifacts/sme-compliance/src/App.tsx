@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 
 import { Layout } from "@/components/layout";
+import { RequireSession } from "@/components/require-session";
 import { Dashboard } from "@/pages/dashboard";
 import { Invoices } from "@/pages/invoices";
 import { InvoiceNew } from "@/pages/invoice-new";
@@ -15,7 +16,18 @@ import { B2cReports } from "@/pages/b2c";
 import { Calendar } from "@/pages/calendar";
 import { Alerts } from "@/pages/alerts";
 
-const queryClient = new QueryClient();
+// A 401 must not retry-spin — the session guard redirects to the portal instead.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (count, err: unknown) => {
+        const status = (err as { status?: number })?.status;
+        if (status && status >= 400 && status < 500) return false;
+        return count < 2;
+      },
+    },
+  },
+});
 
 function Router() {
   return (
@@ -41,7 +53,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
+          <RequireSession>
+            <Router />
+          </RequireSession>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

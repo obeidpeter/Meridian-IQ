@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import { runRequestContext } from "@workspace/db";
@@ -221,6 +222,8 @@ app.use(cors());
 // as JSON bodies well beyond the 100kb express default.
 app.use(express.json({ limit: "8mb" }));
 app.use(express.urlencoded({ extended: true }));
+// Session cookie (modules/auth/session.ts) is read by the principal middleware.
+app.use(cookieParser());
 
 // Verify the Clerk session (if any) from cookie/Bearer token and attach auth to
 // the request. resolvePrincipal reads getAuth(req) to build the tenant-scoped

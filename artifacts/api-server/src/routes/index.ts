@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import authRouter from "./auth";
 import identityRouter from "./identity";
 import partiesRouter from "./parties";
 import consentRouter from "./consent";
@@ -24,6 +25,7 @@ import connectorsRouter from "./connectors";
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(authRouter);
 router.use(identityRouter);
 router.use(partiesRouter);
 router.use(consentRouter);

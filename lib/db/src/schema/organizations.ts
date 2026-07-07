@@ -35,6 +35,9 @@ export const usersTable = pgTable("users", {
   clerkUserId: text("clerk_user_id").unique(),
   email: text("email").notNull().unique(),
   fullName: text("full_name"),
+  // scrypt hash (salt:hash, hex) for cookie-session login. Null for users who
+  // authenticate through Clerk only.
+  passwordHash: text("password_hash"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

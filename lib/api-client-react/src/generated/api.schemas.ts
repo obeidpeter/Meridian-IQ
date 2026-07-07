@@ -25,6 +25,13 @@ export interface Me {
   capabilities: string[];
 }
 
+export interface LoginInput {
+  /** @minLength 3 */
+  email: string;
+  /** @minLength 1 */
+  password: string;
+}
+
 /**
  * @nullable
  */

@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import { errorStatus } from "@/lib/errors";
 
 import { Layout } from "@/components/layout";
+import { RequireSession } from "@/components/require-session";
 import { Confirmations } from "@/pages/confirmations";
 import { InvoiceRespond } from "@/pages/invoice-respond";
 import { Suppliers } from "@/pages/suppliers";
@@ -44,7 +45,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
+          <RequireSession allow={["buyer_user"]}>
+            <Router />
+          </RequireSession>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

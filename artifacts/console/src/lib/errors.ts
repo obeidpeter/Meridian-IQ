@@ -18,3 +18,11 @@ export function errorStatus(error: unknown): number | undefined {
 export function isFeatureDisabled(error: unknown): boolean {
   return errorStatus(error) === 404;
 }
+
+/**
+ * Operator endpoints answer 403 when the signed-in principal is not an
+ * operator. Duck-type the status the same way as isFeatureDisabled.
+ */
+export function isForbidden(error: unknown): boolean {
+  return errorStatus(error) === 403;
+}

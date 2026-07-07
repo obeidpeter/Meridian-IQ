@@ -1,13 +1,23 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, FileText, Calendar as CalendarIcon, Bell, Upload, Landmark, Store, Menu } from "lucide-react";
+import { LayoutDashboard, FileText, Calendar as CalendarIcon, Bell, Upload, Landmark, Store, Menu, LogOut, Grid2x2 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, useLogout } from "@workspace/api-client-react";
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { data: me } = useGetMe();
+  const logout = useLogout();
+
+  const signOut = async () => {
+    try {
+      await logout.mutateAsync();
+    } catch {
+      /* clearing the cookie is best-effort; redirect regardless */
+    }
+    window.location.href = "/";
+  };
 
   const links = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -37,6 +47,16 @@ export function Layout({ children }: { children: ReactNode }) {
           </Link>
         );
       })}
+      <div className="mt-4 pt-4 border-t space-y-1">
+        <a href="/" className="flex items-center gap-3 px-3 py-2 rounded-md text-foreground hover:bg-muted transition-colors">
+          <Grid2x2 className="w-5 h-5" />
+          All apps
+        </a>
+        <button onClick={signOut} className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-foreground hover:bg-muted transition-colors text-left">
+          <LogOut className="w-5 h-5" />
+          Sign out
+        </button>
+      </div>
     </nav>
   );
 

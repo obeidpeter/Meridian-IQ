@@ -145,6 +145,16 @@ export const stampVerificationsTable = pgTable("stamp_verifications", {
   freshUntil: timestamp("fresh_until", { withTimezone: true }).notNull(),
 });
 
+// Server-generated secrets that must survive restarts (e.g. the session-cookie
+// signing key). Generated once at boot when absent; never exposed via any API.
+export const appSecretsTable = pgTable("app_secrets", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // CORE-06: every migration/schema version recorded; records declare their
 // writing version via per-entity schemaVersion columns.
 export const schemaVersionsTable = pgTable("schema_versions", {
