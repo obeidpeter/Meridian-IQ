@@ -80,9 +80,12 @@ export const membershipsTable = pgTable(
       .defaultNow(),
   },
   // nullsNotDistinct so re-seeding the same binding (with null firm/party
-  // columns) conflicts instead of silently duplicating.
+  // columns) conflicts instead of silently duplicating. The constraint carries
+  // an explicit name because the auto-generated one (built from all five
+  // columns) exceeds Postgres's 63-char identifier limit and would be silently
+  // truncated, leaving the schema name and the stored name out of sync.
   (t) => [
-    unique()
+    unique("memberships_binding_unique")
       .on(t.userId, t.firmId, t.role, t.clientPartyId, t.buyerPartyId)
       .nullsNotDistinct(),
   ],
