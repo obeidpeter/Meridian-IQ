@@ -11,4 +11,9 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
+  // `_schema_migrations` is owned by the SQL migration runner (see
+  // src/migrations), not by Drizzle. Exclude it so `drizzle push` never proposes
+  // dropping it — that table records which guardrail migrations have been applied
+  // and losing it would re-run or orphan them.
+  tablesFilter: ["*", "!_schema_migrations"],
 });

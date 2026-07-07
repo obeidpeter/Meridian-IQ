@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, firmsTable, usersTable, membershipsTable } from "@workspace/db";
+import { getDb, firmsTable, usersTable, membershipsTable } from "@workspace/db";
 import {
   GetMeResponse,
   ListFirmsResponse,
@@ -42,8 +42,8 @@ router.get("/firms", async (req, res): Promise<void> => {
   const tenant = tenantFirmId(req.principal);
   const rows =
     tenant === null
-      ? await db.select().from(firmsTable).orderBy(firmsTable.createdAt)
-      : await db.select().from(firmsTable).where(eq(firmsTable.id, tenant));
+      ? await getDb().select().from(firmsTable).orderBy(firmsTable.createdAt)
+      : await getDb().select().from(firmsTable).where(eq(firmsTable.id, tenant));
   res.json(ListFirmsResponse.parse(rows));
 });
 
@@ -54,7 +54,7 @@ router.post("/firms", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [row] = await db
+  const [row] = await getDb()
     .insert(firmsTable)
     .values({
       name: parsed.data.name,
@@ -73,7 +73,7 @@ router.get("/firms/:id", async (req, res): Promise<void> => {
     return;
   }
   assertSameTenant(req.principal, params.data.id);
-  const [row] = await db
+  const [row] = await getDb()
     .select()
     .from(firmsTable)
     .where(eq(firmsTable.id, params.data.id))
@@ -92,7 +92,7 @@ router.post("/users", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [row] = await db
+  const [row] = await getDb()
     .insert(usersTable)
     .values({
       email: parsed.data.email,
@@ -110,7 +110,7 @@ router.post("/memberships", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [row] = await db
+  const [row] = await getDb()
     .insert(membershipsTable)
     .values({
       userId: parsed.data.userId,

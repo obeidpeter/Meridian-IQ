@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import {
-  db,
+  getDb,
   partiesTable,
   invoicesTable,
   type Party,
@@ -60,7 +60,7 @@ export async function createParty(
     }
     cac = check.normalized;
   }
-  const [row] = await db
+  const [row] = await getDb()
     .insert(partiesTable)
     .values({
       type: input.type,
@@ -84,7 +84,7 @@ export async function createParty(
 }
 
 export async function getParty(id: string): Promise<Party | null> {
-  const [row] = await db
+  const [row] = await getDb()
     .select()
     .from(partiesTable)
     .where(eq(partiesTable.id, id))
@@ -122,7 +122,7 @@ export async function mergeParties(
   if (duplicate.mergedIntoId) {
     throw new DomainError("ALREADY_MERGED", "Duplicate already merged", 409);
   }
-  await db
+  await getDb()
     .update(partiesTable)
     .set({ mergedIntoId: survivorId })
     .where(eq(partiesTable.id, duplicateId));
@@ -148,7 +148,7 @@ export async function splitParty(
     throw new DomainError("NOT_MERGED", "Party is not merged", 409);
   }
   const previous = party.mergedIntoId;
-  await db
+  await getDb()
     .update(partiesTable)
     .set({ mergedIntoId: null })
     .where(eq(partiesTable.id, partyId));
@@ -164,7 +164,7 @@ export async function splitParty(
 
 // Count invoices referencing a party (used to surface merge impact).
 export async function invoiceCountForParty(partyId: string): Promise<number> {
-  const rows = await db
+  const rows = await getDb()
     .select({ id: invoicesTable.id })
     .from(invoicesTable)
     .where(eq(invoicesTable.supplierPartyId, partyId));

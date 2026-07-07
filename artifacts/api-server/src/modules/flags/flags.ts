@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import {
-  db,
+  getDb,
   featureFlagsTable,
   featureFlagOverridesTable,
   type FeatureFlag,
@@ -14,7 +14,7 @@ export async function isFeatureEnabled(
   firmId?: string | null,
 ): Promise<boolean> {
   if (firmId) {
-    const [override] = await db
+    const [override] = await getDb()
       .select({ enabled: featureFlagOverridesTable.enabled })
       .from(featureFlagOverridesTable)
       .where(
@@ -26,7 +26,7 @@ export async function isFeatureEnabled(
       .limit(1);
     if (override) return override.enabled;
   }
-  const [flag] = await db
+  const [flag] = await getDb()
     .select({ enabled: featureFlagsTable.enabled })
     .from(featureFlagsTable)
     .where(eq(featureFlagsTable.key, key))
@@ -35,11 +35,11 @@ export async function isFeatureEnabled(
 }
 
 export async function listFlags(): Promise<FeatureFlag[]> {
-  return db.select().from(featureFlagsTable).orderBy(featureFlagsTable.key);
+  return getDb().select().from(featureFlagsTable).orderBy(featureFlagsTable.key);
 }
 
 export async function setFlag(key: string, enabled: boolean): Promise<void> {
-  await db
+  await getDb()
     .update(featureFlagsTable)
     .set({ enabled })
     .where(eq(featureFlagsTable.key, key));
@@ -50,7 +50,7 @@ export async function setFirmOverride(
   firmId: string,
   enabled: boolean,
 ): Promise<void> {
-  await db
+  await getDb()
     .insert(featureFlagOverridesTable)
     .values({ flagKey: key, firmId, enabled })
     .onConflictDoUpdate({

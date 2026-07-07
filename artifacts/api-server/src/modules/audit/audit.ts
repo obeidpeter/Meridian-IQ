@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { asc, desc, sql } from "drizzle-orm";
-import { db, auditEventsTable, type AuditEvent } from "@workspace/db";
+import { getDb, auditEventsTable, type AuditEvent } from "@workspace/db";
 import { canonicalJson } from "../../lib/canonical-json";
 
 const GENESIS = "0".repeat(64);
@@ -27,7 +27,7 @@ function computeHash(prevHash: string, payload: Record<string, unknown>): string
 // Append a tamper-evident audit event. Serialized with a transaction-scoped
 // advisory lock so concurrent appends cannot fork the chain (CORE-05).
 export async function appendAudit(input: AuditInput): Promise<AuditEvent> {
-  return db.transaction(async (tx) => {
+  return getDb().transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${AUDIT_LOCK_ID})`);
     const [last] = await tx
       .select({ hash: auditEventsTable.hash })
@@ -76,7 +76,7 @@ export interface ChainVerification {
 
 // Recompute the whole chain and confirm no row was altered or removed.
 export async function verifyChain(): Promise<ChainVerification> {
-  const events = await db
+  const events = await getDb()
     .select()
     .from(auditEventsTable)
     .orderBy(asc(auditEventsTable.seq));
@@ -108,7 +108,7 @@ export async function exportAuditBundle(): Promise<{
   verification: ChainVerification;
   exportedAt: string;
 }> {
-  const events = await db
+  const events = await getDb()
     .select()
     .from(auditEventsTable)
     .orderBy(asc(auditEventsTable.seq));

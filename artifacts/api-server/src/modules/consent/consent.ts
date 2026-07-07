@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import {
-  db,
+  getDb,
   consentRecordsTable,
   type ConsentRecord,
   type ConsentAction,
@@ -42,7 +42,7 @@ export interface RecordConsentInput {
 export async function recordConsent(
   input: RecordConsentInput,
 ): Promise<ConsentRecord> {
-  const [row] = await db
+  const [row] = await getDb()
     .insert(consentRecordsTable)
     .values({
       partyId: input.partyId,
@@ -70,7 +70,7 @@ export async function hasLayerConsent(
   partyId: string,
   layer: number,
 ): Promise<boolean> {
-  const [latest] = await db
+  const [latest] = await getDb()
     .select({ action: consentRecordsTable.action })
     .from(consentRecordsTable)
     .where(
@@ -97,7 +97,7 @@ export async function isPurposePermitted(
 export async function consentHistory(
   partyId: string,
 ): Promise<ConsentRecord[]> {
-  return db
+  return getDb()
     .select()
     .from(consentRecordsTable)
     .where(eq(consentRecordsTable.partyId, partyId))

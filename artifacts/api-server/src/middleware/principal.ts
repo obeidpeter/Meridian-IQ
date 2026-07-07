@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
-import { db, usersTable, membershipsTable, type Role } from "@workspace/db";
+import { getDb, usersTable, membershipsTable, type Role } from "@workspace/db";
 import type { Principal } from "../modules/auth/rbac";
 
 // Principal resolution.
@@ -48,14 +48,14 @@ async function resolveClerkPrincipal(req: Request): Promise<Principal | null> {
   const clerkUserId = auth?.userId;
   if (!clerkUserId) return null;
 
-  const [user] = await db
+  const [user] = await getDb()
     .select({ id: usersTable.id })
     .from(usersTable)
     .where(eq(usersTable.clerkUserId, clerkUserId))
     .limit(1);
   if (!user) return null;
 
-  const memberships = await db
+  const memberships = await getDb()
     .select({
       firmId: membershipsTable.firmId,
       role: membershipsTable.role,

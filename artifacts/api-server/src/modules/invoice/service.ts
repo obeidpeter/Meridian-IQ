@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import {
-  db,
+  getDb,
   invoicesTable,
   invoiceLinesTable,
   partiesTable,
@@ -11,7 +11,7 @@ import {
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
 import { isPurposePermitted } from "../consent/consent";
-import { assertTransition } from "./lifecycle";
+import { assertTransition, recordTransition } from "./lifecycle";
 import {
   validateCanonical,
   type CanonicalInvoice,
@@ -74,63 +74,68 @@ export async function createDraft(
   });
   const grandTotal = subtotal + vatTotal;
 
-  return db.transaction(async (tx) => {
-    const [invoice] = await tx
-      .insert(invoicesTable)
-      .values({
-        firmId: input.firmId,
-        supplierPartyId: input.supplierPartyId,
-        buyerPartyId: input.buyerPartyId,
-        invoiceNumber: input.invoiceNumber,
-        currency: input.currency ?? "NGN",
-        issueDate: input.issueDate,
-        dueDate: input.dueDate ?? null,
-        kind: input.kind ?? "invoice",
-        category: input.category ?? "b2b",
-        relatedInvoiceId: input.relatedInvoiceId ?? null,
-        notes: input.notes ?? null,
-        subtotal: money(subtotal),
-        vatTotal: money(vatTotal),
-        grandTotal: money(grandTotal),
-      })
-      .returning();
-    const lines = await tx
-      .insert(invoiceLinesTable)
-      .values(
-        computed.map((c) => ({
-          invoiceId: invoice.id,
-          lineNo: c.lineNo,
-          description: c.description,
-          quantity: c.quantity,
-          unitPrice: c.unitPrice,
-          vatRate: c.vatRate,
-          lineExtension: c.lineExtension,
-          vatAmount: c.vatAmount,
-        })),
-      )
-      .returning();
-    await appendAudit({
-      actorId,
+  const [invoice] = await getDb()
+    .insert(invoicesTable)
+    .values({
       firmId: input.firmId,
-      action: "invoice.create",
-      entityType: "invoice",
-      entityId: invoice.id,
-      after: { invoiceNumber: invoice.invoiceNumber, status: invoice.status },
-    });
-    return { invoice, lines };
+      supplierPartyId: input.supplierPartyId,
+      buyerPartyId: input.buyerPartyId,
+      invoiceNumber: input.invoiceNumber,
+      currency: input.currency ?? "NGN",
+      issueDate: input.issueDate,
+      dueDate: input.dueDate ?? null,
+      kind: input.kind ?? "invoice",
+      category: input.category ?? "b2b",
+      relatedInvoiceId: input.relatedInvoiceId ?? null,
+      notes: input.notes ?? null,
+      subtotal: money(subtotal),
+      vatTotal: money(vatTotal),
+      grandTotal: money(grandTotal),
+    })
+    .returning();
+  const lines = await getDb()
+    .insert(invoiceLinesTable)
+    .values(
+      computed.map((c) => ({
+        invoiceId: invoice.id,
+        lineNo: c.lineNo,
+        description: c.description,
+        quantity: c.quantity,
+        unitPrice: c.unitPrice,
+        vatRate: c.vatRate,
+        lineExtension: c.lineExtension,
+        vatAmount: c.vatAmount,
+      })),
+    )
+    .returning();
+  await recordTransition({
+    invoiceId: invoice.id,
+    firmId: input.firmId,
+    fromStatus: null,
+    toStatus: invoice.status,
+    actorId,
   });
+  await appendAudit({
+    actorId,
+    firmId: input.firmId,
+    action: "invoice.create",
+    entityType: "invoice",
+    entityId: invoice.id,
+    after: { invoiceNumber: invoice.invoiceNumber, status: invoice.status },
+  });
+  return { invoice, lines };
 }
 
 export async function getInvoiceWithLines(
   invoiceId: string,
 ): Promise<{ invoice: Invoice; lines: InvoiceLine[] } | null> {
-  const [invoice] = await db
+  const [invoice] = await getDb()
     .select()
     .from(invoicesTable)
     .where(eq(invoicesTable.id, invoiceId))
     .limit(1);
   if (!invoice) return null;
-  const lines = await db
+  const lines = await getDb()
     .select()
     .from(invoiceLinesTable)
     .where(eq(invoiceLinesTable.invoiceId, invoiceId))
@@ -145,12 +150,12 @@ export async function buildCanonical(
   const bundle = await getInvoiceWithLines(invoiceId);
   if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
   const { invoice, lines } = bundle;
-  const [supplier] = await db
+  const [supplier] = await getDb()
     .select()
     .from(partiesTable)
     .where(eq(partiesTable.id, invoice.supplierPartyId))
     .limit(1);
-  const [buyer] = await db
+  const [buyer] = await getDb()
     .select()
     .from(partiesTable)
     .where(eq(partiesTable.id, invoice.buyerPartyId))
@@ -204,10 +209,17 @@ export async function validateInvoice(
     return { ok: false, errors };
   }
   assertTransition(bundle.invoice.status, "validated");
-  await db
+  await getDb()
     .update(invoicesTable)
     .set({ status: "validated" })
     .where(eq(invoicesTable.id, invoiceId));
+  await recordTransition({
+    invoiceId,
+    firmId: bundle.invoice.firmId,
+    fromStatus: bundle.invoice.status,
+    toStatus: "validated",
+    actorId,
+  });
   await appendAudit({
     actorId,
     firmId: bundle.invoice.firmId,
@@ -240,27 +252,32 @@ export async function submitInvoice(
     );
   }
   assertTransition(bundle.invoice.status, "submitted");
-  return db.transaction(async (tx) => {
-    const [updated] = await tx
-      .update(invoicesTable)
-      .set({ status: "submitted" })
-      .where(eq(invoicesTable.id, invoiceId))
-      .returning();
-    await tx.insert(outboxTable).values({
-      aggregateType: "invoice",
-      aggregateId: invoiceId,
-      type: "invoice.submit",
-      payload: { invoiceId },
-    });
-    await appendAudit({
-      actorId,
-      firmId: bundle.invoice.firmId,
-      action: "invoice.submit",
-      entityType: "invoice",
-      entityId: invoiceId,
-      before: { status: bundle.invoice.status },
-      after: { status: "submitted" },
-    });
-    return updated;
+  const [updated] = await getDb()
+    .update(invoicesTable)
+    .set({ status: "submitted" })
+    .where(eq(invoicesTable.id, invoiceId))
+    .returning();
+  await getDb().insert(outboxTable).values({
+    aggregateType: "invoice",
+    aggregateId: invoiceId,
+    type: "invoice.submit",
+    payload: { invoiceId },
   });
+  await recordTransition({
+    invoiceId,
+    firmId: bundle.invoice.firmId,
+    fromStatus: bundle.invoice.status,
+    toStatus: "submitted",
+    actorId,
+  });
+  await appendAudit({
+    actorId,
+    firmId: bundle.invoice.firmId,
+    action: "invoice.submit",
+    entityType: "invoice",
+    entityId: invoiceId,
+    before: { status: bundle.invoice.status },
+    after: { status: "submitted" },
+  });
+  return updated;
 }

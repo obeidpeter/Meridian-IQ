@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "prettier": "^3.8.4",
+    "tsx": "catalog:",
     "typescript": "~5.9.3"
   }
 }

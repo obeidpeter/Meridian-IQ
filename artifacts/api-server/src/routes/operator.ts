@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, railStatesTable } from "@workspace/db";
+import { getDb, railStatesTable } from "@workspace/db";
 import {
   ListErrorCatalogueResponse,
   ListDeadLettersResponse,
@@ -48,7 +48,7 @@ router.post("/operator/reconcile", async (req, res): Promise<void> => {
 
 router.get("/operator/rails", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
-  const rows = await db.select().from(railStatesTable);
+  const rows = await getDb().select().from(railStatesTable);
   res.json(ListRailStatesResponse.parse(rows));
 });
 

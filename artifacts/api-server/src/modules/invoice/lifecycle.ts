@@ -1,4 +1,9 @@
-import type { Invoice, InvoiceStatus } from "@workspace/db";
+import {
+  getDb,
+  invoiceLifecycleEventsTable,
+  type Invoice,
+  type InvoiceStatus,
+} from "@workspace/db";
 import { DomainError } from "../errors";
 
 // Invoice lifecycle state machine (Appendix B, CORE-02, CORE-09).
@@ -66,4 +71,33 @@ export function isTerminal(status: InvoiceStatus): boolean {
 // cancelled or credited (CORE-09).
 export function isPresentableAsEligible(status: InvoiceStatus): boolean {
   return !isTerminal(status);
+}
+
+export interface TransitionRecord {
+  invoiceId: string;
+  firmId: string;
+  fromStatus: InvoiceStatus | null;
+  toStatus: InvoiceStatus;
+  actorId?: string | null;
+  actorRole?: string | null;
+  reason?: string | null;
+}
+
+// Append an immutable projection row for a status transition (CORE-02). Writes
+// through getDb() so it participates in the ambient request/bypass transaction
+// and is protected by the DB-level append-only trigger.
+export async function recordTransition(
+  record: TransitionRecord,
+): Promise<void> {
+  await getDb()
+    .insert(invoiceLifecycleEventsTable)
+    .values({
+      invoiceId: record.invoiceId,
+      firmId: record.firmId,
+      fromStatus: record.fromStatus ?? null,
+      toStatus: record.toStatus,
+      actorId: record.actorId ?? null,
+      actorRole: record.actorRole ?? null,
+      reason: record.reason ?? null,
+    });
 }

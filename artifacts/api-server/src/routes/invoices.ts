@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, asc, eq } from "drizzle-orm";
 import {
-  db,
+  getDb,
   invoicesTable,
   stampRecordsTable,
   submissionAttemptsTable,
@@ -49,7 +49,11 @@ import {
   validateInvoice,
   submitInvoice,
 } from "../modules/invoice/service";
-import { canTransition, assertTransition } from "../modules/invoice/lifecycle";
+import {
+  canTransition,
+  assertTransition,
+  recordTransition,
+} from "../modules/invoice/lifecycle";
 import { serializeToUbl } from "../modules/invoice/canonical";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
@@ -73,12 +77,12 @@ router.get("/invoices", async (req, res): Promise<void> => {
   if (tenant) conditions.push(eq(invoicesTable.firmId, tenant));
   if (status) conditions.push(eq(invoicesTable.status, status as never));
   const rows = conditions.length
-    ? await db
+    ? await getDb()
         .select()
         .from(invoicesTable)
         .where(and(...conditions))
         .orderBy(asc(invoicesTable.createdAt))
-    : await db.select().from(invoicesTable).orderBy(asc(invoicesTable.createdAt));
+    : await getDb().select().from(invoicesTable).orderBy(asc(invoicesTable.createdAt));
   res.json(ListInvoicesResponse.parse(rows));
 });
 
@@ -145,11 +149,19 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
   }
   const { invoice } = await loadForTenant(req, params.data.id);
   assertTransition(invoice.status, "cancelled");
-  const [row] = await db
+  const [row] = await getDb()
     .update(invoicesTable)
     .set({ status: "cancelled" })
     .where(eq(invoicesTable.id, params.data.id))
     .returning();
+  await recordTransition({
+    invoiceId: invoice.id,
+    firmId: invoice.firmId,
+    fromStatus: invoice.status,
+    toStatus: "cancelled",
+    actorId: req.principal.userId,
+    actorRole: req.principal.role,
+  });
   await appendAudit({
     actorId: req.principal.userId,
     firmId: invoice.firmId,
@@ -194,7 +206,7 @@ router.get("/invoices/:id/stamp", async (req, res): Promise<void> => {
     return;
   }
   await loadForTenant(req, params.data.id);
-  const [stamp] = await db
+  const [stamp] = await getDb()
     .select()
     .from(stampRecordsTable)
     .where(eq(stampRecordsTable.invoiceId, params.data.id))
@@ -215,7 +227,7 @@ router.get("/invoices/:id/attempts", async (req, res): Promise<void> => {
     return;
   }
   await loadForTenant(req, params.data.id);
-  const rows = await db
+  const rows = await getDb()
     .select()
     .from(submissionAttemptsTable)
     .where(eq(submissionAttemptsTable.invoiceId, params.data.id))
@@ -236,7 +248,7 @@ router.get("/invoices/:id/confirmations", async (req, res): Promise<void> => {
     return;
   }
   await loadForTenant(req, params.data.id);
-  const rows = await db
+  const rows = await getDb()
     .select()
     .from(confirmationsTable)
     .where(eq(confirmationsTable.invoiceId, params.data.id))
@@ -273,7 +285,7 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
   }
   // A party without a validated TIN cannot enter the confirmation workflow
   // (CORE-08 / BR-02): confirmations feed VAT protection and financeability.
-  const [buyer] = await db
+  const [buyer] = await getDb()
     .select({ tinValidated: partiesTable.tinValidated })
     .from(partiesTable)
     .where(eq(partiesTable.id, invoice.buyerPartyId))
@@ -285,7 +297,7 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
       422,
     );
   }
-  const [row] = await db
+  const [row] = await getDb()
     .insert(confirmationsTable)
     .values({
       invoiceId: params.data.id,
@@ -296,10 +308,18 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
     })
     .returning();
   if (parsed.data.state === "confirmed" && canTransition(invoice.status, "confirmed")) {
-    await db
+    await getDb()
       .update(invoicesTable)
       .set({ status: "confirmed" })
       .where(eq(invoicesTable.id, params.data.id));
+    await recordTransition({
+      invoiceId: invoice.id,
+      firmId: invoice.firmId,
+      fromStatus: invoice.status,
+      toStatus: "confirmed",
+      actorId: req.principal.userId,
+      actorRole: req.principal.role,
+    });
   }
   await appendAudit({
     actorId: req.principal.userId,
@@ -320,7 +340,7 @@ router.get("/invoices/:id/settlements", async (req, res): Promise<void> => {
     return;
   }
   await loadForTenant(req, params.data.id);
-  const rows = await db
+  const rows = await getDb()
     .select()
     .from(settlementEventsTable)
     .where(eq(settlementEventsTable.invoiceId, params.data.id))
@@ -341,7 +361,7 @@ router.post("/invoices/:id/settlements", async (req, res): Promise<void> => {
     return;
   }
   const { invoice } = await loadForTenant(req, params.data.id);
-  const [row] = await db
+  const [row] = await getDb()
     .insert(settlementEventsTable)
     .values({
       invoiceId: params.data.id,

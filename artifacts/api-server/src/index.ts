@@ -1,4 +1,5 @@
 import app from "./app";
+import { pool, applyMigrations } from "@workspace/db";
 import { logger } from "./lib/logger";
 import { startWorker, stopWorker } from "./modules/pipeline/pipeline";
 import { seedPlatform } from "./bootstrap/seed";
@@ -18,6 +19,13 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function main(): Promise<void> {
+  // Apply guardrail migrations (append-only triggers, retention, RLS policies)
+  // before anything touches the data spine (CORE-06).
+  const applied = await applyMigrations(pool);
+  logger.info(
+    { applied: applied.length },
+    applied.length ? "Migrations applied" : "Migrations up to date",
+  );
   await seedPlatform();
   startWorker();
 

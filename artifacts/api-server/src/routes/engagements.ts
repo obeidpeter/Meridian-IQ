@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
-import { db, engagementsTable } from "@workspace/db";
+import { getDb, engagementsTable } from "@workspace/db";
 import {
   ListEngagementsResponse,
   CreateEngagementBody,
@@ -20,11 +20,11 @@ router.get("/engagements", async (req, res): Promise<void> => {
   assertCan(req.principal, "engagement.read");
   const tenant = tenantFirmId(req.principal);
   const rows = tenant
-    ? await db
+    ? await getDb()
         .select()
         .from(engagementsTable)
         .where(eq(engagementsTable.firmId, tenant))
-    : await db.select().from(engagementsTable);
+    : await getDb().select().from(engagementsTable);
   res.json(ListEngagementsResponse.parse(rows));
 });
 
@@ -40,7 +40,7 @@ router.post("/engagements", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [row] = await db
+  const [row] = await getDb()
     .insert(engagementsTable)
     .values({
       firmId,
@@ -68,7 +68,7 @@ router.get("/engagements/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [row] = await db
+  const [row] = await getDb()
     .select()
     .from(engagementsTable)
     .where(eq(engagementsTable.id, params.data.id))
@@ -93,7 +93,7 @@ router.patch("/engagements/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [existing] = await db
+  const [existing] = await getDb()
     .select()
     .from(engagementsTable)
     .where(eq(engagementsTable.id, params.data.id))
@@ -103,7 +103,7 @@ router.patch("/engagements/:id", async (req, res): Promise<void> => {
     return;
   }
   assertSameTenant(req.principal, existing.firmId);
-  const [row] = await db
+  const [row] = await getDb()
     .update(engagementsTable)
     .set({
       status: parsed.data.status ?? existing.status,

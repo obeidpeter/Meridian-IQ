@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
 import {
-  db,
+  getDb,
   railStatesTable,
   stampRecordsTable,
   stampVerificationsTable,
@@ -107,11 +107,11 @@ const FAILURE_THRESHOLD = 3;
 const OPEN_COOLDOWN_MS = 30_000;
 
 async function ensureRailState(rail: Rail) {
-  await db
+  await getDb()
     .insert(railStatesTable)
     .values({ rail })
     .onConflictDoNothing({ target: railStatesTable.rail });
-  const [row] = await db
+  const [row] = await getDb()
     .select()
     .from(railStatesTable)
     .where(eq(railStatesTable.rail, rail))
@@ -124,7 +124,7 @@ async function railAvailable(rail: Rail): Promise<boolean> {
   if (state.state === "open") {
     const openedAt = state.openedAt?.getTime() ?? 0;
     if (Date.now() - openedAt >= OPEN_COOLDOWN_MS) {
-      await db
+      await getDb()
         .update(railStatesTable)
         .set({ state: "half_open" })
         .where(eq(railStatesTable.rail, rail));
@@ -136,7 +136,7 @@ async function railAvailable(rail: Rail): Promise<boolean> {
 }
 
 async function recordSuccess(rail: Rail): Promise<void> {
-  await db
+  await getDb()
     .update(railStatesTable)
     .set({ state: "closed", failureCount: 0, openedAt: null })
     .where(eq(railStatesTable.rail, rail));
@@ -146,12 +146,12 @@ async function recordFailure(rail: Rail): Promise<void> {
   const state = await ensureRailState(rail);
   const failureCount = state.failureCount + 1;
   if (failureCount >= FAILURE_THRESHOLD) {
-    await db
+    await getDb()
       .update(railStatesTable)
       .set({ state: "open", failureCount, openedAt: new Date() })
       .where(eq(railStatesTable.rail, rail));
   } else {
-    await db
+    await getDb()
       .update(railStatesTable)
       .set({ failureCount })
       .where(eq(railStatesTable.rail, rail));
@@ -212,7 +212,7 @@ export async function verifyStamp(
   csid: string,
 ): Promise<{ valid: boolean; rail: string; cached: boolean }> {
   const now = new Date();
-  const [fresh] = await db
+  const [fresh] = await getDb()
     .select()
     .from(stampVerificationsTable)
     .where(
@@ -230,7 +230,7 @@ export async function verifyStamp(
   // submission recorded this exact (IRN, CSID) pair in stamp_records. The CSID
   // is an HMAC over (IRN + idempotency key) that only the issuing rail can
   // produce, so a forged pair will never match a persisted record.
-  const [record] = await db
+  const [record] = await getDb()
     .select({ rail: stampRecordsTable.rail })
     .from(stampRecordsTable)
     .where(
@@ -239,7 +239,7 @@ export async function verifyStamp(
     .limit(1);
   const valid = Boolean(record);
   const matchedRail: Rail = record?.rail ?? RAILS[0];
-  await db.insert(stampVerificationsTable).values({
+  await getDb().insert(stampVerificationsTable).values({
     id: randomUUID(),
     irn,
     csid,

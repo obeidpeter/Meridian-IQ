@@ -12,9 +12,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { invoicesTable } from "./invoices";
+import { invoicesTable, invoiceStatusEnum } from "./invoices";
 import { partiesTable } from "./parties";
-import { usersTable } from "./organizations";
+import { usersTable, firmsTable } from "./organizations";
 
 // Two accredited APP rails behind one adapter (INT-01, C3).
 export const railEnum = pgEnum("rail", ["rail_primary", "rail_secondary"]);
@@ -110,6 +110,31 @@ export const settlementEventsTable = pgTable("settlement_events", {
     .defaultNow(),
 });
 
+// Append-only projection of every invoice status transition (CORE-02). Replaying
+// these rows reconstructs an invoice's status at any timestamp; combined with the
+// DB-level append-only triggers, post-submission lifecycle history is immutable.
+export const invoiceLifecycleEventsTable = pgTable("invoice_lifecycle_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  invoiceId: uuid("invoice_id")
+    .notNull()
+    .references(() => invoicesTable.id),
+  firmId: uuid("firm_id")
+    .notNull()
+    .references(() => firmsTable.id),
+  fromStatus: invoiceStatusEnum("from_status"),
+  toStatus: invoiceStatusEnum("to_status").notNull(),
+  // Actor identity mirrors the authoritative audit log (audit_log.actor_id):
+  // free text, nullable, no FK. This lets the projection record system/worker
+  // actors (actorRole "system") and out-of-band actors the way the audit trail
+  // already does, instead of being stricter than the record it projects from.
+  actorId: text("actor_id"),
+  actorRole: text("actor_role"),
+  reason: text("reason"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const insertSubmissionAttemptSchema = createInsertSchema(
   submissionAttemptsTable,
 ).omit({ id: true, createdAt: true });
@@ -123,7 +148,13 @@ export const insertSettlementEventSchema = createInsertSchema(
   settlementEventsTable,
 ).omit({ id: true, createdAt: true });
 
+export const insertInvoiceLifecycleEventSchema = createInsertSchema(
+  invoiceLifecycleEventsTable,
+).omit({ id: true, createdAt: true });
+
 export type SubmissionAttempt = typeof submissionAttemptsTable.$inferSelect;
+export type InvoiceLifecycleEvent =
+  typeof invoiceLifecycleEventsTable.$inferSelect;
 export type StampRecord = typeof stampRecordsTable.$inferSelect;
 export type Confirmation = typeof confirmationsTable.$inferSelect;
 export type SettlementEvent = typeof settlementEventsTable.$inferSelect;

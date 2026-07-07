@@ -9,7 +9,11 @@
   },
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
+    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts",
+    "migrate": "tsx src/migrate.ts up",
+    "migrate:down": "tsx src/migrate.ts down",
+    "migrate:status": "tsx src/migrate.ts status",
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

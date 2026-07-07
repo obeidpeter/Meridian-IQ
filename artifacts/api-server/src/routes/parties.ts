@@ -13,7 +13,7 @@ import {
   ValidateCacResponse,
 } from "@workspace/api-zod";
 import { eq, inArray } from "drizzle-orm";
-import { db, partiesTable, engagementsTable } from "@workspace/db";
+import { getDb, partiesTable, engagementsTable } from "@workspace/db";
 import {
   assertCan,
   assertPartyAccess,
@@ -36,19 +36,19 @@ router.get("/parties", async (req, res): Promise<void> => {
   let rows;
   if (tenant === null) {
     // Cross-tenant staff (operator, auditor) see the whole spine.
-    rows = await db
+    rows = await getDb()
       .select()
       .from(partiesTable)
       .orderBy(partiesTable.createdAt);
   } else {
     // Firm-scoped principals only see parties they have an engagement with.
-    const engagements = await db
+    const engagements = await getDb()
       .select({ pid: engagementsTable.clientPartyId })
       .from(engagementsTable)
       .where(eq(engagementsTable.firmId, tenant));
     const ids = engagements.map((e) => e.pid);
     rows = ids.length
-      ? await db
+      ? await getDb()
           .select()
           .from(partiesTable)
           .where(inArray(partiesTable.id, ids))

@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { db, engagementsTable, type Role } from "@workspace/db";
+import { getDb, engagementsTable, type Role } from "@workspace/db";
 import { DomainError } from "../errors";
 
 // Principal resolved from the request (see auth middleware). firmId is present
@@ -195,7 +195,7 @@ export async function assertPartyAccess(
 ): Promise<void> {
   const tenant = tenantFirmId(principal);
   if (tenant === null) return;
-  const [engagement] = await db
+  const [engagement] = await getDb()
     .select({ id: engagementsTable.id })
     .from(engagementsTable)
     .where(

@@ -1,5 +1,6 @@
 import {
-  db,
+  getDb,
+  runInBypassContext,
   featureFlagsTable,
   schemaVersionsTable,
 } from "@workspace/db";
@@ -29,19 +30,22 @@ const SCHEMA_VERSIONS: { version: number; description: string }[] = [
   { version: 1, description: "Initial data spine (parties, invoices, lifecycle, consent, audit, platform, credit)" },
 ];
 
+// Trusted internal work: seeding runs with tenant RLS bypassed (CON-01/SEC-02).
 export async function seedPlatform(): Promise<void> {
-  for (const flag of FLAGS) {
-    await db
-      .insert(featureFlagsTable)
-      .values(flag)
-      .onConflictDoNothing({ target: featureFlagsTable.key });
-  }
-  for (const v of SCHEMA_VERSIONS) {
-    await db
-      .insert(schemaVersionsTable)
-      .values(v)
-      .onConflictDoNothing({ target: schemaVersionsTable.version });
-  }
+  await runInBypassContext(async () => {
+    for (const flag of FLAGS) {
+      await getDb()
+        .insert(featureFlagsTable)
+        .values(flag)
+        .onConflictDoNothing({ target: featureFlagsTable.key });
+    }
+    for (const v of SCHEMA_VERSIONS) {
+      await getDb()
+        .insert(schemaVersionsTable)
+        .values(v)
+        .onConflictDoNothing({ target: schemaVersionsTable.version });
+    }
+  });
   logger.info(
     { flags: FLAGS.length, schemaVersions: SCHEMA_VERSIONS.length },
     "Platform seed complete",

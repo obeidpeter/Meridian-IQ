@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db, messagesTable, type Message, type MessageChannel } from "@workspace/db";
+import { getDb, messagesTable, type Message, type MessageChannel } from "@workspace/db";
 import { DomainError } from "../errors";
 
 // Messaging abstraction with a strict data boundary (PL-04, SEC-12): the
@@ -106,7 +106,7 @@ export async function sendMessage(input: SendInput): Promise<Message> {
     if (!template.channels.includes(channel)) break;
     const send = simulateProviderSend(channel);
     if (send.ok) {
-      const [row] = await db
+      const [row] = await getDb()
         .insert(messagesTable)
         .values({
           channel,
@@ -125,7 +125,7 @@ export async function sendMessage(input: SendInput): Promise<Message> {
     channel = FAILOVER[channel];
   }
 
-  const [row] = await db
+  const [row] = await getDb()
     .insert(messagesTable)
     .values({
       channel: input.channel,
@@ -146,7 +146,7 @@ export async function markDelivery(
   messageId: string,
   delivered: boolean,
 ): Promise<void> {
-  await db
+  await getDb()
     .update(messagesTable)
     .set({ status: delivered ? "delivered" : "failed" })
     .where(eq(messagesTable.id, messageId));
