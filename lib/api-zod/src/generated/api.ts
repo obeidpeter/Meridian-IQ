@@ -798,11 +798,74 @@ export const SetFeatureFlagOverrideResponse = zod.void()
 
 export const ListErrorCatalogueResponseItem = zod.object({
   "code": zod.string(),
+  "category": zod.string().optional(),
   "cause": zod.string(),
   "fix": zod.string(),
-  "retriable": zod.boolean()
+  "retriable": zod.boolean(),
+  "source": zod.enum(['builtin', 'operator']).optional(),
+  "updatedBy": zod.string().nullish(),
+  "updatedAt": zod.coerce.date().optional()
 })
 export const ListErrorCatalogueResponse = zod.array(ListErrorCatalogueResponseItem)
+
+
+export const UpsertErrorCatalogueEntryBody = zod.object({
+  "code": zod.string(),
+  "category": zod.string().optional(),
+  "cause": zod.string(),
+  "fix": zod.string(),
+  "retriable": zod.boolean().optional()
+})
+
+export const UpsertErrorCatalogueEntryResponse = zod.object({
+  "code": zod.string(),
+  "category": zod.string().optional(),
+  "cause": zod.string(),
+  "fix": zod.string(),
+  "retriable": zod.boolean(),
+  "source": zod.enum(['builtin', 'operator']).optional(),
+  "updatedBy": zod.string().nullish(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+export const GetErrorCatalogueEntryParams = zod.object({
+  "code": zod.coerce.string()
+})
+
+export const GetErrorCatalogueEntryResponse = zod.object({
+  "code": zod.string(),
+  "category": zod.string().optional(),
+  "cause": zod.string(),
+  "fix": zod.string(),
+  "retriable": zod.boolean(),
+  "source": zod.enum(['builtin', 'operator']).optional(),
+  "updatedBy": zod.string().nullish(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+export const UpdateErrorCatalogueEntryParams = zod.object({
+  "code": zod.coerce.string()
+})
+
+export const UpdateErrorCatalogueEntryBody = zod.object({
+  "category": zod.string().optional(),
+  "cause": zod.string().optional(),
+  "fix": zod.string().optional(),
+  "retriable": zod.boolean().optional()
+})
+
+export const UpdateErrorCatalogueEntryResponse = zod.object({
+  "code": zod.string(),
+  "category": zod.string().optional(),
+  "cause": zod.string(),
+  "fix": zod.string(),
+  "retriable": zod.boolean(),
+  "source": zod.enum(['builtin', 'operator']).optional(),
+  "updatedBy": zod.string().nullish(),
+  "updatedAt": zod.coerce.date().optional()
+})
 
 
 export const ListDeadLettersResponseItem = zod.object({
@@ -867,6 +930,139 @@ export const ExportAuditResponse = zod.object({
   "brokenAtSeq": zod.number().nullish()
 }),
   "exportedAt": zod.coerce.date()
+})
+
+
+export const GetAssessmentQuestionnaireResponse = zod.object({
+  "version": zod.number(),
+  "sections": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "questions": zod.array(zod.object({
+  "id": zod.string(),
+  "prompt": zod.string(),
+  "helpText": zod.string().optional(),
+  "weight": zod.number()
+}))
+}))
+})
+
+
+export const RunAssessmentBody = zod.object({
+  "clientPartyId": zod.string(),
+  "title": zod.string().optional(),
+  "answers": zod.array(zod.object({
+  "questionId": zod.string(),
+  "answer": zod.boolean(),
+  "note": zod.string().optional()
+}))
+})
+
+export const RunAssessmentResponse = zod.object({
+  "engagementId": zod.string(),
+  "clientPartyId": zod.string(),
+  "title": zod.string().optional(),
+  "score": zod.number(),
+  "band": zod.enum(['ready', 'partial', 'at_risk']),
+  "gaps": zod.array(zod.object({
+  "questionId": zod.string(),
+  "section": zod.string(),
+  "prompt": zod.string(),
+  "severity": zod.enum(['high', 'medium', 'low']),
+  "note": zod.string().optional()
+})),
+  "remediation": zod.array(zod.object({
+  "priority": zod.number(),
+  "action": zod.string(),
+  "rationale": zod.string(),
+  "relatedQuestionId": zod.string().optional()
+})),
+  "completedAt": zod.coerce.date()
+})
+
+
+export const GetAssessmentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetAssessmentResponse = zod.object({
+  "engagementId": zod.string(),
+  "clientPartyId": zod.string(),
+  "title": zod.string().optional(),
+  "score": zod.number(),
+  "band": zod.enum(['ready', 'partial', 'at_risk']),
+  "gaps": zod.array(zod.object({
+  "questionId": zod.string(),
+  "section": zod.string(),
+  "prompt": zod.string(),
+  "severity": zod.enum(['high', 'medium', 'low']),
+  "note": zod.string().optional()
+})),
+  "remediation": zod.array(zod.object({
+  "priority": zod.number(),
+  "action": zod.string(),
+  "rationale": zod.string(),
+  "relatedQuestionId": zod.string().optional()
+})),
+  "completedAt": zod.coerce.date()
+})
+
+
+export const AnalyzeVatRiskBody = zod.object({
+  "clientPartyId": zod.string().optional(),
+  "buyerName": zod.string().optional(),
+  "rows": zod.array(zod.object({
+  "supplierTin": zod.string(),
+  "supplierName": zod.string().optional(),
+  "invoiceNumber": zod.string(),
+  "irn": zod.string(),
+  "csid": zod.string(),
+  "invoiceAmount": zod.number(),
+  "vatAmount": zod.number()
+})).optional(),
+  "csv": zod.string().optional()
+})
+
+export const AnalyzeVatRiskResponse = zod.object({
+  "engagementId": zod.string().nullish(),
+  "buyerName": zod.string().optional(),
+  "rowCount": zod.number(),
+  "verifiedCount": zod.number(),
+  "atRiskCount": zod.number(),
+  "invalidCount": zod.number(),
+  "totalVatAmount": zod.number(),
+  "totalVatAtRisk": zod.number(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "invoiceNumber": zod.string(),
+  "supplierTin": zod.string(),
+  "supplierName": zod.string().optional(),
+  "irn": zod.string(),
+  "csid": zod.string(),
+  "invoiceAmount": zod.number(),
+  "vatAmount": zod.number(),
+  "stampValid": zod.boolean(),
+  "status": zod.enum(['verified', 'at_risk', 'invalid_input']),
+  "vatAtRisk": zod.number(),
+  "detail": zod.string().optional()
+})),
+  "graph": zod.object({
+  "nodes": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['buyer', 'supplier']),
+  "invoiceCount": zod.number(),
+  "totalAmount": zod.number(),
+  "totalVatAtRisk": zod.number()
+})),
+  "edges": zod.array(zod.object({
+  "source": zod.string(),
+  "target": zod.string(),
+  "invoiceCount": zod.number(),
+  "totalAmount": zod.number(),
+  "vatAtRisk": zod.number()
+}))
+})
 })
 
 

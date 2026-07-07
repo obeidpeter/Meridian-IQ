@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AssessmentReport,
   AuditBundle,
   AuditVerification,
   BadRequestResponse,
@@ -35,6 +36,8 @@ import type {
   EngagementInput,
   EngagementUpdate,
   ErrorCatalogueEntry,
+  ErrorCatalogueUpdate,
+  ErrorCatalogueUpsertInput,
   FeatureFlag,
   FeatureFlagOverrideInput,
   FeatureFlagUpdate,
@@ -58,8 +61,10 @@ import type {
   Party,
   PartyInput,
   PartyMergeInput,
+  QuestionnaireTemplate,
   RailState,
   ReconcileResult,
+  RunAssessmentInput,
   SettlementEvent,
   SettlementInput,
   StampRecord,
@@ -71,7 +76,9 @@ import type {
   UnauthorizedResponse,
   User,
   UserInput,
-  ValidationResult
+  ValidationResult,
+  VatRiskInput,
+  VatRiskReport
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -2961,6 +2968,206 @@ export function useListErrorCatalogue<TData = Awaited<ReturnType<typeof listErro
 
 
 
+export const getUpsertErrorCatalogueEntryUrl = () => {
+
+
+
+
+  return `/api/error-catalogue`
+}
+
+export const upsertErrorCatalogueEntry = async (errorCatalogueUpsertInput: ErrorCatalogueUpsertInput, options?: RequestInit): Promise<ErrorCatalogueEntry> => {
+
+  return customFetch<ErrorCatalogueEntry>(getUpsertErrorCatalogueEntryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(errorCatalogueUpsertInput)
+  }
+);}
+
+
+
+
+export const getUpsertErrorCatalogueEntryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertErrorCatalogueEntry>>, TError,{data: BodyType<ErrorCatalogueUpsertInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof upsertErrorCatalogueEntry>>, TError,{data: BodyType<ErrorCatalogueUpsertInput>}, TContext> => {
+
+const mutationKey = ['upsertErrorCatalogueEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof upsertErrorCatalogueEntry>>, {data: BodyType<ErrorCatalogueUpsertInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  upsertErrorCatalogueEntry(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpsertErrorCatalogueEntryMutationResult = NonNullable<Awaited<ReturnType<typeof upsertErrorCatalogueEntry>>>
+    export type UpsertErrorCatalogueEntryMutationBody = BodyType<ErrorCatalogueUpsertInput>
+    export type UpsertErrorCatalogueEntryMutationError = ErrorType<unknown>
+
+    export const useUpsertErrorCatalogueEntry = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertErrorCatalogueEntry>>, TError,{data: BodyType<ErrorCatalogueUpsertInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof upsertErrorCatalogueEntry>>,
+        TError,
+        {data: BodyType<ErrorCatalogueUpsertInput>},
+        TContext
+      > => {
+      return useMutation(getUpsertErrorCatalogueEntryMutationOptions(options));
+    }
+
+export const getGetErrorCatalogueEntryUrl = (code: string,) => {
+
+
+
+
+  return `/api/error-catalogue/${code}`
+}
+
+export const getErrorCatalogueEntry = async (code: string, options?: RequestInit): Promise<ErrorCatalogueEntry> => {
+
+  return customFetch<ErrorCatalogueEntry>(getGetErrorCatalogueEntryUrl(code),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetErrorCatalogueEntryQueryKey = (code: string,) => {
+    return [
+    `/api/error-catalogue/${code}`
+    ] as const;
+    }
+
+
+export const getGetErrorCatalogueEntryQueryOptions = <TData = Awaited<ReturnType<typeof getErrorCatalogueEntry>>, TError = ErrorType<NotFoundResponse>>(code: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getErrorCatalogueEntry>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetErrorCatalogueEntryQueryKey(code);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getErrorCatalogueEntry>>> = ({ signal }) => getErrorCatalogueEntry(code, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: code !== null && code !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getErrorCatalogueEntry>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetErrorCatalogueEntryQueryResult = NonNullable<Awaited<ReturnType<typeof getErrorCatalogueEntry>>>
+export type GetErrorCatalogueEntryQueryError = ErrorType<NotFoundResponse>
+
+
+
+export function useGetErrorCatalogueEntry<TData = Awaited<ReturnType<typeof getErrorCatalogueEntry>>, TError = ErrorType<NotFoundResponse>>(
+ code: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getErrorCatalogueEntry>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetErrorCatalogueEntryQueryOptions(code,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateErrorCatalogueEntryUrl = (code: string,) => {
+
+
+
+
+  return `/api/error-catalogue/${code}`
+}
+
+export const updateErrorCatalogueEntry = async (code: string,
+    errorCatalogueUpdate: ErrorCatalogueUpdate, options?: RequestInit): Promise<ErrorCatalogueEntry> => {
+
+  return customFetch<ErrorCatalogueEntry>(getUpdateErrorCatalogueEntryUrl(code),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(errorCatalogueUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateErrorCatalogueEntryMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateErrorCatalogueEntry>>, TError,{code: string;data: BodyType<ErrorCatalogueUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateErrorCatalogueEntry>>, TError,{code: string;data: BodyType<ErrorCatalogueUpdate>}, TContext> => {
+
+const mutationKey = ['updateErrorCatalogueEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateErrorCatalogueEntry>>, {code: string;data: BodyType<ErrorCatalogueUpdate>}> = (props) => {
+          const {code,data} = props ?? {};
+
+          return  updateErrorCatalogueEntry(code,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateErrorCatalogueEntryMutationResult = NonNullable<Awaited<ReturnType<typeof updateErrorCatalogueEntry>>>
+    export type UpdateErrorCatalogueEntryMutationBody = BodyType<ErrorCatalogueUpdate>
+    export type UpdateErrorCatalogueEntryMutationError = ErrorType<NotFoundResponse>
+
+    export const useUpdateErrorCatalogueEntry = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateErrorCatalogueEntry>>, TError,{code: string;data: BodyType<ErrorCatalogueUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateErrorCatalogueEntry>>,
+        TError,
+        {code: string;data: BodyType<ErrorCatalogueUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateErrorCatalogueEntryMutationOptions(options));
+    }
+
 export const getListDeadLettersUrl = () => {
 
 
@@ -3372,4 +3579,274 @@ export function useExportAudit<TData = Awaited<ReturnType<typeof exportAudit>>, 
 
 
 
+
+export const getGetAssessmentQuestionnaireUrl = () => {
+
+
+
+
+  return `/api/assessments/questionnaire`
+}
+
+export const getAssessmentQuestionnaire = async ( options?: RequestInit): Promise<QuestionnaireTemplate> => {
+
+  return customFetch<QuestionnaireTemplate>(getGetAssessmentQuestionnaireUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAssessmentQuestionnaireQueryKey = () => {
+    return [
+    `/api/assessments/questionnaire`
+    ] as const;
+    }
+
+
+export const getGetAssessmentQuestionnaireQueryOptions = <TData = Awaited<ReturnType<typeof getAssessmentQuestionnaire>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessmentQuestionnaire>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAssessmentQuestionnaireQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssessmentQuestionnaire>>> = ({ signal }) => getAssessmentQuestionnaire({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAssessmentQuestionnaire>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAssessmentQuestionnaireQueryResult = NonNullable<Awaited<ReturnType<typeof getAssessmentQuestionnaire>>>
+export type GetAssessmentQuestionnaireQueryError = ErrorType<unknown>
+
+
+
+export function useGetAssessmentQuestionnaire<TData = Awaited<ReturnType<typeof getAssessmentQuestionnaire>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessmentQuestionnaire>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAssessmentQuestionnaireQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRunAssessmentUrl = () => {
+
+
+
+
+  return `/api/assessments`
+}
+
+export const runAssessment = async (runAssessmentInput: RunAssessmentInput, options?: RequestInit): Promise<AssessmentReport> => {
+
+  return customFetch<AssessmentReport>(getRunAssessmentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(runAssessmentInput)
+  }
+);}
+
+
+
+
+export const getRunAssessmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runAssessment>>, TError,{data: BodyType<RunAssessmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runAssessment>>, TError,{data: BodyType<RunAssessmentInput>}, TContext> => {
+
+const mutationKey = ['runAssessment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runAssessment>>, {data: BodyType<RunAssessmentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runAssessment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunAssessmentMutationResult = NonNullable<Awaited<ReturnType<typeof runAssessment>>>
+    export type RunAssessmentMutationBody = BodyType<RunAssessmentInput>
+    export type RunAssessmentMutationError = ErrorType<unknown>
+
+    export const useRunAssessment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runAssessment>>, TError,{data: BodyType<RunAssessmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runAssessment>>,
+        TError,
+        {data: BodyType<RunAssessmentInput>},
+        TContext
+      > => {
+      return useMutation(getRunAssessmentMutationOptions(options));
+    }
+
+export const getGetAssessmentUrl = (id: string,) => {
+
+
+
+
+  return `/api/assessments/${id}`
+}
+
+export const getAssessment = async (id: string, options?: RequestInit): Promise<AssessmentReport> => {
+
+  return customFetch<AssessmentReport>(getGetAssessmentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAssessmentQueryKey = (id: string,) => {
+    return [
+    `/api/assessments/${id}`
+    ] as const;
+    }
+
+
+export const getGetAssessmentQueryOptions = <TData = Awaited<ReturnType<typeof getAssessment>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAssessmentQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssessment>>> = ({ signal }) => getAssessment(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAssessment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAssessmentQueryResult = NonNullable<Awaited<ReturnType<typeof getAssessment>>>
+export type GetAssessmentQueryError = ErrorType<NotFoundResponse>
+
+
+
+export function useGetAssessment<TData = Awaited<ReturnType<typeof getAssessment>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAssessmentQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAnalyzeVatRiskUrl = () => {
+
+
+
+
+  return `/api/vat-risk/analyze`
+}
+
+export const analyzeVatRisk = async (vatRiskInput: VatRiskInput, options?: RequestInit): Promise<VatRiskReport> => {
+
+  return customFetch<VatRiskReport>(getAnalyzeVatRiskUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(vatRiskInput)
+  }
+);}
+
+
+
+
+export const getAnalyzeVatRiskMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeVatRisk>>, TError,{data: BodyType<VatRiskInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof analyzeVatRisk>>, TError,{data: BodyType<VatRiskInput>}, TContext> => {
+
+const mutationKey = ['analyzeVatRisk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof analyzeVatRisk>>, {data: BodyType<VatRiskInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  analyzeVatRisk(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AnalyzeVatRiskMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeVatRisk>>>
+    export type AnalyzeVatRiskMutationBody = BodyType<VatRiskInput>
+    export type AnalyzeVatRiskMutationError = ErrorType<unknown>
+
+    export const useAnalyzeVatRisk = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeVatRisk>>, TError,{data: BodyType<VatRiskInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof analyzeVatRisk>>,
+        TError,
+        {data: BodyType<VatRiskInput>},
+        TContext
+      > => {
+      return useMutation(getAnalyzeVatRiskMutationOptions(options));
+    }
 

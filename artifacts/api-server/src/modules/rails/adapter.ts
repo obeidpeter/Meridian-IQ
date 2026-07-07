@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, inArray } from "drizzle-orm";
 import {
   getDb,
   railStatesTable,
@@ -250,4 +250,24 @@ export async function verifyStamp(
     raw: {},
   });
   return { valid, rail: matchedRail, cached: false };
+}
+
+// Bulk stamp verification for ledger analysis (ADV-02). A per-invoice call over
+// a 1000-row ledger would blow the request budget, so this resolves the whole
+// batch with a single indexed select against the source of truth and returns
+// the set of valid "irn|csid" keys. Freshness-cache bookkeeping is skipped: a
+// one-shot advisory report does not need the cache and writing 1000 rows would
+// itself risk the transaction budget.
+export async function verifyStampBatch(
+  pairs: { irn: string; csid: string }[],
+): Promise<Set<string>> {
+  const irns = [...new Set(pairs.map((p) => p.irn).filter(Boolean))];
+  if (irns.length === 0) return new Set();
+  const records = await getDb()
+    .select({ irn: stampRecordsTable.irn, csid: stampRecordsTable.csid })
+    .from(stampRecordsTable)
+    .where(inArray(stampRecordsTable.irn, irns));
+  const valid = new Set<string>();
+  for (const r of records) valid.add(`${r.irn}|${r.csid}`);
+  return valid;
 }

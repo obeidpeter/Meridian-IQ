@@ -662,11 +662,196 @@ export interface FeatureFlagOverrideInput {
   enabled: boolean;
 }
 
+export type ErrorCatalogueEntrySource = typeof ErrorCatalogueEntrySource[keyof typeof ErrorCatalogueEntrySource];
+
+
+export const ErrorCatalogueEntrySource = {
+  builtin: 'builtin',
+  operator: 'operator',
+} as const;
+
 export interface ErrorCatalogueEntry {
   code: string;
+  category?: string;
   cause: string;
   fix: string;
   retriable: boolean;
+  source?: ErrorCatalogueEntrySource;
+  updatedBy?: string | null;
+  updatedAt?: string;
+}
+
+export interface ErrorCatalogueUpsertInput {
+  code: string;
+  category?: string;
+  cause: string;
+  fix: string;
+  retriable?: boolean;
+}
+
+export interface ErrorCatalogueUpdate {
+  category?: string;
+  cause?: string;
+  fix?: string;
+  retriable?: boolean;
+}
+
+export interface QuestionnaireQuestion {
+  id: string;
+  prompt: string;
+  helpText?: string;
+  weight: number;
+}
+
+export interface QuestionnaireSection {
+  id: string;
+  title: string;
+  questions: QuestionnaireQuestion[];
+}
+
+export interface QuestionnaireTemplate {
+  version: number;
+  sections: QuestionnaireSection[];
+}
+
+export interface AssessmentAnswer {
+  questionId: string;
+  answer: boolean;
+  note?: string;
+}
+
+export interface RunAssessmentInput {
+  clientPartyId: string;
+  title?: string;
+  answers: AssessmentAnswer[];
+}
+
+export type GapItemSeverity = typeof GapItemSeverity[keyof typeof GapItemSeverity];
+
+
+export const GapItemSeverity = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+} as const;
+
+export interface GapItem {
+  questionId: string;
+  section: string;
+  prompt: string;
+  severity: GapItemSeverity;
+  note?: string;
+}
+
+export interface RemediationItem {
+  priority: number;
+  action: string;
+  rationale: string;
+  relatedQuestionId?: string;
+}
+
+export type AssessmentReportBand = typeof AssessmentReportBand[keyof typeof AssessmentReportBand];
+
+
+export const AssessmentReportBand = {
+  ready: 'ready',
+  partial: 'partial',
+  at_risk: 'at_risk',
+} as const;
+
+export interface AssessmentReport {
+  engagementId: string;
+  clientPartyId: string;
+  title?: string;
+  score: number;
+  band: AssessmentReportBand;
+  gaps: GapItem[];
+  remediation: RemediationItem[];
+  completedAt: string;
+}
+
+export interface VatRiskLedgerRow {
+  supplierTin: string;
+  supplierName?: string;
+  invoiceNumber: string;
+  irn: string;
+  csid: string;
+  invoiceAmount: number;
+  vatAmount: number;
+}
+
+export interface VatRiskInput {
+  clientPartyId?: string;
+  buyerName?: string;
+  rows?: VatRiskLedgerRow[];
+  csv?: string;
+}
+
+export type VatRiskRowResultStatus = typeof VatRiskRowResultStatus[keyof typeof VatRiskRowResultStatus];
+
+
+export const VatRiskRowResultStatus = {
+  verified: 'verified',
+  at_risk: 'at_risk',
+  invalid_input: 'invalid_input',
+} as const;
+
+export interface VatRiskRowResult {
+  rowNumber: number;
+  invoiceNumber: string;
+  supplierTin: string;
+  supplierName?: string;
+  irn: string;
+  csid: string;
+  invoiceAmount: number;
+  vatAmount: number;
+  stampValid: boolean;
+  status: VatRiskRowResultStatus;
+  vatAtRisk: number;
+  detail?: string;
+}
+
+export type GraphNodeKind = typeof GraphNodeKind[keyof typeof GraphNodeKind];
+
+
+export const GraphNodeKind = {
+  buyer: 'buyer',
+  supplier: 'supplier',
+} as const;
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  kind: GraphNodeKind;
+  invoiceCount: number;
+  totalAmount: number;
+  totalVatAtRisk: number;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  invoiceCount: number;
+  totalAmount: number;
+  vatAtRisk: number;
+}
+
+export interface PartyGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface VatRiskReport {
+  engagementId?: string | null;
+  buyerName?: string;
+  rowCount: number;
+  verifiedCount: number;
+  atRiskCount: number;
+  invalidCount: number;
+  totalVatAmount: number;
+  totalVatAtRisk: number;
+  rows: VatRiskRowResult[];
+  graph: PartyGraph;
 }
 
 export type OutboxEventStatus = typeof OutboxEventStatus[keyof typeof OutboxEventStatus];

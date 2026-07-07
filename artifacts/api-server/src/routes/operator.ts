@@ -1,14 +1,12 @@
 import { Router, type IRouter } from "express";
 import { getDb, railStatesTable } from "@workspace/db";
 import {
-  ListErrorCatalogueResponse,
   ListDeadLettersResponse,
   ReplayDeadLetterParams,
   ReconcilePipelineResponse,
   ListRailStatesResponse,
 } from "@workspace/api-zod";
 import { assertCan } from "../modules/auth/rbac";
-import { ERROR_CATALOGUE } from "../modules/errors";
 import {
   listDeadLetters,
   replayDead,
@@ -16,10 +14,6 @@ import {
 } from "../modules/pipeline/pipeline";
 
 const router: IRouter = Router();
-
-router.get("/error-catalogue", (_req, res): void => {
-  res.json(ListErrorCatalogueResponse.parse(Object.values(ERROR_CATALOGUE)));
-});
 
 router.get("/operator/dead-letters", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");

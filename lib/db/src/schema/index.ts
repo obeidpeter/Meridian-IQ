@@ -7,3 +7,4 @@ export * from "./consent";
 export * from "./audit";
 export * from "./platform";
 export * from "./credit";
+export * from "./catalogue";

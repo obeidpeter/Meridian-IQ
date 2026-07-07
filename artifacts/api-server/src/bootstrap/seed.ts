@@ -5,6 +5,7 @@ import {
   schemaVersionsTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { seedCatalogue } from "../modules/catalogue/catalogue";
 
 // Release-tagged feature flags (PL-02). Everything past R0 ships dark; a dark
 // feature is unreachable until an operator flips the flag (or a per-firm
@@ -28,6 +29,7 @@ const FLAGS: {
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [
   { version: 1, description: "Initial data spine (parties, invoices, lifecycle, consent, audit, platform, credit)" },
+  { version: 2, description: "Persisted operator-editable error catalogue (ADV-03)" },
 ];
 
 // Trusted internal work: seeding runs with tenant RLS bypassed (CON-01/SEC-02).
@@ -45,6 +47,7 @@ export async function seedPlatform(): Promise<void> {
         .values(v)
         .onConflictDoNothing({ target: schemaVersionsTable.version });
     }
+    await seedCatalogue();
   });
   logger.info(
     { flags: FLAGS.length, schemaVersions: SCHEMA_VERSIONS.length },

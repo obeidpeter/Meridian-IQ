@@ -5,10 +5,15 @@
  * MeridianIQ platform API — data spine, compliance rails and consent.
  * OpenAPI spec version: 0.1.0
  */
+import type { ErrorCatalogueEntrySource } from './errorCatalogueEntrySource';
 
 export interface ErrorCatalogueEntry {
   code: string;
+  category?: string;
   cause: string;
   fix: string;
   retriable: boolean;
+  source?: ErrorCatalogueEntrySource;
+  updatedBy?: string | null;
+  updatedAt?: Date;
 }

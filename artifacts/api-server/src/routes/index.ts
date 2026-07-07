@@ -10,6 +10,8 @@ import messagingRouter from "./messaging";
 import platformRouter from "./platform";
 import operatorRouter from "./operator";
 import auditRouter from "./audit";
+import advisoryRouter from "./advisory";
+import catalogueRouter from "./catalogue";
 
 const router: IRouter = Router();
 
@@ -24,5 +26,7 @@ router.use(messagingRouter);
 router.use(platformRouter);
 router.use(operatorRouter);
 router.use(auditRouter);
+router.use(advisoryRouter);
+router.use(catalogueRouter);
 
 export default router;

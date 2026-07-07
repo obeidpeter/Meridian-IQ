@@ -684,6 +684,57 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ErrorCatalogueEntry"
+    post:
+      operationId: upsertErrorCatalogueEntry
+      tags: [operator]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorCatalogueUpsertInput"
+      responses:
+        "201":
+          description: Created or updated catalogue entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorCatalogueEntry"
+  /error-catalogue/{code}:
+    get:
+      operationId: getErrorCatalogueEntry
+      tags: [operator]
+      parameters:
+        - $ref: "#/components/parameters/CodeParam"
+      responses:
+        "200":
+          description: Catalogue entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorCatalogueEntry"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateErrorCatalogueEntry
+      tags: [operator]
+      parameters:
+        - $ref: "#/components/parameters/CodeParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErrorCatalogueUpdate"
+      responses:
+        "200":
+          description: Updated catalogue entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorCatalogueEntry"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /operator/dead-letters:
     get:
       operationId: listDeadLetters
@@ -754,6 +805,67 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuditBundle"
 
+  /assessments/questionnaire:
+    get:
+      operationId: getAssessmentQuestionnaire
+      tags: [advisory]
+      responses:
+        "200":
+          description: Readiness-assessment questionnaire template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestionnaireTemplate"
+  /assessments:
+    post:
+      operationId: runAssessment
+      tags: [advisory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunAssessmentInput"
+      responses:
+        "201":
+          description: Completed readiness assessment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentReport"
+  /assessments/{id}:
+    get:
+      operationId: getAssessment
+      tags: [advisory]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Persisted readiness assessment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentReport"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /vat-risk/analyze:
+    post:
+      operationId: analyzeVatRisk
+      tags: [advisory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VatRiskInput"
+      responses:
+        "200":
+          description: VAT-risk exposure report and buyer-supplier graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VatRiskReport"
+
 components:
   parameters:
     IdParam:
@@ -764,6 +876,12 @@ components:
         type: string
     KeyParam:
       name: key
+      in: path
+      required: true
+      schema:
+        type: string
+    CodeParam:
+      name: code
       in: path
       required: true
       schema:
@@ -1556,12 +1674,318 @@ components:
       properties:
         code:
           type: string
+        category:
+          type: string
         cause:
           type: string
         fix:
           type: string
         retriable:
           type: boolean
+        source:
+          type: string
+          enum: [builtin, operator]
+        updatedBy:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+    ErrorCatalogueUpsertInput:
+      type: object
+      required: [code, cause, fix]
+      properties:
+        code:
+          type: string
+        category:
+          type: string
+        cause:
+          type: string
+        fix:
+          type: string
+        retriable:
+          type: boolean
+    ErrorCatalogueUpdate:
+      type: object
+      properties:
+        category:
+          type: string
+        cause:
+          type: string
+        fix:
+          type: string
+        retriable:
+          type: boolean
+    QuestionnaireQuestion:
+      type: object
+      required: [id, prompt, weight]
+      properties:
+        id:
+          type: string
+        prompt:
+          type: string
+        helpText:
+          type: string
+        weight:
+          type: number
+    QuestionnaireSection:
+      type: object
+      required: [id, title, questions]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionnaireQuestion"
+    QuestionnaireTemplate:
+      type: object
+      required: [version, sections]
+      properties:
+        version:
+          type: integer
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionnaireSection"
+    AssessmentAnswer:
+      type: object
+      required: [questionId, answer]
+      properties:
+        questionId:
+          type: string
+        answer:
+          type: boolean
+        note:
+          type: string
+    RunAssessmentInput:
+      type: object
+      required: [clientPartyId, answers]
+      properties:
+        clientPartyId:
+          type: string
+        title:
+          type: string
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssessmentAnswer"
+    GapItem:
+      type: object
+      required: [questionId, section, prompt, severity]
+      properties:
+        questionId:
+          type: string
+        section:
+          type: string
+        prompt:
+          type: string
+        severity:
+          type: string
+          enum: [high, medium, low]
+        note:
+          type: string
+    RemediationItem:
+      type: object
+      required: [priority, action, rationale]
+      properties:
+        priority:
+          type: integer
+        action:
+          type: string
+        rationale:
+          type: string
+        relatedQuestionId:
+          type: string
+    AssessmentReport:
+      type: object
+      required:
+        [
+          engagementId,
+          clientPartyId,
+          score,
+          band,
+          gaps,
+          remediation,
+          completedAt,
+        ]
+      properties:
+        engagementId:
+          type: string
+        clientPartyId:
+          type: string
+        title:
+          type: string
+        score:
+          type: integer
+        band:
+          type: string
+          enum: [ready, partial, at_risk]
+        gaps:
+          type: array
+          items:
+            $ref: "#/components/schemas/GapItem"
+        remediation:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemediationItem"
+        completedAt:
+          type: string
+          format: date-time
+    VatRiskLedgerRow:
+      type: object
+      required: [invoiceNumber, supplierTin, irn, csid, invoiceAmount, vatAmount]
+      properties:
+        supplierTin:
+          type: string
+        supplierName:
+          type: string
+        invoiceNumber:
+          type: string
+        irn:
+          type: string
+        csid:
+          type: string
+        invoiceAmount:
+          type: number
+        vatAmount:
+          type: number
+    VatRiskInput:
+      type: object
+      properties:
+        clientPartyId:
+          type: string
+        buyerName:
+          type: string
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/VatRiskLedgerRow"
+        csv:
+          type: string
+    VatRiskRowResult:
+      type: object
+      required:
+        [
+          rowNumber,
+          invoiceNumber,
+          supplierTin,
+          irn,
+          csid,
+          invoiceAmount,
+          vatAmount,
+          stampValid,
+          status,
+          vatAtRisk,
+        ]
+      properties:
+        rowNumber:
+          type: integer
+        invoiceNumber:
+          type: string
+        supplierTin:
+          type: string
+        supplierName:
+          type: string
+        irn:
+          type: string
+        csid:
+          type: string
+        invoiceAmount:
+          type: number
+        vatAmount:
+          type: number
+        stampValid:
+          type: boolean
+        status:
+          type: string
+          enum: [verified, at_risk, invalid_input]
+        vatAtRisk:
+          type: number
+        detail:
+          type: string
+    GraphNode:
+      type: object
+      required: [id, label, kind, invoiceCount, totalAmount, totalVatAtRisk]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [buyer, supplier]
+        invoiceCount:
+          type: integer
+        totalAmount:
+          type: number
+        totalVatAtRisk:
+          type: number
+    GraphEdge:
+      type: object
+      required: [source, target, invoiceCount, totalAmount, vatAtRisk]
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        invoiceCount:
+          type: integer
+        totalAmount:
+          type: number
+        vatAtRisk:
+          type: number
+    PartyGraph:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/GraphNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/GraphEdge"
+    VatRiskReport:
+      type: object
+      required:
+        [
+          rowCount,
+          verifiedCount,
+          atRiskCount,
+          invalidCount,
+          totalVatAmount,
+          totalVatAtRisk,
+          rows,
+          graph,
+        ]
+      properties:
+        engagementId:
+          type: string
+          nullable: true
+        buyerName:
+          type: string
+        rowCount:
+          type: integer
+        verifiedCount:
+          type: integer
+        atRiskCount:
+          type: integer
+        invalidCount:
+          type: integer
+        totalVatAmount:
+          type: number
+        totalVatAtRisk:
+          type: number
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/VatRiskRowResult"
+        graph:
+          $ref: "#/components/schemas/PartyGraph"
 
     OutboxEvent:
       type: object
