@@ -8,6 +8,7 @@ import {
   boolean,
   jsonb,
   pgEnum,
+  unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -57,7 +58,10 @@ export const stampRecordsTable = pgTable("stamp_records", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+  // One canonical stamp per invoice: enforces idempotency so a crash/retry
+  // between the stamp insert and the outbox row being marked done cannot write
+  // a second stamp (INT-09), without ever deleting an append-only record.
+}, (t) => [unique().on(t.invoiceId)]);
 
 export const confirmationStateEnum = pgEnum("confirmation_state", [
   "requested",

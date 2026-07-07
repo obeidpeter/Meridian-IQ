@@ -57,14 +57,20 @@ async function handleInvoiceSubmit(event: OutboxEvent): Promise<void> {
   });
 
   if (result.status === "accepted") {
-    await db.insert(stampRecordsTable).values({
-      invoiceId,
-      irn: result.irn!,
-      csid: result.csid!,
-      qrPayload: result.qrPayload!,
-      signedArtifactRef: result.signedArtifactRef!,
-      rail: result.rail,
-    });
+    // Idempotent stamp write (INT-09): the unique(invoiceId) constraint plus
+    // onConflictDoNothing guarantees a retried/double-processed event can never
+    // create a second stamp, without deleting an append-only lifecycle record.
+    await db
+      .insert(stampRecordsTable)
+      .values({
+        invoiceId,
+        irn: result.irn!,
+        csid: result.csid!,
+        qrPayload: result.qrPayload!,
+        signedArtifactRef: result.signedArtifactRef!,
+        rail: result.rail,
+      })
+      .onConflictDoNothing({ target: stampRecordsTable.invoiceId });
     await db
       .update(invoicesTable)
       .set({ status: "stamped" })
@@ -218,10 +224,12 @@ export async function reconcile(): Promise<number> {
   return requeued;
 }
 
-// Duplicate-stamp reconciliation (INT-09): a crash between the stamp insert and
-// the outbox row being marked done can double-process an event and write two
-// stamp rows for one invoice. Keep the earliest stamp, remove the extras, and
-// append an audit entry for each removal so the collapse is traceable.
+// Duplicate-stamp reconciliation (INT-09), append-only (CORE-02). Duplicates are
+// prevented at write by the unique(invoiceId) constraint + idempotent insert, so
+// this sweep is a defensive detector for any historical/anomalous duplicate. It
+// NEVER deletes a stamp: stamps are immutable post-submission. Instead it names
+// the canonical (earliest) stamp and records the superseded ones in an audit
+// event, so every reader resolves deterministically to the same canonical stamp.
 export async function reconcileDuplicateStamps(): Promise<number> {
   const dupes = await db.execute<{ invoice_id: string }>(sql`
     SELECT invoice_id FROM stamp_records
@@ -230,30 +238,27 @@ export async function reconcileDuplicateStamps(): Promise<number> {
   const list =
     (dupes as unknown as { rows?: { invoice_id: string }[] }).rows ??
     (dupes as unknown as { invoice_id: string }[]);
-  let collapsed = 0;
+  let flagged = 0;
   for (const { invoice_id: invoiceId } of list) {
     const stamps = await db
       .select()
       .from(stampRecordsTable)
       .where(eq(stampRecordsTable.invoiceId, invoiceId))
       .orderBy(asc(stampRecordsTable.createdAt));
-    const [keep, ...extras] = stamps;
-    if (!keep) continue;
-    for (const extra of extras) {
-      await db
-        .delete(stampRecordsTable)
-        .where(eq(stampRecordsTable.id, extra.id));
-      await appendAudit({
-        action: "invoice.stamp_deduplicated",
-        entityType: "stamp_record",
-        entityId: extra.id,
-        before: { invoiceId, irn: extra.irn, csid: extra.csid },
-        after: { keptStampId: keep.id },
-      });
-      collapsed++;
-    }
+    const [canonical, ...superseded] = stamps;
+    if (!canonical || superseded.length === 0) continue;
+    await appendAudit({
+      action: "invoice.stamp_duplicate_detected",
+      entityType: "invoice",
+      entityId: invoiceId,
+      after: {
+        canonicalStampId: canonical.id,
+        supersededStampIds: superseded.map((s) => s.id),
+      },
+    });
+    flagged += superseded.length;
   }
-  return collapsed;
+  return flagged;
 }
 
 // Replay a dead-lettered event (operator action).

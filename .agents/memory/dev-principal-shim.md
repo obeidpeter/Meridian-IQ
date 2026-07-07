@@ -1,17 +1,18 @@
 ---
-name: Dev principal shim
-description: Rules for the header-based dev auth shim used until Clerk is wired.
+name: Principal resolution (Clerk prod + dev shim)
+description: How the API resolves the request principal — Clerk in prod, header shim in dev — and why tenancy lives in our DB.
 ---
 
-# The x-mock-* principal shim is dev-only and least-privilege
+# Principal resolution: Clerk identity in prod, header shim in dev
 
-Until Clerk is wired, `resolvePrincipal` builds the request principal from client headers: `x-mock-user`, `x-mock-role`, `x-mock-firm`, `x-mock-client-party`.
+`resolvePrincipal` builds the request `Principal` two ways depending on `NODE_ENV`.
 
-**Rules:**
-- Only honor these headers when `NODE_ENV !== "production"`. In production, reject non-public requests with 401 (no verified-session provider is wired yet).
-- Never default to a privileged role. Require an explicit valid `x-mock-role`; 401 if missing/invalid.
-- Keep truly public routes open without a principal: `/api/healthz` and `/api/verify-stamp`.
+**Production:** identity comes from a Clerk-verified session (`clerkMiddleware()` runs first in `app.ts`, then `getAuth(req).userId`). Tenancy (firm) and role are resolved from OUR `memberships` table keyed by `usersTable.clerkUserId` — NOT from Clerk. A user with multiple memberships disambiguates with the `x-firm-id` header, else the first membership. No verified session or no membership => 401.
 
-**Why:** The shim previously defaulted to `firm_admin` and always trusted headers, so any caller could self-assert admin — a privilege-escalation footgun, especially if it ever ran in production.
+**Development:** header shim (`x-mock-user`, `x-mock-role`, `x-mock-firm`, `x-mock-client-party`), only honoured when `NODE_ENV !== "production"`; requires an explicit valid `x-mock-role` (401 if missing/invalid), never defaults to a privileged role.
 
-**How to apply:** When Clerk is added, populate the principal from the verified session and remove/limit the header path. Keep the public-paths allowlist in sync with any new unauthenticated endpoints.
+**Why tenancy is in our DB, not Clerk:** Replit-managed Clerk does NOT support organization tenants (see clerk-auth SKILL "Not supported today"). So the task's "Clerk with organizations" is implemented as Clerk-for-identity + platform-owned `memberships` for firm/role. This is the only viable shape on Replit-managed Clerk.
+
+**Why the dev shim exists:** this task has no frontend to originate Clerk sessions, and the shim previously defaulted to `firm_admin` + always trusted headers (privilege-escalation footgun) — hence least-privilege + prod lockout.
+
+**How to apply:** keep the public-paths allowlist (`/api/healthz`, `/api/verify-stamp`) in sync with any new unauthenticated endpoints. Clerk env vars (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`) are auto-provisioned by `setupClerkWhitelabelAuth`; do not hand-set them.
