@@ -4,6 +4,7 @@ import {
   useGetMe,
   useListParties,
   useCreateInvoice,
+  useListErrorCatalogue,
   type InvoiceLineInput,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -64,7 +65,16 @@ export function InvoiceNew() {
   const queryClient = useQueryClient();
   const { data: me } = useGetMe();
   const { data: parties } = useListParties();
+  const { data: catalogue } = useListErrorCatalogue();
   const create = useCreateInvoice();
+
+  const tinGuidance = useMemo(() => {
+    const entry = (catalogue || []).find((c) => c.code === "MBS_INVALID_TIN");
+    return (
+      entry?.fix ??
+      "Add the customer's Tax Identification Number before submitting — the NRS rejects B2B invoices without a valid buyer TIN."
+    );
+  }, [catalogue]);
 
   const [draft, setDraft] = useState<DraftState>(loadDraft);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -103,6 +113,7 @@ export function InvoiceNew() {
   const errors: Record<string, string> = {};
   if (!draft.invoiceNumber.trim()) errors.invoiceNumber = "Invoice number is required.";
   if (!draft.buyerPartyId) errors.buyerPartyId = "Select a customer.";
+  else if (!selectedBuyer?.tin) errors.buyerTin = tinGuidance;
   if (!draft.issueDate) errors.issueDate = "Issue date is required.";
   draft.lines.forEach((l, i) => {
     if (!l.description.trim()) errors[`line-${i}-desc`] = "Description required.";
@@ -213,8 +224,10 @@ export function InvoiceNew() {
                   <p className="text-xs text-destructive mt-1">{errors.buyerPartyId}</p>
                 )}
                 {selectedBuyer && !selectedBuyer.tin && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    This customer has no TIN on file — FIRS requires a buyer TIN for B2B invoices.
+                  <p
+                    className={`text-xs mt-1 ${showErrors ? "text-destructive" : "text-amber-600"}`}
+                  >
+                    {errors.buyerTin}
                   </p>
                 )}
               </div>

@@ -1,10 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useGetMe, useListInvoices } from "@workspace/api-client-react";
+import {
+  useGetMe,
+  useListInvoices,
+  useListParties,
+} from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, FileText, ChevronRight } from "lucide-react";
+import { Search, FileText, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { formatNaira, formatDate, statusLabel, badgeClasses, statusTone } from "@/lib/format";
 
 const FILTERS = [
@@ -18,21 +24,65 @@ const FILTERS = [
 export function Invoices() {
   const { data: me } = useGetMe();
   const { data: invoices, isLoading } = useListInvoices();
+  const { data: parties } = useListParties();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
+  const [showFilters, setShowFilters] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+
+  const partyName = useMemo(() => {
+    const map = new Map<string, string>();
+    (parties || []).forEach((p) => map.set(p.id, p.legalName));
+    return map;
+  }, [parties]);
+
+  const hasAdvanced =
+    !!fromDate || !!toDate || !!minAmount || !!maxAmount;
+
+  const clearAdvanced = () => {
+    setFromDate("");
+    setToDate("");
+    setMinAmount("");
+    setMaxAmount("");
+  };
 
   const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const minParsed = Number(minAmount);
+    const maxParsed = Number(maxAmount);
+    const min = minAmount && Number.isFinite(minParsed) ? minParsed : null;
+    const max = maxAmount && Number.isFinite(maxParsed) ? maxParsed : null;
     const list = (invoices || []).filter(
       (inv) => !me?.clientPartyId || inv.supplierPartyId === me.clientPartyId,
     );
     return list
       .filter((inv) => (filter === "all" ? true : statusTone(inv.status) === filter))
-      .filter((inv) =>
-        search.trim()
-          ? inv.invoiceNumber.toLowerCase().includes(search.trim().toLowerCase())
-          : true,
-      );
-  }, [invoices, me?.clientPartyId, filter, search]);
+      .filter((inv) => {
+        if (!q) return true;
+        const counterparty = (partyName.get(inv.buyerPartyId) || "").toLowerCase();
+        return (
+          inv.invoiceNumber.toLowerCase().includes(q) ||
+          counterparty.includes(q)
+        );
+      })
+      .filter((inv) => (fromDate ? inv.issueDate >= fromDate : true))
+      .filter((inv) => (toDate ? inv.issueDate <= toDate : true))
+      .filter((inv) => (min !== null ? Number(inv.grandTotal) >= min : true))
+      .filter((inv) => (max !== null ? Number(inv.grandTotal) <= max : true));
+  }, [
+    invoices,
+    me?.clientPartyId,
+    filter,
+    search,
+    partyName,
+    fromDate,
+    toDate,
+    minAmount,
+    maxAmount,
+  ]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -54,14 +104,14 @@ export function Invoices() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="Search by invoice number"
+          placeholder="Search by invoice number or customer"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -75,7 +125,66 @@ export function Invoices() {
             {f.label}
           </button>
         ))}
+        <Button
+          variant={hasAdvanced ? "default" : "outline"}
+          size="sm"
+          className="ml-auto rounded-full"
+          onClick={() => setShowFilters((s) => !s)}
+        >
+          <SlidersHorizontal className="w-4 h-4 mr-1.5" />
+          Filters{hasAdvanced ? " (on)" : ""}
+        </Button>
       </div>
+
+      {showFilters && (
+        <Card>
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6">
+            <div>
+              <Label className="text-xs">Issued from</Label>
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Issued to</Label>
+              <Input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Min amount (₦)</Label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                placeholder="0"
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Max amount (₦)</Label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                placeholder="Any"
+                value={maxAmount}
+                onChange={(e) => setMaxAmount(e.target.value)}
+              />
+            </div>
+            {hasAdvanced && (
+              <div className="sm:col-span-2">
+                <Button variant="ghost" size="sm" onClick={clearAdvanced}>
+                  Clear filters
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading ? (
         <div className="space-y-3">

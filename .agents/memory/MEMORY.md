@@ -1,3 +1,4 @@
 - [Shell UUID capture pitfall](shell-uuid-capture.md) — psql `RETURNING id` output pollutes captured vars; filter, don't trust raw capture.
 - [Artifact workflow naming](artifact-workflow-naming.md) — auto-created web artifact workflows are named `artifacts/<slug>: web`, not by title.
 - [MeridianIQ DB guardrails](meridian-db-guardrails.md) — immutable/append-only tables need TRUNCATE to reset + insert-time seed idempotency; scope SME queries by firmId.
+- [PWA stale SW cache in dev](pwa-sw-stale-cache.md) — preview/screenshot can show old UI after HMR; verify via curl on real dev PORT, not the :8080 proxy.

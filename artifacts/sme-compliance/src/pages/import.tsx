@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import {
   useGetMe,
   useImportInvoices,
@@ -45,6 +46,47 @@ function download(filename: string, text: string, mime = "text/csv") {
   URL.revokeObjectURL(url);
 }
 
+function downloadExcelTemplate() {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    [...COLUMNS],
+    [
+      "INV-2001",
+      "Lagos Retail Ltd",
+      "12345678-0001",
+      "2026-07-01",
+      "2026-07-31",
+      "Consulting services",
+      "1",
+      "150000",
+      "0.075",
+      "NGN",
+    ],
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws, "Invoices");
+  XLSX.writeFile(wb, "meridianiq-template.xlsx");
+}
+
+function mapRow(row: Record<string, unknown>, idx: number): InvoiceImportRow {
+  const cell = (k: string) => {
+    const v = row[k];
+    return v === undefined || v === null ? "" : String(v).trim();
+  };
+  return {
+    rowNumber: idx + 1,
+    invoiceNumber: cell("invoiceNumber"),
+    buyerName: cell("buyerName"),
+    buyerTin: cell("buyerTin"),
+    issueDate: cell("issueDate"),
+    dueDate: cell("dueDate"),
+    description: cell("description"),
+    quantity: cell("quantity"),
+    unitPrice: cell("unitPrice"),
+    vatRate: cell("vatRate"),
+    currency: cell("currency"),
+  } as InvoiceImportRow;
+}
+
 function parseCsv(text: string): InvoiceImportRow[] {
   const lines = text
     .split(/\r?\n/)
@@ -58,20 +100,27 @@ function parseCsv(text: string): InvoiceImportRow[] {
     header.forEach((h, i) => {
       row[h] = (cells[i] || "").trim();
     });
-    return {
-      rowNumber: idx + 1,
-      invoiceNumber: row.invoiceNumber,
-      buyerName: row.buyerName,
-      buyerTin: row.buyerTin,
-      issueDate: row.issueDate,
-      dueDate: row.dueDate,
-      description: row.description,
-      quantity: row.quantity,
-      unitPrice: row.unitPrice,
-      vatRate: row.vatRate,
-      currency: row.currency,
-    } as InvoiceImportRow;
+    return mapRow(row, idx);
   });
+}
+
+// Parse the first sheet of an Excel workbook (.xlsx/.xls). Header row must use
+// the same canonical column names as the CSV template so both formats map to the
+// identical import-row model and run through the same server-side validator.
+function parseWorkbook(data: ArrayBuffer): InvoiceImportRow[] {
+  const wb = XLSX.read(data, { type: "array" });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return [];
+  const sheet = wb.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+    defval: "",
+    raw: false,
+  });
+  return json.map((row, idx) => mapRow(row, idx));
+}
+
+function isExcel(name: string): boolean {
+  return /\.xlsx?$/i.test(name);
 }
 
 export function Import() {
@@ -82,14 +131,37 @@ export function Import() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [raw, setRaw] = useState("");
+  const [fileRows, setFileRows] = useState<InvoiceImportRow[] | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<InvoiceImportResult | null>(null);
 
-  const rows = useMemo(() => parseCsv(raw), [raw]);
+  const rows = useMemo(
+    () => fileRows ?? parseCsv(raw),
+    [fileRows, raw],
+  );
 
   const onFile = async (file: File) => {
-    const text = await file.text();
-    setRaw(text);
     setResult(null);
+    try {
+      if (isExcel(file.name)) {
+        const buf = await file.arrayBuffer();
+        const parsed = parseWorkbook(buf);
+        setFileRows(parsed);
+        setFileName(file.name);
+        setRaw("");
+      } else {
+        const text = await file.text();
+        setRaw(text);
+        setFileRows(null);
+        setFileName(null);
+      }
+    } catch {
+      toast({
+        title: "Could not read file",
+        description: "Use the template's columns in the first sheet.",
+        variant: "destructive",
+      });
+    }
   };
 
   const run = async (commit: boolean) => {
@@ -154,18 +226,21 @@ export function Import() {
             <input
               ref={fileRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
             />
             <Button variant="outline" onClick={() => fileRef.current?.click()}>
-              <Upload className="w-4 h-4 mr-2" /> Upload CSV
+              <Upload className="w-4 h-4 mr-2" /> Upload Excel or CSV
             </Button>
             <Button
               variant="ghost"
               onClick={() => download("meridianiq-template.csv", TEMPLATE)}
             >
-              <Download className="w-4 h-4 mr-2" /> Download template
+              <Download className="w-4 h-4 mr-2" /> CSV template
+            </Button>
+            <Button variant="ghost" onClick={downloadExcelTemplate}>
+              <Download className="w-4 h-4 mr-2" /> Excel template
             </Button>
           </div>
           <textarea
@@ -174,10 +249,17 @@ export function Import() {
             value={raw}
             onChange={(e) => {
               setRaw(e.target.value);
+              setFileRows(null);
+              setFileName(null);
               setResult(null);
             }}
           />
-          {rows.length > 0 && (
+          {fileName && (
+            <p className="text-sm text-muted-foreground">
+              Loaded <span className="font-medium">{fileName}</span> — {rows.length} row(s).
+            </p>
+          )}
+          {!fileName && rows.length > 0 && (
             <p className="text-sm text-muted-foreground">
               {rows.length} row(s) ready.
             </p>
