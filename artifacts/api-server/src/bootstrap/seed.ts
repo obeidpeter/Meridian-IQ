@@ -568,12 +568,23 @@ async function seedConsoleDemo(): Promise<void> {
 
   await getDb()
     .insert(membershipsTable)
-    .values({
-      userId: CONSOLE.adminUserId,
-      firmId: DEMO.firmId,
-      role: "firm_admin",
-      clientPartyId: null,
-    })
+    .values([
+      {
+        userId: CONSOLE.adminUserId,
+        firmId: DEMO.firmId,
+        role: "firm_admin",
+        clientPartyId: null,
+      },
+      {
+        // The operator works the cross-tenant queue, so the membership is not
+        // scoped to a firm (firmId null). Without this row the operator user
+        // exists but login rejects it with "no active membership".
+        userId: CONSOLE.operatorUserId,
+        firmId: null,
+        role: "operator",
+        clientPartyId: null,
+      },
+    ])
     .onConflictDoNothing();
 
   // Additional client businesses under the demo firm so the portfolio has a

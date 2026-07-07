@@ -39,5 +39,5 @@ production, add a CSRF token (synchronizer/double-submit) or a strict Origin
 allowlist on unsafe methods. This was left as a known follow-up, not silently
 implemented, because it is a larger security change than the sign-in fix.
 
-**Demo credentials:** shared password `meridian2027`; demo emails
-`demo.staff@`, `demo.admin@`, `ops@` `meridianiq.example` (seed defines them).
+**Demo credentials:** the seed (`bootstrap/seed.ts`) defines the demo accounts
+and their shared password — read it there; never copy credentials into memory.

@@ -290,7 +290,12 @@ function SignedInPanel({ role }: { role: Role }) {
     } catch {
       /* best effort */
     }
-    await qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    // Drop the cached principal immediately. GET /api/me returns 401 once the
+    // session cookie is cleared, and on that errored refetch React Query would
+    // otherwise retain the previous (signed-in) data, leaving the UI stuck on
+    // the signed-in state. Clearing the cache flips it to signed-out at once.
+    qc.setQueryData(getGetMeQueryKey(), null);
+    qc.removeQueries({ queryKey: getGetMeQueryKey() });
   };
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
