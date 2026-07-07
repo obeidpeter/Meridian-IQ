@@ -1,2 +1,3 @@
 - [Console write-route RBAC](console-rbac.md) — auditor inherits all `*.read` caps; never gate a mutation on a `.read` capability, use explicit `*.write`.
 - [Web artifact BASE_PATH](artifact-base-path.md) — wrong-app/404 render usually a stale BASE_PATH in the running vite dev server; restart the artifact workflow to re-read it.
+- [Root-scoped service worker](service-worker-scope.md) — the "/" app's SW controls the whole origin and hijacks sibling artifacts; it must bypass every foreign path prefix.
