@@ -17,5 +17,7 @@ export interface Confirmation {
   noSetOff: boolean;
   /** @nullable */
   confirmingUserId?: string | null;
+  /** @nullable */
+  note?: string | null;
   createdAt: Date;
 }

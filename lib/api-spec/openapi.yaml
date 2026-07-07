@@ -498,6 +498,12 @@ paths:
       tags: [lifecycle]
       parameters:
         - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelInvoiceInput"
       responses:
         "200":
           description: Cancelled
@@ -1417,6 +1423,8 @@ components:
           type: ["string", "null"]
         clientPartyId:
           type: ["string", "null"]
+        buyerPartyId:
+          type: ["string", "null"]
         capabilities:
           type: array
           items:
@@ -1495,6 +1503,8 @@ components:
           type: string
         clientPartyId:
           type: ["string", "null"]
+        buyerPartyId:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -1509,8 +1519,10 @@ components:
         role:
           type: string
           enum:
-            [firm_admin, firm_staff, client_user, operator, bank_user, auditor]
+            [firm_admin, firm_staff, client_user, operator, bank_user, buyer_user, auditor]
         clientPartyId:
+          type: string
+        buyerPartyId:
           type: string
 
     Party:
@@ -1989,6 +2001,8 @@ components:
           type: boolean
         confirmingUserId:
           type: ["string", "null"]
+        note:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -2005,6 +2019,8 @@ components:
           type: string
         noSetOff:
           type: boolean
+        note:
+          type: string
 
     SettlementEvent:
       type: object
@@ -2020,6 +2036,13 @@ components:
         amount:
           type: string
         confidence:
+          type: ["string", "null"]
+        paymentStatus:
+          type: ["string", "null"]
+          enum: [scheduled, paid, null]
+        statementLineId:
+          type: ["string", "null"]
+        actorId:
           type: ["string", "null"]
         occurredAt:
           type: string
@@ -2052,7 +2075,7 @@ components:
           type: string
     StampVerifyResult:
       type: object
-      required: [valid, rail, cached]
+      required: [valid, rail, cached, eligible]
       properties:
         valid:
           type: boolean
@@ -2060,6 +2083,19 @@ components:
           type: string
         cached:
           type: boolean
+        # CORE-09: a cancelled or credited stamped invoice keeps a valid stamp
+        # but must never be presented as eligible.
+        eligible:
+          type: boolean
+        invoiceStatus:
+          type: ["string", "null"]
+    CancelInvoiceInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
 
     Message:
       type: object

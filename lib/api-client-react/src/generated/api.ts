@@ -29,6 +29,7 @@ import type {
   BadRequestResponse,
   BillingTier,
   CacCheckInput,
+  CancelInvoiceInput,
   CanonicalInvoice,
   ClientPortfolioDetail,
   ComplianceDeadline,
@@ -2205,14 +2206,15 @@ export const getCancelInvoiceUrl = (id: string,) => {
   return `/api/invoices/${id}/cancel`
 }
 
-export const cancelInvoice = async (id: string, options?: RequestInit): Promise<Invoice> => {
+export const cancelInvoice = async (id: string,
+    cancelInvoiceInput: CancelInvoiceInput, options?: RequestInit): Promise<Invoice> => {
 
   return customFetch<Invoice>(getCancelInvoiceUrl(id),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cancelInvoiceInput)
   }
 );}
 
@@ -2220,8 +2222,8 @@ export const cancelInvoice = async (id: string, options?: RequestInit): Promise<
 
 
 export const getCancelInvoiceMutationOptions = <TError = ErrorType<ConflictResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelInvoice>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof cancelInvoice>>, TError,{id: string}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelInvoice>>, TError,{id: string;data: BodyType<CancelInvoiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelInvoice>>, TError,{id: string;data: BodyType<CancelInvoiceInput>}, TContext> => {
 
 const mutationKey = ['cancelInvoice'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2233,10 +2235,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelInvoice>>, {id: string}> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelInvoice>>, {id: string;data: BodyType<CancelInvoiceInput>}> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  cancelInvoice(id,requestOptions)
+          return  cancelInvoice(id,data,requestOptions)
         }
 
 
@@ -2247,15 +2249,15 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CancelInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof cancelInvoice>>>
-
+    export type CancelInvoiceMutationBody = BodyType<CancelInvoiceInput>
     export type CancelInvoiceMutationError = ErrorType<ConflictResponse>
 
     export const useCancelInvoice = <TError = ErrorType<ConflictResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelInvoice>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelInvoice>>, TError,{id: string;data: BodyType<CancelInvoiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof cancelInvoice>>,
         TError,
-        {id: string},
+        {id: string;data: BodyType<CancelInvoiceInput>},
         TContext
       > => {
       return useMutation(getCancelInvoiceMutationOptions(options));

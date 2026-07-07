@@ -9,8 +9,8 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { firmsTable } from "./organizations";
-import { partiesTable } from "./parties";
+import { firmsTable } from "./organizations.ts";
+import { partiesTable } from "./parties.ts";
 
 // An Engagement is an advisory unit of work so services data lands in the same
 // spine from R0 (ADV-01). Findings are queryable in the spine.

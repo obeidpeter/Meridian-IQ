@@ -57,12 +57,55 @@ export interface CreateInvoiceInput {
   lines: LineInput[];
 }
 
+// Statuses an original must have reached before a credit note or correction can
+// be raised against it: adjustments target platform-accepted (stamped or later,
+// non-terminal) invoices (CORE-09).
+const ADJUSTABLE_STATUSES = ["stamped", "confirmed", "settled"];
+
 export async function createDraft(
   input: CreateInvoiceInput,
   actorId?: string,
 ): Promise<{ invoice: Invoice; lines: InvoiceLine[] }> {
   if (input.lines.length === 0) {
     throw new DomainError("NO_LINES", "An invoice needs at least one line", 400);
+  }
+  // Corrections, cancellations and credit notes are first-class lifecycle
+  // events (CORE-09): an adjustment must name a real, same-tenant, stamped
+  // original; a plain invoice must not carry a relatedInvoiceId.
+  const kind = input.kind ?? "invoice";
+  if (kind === "credit_note" || kind === "correction") {
+    if (!input.relatedInvoiceId) {
+      throw new DomainError(
+        "RELATED_INVOICE_REQUIRED",
+        `A ${kind} must reference the stamped invoice it adjusts`,
+        400,
+      );
+    }
+    const [original] = await getDb()
+      .select()
+      .from(invoicesTable)
+      .where(eq(invoicesTable.id, input.relatedInvoiceId))
+      .limit(1);
+    if (!original || original.firmId !== input.firmId) {
+      throw new DomainError(
+        "RELATED_INVOICE_NOT_FOUND",
+        "Related invoice does not exist in this tenant",
+        404,
+      );
+    }
+    if (!ADJUSTABLE_STATUSES.includes(original.status)) {
+      throw new DomainError(
+        "RELATED_INVOICE_NOT_ADJUSTABLE",
+        `Related invoice is ${original.status}; only a stamped, confirmed or settled invoice can be adjusted`,
+        409,
+      );
+    }
+  } else if (input.relatedInvoiceId) {
+    throw new DomainError(
+      "UNEXPECTED_RELATED_INVOICE",
+      "Only credit notes and corrections may reference a related invoice",
+      400,
+    );
   }
   let subtotal = 0;
   let vatTotal = 0;

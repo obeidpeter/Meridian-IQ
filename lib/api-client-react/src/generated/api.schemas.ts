@@ -20,6 +20,8 @@ export interface Me {
   firmId?: string | null;
   /** @nullable */
   clientPartyId?: string | null;
+  /** @nullable */
+  buyerPartyId?: string | null;
   capabilities: string[];
 }
 
@@ -68,6 +70,8 @@ export interface Membership {
   role: string;
   /** @nullable */
   clientPartyId?: string | null;
+  /** @nullable */
+  buyerPartyId?: string | null;
   createdAt: string;
 }
 
@@ -80,6 +84,7 @@ export const MembershipInputRole = {
   client_user: 'client_user',
   operator: 'operator',
   bank_user: 'bank_user',
+  buyer_user: 'buyer_user',
   auditor: 'auditor',
 } as const;
 
@@ -88,6 +93,7 @@ export interface MembershipInput {
   firmId?: string;
   role: MembershipInputRole;
   clientPartyId?: string;
+  buyerPartyId?: string;
 }
 
 export type PartyType = typeof PartyType[keyof typeof PartyType];
@@ -518,6 +524,8 @@ export interface Confirmation {
   noSetOff: boolean;
   /** @nullable */
   confirmingUserId?: string | null;
+  /** @nullable */
+  note?: string | null;
   createdAt: string;
 }
 
@@ -536,6 +544,7 @@ export interface ConfirmationInput {
   state: ConfirmationInputState;
   method?: string;
   noSetOff?: boolean;
+  note?: string;
 }
 
 export type SettlementEventSource = typeof SettlementEventSource[keyof typeof SettlementEventSource];
@@ -548,6 +557,17 @@ export const SettlementEventSource = {
   uploaded_evidence: 'uploaded_evidence',
 } as const;
 
+/**
+ * @nullable
+ */
+export type SettlementEventPaymentStatus = typeof SettlementEventPaymentStatus[keyof typeof SettlementEventPaymentStatus] | null;
+
+
+export const SettlementEventPaymentStatus = {
+  scheduled: 'scheduled',
+  paid: 'paid',
+} as const;
+
 export interface SettlementEvent {
   id: string;
   invoiceId: string;
@@ -555,6 +575,12 @@ export interface SettlementEvent {
   amount: string;
   /** @nullable */
   confidence?: string | null;
+  /** @nullable */
+  paymentStatus?: SettlementEventPaymentStatus;
+  /** @nullable */
+  statementLineId?: string | null;
+  /** @nullable */
+  actorId?: string | null;
   occurredAt: string;
   createdAt: string;
 }
@@ -585,6 +611,14 @@ export interface StampVerifyResult {
   valid: boolean;
   rail: string;
   cached: boolean;
+  eligible: boolean;
+  /** @nullable */
+  invoiceStatus?: string | null;
+}
+
+export interface CancelInvoiceInput {
+  /** @minLength 1 */
+  reason: string;
 }
 
 export type MessageChannel = typeof MessageChannel[keyof typeof MessageChannel];

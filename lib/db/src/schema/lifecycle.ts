@@ -12,9 +12,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { invoicesTable, invoiceStatusEnum } from "./invoices";
-import { partiesTable } from "./parties";
-import { usersTable, firmsTable } from "./organizations";
+import { invoicesTable, invoiceStatusEnum } from "./invoices.ts";
+import { partiesTable } from "./parties.ts";
+import { usersTable, firmsTable } from "./organizations.ts";
 
 // Two accredited APP rails behind one adapter (INT-01, C3).
 export const railEnum = pgEnum("rail", ["rail_primary", "rail_secondary"]);
@@ -71,6 +71,9 @@ export const confirmationStateEnum = pgEnum("confirmation_state", [
 ]);
 
 // Buyer confirmation serves both VAT protection and financeability (BR-02).
+// Append-only: lineage is successive rows (requested -> confirmed/queried/
+// rejected), never an update. The confirming user and method are captured on
+// every buyer-side response.
 export const confirmationsTable = pgTable("confirmations", {
   id: uuid("id").primaryKey().defaultRandom(),
   invoiceId: uuid("invoice_id")
@@ -83,6 +86,8 @@ export const confirmationsTable = pgTable("confirmations", {
   method: text("method"),
   noSetOff: boolean("no_set_off").notNull().default(false),
   confirmingUserId: uuid("confirming_user_id").references(() => usersTable.id),
+  // Reason accompanying a queried/rejected response, returned to the supplier.
+  note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -96,6 +101,13 @@ export const settlementSourceEnum = pgEnum("settlement_source", [
   "uploaded_evidence",
 ]);
 
+// Buyer payment-status flags (BR-04). `scheduled` is an intent signal only;
+// only `paid` counts toward settlement observation (Plan 7.4).
+export const settlementPaymentStatusEnum = pgEnum("settlement_payment_status", [
+  "scheduled",
+  "paid",
+]);
+
 export const settlementEventsTable = pgTable("settlement_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   invoiceId: uuid("invoice_id")
@@ -104,6 +116,16 @@ export const settlementEventsTable = pgTable("settlement_events", {
   source: settlementSourceEnum("source").notNull(),
   amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
   confidence: numeric("confidence", { precision: 5, scale: 4 }),
+  // For source=buyer_flag: scheduled vs paid. Append-only lineage means a
+  // scheduled-then-paid sequence is two rows, never an update (BR-04).
+  paymentStatus: settlementPaymentStatusEnum("payment_status"),
+  // For source=statement_match: the bank-statement line this event was matched
+  // from (SME-07). Bare uuid (no FK) to avoid a schema-module cycle with
+  // statements.ts; referential integrity is enforced at the write path.
+  statementLineId: uuid("statement_line_id"),
+  // Actor identity mirrors invoice_lifecycle_events.actor_id: free text,
+  // nullable, so system/worker writes record the same way the audit trail does.
+  actorId: text("actor_id"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -160,5 +182,7 @@ export type Confirmation = typeof confirmationsTable.$inferSelect;
 export type SettlementEvent = typeof settlementEventsTable.$inferSelect;
 export type Rail = (typeof railEnum.enumValues)[number];
 export type SettlementSource = (typeof settlementSourceEnum.enumValues)[number];
+export type SettlementPaymentStatus =
+  (typeof settlementPaymentStatusEnum.enumValues)[number];
 export type ConfirmationState =
   (typeof confirmationStateEnum.enumValues)[number];

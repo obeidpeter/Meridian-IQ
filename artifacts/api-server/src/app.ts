@@ -8,10 +8,11 @@ import { logger } from "./lib/logger";
 import { resolvePrincipal } from "./middleware/principal";
 import { errorHandler } from "./middleware/error";
 
-// Cross-tenant staff (operator/auditor/bank_user) and unauthenticated public
-// endpoints (e.g. stamp verification) read across firms, so they run with RLS
+// Cross-tenant staff (operator/auditor/bank_user), buyer-organization users
+// (buyer_user — scoped to a buyer Party at the route level, not to a firm) and
+// unauthenticated public endpoints (e.g. stamp verification) run with RLS
 // bypassed; firm-scoped principals are pinned to their own firm_id.
-const BYPASS_ROLES = new Set(["operator", "auditor", "bank_user"]);
+const BYPASS_ROLES = new Set(["operator", "auditor", "bank_user", "buyer_user"]);
 
 // Liveness probe must not depend on the database, so it skips the per-request
 // transaction entirely.

@@ -25,6 +25,7 @@ export const GetMeResponse = zod.object({
   "role": zod.string(),
   "firmId": zod.string().nullish(),
   "clientPartyId": zod.string().nullish(),
+  "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string())
 })
 
@@ -98,8 +99,9 @@ export const CreateUserResponse = zod.object({
 export const CreateMembershipBody = zod.object({
   "userId": zod.string(),
   "firmId": zod.string().optional(),
-  "role": zod.enum(['firm_admin', 'firm_staff', 'client_user', 'operator', 'bank_user', 'auditor']),
-  "clientPartyId": zod.string().optional()
+  "role": zod.enum(['firm_admin', 'firm_staff', 'client_user', 'operator', 'bank_user', 'buyer_user', 'auditor']),
+  "clientPartyId": zod.string().optional(),
+  "buyerPartyId": zod.string().optional()
 })
 
 export const CreateMembershipResponse = zod.object({
@@ -108,6 +110,7 @@ export const CreateMembershipResponse = zod.object({
   "firmId": zod.string().nullish(),
   "role": zod.string(),
   "clientPartyId": zod.string().nullish(),
+  "buyerPartyId": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -615,6 +618,13 @@ export const CancelInvoiceParams = zod.object({
   "id": zod.coerce.string()
 })
 
+
+
+
+export const CancelInvoiceBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
 export const CancelInvoiceResponse = zod.object({
   "id": zod.string(),
   "firmId": zod.string(),
@@ -652,6 +662,7 @@ export const ListConfirmationsResponseItem = zod.object({
   "method": zod.string().nullish(),
   "noSetOff": zod.boolean(),
   "confirmingUserId": zod.string().nullish(),
+  "note": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListConfirmationsResponse = zod.array(ListConfirmationsResponseItem)
@@ -665,7 +676,8 @@ export const CreateConfirmationBody = zod.object({
   "buyerPartyId": zod.string(),
   "state": zod.enum(['requested', 'confirmed', 'queried', 'rejected']),
   "method": zod.string().optional(),
-  "noSetOff": zod.boolean().optional()
+  "noSetOff": zod.boolean().optional(),
+  "note": zod.string().optional()
 })
 
 export const CreateConfirmationResponse = zod.object({
@@ -676,6 +688,7 @@ export const CreateConfirmationResponse = zod.object({
   "method": zod.string().nullish(),
   "noSetOff": zod.boolean(),
   "confirmingUserId": zod.string().nullish(),
+  "note": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -690,6 +703,9 @@ export const ListSettlementsResponseItem = zod.object({
   "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence']),
   "amount": zod.string(),
   "confidence": zod.string().nullish(),
+  "paymentStatus": zod.union([zod.literal('scheduled'),zod.literal('paid'),zod.literal(null)]).nullish(),
+  "statementLineId": zod.string().nullish(),
+  "actorId": zod.string().nullish(),
   "occurredAt": zod.coerce.date(),
   "createdAt": zod.coerce.date()
 })
@@ -713,6 +729,9 @@ export const CreateSettlementResponse = zod.object({
   "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence']),
   "amount": zod.string(),
   "confidence": zod.string().nullish(),
+  "paymentStatus": zod.union([zod.literal('scheduled'),zod.literal('paid'),zod.literal(null)]).nullish(),
+  "statementLineId": zod.string().nullish(),
+  "actorId": zod.string().nullish(),
   "occurredAt": zod.coerce.date(),
   "createdAt": zod.coerce.date()
 })
@@ -726,7 +745,9 @@ export const VerifyStampBody = zod.object({
 export const VerifyStampResponse = zod.object({
   "valid": zod.boolean(),
   "rail": zod.string(),
-  "cached": zod.boolean()
+  "cached": zod.boolean(),
+  "eligible": zod.boolean(),
+  "invoiceStatus": zod.string().nullish()
 })
 
 

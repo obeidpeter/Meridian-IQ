@@ -64,13 +64,16 @@ export function isRetriable(code: string): boolean {
 }
 
 // Thrown by domain services; carries a catalogue code and HTTP status.
+// Plain field assignments (not TS parameter properties) so the module runs
+// under node --test's strip-only type stripping.
 export class DomainError extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-    public readonly status: number = 400,
-  ) {
+  readonly code: string;
+  readonly status: number;
+
+  constructor(code: string, message: string, status: number = 400) {
     super(message);
     this.name = "DomainError";
+    this.code = code;
+    this.status = status;
   }
 }

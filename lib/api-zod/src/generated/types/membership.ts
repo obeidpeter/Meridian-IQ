@@ -14,5 +14,7 @@ export interface Membership {
   role: string;
   /** @nullable */
   clientPartyId?: string | null;
+  /** @nullable */
+  buyerPartyId?: string | null;
   createdAt: Date;
 }

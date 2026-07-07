@@ -12,9 +12,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { firmsTable, usersTable } from "./organizations";
-import { partiesTable } from "./parties";
-import { invoicesTable } from "./invoices";
+import { firmsTable, usersTable } from "./organizations.ts";
+import { partiesTable } from "./parties.ts";
+import { invoicesTable } from "./invoices.ts";
 
 // --- Billing & tiering (PL-01) ----------------------------------------------
 // The four commercial tiers. Every commercial parameter (price, included

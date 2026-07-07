@@ -8,7 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { partiesTable } from "./parties";
+import { partiesTable } from "./parties.ts";
 
 // Three-layer consent architecture (Plan 7.2, C6):
 //   layer 1 = compliance (required)

@@ -13,5 +13,7 @@ export interface Me {
   firmId?: string | null;
   /** @nullable */
   clientPartyId?: string | null;
+  /** @nullable */
+  buyerPartyId?: string | null;
   capabilities: string[];
 }

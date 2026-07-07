@@ -1,5 +1,5 @@
 import app from "./app";
-import { pool, applyMigrations } from "@workspace/db";
+import { pool, applyMigrations, requireDatabaseUrl } from "@workspace/db";
 import { logger } from "./lib/logger";
 import { startWorker, stopWorker } from "./modules/pipeline/pipeline";
 import { seedPlatform } from "./bootstrap/seed";
@@ -19,6 +19,9 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function main(): Promise<void> {
+  // Fail fast on a missing database before serving anything (the pool itself
+  // is lazy so that pure-function tests can import the schema without a DB).
+  requireDatabaseUrl();
   // Apply guardrail migrations (append-only triggers, retention, RLS policies)
   // before anything touches the data spine (CORE-06).
   const applied = await applyMigrations(pool);

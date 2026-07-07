@@ -9,7 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { partiesTable } from "./parties";
+import { partiesTable } from "./parties.ts";
 
 // The accounting firm is the tenant root (CON-01). White-label theming (CON-05).
 export const firmsTable = pgTable("firms", {
@@ -45,18 +45,22 @@ export const usersTable = pgTable("users", {
 });
 
 // Role-permission matrix (Appendix C). bank_user is dormant until R4.
+// buyer_user is the Buyer Rails role (BR-01..BR-05): a buyer-organization
+// principal scoped to a buyer Party rather than a tenant firm.
 export const roleEnum = pgEnum("role", [
   "firm_admin",
   "firm_staff",
   "client_user",
   "operator",
   "bank_user",
+  "buyer_user",
   "auditor",
 ]);
 
 // A user's role binding. firm-scoped roles carry a firmId; MeridianIQ staff
 // (operator, auditor) and bank users are cross-tenant and may have a null firmId.
-// client_user additionally scopes to a single client Party.
+// client_user additionally scopes to a single client Party; buyer_user scopes to
+// a single buyer Party (Buyer Rails) and carries no firm.
 export const membershipsTable = pgTable(
   "memberships",
   {
@@ -67,11 +71,18 @@ export const membershipsTable = pgTable(
     firmId: uuid("firm_id").references(() => firmsTable.id),
     role: roleEnum("role").notNull(),
     clientPartyId: uuid("client_party_id").references(() => partiesTable.id),
+    buyerPartyId: uuid("buyer_party_id").references(() => partiesTable.id),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [unique().on(t.userId, t.firmId, t.role, t.clientPartyId)],
+  // nullsNotDistinct so re-seeding the same binding (with null firm/party
+  // columns) conflicts instead of silently duplicating.
+  (t) => [
+    unique()
+      .on(t.userId, t.firmId, t.role, t.clientPartyId, t.buyerPartyId)
+      .nullsNotDistinct(),
+  ],
 );
 
 export const insertFirmSchema = createInsertSchema(firmsTable).omit({

@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { sql } from "drizzle-orm";
-import { db, type Database } from "./client";
+import { db, type Database } from "./client.ts";
 
 // Request/worker DB context (CON-01, SEC-02/03).
 //

@@ -15,5 +15,6 @@ export const MembershipInputRole = {
   client_user: 'client_user',
   operator: 'operator',
   bank_user: 'bank_user',
+  buyer_user: 'buyer_user',
   auditor: 'auditor',
 } as const;

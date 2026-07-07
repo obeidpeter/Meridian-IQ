@@ -9,9 +9,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { firmsTable } from "./organizations";
-import { partiesTable } from "./parties";
-import { invoicesTable } from "./invoices";
+import { firmsTable } from "./organizations.ts";
+import { partiesTable } from "./parties.ts";
+import { invoicesTable } from "./invoices.ts";
 
 // Per-client alert channel + alert-type preferences (SME-05). One row per client
 // business Party. Channel toggles drive WhatsApp/SMS/email fan-out with failover;

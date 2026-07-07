@@ -6,11 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface StampVerifyResult {
-  valid: boolean;
-  rail: string;
-  cached: boolean;
-  eligible: boolean;
-  /** @nullable */
-  invoiceStatus?: string | null;
+export interface CancelInvoiceInput {
+  /** @minLength 1 */
+  reason: string;
 }

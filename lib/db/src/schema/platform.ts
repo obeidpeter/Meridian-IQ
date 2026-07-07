@@ -11,7 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { firmsTable } from "./organizations";
+import { firmsTable } from "./organizations.ts";
 
 // Feature flags gate every release-tagged capability (PL-02). A dark feature is
 // unreachable. Per-firm overrides allow layer-three surfaces to activate per

@@ -30,6 +30,7 @@ router.get("/me", (req, res): void => {
       role: p.role,
       firmId: p.firmId,
       clientPartyId: p.clientPartyId,
+      buyerPartyId: p.buyerPartyId,
       capabilities: ROLE_CAPABILITIES[p.role] ?? [],
     }),
   );
@@ -117,6 +118,7 @@ router.post("/memberships", async (req, res): Promise<void> => {
       firmId: parsed.data.firmId ?? null,
       role: parsed.data.role,
       clientPartyId: parsed.data.clientPartyId ?? null,
+      buyerPartyId: parsed.data.buyerPartyId ?? null,
     })
     .returning();
   res.status(201).json(CreateMembershipResponse.parse(row));

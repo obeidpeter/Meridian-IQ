@@ -4,7 +4,9 @@ import {
   type Invoice,
   type InvoiceStatus,
 } from "@workspace/db";
-import { DomainError } from "../errors";
+// Explicit .ts extension: this module is imported by node --test suites, where
+// native type stripping requires fully-specified relative imports.
+import { DomainError } from "../errors.ts";
 
 // Invoice lifecycle state machine (Appendix B, CORE-02, CORE-09).
 // Drafts are mutable working state; every transition from `submitted` onward is

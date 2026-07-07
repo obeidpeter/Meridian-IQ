@@ -12,4 +12,5 @@ export interface ConfirmationInput {
   state: ConfirmationInputState;
   method?: string;
   noSetOff?: boolean;
+  note?: string;
 }
