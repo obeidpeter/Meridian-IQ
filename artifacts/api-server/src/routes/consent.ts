@@ -8,7 +8,7 @@ import {
   CheckConsentParams,
   CheckConsentResponse,
 } from "@workspace/api-zod";
-import { assertCan } from "../modules/auth/rbac";
+import { assertCan, assertPartyAccess } from "../modules/auth/rbac";
 import {
   consentHistory,
   recordConsent,
@@ -25,6 +25,7 @@ router.get("/parties/:id/consent", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  await assertPartyAccess(req.principal, params.data.id);
   const rows = await consentHistory(params.data.id);
   res.json(ListConsentResponse.parse(rows));
 });
@@ -36,6 +37,7 @@ router.post("/parties/:id/consent", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  await assertPartyAccess(req.principal, params.data.id);
   const parsed = RecordConsentBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -62,6 +64,7 @@ router.get(
       res.status(400).json({ error: params.error.message });
       return;
     }
+    await assertPartyAccess(req.principal, params.data.id);
     const permitted = await isPurposePermitted(
       params.data.id,
       params.data.purpose,

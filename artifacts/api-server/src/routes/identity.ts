@@ -13,7 +13,7 @@ import {
   CreateMembershipBody,
   CreateMembershipResponse,
 } from "@workspace/api-zod";
-import { ROLE_CAPABILITIES } from "../modules/auth/rbac";
+import { ROLE_CAPABILITIES, assertCan } from "../modules/auth/rbac";
 
 const router: IRouter = Router();
 
@@ -30,12 +30,14 @@ router.get("/me", (req, res): void => {
   );
 });
 
-router.get("/firms", async (_req, res): Promise<void> => {
+router.get("/firms", async (req, res): Promise<void> => {
+  assertCan(req.principal, "identity.read");
   const rows = await db.select().from(firmsTable).orderBy(firmsTable.createdAt);
   res.json(ListFirmsResponse.parse(rows));
 });
 
 router.post("/firms", async (req, res): Promise<void> => {
+  assertCan(req.principal, "identity.write");
   const parsed = CreateFirmBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -53,6 +55,7 @@ router.post("/firms", async (req, res): Promise<void> => {
 });
 
 router.get("/firms/:id", async (req, res): Promise<void> => {
+  assertCan(req.principal, "identity.read");
   const params = GetFirmParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -71,6 +74,7 @@ router.get("/firms/:id", async (req, res): Promise<void> => {
 });
 
 router.post("/users", async (req, res): Promise<void> => {
+  assertCan(req.principal, "identity.write");
   const parsed = CreateUserBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -88,6 +92,7 @@ router.post("/users", async (req, res): Promise<void> => {
 });
 
 router.post("/memberships", async (req, res): Promise<void> => {
+  assertCan(req.principal, "identity.write");
   const parsed = CreateMembershipBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });

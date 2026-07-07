@@ -1,4 +1,5 @@
-import type { Role } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import { db, engagementsTable, type Role } from "@workspace/db";
 import { DomainError } from "../errors";
 
 // Principal resolved from the request (see auth middleware). firmId is present
@@ -35,7 +36,10 @@ export type Capability =
   | "flags.read"
   | "flags.write"
   | "audit.read"
-  | "audit.export";
+  | "audit.export"
+  | "identity.read"
+  | "identity.write"
+  | "messaging.send";
 
 const ALL: Capability[] = [
   "invoice.read",
@@ -61,6 +65,9 @@ const ALL: Capability[] = [
   "flags.write",
   "audit.read",
   "audit.export",
+  "identity.read",
+  "identity.write",
+  "messaging.send",
 ];
 
 const READ_ONLY: Capability[] = ALL.filter(
@@ -85,6 +92,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "consent.read",
     "consent.write",
     "flags.read",
+    "identity.read",
+    "messaging.send",
   ],
   firm_staff: [
     "invoice.read",
@@ -97,6 +106,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "confirmation.read",
     "settlement.write",
     "console.portfolio.read",
+    "messaging.send",
   ],
   client_user: [
     "invoice.read",
@@ -120,6 +130,9 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "audit.read",
     "audit.export",
     "consent.read",
+    "identity.read",
+    "identity.write",
+    "messaging.send",
   ],
   bank_user: ["buyer.verify", "audit.read"],
   auditor: READ_ONLY,
@@ -169,5 +182,30 @@ export function assertSameTenant(
       "Cross-tenant access denied",
       403,
     );
+  }
+}
+
+// Party-scoped tenant guard. Parties are shared reference data; a firm-scoped
+// principal may only touch a party it has an engagement with. Cross-tenant
+// staff (operator, auditor) are unrestricted. Prevents cross-tenant IDOR on
+// party and consent resources (SEC-02/03, CON-01).
+export async function assertPartyAccess(
+  principal: Principal,
+  partyId: string,
+): Promise<void> {
+  const tenant = tenantFirmId(principal);
+  if (tenant === null) return;
+  const [engagement] = await db
+    .select({ id: engagementsTable.id })
+    .from(engagementsTable)
+    .where(
+      and(
+        eq(engagementsTable.firmId, tenant),
+        eq(engagementsTable.clientPartyId, partyId),
+      ),
+    )
+    .limit(1);
+  if (!engagement) {
+    throw new DomainError("CROSS_TENANT", "Party is not in your tenant", 403);
   }
 }

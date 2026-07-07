@@ -96,7 +96,9 @@ const builder = new XMLBuilder({
 });
 
 const parser = new XMLParser({
-  ignoreAttributes: true,
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  textNodeName: "#text",
   parseTagValue: false,
   trimValues: true,
   isArray: (name) => name === "cac:InvoiceLine",
@@ -122,7 +124,9 @@ export function serializeToUbl(inv: CanonicalInvoice): string {
       },
       "cac:InvoiceLine": inv.lines.map((l) => ({
         "cbc:ID": l.id,
-        "cbc:InvoicedQuantity": l.quantity,
+        // UBL carries the unit of measure as the unitCode attribute on the
+        // quantity element (UBL 2.1, CORE-01), not as a sibling element.
+        "cbc:InvoicedQuantity": { "#text": l.quantity, "@_unitCode": l.unitCode },
         "cbc:LineExtensionAmount": l.lineExtension,
         "cac:Item": { "cbc:Description": l.description },
         "cac:Price": { "cbc:PriceAmount": l.unitPrice },
@@ -132,7 +136,6 @@ export function serializeToUbl(inv: CanonicalInvoice): string {
             "cac:TaxCategory": { "cbc:Percent": l.vatRate },
           },
         },
-        "cac:_UnitCode": l.unitCode,
       })),
     },
   };
@@ -170,11 +173,12 @@ export function parseFromUbl(xml: string): CanonicalInvoice {
       const lineTax = l["cac:TaxTotal"] as Record<string, unknown>;
       const subtotal = lineTax["cac:TaxSubtotal"] as Record<string, unknown>;
       const category = subtotal["cac:TaxCategory"] as Record<string, unknown>;
+      const qty = l["cbc:InvoicedQuantity"] as Record<string, unknown>;
       return {
         id: String(l["cbc:ID"]),
         description: String(item["cbc:Description"]),
-        quantity: String(l["cbc:InvoicedQuantity"]),
-        unitCode: String(l["cac:_UnitCode"]),
+        quantity: String(qty["#text"]),
+        unitCode: String(qty["@_unitCode"]),
         unitPrice: String(price["cbc:PriceAmount"]),
         vatRate: String(category["cbc:Percent"]),
         lineExtension: String(l["cbc:LineExtensionAmount"]),

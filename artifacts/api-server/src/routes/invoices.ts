@@ -52,6 +52,7 @@ import { canTransition, assertTransition } from "../modules/invoice/lifecycle";
 import { serializeToUbl } from "../modules/invoice/canonical";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
+import { isFeatureEnabled } from "../modules/flags/flags";
 
 const router: IRouter = Router();
 
@@ -222,6 +223,11 @@ router.get("/invoices/:id/attempts", async (req, res): Promise<void> => {
 });
 
 router.get("/invoices/:id/confirmations", async (req, res): Promise<void> => {
+  // Buyer confirmations are a release-tagged (R1) feature: unreachable when dark.
+  if (!(await isFeatureEnabled("buyer_confirmations", req.principal.firmId))) {
+    res.sendStatus(404);
+    return;
+  }
   assertCan(req.principal, "confirmation.read");
   const params = ListConfirmationsParams.safeParse(req.params);
   if (!params.success) {
@@ -238,6 +244,10 @@ router.get("/invoices/:id/confirmations", async (req, res): Promise<void> => {
 });
 
 router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
+  if (!(await isFeatureEnabled("buyer_confirmations", req.principal.firmId))) {
+    res.sendStatus(404);
+    return;
+  }
   assertCan(req.principal, "confirmation.write");
   const params = CreateConfirmationParams.safeParse(req.params);
   if (!params.success) {

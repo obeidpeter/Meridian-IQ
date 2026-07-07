@@ -12,8 +12,13 @@ import {
   ValidateCacBody,
   ValidateCacResponse,
 } from "@workspace/api-zod";
-import { db, partiesTable } from "@workspace/db";
-import { assertCan } from "../modules/auth/rbac";
+import { eq, inArray } from "drizzle-orm";
+import { db, partiesTable, engagementsTable } from "@workspace/db";
+import {
+  assertCan,
+  assertPartyAccess,
+  tenantFirmId,
+} from "../modules/auth/rbac";
 import {
   createParty,
   getParty,
@@ -27,10 +32,29 @@ const router: IRouter = Router();
 
 router.get("/parties", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.read");
-  const rows = await db
-    .select()
-    .from(partiesTable)
-    .orderBy(partiesTable.createdAt);
+  const tenant = tenantFirmId(req.principal);
+  let rows;
+  if (tenant === null) {
+    // Cross-tenant staff (operator, auditor) see the whole spine.
+    rows = await db
+      .select()
+      .from(partiesTable)
+      .orderBy(partiesTable.createdAt);
+  } else {
+    // Firm-scoped principals only see parties they have an engagement with.
+    const engagements = await db
+      .select({ pid: engagementsTable.clientPartyId })
+      .from(engagementsTable)
+      .where(eq(engagementsTable.firmId, tenant));
+    const ids = engagements.map((e) => e.pid);
+    rows = ids.length
+      ? await db
+          .select()
+          .from(partiesTable)
+          .where(inArray(partiesTable.id, ids))
+          .orderBy(partiesTable.createdAt)
+      : [];
+  }
   res.json(ListPartiesResponse.parse(rows));
 });
 
@@ -96,6 +120,7 @@ router.get("/parties/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  await assertPartyAccess(req.principal, params.data.id);
   const party = await getParty(params.data.id);
   if (!party) {
     res.status(404).json({ error: "Party not found" });
