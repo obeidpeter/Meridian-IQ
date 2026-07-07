@@ -22,6 +22,8 @@ export const PURPOSE_LAYER: Record<string, number> = {
   compliance_submission: CONSENT_LAYERS.COMPLIANCE,
   vault_storage: CONSENT_LAYERS.COMPLIANCE,
   deadline_alerts: CONSENT_LAYERS.COMPLIANCE,
+  // Bank-statement reconciliation is layer-1 compliance scope (Plan 7.2).
+  reconciliation: CONSENT_LAYERS.COMPLIANCE,
   anonymized_benchmark: CONSENT_LAYERS.ANONYMIZED_AGGREGATE,
   aggregate_analytics: CONSENT_LAYERS.ANONYMIZED_AGGREGATE,
   credit_scoring: CONSENT_LAYERS.CREDIT_READINESS,

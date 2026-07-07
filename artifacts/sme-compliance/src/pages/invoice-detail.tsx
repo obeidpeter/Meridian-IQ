@@ -9,11 +9,16 @@ import {
   useValidateInvoice,
   useSubmitInvoice,
   useEscalateInvoice,
+  useListConfirmations,
+  useCreateConfirmation,
+  useListSettlements,
   getGetInvoiceQueryKey,
   getListSubmissionAttemptsQueryKey,
   getGetInvoiceStampQueryKey,
   getListEscalationsQueryKey,
   getGetErrorCatalogueEntryQueryKey,
+  getListConfirmationsQueryKey,
+  getListSettlementsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +35,8 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
+  MailCheck,
+  Banknote,
 } from "lucide-react";
 import {
   formatNaira,
@@ -38,6 +45,42 @@ import {
   badgeClasses,
   statusTone,
 } from "@/lib/format";
+
+function isNotFound(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    (error as { status?: unknown }).status === 404
+  );
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const CONFIRMATION_BADGES: Record<string, string> = {
+  requested: "bg-amber-100 text-amber-800 border-amber-200",
+  confirmed: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  queried: "bg-blue-100 text-blue-800 border-blue-200",
+  rejected: "bg-red-100 text-red-800 border-red-200",
+};
+
+const SETTLEMENT_SOURCE_LABELS: Record<string, string> = {
+  statement_match: "Statement match",
+  buyer_flag: "Buyer flag",
+  collection_account: "Collection account",
+  uploaded_evidence: "Uploaded evidence",
+};
 
 export function InvoiceDetail() {
   const [, params] = useRoute("/invoices/:id");
@@ -50,18 +93,35 @@ export function InvoiceDetail() {
   });
   const invoice = data?.invoice;
   const tone = invoice ? statusTone(invoice.status) : "draft";
+  // Settled/credited invoices were stamped first, so keep their stamp visible.
+  const stampedFamily =
+    tone === "stamped" || tone === "settled" || tone === "credited";
 
   const { data: attempts } = useListSubmissionAttempts(id, {
     query: { enabled: !!id, queryKey: getListSubmissionAttemptsQueryKey(id) },
   });
   const { data: stamp } = useGetInvoiceStamp(id, {
     query: {
-      enabled: !!id && tone === "stamped",
+      enabled: !!id && stampedFamily,
       queryKey: getGetInvoiceStampQueryKey(id),
     },
   });
   const { data: escalations } = useListEscalations(id, {
     query: { enabled: !!id, queryKey: getListEscalationsQueryKey(id) },
+  });
+  const { data: confirmations, error: confirmationsError } = useListConfirmations(id, {
+    query: {
+      enabled: !!id,
+      queryKey: getListConfirmationsQueryKey(id),
+      retry: false,
+    },
+  });
+  const { data: settlements } = useListSettlements(id, {
+    query: {
+      enabled: !!id,
+      queryKey: getListSettlementsQueryKey(id),
+      retry: false,
+    },
   });
 
   const latestFailed = (attempts || [])
@@ -78,6 +138,7 @@ export function InvoiceDetail() {
   const validate = useValidateInvoice();
   const submit = useSubmitInvoice();
   const escalate = useEscalateInvoice();
+  const createConfirmation = useCreateConfirmation();
 
   const [reason, setReason] = useState("");
   const [showEscalate, setShowEscalate] = useState(false);
@@ -135,6 +196,27 @@ export function InvoiceDetail() {
     }
   };
 
+  const handleRequestConfirmation = async () => {
+    if (!invoice) return;
+    try {
+      await createConfirmation.mutateAsync({
+        id,
+        data: { buyerPartyId: invoice.buyerPartyId, state: "requested" },
+      });
+      await queryClient.invalidateQueries();
+      toast({
+        title: "Confirmation requested",
+        description: "Your buyer will be asked to confirm receipt of this invoice.",
+      });
+    } catch (e) {
+      toast({
+        title: "Could not request confirmation",
+        description: e instanceof Error ? e.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading || !invoice) {
     return (
       <div className="space-y-4">
@@ -145,6 +227,17 @@ export function InvoiceDetail() {
   }
 
   const canSubmit = invoice.status === "draft" || invoice.status === "validated";
+  const confirmationsDark = isNotFound(confirmationsError);
+  const confirmationTimeline = [...(confirmations || [])].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt),
+  );
+  const latestConfirmation = confirmationTimeline[confirmationTimeline.length - 1];
+  const canRequestConfirmation =
+    !confirmationsDark &&
+    invoice.status === "stamped" &&
+    (!latestConfirmation ||
+      (latestConfirmation.state !== "requested" &&
+        latestConfirmation.state !== "confirmed"));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -179,7 +272,7 @@ export function InvoiceDetail() {
         )}
       </div>
 
-      {tone === "stamped" && stamp && (
+      {stampedFamily && stamp && (
         <Card className="border-emerald-200 bg-emerald-50/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base text-emerald-800">
@@ -281,6 +374,131 @@ export function InvoiceDetail() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <MailCheck className="w-4 h-4" /> Buyer confirmation
+          </CardTitle>
+          {canRequestConfirmation && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleRequestConfirmation}
+              disabled={createConfirmation.isPending}
+            >
+              <Send className="w-4 h-4 mr-2" />
+              {createConfirmation.isPending ? "Requesting…" : "Request confirmation"}
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {confirmationsDark ? (
+            <p className="text-sm text-muted-foreground">
+              Buyer confirmations are not yet enabled for this firm. Ask your operator to
+              enable it.
+            </p>
+          ) : confirmationTimeline.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No confirmation activity yet.
+              {invoice.status === "stamped"
+                ? " Request a confirmation so your buyer acknowledges this invoice."
+                : " Confirmations open up once the invoice is stamped."}
+            </p>
+          ) : (
+            <div>
+              {confirmationTimeline.map((c, i) => (
+                <div key={c.id} className="relative pl-6 pb-4 last:pb-0">
+                  {i < confirmationTimeline.length - 1 && (
+                    <span className="absolute left-[5px] top-4 bottom-0 w-px bg-border" />
+                  )}
+                  <span
+                    className={`absolute left-0 top-1.5 w-3 h-3 rounded-full border-2 border-background ${
+                      c.state === "confirmed"
+                        ? "bg-emerald-500"
+                        : c.state === "rejected"
+                          ? "bg-red-500"
+                          : c.state === "queried"
+                            ? "bg-blue-500"
+                            : "bg-amber-500"
+                    }`}
+                  />
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full border capitalize ${
+                        CONFIRMATION_BADGES[c.state] ||
+                        "bg-slate-100 text-slate-600 border-slate-200"
+                      }`}
+                    >
+                      {c.state}
+                    </span>
+                    {c.method && (
+                      <span className="text-xs text-muted-foreground capitalize">
+                        via {c.method}
+                      </span>
+                    )}
+                    {c.noSetOff && (
+                      <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200">
+                        No set-off
+                      </span>
+                    )}
+                  </div>
+                  {c.note && (
+                    <p className="text-sm text-muted-foreground mt-1">{c.note}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatDateTime(c.createdAt)}
+                    {c.confirmingUserId && (
+                      <>
+                        {" "}
+                        · by <span className="font-mono">{c.confirmingUserId}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {settlements && settlements.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Banknote className="w-4 h-4" /> Settlement events
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {settlements.map((s) => (
+              <div key={s.id} className="text-sm border rounded-md px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200">
+                      {SETTLEMENT_SOURCE_LABELS[s.source] || s.source}
+                    </span>
+                    {s.paymentStatus && (
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full border capitalize ${
+                          s.paymentStatus === "paid"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                            : "bg-amber-100 text-amber-800 border-amber-200"
+                        }`}
+                      >
+                        {s.paymentStatus}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-semibold">{formatNaira(s.amount)}</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formatDateTime(s.occurredAt)}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {attempts && attempts.length > 0 && (
         <Card>

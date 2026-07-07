@@ -10,4 +10,7 @@ export interface StampVerifyResult {
   valid: boolean;
   rail: string;
   cached: boolean;
+  eligible: boolean;
+  /** @nullable */
+  invoiceStatus?: string | null;
 }

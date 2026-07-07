@@ -6,11 +6,13 @@ import {
   invoicesTable,
   submissionAttemptsTable,
   stampRecordsTable,
+  stampVerificationsTable,
+  matchProposalsTable,
   type OutboxEvent,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { buildCanonical } from "../invoice/service";
-import { recordTransition } from "../invoice/lifecycle";
+import { canTransition, recordTransition } from "../invoice/lifecycle";
 import { submitWithFailover } from "../rails/adapter";
 import { isRetriable } from "../errors";
 
@@ -103,6 +105,15 @@ async function handleInvoiceSubmit(
       entityId: invoiceId,
       after: { irn: result.irn, rail: result.rail },
     });
+    // CORE-09: a stamped credit note / correction credits its original in the
+    // same transaction, and downstream projections (reconciliation proposals,
+    // stamp-verification cache, exposure) react via the lifecycle-changed event.
+    if (
+      (invoice.kind === "credit_note" || invoice.kind === "correction") &&
+      invoice.relatedInvoiceId
+    ) {
+      await creditOriginal(invoice.relatedInvoiceId, invoiceId);
+    }
     return { kind: "done" };
   }
 
@@ -150,12 +161,136 @@ async function handleInvoiceSubmit(
   return { kind: "dead", error: result.errorCode ?? "UNKNOWN" };
 }
 
+// CORE-09: transition a credited original when its credit note / correction is
+// stamped. Runs inside the worker's bypass transaction so the credit-note stamp
+// and the original's transition commit atomically. Idempotent: an original that
+// already left the creditable set is recorded, never re-credited.
+async function creditOriginal(
+  originalId: string,
+  adjustmentId: string,
+): Promise<void> {
+  const [original] = await getDb()
+    .select()
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, originalId))
+    .limit(1);
+  if (!original) return;
+  if (!canTransition(original.status, "credited")) {
+    // Already terminal (e.g. double-processing) — leave an audit trace only.
+    await appendAudit({
+      firmId: original.firmId,
+      action: "invoice.credit_skipped",
+      entityType: "invoice",
+      entityId: originalId,
+      after: { adjustmentId, status: original.status },
+    });
+    return;
+  }
+  // Compare-and-set: a concurrent cancel between the read and this write must
+  // not be overwritten (CORE-09: terminal states never resurrect).
+  const [moved] = await getDb()
+    .update(invoicesTable)
+    .set({ status: "credited" })
+    .where(
+      and(
+        eq(invoicesTable.id, originalId),
+        eq(invoicesTable.status, original.status),
+      ),
+    )
+    .returning({ id: invoicesTable.id });
+  if (!moved) {
+    await appendAudit({
+      firmId: original.firmId,
+      action: "invoice.credit_skipped",
+      entityType: "invoice",
+      entityId: originalId,
+      after: { adjustmentId, reason: "concurrent transition" },
+    });
+    return;
+  }
+  await recordTransition({
+    invoiceId: originalId,
+    firmId: original.firmId,
+    fromStatus: original.status,
+    toStatus: "credited",
+    actorRole: "system",
+    reason: `credit_note:${adjustmentId}`,
+  });
+  await appendAudit({
+    firmId: original.firmId,
+    action: "invoice.credited",
+    entityType: "invoice",
+    entityId: originalId,
+    after: { adjustmentId },
+  });
+  await getDb().insert(outboxTable).values({
+    aggregateType: "invoice",
+    aggregateId: originalId,
+    type: "invoice.lifecycle_changed",
+    payload: { invoiceId: originalId, toStatus: "credited" },
+  });
+}
+
+// CORE-09 propagation: when an invoice leaves the eligible set (cancelled or
+// credited), downstream projections must react — open reconciliation proposals
+// are superseded so an accepted match can never settle a dead invoice, and the
+// stamp-verification freshness cache is staled so `verify-stamp` re-reads the
+// lifecycle immediately rather than serving a cached "eligible".
+async function handleLifecycleChanged(
+  event: OutboxEvent,
+): Promise<HandlerOutcome> {
+  const invoiceId = String(
+    (event.payload as { invoiceId?: string }).invoiceId ?? "",
+  );
+  if (!invoiceId) return { kind: "dead", error: "Missing invoiceId" };
+
+  await getDb()
+    .update(matchProposalsTable)
+    .set({ status: "superseded" })
+    .where(
+      and(
+        eq(matchProposalsTable.invoiceId, invoiceId),
+        eq(matchProposalsTable.status, "proposed"),
+      ),
+    );
+
+  const [stamp] = await getDb()
+    .select({ irn: stampRecordsTable.irn, csid: stampRecordsTable.csid })
+    .from(stampRecordsTable)
+    .where(eq(stampRecordsTable.invoiceId, invoiceId))
+    .limit(1);
+  if (stamp) {
+    await getDb()
+      .update(stampVerificationsTable)
+      .set({ freshUntil: new Date() })
+      .where(
+        and(
+          eq(stampVerificationsTable.irn, stamp.irn),
+          eq(stampVerificationsTable.csid, stamp.csid),
+        ),
+      );
+  }
+  return { kind: "done" };
+}
+
 const HANDLERS: Record<
   string,
   (e: OutboxEvent) => Promise<HandlerOutcome>
 > = {
   "invoice.submit": handleInvoiceSubmit,
+  "invoice.lifecycle_changed": handleLifecycleChanged,
 };
+
+// Later modules (reconciliation, B2C, connectors) contribute their own outbox
+// handlers without touching the worker core.
+export function registerHandler(
+  type: string,
+  handler: (e: OutboxEvent) => Promise<HandlerOutcome>,
+): void {
+  HANDLERS[type] = handler;
+}
+
+export type { HandlerOutcome };
 
 // Claim one pending event atomically (SKIP LOCKED so multiple workers are safe).
 async function claimnext(): Promise<OutboxEvent | null> {
@@ -362,14 +497,28 @@ export async function listDeadLetters(): Promise<OutboxEvent[]> {
 
 let timer: NodeJS.Timeout | null = null;
 let reconcileTimer: NodeJS.Timeout | null = null;
+let sweepTimer: NodeJS.Timeout | null = null;
 
 // Reconciliation runs on a slower cadence than the drain loop.
 const RECONCILE_INTERVAL_MS = 30_000;
+// R2 compliance sweeps: B2C clocks are minute-sensitive (SME-08 pre-breach
+// alerts must land >= 4h before the deadline), so the sweep runs every minute;
+// buyer exposure snapshots refresh inside the same pass but self-limit to a
+// 24-hour window (BR-01), so the frequent cadence costs nothing.
+const SWEEP_INTERVAL_MS = 60_000;
+
+// Registered by R2 modules at import time (b2c, buyer) so the worker core does
+// not import feature modules.
+const SWEEPS: (() => Promise<unknown>)[] = [];
+export function registerSweep(sweep: () => Promise<unknown>): void {
+  SWEEPS.push(sweep);
+}
 
 // In-process polling worker (modular monolith). Guarded against double-start.
 // A fast loop drains the outbox; a slower loop runs the scheduled
 // reconciliation sweeps (stuck-submission re-enqueue + duplicate-stamp
-// collapse) so INT-09 recovery does not depend on a manual operator trigger.
+// collapse) so INT-09 recovery does not depend on a manual operator trigger;
+// a third loop runs the registered R2 compliance sweeps.
 export function startWorker(intervalMs = 1_500): void {
   if (timer) return;
   timer = setInterval(() => {
@@ -383,6 +532,13 @@ export function startWorker(intervalMs = 1_500): void {
     void reconcileDuplicateStamps().catch(() => {});
   }, RECONCILE_INTERVAL_MS);
   reconcileTimer.unref?.();
+
+  sweepTimer = setInterval(() => {
+    for (const sweep of SWEEPS) {
+      void sweep().catch(() => {});
+    }
+  }, SWEEP_INTERVAL_MS);
+  sweepTimer.unref?.();
 }
 
 export function stopWorker(): void {
@@ -393,5 +549,9 @@ export function stopWorker(): void {
   if (reconcileTimer) {
     clearInterval(reconcileTimer);
     reconcileTimer = null;
+  }
+  if (sweepTimer) {
+    clearInterval(sweepTimer);
+    sweepTimer = null;
   }
 }

@@ -1,10 +1,14 @@
+import { and, eq } from "drizzle-orm";
 import {
   getDb,
+  invoicesTable,
   invoiceLifecycleEventsTable,
   type Invoice,
   type InvoiceStatus,
 } from "@workspace/db";
-import { DomainError } from "../errors";
+// Explicit .ts extension: this module is imported by node --test suites, where
+// native type stripping requires fully-specified relative imports.
+import { DomainError } from "../errors.ts";
 
 // Invoice lifecycle state machine (Appendix B, CORE-02, CORE-09).
 // Drafts are mutable working state; every transition from `submitted` onward is
@@ -71,6 +75,34 @@ export function isTerminal(status: InvoiceStatus): boolean {
 // cancelled or credited (CORE-09).
 export function isPresentableAsEligible(status: InvoiceStatus): boolean {
   return !isTerminal(status);
+}
+
+// Guarded compare-and-set transition. The naive pattern — SELECT status, check
+// assertTransition, then UPDATE by id — is a TOCTOU under READ COMMITTED: a
+// concurrent cancel/credit can commit between the read and the write, and the
+// unconditional UPDATE would resurrect a terminal invoice (e.g. overwrite
+// `cancelled` with `settled`). This helper makes the expected from-status part
+// of the UPDATE's WHERE clause; zero rows updated means the invoice moved under
+// us and the transition is rejected with the same 409 a stale read would earn.
+export async function applyTransition(
+  invoiceId: string,
+  from: InvoiceStatus,
+  to: InvoiceStatus,
+): Promise<Invoice> {
+  assertTransition(from, to);
+  const [row] = await getDb()
+    .update(invoicesTable)
+    .set({ status: to })
+    .where(and(eq(invoicesTable.id, invoiceId), eq(invoicesTable.status, from)))
+    .returning();
+  if (!row) {
+    throw new DomainError(
+      "INVALID_TRANSITION",
+      `Invoice ${invoiceId} is no longer ${from}; cannot move to ${to}`,
+      409,
+    );
+  }
+  return row;
 }
 
 export interface TransitionRecord {

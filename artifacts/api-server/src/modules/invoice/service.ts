@@ -3,6 +3,7 @@ import {
   getDb,
   invoicesTable,
   invoiceLinesTable,
+  invoiceLifecycleEventsTable,
   partiesTable,
   outboxTable,
   type Invoice,
@@ -57,12 +58,72 @@ export interface CreateInvoiceInput {
   lines: LineInput[];
 }
 
+// Statuses an original must have reached before a credit note or correction can
+// be raised against it: adjustments target platform-accepted (stamped or later,
+// non-terminal) invoices (CORE-09).
+const ADJUSTABLE_STATUSES = ["stamped", "confirmed", "settled"];
+
 export async function createDraft(
   input: CreateInvoiceInput,
   actorId?: string,
 ): Promise<{ invoice: Invoice; lines: InvoiceLine[] }> {
   if (input.lines.length === 0) {
     throw new DomainError("NO_LINES", "An invoice needs at least one line", 400);
+  }
+  // Corrections, cancellations and credit notes are first-class lifecycle
+  // events (CORE-09): an adjustment must name a real, same-tenant, stamped
+  // original; a plain invoice must not carry a relatedInvoiceId.
+  const kind = input.kind ?? "invoice";
+  if (kind === "credit_note" || kind === "correction") {
+    if (!input.relatedInvoiceId) {
+      throw new DomainError(
+        "RELATED_INVOICE_REQUIRED",
+        `A ${kind} must reference the stamped invoice it adjusts`,
+        400,
+      );
+    }
+    const [original] = await getDb()
+      .select()
+      .from(invoicesTable)
+      .where(eq(invoicesTable.id, input.relatedInvoiceId))
+      .limit(1);
+    if (!original || original.firmId !== input.firmId) {
+      throw new DomainError(
+        "RELATED_INVOICE_NOT_FOUND",
+        "Related invoice does not exist in this tenant",
+        404,
+      );
+    }
+    if (!ADJUSTABLE_STATUSES.includes(original.status)) {
+      throw new DomainError(
+        "RELATED_INVOICE_NOT_ADJUSTABLE",
+        `Related invoice is ${original.status}; only a stamped, confirmed or settled invoice can be adjusted`,
+        409,
+      );
+    }
+    // One live adjustment per original: a second credit note would stamp but
+    // silently fail to credit (the original is already credited), leaving an
+    // orphan adjustment. Cancelled or failed adjustments free the slot.
+    const adjustments = await getDb()
+      .select({ id: invoicesTable.id, status: invoicesTable.status })
+      .from(invoicesTable)
+      .where(eq(invoicesTable.relatedInvoiceId, input.relatedInvoiceId));
+    const live = adjustments.find(
+      (a) => a.status !== "cancelled" && a.status !== "failed",
+    );
+    if (live) {
+      throw new DomainError(
+        "ADJUSTMENT_EXISTS",
+        `Invoice already has an active adjustment (${live.id}, ${live.status})`,
+        409,
+      );
+    }
+  } else if (input.relatedInvoiceId) {
+    throw new DomainError(
+      "UNEXPECTED_RELATED_INVOICE",
+      "Only credit notes and corrections may reference a related invoice",
+      400,
+    );
   }
   let subtotal = 0;
   let vatTotal = 0;
@@ -124,6 +185,104 @@ export async function createDraft(
     after: { invoiceNumber: invoice.invoiceNumber, status: invoice.status },
   });
   return { invoice, lines };
+}
+
+export interface BulkDraftRow {
+  rowNumber: number;
+  supplierPartyId: string;
+  buyerPartyId: string;
+  invoiceNumber: string;
+  currency?: string;
+  issueDate: string;
+  dueDate?: string | null;
+  line: LineInput;
+}
+
+// Bulk draft creation for large imports (NFR-03: a 5,000-row import must fit
+// inside the request-transaction budget). Instead of per-row createDraft calls
+// (~6 statements each), rows land in chunked multi-row inserts — invoices,
+// lines and lifecycle events — with ONE audit entry for the whole batch. Every
+// invoice still gets its creation transition row (CORE-02 lineage).
+const BULK_CHUNK = 500;
+
+export async function bulkCreateDrafts(
+  firmId: string,
+  rows: BulkDraftRow[],
+  actorId?: string,
+): Promise<{ rowNumber: number; invoiceId: string; invoiceNumber: string }[]> {
+  const out: { rowNumber: number; invoiceId: string; invoiceNumber: string }[] =
+    [];
+  for (let i = 0; i < rows.length; i += BULK_CHUNK) {
+    const chunk = rows.slice(i, i + BULK_CHUNK);
+    const computed = chunk.map((r) => {
+      const fin = computeLineFinancials(r.line);
+      const subtotal = Number(fin.lineExtension);
+      const vatTotal = Number(fin.vatAmount);
+      return { r, fin, subtotal, vatTotal };
+    });
+    const inserted = await getDb()
+      .insert(invoicesTable)
+      .values(
+        computed.map(({ r, subtotal, vatTotal }) => ({
+          firmId,
+          supplierPartyId: r.supplierPartyId,
+          buyerPartyId: r.buyerPartyId,
+          invoiceNumber: r.invoiceNumber,
+          currency: r.currency ?? "NGN",
+          issueDate: r.issueDate,
+          dueDate: r.dueDate ?? null,
+          subtotal: money(subtotal),
+          vatTotal: money(vatTotal),
+          grandTotal: money(subtotal + vatTotal),
+        })),
+      )
+      .returning({
+        id: invoicesTable.id,
+        invoiceNumber: invoicesTable.invoiceNumber,
+        status: invoicesTable.status,
+      });
+    await getDb()
+      .insert(invoiceLinesTable)
+      .values(
+        inserted.map((inv, idx) => ({
+          invoiceId: inv.id,
+          lineNo: 1,
+          description: computed[idx].r.line.description,
+          quantity: computed[idx].r.line.quantity,
+          unitPrice: computed[idx].r.line.unitPrice,
+          vatRate: computed[idx].r.line.vatRate,
+          lineExtension: computed[idx].fin.lineExtension,
+          vatAmount: computed[idx].fin.vatAmount,
+        })),
+      );
+    await getDb()
+      .insert(invoiceLifecycleEventsTable)
+      .values(
+        inserted.map((inv) => ({
+          invoiceId: inv.id,
+          firmId,
+          fromStatus: null,
+          toStatus: inv.status,
+          actorId: actorId ?? null,
+        })),
+      );
+    inserted.forEach((inv, idx) => {
+      out.push({
+        rowNumber: computed[idx].r.rowNumber,
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+      });
+    });
+  }
+  await appendAudit({
+    actorId,
+    firmId,
+    action: "invoice.bulk_import",
+    entityType: "firm",
+    entityId: firmId,
+    after: { count: out.length },
+  });
+  return out;
 }
 
 export async function getInvoiceWithLines(

@@ -22,6 +22,13 @@ tags:
   - name: audit
   - name: console
   - name: billing
+  - name: statements
+  - name: reconciliation
+  - name: buyer
+  - name: b2c
+  - name: whitelabel
+  - name: certification
+  - name: connectors
 paths:
   /healthz:
     get:
@@ -498,6 +505,12 @@ paths:
       tags: [lifecycle]
       parameters:
         - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelInvoiceInput"
       responses:
         "200":
           description: Cancelled
@@ -1338,6 +1351,512 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  # ---- R2: bank-statement ingestion (INT-05) ----
+  /statements:
+    post:
+      operationId: importBankStatement
+      tags: [statements]
+      summary: Ingest a bank statement (validate-then-commit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StatementImportInput"
+      responses:
+        "200":
+          description: Parse report (and statement id when committed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementImportResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          description: Unrecognised or empty statement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: listBankStatements
+      tags: [statements]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Statements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BankStatement"
+  /statements/{id}:
+    get:
+      operationId: getBankStatement
+      tags: [statements]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Statement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankStatement"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /statements/{id}/lines:
+    get:
+      operationId: listBankStatementLines
+      tags: [statements]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Statement lines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BankStatementLine"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /statements/{id}/proposals:
+    get:
+      operationId: listBankStatementProposals
+      tags: [statements]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Match proposals for the statement
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MatchProposalView"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---- R2: reconciliation decisions (SME-07) ----
+  /reconciliation/proposals/{id}/accept:
+    post:
+      operationId: acceptMatchProposal
+      tags: [reconciliation]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Accepted; settlement recorded and invoice settled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchDecisionResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /reconciliation/proposals/{id}/reject:
+    post:
+      operationId: rejectMatchProposal
+      tags: [reconciliation]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchDecisionResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # ---- R2: Buyer Rails v1 (BR-01, BR-02, BR-04, BR-05) ----
+  /buyer/invoices:
+    get:
+      operationId: listBuyerInvoices
+      tags: [buyer]
+      summary: Invoices addressed to the caller's buyer organization
+      parameters:
+        - name: confirmationState
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [none, requested, confirmed, queried, rejected]
+      responses:
+        "200":
+          description: Buyer-side invoice list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BuyerInvoice"
+  /invoices/{id}/payment-flags:
+    post:
+      operationId: flagPayment
+      tags: [buyer]
+      summary: Buyer marks an invoice payment as scheduled or paid (BR-04)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentFlagInput"
+      responses:
+        "201":
+          description: Settlement event recorded with source buyer_flag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettlementEvent"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /buyer/suppliers:
+    get:
+      operationId: listBuyerSuppliers
+      tags: [buyer]
+      summary: Supplier verification view (BR-01)
+      responses:
+        "200":
+          description: Per-supplier stamp and confirmation status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BuyerSupplier"
+  /buyer/exposure:
+    get:
+      operationId: getBuyerExposure
+      tags: [buyer]
+      summary: Input-VAT exposure, refreshed at least daily (BR-01)
+      responses:
+        "200":
+          description: Latest exposure snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuyerExposure"
+  /buyer/scoreboard:
+    get:
+      operationId: getBuyerScoreboard
+      tags: [buyer]
+      summary: Supplier compliance scoreboard (BR-05)
+      responses:
+        "200":
+          description: Suppliers ranked by compliance and confirmation status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScoreboardRow"
+
+  # ---- R2: B2C reporting (SME-08) ----
+  /b2c/reports:
+    get:
+      operationId: listB2cReports
+      tags: [b2c]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, reported, breached]
+      responses:
+        "200":
+          description: B2C report batches with compliance clocks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/B2cReportBatch"
+  /b2c/reports/{id}:
+    get:
+      operationId: getB2cReport
+      tags: [b2c]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Batch detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/B2cReportBatch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /b2c/reports/{id}/items:
+    get:
+      operationId: listB2cReportItems
+      tags: [b2c]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Batch items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/B2cReportItem"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /b2c/reports/{id}/submit:
+    post:
+      operationId: submitB2cReport
+      tags: [b2c]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Batch reported inside the window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/B2cReportBatch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # ---- R2: white-label (CON-05) ----
+  /public/theme:
+    get:
+      operationId: getPublicTheme
+      tags: [whitelabel]
+      summary: Resolve firm branding by subdomain (no auth; public shell needs it before login)
+      parameters:
+        - name: subdomain
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Firm branding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirmTheme"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /firms/{id}/theme:
+    put:
+      operationId: updateFirmTheme
+      tags: [whitelabel]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FirmThemeInput"
+      responses:
+        "200":
+          description: Updated firm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Firm"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clients/import:
+    post:
+      operationId: importClients
+      tags: [whitelabel]
+      summary: Bulk client import from a practice-management export (CON-05)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientImportInput"
+      responses:
+        "200":
+          description: Per-row import results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientImportResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ---- R2: certification portal (CON-05) ----
+  /certification/courses:
+    get:
+      operationId: listCpdCourses
+      tags: [certification]
+      responses:
+        "200":
+          description: Active CPD courses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CpdCourse"
+  /certification/courses/{id}/enroll:
+    post:
+      operationId: enrollCpdCourse
+      tags: [certification]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "201":
+          description: Enrollment created (idempotent per user/course)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CpdEnrollment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /certification/courses/{id}/complete:
+    post:
+      operationId: completeCpdCourse
+      tags: [certification]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Completion recorded; certificate serial minted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CpdEnrollment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /certification/enrollments:
+    get:
+      operationId: listCpdEnrollments
+      tags: [certification]
+      responses:
+        "200":
+          description: The firm's enrollments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CpdEnrollmentView"
+
+  # ---- R2: ERP connectors (PL-03, INT-06) ----
+  /connectors:
+    get:
+      operationId: listConnectors
+      tags: [connectors]
+      summary: Registered connector implementations
+      responses:
+        "200":
+          description: Connector registry
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConnectorInfo"
+  /connections:
+    get:
+      operationId: listErpConnections
+      tags: [connectors]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ERP connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ErpConnection"
+    post:
+      operationId: createErpConnection
+      tags: [connectors]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErpConnectionInput"
+      responses:
+        "201":
+          description: Connection created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpConnection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /connections/{id}/sync:
+    post:
+      operationId: syncErpConnection
+      tags: [connectors]
+      summary: Enqueue an incremental pull for the connection
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "202":
+          description: Sync enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpSyncRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /connections/{id}/runs:
+    get:
+      operationId: listErpSyncRuns
+      tags: [connectors]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Sync run history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ErpSyncRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+
 components:
   parameters:
     IdParam:
@@ -1417,6 +1936,8 @@ components:
           type: ["string", "null"]
         clientPartyId:
           type: ["string", "null"]
+        buyerPartyId:
+          type: ["string", "null"]
         capabilities:
           type: array
           items:
@@ -1436,6 +1957,9 @@ components:
           type: ["string", "null"]
         partyId:
           type: ["string", "null"]
+        theme:
+          type: ["object", "null"]
+          additionalProperties: true
         createdAt:
           type: string
           format: date-time
@@ -1495,6 +2019,8 @@ components:
           type: string
         clientPartyId:
           type: ["string", "null"]
+        buyerPartyId:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -1509,8 +2035,10 @@ components:
         role:
           type: string
           enum:
-            [firm_admin, firm_staff, client_user, operator, bank_user, auditor]
+            [firm_admin, firm_staff, client_user, operator, bank_user, buyer_user, auditor]
         clientPartyId:
+          type: string
+        buyerPartyId:
           type: string
 
     Party:
@@ -1989,6 +2517,8 @@ components:
           type: boolean
         confirmingUserId:
           type: ["string", "null"]
+        note:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -2005,6 +2535,8 @@ components:
           type: string
         noSetOff:
           type: boolean
+        note:
+          type: string
 
     SettlementEvent:
       type: object
@@ -2020,6 +2552,13 @@ components:
         amount:
           type: string
         confidence:
+          type: ["string", "null"]
+        paymentStatus:
+          type: ["string", "null"]
+          enum: [scheduled, paid, null]
+        statementLineId:
+          type: ["string", "null"]
+        actorId:
           type: ["string", "null"]
         occurredAt:
           type: string
@@ -2052,7 +2591,7 @@ components:
           type: string
     StampVerifyResult:
       type: object
-      required: [valid, rail, cached]
+      required: [valid, rail, cached, eligible]
       properties:
         valid:
           type: boolean
@@ -2060,6 +2599,19 @@ components:
           type: string
         cached:
           type: boolean
+        # CORE-09: a cancelled or credited stamped invoice keeps a valid stamp
+        # but must never be presented as eligible.
+        eligible:
+          type: boolean
+        invoiceStatus:
+          type: ["string", "null"]
+    CancelInvoiceInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
 
     Message:
       type: object
@@ -3355,3 +3907,616 @@ components:
           type: integer
         avgHandleSeconds:
           type: ["integer", "null"]
+
+    # ---- R2 schemas: statements & reconciliation (INT-05, SME-07) ----
+    BankStatement:
+      type: object
+      required: [id, firmId, clientPartyId, formatKey, status, lineCount, parsedCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        clientPartyId:
+          type: string
+        formatKey:
+          type: string
+        filename:
+          type: ["string", "null"]
+        accountRef:
+          type: ["string", "null"]
+        uploadedByUserId:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [validated, committed, reconciled]
+        lineCount:
+          type: integer
+        parsedCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    BankStatementLine:
+      type: object
+      required: [id, statementId, lineNo, parseStatus, rawLine, createdAt]
+      properties:
+        id:
+          type: string
+        statementId:
+          type: string
+        lineNo:
+          type: integer
+        valueDate:
+          type: ["string", "null"]
+        amount:
+          type: ["string", "null"]
+        direction:
+          type: ["string", "null"]
+          enum: [credit, debit, null]
+        narration:
+          type: ["string", "null"]
+        counterpartyRef:
+          type: ["string", "null"]
+        parseStatus:
+          type: string
+          enum: [parsed, invalid]
+        parseError:
+          type: ["string", "null"]
+        rawLine:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    StatementImportInput:
+      type: object
+      required: [clientPartyId, csv, commit]
+      properties:
+        clientPartyId:
+          type: string
+        csv:
+          type: string
+          minLength: 1
+        formatKey:
+          type: string
+        filename:
+          type: string
+        commit:
+          type: boolean
+    StatementRowResult:
+      type: object
+      required: [lineNo, parseStatus]
+      properties:
+        lineNo:
+          type: integer
+        parseStatus:
+          type: string
+          enum: [parsed, invalid]
+        valueDate:
+          type: ["string", "null"]
+        amount:
+          type: ["string", "null"]
+        direction:
+          type: ["string", "null"]
+          enum: [credit, debit, null]
+        narration:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+    StatementImportResult:
+      type: object
+      required: [statementId, committed, formatKey, lineCount, parsedCount, parseRate, rows]
+      properties:
+        statementId:
+          type: ["string", "null"]
+        committed:
+          type: boolean
+        formatKey:
+          type: ["string", "null"]
+        accountRef:
+          type: ["string", "null"]
+        lineCount:
+          type: integer
+        parsedCount:
+          type: integer
+        parseRate:
+          type: number
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatementRowResult"
+    MatchProposalView:
+      type: object
+      required: [id, statementId, statementLineId, invoiceId, invoiceNumber, invoiceStatus, invoiceTotal, buyerName, confidence, status, createdAt]
+      properties:
+        id:
+          type: string
+        statementId:
+          type: string
+        statementLineId:
+          type: string
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        invoiceStatus:
+          type: string
+        invoiceTotal:
+          type: string
+        buyerName:
+          type: string
+        lineNo:
+          type: integer
+        lineAmount:
+          type: ["string", "null"]
+        lineDate:
+          type: ["string", "null"]
+        narration:
+          type: ["string", "null"]
+        confidence:
+          type: string
+        features:
+          type: ["object", "null"]
+          additionalProperties: true
+        status:
+          type: string
+          enum: [proposed, accepted, rejected, superseded]
+        createdAt:
+          type: string
+          format: date-time
+    MatchDecisionResult:
+      type: object
+      required: [proposalId, status, invoiceId, invoiceStatus, settlementEventId]
+      properties:
+        proposalId:
+          type: string
+        status:
+          type: string
+          enum: [accepted, rejected]
+        invoiceId:
+          type: string
+        invoiceStatus:
+          type: string
+        settlementEventId:
+          type: ["string", "null"]
+
+    # ---- R2 schemas: Buyer Rails (BR-01, BR-02, BR-04, BR-05) ----
+    BuyerInvoice:
+      type: object
+      required: [id, invoiceNumber, supplierPartyId, supplierName, status, grandTotal, vatTotal, issueDate, confirmationState]
+      properties:
+        id:
+          type: string
+        invoiceNumber:
+          type: string
+        supplierPartyId:
+          type: string
+        supplierName:
+          type: string
+        status:
+          type: string
+        grandTotal:
+          type: string
+        vatTotal:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        confirmationState:
+          type: string
+          enum: [none, requested, confirmed, queried, rejected]
+        stampValid:
+          type: ["boolean", "null"]
+        eligible:
+          type: ["boolean", "null"]
+    PaymentFlagInput:
+      type: object
+      required: [paymentStatus]
+      properties:
+        paymentStatus:
+          type: string
+          enum: [scheduled, paid]
+        occurredAt:
+          type: string
+          format: date-time
+        amount:
+          type: string
+    BuyerSupplier:
+      type: object
+      required: [supplierPartyId, supplierName, invoiceCount, stampedCount, eligibleCount, totalAmount, vatProtected, vatAtRisk]
+      properties:
+        supplierPartyId:
+          type: string
+        supplierName:
+          type: string
+        supplierTin:
+          type: ["string", "null"]
+        tinValidated:
+          type: ["boolean", "null"]
+        invoiceCount:
+          type: integer
+        stampedCount:
+          type: integer
+        eligibleCount:
+          type: integer
+        totalAmount:
+          type: string
+        vatProtected:
+          type: string
+        vatAtRisk:
+          type: string
+    BuyerExposure:
+      type: object
+      required: [buyerPartyId, supplierCount, invoiceCount, protectedVat, atRiskVat, computedAt, breakdown]
+      properties:
+        buyerPartyId:
+          type: string
+        supplierCount:
+          type: integer
+        invoiceCount:
+          type: integer
+        protectedVat:
+          type: string
+        atRiskVat:
+          type: string
+        computedAt:
+          type: string
+          format: date-time
+        breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuyerSupplier"
+    ScoreboardRow:
+      type: object
+      required: [rank, supplierPartyId, supplierName, complianceScore, stampedRate, confirmedRate, invoiceCount, confirmedCount, outstandingCount, queriedCount, vatAtRisk]
+      properties:
+        rank:
+          type: integer
+        supplierPartyId:
+          type: string
+        supplierName:
+          type: string
+        complianceScore:
+          type: number
+        stampedRate:
+          type: number
+        confirmedRate:
+          type: number
+        invoiceCount:
+          type: integer
+        confirmedCount:
+          type: integer
+        outstandingCount:
+          type: integer
+        queriedCount:
+          type: integer
+        vatAtRisk:
+          type: string
+
+    # ---- R2 schemas: B2C reporting (SME-08) ----
+    B2cReportBatch:
+      type: object
+      required: [id, firmId, clientPartyId, status, windowStart, deadlineAt, itemCount, totalAmount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        clientPartyId:
+          type: string
+        status:
+          type: string
+          enum: [open, reported, breached]
+        windowStart:
+          type: string
+          format: date-time
+        deadlineAt:
+          type: string
+          format: date-time
+        itemCount:
+          type: integer
+        totalAmount:
+          type: string
+        reportedAt:
+          type: ["string", "null"]
+          format: date-time
+        reportedByUserId:
+          type: ["string", "null"]
+        preBreachAlertAt:
+          type: ["string", "null"]
+          format: date-time
+        breachedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    B2cReportItem:
+      type: object
+      required: [id, batchId, invoiceId, amount, createdAt]
+      properties:
+        id:
+          type: string
+        batchId:
+          type: string
+        invoiceId:
+          type: string
+        amount:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    # ---- R2 schemas: white-label (CON-05) ----
+    FirmTheme:
+      type: object
+      required: [firmId, name, subdomain, theme]
+      properties:
+        firmId:
+          type: string
+        name:
+          type: string
+        subdomain:
+          type: ["string", "null"]
+        theme:
+          type: ["object", "null"]
+          additionalProperties: true
+    FirmThemeInput:
+      type: object
+      required: [theme]
+      properties:
+        subdomain:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+        theme:
+          type: object
+          additionalProperties: true
+    ClientImportRow:
+      type: object
+      required: [legalName]
+      properties:
+        legalName:
+          type: string
+          minLength: 1
+        tin:
+          type: string
+        cacNumber:
+          type: string
+        email:
+          type: string
+        street:
+          type: string
+        city:
+          type: string
+        engagementTitle:
+          type: string
+    ClientImportInput:
+      type: object
+      required: [rows, commit]
+      properties:
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            $ref: "#/components/schemas/ClientImportRow"
+        commit:
+          type: boolean
+    ClientImportRowResult:
+      type: object
+      required: [rowNumber, status]
+      properties:
+        rowNumber:
+          type: integer
+        status:
+          type: string
+          enum: [created, exists, invalid]
+        partyId:
+          type: ["string", "null"]
+        engagementId:
+          type: ["string", "null"]
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+    ClientImportResult:
+      type: object
+      required: [rowCount, createdCount, existsCount, invalidCount, committed, rows]
+      properties:
+        rowCount:
+          type: integer
+        createdCount:
+          type: integer
+        existsCount:
+          type: integer
+        invalidCount:
+          type: integer
+        committed:
+          type: boolean
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientImportRowResult"
+
+    # ---- R2 schemas: certification portal (CON-05) ----
+    CpdCourseModule:
+      type: object
+      required: [title, body]
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+    CpdCourse:
+      type: object
+      required: [id, key, title, cpdHours, active, sortOrder, createdAt]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        title:
+          type: string
+        summary:
+          type: ["string", "null"]
+        cpdHours:
+          type: integer
+        modules:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/CpdCourseModule"
+        active:
+          type: boolean
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    CpdEnrollment:
+      type: object
+      required: [id, courseId, firmId, userId, status, createdAt]
+      properties:
+        id:
+          type: string
+        courseId:
+          type: string
+        firmId:
+          type: string
+        userId:
+          type: string
+        status:
+          type: string
+          enum: [enrolled, completed]
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        certificateSerial:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    CpdEnrollmentView:
+      type: object
+      required: [id, courseId, courseTitle, cpdHours, userId, status, createdAt]
+      properties:
+        id:
+          type: string
+        courseId:
+          type: string
+        courseTitle:
+          type: string
+        cpdHours:
+          type: integer
+        userId:
+          type: string
+        userName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [enrolled, completed]
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        certificateSerial:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    # ---- R2 schemas: ERP connectors (PL-03, INT-06) ----
+    ConnectorInfo:
+      type: object
+      required: [key, name, description]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+    ErpConnection:
+      type: object
+      required: [id, firmId, clientPartyId, connectorKey, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        clientPartyId:
+          type: string
+        connectorKey:
+          type: string
+        cursor:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, paused, error]
+        lastSyncAt:
+          type: ["string", "null"]
+          format: date-time
+        lastError:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ErpConnectionInput:
+      type: object
+      required: [clientPartyId, connectorKey]
+      properties:
+        clientPartyId:
+          type: string
+        connectorKey:
+          type: string
+        authConfig:
+          type: object
+          additionalProperties: true
+        fieldMap:
+          type: object
+          additionalProperties:
+            type: string
+    ErpSyncRun:
+      type: object
+      required: [id, connectionId, status, pulledCount, importedCount, skippedCount, errorCount, startedAt]
+      properties:
+        id:
+          type: string
+        connectionId:
+          type: string
+        status:
+          type: string
+          enum: [running, succeeded, failed]
+        fromCursor:
+          type: ["string", "null"]
+        toCursor:
+          type: ["string", "null"]
+        pulledCount:
+          type: integer
+        importedCount:
+          type: integer
+        skippedCount:
+          type: integer
+        errorCount:
+          type: integer
+        rowResults:
+          type: ["array", "null"]
+          items:
+            type: object
+            additionalProperties: true
+        error:
+          type: ["string", "null"]
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: ["string", "null"]
+          format: date-time

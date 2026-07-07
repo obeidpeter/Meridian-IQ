@@ -1,0 +1,204 @@
+import { Router, type IRouter } from "express";
+import { and, desc, eq } from "drizzle-orm";
+import { getDb, erpConnectionsTable, erpSyncRunsTable, outboxTable } from "@workspace/db";
+import {
+  ListConnectorsResponse,
+  ListErpConnectionsQueryParams,
+  ListErpConnectionsResponse,
+  CreateErpConnectionBody,
+  CreateErpConnectionResponse,
+  SyncErpConnectionParams,
+  SyncErpConnectionResponse,
+  ListErpSyncRunsParams,
+  ListErpSyncRunsResponse,
+} from "@workspace/api-zod";
+import {
+  assertCan,
+  assertPartyAccess,
+  assertSameTenant,
+  tenantFirmId,
+} from "../modules/auth/rbac";
+import { isFeatureEnabled } from "../modules/flags/flags";
+import { DomainError } from "../modules/errors";
+import { appendAudit } from "../modules/audit/audit";
+import { CONNECTORS, findConnector } from "../modules/connectors/implementations";
+// Importing the engine registers the erp.sync outbox handler.
+import "../modules/connectors/engine";
+
+// ERP connector surfaces (PL-03, INT-06), gated by the R2 `erp_connectors`
+// flag. Connections are firm-tenant resources; syncs run async via the outbox.
+
+const router: IRouter = Router();
+
+async function gate(req: { principal: import("../modules/auth/rbac").Principal }): Promise<boolean> {
+  return isFeatureEnabled("erp_connectors", req.principal.firmId);
+}
+
+router.get("/connectors", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "connector.read");
+  res.json(
+    ListConnectorsResponse.parse(
+      Object.values(CONNECTORS).map((c) => ({
+        key: c.key,
+        name: c.name,
+        description: c.description,
+      })),
+    ),
+  );
+});
+
+router.get("/connections", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "connector.read");
+  const query = ListErpConnectionsQueryParams.safeParse(req.query);
+  const clientPartyId = query.success ? query.data.clientPartyId : undefined;
+  const tenant = tenantFirmId(req.principal);
+  const conditions = [];
+  if (tenant) conditions.push(eq(erpConnectionsTable.firmId, tenant));
+  if (clientPartyId)
+    conditions.push(eq(erpConnectionsTable.clientPartyId, clientPartyId));
+  const rows = conditions.length
+    ? await getDb()
+        .select()
+        .from(erpConnectionsTable)
+        .where(and(...conditions))
+        .orderBy(desc(erpConnectionsTable.createdAt))
+    : await getDb()
+        .select()
+        .from(erpConnectionsTable)
+        .orderBy(desc(erpConnectionsTable.createdAt));
+  res.json(ListErpConnectionsResponse.parse(rows));
+});
+
+router.post("/connections", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "connector.write");
+  const firmId = tenantFirmId(req.principal);
+  if (!firmId) {
+    res.status(403).json({ error: "A firm-scoped principal is required" });
+    return;
+  }
+  const parsed = CreateErpConnectionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  if (!findConnector(parsed.data.connectorKey)) {
+    throw new DomainError(
+      "UNKNOWN_CONNECTOR",
+      `No connector registered for "${parsed.data.connectorKey}"`,
+      422,
+    );
+  }
+  await assertPartyAccess(req.principal, parsed.data.clientPartyId);
+  const [row] = await getDb()
+    .insert(erpConnectionsTable)
+    .values({
+      firmId,
+      clientPartyId: parsed.data.clientPartyId,
+      connectorKey: parsed.data.connectorKey,
+      authConfig: parsed.data.authConfig ?? null,
+      fieldMap: (parsed.data.fieldMap ?? null) as Record<string, string> | null,
+    })
+    .returning();
+  await appendAudit({
+    actorId: req.principal.userId,
+    firmId,
+    action: "connector.connection_created",
+    entityType: "erp_connection",
+    entityId: row.id,
+    after: { connectorKey: row.connectorKey, clientPartyId: row.clientPartyId },
+  });
+  res.status(201).json(CreateErpConnectionResponse.parse(row));
+});
+
+router.post("/connections/:id/sync", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "connector.write");
+  const params = SyncErpConnectionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [connection] = await getDb()
+    .select()
+    .from(erpConnectionsTable)
+    .where(eq(erpConnectionsTable.id, params.data.id))
+    .limit(1);
+  if (!connection) {
+    res.status(404).json({ error: "Connection not found" });
+    return;
+  }
+  assertSameTenant(req.principal, connection.firmId);
+  if (connection.status === "paused") {
+    throw new DomainError("CONNECTION_PAUSED", "Connection is paused", 409);
+  }
+  // Create the run marker synchronously so the caller has something to watch,
+  // then hand the pull to the worker via the outbox (async, INT-09 pattern).
+  const [run] = await getDb()
+    .insert(erpSyncRunsTable)
+    .values({
+      connectionId: connection.id,
+      status: "running",
+      fromCursor: connection.cursor,
+    })
+    .returning();
+  await getDb().insert(outboxTable).values({
+    aggregateType: "erp_connection",
+    aggregateId: connection.id,
+    type: "erp.sync",
+    payload: { connectionId: connection.id, requestRunId: run.id },
+  });
+  await appendAudit({
+    actorId: req.principal.userId,
+    firmId: connection.firmId,
+    action: "connector.sync_requested",
+    entityType: "erp_connection",
+    entityId: connection.id,
+  });
+  res.status(202).json(SyncErpConnectionResponse.parse(run));
+});
+
+router.get("/connections/:id/runs", async (req, res): Promise<void> => {
+  if (!(await gate(req))) {
+    res.sendStatus(404);
+    return;
+  }
+  assertCan(req.principal, "connector.read");
+  const params = ListErpSyncRunsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const [connection] = await getDb()
+    .select({ firmId: erpConnectionsTable.firmId })
+    .from(erpConnectionsTable)
+    .where(eq(erpConnectionsTable.id, params.data.id))
+    .limit(1);
+  if (!connection) {
+    res.status(404).json({ error: "Connection not found" });
+    return;
+  }
+  assertSameTenant(req.principal, connection.firmId);
+  const rows = await getDb()
+    .select()
+    .from(erpSyncRunsTable)
+    .where(eq(erpSyncRunsTable.connectionId, params.data.id))
+    .orderBy(desc(erpSyncRunsTable.startedAt));
+  res.json(ListErpSyncRunsResponse.parse(rows));
+});
+
+export default router;

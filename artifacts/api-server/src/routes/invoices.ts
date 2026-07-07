@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import {
   getDb,
   invoicesTable,
@@ -8,6 +8,7 @@ import {
   confirmationsTable,
   settlementEventsTable,
   partiesTable,
+  outboxTable,
 } from "@workspace/db";
 import {
   ListInvoicesQueryParams,
@@ -21,6 +22,7 @@ import {
   SubmitInvoiceParams,
   SubmitInvoiceResponse,
   CancelInvoiceParams,
+  CancelInvoiceBody,
   CancelInvoiceResponse,
   GetInvoiceUblParams,
   GetInvoiceUblResponse,
@@ -41,7 +43,12 @@ import {
   CreateSettlementBody,
   CreateSettlementResponse,
 } from "@workspace/api-zod";
-import { assertCan, assertSameTenant, tenantFirmId } from "../modules/auth/rbac";
+import {
+  assertCan,
+  assertSameTenant,
+  assertBuyerPartyAccess,
+  tenantFirmId,
+} from "../modules/auth/rbac";
 import {
   createDraft,
   getInvoiceWithLines,
@@ -51,7 +58,8 @@ import {
 } from "../modules/invoice/service";
 import {
   canTransition,
-  assertTransition,
+  applyTransition,
+  isPresentableAsEligible,
   recordTransition,
 } from "../modules/invoice/lifecycle";
 import { serializeToUbl } from "../modules/invoice/canonical";
@@ -147,13 +155,17 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  // CORE-09: cancellation is a first-class lifecycle event and always carries a
+  // stated reason.
+  const body = CancelInvoiceBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
   const { invoice } = await loadForTenant(req, params.data.id);
-  assertTransition(invoice.status, "cancelled");
-  const [row] = await getDb()
-    .update(invoicesTable)
-    .set({ status: "cancelled" })
-    .where(eq(invoicesTable.id, params.data.id))
-    .returning();
+  // Compare-and-set: a concurrent transition (e.g. the worker crediting this
+  // invoice) rejects the cancel instead of being overwritten.
+  const row = await applyTransition(invoice.id, invoice.status, "cancelled");
   await recordTransition({
     invoiceId: invoice.id,
     firmId: invoice.firmId,
@@ -161,6 +173,7 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
     toStatus: "cancelled",
     actorId: req.principal.userId,
     actorRole: req.principal.role,
+    reason: body.data.reason,
   });
   await appendAudit({
     actorId: req.principal.userId,
@@ -169,8 +182,18 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
     entityType: "invoice",
     entityId: invoice.id,
     before: { status: invoice.status },
-    after: { status: "cancelled" },
+    after: { status: "cancelled", reason: body.data.reason },
   });
+  // A post-stamp cancellation propagates: reconciliation proposals close and the
+  // verification cache is staled so the invoice can never present as eligible.
+  if (invoice.status !== "draft" && invoice.status !== "validated") {
+    await getDb().insert(outboxTable).values({
+      aggregateType: "invoice",
+      aggregateId: invoice.id,
+      type: "invoice.lifecycle_changed",
+      payload: { invoiceId: invoice.id, toStatus: "cancelled" },
+    });
+  }
   res.json(CancelInvoiceResponse.parse(row));
 });
 
@@ -256,12 +279,18 @@ router.get("/invoices/:id/confirmations", async (req, res): Promise<void> => {
   res.json(ListConfirmationsResponse.parse(rows));
 });
 
+// BR-02 confirmation workflow. One write path to the spine, two sides:
+//   - The supplier's firm requests confirmation (state=requested) on a stamped
+//     invoice (confirmation.write).
+//   - The buyer organization responds (confirmed/queried/rejected) via a
+//     buyer_user principal scoped to the invoice's buyer Party
+//     (confirmation.respond), with confirming user and method captured.
+// Lineage is append-only rows; a response requires an open `requested` row.
 router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
   if (!(await isFeatureEnabled("buyer_confirmations", req.principal.firmId))) {
     res.sendStatus(404);
     return;
   }
-  assertCan(req.principal, "confirmation.write");
   const params = CreateConfirmationParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -272,7 +301,21 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { invoice } = await loadForTenant(req, params.data.id);
+  const isRequest = parsed.data.state === "requested";
+
+  let invoice;
+  if (isRequest) {
+    assertCan(req.principal, "confirmation.write");
+    ({ invoice } = await loadForTenant(req, params.data.id));
+  } else {
+    // Buyer-side response: scoped by buyer Party, not by firm tenancy.
+    assertCan(req.principal, "confirmation.respond");
+    const bundle = await getInvoiceWithLines(params.data.id);
+    if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
+    invoice = bundle.invoice;
+    assertBuyerPartyAccess(req.principal, invoice.buyerPartyId);
+  }
+
   // The confirmation always belongs to the invoice's own buyer; a mismatched
   // body buyerPartyId must never be trusted (it would bypass the TIN gate and
   // could reference a cross-tenant party).
@@ -297,6 +340,58 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
       422,
     );
   }
+
+  // Record-level state machine over the append-only lineage.
+  const [latest] = await getDb()
+    .select()
+    .from(confirmationsTable)
+    .where(eq(confirmationsTable.invoiceId, params.data.id))
+    .orderBy(desc(confirmationsTable.createdAt))
+    .limit(1);
+  if (isRequest) {
+    // Confirmation is requested on a stamped invoice; re-requesting is allowed
+    // only after a queried/rejected response (Appendix B).
+    if (invoice.status !== "stamped") {
+      throw new DomainError(
+        "NOT_STAMPED",
+        "Confirmation can only be requested on a stamped invoice",
+        409,
+      );
+    }
+    if (latest && (latest.state === "requested" || latest.state === "confirmed")) {
+      throw new DomainError(
+        "CONFIRMATION_ALREADY_OPEN",
+        `Confirmation is already ${latest.state}`,
+        409,
+      );
+    }
+  } else {
+    if (!latest || latest.state !== "requested") {
+      throw new DomainError(
+        "NO_OPEN_REQUEST",
+        "A confirmation response requires an open request",
+        409,
+      );
+    }
+    if (!parsed.data.method) {
+      throw new DomainError(
+        "METHOD_REQUIRED",
+        "A confirmation response must state its method",
+        400,
+      );
+    }
+    // CORE-09: an invoice cancelled or credited after the request was raised
+    // can no longer collect a confirmation (a confirmed dead invoice would
+    // read as financeable evidence).
+    if (!isPresentableAsEligible(invoice.status)) {
+      throw new DomainError(
+        "INVOICE_NOT_ELIGIBLE",
+        `Invoice is ${invoice.status}; the confirmation request is void`,
+        409,
+      );
+    }
+  }
+
   const [row] = await getDb()
     .insert(confirmationsTable)
     .values({
@@ -305,21 +400,34 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
       state: parsed.data.state,
       method: parsed.data.method ?? null,
       noSetOff: parsed.data.noSetOff ?? false,
+      note: parsed.data.note ?? null,
+      // BR-02: the confirming user is captured on buyer responses with lineage.
+      confirmingUserId: isRequest ? null : req.principal.userId,
     })
     .returning();
   if (parsed.data.state === "confirmed" && canTransition(invoice.status, "confirmed")) {
-    await getDb()
+    // Compare-and-set: if the invoice moved concurrently (cancel/credit), the
+    // confirmation row stands as lineage but the status transition is skipped.
+    const [moved] = await getDb()
       .update(invoicesTable)
       .set({ status: "confirmed" })
-      .where(eq(invoicesTable.id, params.data.id));
-    await recordTransition({
-      invoiceId: invoice.id,
-      firmId: invoice.firmId,
-      fromStatus: invoice.status,
-      toStatus: "confirmed",
-      actorId: req.principal.userId,
-      actorRole: req.principal.role,
-    });
+      .where(
+        and(
+          eq(invoicesTable.id, params.data.id),
+          eq(invoicesTable.status, invoice.status),
+        ),
+      )
+      .returning({ id: invoicesTable.id });
+    if (moved) {
+      await recordTransition({
+        invoiceId: invoice.id,
+        firmId: invoice.firmId,
+        fromStatus: invoice.status,
+        toStatus: "confirmed",
+        actorId: req.principal.userId,
+        actorRole: req.principal.role,
+      });
+    }
   }
   await appendAudit({
     actorId: req.principal.userId,
@@ -327,7 +435,7 @@ router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
     action: "invoice.confirmation",
     entityType: "confirmation",
     entityId: row.id,
-    after: { state: row.state },
+    after: { state: row.state, method: row.method, noSetOff: row.noSetOff },
   });
   res.status(201).json(CreateConfirmationResponse.parse(row));
 });

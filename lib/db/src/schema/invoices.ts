@@ -8,11 +8,12 @@ import {
   integer,
   boolean,
   pgEnum,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { firmsTable } from "./organizations";
-import { partiesTable } from "./parties";
+import { firmsTable } from "./organizations.ts";
+import { partiesTable } from "./parties.ts";
 
 // Invoice lifecycle states (Appendix B). Drafts are mutable working state;
 // everything from `submitted` onward is append-only (CORE-02).
@@ -54,8 +55,12 @@ export const invoicesTable = pgTable("invoices", {
     .references(() => partiesTable.id),
   kind: invoiceKindEnum("kind").notNull().default("invoice"),
   category: invoiceCategoryEnum("category").notNull().default("b2b"),
-  // For credit notes / corrections, the stamped invoice being adjusted.
-  relatedInvoiceId: uuid("related_invoice_id"),
+  // For credit notes / corrections, the stamped invoice being adjusted
+  // (CORE-09). FK-constrained so an adjustment can never point at a
+  // non-existent original; same-tenant + stampedness are enforced in service.
+  relatedInvoiceId: uuid("related_invoice_id").references(
+    (): AnyPgColumn => invoicesTable.id,
+  ),
   invoiceNumber: text("invoice_number").notNull(),
   currency: text("currency").notNull().default("NGN"),
   issueDate: date("issue_date", { mode: "string" }).notNull(),

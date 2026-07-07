@@ -16,7 +16,7 @@ import type { Principal } from "../modules/auth/rbac";
 //
 // Development: a dev-header principal keeps the RBAC + tenant-isolation contract
 // exercisable without a frontend to originate Clerk sessions:
-//   x-mock-user, x-mock-role, x-mock-firm, x-mock-client-party
+//   x-mock-user, x-mock-role, x-mock-firm, x-mock-client-party, x-mock-buyer-party
 // The client-supplied header path is ONLY honoured outside production and never
 // defaults to a privileged role — callers must assert an explicit valid role.
 
@@ -26,12 +26,18 @@ const VALID_ROLES: Role[] = [
   "client_user",
   "operator",
   "bank_user",
+  "buyer_user",
   "auditor",
 ];
 
-// Routes reachable without a principal (health probe + public stamp
-// verification, which any buyer/bank/auditor may call).
-const PUBLIC_PATHS = new Set(["/api/healthz", "/api/verify-stamp"]);
+// Routes reachable without a principal (health probe, public stamp
+// verification, and subdomain branding resolution — the white-label shell needs
+// its theme before any login).
+const PUBLIC_PATHS = new Set([
+  "/api/healthz",
+  "/api/verify-stamp",
+  "/api/public/theme",
+]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
@@ -60,6 +66,7 @@ async function resolveClerkPrincipal(req: Request): Promise<Principal | null> {
       firmId: membershipsTable.firmId,
       role: membershipsTable.role,
       clientPartyId: membershipsTable.clientPartyId,
+      buyerPartyId: membershipsTable.buyerPartyId,
     })
     .from(membershipsTable)
     .where(eq(membershipsTable.userId, user.id));
@@ -76,6 +83,7 @@ async function resolveClerkPrincipal(req: Request): Promise<Principal | null> {
     role: membership.role,
     firmId: membership.firmId,
     clientPartyId: membership.clientPartyId,
+    buyerPartyId: membership.buyerPartyId,
   };
 }
 
@@ -90,6 +98,7 @@ function resolveDevPrincipal(req: Request): Principal | null {
     role: roleHeader as Role,
     firmId: header(req, "x-mock-firm"),
     clientPartyId: header(req, "x-mock-client-party"),
+    buyerPartyId: header(req, "x-mock-buyer-party"),
   };
 }
 

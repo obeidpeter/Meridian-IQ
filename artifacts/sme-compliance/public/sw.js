@@ -4,7 +4,12 @@ const CACHE = "meridianiq-v2";
 // covers the ENTIRE origin — including sibling artifacts served under their own
 // path prefixes. Those apps must never be intercepted or cached by this SW, or
 // they get served this app's cached shell instead of their own. Bypass them.
-const FOREIGN_PREFIXES = ["/console/", "/penalty-calculator/", "/__mockup"];
+const FOREIGN_PREFIXES = [
+  "/console/",
+  "/penalty-calculator/",
+  "/buyer/",
+  "/__mockup",
+];
 
 function isForeign(pathname) {
   return FOREIGN_PREFIXES.some(

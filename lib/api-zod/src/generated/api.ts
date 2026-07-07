@@ -25,6 +25,7 @@ export const GetMeResponse = zod.object({
   "role": zod.string(),
   "firmId": zod.string().nullish(),
   "clientPartyId": zod.string().nullish(),
+  "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string())
 })
 
@@ -35,6 +36,7 @@ export const ListFirmsResponseItem = zod.object({
   "subdomain": zod.string().nullish(),
   "clerkOrgId": zod.string().nullish(),
   "partyId": zod.string().nullish(),
+  "theme": zod.record(zod.string(), zod.unknown()).nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -56,6 +58,7 @@ export const CreateFirmResponse = zod.object({
   "subdomain": zod.string().nullish(),
   "clerkOrgId": zod.string().nullish(),
   "partyId": zod.string().nullish(),
+  "theme": zod.record(zod.string(), zod.unknown()).nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -71,6 +74,7 @@ export const GetFirmResponse = zod.object({
   "subdomain": zod.string().nullish(),
   "clerkOrgId": zod.string().nullish(),
   "partyId": zod.string().nullish(),
+  "theme": zod.record(zod.string(), zod.unknown()).nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
@@ -98,8 +102,9 @@ export const CreateUserResponse = zod.object({
 export const CreateMembershipBody = zod.object({
   "userId": zod.string(),
   "firmId": zod.string().optional(),
-  "role": zod.enum(['firm_admin', 'firm_staff', 'client_user', 'operator', 'bank_user', 'auditor']),
-  "clientPartyId": zod.string().optional()
+  "role": zod.enum(['firm_admin', 'firm_staff', 'client_user', 'operator', 'bank_user', 'buyer_user', 'auditor']),
+  "clientPartyId": zod.string().optional(),
+  "buyerPartyId": zod.string().optional()
 })
 
 export const CreateMembershipResponse = zod.object({
@@ -108,6 +113,7 @@ export const CreateMembershipResponse = zod.object({
   "firmId": zod.string().nullish(),
   "role": zod.string(),
   "clientPartyId": zod.string().nullish(),
+  "buyerPartyId": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -615,6 +621,13 @@ export const CancelInvoiceParams = zod.object({
   "id": zod.coerce.string()
 })
 
+
+
+
+export const CancelInvoiceBody = zod.object({
+  "reason": zod.string().min(1)
+})
+
 export const CancelInvoiceResponse = zod.object({
   "id": zod.string(),
   "firmId": zod.string(),
@@ -652,6 +665,7 @@ export const ListConfirmationsResponseItem = zod.object({
   "method": zod.string().nullish(),
   "noSetOff": zod.boolean(),
   "confirmingUserId": zod.string().nullish(),
+  "note": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListConfirmationsResponse = zod.array(ListConfirmationsResponseItem)
@@ -665,7 +679,8 @@ export const CreateConfirmationBody = zod.object({
   "buyerPartyId": zod.string(),
   "state": zod.enum(['requested', 'confirmed', 'queried', 'rejected']),
   "method": zod.string().optional(),
-  "noSetOff": zod.boolean().optional()
+  "noSetOff": zod.boolean().optional(),
+  "note": zod.string().optional()
 })
 
 export const CreateConfirmationResponse = zod.object({
@@ -676,6 +691,7 @@ export const CreateConfirmationResponse = zod.object({
   "method": zod.string().nullish(),
   "noSetOff": zod.boolean(),
   "confirmingUserId": zod.string().nullish(),
+  "note": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -690,6 +706,9 @@ export const ListSettlementsResponseItem = zod.object({
   "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence']),
   "amount": zod.string(),
   "confidence": zod.string().nullish(),
+  "paymentStatus": zod.union([zod.literal('scheduled'),zod.literal('paid'),zod.literal(null)]).nullish(),
+  "statementLineId": zod.string().nullish(),
+  "actorId": zod.string().nullish(),
   "occurredAt": zod.coerce.date(),
   "createdAt": zod.coerce.date()
 })
@@ -713,6 +732,9 @@ export const CreateSettlementResponse = zod.object({
   "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence']),
   "amount": zod.string(),
   "confidence": zod.string().nullish(),
+  "paymentStatus": zod.union([zod.literal('scheduled'),zod.literal('paid'),zod.literal(null)]).nullish(),
+  "statementLineId": zod.string().nullish(),
+  "actorId": zod.string().nullish(),
   "occurredAt": zod.coerce.date(),
   "createdAt": zod.coerce.date()
 })
@@ -726,7 +748,9 @@ export const VerifyStampBody = zod.object({
 export const VerifyStampResponse = zod.object({
   "valid": zod.boolean(),
   "rail": zod.string(),
-  "cached": zod.boolean()
+  "cached": zod.boolean(),
+  "eligible": zod.boolean(),
+  "invoiceStatus": zod.string().nullish()
 })
 
 
@@ -1786,5 +1810,587 @@ export const ResolveOperatorCaseResponse = zod.object({
   "retriable": zod.boolean()
 }),zod.null()]).optional()
 })
+
+
+/**
+ * @summary Ingest a bank statement (validate-then-commit)
+ */
+
+
+
+export const ImportBankStatementBody = zod.object({
+  "clientPartyId": zod.string(),
+  "csv": zod.string().min(1),
+  "formatKey": zod.string().optional(),
+  "filename": zod.string().optional(),
+  "commit": zod.boolean()
+})
+
+export const ImportBankStatementResponse = zod.object({
+  "statementId": zod.string().nullable(),
+  "committed": zod.boolean(),
+  "formatKey": zod.string().nullable(),
+  "accountRef": zod.string().nullish(),
+  "lineCount": zod.number(),
+  "parsedCount": zod.number(),
+  "parseRate": zod.number(),
+  "rows": zod.array(zod.object({
+  "lineNo": zod.number(),
+  "parseStatus": zod.enum(['parsed', 'invalid']),
+  "valueDate": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "direction": zod.union([zod.literal('credit'),zod.literal('debit'),zod.literal(null)]).nullish(),
+  "narration": zod.string().nullish(),
+  "error": zod.string().nullish()
+}))
+})
+
+
+export const ListBankStatementsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().optional()
+})
+
+export const ListBankStatementsResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "formatKey": zod.string(),
+  "filename": zod.string().nullish(),
+  "accountRef": zod.string().nullish(),
+  "uploadedByUserId": zod.string().nullish(),
+  "status": zod.enum(['validated', 'committed', 'reconciled']),
+  "lineCount": zod.number(),
+  "parsedCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListBankStatementsResponse = zod.array(ListBankStatementsResponseItem)
+
+
+export const GetBankStatementParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetBankStatementResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "formatKey": zod.string(),
+  "filename": zod.string().nullish(),
+  "accountRef": zod.string().nullish(),
+  "uploadedByUserId": zod.string().nullish(),
+  "status": zod.enum(['validated', 'committed', 'reconciled']),
+  "lineCount": zod.number(),
+  "parsedCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const ListBankStatementLinesParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListBankStatementLinesResponseItem = zod.object({
+  "id": zod.string(),
+  "statementId": zod.string(),
+  "lineNo": zod.number(),
+  "valueDate": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "direction": zod.union([zod.literal('credit'),zod.literal('debit'),zod.literal(null)]).nullish(),
+  "narration": zod.string().nullish(),
+  "counterpartyRef": zod.string().nullish(),
+  "parseStatus": zod.enum(['parsed', 'invalid']),
+  "parseError": zod.string().nullish(),
+  "rawLine": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListBankStatementLinesResponse = zod.array(ListBankStatementLinesResponseItem)
+
+
+export const ListBankStatementProposalsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListBankStatementProposalsResponseItem = zod.object({
+  "id": zod.string(),
+  "statementId": zod.string(),
+  "statementLineId": zod.string(),
+  "invoiceId": zod.string(),
+  "invoiceNumber": zod.string(),
+  "invoiceStatus": zod.string(),
+  "invoiceTotal": zod.string(),
+  "buyerName": zod.string(),
+  "lineNo": zod.number().optional(),
+  "lineAmount": zod.string().nullish(),
+  "lineDate": zod.string().nullish(),
+  "narration": zod.string().nullish(),
+  "confidence": zod.string(),
+  "features": zod.record(zod.string(), zod.unknown()).nullish(),
+  "status": zod.enum(['proposed', 'accepted', 'rejected', 'superseded']),
+  "createdAt": zod.coerce.date()
+})
+export const ListBankStatementProposalsResponse = zod.array(ListBankStatementProposalsResponseItem)
+
+
+export const AcceptMatchProposalParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AcceptMatchProposalResponse = zod.object({
+  "proposalId": zod.string(),
+  "status": zod.enum(['accepted', 'rejected']),
+  "invoiceId": zod.string(),
+  "invoiceStatus": zod.string(),
+  "settlementEventId": zod.string().nullable()
+})
+
+
+export const RejectMatchProposalParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RejectMatchProposalResponse = zod.object({
+  "proposalId": zod.string(),
+  "status": zod.enum(['accepted', 'rejected']),
+  "invoiceId": zod.string(),
+  "invoiceStatus": zod.string(),
+  "settlementEventId": zod.string().nullable()
+})
+
+
+/**
+ * @summary Invoices addressed to the caller's buyer organization
+ */
+export const ListBuyerInvoicesQueryParams = zod.object({
+  "confirmationState": zod.enum(['none', 'requested', 'confirmed', 'queried', 'rejected']).optional()
+})
+
+export const ListBuyerInvoicesResponseItem = zod.object({
+  "id": zod.string(),
+  "invoiceNumber": zod.string(),
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "status": zod.string(),
+  "grandTotal": zod.string(),
+  "vatTotal": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "confirmationState": zod.enum(['none', 'requested', 'confirmed', 'queried', 'rejected']),
+  "stampValid": zod.boolean().nullish(),
+  "eligible": zod.boolean().nullish()
+})
+export const ListBuyerInvoicesResponse = zod.array(ListBuyerInvoicesResponseItem)
+
+
+/**
+ * @summary Buyer marks an invoice payment as scheduled or paid (BR-04)
+ */
+export const FlagPaymentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const FlagPaymentBody = zod.object({
+  "paymentStatus": zod.enum(['scheduled', 'paid']),
+  "occurredAt": zod.coerce.date().optional(),
+  "amount": zod.string().optional()
+})
+
+export const FlagPaymentResponse = zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence']),
+  "amount": zod.string(),
+  "confidence": zod.string().nullish(),
+  "paymentStatus": zod.union([zod.literal('scheduled'),zod.literal('paid'),zod.literal(null)]).nullish(),
+  "statementLineId": zod.string().nullish(),
+  "actorId": zod.string().nullish(),
+  "occurredAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Supplier verification view (BR-01)
+ */
+export const ListBuyerSuppliersResponseItem = zod.object({
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "supplierTin": zod.string().nullish(),
+  "tinValidated": zod.boolean().nullish(),
+  "invoiceCount": zod.number(),
+  "stampedCount": zod.number(),
+  "eligibleCount": zod.number(),
+  "totalAmount": zod.string(),
+  "vatProtected": zod.string(),
+  "vatAtRisk": zod.string()
+})
+export const ListBuyerSuppliersResponse = zod.array(ListBuyerSuppliersResponseItem)
+
+
+/**
+ * @summary Input-VAT exposure, refreshed at least daily (BR-01)
+ */
+export const GetBuyerExposureResponse = zod.object({
+  "buyerPartyId": zod.string(),
+  "supplierCount": zod.number(),
+  "invoiceCount": zod.number(),
+  "protectedVat": zod.string(),
+  "atRiskVat": zod.string(),
+  "computedAt": zod.coerce.date(),
+  "breakdown": zod.array(zod.object({
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "supplierTin": zod.string().nullish(),
+  "tinValidated": zod.boolean().nullish(),
+  "invoiceCount": zod.number(),
+  "stampedCount": zod.number(),
+  "eligibleCount": zod.number(),
+  "totalAmount": zod.string(),
+  "vatProtected": zod.string(),
+  "vatAtRisk": zod.string()
+}))
+})
+
+
+/**
+ * @summary Supplier compliance scoreboard (BR-05)
+ */
+export const GetBuyerScoreboardResponseItem = zod.object({
+  "rank": zod.number(),
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "complianceScore": zod.number(),
+  "stampedRate": zod.number(),
+  "confirmedRate": zod.number(),
+  "invoiceCount": zod.number(),
+  "confirmedCount": zod.number(),
+  "outstandingCount": zod.number(),
+  "queriedCount": zod.number(),
+  "vatAtRisk": zod.string()
+})
+export const GetBuyerScoreboardResponse = zod.array(GetBuyerScoreboardResponseItem)
+
+
+export const ListB2cReportsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().optional(),
+  "status": zod.enum(['open', 'reported', 'breached']).optional()
+})
+
+export const ListB2cReportsResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "status": zod.enum(['open', 'reported', 'breached']),
+  "windowStart": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date(),
+  "itemCount": zod.number(),
+  "totalAmount": zod.string(),
+  "reportedAt": zod.coerce.date().nullish(),
+  "reportedByUserId": zod.string().nullish(),
+  "preBreachAlertAt": zod.coerce.date().nullish(),
+  "breachedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListB2cReportsResponse = zod.array(ListB2cReportsResponseItem)
+
+
+export const GetB2cReportParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetB2cReportResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "status": zod.enum(['open', 'reported', 'breached']),
+  "windowStart": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date(),
+  "itemCount": zod.number(),
+  "totalAmount": zod.string(),
+  "reportedAt": zod.coerce.date().nullish(),
+  "reportedByUserId": zod.string().nullish(),
+  "preBreachAlertAt": zod.coerce.date().nullish(),
+  "breachedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const ListB2cReportItemsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListB2cReportItemsResponseItem = zod.object({
+  "id": zod.string(),
+  "batchId": zod.string(),
+  "invoiceId": zod.string(),
+  "amount": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListB2cReportItemsResponse = zod.array(ListB2cReportItemsResponseItem)
+
+
+export const SubmitB2cReportParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const SubmitB2cReportResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "status": zod.enum(['open', 'reported', 'breached']),
+  "windowStart": zod.coerce.date(),
+  "deadlineAt": zod.coerce.date(),
+  "itemCount": zod.number(),
+  "totalAmount": zod.string(),
+  "reportedAt": zod.coerce.date().nullish(),
+  "reportedByUserId": zod.string().nullish(),
+  "preBreachAlertAt": zod.coerce.date().nullish(),
+  "breachedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Resolve firm branding by subdomain (no auth; public shell needs it before login)
+ */
+export const GetPublicThemeQueryParams = zod.object({
+  "subdomain": zod.coerce.string()
+})
+
+export const GetPublicThemeResponse = zod.object({
+  "firmId": zod.string(),
+  "name": zod.string(),
+  "subdomain": zod.string().nullable(),
+  "theme": zod.record(zod.string(), zod.unknown()).nullable()
+})
+
+
+export const UpdateFirmThemeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const updateFirmThemeBodySubdomainRegExp = new RegExp('^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$');
+
+
+export const UpdateFirmThemeBody = zod.object({
+  "subdomain": zod.string().regex(updateFirmThemeBodySubdomainRegExp).optional(),
+  "theme": zod.record(zod.string(), zod.unknown())
+})
+
+export const UpdateFirmThemeResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "subdomain": zod.string().nullish(),
+  "clerkOrgId": zod.string().nullish(),
+  "partyId": zod.string().nullish(),
+  "theme": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Bulk client import from a practice-management export (CON-05)
+ */
+
+export const importClientsBodyRowsMax = 1000;
+
+
+
+export const ImportClientsBody = zod.object({
+  "rows": zod.array(zod.object({
+  "legalName": zod.string().min(1),
+  "tin": zod.string().optional(),
+  "cacNumber": zod.string().optional(),
+  "email": zod.string().optional(),
+  "street": zod.string().optional(),
+  "city": zod.string().optional(),
+  "engagementTitle": zod.string().optional()
+})).min(1).max(importClientsBodyRowsMax),
+  "commit": zod.boolean()
+})
+
+export const ImportClientsResponse = zod.object({
+  "rowCount": zod.number(),
+  "createdCount": zod.number(),
+  "existsCount": zod.number(),
+  "invalidCount": zod.number(),
+  "committed": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "rowNumber": zod.number(),
+  "status": zod.enum(['created', 'exists', 'invalid']),
+  "partyId": zod.string().nullish(),
+  "engagementId": zod.string().nullish(),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).optional()
+}))
+})
+
+
+export const ListCpdCoursesResponseItem = zod.object({
+  "id": zod.string(),
+  "key": zod.string(),
+  "title": zod.string(),
+  "summary": zod.string().nullish(),
+  "cpdHours": zod.number(),
+  "modules": zod.array(zod.object({
+  "title": zod.string(),
+  "body": zod.string()
+})).nullish(),
+  "active": zod.boolean(),
+  "sortOrder": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListCpdCoursesResponse = zod.array(ListCpdCoursesResponseItem)
+
+
+export const EnrollCpdCourseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const EnrollCpdCourseResponse = zod.object({
+  "id": zod.string(),
+  "courseId": zod.string(),
+  "firmId": zod.string(),
+  "userId": zod.string(),
+  "status": zod.enum(['enrolled', 'completed']),
+  "completedAt": zod.coerce.date().nullish(),
+  "certificateSerial": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+export const CompleteCpdCourseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const CompleteCpdCourseResponse = zod.object({
+  "id": zod.string(),
+  "courseId": zod.string(),
+  "firmId": zod.string(),
+  "userId": zod.string(),
+  "status": zod.enum(['enrolled', 'completed']),
+  "completedAt": zod.coerce.date().nullish(),
+  "certificateSerial": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+export const ListCpdEnrollmentsResponseItem = zod.object({
+  "id": zod.string(),
+  "courseId": zod.string(),
+  "courseTitle": zod.string(),
+  "cpdHours": zod.number(),
+  "userId": zod.string(),
+  "userName": zod.string().nullish(),
+  "status": zod.enum(['enrolled', 'completed']),
+  "completedAt": zod.coerce.date().nullish(),
+  "certificateSerial": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListCpdEnrollmentsResponse = zod.array(ListCpdEnrollmentsResponseItem)
+
+
+/**
+ * @summary Registered connector implementations
+ */
+export const ListConnectorsResponseItem = zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "description": zod.string()
+})
+export const ListConnectorsResponse = zod.array(ListConnectorsResponseItem)
+
+
+export const ListErpConnectionsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().optional()
+})
+
+export const ListErpConnectionsResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "connectorKey": zod.string(),
+  "cursor": zod.string().nullish(),
+  "status": zod.enum(['active', 'paused', 'error']),
+  "lastSyncAt": zod.coerce.date().nullish(),
+  "lastError": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListErpConnectionsResponse = zod.array(ListErpConnectionsResponseItem)
+
+
+export const CreateErpConnectionBody = zod.object({
+  "clientPartyId": zod.string(),
+  "connectorKey": zod.string(),
+  "authConfig": zod.record(zod.string(), zod.unknown()).optional(),
+  "fieldMap": zod.record(zod.string(), zod.string()).optional()
+})
+
+export const CreateErpConnectionResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "connectorKey": zod.string(),
+  "cursor": zod.string().nullish(),
+  "status": zod.enum(['active', 'paused', 'error']),
+  "lastSyncAt": zod.coerce.date().nullish(),
+  "lastError": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Enqueue an incremental pull for the connection
+ */
+export const SyncErpConnectionParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const SyncErpConnectionResponse = zod.object({
+  "id": zod.string(),
+  "connectionId": zod.string(),
+  "status": zod.enum(['running', 'succeeded', 'failed']),
+  "fromCursor": zod.string().nullish(),
+  "toCursor": zod.string().nullish(),
+  "pulledCount": zod.number(),
+  "importedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "errorCount": zod.number(),
+  "rowResults": zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
+  "error": zod.string().nullish(),
+  "startedAt": zod.coerce.date(),
+  "finishedAt": zod.coerce.date().nullish()
+})
+
+
+export const ListErpSyncRunsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListErpSyncRunsResponseItem = zod.object({
+  "id": zod.string(),
+  "connectionId": zod.string(),
+  "status": zod.enum(['running', 'succeeded', 'failed']),
+  "fromCursor": zod.string().nullish(),
+  "toCursor": zod.string().nullish(),
+  "pulledCount": zod.number(),
+  "importedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "errorCount": zod.number(),
+  "rowResults": zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
+  "error": zod.string().nullish(),
+  "startedAt": zod.coerce.date(),
+  "finishedAt": zod.coerce.date().nullish()
+})
+export const ListErpSyncRunsResponse = zod.array(ListErpSyncRunsResponseItem)
 
 

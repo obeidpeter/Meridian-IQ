@@ -5,11 +5,13 @@ import {
   railStatesTable,
   stampRecordsTable,
   stampVerificationsTable,
+  invoicesTable,
   type Rail,
 } from "@workspace/db";
 import type { CanonicalInvoice } from "../invoice/canonical";
 import { canonicalJson } from "../../lib/canonical-json";
 import { isRetriable } from "../errors";
+import { isPresentableAsEligible } from "../invoice/lifecycle";
 
 // One adapter interface over two accredited access-point rails (INT-01, C3).
 // The rails are simulated (no real MBS/APP reachable) but exercise the full
@@ -207,10 +209,41 @@ export async function submitWithFailover(
 // ---- Stamp verification with a freshness cache (CORE-04) ----
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
+export interface StampVerification {
+  valid: boolean;
+  rail: string;
+  cached: boolean;
+  // CORE-09: a stamped invoice that has been cancelled or credited must never
+  // be presented as eligible, however valid its stamp remains.
+  eligible: boolean;
+  invoiceStatus: string | null;
+}
+
+// Lifecycle eligibility is always read live (never from the freshness cache) so
+// a cancellation reflects on the very next verification (CORE-09).
+async function lookupLifecycle(
+  irn: string,
+  csid: string,
+): Promise<{ eligible: boolean; invoiceStatus: string | null }> {
+  const [row] = await getDb()
+    .select({ status: invoicesTable.status })
+    .from(stampRecordsTable)
+    .innerJoin(invoicesTable, eq(invoicesTable.id, stampRecordsTable.invoiceId))
+    .where(
+      and(eq(stampRecordsTable.irn, irn), eq(stampRecordsTable.csid, csid)),
+    )
+    .limit(1);
+  if (!row) return { eligible: false, invoiceStatus: null };
+  return {
+    eligible: isPresentableAsEligible(row.status),
+    invoiceStatus: row.status,
+  };
+}
+
 export async function verifyStamp(
   irn: string,
   csid: string,
-): Promise<{ valid: boolean; rail: string; cached: boolean }> {
+): Promise<StampVerification> {
   const now = new Date();
   const [fresh] = await getDb()
     .select()
@@ -224,7 +257,14 @@ export async function verifyStamp(
     )
     .limit(1);
   if (fresh) {
-    return { valid: fresh.valid, rail: fresh.rail, cached: true };
+    const lifecycle = await lookupLifecycle(irn, csid);
+    return {
+      valid: fresh.valid,
+      rail: fresh.rail,
+      cached: true,
+      eligible: fresh.valid && lifecycle.eligible,
+      invoiceStatus: lifecycle.invoiceStatus,
+    };
   }
   // Verify against the source of truth: a stamp is valid iff an accepted
   // submission recorded this exact (IRN, CSID) pair in stamp_records. The CSID
@@ -249,7 +289,16 @@ export async function verifyStamp(
     freshUntil: new Date(now.getTime() + CACHE_TTL_MS),
     raw: {},
   });
-  return { valid, rail: matchedRail, cached: false };
+  const lifecycle = valid
+    ? await lookupLifecycle(irn, csid)
+    : { eligible: false, invoiceStatus: null };
+  return {
+    valid,
+    rail: matchedRail,
+    cached: false,
+    eligible: valid && lifecycle.eligible,
+    invoiceStatus: lifecycle.invoiceStatus,
+  };
 }
 
 // Bulk stamp verification for ledger analysis (ADV-02). A per-invoice call over

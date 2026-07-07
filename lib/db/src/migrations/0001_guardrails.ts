@@ -220,11 +220,18 @@ DROP FUNCTION IF EXISTS meridian_set_retention();
 DROP FUNCTION IF EXISTS meridian_block_mutations();
 
 -- Tear down the restricted application role. DROP OWNED BY removes every grant
--- and default-privilege entry attached to it so DROP ROLE can succeed.
+-- and default-privilege entry attached to it in THIS database; the role itself
+-- is cluster-wide, so if another database in the cluster still holds grants
+-- (e.g. a test database beside the app database) DROP ROLE is skipped — this
+-- database is fully reverted either way.
 DO $$ BEGIN
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'meridian_app') THEN
     DROP OWNED BY meridian_app;
-    DROP ROLE meridian_app;
+    BEGIN
+      DROP ROLE meridian_app;
+    EXCEPTION WHEN dependent_objects_still_exist THEN
+      NULL;
+    END;
   END IF;
 END $$;
 `;

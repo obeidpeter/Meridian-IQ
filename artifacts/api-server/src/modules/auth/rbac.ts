@@ -4,11 +4,14 @@ import { DomainError } from "../errors";
 
 // Principal resolved from the request (see auth middleware). firmId is present
 // for firm-scoped roles; operator/auditor/bank roles are cross-tenant.
+// buyerPartyId is present for buyer_user principals (Buyer Rails), which carry
+// no firm and are scoped to their buyer Party at the route level.
 export interface Principal {
   userId: string;
   role: Role;
   firmId: string | null;
   clientPartyId: string | null;
+  buyerPartyId: string | null;
 }
 
 // Capability strings used to gate actions. Kept coarse-grained and stable so
@@ -41,7 +44,22 @@ export type Capability =
   | "audit.export"
   | "identity.read"
   | "identity.write"
-  | "messaging.send";
+  | "messaging.send"
+  | "statement.read"
+  | "statement.write"
+  | "reconciliation.read"
+  | "reconciliation.act"
+  | "b2c.read"
+  | "b2c.write"
+  | "buyer.rails.read"
+  | "confirmation.respond"
+  | "settlement.flag"
+  | "clients.import"
+  | "theme.write"
+  | "certification.read"
+  | "certification.write"
+  | "connector.read"
+  | "connector.write";
 
 const ALL: Capability[] = [
   "invoice.read",
@@ -72,6 +90,21 @@ const ALL: Capability[] = [
   "identity.read",
   "identity.write",
   "messaging.send",
+  "statement.read",
+  "statement.write",
+  "reconciliation.read",
+  "reconciliation.act",
+  "b2c.read",
+  "b2c.write",
+  "buyer.rails.read",
+  "confirmation.respond",
+  "settlement.flag",
+  "clients.import",
+  "theme.write",
+  "certification.read",
+  "certification.write",
+  "connector.read",
+  "connector.write",
 ];
 
 const READ_ONLY: Capability[] = ALL.filter(
@@ -100,6 +133,18 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "flags.read",
     "identity.read",
     "messaging.send",
+    "statement.read",
+    "statement.write",
+    "reconciliation.read",
+    "reconciliation.act",
+    "b2c.read",
+    "b2c.write",
+    "clients.import",
+    "theme.write",
+    "certification.read",
+    "certification.write",
+    "connector.read",
+    "connector.write",
   ],
   firm_staff: [
     "invoice.read",
@@ -113,6 +158,14 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "settlement.write",
     "console.portfolio.read",
     "messaging.send",
+    "statement.read",
+    "statement.write",
+    "reconciliation.read",
+    "reconciliation.act",
+    "b2c.read",
+    "b2c.write",
+    "certification.read",
+    "certification.write",
   ],
   client_user: [
     "invoice.read",
@@ -123,6 +176,9 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "confirmation.read",
     "consent.read",
     "consent.write",
+    "statement.read",
+    "reconciliation.read",
+    "b2c.read",
   ],
   operator: [
     "invoice.read",
@@ -141,6 +197,14 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "messaging.send",
   ],
   bank_user: ["buyer.verify", "audit.read"],
+  // Buyer Rails role (Appendix C "Y (buyer org)"): verification, confirmation
+  // responses and payment flags on invoices addressed to the buyer's own Party.
+  buyer_user: [
+    "buyer.verify",
+    "buyer.rails.read",
+    "confirmation.respond",
+    "settlement.flag",
+  ],
   auditor: READ_ONLY,
 };
 
@@ -186,6 +250,35 @@ export function assertSameTenant(
     throw new DomainError(
       "CROSS_TENANT",
       "Cross-tenant access denied",
+      403,
+    );
+  }
+}
+
+// Buyer-party scoping (BR-01..BR-05). buyer_user principals carry no firm and
+// run with RLS bypassed (like operator/auditor), so this route-level guard is
+// the tenancy boundary: a buyer principal may only touch resources addressed to
+// its own buyer Party. Every buyer-rails handler must call it before touching
+// invoice, confirmation or settlement data.
+export function buyerPartyId(principal: Principal): string {
+  if (principal.role !== "buyer_user" || !principal.buyerPartyId) {
+    throw new DomainError(
+      "NO_BUYER_PARTY",
+      "A buyer-scoped principal is required",
+      403,
+    );
+  }
+  return principal.buyerPartyId;
+}
+
+export function assertBuyerPartyAccess(
+  principal: Principal,
+  resourceBuyerPartyId: string,
+): void {
+  if (buyerPartyId(principal) !== resourceBuyerPartyId) {
+    throw new DomainError(
+      "CROSS_BUYER",
+      "Resource is not addressed to your buyer organization",
       403,
     );
   }

@@ -1,10 +1,10 @@
-export * from "./client";
-export * from "./context";
+export * from "./client.ts";
+export * from "./context.ts";
 export {
   migrations,
   applyMigrations,
   rollbackLast,
   appliedVersions,
   type Migration,
-} from "./migrations";
-export * from "./schema";
+} from "./migrations/index.ts";
+export * from "./schema/index.ts";

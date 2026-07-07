@@ -8,10 +8,11 @@ import { logger } from "./lib/logger";
 import { resolvePrincipal } from "./middleware/principal";
 import { errorHandler } from "./middleware/error";
 
-// Cross-tenant staff (operator/auditor/bank_user) and unauthenticated public
-// endpoints (e.g. stamp verification) read across firms, so they run with RLS
+// Cross-tenant staff (operator/auditor/bank_user), buyer-organization users
+// (buyer_user — scoped to a buyer Party at the route level, not to a firm) and
+// unauthenticated public endpoints (e.g. stamp verification) run with RLS
 // bypassed; firm-scoped principals are pinned to their own firm_id.
-const BYPASS_ROLES = new Set(["operator", "auditor", "bank_user"]);
+const BYPASS_ROLES = new Set(["operator", "auditor", "bank_user", "buyer_user"]);
 
 // Liveness probe must not depend on the database, so it skips the per-request
 // transaction entirely.
@@ -216,13 +217,19 @@ app.use(
   }),
 );
 app.use(cors());
-app.use(express.json());
+// 5,000-row imports (NFR-03) and full bank-statement uploads (INT-05) arrive
+// as JSON bodies well beyond the 100kb express default.
+app.use(express.json({ limit: "8mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Verify the Clerk session (if any) from cookie/Bearer token and attach auth to
 // the request. resolvePrincipal reads getAuth(req) to build the tenant-scoped
 // principal in production; the dev-header shim is used only outside production.
-app.use(clerkMiddleware());
+// Mounted only when Clerk keys are provisioned: a keyless dev environment
+// (local smoke, CI) authenticates through the dev-header shim alone.
+if (process.env.CLERK_SECRET_KEY) {
+  app.use(clerkMiddleware());
+}
 app.use(resolvePrincipal);
 app.use(tenantContext);
 app.use("/api", router);

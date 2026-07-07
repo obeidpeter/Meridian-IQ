@@ -8,8 +8,8 @@ import {
   integer,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { invoicesTable } from "./invoices";
-import { partiesTable } from "./parties";
+import { invoicesTable } from "./invoices.ts";
+import { partiesTable } from "./parties.ts";
 
 // DORMANT until R3/R4. Defined now so the spine is complete and append-only
 // financing events have a home, but no code path writes to these before their

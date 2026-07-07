@@ -1,5 +1,5 @@
 import pg from "pg";
-import { applyMigrations, rollbackLast, appliedVersions } from "./migrations";
+import { applyMigrations, rollbackLast, appliedVersions } from "./migrations/index.ts";
 
 // CLI migration runner (CORE-06): `node src/migrate.ts up|down|status`.
 async function main(): Promise<void> {

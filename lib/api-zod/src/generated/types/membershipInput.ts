@@ -12,4 +12,5 @@ export interface MembershipInput {
   firmId?: string;
   role: MembershipInputRole;
   clientPartyId?: string;
+  buyerPartyId?: string;
 }

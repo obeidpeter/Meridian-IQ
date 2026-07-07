@@ -19,6 +19,7 @@ import {
   onboardingProspectsTable,
   operatorCasesTable,
   revenueShareStatementsTable,
+  cpdCoursesTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { seedCatalogue } from "../modules/catalogue/catalogue";
@@ -39,6 +40,13 @@ const FLAGS: {
   { key: "stamp_verification", enabled: true, releaseTag: "R1", description: "Public stamp verification" },
   { key: "messaging_notifications", enabled: false, releaseTag: "R1", description: "WhatsApp/SMS/email notifications" },
   { key: "anonymized_benchmarks", enabled: false, releaseTag: "R2", description: "Layer-2 anonymized aggregate analytics" },
+  // R2 — Channel Scale and Buyer Rails v1. Shipped dark (PL-02): an operator
+  // flips each flag when its gate evidence lands (or per-firm via override).
+  { key: "reconciliation", enabled: false, releaseTag: "R2", description: "Bank-statement ingestion and reconciliation v1 (SME-07, INT-05)" },
+  { key: "b2c_reporting", enabled: false, releaseTag: "R2", description: "B2C 24-hour reporting module with compliance clocks (SME-08)" },
+  { key: "buyer_rails", enabled: false, releaseTag: "R2", description: "Buyer Rails v1: supplier verification, payment flags, scoreboard (BR-01..BR-05)" },
+  { key: "white_label", enabled: false, releaseTag: "R2", description: "White-label theming, subdomains, bulk client import, certification (CON-05)" },
+  { key: "erp_connectors", enabled: false, releaseTag: "R2", description: "ERP connector contract and first two connectors (PL-03, INT-06)" },
   { key: "credit_readiness", enabled: false, releaseTag: "R3", description: "Layer-3 credit readiness scoring" },
   { key: "bank_data_room", enabled: false, releaseTag: "R4", description: "Bank data room and financing origination" },
 ];
@@ -46,6 +54,7 @@ const FLAGS: {
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [
   { version: 1, description: "Initial data spine (parties, invoices, lifecycle, consent, audit, platform, credit)" },
   { version: 2, description: "Persisted operator-editable error catalogue (ADV-03)" },
+  { version: 3, description: "R2 spine: statements/reconciliation, B2C batches, buyer rails columns, certification, connectors" },
 ];
 
 // Trusted internal work: seeding runs with tenant RLS bypassed (CON-01/SEC-02).
@@ -66,6 +75,8 @@ export async function seedPlatform(): Promise<void> {
     await seedCatalogue();
     await seedDemo();
     await seedConsoleDemo();
+    await seedBuyerDemo();
+    await seedCpdCourses();
   });
   logger.info(
     { flags: FLAGS.length, schemaVersions: SCHEMA_VERSIONS.length },
@@ -375,6 +386,124 @@ async function seedDemo(): Promise<void> {
       { description: "Retail groceries (consolidated)", quantity: "1", unitPrice: "480000", vatRate: "0.075" },
     ],
   });
+}
+
+// --- Buyer Rails demo principals (BR-01..BR-05) ------------------------------
+// Fixed identifiers so the buyer portal can inject stable x-mock-* headers.
+// One buyer-side finance user per demo anchor buyer.
+export const BUYERS = {
+  zenithUserId: "b0000001-0000-4000-8000-0000000000d1",
+  saharaUserId: "b0000002-0000-4000-8000-0000000000d2",
+} as const;
+
+async function seedBuyerDemo(): Promise<void> {
+  await getDb()
+    .insert(usersTable)
+    .values([
+      {
+        id: BUYERS.zenithUserId,
+        email: "finance@zenithretail.example",
+        fullName: "Zenith Retail Finance",
+      },
+      {
+        id: BUYERS.saharaUserId,
+        email: "accounts@saharalogistics.example",
+        fullName: "Sahara Logistics Accounts",
+      },
+    ])
+    .onConflictDoNothing({ target: usersTable.id });
+
+  // buyer_user memberships carry no firm; scope is the buyer Party. The
+  // memberships unique index is NULLS NOT DISTINCT, so re-seeding conflicts
+  // instead of duplicating.
+  await getDb()
+    .insert(membershipsTable)
+    .values([
+      {
+        userId: BUYERS.zenithUserId,
+        firmId: null,
+        role: "buyer_user",
+        clientPartyId: null,
+        buyerPartyId: DEMO.buyerOneId,
+      },
+      {
+        userId: BUYERS.saharaUserId,
+        firmId: null,
+        role: "buyer_user",
+        clientPartyId: null,
+        buyerPartyId: DEMO.buyerTwoId,
+      },
+    ])
+    .onConflictDoNothing();
+}
+
+// --- CPD certification content (CON-05) --------------------------------------
+// Platform course content for the certification portal; keyed so re-seeding is
+// idempotent. Deliberately compact — the portal needs real content, not an LMS.
+async function seedCpdCourses(): Promise<void> {
+  await getDb()
+    .insert(cpdCoursesTable)
+    .values([
+      {
+        key: "mbs-onboarding-101",
+        title: "MBS Onboarding Essentials",
+        summary:
+          "The mandatory e-invoicing model, IRN/CSID stamping, and how to move a client book onto MeridianIQ.",
+        cpdHours: 2,
+        sortOrder: 1,
+        modules: [
+          {
+            title: "The pre-clearance model",
+            body: "B2B and B2G invoices are validated by the national MBS platform before reaching the buyer; validated invoices carry an IRN, a CSID and a QR code. Issuance is measured in hours — every client workflow must treat stamping as asynchronous.",
+          },
+          {
+            title: "Onboarding a client book",
+            body: "Capture the client's entity profile and TIN, validate against the registry, obtain layer-1 consent, and bulk-import open invoices from the published template before the first live submission.",
+          },
+          {
+            title: "Resolving validation failures",
+            body: "Every rejection maps to a catalogue entry with a plain-language cause and fix. Escalate to the Compliance Desk only when the catalogue guidance does not resolve the failure.",
+          },
+        ],
+      },
+      {
+        key: "penalty-exposure-201",
+        title: "Penalty Exposure and the Compliance Calendar",
+        summary:
+          "s.103/s.104 exposure, the B2C 24-hour rule, and using deadline clocks to keep a portfolio penalty-free.",
+        cpdHours: 1,
+        sortOrder: 2,
+        modules: [
+          {
+            title: "Where penalties come from",
+            body: "Late or missing submissions attract per-invoice penalties; B2C transactions above NGN 50,000 must be reported within 24 hours with a daily penalty for late reporting.",
+          },
+          {
+            title: "Working the calendar",
+            body: "The console surfaces per-client deadline clocks. Anything marked due-soon needs action today; anything overdue is accruing penalties now.",
+          },
+        ],
+      },
+      {
+        key: "buyer-rails-301",
+        title: "Buyer Confirmation and VAT Protection",
+        summary:
+          "Why buyers confirm invoices, how confirmation protects input VAT, and what it means for client financeability.",
+        cpdHours: 2,
+        sortOrder: 3,
+        modules: [
+          {
+            title: "Input-VAT protection",
+            body: "A buyer's input-VAT claim rests on valid supplier stamps. Supplier verification shows exposure across the supplier base, refreshed daily.",
+          },
+          {
+            title: "The confirmation workflow",
+            body: "A supplier requests confirmation on a stamped invoice; the buyer confirms, queries or rejects with a recorded method. A confirmation recorded for VAT protection is the same event that makes the supplier financeable later.",
+          },
+        ],
+      },
+    ])
+    .onConflictDoNothing({ target: cpdCoursesTable.key });
 }
 
 // --- Console / accountant tooling demo data (Task #4) -----------------------

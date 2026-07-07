@@ -5,6 +5,7 @@
  * MeridianIQ platform API — data spine, compliance rails and consent.
  * OpenAPI spec version: 0.1.0
  */
+import type { SettlementEventPaymentStatus } from './settlementEventPaymentStatus';
 import type { SettlementEventSource } from './settlementEventSource';
 
 export interface SettlementEvent {
@@ -14,6 +15,12 @@ export interface SettlementEvent {
   amount: string;
   /** @nullable */
   confidence?: string | null;
+  /** @nullable */
+  paymentStatus?: SettlementEventPaymentStatus;
+  /** @nullable */
+  statementLineId?: string | null;
+  /** @nullable */
+  actorId?: string | null;
   occurredAt: Date;
   createdAt: Date;
 }

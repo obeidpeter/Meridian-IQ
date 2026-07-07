@@ -29,6 +29,13 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email"],
     description: "A buyer is asked to confirm an invoice.",
   },
+  // SME-08: the 24-hour B2C reporting window is approaching breach. Pointer
+  // only (SEC-12): the message names no amounts, counts or client details.
+  b2c_window_alert: {
+    key: "b2c_window_alert",
+    channels: ["whatsapp", "sms", "email"],
+    description: "A B2C reporting window is about to breach.",
+  },
 };
 
 // Channel failover order when a provider fails.
