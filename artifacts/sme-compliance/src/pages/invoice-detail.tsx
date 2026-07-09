@@ -9,6 +9,8 @@ import {
   useValidateInvoice,
   useSubmitInvoice,
   useEscalateInvoice,
+  useCancelInvoice,
+  useCreditNoteInvoice,
   useListConfirmations,
   useCreateConfirmation,
   useListSettlements,
@@ -25,6 +27,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
@@ -37,6 +47,8 @@ import {
   XCircle,
   MailCheck,
   Banknote,
+  Ban,
+  Undo2,
 } from "lucide-react";
 import {
   formatNaira,
@@ -138,10 +150,15 @@ export function InvoiceDetail() {
   const validate = useValidateInvoice();
   const submit = useSubmitInvoice();
   const escalate = useEscalateInvoice();
+  const cancelInvoice = useCancelInvoice();
+  const creditNote = useCreditNoteInvoice();
   const createConfirmation = useCreateConfirmation();
 
   const [reason, setReason] = useState("");
   const [showEscalate, setShowEscalate] = useState(false);
+  // CORE-09 adjustment dialog: cancel or credit-note, both reason-first.
+  const [adjustKind, setAdjustKind] = useState<"cancel" | "credit" | null>(null);
+  const [adjustReason, setAdjustReason] = useState("");
 
   const handleSubmit = async () => {
     if (!invoice) return;
@@ -196,6 +213,44 @@ export function InvoiceDetail() {
     }
   };
 
+  const handleAdjust = async () => {
+    if (!adjustKind || !adjustReason.trim()) return;
+    try {
+      if (adjustKind === "cancel") {
+        await cancelInvoice.mutateAsync({
+          id,
+          data: { reason: adjustReason.trim() },
+        });
+        toast({
+          title: "Invoice cancelled",
+          description: "The cancellation is recorded on the lifecycle ledger.",
+        });
+      } else {
+        const cn = await creditNote.mutateAsync({
+          id,
+          data: { reason: adjustReason.trim() },
+        });
+        toast({
+          title: `Credit note ${cn.invoiceNumber} submitted`,
+          description:
+            "This invoice becomes Credited when the credit note is stamped.",
+        });
+      }
+      setAdjustKind(null);
+      setAdjustReason("");
+      await queryClient.invalidateQueries();
+    } catch (e) {
+      toast({
+        title:
+          adjustKind === "cancel"
+            ? "Could not cancel invoice"
+            : "Could not issue credit note",
+        description: e instanceof Error ? e.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleRequestConfirmation = async () => {
     if (!invoice) return;
     try {
@@ -227,6 +282,15 @@ export function InvoiceDetail() {
   }
 
   const canSubmit = invoice.status === "draft" || invoice.status === "validated";
+  // CORE-09: cancellation is allowed from any non-terminal, non-inflight state;
+  // a credit note adjusts a stamped/confirmed/settled invoice. Mirrors the
+  // server's lifecycle TRANSITIONS map — the server still has the final say.
+  const canCancel = ["draft", "validated", "failed", "stamped", "confirmed"].includes(
+    invoice.status,
+  );
+  const canCredit =
+    invoice.kind === "invoice" &&
+    ["stamped", "confirmed", "settled"].includes(invoice.status);
   const confirmationsDark = isNotFound(confirmationsError);
   const confirmationTimeline = [...(confirmations || [])].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
@@ -264,13 +328,90 @@ export function InvoiceDetail() {
             Issued {formatDate(invoice.issueDate)} · Due {formatDate(invoice.dueDate)}
           </p>
         </div>
-        {canSubmit && (
-          <Button onClick={handleSubmit} disabled={validate.isPending || submit.isPending}>
-            <Send className="w-4 h-4 mr-2" />
-            {validate.isPending || submit.isPending ? "Submitting…" : "Submit for stamping"}
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canSubmit && (
+            <Button onClick={handleSubmit} disabled={validate.isPending || submit.isPending}>
+              <Send className="w-4 h-4 mr-2" />
+              {validate.isPending || submit.isPending ? "Submitting…" : "Submit for stamping"}
+            </Button>
+          )}
+          {canCredit && (
+            <Button
+              variant="outline"
+              onClick={() => setAdjustKind("credit")}
+              data-testid="button-credit-note"
+            >
+              <Undo2 className="w-4 h-4 mr-2" /> Issue credit note
+            </Button>
+          )}
+          {canCancel && (
+            <Button
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setAdjustKind("cancel")}
+              data-testid="button-cancel-invoice"
+            >
+              <Ban className="w-4 h-4 mr-2" /> Cancel invoice
+            </Button>
+          )}
+        </div>
       </div>
+
+      <Dialog
+        open={adjustKind !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAdjustKind(null);
+            setAdjustReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {adjustKind === "cancel" ? "Cancel this invoice" : "Issue a credit note"}
+            </DialogTitle>
+            <DialogDescription>
+              {adjustKind === "cancel"
+                ? "Cancellation is a recorded lifecycle event. A cancelled invoice can never be presented as eligible again."
+                : "A credit note referencing this invoice is created and submitted for stamping. Once stamped, this invoice becomes Credited — a terminal, recorded state."}
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Reason (required — it is recorded on the ledger)"
+            value={adjustReason}
+            onChange={(e) => setAdjustReason(e.target.value)}
+            data-testid="input-adjust-reason"
+          />
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setAdjustKind(null);
+                setAdjustReason("");
+              }}
+            >
+              Keep invoice
+            </Button>
+            <Button
+              variant={adjustKind === "cancel" ? "destructive" : "default"}
+              disabled={
+                !adjustReason.trim() ||
+                cancelInvoice.isPending ||
+                creditNote.isPending
+              }
+              onClick={handleAdjust}
+              data-testid="button-confirm-adjust"
+            >
+              {cancelInvoice.isPending || creditNote.isPending
+                ? "Working…"
+                : adjustKind === "cancel"
+                  ? "Cancel invoice"
+                  : "Issue credit note"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {stampedFamily && stamp && (
         <Card className="border-emerald-200 bg-emerald-50/50">

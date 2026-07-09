@@ -24,6 +24,9 @@ import {
   CancelInvoiceParams,
   CancelInvoiceBody,
   CancelInvoiceResponse,
+  CreditNoteInvoiceParams,
+  CreditNoteInvoiceBody,
+  CreditNoteInvoiceResponse,
   GetInvoiceUblParams,
   GetInvoiceUblResponse,
   GetInvoiceCanonicalParams,
@@ -195,6 +198,80 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
     });
   }
   res.json(CancelInvoiceResponse.parse(row));
+});
+
+// CORE-09: `credited` is reached only through a STAMPED credit note, so this
+// endpoint does not transition anything itself. It composes the existing
+// machinery — draft a credit_note referencing the original (createDraft
+// enforces adjustability and one-live-adjustment), validate, submit — and the
+// pipeline credits the original atomically when the credit note stamps.
+router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.submit");
+  const params = CreditNoteInvoiceParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const body = CreditNoteInvoiceBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const { invoice: original, lines } = await loadForTenant(req, params.data.id);
+  if (!canTransition(original.status, "credited")) {
+    throw new DomainError(
+      "NOT_CREDITABLE",
+      `Invoice is ${original.status}; only a stamped, confirmed or settled invoice can be credited`,
+      409,
+    );
+  }
+  const bundle = await createDraft(
+    {
+      firmId: original.firmId,
+      supplierPartyId: original.supplierPartyId,
+      buyerPartyId: original.buyerPartyId,
+      invoiceNumber:
+        body.data.creditNoteNumber ?? `CN-${original.invoiceNumber}`,
+      currency: original.currency,
+      issueDate: new Date().toISOString().slice(0, 10),
+      kind: "credit_note",
+      category: original.category,
+      relatedInvoiceId: original.id,
+      notes: body.data.reason,
+      lines: lines.map((l) => ({
+        description: l.description,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        vatRate: l.vatRate,
+      })),
+    },
+    req.principal.userId,
+  );
+  const validation = await validateInvoice(bundle.invoice.id, req.principal.userId);
+  if (!validation.ok) {
+    // Name the failing field — the fix is usually completing the client's
+    // party record, and an opaque 422 hides that.
+    const first = validation.errors[0];
+    throw new DomainError(
+      "CREDIT_NOTE_INVALID",
+      `Credit note failed validation${first ? `: ${first.field} — ${first.message}` : ""}`,
+      422,
+    );
+  }
+  const submitted = await submitInvoice(bundle.invoice.id, req.principal.userId);
+  await appendAudit({
+    actorId: req.principal.userId,
+    firmId: original.firmId,
+    action: "invoice.credit_note",
+    entityType: "invoice",
+    entityId: original.id,
+    after: {
+      creditNoteId: bundle.invoice.id,
+      creditNoteNumber: bundle.invoice.invoiceNumber,
+      reason: body.data.reason,
+    },
+  });
+  res.status(202).json(CreditNoteInvoiceResponse.parse(submitted));
 });
 
 router.get("/invoices/:id/ubl", async (req, res): Promise<void> => {

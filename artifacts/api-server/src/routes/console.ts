@@ -15,6 +15,7 @@ import {
   onboardingProspectsTable,
   operatorCasesTable,
   revenueShareStatementsTable,
+  escalationsTable,
   type Invoice,
   type BillingTier,
   type OperatorCase,
@@ -896,6 +897,24 @@ async function caseView(row: OperatorCase) {
       };
     }
   }
+  // SME-06: the operator sees what the client already reported and tried —
+  // escalations ride along with the case, no re-entry.
+  const escalations = row.invoiceId
+    ? (
+        await getDb()
+          .select()
+          .from(escalationsTable)
+          .where(eq(escalationsTable.invoiceId, row.invoiceId))
+          .orderBy(desc(escalationsTable.createdAt))
+      ).map((e) => ({
+        id: e.id,
+        reason: e.reason,
+        errorCode: e.errorCode,
+        status: e.status,
+        context: e.context,
+        createdAt: e.createdAt,
+      }))
+    : [];
   return {
     id: row.id,
     firmId: row.firmId,
@@ -916,6 +935,7 @@ async function caseView(row: OperatorCase) {
     resolvedAt: row.resolvedAt,
     handleSeconds: row.handleSeconds,
     playbook,
+    escalations,
   };
 }
 

@@ -21,6 +21,11 @@ import { FeatureFlags } from "@/pages/feature-flags";
 import { Statements } from "@/pages/statements";
 import { WhiteLabel } from "@/pages/whitelabel";
 import { Certification } from "@/pages/certification";
+import { Advisory } from "@/pages/advisory";
+import { Integrations } from "@/pages/integrations";
+import { Catalogue } from "@/pages/catalogue";
+import { AuditEvidence } from "@/pages/audit-evidence";
+import { GateMetrics } from "@/pages/gate-metrics";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
 // up, so fail fast to the "not yet enabled" card instead of spinning.
@@ -94,14 +99,39 @@ function Router() {
             <Certification />
           </CapabilityGate>
         </Route>
+        <Route path="/advisory">
+          <CapabilityGate capability="engagement.write">
+            <Advisory />
+          </CapabilityGate>
+        </Route>
+        <Route path="/integrations">
+          <CapabilityGate capability="connector.read">
+            <Integrations />
+          </CapabilityGate>
+        </Route>
         <Route path="/operator-queue">
           <CapabilityGate capability="operator.queue.read">
             <OperatorQueue />
           </CapabilityGate>
         </Route>
+        <Route path="/catalogue">
+          <CapabilityGate capability="catalogue.write">
+            <Catalogue />
+          </CapabilityGate>
+        </Route>
         <Route path="/platform-ops">
           <CapabilityGate capability="operator.queue.read">
             <PlatformOps />
+          </CapabilityGate>
+        </Route>
+        <Route path="/gate-metrics">
+          <CapabilityGate capability="operator.queue.read">
+            <GateMetrics />
+          </CapabilityGate>
+        </Route>
+        <Route path="/audit">
+          <CapabilityGate capability="audit.read">
+            <AuditEvidence />
           </CapabilityGate>
         </Route>
         <Route path="/feature-flags">
@@ -124,7 +154,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <RequireSession allowedRoles={["firm_admin", "operator", "firm_staff"]}>
+        <RequireSession
+          allowedRoles={["firm_admin", "operator", "firm_staff", "auditor"]}
+        >
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />
           </WouterRouter>

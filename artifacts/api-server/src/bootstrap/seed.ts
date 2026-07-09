@@ -20,6 +20,7 @@ import {
   operatorCasesTable,
   revenueShareStatementsTable,
   cpdCoursesTable,
+  escalationsTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { seedCatalogue } from "../modules/catalogue/catalogue";
@@ -528,6 +529,7 @@ async function seedCpdCourses(): Promise<void> {
 export const CONSOLE = {
   adminUserId: "44444444-4444-4444-8444-4444444444a0",
   operatorUserId: "99999999-9999-4999-8999-999999999999",
+  auditorUserId: "88888888-8888-4888-8888-888888888888",
   clients: {
     kano: "cb000002-0000-4000-8000-0000000000b2",
     pharma: "cb000003-0000-4000-8000-0000000000b3",
@@ -563,6 +565,11 @@ async function seedConsoleDemo(): Promise<void> {
         email: "ops@meridianiq.example",
         fullName: "Compliance Desk Operator",
       },
+      {
+        id: CONSOLE.auditorUserId,
+        email: "audit@meridianiq.example",
+        fullName: "Read-only Auditor",
+      },
     ])
     .onConflictDoNothing({ target: usersTable.id });
 
@@ -585,6 +592,19 @@ async function seedConsoleDemo(): Promise<void> {
         clientPartyId: null,
       },
     ])
+    .onConflictDoNothing();
+
+  // Read-only auditor (Appendix C): cross-tenant like the operator, but bound
+  // to the demo firm so firm-scoped read surfaces (portfolio, billing) resolve
+  // a scope without an x-firm-id header.
+  await getDb()
+    .insert(membershipsTable)
+    .values({
+      userId: CONSOLE.auditorUserId,
+      firmId: DEMO.firmId,
+      role: "auditor",
+      clientPartyId: null,
+    })
     .onConflictDoNothing();
 
   // Additional client businesses under the demo firm so the portfolio has a
@@ -918,6 +938,23 @@ async function seedConsoleDemo(): Promise<void> {
       },
     ])
     .onConflictDoNothing({ target: operatorCasesTable.id });
+
+  // A client escalation on the open case's invoice (SME-06): the operator
+  // queue card shows what the client already reported, no re-entry.
+  await getDb()
+    .insert(escalationsTable)
+    .values({
+      id: "e5c00001-0000-4000-8000-0000000000e1",
+      invoiceId: "cccc3001-0000-4000-8000-000000003001",
+      firmId: DEMO.firmId,
+      clientPartyId: CONSOLE.clients.pharma,
+      reason:
+        "Re-validated the TIN and re-submitted twice — still rejected with a schema error we don't understand.",
+      errorCode: "MBS_SCHEMA_INVALID",
+      status: "open",
+      context: { attempts: 2, lastAction: "resubmit" },
+    })
+    .onConflictDoNothing({ target: escalationsTable.id });
 
   // A prior-month revenue-share statement so CON-06 has history to export.
   const period = lastMonthPeriod();

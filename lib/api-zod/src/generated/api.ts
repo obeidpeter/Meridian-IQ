@@ -686,6 +686,46 @@ export const CancelInvoiceResponse = zod.object({
 })
 
 
+/**
+ * @summary Issue a credit note against a stamped invoice (CORE-09)
+ */
+export const CreditNoteInvoiceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const CreditNoteInvoiceBody = zod.object({
+  "reason": zod.string().min(1),
+  "creditNoteNumber": zod.string().optional()
+})
+
+export const CreditNoteInvoiceResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "supplierPartyId": zod.string(),
+  "buyerPartyId": zod.string(),
+  "kind": zod.enum(['invoice', 'credit_note', 'correction']),
+  "category": zod.enum(['b2b', 'b2g', 'b2c']),
+  "relatedInvoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string(),
+  "currency": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "notes": zod.string().nullish(),
+  "legalHold": zod.boolean(),
+  "retentionUntil": zod.string().nullish(),
+  "schemaVersion": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
 export const ListConfirmationsParams = zod.object({
   "id": zod.coerce.string()
 })
@@ -922,6 +962,34 @@ export const UpdateErrorCatalogueEntryResponse = zod.object({
   "source": zod.enum(['builtin', 'operator']).optional(),
   "updatedBy": zod.string().nullish(),
   "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Failure codes seen on submissions with no catalogue entry (INT-02)
+ */
+export const ListUnmappedErrorCodesResponseItem = zod.object({
+  "code": zod.string(),
+  "occurrences": zod.number(),
+  "lastSeenAt": zod.coerce.date()
+})
+export const ListUnmappedErrorCodesResponse = zod.array(ListUnmappedErrorCodesResponseItem)
+
+
+/**
+ * @summary Live measurements of the roadmap release-gate metrics
+ */
+export const GetGateMetricsResponse = zod.object({
+  "subscribedFirms": zod.number(),
+  "activeClients": zod.number(),
+  "stampedInvoices": zod.number(),
+  "medianHoursToStamp": zod.number().nullable(),
+  "failedInvoicesTotal": zod.number(),
+  "failureSelfResolutionRate": zod.number().nullable(),
+  "creditObservableCount": zod.number(),
+  "confirmationsLast30d": zod.number(),
+  "reconciliationAcceptRate": zod.number().nullable(),
+  "openEscalations": zod.number()
 })
 
 
@@ -1751,7 +1819,15 @@ export const ListOperatorCasesResponseItem = zod.object({
   "cause": zod.string(),
   "fix": zod.string(),
   "retriable": zod.boolean()
-}),zod.null()]).optional()
+}),zod.null()]).optional(),
+  "escalations": zod.array(zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "errorCode": zod.string().nullish(),
+  "status": zod.string(),
+  "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date()
+})).nullish()
 })
 export const ListOperatorCasesResponse = zod.array(ListOperatorCasesResponseItem)
 
@@ -1800,7 +1876,15 @@ export const ClaimOperatorCaseResponse = zod.object({
   "cause": zod.string(),
   "fix": zod.string(),
   "retriable": zod.boolean()
-}),zod.null()]).optional()
+}),zod.null()]).optional(),
+  "escalations": zod.array(zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "errorCode": zod.string().nullish(),
+  "status": zod.string(),
+  "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date()
+})).nullish()
 })
 
 
@@ -1841,7 +1925,15 @@ export const ResolveOperatorCaseResponse = zod.object({
   "cause": zod.string(),
   "fix": zod.string(),
   "retriable": zod.boolean()
-}),zod.null()]).optional()
+}),zod.null()]).optional(),
+  "escalations": zod.array(zod.object({
+  "id": zod.string(),
+  "reason": zod.string(),
+  "errorCode": zod.string().nullish(),
+  "status": zod.string(),
+  "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date()
+})).nullish()
 })
 
 

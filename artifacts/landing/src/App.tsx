@@ -76,7 +76,7 @@ const APPS: AppTile[] = [
       "Multi-client portfolio, onboarding, billing, white-label branding, certification and the operator queue.",
     href: "/console/",
     icon: Building2,
-    allowedRoles: ["firm_admin", "firm_staff", "operator"],
+    allowedRoles: ["firm_admin", "firm_staff", "operator", "auditor"],
     accent: "text-indigo-600",
   },
   {
@@ -111,6 +111,7 @@ const DEFAULT_WORKSPACE: Partial<
   firm_staff: { href: "/app/", label: "Compliance App" },
   client_user: { href: "/app/", label: "Compliance App" },
   buyer_user: { href: "/buyer/", label: "Buyer Rails" },
+  auditor: { href: "/console/audit", label: "Audit & evidence" },
 };
 
 const DEMO_ACCOUNTS: { label: string; email: string; opens: string }[] = [
@@ -133,6 +134,11 @@ const DEMO_ACCOUNTS: { label: string; email: string; opens: string }[] = [
     label: "Buyer finance (Zenith Retail)",
     email: "finance@zenithretail.example",
     opens: "Buyer Rails",
+  },
+  {
+    label: "Read-only auditor",
+    email: "audit@meridianiq.example",
+    opens: "Audit & evidence (read-only console)",
   },
 ];
 const DEMO_PASSWORD = "meridian2027";
