@@ -63,6 +63,22 @@ export const LoginResponse = zod.object({
 export const LogoutResponse = zod.void()
 
 
+/**
+ * @summary Change the signed-in account's password (SEC-02)
+ */
+
+export const changePasswordBodyNewPasswordMin = 8;
+
+
+
+export const ChangePasswordBody = zod.object({
+  "currentPassword": zod.string().min(1),
+  "newPassword": zod.string().min(changePasswordBodyNewPasswordMin)
+})
+
+export const ChangePasswordResponse = zod.void()
+
+
 export const ListFirmsResponseItem = zod.object({
   "id": zod.string(),
   "name": zod.string(),

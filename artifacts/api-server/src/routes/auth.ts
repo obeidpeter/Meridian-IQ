@@ -1,21 +1,74 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { eq } from "drizzle-orm";
-import { getDb, membershipsTable } from "@workspace/db";
-import { LoginBody, LoginResponse } from "@workspace/api-zod";
+import { getDb, membershipsTable, usersTable } from "@workspace/db";
+import {
+  LoginBody,
+  LoginResponse,
+  ChangePasswordBody,
+} from "@workspace/api-zod";
 import { ROLE_CAPABILITIES } from "../modules/auth/rbac";
 import {
   SESSION_COOKIE,
   authenticate,
   issueSessionToken,
+  hashPassword,
+  verifyPassword,
 } from "../modules/auth/session";
 import { appendAudit } from "../modules/audit/audit";
 
 // First-party session sign-in (SEC-02). Sets an HttpOnly, SameSite=Lax cookie;
-// the principal middleware resolves it on subsequent requests. Both endpoints
+// the principal middleware resolves it on subsequent requests. Login/logout
 // are on the PUBLIC_PATHS allowlist (login must work unauthenticated; logout
-// must work even with an expired session).
+// must work even with an expired session); change-password is authenticated.
 
 const router: IRouter = Router();
+
+// ---- login throttling (SEC-02) ----------------------------------------------
+// In-memory fixed-window backoff per email+IP: uniform 401s stop credential
+// probing from learning anything, this stops it from being free. Suits the
+// single-process modular monolith; a multi-instance deployment would move the
+// counter to shared storage.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 5;
+const failures = new Map<string, { count: number; windowStart: number }>();
+
+function throttleKey(req: Request, email: string): string {
+  const ip =
+    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
+    req.socket.remoteAddress ||
+    "unknown";
+  return `${email.trim().toLowerCase()}|${ip}`;
+}
+
+function isThrottled(key: string): number | null {
+  const entry = failures.get(key);
+  if (!entry) return null;
+  const elapsed = Date.now() - entry.windowStart;
+  if (elapsed > LOGIN_WINDOW_MS) {
+    failures.delete(key);
+    return null;
+  }
+  if (entry.count >= LOGIN_MAX_FAILURES) {
+    return Math.ceil((LOGIN_WINDOW_MS - elapsed) / 1000);
+  }
+  return null;
+}
+
+function recordFailure(key: string): void {
+  const now = Date.now();
+  const entry = failures.get(key);
+  if (!entry || now - entry.windowStart > LOGIN_WINDOW_MS) {
+    failures.set(key, { count: 1, windowStart: now });
+  } else {
+    entry.count += 1;
+  }
+  // Opportunistic pruning keeps the map bounded without a timer.
+  if (failures.size > 10_000) {
+    for (const [k, v] of failures) {
+      if (now - v.windowStart > LOGIN_WINDOW_MS) failures.delete(k);
+    }
+  }
+}
 
 function cookieOptions(req: { secure?: boolean; headers: Record<string, unknown> }) {
   const forwardedProto = String(req.headers["x-forwarded-proto"] ?? "");
@@ -40,12 +93,23 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const key = throttleKey(req, parsed.data.email);
+  const retryAfter = isThrottled(key);
+  if (retryAfter !== null) {
+    res.setHeader("Retry-After", String(retryAfter));
+    res.status(429).json({
+      error: `Too many sign-in attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+    });
+    return;
+  }
   const result = await authenticate(parsed.data.email, parsed.data.password);
   if (!result) {
+    recordFailure(key);
     // Uniform message: never reveal whether the email exists.
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
+  failures.delete(key);
   const memberships = await getDb()
     .select({
       firmId: membershipsTable.firmId,
@@ -89,6 +153,43 @@ router.post("/auth/logout", (req, res): void => {
   // matches and deletes it in the cross-site iframe context.
   const { maxAge: _maxAge, ...clearOpts } = cookieOptions(req);
   res.clearCookie(SESSION_COOKIE, clearOpts);
+  res.sendStatus(204);
+});
+
+// Authenticated password change (SEC-02). Requires the current password —
+// possession of a session cookie alone must not be enough to take over the
+// account. Existing session tokens stay valid until expiry (stateless HMAC);
+// the audit event records the rotation.
+router.post("/auth/change-password", async (req, res): Promise<void> => {
+  const parsed = ChangePasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [user] = await getDb()
+    .select({ id: usersTable.id, passwordHash: usersTable.passwordHash })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.principal.userId))
+    .limit(1);
+  if (
+    !user?.passwordHash ||
+    !verifyPassword(parsed.data.currentPassword, user.passwordHash)
+  ) {
+    res.status(401).json({ error: "Current password is incorrect" });
+    return;
+  }
+  await getDb()
+    .update(usersTable)
+    .set({ passwordHash: hashPassword(parsed.data.newPassword) })
+    .where(eq(usersTable.id, user.id));
+  await appendAudit({
+    actorId: user.id,
+    firmId: req.principal.firmId,
+    action: "auth.password_change",
+    entityType: "user",
+    entityId: user.id,
+    after: { rotated: true },
+  });
   res.sendStatus(204);
 });
 

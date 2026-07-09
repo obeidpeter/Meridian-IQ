@@ -89,6 +89,22 @@ paths:
       responses:
         "204":
           description: Signed out
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change the signed-in account's password (SEC-02)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "204":
+          description: Password changed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /firms:
     get:
@@ -2052,6 +2068,16 @@ components:
         password:
           type: string
           minLength: 1
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+        newPassword:
+          type: string
+          minLength: 8
 
     Firm:
       type: object

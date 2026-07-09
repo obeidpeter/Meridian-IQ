@@ -88,3 +88,62 @@ jobs:
       - name: Build buyer portal
         run: pnpm --filter @workspace/buyer-portal run build
         env: { BASE_PATH: /buyer/, PORT: "3000" }
+
+  # End-to-end user journeys against real builds and a real database: portal
+  # auth (incl. throttling + password change), operator Desk, admin advisory,
+  # auditor read-only boundary, consent round-trip, credit-note lifecycle.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: meridian
+          POSTGRES_PASSWORD: meridian
+          POSTGRES_DB: meridian_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meridian"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://meridian:meridian@127.0.0.1:5432/meridian_e2e
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright chromium
+        run: pnpm --filter @workspace/scripts exec playwright install --with-deps chromium
+
+      - name: Build api-server
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build frontends
+        run: |
+          BASE_PATH=/ PORT=3000 pnpm --filter @workspace/landing run build
+          BASE_PATH=/console/ PORT=3000 pnpm --filter @workspace/console run build
+          BASE_PATH=/app/ PORT=3000 pnpm --filter @workspace/sme-compliance run build
+          BASE_PATH=/buyer/ PORT=3000 pnpm --filter @workspace/buyer-portal run build
+
+      - name: Push schema
+        run: pnpm --filter @workspace/db run push
+
+      - name: Run E2E journeys
+        run: pnpm --filter @workspace/scripts run e2e

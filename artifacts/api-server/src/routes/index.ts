@@ -21,6 +21,8 @@ import b2cRouter from "./b2c";
 import whitelabelRouter from "./whitelabel";
 import certificationRouter from "./certification";
 import connectorsRouter from "./connectors";
+// Registers the INT-02 unmapped-code sweep with the pipeline worker.
+import "../modules/desk/sweeps";
 
 const router: IRouter = Router();
 
