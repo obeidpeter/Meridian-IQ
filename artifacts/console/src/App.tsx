@@ -26,6 +26,7 @@ import { Integrations } from "@/pages/integrations";
 import { Catalogue } from "@/pages/catalogue";
 import { AuditEvidence } from "@/pages/audit-evidence";
 import { GateMetrics } from "@/pages/gate-metrics";
+import { Parties } from "@/pages/parties";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
 // up, so fail fast to the "not yet enabled" card instead of spinning.
@@ -112,6 +113,11 @@ function Router() {
         <Route path="/operator-queue">
           <CapabilityGate capability="operator.queue.read">
             <OperatorQueue />
+          </CapabilityGate>
+        </Route>
+        <Route path="/parties">
+          <CapabilityGate capability="party.merge">
+            <Parties />
           </CapabilityGate>
         </Route>
         <Route path="/catalogue">

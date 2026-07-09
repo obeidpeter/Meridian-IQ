@@ -157,6 +157,10 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "confirmation.read",
     "settlement.write",
     "console.portfolio.read",
+    // Staff submit on behalf of clients, so they may SEE consent status (the
+    // submit path enforces it); granting/revoking stays with the client and
+    // the firm admin (Appendix C).
+    "consent.read",
     "messaging.send",
     "statement.read",
     "statement.write",
