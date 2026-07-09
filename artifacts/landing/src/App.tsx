@@ -10,6 +10,7 @@ import {
   useLogout,
   getGetMeQueryKey,
 } from "@workspace/api-client-react";
+import type { Me } from "@workspace/api-client-react";
 import {
   FileCheck2,
   Building2,
@@ -75,7 +76,7 @@ const APPS: AppTile[] = [
       "Multi-client portfolio, onboarding, billing, white-label branding, certification and the operator queue.",
     href: "/console/",
     icon: Building2,
-    allowedRoles: ["firm_admin", "operator"],
+    allowedRoles: ["firm_admin", "firm_staff", "operator"],
     accent: "text-indigo-600",
   },
   {
@@ -99,6 +100,18 @@ const APPS: AppTile[] = [
     accent: "text-amber-600",
   },
 ];
+
+// Where each role starts after sign-in. The operator goes straight to the
+// Compliance Desk work queue — that is the account's job, not the portfolio.
+const DEFAULT_WORKSPACE: Partial<
+  Record<Role, { href: string; label: string }>
+> = {
+  operator: { href: "/console/operator-queue", label: "Operator queue" },
+  firm_admin: { href: "/console/", label: "Accountant Console" },
+  firm_staff: { href: "/app/", label: "Compliance App" },
+  client_user: { href: "/app/", label: "Compliance App" },
+  buyer_user: { href: "/buyer/", label: "Buyer Rails" },
+};
 
 const DEMO_ACCOUNTS: { label: string; email: string; opens: string }[] = [
   {
@@ -137,13 +150,27 @@ function roleLabel(role: string): string {
   );
 }
 
-function AppCard({
-  app,
-  role,
-}: {
-  app: AppTile;
-  role: Role | null;
-}) {
+// The generated client throws ApiError carrying the parsed body; the server
+// answers { error: string }. Fall back to a friendly generic per failure kind.
+function loginErrorMessage(err: unknown): string {
+  const status = (err as { status?: number })?.status;
+  const data = (err as { data?: unknown })?.data;
+  const serverError =
+    data && typeof data === "object" && "error" in data
+      ? String((data as { error: unknown }).error)
+      : null;
+  if (status === 401) {
+    return serverError === "Account has no active membership"
+      ? "This account exists but has no workspace membership yet. Ask your administrator to add one."
+      : "Invalid email or password.";
+  }
+  if (status !== undefined) {
+    return serverError ?? "Sign-in failed. Please try again.";
+  }
+  return "Could not reach the server. Check your connection and try again.";
+}
+
+function AppCard({ app, role }: { app: AppTile; role: Role | null }) {
   const Icon = app.icon;
   const isPublic = app.allowedRoles === null;
   const canOpen = isPublic || (role !== null && app.allowedRoles!.includes(role));
@@ -174,7 +201,7 @@ function AppCard({
       <p className="mt-1 flex-1 text-sm text-muted-foreground">{app.tagline}</p>
       <div className="mt-5">
         {canOpen ? (
-          <a href={app.href}>
+          <a href={app.href} data-testid={`link-open-${app.key}`}>
             <Button className="w-full">
               Open {app.name}
               <ArrowRight className="h-4 w-4" />
@@ -200,17 +227,54 @@ function SignInPanel() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Which sign-in is running: "form" or a demo account's email. Drives the
+  // per-button spinners without disabling the whole panel.
+  const [pending, setPending] = useState<string | null>(null);
+  const [redirecting, setRedirecting] = useState<string | null>(null);
 
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const signIn = async (source: string, creds: { email: string; password: string }) => {
     setError(null);
+    setPending(source);
     try {
-      await login.mutateAsync({ data: { email, password } });
+      const me = await login.mutateAsync({ data: creds });
       await qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
-    } catch {
-      setError("Invalid email or password.");
+      const target = DEFAULT_WORKSPACE[me.role as Role];
+      if (target) {
+        // Land the account in the workspace it signed in for (the operator's
+        // queue, the buyer's rails…). A full navigation, so the app boots
+        // against the fresh session cookie.
+        setRedirecting(target.label);
+        window.location.assign(target.href);
+        return; // keep the "opening…" state until the browser navigates
+      }
+      setPending(null);
+    } catch (err) {
+      setError(loginErrorMessage(err));
+      setPending(null);
     }
   };
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    void signIn("form", { email, password });
+  };
+
+  if (redirecting) {
+    return (
+      <div
+        className="rounded-xl border bg-card p-6 shadow-sm"
+        data-testid="panel-redirecting"
+      >
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <h2 className="text-lg font-semibold">Signed in</h2>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Opening {redirecting}…
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
@@ -229,6 +293,7 @@ function SignInPanel() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@firm.example"
             required
+            data-testid="input-email"
           />
         </div>
         <div className="space-y-1.5">
@@ -241,35 +306,54 @@ function SignInPanel() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             required
+            data-testid="input-password"
           />
         </div>
         {error && (
-          <p className="flex items-center gap-1.5 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4" /> {error}
+          <p
+            className="flex items-start gap-1.5 text-sm text-destructive"
+            data-testid="text-login-error"
+          >
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" /> {error}
           </p>
         )}
-        <Button type="submit" className="w-full" disabled={login.isPending}>
-          {login.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={pending !== null}
+          data-testid="button-sign-in"
+        >
+          {pending === "form" && <Loader2 className="h-4 w-4 animate-spin" />}
           Sign in
         </Button>
       </form>
 
       <div className="mt-5 rounded-lg bg-muted/60 p-3">
         <p className="text-xs font-medium text-muted-foreground">
-          Demo accounts — password{" "}
+          Demo accounts — one click signs you in (password{" "}
           <code className="rounded bg-background px-1 py-0.5">{DEMO_PASSWORD}</code>
+          )
         </p>
         <ul className="mt-2 space-y-2">
           {DEMO_ACCOUNTS.map((a) => (
             <li key={a.email} className="text-xs">
               <button
                 type="button"
+                disabled={pending !== null}
                 onClick={() => {
                   setEmail(a.email);
                   setPassword(DEMO_PASSWORD);
+                  void signIn(a.email, {
+                    email: a.email,
+                    password: DEMO_PASSWORD,
+                  });
                 }}
-                className="font-medium text-primary hover:underline"
+                className="font-medium text-primary hover:underline disabled:opacity-50 inline-flex items-center gap-1"
+                data-testid={`button-demo-${a.email.split("@")[0]}`}
               >
+                {pending === a.email && (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                )}
                 {a.label}
               </button>
               <span className="text-muted-foreground"> — opens {a.opens}</span>
@@ -281,32 +365,69 @@ function SignInPanel() {
   );
 }
 
-function SignedInPanel({ role }: { role: Role }) {
+function SignedInPanel({ me }: { me: Me }) {
   const qc = useQueryClient();
   const logout = useLogout();
+  const [signingOut, setSigningOut] = useState(false);
+  const role = me.role as Role;
+  const target = DEFAULT_WORKSPACE[role];
+
   const signOut = async () => {
+    setSigningOut(true);
     try {
       await logout.mutateAsync();
     } catch {
-      /* best effort */
+      /* best effort — the cookie may already be gone */
     }
-    await qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    // Reset (not just invalidate) every cached query: data from the previous
+    // account is dropped immediately and active queries — /me here — refetch,
+    // flipping the panel back to the sign-in form.
+    await qc.resetQueries();
+    setSigningOut(false);
   };
+
   return (
-    <div className="rounded-xl border bg-card p-6 shadow-sm">
+    <div className="rounded-xl border bg-card p-6 shadow-sm" data-testid="panel-signed-in">
       <div className="flex items-center gap-2">
         <ShieldCheck className="h-5 w-5 text-teal-600" />
         <h2 className="text-lg font-semibold">Signed in</h2>
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        You're signed in as a{" "}
-        <span className="font-medium text-foreground">{roleLabel(role)}</span>.
-        Open the workspaces highlighted below, or switch accounts.
+      <div className="mt-3 rounded-lg bg-muted/60 p-3">
+        <p className="text-sm font-medium" data-testid="text-account-name">
+          {me.fullName ?? me.email ?? "Your account"}
+        </p>
+        <p className="text-xs text-muted-foreground" data-testid="text-account-detail">
+          {me.email ? `${me.email} · ` : ""}
+          {roleLabel(me.role)}
+        </p>
+      </div>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Open a workspace highlighted below, or switch accounts.
       </p>
-      <Button variant="secondary" className="mt-4 w-full" onClick={signOut}>
-        <LogOut className="h-4 w-4" />
-        Sign out
-      </Button>
+      <div className="mt-4 space-y-2">
+        {target && (
+          <a href={target.href} data-testid="link-default-workspace">
+            <Button className="w-full">
+              Open {target.label}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </a>
+        )}
+        <Button
+          variant="secondary"
+          className="w-full"
+          onClick={signOut}
+          disabled={signingOut}
+          data-testid="button-sign-out"
+        >
+          {signingOut ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <LogOut className="h-4 w-4" />
+          )}
+          Sign out
+        </Button>
+      </div>
     </div>
   );
 }
@@ -334,9 +455,13 @@ function Portal() {
               </p>
             </div>
           </div>
-          {role && (
-            <span className="rounded-full border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-              {roleLabel(role)}
+          {me && (
+            <span
+              className="max-w-[50%] truncate rounded-full border bg-background px-3 py-1 text-xs font-medium text-muted-foreground"
+              data-testid="badge-session"
+            >
+              {me.fullName ?? me.email ?? roleLabel(me.role)} ·{" "}
+              {roleLabel(me.role)}
             </span>
           )}
         </div>
@@ -366,8 +491,8 @@ function Portal() {
               <div className="flex h-40 items-center justify-center rounded-xl border bg-card">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : role ? (
-              <SignedInPanel role={role} />
+            ) : me ? (
+              <SignedInPanel me={me} />
             ) : (
               <SignInPanel />
             )}

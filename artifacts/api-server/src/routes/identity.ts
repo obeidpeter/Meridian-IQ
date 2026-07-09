@@ -22,12 +22,27 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/me", (req, res): void => {
+// users.id is a uuid column; querying it with a non-UUID (e.g. the dev-header
+// principal's "dev-user") would error and abort the request transaction.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+router.get("/me", async (req, res): Promise<void> => {
   const p = req.principal;
+  // Display identity for the signed-in UI. Dev-header principals may carry a
+  // userId with no users row — identity stays null rather than failing.
+  const [user] = UUID_RE.test(p.userId)
+    ? await getDb()
+        .select({ email: usersTable.email, fullName: usersTable.fullName })
+        .from(usersTable)
+        .where(eq(usersTable.id, p.userId))
+        .limit(1)
+    : [];
   res.json(
     GetMeResponse.parse({
       userId: p.userId,
       role: p.role,
+      email: user?.email ?? null,
+      fullName: user?.fullName ?? null,
       firmId: p.firmId,
       clientPartyId: p.clientPartyId,
       buyerPartyId: p.buyerPartyId,

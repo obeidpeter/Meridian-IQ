@@ -23,6 +23,8 @@ export const HealthCheckResponse = zod.object({
 export const GetMeResponse = zod.object({
   "userId": zod.string(),
   "role": zod.string(),
+  "email": zod.string().nullish(),
+  "fullName": zod.string().nullish(),
   "firmId": zod.string().nullish(),
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
@@ -46,6 +48,8 @@ export const LoginBody = zod.object({
 export const LoginResponse = zod.object({
   "userId": zod.string(),
   "role": zod.string(),
+  "email": zod.string().nullish(),
+  "fullName": zod.string().nullish(),
   "firmId": zod.string().nullish(),
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
