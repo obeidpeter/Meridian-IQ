@@ -587,19 +587,6 @@ async function seedConsoleDemo(): Promise<void> {
     ])
     .onConflictDoNothing();
 
-  // The operator is cross-tenant platform staff: its membership carries no
-  // firm (RLS-bypassed, like auditor). Without this row the login endpoint
-  // rejects ops@meridianiq.example with "Account has no active membership".
-  await getDb()
-    .insert(membershipsTable)
-    .values({
-      userId: CONSOLE.operatorUserId,
-      firmId: null,
-      role: "operator",
-      clientPartyId: null,
-    })
-    .onConflictDoNothing();
-
   // Additional client businesses under the demo firm so the portfolio has a
   // multi-client book with a spread of penalty risk.
   await getDb()

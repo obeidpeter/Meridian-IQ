@@ -15,3 +15,4 @@
 - [Stamp verification](stamp-verification.md) — invoice stamp/QR verification invariants.
 - [API server testing](api-server-testing.md) — how to run/verify api-server tests.
 - [Shell UUID capture](shell-uuid-capture.md) — capturing generated UUIDs in shell for scripted checks.
+- [Git ops sandbox](git-ops-sandbox.md) — bash blocks git merge/commit and `.git/*` writes; run them from the code-execution notebook with committer env vars, clearing stale locks atomically.
