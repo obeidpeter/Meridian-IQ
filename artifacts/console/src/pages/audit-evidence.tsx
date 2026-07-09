@@ -8,7 +8,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -22,7 +24,8 @@ import {
 // verifiable bundle — evidence on demand, not on request-to-engineering.
 
 export function AuditEvidence() {
-  const { data: verification, isLoading } = useVerifyAudit({
+  usePageTitle("Audit & evidence");
+  const { data: verification, isLoading, error, refetch } = useVerifyAudit({
     query: { queryKey: getVerifyAuditQueryKey() },
   });
   const [exporting, setExporting] = useState(false);
@@ -72,11 +75,19 @@ export function AuditEvidence() {
 
       {isLoading ? (
         <Skeleton className="h-36" />
-      ) : verification?.valid ? (
-        <Card className="border-emerald-200 bg-emerald-50/50" data-testid="card-chain-valid">
+      ) : error || !verification ? (
+        // A failed fetch is not a broken chain — never raise the sev-zero
+        // card on a network blip; offer a retry instead.
+        <QueryError thing="audit verification" onRetry={() => refetch()} />
+      ) : verification.valid ? (
+        <Card
+          className="border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/40"
+          data-testid="card-chain-valid"
+        >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-emerald-800">
-              <ShieldCheck className="w-5 h-5" /> Chain verified
+            <CardTitle className="flex items-center gap-2 text-base text-emerald-800 dark:text-emerald-300">
+              <ShieldCheck className="w-5 h-5" aria-hidden="true" /> Chain
+              verified
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-1">
@@ -86,26 +97,30 @@ export function AuditEvidence() {
               events hash-chain correctly — no row has been altered or removed.
             </p>
             <p className="text-muted-foreground flex items-center gap-1.5">
-              <Link2 className="w-3.5 h-3.5" /> Each event's hash covers its
-              content plus the previous event's hash; breaking any link breaks
-              every link after it.
+              <Link2 className="w-3.5 h-3.5" aria-hidden="true" /> Each event's
+              hash covers its content plus the previous event's hash; breaking
+              any link breaks every link after it.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-red-200 bg-red-50/50" data-testid="card-chain-broken">
+        <Card
+          className="border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/40"
+          data-testid="card-chain-broken"
+        >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-red-800">
-              <ShieldAlert className="w-5 h-5" /> Chain verification FAILED
+            <CardTitle className="flex items-center gap-2 text-base text-red-800 dark:text-red-300">
+              <ShieldAlert className="w-5 h-5" aria-hidden="true" /> Chain
+              verification failed
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm">
             <p>
               The chain breaks at sequence{" "}
               <span className="font-mono font-semibold">
-                {verification?.brokenAtSeq ?? "?"}
+                {verification.brokenAtSeq ?? "?"}
               </span>{" "}
-              of {verification?.count ?? "?"} events. Treat as a sev-zero
+              of {verification.count ?? "?"} events. Treat as a sev-zero
               incident (SEC-10) — records after the break cannot be trusted.
             </p>
           </CardContent>
@@ -115,7 +130,7 @@ export function AuditEvidence() {
       <Card data-testid="card-export">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <FileJson className="w-4 h-4 text-primary" /> Verifiable export
+            <FileJson className="w-4 h-4 text-primary" aria-hidden="true" /> Verifiable export
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -129,7 +144,7 @@ export function AuditEvidence() {
             disabled={exporting}
             data-testid="button-export-bundle"
           >
-            <Download className="w-4 h-4 mr-1" />
+            <Download className="w-4 h-4 mr-1" aria-hidden="true" />
             {exporting ? "Preparing bundle…" : "Download audit bundle"}
           </Button>
         </CardContent>

@@ -23,9 +23,22 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Check, History, Pencil } from "lucide-react";
-import { formatNaira, formatDate } from "@/lib/format";
+import { formatNaira, formatDate, humanize } from "@/lib/format";
 
 function pct(v: string) {
   return `${(Number(v) * 100).toFixed(1)}%`;
@@ -49,9 +62,7 @@ function PriceReviewHistory({ tierId }: { tierId: string }) {
           className="text-sm border rounded-md p-2.5"
         >
           <div className="flex items-center justify-between">
-            <span className="font-medium capitalize">
-              {r.field.replace(/_/g, " ")}
-            </span>
+            <span className="font-medium">{humanize(r.field)}</span>
             <span className="text-xs text-muted-foreground">
               {formatDate(r.effectiveDate)}
             </span>
@@ -66,9 +77,47 @@ function PriceReviewHistory({ tierId }: { tierId: string }) {
   );
 }
 
+interface TierForm {
+  monthlyPrice: string;
+  includedInvoices: string;
+  overagePrice: string;
+  revenueSharePct: string;
+  effectiveDate: string;
+  note: string;
+}
+
+// Field-level validation for the price-review dialog (§7: inline, at the
+// field, never toast-only).
+function validateForm(form: TierForm): Partial<Record<keyof TierForm, string>> {
+  const errors: Partial<Record<keyof TierForm, string>> = {};
+  if (form.monthlyPrice.trim() === "" || Number(form.monthlyPrice) < 0 || Number.isNaN(Number(form.monthlyPrice)))
+    errors.monthlyPrice = "Enter a price of ₦0 or more.";
+  const included = Number(form.includedInvoices);
+  if (form.includedInvoices.trim() === "" || !Number.isInteger(included) || included < 0)
+    errors.includedInvoices = "Enter a whole number of invoices.";
+  if (form.overagePrice.trim() === "" || Number(form.overagePrice) < 0 || Number.isNaN(Number(form.overagePrice)))
+    errors.overagePrice = "Enter a price of ₦0 or more.";
+  const share = Number(form.revenueSharePct);
+  if (form.revenueSharePct.trim() === "" || Number.isNaN(share) || share < 0 || share > 100)
+    errors.revenueSharePct = "Enter a percentage between 0 and 100.";
+  if (!form.effectiveDate) errors.effectiveDate = "Pick the effective date.";
+  return errors;
+}
+
 export function Billing() {
-  const { data: tiers, isLoading: tiersLoading } = useListTiers();
-  const { data: subscription, isLoading: subLoading } = useGetSubscription();
+  usePageTitle("Plans & billing");
+  const {
+    data: tiers,
+    isLoading: tiersLoading,
+    error: tiersError,
+    refetch: refetchTiers,
+  } = useListTiers();
+  const {
+    data: subscription,
+    isLoading: subLoading,
+    error: subError,
+    refetch: refetchSub,
+  } = useGetSubscription();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -77,7 +126,10 @@ export function Billing() {
 
   const [editTier, setEditTier] = useState<BillingTier | null>(null);
   const [historyTierId, setHistoryTierId] = useState<string | null>(null);
-  const [form, setForm] = useState({
+  // Plan switches change what the firm is billed — confirm first (§7).
+  const [pendingPlan, setPendingPlan] = useState<BillingTier | null>(null);
+  const [showErrors, setShowErrors] = useState(false);
+  const [form, setForm] = useState<TierForm>({
     monthlyPrice: "",
     includedInvoices: "",
     overagePrice: "",
@@ -86,8 +138,12 @@ export function Billing() {
     note: "",
   });
 
+  const formErrors = validateForm(form);
+  const formValid = Object.keys(formErrors).length === 0;
+
   const openEdit = (t: BillingTier) => {
     setEditTier(t);
+    setShowErrors(false);
     setForm({
       monthlyPrice: t.monthlyPrice,
       includedInvoices: String(t.includedInvoices),
@@ -100,6 +156,12 @@ export function Billing() {
 
   const saveTier = () => {
     if (!editTier) return;
+    if (!formValid) {
+      setShowErrors(true);
+      const firstInvalid = Object.keys(formErrors)[0];
+      document.getElementById(`tier-${firstInvalid}`)?.focus();
+      return;
+    }
     updateTier.mutate(
       {
         id: editTier.id,
@@ -142,11 +204,29 @@ export function Billing() {
         },
         onError: () =>
           toast({ title: "Could not switch plan", variant: "destructive" }),
+        onSettled: () => setPendingPlan(null),
       },
     );
   };
 
   const activeKey = subscription?.tier.key;
+
+  const fieldError = (key: keyof TierForm) =>
+    showErrors && formErrors[key] ? (
+      <p
+        id={`tier-${key}-error`}
+        role="alert"
+        className="text-sm text-destructive mt-1"
+      >
+        {formErrors[key]}
+      </p>
+    ) : null;
+  const fieldAria = (key: keyof TierForm) => ({
+    "aria-invalid": showErrors && !!formErrors[key],
+    "aria-describedby":
+      showErrors && formErrors[key] ? `tier-${key}-error` : undefined,
+    className: showErrors && formErrors[key] ? "border-destructive" : undefined,
+  });
 
   return (
     <div className="space-y-6">
@@ -162,6 +242,8 @@ export function Billing() {
 
       {subLoading ? (
         <Skeleton className="h-20" />
+      ) : subError ? (
+        <QueryError thing="your subscription" onRetry={() => refetchSub()} />
       ) : subscription ? (
         <Card className="bg-accent/40" data-testid="card-current-plan">
           <CardContent className="pt-6 flex flex-wrap items-center justify-between gap-3">
@@ -170,13 +252,13 @@ export function Billing() {
               <p className="text-xl font-bold">{subscription.tier.name}</p>
             </div>
             <div className="text-right">
-              <p className="text-lg font-semibold">
+              <p className="text-lg font-semibold tabular-nums">
                 {formatNaira(subscription.tier.monthlyPrice)}/mo
               </p>
               <p className="text-xs text-muted-foreground">
                 {subscription.tier.includedInvoices} invoices included ·{" "}
                 {pct(subscription.tier.revenueSharePct)} revenue share ·{" "}
-                {subscription.status}
+                {humanize(subscription.status)}
               </p>
             </div>
           </CardContent>
@@ -189,6 +271,8 @@ export function Billing() {
             <Skeleton key={i} className="h-80" />
           ))}
         </div>
+      ) : tiersError ? (
+        <QueryError thing="billing tiers" onRetry={() => refetchTiers()} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {(tiers ?? [])
@@ -213,7 +297,7 @@ export function Billing() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <p className="text-2xl font-bold">
+                    <p className="text-2xl font-bold tabular-nums">
                       {formatNaira(t.monthlyPrice)}
                       <span className="text-sm font-normal text-muted-foreground">
                         /mo
@@ -230,34 +314,47 @@ export function Billing() {
                         size="sm"
                         variant={isCurrent ? "secondary" : "default"}
                         className="flex-1"
-                        disabled={isCurrent || updateSubscription.isPending}
-                        onClick={() => selectPlan(t)}
+                        disabled={isCurrent}
+                        onClick={() => setPendingPlan(t)}
                         data-testid={`button-select-${t.key}`}
                       >
                         {isCurrent ? (
                           <>
-                            <Check className="w-4 h-4 mr-1" /> Selected
+                            <Check className="w-4 h-4 mr-1" aria-hidden="true" />{" "}
+                            Selected
                           </>
                         ) : (
                           "Select"
                         )}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openEdit(t)}
-                        data-testid={`button-edit-${t.key}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setHistoryTierId(t.id)}
-                        data-testid={`button-history-${t.key}`}
-                      >
-                        <History className="w-4 h-4" />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEdit(t)}
+                            aria-label={`Edit ${t.name} pricing`}
+                            data-testid={`button-edit-${t.key}`}
+                          >
+                            <Pencil className="w-4 h-4" aria-hidden="true" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit pricing</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setHistoryTierId(t.id)}
+                            aria-label={`Price review history for ${t.name}`}
+                            data-testid={`button-history-${t.key}`}
+                          >
+                            <History className="w-4 h-4" aria-hidden="true" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Price review history</TooltipContent>
+                      </Tooltip>
                     </div>
                   </CardContent>
                 </Card>
@@ -265,6 +362,36 @@ export function Billing() {
             })}
         </div>
       )}
+
+      <AlertDialog
+        open={pendingPlan !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingPlan(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Switch your firm to {pendingPlan?.name}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingPlan
+                ? `Billing changes to ${formatNaira(pendingPlan.monthlyPrice)}/mo with ${pendingPlan.includedInvoices} invoices included and ${pct(pendingPlan.revenueSharePct)} revenue share.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={updateSubscription.isPending}
+              onClick={() => pendingPlan && selectPlan(pendingPlan)}
+              data-testid="button-confirm-plan"
+            >
+              {updateSubscription.isPending ? "Switching…" : "Switch plan"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={!!editTier} onOpenChange={(o) => !o && setEditTier(null)}>
         <DialogContent>
@@ -276,67 +403,89 @@ export function Billing() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="mp">Monthly price (₦)</Label>
+                <Label htmlFor="tier-monthlyPrice">Monthly price (₦)</Label>
                 <Input
-                  id="mp"
+                  id="tier-monthlyPrice"
+                  type="number"
+                  min={0}
+                  step="0.01"
                   value={form.monthlyPrice}
                   onChange={(e) =>
                     setForm({ ...form, monthlyPrice: e.target.value })
                   }
+                  {...fieldAria("monthlyPrice")}
                   data-testid="input-monthly-price"
                 />
+                {fieldError("monthlyPrice")}
               </div>
               <div>
-                <Label htmlFor="inc">Included invoices</Label>
+                <Label htmlFor="tier-includedInvoices">Included invoices</Label>
                 <Input
-                  id="inc"
+                  id="tier-includedInvoices"
                   type="number"
+                  min={0}
+                  step={1}
                   value={form.includedInvoices}
                   onChange={(e) =>
                     setForm({ ...form, includedInvoices: e.target.value })
                   }
+                  {...fieldAria("includedInvoices")}
                   data-testid="input-included-invoices"
                 />
+                {fieldError("includedInvoices")}
               </div>
               <div>
-                <Label htmlFor="ov">Overage price (₦)</Label>
+                <Label htmlFor="tier-overagePrice">Overage price (₦)</Label>
                 <Input
-                  id="ov"
+                  id="tier-overagePrice"
+                  type="number"
+                  min={0}
+                  step="0.01"
                   value={form.overagePrice}
                   onChange={(e) =>
                     setForm({ ...form, overagePrice: e.target.value })
                   }
+                  {...fieldAria("overagePrice")}
                   data-testid="input-overage-price"
                 />
+                {fieldError("overagePrice")}
               </div>
               <div>
-                <Label htmlFor="rs">Revenue share (%)</Label>
+                <Label htmlFor="tier-revenueSharePct">Revenue share (%)</Label>
                 <Input
-                  id="rs"
+                  id="tier-revenueSharePct"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.1"
                   value={form.revenueSharePct}
                   onChange={(e) =>
                     setForm({ ...form, revenueSharePct: e.target.value })
                   }
+                  {...fieldAria("revenueSharePct")}
                   data-testid="input-revenue-share"
                 />
+                {fieldError("revenueSharePct")}
               </div>
             </div>
             <div>
-              <Label htmlFor="ed">Effective date</Label>
+              <Label htmlFor="tier-effectiveDate">Effective date</Label>
               <Input
-                id="ed"
+                id="tier-effectiveDate"
                 type="date"
                 value={form.effectiveDate}
                 onChange={(e) =>
                   setForm({ ...form, effectiveDate: e.target.value })
                 }
+                {...fieldAria("effectiveDate")}
                 data-testid="input-effective-date"
               />
+              {fieldError("effectiveDate")}
             </div>
             <div>
-              <Label htmlFor="nt">Note</Label>
+              <Label htmlFor="tier-note">Note</Label>
               <Input
-                id="nt"
+                id="tier-note"
                 value={form.note}
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
                 placeholder="Reason for semi-annual review"
@@ -346,11 +495,18 @@ export function Billing() {
           </div>
           <DialogFooter>
             <Button
+              variant="ghost"
+              onClick={() => setEditTier(null)}
+              data-testid="button-cancel-tier"
+            >
+              Cancel
+            </Button>
+            <Button
               onClick={saveTier}
               disabled={updateTier.isPending}
               data-testid="button-save-tier"
             >
-              Record review
+              {updateTier.isPending ? "Recording…" : "Record review"}
             </Button>
           </DialogFooter>
         </DialogContent>

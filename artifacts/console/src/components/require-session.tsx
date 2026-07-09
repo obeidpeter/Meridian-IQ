@@ -3,6 +3,7 @@ import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { errorStatus } from "@/lib/errors";
 
 // Full navigation back to the origin landing page. The session cookie is
 // origin-wide (Path=/), so signing in there re-authenticates every app.
@@ -11,7 +12,7 @@ const PORTAL_URL = "/";
 function BrandSplash({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-2xl font-bold text-primary">MeridianIQ</h1>
+      <span className="text-2xl font-bold text-primary">MeridianIQ</span>
       {children}
     </div>
   );
@@ -20,7 +21,8 @@ function BrandSplash({ children }: { children: ReactNode }) {
 /**
  * Gates the routed app behind the real first-party session.
  *  • loading    → centered brand + spinner
- *  • error/401  → not signed in; full-navigate to the landing page
+ *  • 401        → not signed in; full-navigate to the landing page
+ *  • other error→ branded "Can't reach MeridianIQ" splash with Retry
  *  • wrong role → centered card explaining which account type is required
  *  • allowed    → render children
  */
@@ -31,7 +33,7 @@ export function RequireSession({
   allowedRoles: string[];
   children: ReactNode;
 }) {
-  const { data: me, isLoading, isError } = useGetMe({
+  const { data: me, isLoading, isError, error, refetch } = useGetMe({
     query: { retry: false, queryKey: getGetMeQueryKey() },
   });
 
@@ -39,6 +41,26 @@ export function RequireSession({
     return (
       <BrandSplash>
         <Spinner className="size-6 text-muted-foreground" />
+      </BrandSplash>
+    );
+  }
+
+  if (isError && errorStatus(error) !== 401) {
+    // A transient failure (network blip, 5xx) is not a missing session —
+    // offer a retry instead of bouncing a signed-in user to the portal.
+    return (
+      <BrandSplash>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          Can't reach MeridianIQ right now. Check your connection and try
+          again.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => refetch()}
+          data-testid="button-retry-session"
+        >
+          Retry
+        </Button>
       </BrandSplash>
     );
   }
@@ -51,17 +73,18 @@ export function RequireSession({
   }
 
   if (!allowedRoles.includes(me.role)) {
-    const list = allowedRoles.join(", ");
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <Card className="max-w-md w-full" data-testid="card-wrong-role">
-          <CardContent className="pt-6 space-y-4 text-center">
-            <h1 className="text-lg font-bold text-primary">MeridianIQ</h1>
-            <p className="text-sm text-muted-foreground">
-              Signed in as {me.role}. This workspace needs a {list} account.
-            </p>
+          <CardContent className="pt-6 space-y-4">
+            <div>
+              <h1 className="text-xl font-bold">Wrong workspace</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Signed in as {me.role}. This workspace needs a{" "}
+                {allowedRoles.join(" or ")} account.
+              </p>
+            </div>
             <Button
-              className="w-full"
               onClick={() => {
                 window.location.href = PORTAL_URL;
               }}

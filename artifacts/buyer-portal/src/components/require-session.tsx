@@ -3,11 +3,21 @@ import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { errorStatus } from "@/lib/errors";
 
 function goToPortal() {
   // Full navigation back to the origin's landing page (not a wouter route) —
   // sign-in and role selection live at "/", outside this app's basename.
   window.location.href = "/";
+}
+
+function BrandSplash({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-6 text-center">
+      <span className="text-2xl font-bold text-primary">MeridianIQ</span>
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -22,21 +32,44 @@ export function RequireSession({
   allow: string[];
   children: ReactNode;
 }) {
-  const { data: me, isLoading, error } = useGetMe({
+  const { data: me, isLoading, error, refetch } = useGetMe({
     query: { queryKey: getGetMeQueryKey(), retry: false },
   });
 
   // No session (or it expired) — GET /api/me answered 401. Leave the app.
+  const unauthenticated = errorStatus(error) === 401;
   useEffect(() => {
-    if (error) goToPortal();
-  }, [error]);
+    if (unauthenticated) goToPortal();
+  }, [unauthenticated]);
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
-        <h1 className="text-2xl font-bold text-primary">MeridianIQ</h1>
+      <BrandSplash>
         <Spinner className="size-6 text-muted-foreground" />
-      </div>
+        <span className="sr-only" role="status">
+          Loading your session
+        </span>
+      </BrandSplash>
+    );
+  }
+
+  if (error && !unauthenticated) {
+    // A transient failure (network blip, 5xx) is not a missing session —
+    // offer a retry instead of ejecting the user mid-confirmation.
+    return (
+      <BrandSplash>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          Couldn't reach MeridianIQ right now. Check your connection and try
+          again.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => refetch()}
+          data-testid="button-retry-session"
+        >
+          Retry
+        </Button>
+      </BrandSplash>
     );
   }
 

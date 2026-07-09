@@ -12,8 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { QueryError } from "@/components/query-error";
 import { isFeatureDisabled } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Globe, Palette } from "lucide-react";
 
 // Server-side pattern on FirmThemeInput.subdomain (openapi.yaml): mirror it
@@ -31,12 +33,14 @@ function themeString(
 }
 
 export function WhiteLabel() {
+  usePageTitle("White-label");
   const { data: me } = useGetMe();
   const firmId = me?.firmId ?? "";
   const {
     data: firm,
     isLoading,
     error,
+    refetch,
   } = useGetFirm(firmId, {
     query: { enabled: !!firmId, queryKey: getGetFirmQueryKey(firmId) },
   });
@@ -130,9 +134,15 @@ export function WhiteLabel() {
 
   if (error || !firm) {
     return (
-      <p className="text-destructive" data-testid="text-error">
-        Unable to load firm branding.
-      </p>
+      <div className="space-y-6">
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
+          White-label branding
+        </h1>
+        <QueryError thing="firm branding" onRetry={() => refetch()} />
+      </div>
     );
   }
 
@@ -152,7 +162,7 @@ export function WhiteLabel() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Palette className="w-4 h-4 text-primary" /> Branding
+              <Palette className="w-4 h-4 text-primary" aria-hidden="true" /> Branding
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -174,14 +184,23 @@ export function WhiteLabel() {
                 onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
                 placeholder="your-firm"
                 className={subdomainValid ? "" : "border-destructive"}
+                aria-invalid={!subdomainValid}
+                aria-describedby={
+                  subdomainValid ? "subdomain-hint" : "subdomain-error"
+                }
                 data-testid="input-subdomain"
               />
               {subdomainValid ? (
-                <p className="text-xs text-muted-foreground mt-1">
+                <p id="subdomain-hint" className="text-xs text-muted-foreground mt-1">
                   Lowercase letters, digits and hyphens; 3–63 characters.
                 </p>
               ) : (
-                <p className="text-xs text-destructive mt-1" data-testid="text-subdomain-error">
+                <p
+                  id="subdomain-error"
+                  role="alert"
+                  className="text-xs text-destructive mt-1"
+                  data-testid="text-subdomain-error"
+                >
                   Use only lowercase letters, digits and hyphens (3–63
                   characters, no leading or trailing hyphen).
                 </p>
@@ -272,7 +291,7 @@ export function WhiteLabel() {
           <Card data-testid="card-public-url">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
-                <Globe className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                <Globe className="w-5 h-5 text-primary mt-0.5 shrink-0" aria-hidden="true" />
                 <div className="min-w-0">
                   <p className="font-medium">Public URL</p>
                   <p className="text-sm font-mono mt-1 break-all" data-testid="text-public-url">

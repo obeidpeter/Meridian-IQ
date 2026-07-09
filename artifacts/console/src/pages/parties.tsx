@@ -6,6 +6,7 @@ import {
   getListPartiesQueryKey,
 } from "@workspace/api-client-react";
 import type { Party } from "@workspace/api-client-react";
+import { humanize } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   GitMerge,
   Undo2,
@@ -90,7 +103,8 @@ function findDuplicateGroups(parties: Party[]): DupGroup[] {
 }
 
 export function Parties() {
-  const { data: parties, isLoading } = useListParties();
+  usePageTitle("Party integrity");
+  const { data: parties, isLoading, error, refetch } = useListParties();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const merge = useMergeParties();
@@ -98,6 +112,8 @@ export function Parties() {
 
   const [mergeGroup, setMergeGroup] = useState<DupGroup | null>(null);
   const [survivorId, setSurvivorId] = useState("");
+  // Splitting a merge is history-rewriting — confirm before firing.
+  const [splitCandidate, setSplitCandidate] = useState<Party | null>(null);
 
   const live = useMemo(
     () => (parties ?? []).filter((p) => !p.mergedIntoId),
@@ -152,6 +168,7 @@ export function Parties() {
         },
         onError: () =>
           toast({ title: "Split failed", variant: "destructive" }),
+        onSettled: () => setSplitCandidate(null),
       },
     );
   };
@@ -171,45 +188,68 @@ export function Parties() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card data-testid="stat-parties">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Live parties</p>
-            <p className="text-2xl font-bold mt-1">{live.length}</p>
-          </CardContent>
-        </Card>
-        <Card data-testid="stat-validated">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">TIN validated</p>
-            <p className="text-2xl font-bold mt-1 text-emerald-700">
-              {live.length - unvalidated.length}
-            </p>
-          </CardContent>
-        </Card>
-        <Card data-testid="stat-unvalidated">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Unvalidated TIN</p>
-            <p className="text-2xl font-bold mt-1 text-amber-600">
-              {unvalidated.length}
-            </p>
-          </CardContent>
-        </Card>
-        <Card data-testid="stat-dup-groups">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Duplicate groups</p>
-            <p className="text-2xl font-bold mt-1">{groups.length}</p>
-          </CardContent>
-        </Card>
-      </div>
-
       {isLoading ? (
-        <Skeleton className="h-64" />
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24" />
+            ))}
+          </div>
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-48" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-16" />
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      ) : error ? (
+        <QueryError thing="parties" onRetry={() => refetch()} />
       ) : (
         <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card data-testid="stat-parties">
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Live parties</p>
+                <p className="text-2xl font-bold mt-1 tabular-nums">
+                  {live.length}
+                </p>
+              </CardContent>
+            </Card>
+            <Card data-testid="stat-validated">
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">TIN validated</p>
+                <p className="text-2xl font-bold mt-1 tabular-nums text-emerald-700 dark:text-emerald-400">
+                  {live.length - unvalidated.length}
+                </p>
+              </CardContent>
+            </Card>
+            <Card data-testid="stat-unvalidated">
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Unvalidated TIN</p>
+                <p className="text-2xl font-bold mt-1 tabular-nums text-amber-600 dark:text-amber-400">
+                  {unvalidated.length}
+                </p>
+              </CardContent>
+            </Card>
+            <Card data-testid="stat-dup-groups">
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">
+                  Duplicate groups
+                </p>
+                <p className="text-2xl font-bold mt-1 tabular-nums">
+                  {groups.length}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
           <Card data-testid="card-duplicates">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <GitMerge className="w-4 h-4 text-primary" /> Duplicate
+                <GitMerge className="w-4 h-4 text-primary" aria-hidden="true" /> Duplicate
                 candidates
               </CardTitle>
             </CardHeader>
@@ -219,8 +259,11 @@ export function Parties() {
                   className="text-sm text-muted-foreground flex items-center gap-2"
                   data-testid="text-no-duplicates"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" /> No
-                  duplicate candidates — every live party is distinct by TIN
+                  <CheckCircle2
+                    className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
+                    aria-hidden="true"
+                  />{" "}
+                  No duplicate candidates — every live party is distinct by TIN
                   and name.
                 </p>
               ) : (
@@ -232,8 +275,8 @@ export function Parties() {
                       data-testid={`dup-group-${group.key}`}
                     >
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-amber-700 mb-1">
-                          {group.reason}
+                        <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">
+                          {humanize(group.reason)}
                         </p>
                         {group.parties.map((p) => (
                           <p key={p.id} className="text-sm">
@@ -253,7 +296,7 @@ export function Parties() {
                         }}
                         data-testid={`button-merge-${group.key}`}
                       >
-                        <GitMerge className="w-4 h-4 mr-1" /> Merge
+                        <GitMerge className="w-4 h-4 mr-1" aria-hidden="true" /> Merge
                       </Button>
                     </div>
                   ))}
@@ -265,19 +308,25 @@ export function Parties() {
           <Card data-testid="card-tin-status">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Fingerprint className="w-4 h-4 text-primary" /> TIN validation
+                <Fingerprint className="w-4 h-4 text-primary" aria-hidden="true" /> TIN validation
               </CardTitle>
             </CardHeader>
             <CardContent>
               {unvalidated.length === 0 ? (
                 <p className="text-sm text-muted-foreground flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Every
-                  live party has a validated TIN.
+                  <CheckCircle2
+                    className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
+                    aria-hidden="true"
+                  />{" "}
+                  Every live party has a validated TIN.
                 </p>
               ) : (
                 <div className="space-y-1.5">
                   <p className="text-sm text-muted-foreground flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                    <AlertTriangle
+                      className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0"
+                      aria-hidden="true"
+                    />
                     These parties cannot enter the confirmation workflow until
                     their TIN validates (CORE-08):
                   </p>
@@ -306,7 +355,7 @@ export function Parties() {
             <Card data-testid="card-merge-lineage">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Undo2 className="w-4 h-4 text-primary" /> Merge lineage
+                  <Undo2 className="w-4 h-4 text-primary" aria-hidden="true" /> Merge lineage
                 </CardTitle>
               </CardHeader>
               <CardContent className="divide-y">
@@ -326,10 +375,11 @@ export function Parties() {
                       size="sm"
                       variant="ghost"
                       disabled={split.isPending}
-                      onClick={() => runSplit(p)}
+                      onClick={() => setSplitCandidate(p)}
                       data-testid={`button-split-${p.id}`}
                     >
-                      <Undo2 className="w-4 h-4 mr-1" /> Split back out
+                      <Undo2 className="w-4 h-4 mr-1" aria-hidden="true" />{" "}
+                      Split back out
                     </Button>
                   </div>
                 ))}
@@ -406,6 +456,38 @@ export function Parties() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={splitCandidate !== null}
+        onOpenChange={(open) => {
+          if (!open) setSplitCandidate(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Split {splitCandidate?.legalName ?? "this party"} back out?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {splitCandidate?.legalName ?? "This party"} becomes a live,
+              separate party again — records currently folded into{" "}
+              {nameOf(splitCandidate?.mergedIntoId)} stop counting as one
+              counterparty, which changes duplicate detection and fraud
+              signals.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={split.isPending}
+              onClick={() => splitCandidate && runSplit(splitCandidate)}
+              data-testid="button-confirm-split"
+            >
+              {split.isPending ? "Splitting…" : "Split back out"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

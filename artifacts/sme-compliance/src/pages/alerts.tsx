@@ -15,15 +15,44 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
+import { RequireClientScope } from "@/components/require-client-scope";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { MessageSquare, Phone, Mail, Send } from "lucide-react";
+import { humanize } from "@/lib/format";
+
+function AlertsSkeleton() {
+  return (
+    <div className="space-y-6">
+      {Array.from({ length: 2 }).map((_, i) => (
+        <Card key={i}>
+          <CardHeader>
+            <Skeleton className="h-5 w-40" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Skeleton className="h-9" />
+            <Skeleton className="h-9" />
+            <Skeleton className="h-9" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
 
 export function Alerts() {
+  usePageTitle("Alert settings");
   const { data: me } = useGetMe();
   const clientPartyId = me?.clientPartyId || "";
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { data: prefs, isLoading } = useGetAlertPreferences(clientPartyId, {
+  const {
+    data: prefs,
+    isLoading,
+    isError,
+    refetch,
+  } = useGetAlertPreferences(clientPartyId, {
     query: {
       enabled: !!clientPartyId,
       queryKey: getGetAlertPreferencesQueryKey(clientPartyId),
@@ -57,28 +86,35 @@ export function Alerts() {
   ) => setForm((f) => ({ ...f, [key]: value }));
 
   const save = async () => {
-    await update.mutateAsync({ id: clientPartyId, data: form });
-    await queryClient.invalidateQueries();
-    toast({ title: "Preferences saved", description: "Alert settings updated." });
+    try {
+      await update.mutateAsync({ id: clientPartyId, data: form });
+      await queryClient.invalidateQueries();
+      toast({ title: "Preferences saved", description: "Alert settings updated." });
+    } catch (e) {
+      toast({
+        title: "Couldn't save alert preferences",
+        description: e instanceof Error ? e.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const sendTest = async () => {
-    const res = await test.mutateAsync({ id: clientPartyId });
-    setResults(res);
-    toast({
-      title: "Test alert sent",
-      description: `Delivered across ${res.length} channel(s).`,
-    });
+    try {
+      const res = await test.mutateAsync({ id: clientPartyId });
+      setResults(res);
+      toast({
+        title: "Test alert sent",
+        description: `Delivered across ${res.length} channel(s).`,
+      });
+    } catch (e) {
+      toast({
+        title: "Couldn't send test alert",
+        description: e instanceof Error ? e.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
   };
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-64" />
-      </div>
-    );
-  }
 
   const channels: {
     key: "whatsapp" | "sms" | "email";
@@ -100,112 +136,138 @@ export function Alerts() {
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Alert Preferences</h1>
-        <p className="text-muted-foreground">
-          Choose how and where you want to be reminded.
-        </p>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+            Alert preferences
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Choose how and where you want to be reminded.
+          </p>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Channels</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {channels.map((ch) => {
-            const Icon = ch.icon;
-            const enabled = Boolean(form[ch.enabledKey]);
-            return (
-              <div key={ch.key} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <Icon className="w-4 h-4" /> {ch.label}
-                  </Label>
-                  <Switch
-                    checked={enabled}
-                    onCheckedChange={(v) => set(ch.enabledKey, v as never)}
-                  />
-                </div>
-                {enabled && (
-                  <Input
-                    placeholder={ch.placeholder}
-                    value={(form[ch.contactKey] as string) || ""}
-                    onChange={(e) => set(ch.contactKey, e.target.value as never)}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+      <RequireClientScope thing="alert preferences">
+        {isLoading ? (
+          <AlertsSkeleton />
+        ) : isError ? (
+          <QueryError thing="your alert preferences" onRetry={() => refetch()} />
+        ) : (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Channels</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {channels.map((ch) => {
+                  const Icon = ch.icon;
+                  const enabled = Boolean(form[ch.enabledKey]);
+                  const switchId = `switch-${ch.key}`;
+                  const inputId = `input-${ch.key}`;
+                  return (
+                    <div key={ch.key} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor={switchId} className="flex items-center gap-2">
+                          <Icon className="w-4 h-4" aria-hidden="true" /> {ch.label}
+                        </Label>
+                        <Switch
+                          id={switchId}
+                          checked={enabled}
+                          onCheckedChange={(v) => set(ch.enabledKey, v as never)}
+                        />
+                      </div>
+                      {enabled && (
+                        <div>
+                          <Label htmlFor={inputId} className="sr-only">
+                            {ch.label} destination
+                          </Label>
+                          <Input
+                            id={inputId}
+                            placeholder={ch.placeholder}
+                            value={(form[ch.contactKey] as string) || ""}
+                            onChange={(e) => set(ch.contactKey, e.target.value as never)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>What to alert me about</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {alertTypes.map((a) => (
-            <div key={a.key} className="flex items-center justify-between gap-4">
-              <div>
-                <p className="font-medium">{a.label}</p>
-                <p className="text-sm text-muted-foreground">{a.desc}</p>
-              </div>
-              <Switch
-                checked={Boolean(form[a.key])}
-                onCheckedChange={(v) => set(a.key, v as never)}
-              />
+            <Card>
+              <CardHeader>
+                <CardTitle>What to alert me about</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {alertTypes.map((a) => (
+                  <div key={a.key} className="flex items-center justify-between gap-4">
+                    <div>
+                      <Label htmlFor={`switch-${a.key}`} className="font-medium">
+                        {a.label}
+                      </Label>
+                      <p className="text-sm text-muted-foreground">{a.desc}</p>
+                    </div>
+                    <Switch
+                      id={`switch-${a.key}`}
+                      checked={Boolean(form[a.key])}
+                      onCheckedChange={(v) => set(a.key, v as never)}
+                    />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={save} disabled={update.isPending}>
+                {update.isPending ? "Saving…" : "Save preferences"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={sendTest}
+                disabled={test.isPending}
+              >
+                <Send className="w-4 h-4 mr-2" aria-hidden="true" />
+                {test.isPending ? "Sending…" : "Send test alert"}
+              </Button>
             </div>
-          ))}
-        </CardContent>
-      </Card>
 
-      <div className="flex flex-wrap gap-3">
-        <Button onClick={save} disabled={update.isPending}>
-          {update.isPending ? "Saving…" : "Save preferences"}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={sendTest}
-          disabled={test.isPending}
-        >
-          <Send className="w-4 h-4 mr-2" />
-          {test.isPending ? "Sending…" : "Send test alert"}
-        </Button>
-      </div>
-
-      {results && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Test delivery results</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {results.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No channels enabled — turn one on and save first.
-              </p>
-            ) : (
-              results.map((r, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between text-sm border rounded-md px-3 py-2"
-                >
-                  <span className="capitalize font-medium">{r.channel}</span>
-                  <span
-                    className={
-                      r.status === "failed"
-                        ? "text-destructive"
-                        : "text-emerald-700"
-                    }
-                  >
-                    {r.detail || r.status}
-                  </span>
-                </div>
-              ))
+            {results && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Test delivery results</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {results.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No channels enabled — turn one on and save first.
+                    </p>
+                  ) : (
+                    results.map((r, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between text-sm border rounded-md px-3 py-2"
+                      >
+                        <span className="font-medium">{humanize(r.channel)}</span>
+                        <span
+                          className={
+                            r.status === "failed"
+                              ? "text-destructive"
+                              : "text-emerald-700 dark:text-emerald-400"
+                          }
+                        >
+                          {r.detail || humanize(r.status)}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        )}
+      </RequireClientScope>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   useGetMe,
   useListConsent,
@@ -9,6 +10,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
+import { RequireClientScope } from "@/components/require-client-scope";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import {
   ShieldCheck,
@@ -19,7 +23,7 @@ import {
   BarChart3,
   Landmark,
 } from "lucide-react";
-import { formatDate } from "@/lib/format";
+import { formatDate, humanize, pillClasses } from "@/lib/format";
 
 // Consent flows v1 (R1, CORE-03/C6): the three-layer architecture surfaced.
 // Layer 1 powers submission/vault/alerts; layer 2 anonymized benchmarking;
@@ -55,6 +59,14 @@ const LAYERS = [
   },
 ] as const;
 
+const SCOPE_TITLES: Record<string, string> = Object.fromEntries(
+  LAYERS.map((l) => [l.scope, l.title]),
+);
+
+function scopeTitle(scope: string): string {
+  return SCOPE_TITLES[scope] ?? humanize(scope);
+}
+
 // Latest grant/revoke wins per layer.
 function layerStatus(records: ConsentRecord[], layer: number): ConsentRecord | null {
   const forLayer = records
@@ -64,21 +76,30 @@ function layerStatus(records: ConsentRecord[], layer: number): ConsentRecord | n
 }
 
 export function Consent() {
+  usePageTitle("Consent");
   const { data: me } = useGetMe();
   const clientPartyId = me?.clientPartyId || "";
   const canWrite = (me?.capabilities ?? []).includes("consent.write");
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: records, isLoading } = useListConsent(clientPartyId, {
+  const {
+    data: records,
+    isLoading,
+    isError,
+    refetch,
+  } = useListConsent(clientPartyId, {
     query: {
       enabled: !!clientPartyId,
       queryKey: getListConsentQueryKey(clientPartyId),
     },
   });
   const record = useRecordConsent();
+  // Only the control that fired shows pending state.
+  const [actingLayer, setActingLayer] = useState<number | null>(null);
 
   const act = (layer: number, scope: string, action: "grant" | "revoke") => {
+    setActingLayer(layer);
     record.mutate(
       {
         id: clientPartyId,
@@ -99,153 +120,161 @@ export function Consent() {
         },
         onError: () =>
           toast({ title: "Could not record consent", variant: "destructive" }),
+        onSettled: () => setActingLayer(null),
       },
     );
   };
 
-  if (!clientPartyId) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">
-          Consent
-        </h1>
-        <Card>
-          <CardContent className="pt-6 text-sm text-muted-foreground flex items-start gap-2">
-            <Info className="w-4 h-4 mt-0.5 shrink-0" />
-            Your account isn't scoped to a client business, so there's no
-            consent ledger to show here. Sign in with a client account.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">
-          Consent
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Every permission on your data, recorded with lineage — grants and
-          revocations are ledger events, never edits.
-        </p>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+            Consent
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Every permission on your data, recorded with lineage — grants and
+            revocations are ledger events, never edits.
+          </p>
+        </div>
       </div>
 
-      {!canWrite && (
-        <p
-          className="text-sm text-muted-foreground flex items-center gap-2"
-          data-testid="text-consent-readonly"
-        >
-          <Info className="w-4 h-4" />
-          Read-only view — granting or revoking consent is for the client's own
-          account (or the firm admin).
-        </p>
-      )}
+      <RequireClientScope thing="consent ledger">
+        <div className="space-y-6">
+          {!canWrite && (
+            <p
+              className="text-sm text-muted-foreground flex items-center gap-2"
+              data-testid="text-consent-readonly"
+            >
+              <Info className="w-4 h-4" aria-hidden="true" />
+              Read-only view — granting or revoking consent is for the client's own
+              account (or the firm admin).
+            </p>
+          )}
 
-      {isLoading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {LAYERS.map((l) => {
-            const Icon = l.icon;
-            const current = layerStatus(records ?? [], l.layer);
-            const granted = current?.action === "grant";
-            return (
-              <Card key={l.layer} data-testid={`consent-layer-${l.layer}`}>
+          {isLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-32" />
+              ))}
+            </div>
+          ) : isError ? (
+            <QueryError thing="the consent ledger" onRetry={() => refetch()} />
+          ) : (
+            <>
+              <div className="space-y-4">
+                {LAYERS.map((l) => {
+                  const Icon = l.icon;
+                  const current = layerStatus(records ?? [], l.layer);
+                  const granted = current?.action === "grant";
+                  const acting = actingLayer === l.layer && record.isPending;
+                  return (
+                    <Card key={l.layer} data-testid={`consent-layer-${l.layer}`}>
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-between gap-2 text-base">
+                          <span className="flex items-center gap-2">
+                            <Icon className="w-4 h-4 text-primary" aria-hidden="true" />
+                            Layer {l.layer} · {l.title}
+                          </span>
+                          {l.dormant ? (
+                            <span className={pillClasses("slate")}>
+                              <Lock className="w-3 h-3" aria-hidden="true" /> Not yet available
+                            </span>
+                          ) : granted ? (
+                            <span className={pillClasses("emerald")}>
+                              <ShieldCheck className="w-3 h-3" aria-hidden="true" /> Granted
+                            </span>
+                          ) : (
+                            <span className={pillClasses("slate")}>
+                              <ShieldOff className="w-3 h-3" aria-hidden="true" /> Not granted
+                            </span>
+                          )}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">{l.description}</p>
+                        {current && (
+                          <p className="text-xs text-muted-foreground">
+                            Last change: {current.action === "grant" ? "Granted" : "Revoked"} ·{" "}
+                            {formatDate(current.createdAt)} via {humanize(current.channel)}
+                          </p>
+                        )}
+                        {!l.dormant && canWrite && (
+                          <div className="flex gap-2">
+                            {granted ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive hover:text-destructive"
+                                disabled={acting}
+                                onClick={() => act(l.layer, l.scope, "revoke")}
+                                data-testid={`button-revoke-${l.layer}`}
+                              >
+                                <ShieldOff className="w-4 h-4 mr-1" aria-hidden="true" />
+                                {acting ? "Revoking…" : "Revoke"}
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                disabled={acting}
+                                onClick={() => act(l.layer, l.scope, "grant")}
+                                data-testid={`button-grant-${l.layer}`}
+                              >
+                                <ShieldCheck className="w-4 h-4 mr-1" aria-hidden="true" />
+                                {acting ? "Granting…" : "Grant"}
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center justify-between gap-2 text-base">
-                    <span className="flex items-center gap-2">
-                      <Icon className="w-4 h-4 text-primary" />
-                      Layer {l.layer} · {l.title}
-                    </span>
-                    {l.dormant ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border bg-slate-100 text-slate-600 border-slate-200">
-                        <Lock className="w-3 h-3" /> Not yet available
-                      </span>
-                    ) : granted ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-200">
-                        <ShieldCheck className="w-3 h-3" /> Granted
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border bg-slate-100 text-slate-700 border-slate-200">
-                        <ShieldOff className="w-3 h-3" /> Not granted
-                      </span>
-                    )}
-                  </CardTitle>
+                  <CardTitle className="text-base">Consent history</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">{l.description}</p>
-                  {current && (
-                    <p className="text-xs text-muted-foreground">
-                      Last change: {current.action} · {formatDate(current.createdAt)} via{" "}
-                      {current.channel}
+                <CardContent>
+                  {(records ?? []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground" data-testid="text-empty">
+                      No consent events yet.
                     </p>
-                  )}
-                  {!l.dormant && canWrite && (
-                    <div className="flex gap-2">
-                      {granted ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive hover:text-destructive"
-                          disabled={record.isPending}
-                          onClick={() => act(l.layer, l.scope, "revoke")}
-                          data-testid={`button-revoke-${l.layer}`}
-                        >
-                          <ShieldOff className="w-4 h-4 mr-1" /> Revoke
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          disabled={record.isPending}
-                          onClick={() => act(l.layer, l.scope, "grant")}
-                          data-testid={`button-grant-${l.layer}`}
-                        >
-                          <ShieldCheck className="w-4 h-4 mr-1" /> Grant
-                        </Button>
-                      )}
+                  ) : (
+                    <div className="divide-y">
+                      {[...(records ?? [])]
+                        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                        .map((r) => (
+                          <div
+                            key={r.id}
+                            className="py-2 text-sm flex items-center justify-between gap-3"
+                          >
+                            <span>
+                              <span
+                                className={`font-medium ${
+                                  r.action === "grant"
+                                    ? "text-emerald-700 dark:text-emerald-400"
+                                    : "text-red-700 dark:text-red-400"
+                                }`}
+                              >
+                                {r.action === "grant" ? "Granted" : "Revoked"}
+                              </span>{" "}
+                              · Layer {r.layer} · {scopeTitle(r.scope)}
+                            </span>
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              {formatDate(r.createdAt)} · {humanize(r.channel)}
+                            </span>
+                          </div>
+                        ))}
                     </div>
                   )}
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Consent history</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(records ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">No consent events yet.</p>
-          ) : (
-            <div className="divide-y">
-              {[...(records ?? [])]
-                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                .map((r) => (
-                  <div key={r.id} className="py-2 text-sm flex items-center justify-between gap-3">
-                    <span>
-                      <span className={`font-medium ${r.action === "grant" ? "text-emerald-700" : "text-red-700"}`}>
-                        {r.action}
-                      </span>{" "}
-                      layer {r.layer} · {r.scope}
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {formatDate(r.createdAt)} · {r.channel}
-                    </span>
-                  </div>
-                ))}
-            </div>
+            </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </RequireClientScope>
     </div>
   );
 }

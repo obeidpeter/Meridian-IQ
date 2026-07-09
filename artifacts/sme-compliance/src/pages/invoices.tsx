@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Search, FileText, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { formatNaira, formatDate, statusLabel, badgeClasses, statusTone } from "@/lib/format";
 
@@ -22,8 +24,9 @@ const FILTERS = [
 ] as const;
 
 export function Invoices() {
+  usePageTitle("Invoices");
   const { data: me } = useGetMe();
-  const { data: invoices, isLoading } = useListInvoices();
+  const { data: invoices, isLoading, isError, refetch } = useListInvoices();
   const { data: parties } = useListParties();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
@@ -41,6 +44,7 @@ export function Invoices() {
 
   const hasAdvanced =
     !!fromDate || !!toDate || !!minAmount || !!maxAmount;
+  const hasAnyFilter = hasAdvanced || !!search.trim() || filter !== "all";
 
   const clearAdvanced = () => {
     setFromDate("");
@@ -49,16 +53,33 @@ export function Invoices() {
     setMaxAmount("");
   };
 
+  const clearAllFilters = () => {
+    clearAdvanced();
+    setSearch("");
+    setFilter("all");
+  };
+
+  // The client's own invoice book — the base every filter applies to.
+  const scoped = useMemo(
+    () =>
+      (invoices || []).filter(
+        (inv) => !me?.clientPartyId || inv.supplierPartyId === me.clientPartyId,
+      ),
+    [invoices, me?.clientPartyId],
+  );
+
+  const countFor = (key: (typeof FILTERS)[number]["key"]) =>
+    key === "all"
+      ? scoped.length
+      : scoped.filter((inv) => statusTone(inv.status) === key).length;
+
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     const minParsed = Number(minAmount);
     const maxParsed = Number(maxAmount);
     const min = minAmount && Number.isFinite(minParsed) ? minParsed : null;
     const max = maxAmount && Number.isFinite(maxParsed) ? maxParsed : null;
-    const list = (invoices || []).filter(
-      (inv) => !me?.clientPartyId || inv.supplierPartyId === me.clientPartyId,
-    );
-    return list
+    return scoped
       .filter((inv) => (filter === "all" ? true : statusTone(inv.status) === filter))
       .filter((inv) => {
         if (!q) return true;
@@ -73,8 +94,7 @@ export function Invoices() {
       .filter((inv) => (min !== null ? Number(inv.grandTotal) >= min : true))
       .filter((inv) => (max !== null ? Number(inv.grandTotal) <= max : true));
   }, [
-    invoices,
-    me?.clientPartyId,
+    scoped,
     filter,
     search,
     partyName,
@@ -85,25 +105,31 @@ export function Invoices() {
   ]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Invoice Vault</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+            Invoice vault
+          </h1>
+          <p className="text-muted-foreground mt-1">
             Every invoice, write-once and searchable.
           </p>
         </div>
-        <Link
-          href="/invoices/new"
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2"
-        >
-          New Invoice
-        </Link>
+        <Button asChild>
+          <Link href="/invoices/new">New invoice</Link>
+        </Button>
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Search
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Label htmlFor="invoice-search" className="sr-only">
+          Search invoices
+        </Label>
         <Input
+          id="invoice-search"
           placeholder="Search by invoice number or customer"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -112,26 +138,32 @@ export function Invoices() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              filter === f.key
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+        {FILTERS.map((f) => {
+          const isActive = filter === f.key;
+          return (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              aria-pressed={isActive}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border min-h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                isActive
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-foreground hover:bg-muted"
+              }`}
+            >
+              {f.label}
+              {!isLoading && !isError ? ` · ${countFor(f.key)}` : ""}
+            </button>
+          );
+        })}
         <Button
           variant={hasAdvanced ? "default" : "outline"}
           size="sm"
           className="ml-auto rounded-full"
           onClick={() => setShowFilters((s) => !s)}
+          aria-pressed={showFilters}
         >
-          <SlidersHorizontal className="w-4 h-4 mr-1.5" />
+          <SlidersHorizontal className="w-4 h-4 mr-1.5" aria-hidden="true" />
           Filters{hasAdvanced ? " (on)" : ""}
         </Button>
       </div>
@@ -140,25 +172,35 @@ export function Invoices() {
         <Card>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6">
             <div>
-              <Label className="text-xs">Issued from</Label>
+              <Label htmlFor="filter-from" className="text-xs">
+                Issued from
+              </Label>
               <Input
+                id="filter-from"
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
               />
             </div>
             <div>
-              <Label className="text-xs">Issued to</Label>
+              <Label htmlFor="filter-to" className="text-xs">
+                Issued to
+              </Label>
               <Input
+                id="filter-to"
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
               />
             </div>
             <div>
-              <Label className="text-xs">Min amount (₦)</Label>
+              <Label htmlFor="filter-min" className="text-xs">
+                Min amount (₦)
+              </Label>
               <Input
+                id="filter-min"
                 type="number"
+                min="0"
                 inputMode="decimal"
                 placeholder="0"
                 value={minAmount}
@@ -166,9 +208,13 @@ export function Invoices() {
               />
             </div>
             <div>
-              <Label className="text-xs">Max amount (₦)</Label>
+              <Label htmlFor="filter-max" className="text-xs">
+                Max amount (₦)
+              </Label>
               <Input
+                id="filter-max"
                 type="number"
+                min="0"
                 inputMode="decimal"
                 placeholder="Any"
                 value={maxAmount}
@@ -188,46 +234,74 @@ export function Invoices() {
 
       {isLoading ? (
         <div className="space-y-3">
-          <Skeleton className="h-20" />
-          <Skeleton className="h-20" />
-          <Skeleton className="h-20" />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-20" />
+          ))}
         </div>
+      ) : isError ? (
+        <QueryError thing="your invoices" onRetry={() => refetch()} />
       ) : rows.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <FileText className="w-10 h-10 text-muted-foreground mb-3" />
-            <p className="font-medium">No invoices found</p>
-            <p className="text-sm text-muted-foreground">
-              Try a different filter, or create a new invoice.
-            </p>
-          </CardContent>
-        </Card>
+        scoped.length === 0 && !hasAnyFilter ? (
+          <Card>
+            <CardContent className="py-12 flex flex-col items-center text-center gap-2">
+              <FileText className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
+              <p className="font-semibold" data-testid="text-empty">
+                No invoices yet
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Create your first invoice, or bring your whole book across in one
+                go with{" "}
+                <Link href="/import" className="text-primary hover:underline">
+                  bulk import
+                </Link>
+                .
+              </p>
+              <Button asChild className="mt-2">
+                <Link href="/invoices/new">Create your first invoice</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="py-12 flex flex-col items-center text-center gap-2">
+              <FileText className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
+              <p className="font-semibold" data-testid="text-empty">
+                No matches
+              </p>
+              <p className="text-sm text-muted-foreground">
+                No invoices match the current search and filters.
+              </p>
+              <Button variant="outline" className="mt-2" onClick={clearAllFilters}>
+                Clear filters
+              </Button>
+            </CardContent>
+          </Card>
+        )
       ) : (
         <div className="space-y-3">
           {rows.map((inv) => (
-            <Link key={inv.id} href={`/invoices/${inv.id}`}>
+            <Link key={inv.id} href={`/invoices/${inv.id}`} className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
               <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-                <CardContent className="flex items-center justify-between p-4">
+                <CardContent className="flex items-center justify-between p-4 gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold truncate">
                         {inv.invoiceNumber}
                       </span>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-full border ${badgeClasses(inv.status)}`}
-                      >
+                      <span className={badgeClasses(inv.status)}>
                         {statusLabel(inv.status)}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-sm text-muted-foreground mt-1 truncate">
+                      {partyName.get(inv.buyerPartyId) || "Unknown customer"} ·
                       Issued {formatDate(inv.issueDate)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-semibold">
+                    <span className="font-semibold tabular-nums">
                       {formatNaira(inv.grandTotal)}
                     </span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
                   </div>
                 </CardContent>
               </Card>

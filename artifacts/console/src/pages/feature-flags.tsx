@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   useGetMe,
   useListFeatureFlags,
@@ -10,8 +10,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
-import { Info } from "lucide-react";
+import { usePageTitle } from "@/hooks/use-page-title";
+import { Info, ToggleRight } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 
 // Flags ship dark and are flipped per release gate (PL-02). Grouping by
@@ -65,13 +67,18 @@ function FlagRow({
 }
 
 export function FeatureFlags() {
+  usePageTitle("Feature flags");
   const { data: me } = useGetMe();
-  const { data: flags, isLoading } = useListFeatureFlags();
+  const { data: flags, isLoading, error, refetch } = useListFeatureFlags();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const update = useUpdateFeatureFlag();
 
   const canWrite = (me?.capabilities ?? []).includes("flags.write");
+
+  // Track which key is saving so only that Switch disables while the
+  // mutation runs.
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   const groups = useMemo(() => {
     const byTag = new Map<string, FeatureFlag[]>();
@@ -88,7 +95,8 @@ export function FeatureFlags() {
       }));
   }, [flags]);
 
-  const handleToggle = (flag: FeatureFlag, enabled: boolean) => {
+  const runToggle = (flag: FeatureFlag, enabled: boolean) => {
+    setSavingKey(flag.key);
     update.mutate(
       { key: flag.key, data: { enabled } },
       {
@@ -108,6 +116,7 @@ export function FeatureFlags() {
             title: `Could not update ${flag.key}`,
             variant: "destructive",
           }),
+        onSettled: () => setSavingKey(null),
       },
     );
   };
@@ -131,7 +140,7 @@ export function FeatureFlags() {
           className="text-sm text-muted-foreground flex items-center gap-2"
           data-testid="text-read-only"
         >
-          <Info className="w-4 h-4" />
+          <Info className="w-4 h-4" aria-hidden="true" />
           Read-only view — only the Compliance Desk operator can flip release
           flags.
         </p>
@@ -140,13 +149,36 @@ export function FeatureFlags() {
       {isLoading ? (
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-40" />
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-5 w-32" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {Array.from({ length: 3 }).map((_, j) => (
+                  <Skeleton key={j} className="h-14" />
+                ))}
+              </CardContent>
+            </Card>
           ))}
         </div>
+      ) : error ? (
+        <QueryError thing="feature flags" onRetry={() => refetch()} />
       ) : groups.length === 0 ? (
-        <p className="text-muted-foreground" data-testid="text-empty">
-          No flags seeded yet.
-        </p>
+        <Card>
+          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
+            <ToggleRight
+              className="w-10 h-10 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p className="font-semibold" data-testid="text-empty">
+              No flags seeded yet
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Release flags are seeded by the platform — they appear here once
+              the spine registers them.
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         groups.map((group) => (
           <Card key={group.tag} data-testid={`card-release-${group.tag}`}>
@@ -160,8 +192,8 @@ export function FeatureFlags() {
                     key={flag.key}
                     flag={flag}
                     canWrite={canWrite}
-                    onToggle={handleToggle}
-                    saving={update.isPending}
+                    onToggle={runToggle}
+                    saving={savingKey === flag.key}
                   />
                 ))}
               </div>

@@ -31,8 +31,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
-import { Plus } from "lucide-react";
+import { usePageTitle } from "@/hooks/use-page-title";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 
 const STAGES: { key: ProspectInputStage; label: string }[] = [
   { key: "lead", label: "Lead" },
@@ -48,7 +50,8 @@ const STAGE_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 export function Pipeline() {
-  const { data, isLoading } = useListPipeline();
+  usePageTitle("Onboarding pipeline");
+  const { data, isLoading, error, refetch } = useListPipeline();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -56,6 +59,14 @@ export function Pipeline() {
   const [email, setEmail] = useState("");
   const [stage, setStage] = useState<ProspectInputStage>("lead");
   const [estimate, setEstimate] = useState("50");
+  const [showLost, setShowLost] = useState(false);
+  // Per-card pending state: while a stage change is in flight the affected
+  // Select keeps showing the chosen stage instead of snapping back, and only
+  // that card's control disables.
+  const [pendingMove, setPendingMove] = useState<{
+    id: string;
+    stage: ProspectInputStage;
+  } | null>(null);
 
   const createProspect = useCreateProspect();
   const updateProspect = useUpdateProspect();
@@ -95,22 +106,29 @@ export function Pipeline() {
   };
 
   const advanceStage = (p: OnboardingProspect, newStage: ProspectInputStage) => {
+    setPendingMove({ id: p.id, stage: newStage });
     updateProspect.mutate(
       { id: p.id, data: { stage: newStage } },
       {
-        onSuccess: () => invalidate(),
+        onSuccess: () => {
+          toast({
+            title: `Moved ${p.name} to ${STAGE_LABEL[newStage] ?? newStage}`,
+          });
+          invalidate();
+        },
         onError: () =>
           toast({ title: "Could not update stage", variant: "destructive" }),
+        onSettled: () => setPendingMove(null),
       },
     );
   };
 
-  const byStage = (s: string) =>
-    (data ?? []).filter((p) => p.stage === s);
+  const byStage = (s: string) => (data ?? []).filter((p) => p.stage === s);
+  const lost = byStage("lost");
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
             Onboarding pipeline
@@ -122,7 +140,7 @@ export function Pipeline() {
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-prospect">
-              <Plus className="w-4 h-4 mr-2" /> Add prospect
+              <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add prospect
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -150,12 +168,12 @@ export function Pipeline() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Stage</Label>
+                  <Label htmlFor="p-stage">Stage</Label>
                   <Select
                     value={stage}
                     onValueChange={(v) => setStage(v as ProspectInputStage)}
                   >
-                    <SelectTrigger data-testid="select-prospect-stage">
+                    <SelectTrigger id="p-stage" data-testid="select-prospect-stage">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -172,6 +190,8 @@ export function Pipeline() {
                   <Input
                     id="p-est"
                     type="number"
+                    min={0}
+                    step={1}
                     value={estimate}
                     onChange={(e) => setEstimate(e.target.value)}
                     data-testid="input-prospect-estimate"
@@ -180,12 +200,15 @@ export function Pipeline() {
               </div>
             </div>
             <DialogFooter>
+              <Button variant="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
               <Button
                 onClick={handleCreate}
                 disabled={createProspect.isPending || !name.trim()}
                 data-testid="button-save-prospect"
               >
-                Save
+                {createProspect.isPending ? "Saving…" : "Save"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -193,63 +216,125 @@ export function Pipeline() {
       </div>
 
       {isLoading ? (
-        <Skeleton className="h-96" />
-      ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {STAGES.filter((s) => s.key !== "lost").map((s) => {
-            const items = byStage(s.key);
-            return (
-              <Card key={s.key} data-testid={`column-${s.key}`}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center justify-between">
-                    {s.label}
-                    <span className="text-muted-foreground font-normal">
-                      {items.length}
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {items.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">—</p>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-3">
+                <Skeleton className="h-4 w-24" />
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Skeleton className="h-20" />
+                <Skeleton className="h-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : error ? (
+        <QueryError thing="the pipeline" onRetry={() => refetch()} />
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {STAGES.filter((s) => s.key !== "lost").map((s) => {
+              const items = byStage(s.key);
+              return (
+                <Card key={s.key} data-testid={`column-${s.key}`}>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      {s.label}
+                      <span className="text-muted-foreground font-normal">
+                        {items.length}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {items.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">—</p>
+                    ) : (
+                      items.map((p) => {
+                        const isMoving = pendingMove?.id === p.id;
+                        return (
+                          <div
+                            key={p.id}
+                            data-testid={`card-prospect-${p.id}`}
+                            className="border rounded-md p-3 space-y-2"
+                          >
+                            <p className="font-medium text-sm">{p.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              ~{p.estimatedMonthlyInvoices} inv/mo
+                            </p>
+                            <Select
+                              value={isMoving ? pendingMove.stage : p.stage}
+                              disabled={isMoving}
+                              onValueChange={(v) =>
+                                advanceStage(p, v as ProspectInputStage)
+                              }
+                            >
+                              <SelectTrigger
+                                className="h-8 text-xs"
+                                aria-label={`Stage for ${p.name}`}
+                                data-testid={`select-stage-${p.id}`}
+                              >
+                                <SelectValue>
+                                  {isMoving
+                                    ? `Moving to ${STAGE_LABEL[pendingMove.stage]}…`
+                                    : STAGE_LABEL[p.stage]}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {STAGES.map((st) => (
+                                  <SelectItem key={st.key} value={st.key}>
+                                    {st.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        );
+                      })
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          {lost.length > 0 && (
+            <Card data-testid="card-lost">
+              <CardContent className="pt-4 pb-4">
+                <button
+                  type="button"
+                  onClick={() => setShowLost((v) => !v)}
+                  aria-expanded={showLost}
+                  className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  data-testid="button-toggle-lost"
+                >
+                  {showLost ? (
+                    <ChevronUp className="w-4 h-4" aria-hidden="true" />
                   ) : (
-                    items.map((p) => (
+                    <ChevronDown className="w-4 h-4" aria-hidden="true" />
+                  )}
+                  Lost ({lost.length})
+                </button>
+                {showLost && (
+                  <div className="divide-y mt-2">
+                    {lost.map((p) => (
                       <div
                         key={p.id}
-                        data-testid={`card-prospect-${p.id}`}
-                        className="border rounded-md p-3 space-y-2"
+                        className="py-2 flex items-center justify-between gap-3"
+                        data-testid={`lost-prospect-${p.id}`}
                       >
-                        <p className="font-medium text-sm">{p.name}</p>
+                        <p className="text-sm">{p.name}</p>
                         <p className="text-xs text-muted-foreground">
                           ~{p.estimatedMonthlyInvoices} inv/mo
                         </p>
-                        <Select
-                          value={p.stage}
-                          onValueChange={(v) =>
-                            advanceStage(p, v as ProspectInputStage)
-                          }
-                        >
-                          <SelectTrigger
-                            className="h-8 text-xs"
-                            data-testid={`select-stage-${p.id}`}
-                          >
-                            <SelectValue>{STAGE_LABEL[p.stage]}</SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STAGES.map((st) => (
-                              <SelectItem key={st.key} value={st.key}>
-                                {st.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
                       </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );

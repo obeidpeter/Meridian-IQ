@@ -3,15 +3,18 @@ import {
   useImportClients,
   type ClientImportRow,
   type ClientImportResult,
-  type ClientImportRowResult,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { isFeatureDisabled } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
+import { importRowBadgeClasses, importRowLabel } from "@/lib/format";
 import {
   Upload,
   Download,
@@ -108,12 +111,6 @@ function download(filename: string, text: string) {
   URL.revokeObjectURL(url);
 }
 
-const ROW_BADGES: Record<ClientImportRowResult["status"], string> = {
-  created: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  exists: "bg-amber-100 text-amber-800 border-amber-200",
-  invalid: "bg-red-100 text-red-800 border-red-200",
-};
-
 function SummaryTile({
   label,
   value,
@@ -127,23 +124,24 @@ function SummaryTile({
 }) {
   const color =
     tone === "success"
-      ? "text-emerald-700"
+      ? "text-emerald-700 dark:text-emerald-400"
       : tone === "warning"
-        ? "text-amber-700"
+        ? "text-amber-700 dark:text-amber-400"
         : tone === "danger"
-          ? "text-red-700"
+          ? "text-red-700 dark:text-red-400"
           : "";
   return (
     <Card data-testid={testId}>
       <CardContent className="pt-6">
         <p className="text-sm text-muted-foreground">{label}</p>
-        <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
+        <p className={`text-2xl font-bold mt-1 tabular-nums ${color}`}>{value}</p>
       </CardContent>
     </Card>
   );
 }
 
 export function ClientImport() {
+  usePageTitle("Client import");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const importClients = useImportClients();
@@ -234,27 +232,33 @@ export function ClientImport() {
               onClick={() => fileRef.current?.click()}
               data-testid="button-upload"
             >
-              <Upload className="w-4 h-4 mr-2" /> Upload CSV
+              <Upload className="w-4 h-4 mr-2" aria-hidden="true" /> Upload CSV
             </Button>
             <Button
               variant="ghost"
               onClick={() => download("meridianiq-clients-template.csv", TEMPLATE)}
               data-testid="button-template"
             >
-              <Download className="w-4 h-4 mr-2" /> CSV template
+              <Download className="w-4 h-4 mr-2" aria-hidden="true" /> CSV template
             </Button>
           </div>
-          <textarea
-            className="w-full min-h-[140px] rounded-md border border-input bg-transparent p-3 text-sm font-mono"
-            placeholder={`…or paste CSV rows here (first line = ${COLUMNS.join(",")})`}
-            value={raw}
-            onChange={(e) => {
-              setRaw(e.target.value);
-              setFileName(null);
-              setResult(null);
-            }}
-            data-testid="input-csv"
-          />
+          <div className="space-y-1.5">
+            <Label htmlFor="import-csv">
+              Or paste CSV rows (first line = {COLUMNS.join(",")})
+            </Label>
+            <Textarea
+              id="import-csv"
+              className="min-h-[140px] font-mono text-sm"
+              placeholder={TEMPLATE}
+              value={raw}
+              onChange={(e) => {
+                setRaw(e.target.value);
+                setFileName(null);
+                setResult(null);
+              }}
+              data-testid="input-csv"
+            />
+          </div>
           {rows.length > 0 && (
             <p className="text-sm text-muted-foreground" data-testid="text-rows-ready">
               {fileName ? (
@@ -275,7 +279,7 @@ export function ClientImport() {
           disabled={rows.length === 0 || importClients.isPending}
           data-testid="button-validate"
         >
-          <CheckCircle2 className="w-4 h-4 mr-2" /> Validate rows
+          <CheckCircle2 className="w-4 h-4 mr-2" aria-hidden="true" /> Validate rows
         </Button>
         <Button
           onClick={() => run(true)}
@@ -287,7 +291,7 @@ export function ClientImport() {
           }
           data-testid="button-commit"
         >
-          <Users className="w-4 h-4 mr-2" />
+          <Users className="w-4 h-4 mr-2" aria-hidden="true" />
           {importClients.isPending ? "Working…" : "Commit import"}
         </Button>
         {!result && rows.length > 0 && (
@@ -343,11 +347,11 @@ export function ClientImport() {
                     data-testid={`row-result-${r.rowNumber}`}
                   >
                     {r.status === "invalid" ? (
-                      <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                      <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" aria-hidden="true" />
                     ) : r.status === "exists" ? (
-                      <Copy className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                      <Copy className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" aria-hidden="true" />
                     ) : (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -355,10 +359,8 @@ export function ClientImport() {
                           Row {r.rowNumber}
                           {source?.legalName ? ` · ${source.legalName}` : ""}
                         </p>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full border capitalize ${ROW_BADGES[r.status]}`}
-                        >
-                          {r.status}
+                        <span className={importRowBadgeClasses(r.status)}>
+                          {importRowLabel(r.status)}
                         </span>
                       </div>
                       {(r.errors ?? []).length > 0 && (

@@ -13,14 +13,18 @@ import type {
   ListOperatorCasesStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { isForbidden } from "@/lib/errors";
-import { Clock, Zap, ShieldCheck, Lock, LifeBuoy } from "lucide-react";
+import { humanize, priorityBadgeClasses } from "@/lib/format";
+import { Clock, Zap, ShieldCheck, Lock, LifeBuoy, Inbox } from "lucide-react";
 
 function formatDuration(seconds?: number | null): string {
   if (seconds == null) return "—";
@@ -28,17 +32,6 @@ function formatDuration(seconds?: number | null): string {
   const s = seconds % 60;
   if (m === 0) return `${s}s`;
   return `${m}m ${s}s`;
-}
-
-function priorityBadge(p: OperatorCaseView["priority"]): string {
-  switch (p) {
-    case "high":
-      return "bg-red-100 text-red-800 border-red-200";
-    case "medium":
-      return "bg-amber-100 text-amber-800 border-amber-200";
-    default:
-      return "bg-slate-100 text-slate-700 border-slate-200";
-  }
 }
 
 function CaseCard({
@@ -71,18 +64,16 @@ function CaseCard({
               {c.errorCode ? ` · ${c.errorCode}` : ""}
             </p>
           </div>
-          <span
-            className={`text-xs font-medium px-2.5 py-1 rounded-full border shrink-0 ${priorityBadge(c.priority)}`}
-          >
-            {c.priority}
+          <span className={`${priorityBadgeClasses(c.priority)} shrink-0`}>
+            {humanize(c.priority)}
           </span>
         </div>
 
         {c.playbook && (
           <div className="rounded-md bg-muted/60 p-3 text-sm space-y-1">
             <p className="font-medium flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-primary" /> Playbook ·{" "}
-              {c.playbook.category}
+              <ShieldCheck className="w-4 h-4 text-primary" aria-hidden="true" />{" "}
+              Playbook · {c.playbook.category}
             </p>
             <p className="text-muted-foreground">
               <span className="font-medium text-foreground">Cause:</span>{" "}
@@ -96,12 +87,13 @@ function CaseCard({
         )}
 
         {(c.escalations ?? []).length > 0 && (
-          <div className="rounded-md border border-amber-200 bg-amber-50/60 p-3 text-sm space-y-1.5">
-            <p className="font-medium flex items-center gap-1.5 text-amber-900">
-              <LifeBuoy className="w-4 h-4" /> Client escalation
+          <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/40 p-3 text-sm space-y-1.5">
+            <p className="font-medium flex items-center gap-1.5 text-amber-900 dark:text-amber-200">
+              <LifeBuoy className="w-4 h-4" aria-hidden="true" /> Client
+              escalation
             </p>
             {(c.escalations ?? []).map((e) => (
-              <p key={e.id} className="text-amber-900/80">
+              <p key={e.id} className="text-amber-900/80 dark:text-amber-200/80">
                 “{e.reason}”
               </p>
             ))}
@@ -110,10 +102,10 @@ function CaseCard({
 
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5" /> Handle:{" "}
+            <Clock className="w-3.5 h-3.5" aria-hidden="true" /> Handle:{" "}
             {formatDuration(c.handleSeconds)}
           </span>
-          <span className="capitalize">{c.status.replace("_", " ")}</span>
+          <span>{humanize(c.status)}</span>
         </div>
 
         {c.status === "open" && canAct && (
@@ -124,13 +116,17 @@ function CaseCard({
             onClick={() => onClaim(c)}
             data-testid={`button-claim-${c.id}`}
           >
-            Claim case
+            {claiming ? "Claiming…" : "Claim case"}
           </Button>
         )}
 
         {c.status === "in_progress" && canAct && (
           <div className="space-y-2">
+            <Label htmlFor={`note-${c.id}`} className="sr-only">
+              Resolution note
+            </Label>
             <Input
+              id={`note-${c.id}`}
               placeholder="Resolution note (optional)"
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -146,7 +142,8 @@ function CaseCard({
                   onClick={() => onResolve(c, "retried", note)}
                   data-testid={`button-retry-${c.id}`}
                 >
-                  <Zap className="w-4 h-4 mr-1" /> Retry & resolve
+                  <Zap className="w-4 h-4 mr-1" aria-hidden="true" /> Retry &
+                  resolve
                 </Button>
               )}
               <Button
@@ -156,15 +153,15 @@ function CaseCard({
                 onClick={() => onResolve(c, "resolved_manually", note)}
                 data-testid={`button-resolve-${c.id}`}
               >
-                Resolve
+                {resolving ? "Resolving…" : "Resolve"}
               </Button>
             </div>
           </div>
         )}
 
         {c.status === "resolved" && (
-          <p className="text-xs text-emerald-700">
-            Resolved{c.resolutionCode ? ` · ${c.resolutionCode}` : ""}
+          <p className="text-xs text-emerald-700 dark:text-emerald-400">
+            Resolved{c.resolutionCode ? ` · ${humanize(c.resolutionCode)}` : ""}
             {c.resolutionNote ? ` — ${c.resolutionNote}` : ""}
           </p>
         )}
@@ -173,16 +170,48 @@ function CaseCard({
   );
 }
 
+function StatTile({
+  label,
+  value,
+  loading,
+  "data-testid": testId,
+}: {
+  label: string;
+  value: string;
+  loading: boolean;
+  "data-testid": string;
+}) {
+  return (
+    <Card data-testid={testId}>
+      <CardContent className="pt-6">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        {loading ? (
+          <Skeleton className="h-8 w-16 mt-1" />
+        ) : (
+          <p className="text-2xl font-bold mt-1 tabular-nums">{value}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function OperatorQueue() {
+  usePageTitle("Operator queue");
   const [status, setStatus] = useState<ListOperatorCasesStatus>("open");
   const { data: me } = useGetMe();
   // Auditors hold operator.queue.read but not .act — the queue renders
   // read-only for them instead of offering buttons that 403.
   const canAct = (me?.capabilities ?? []).includes("operator.queue.act");
-  const { data, isLoading, error } = useListOperatorCases({ status });
-  const { data: stats, error: statsError } = useGetOperatorQueueStats();
+  const { data, isLoading, error, refetch } = useListOperatorCases({ status });
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    error: statsError,
+  } = useGetOperatorQueueStats();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  // Per-case pending: only the card whose action fired disables (§7).
+  const [pendingCaseId, setPendingCaseId] = useState<string | null>(null);
 
   const claim = useClaimOperatorCase();
   const resolve = useResolveOperatorCase();
@@ -197,6 +226,7 @@ export function OperatorQueue() {
   };
 
   const handleClaim = (c: OperatorCaseView) => {
+    setPendingCaseId(c.id);
     claim.mutate(
       { id: c.id },
       {
@@ -206,11 +236,13 @@ export function OperatorQueue() {
         },
         onError: () =>
           toast({ title: "Could not claim case", variant: "destructive" }),
+        onSettled: () => setPendingCaseId(null),
       },
     );
   };
 
   const handleResolve = (c: OperatorCaseView, code: string, note: string) => {
+    setPendingCaseId(c.id);
     resolve.mutate(
       { id: c.id, data: { resolutionCode: code, note: note || undefined } },
       {
@@ -220,6 +252,7 @@ export function OperatorQueue() {
         },
         onError: () =>
           toast({ title: "Could not resolve case", variant: "destructive" }),
+        onSettled: () => setPendingCaseId(null),
       },
     );
   };
@@ -236,7 +269,10 @@ export function OperatorQueue() {
         <Card data-testid="card-operator-access-required">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
-              <Lock className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
+              <Lock
+                className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0"
+                aria-hidden="true"
+              />
               <div>
                 <p className="font-medium">Operator access required</p>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -267,44 +303,36 @@ export function OperatorQueue() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card data-testid="stat-open">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Open</p>
-            <p className="text-2xl font-bold mt-1">{stats?.openCount ?? "—"}</p>
-          </CardContent>
-        </Card>
-        <Card data-testid="stat-in-progress">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">In progress</p>
-            <p className="text-2xl font-bold mt-1">
-              {stats?.inProgressCount ?? "—"}
-            </p>
-          </CardContent>
-        </Card>
-        <Card data-testid="stat-resolved">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Resolved</p>
-            <p className="text-2xl font-bold mt-1">
-              {stats?.resolvedCount ?? "—"}
-            </p>
-          </CardContent>
-        </Card>
-        <Card data-testid="stat-clients-served">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Clients served</p>
-            <p className="text-2xl font-bold mt-1">
-              {stats?.clientsServed ?? "—"}
-            </p>
-          </CardContent>
-        </Card>
-        <Card data-testid="stat-avg-handle">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Avg handle time</p>
-            <p className="text-2xl font-bold mt-1">
-              {formatDuration(stats?.avgHandleSeconds)}
-            </p>
-          </CardContent>
-        </Card>
+        <StatTile
+          label="Open"
+          value={String(stats?.openCount ?? "—")}
+          loading={statsLoading}
+          data-testid="stat-open"
+        />
+        <StatTile
+          label="In progress"
+          value={String(stats?.inProgressCount ?? "—")}
+          loading={statsLoading}
+          data-testid="stat-in-progress"
+        />
+        <StatTile
+          label="Resolved"
+          value={String(stats?.resolvedCount ?? "—")}
+          loading={statsLoading}
+          data-testid="stat-resolved"
+        />
+        <StatTile
+          label="Clients served"
+          value={String(stats?.clientsServed ?? "—")}
+          loading={statsLoading}
+          data-testid="stat-clients-served"
+        />
+        <StatTile
+          label="Avg handle time"
+          value={formatDuration(stats?.avgHandleSeconds)}
+          loading={statsLoading}
+          data-testid="stat-avg-handle"
+        />
       </div>
 
       <Tabs
@@ -330,10 +358,24 @@ export function OperatorQueue() {
             <Skeleton key={i} className="h-56" />
           ))}
         </div>
+      ) : error ? (
+        <QueryError thing="the work queue" onRetry={() => refetch()} />
       ) : (data ?? []).length === 0 ? (
-        <p className="text-muted-foreground" data-testid="text-empty">
-          No cases in this state.
-        </p>
+        <Card>
+          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
+            <Inbox
+              className="w-10 h-10 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p className="font-semibold" data-testid="text-empty">
+              No {humanize(status).toLowerCase()} cases
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Cases land here when submissions fail or clients escalate —
+              switch tabs to see other states.
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {(data ?? []).map((c) => (
@@ -342,8 +384,8 @@ export function OperatorQueue() {
               c={c}
               onClaim={handleClaim}
               onResolve={handleResolve}
-              claiming={claim.isPending}
-              resolving={resolve.isPending}
+              claiming={claim.isPending && pendingCaseId === c.id}
+              resolving={resolve.isPending && pendingCaseId === c.id}
               canAct={canAct}
             />
           ))}

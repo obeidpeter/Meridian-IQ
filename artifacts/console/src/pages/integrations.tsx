@@ -29,29 +29,34 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { QueryError } from "@/components/query-error";
 import { isFeatureDisabled } from "@/lib/errors";
 import { Plug, Plus, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
-import { formatDateTime } from "@/lib/format";
+import {
+  formatDateTime,
+  connectionBadgeClasses,
+  humanize,
+} from "@/lib/format";
 
 // PL-03 / INT-06: ERP connectors behind the single connector contract. A
 // connection binds one client business to one connector; syncs pull AR
 // invoices through the outbox. Gated by the R2 `erp_connectors` flag.
 
-function statusBadge(status: ErpConnection["status"]): string {
-  switch (status) {
-    case "active":
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    case "error":
-      return "bg-red-100 text-red-800 border-red-200";
-    default:
-      return "bg-slate-100 text-slate-700 border-slate-200";
-  }
-}
-
 export function Integrations() {
-  const { data: connectors, isLoading, error } = useListConnectors();
-  const { data: connections, error: connectionsError } = useListErpConnections();
+  usePageTitle("Integrations");
+  const {
+    data: connectors,
+    isLoading,
+    error,
+    refetch: refetchConnectors,
+  } = useListConnectors();
+  const {
+    data: connections,
+    error: connectionsError,
+    refetch: refetchConnections,
+  } = useListErpConnections();
   const { data: portfolio } = useGetPortfolio();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -138,19 +143,24 @@ export function Integrations() {
           </p>
         </div>
         <Button onClick={() => setShowCreate(true)} data-testid="button-new-connection">
-          <Plus className="w-4 h-4 mr-1" /> Connect a client
+          <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Connect a client
         </Button>
       </div>
 
       <Card data-testid="card-connectors">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Plug className="w-4 h-4 text-primary" /> Available connectors
+            <Plug className="w-4 h-4 text-primary" aria-hidden="true" /> Available connectors
           </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <Skeleton className="h-16" />
+          ) : error ? (
+            <QueryError
+              thing="available connectors"
+              onRetry={() => refetchConnectors()}
+            />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {(connectors ?? []).map((c) => (
@@ -171,7 +181,12 @@ export function Integrations() {
           <CardTitle className="text-base">Client connections</CardTitle>
         </CardHeader>
         <CardContent>
-          {(connections ?? []).length === 0 ? (
+          {connectionsError ? (
+            <QueryError
+              thing="client connections"
+              onRetry={() => refetchConnections()}
+            />
+          ) : (connections ?? []).length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="text-no-connections">
               No connections yet — connect a client to start pulling their
               invoice book.
@@ -194,37 +209,36 @@ export function Integrations() {
                     <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                       {connection.lastSyncAt ? (
                         <>
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                           Last sync {formatDateTime(connection.lastSyncAt)}
                         </>
                       ) : (
                         "Never synced"
                       )}
                       {connection.lastError && (
-                        <span className="text-red-700 inline-flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
+                        <span className="text-red-700 dark:text-red-400 inline-flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" aria-hidden="true" />
                           {connection.lastError}
                         </span>
                       )}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span
-                      className={`text-xs font-medium px-2.5 py-1 rounded-full border ${statusBadge(connection.status)}`}
-                    >
-                      {connection.status}
+                    <span className={connectionBadgeClasses(connection.status)}>
+                      {humanize(connection.status)}
                     </span>
                     <Button
                       size="sm"
                       variant="secondary"
-                      disabled={syncingId !== null}
+                      disabled={syncingId === connection.id}
                       onClick={() => handleSync(connection)}
                       data-testid={`button-sync-${connection.id}`}
                     >
                       <RefreshCw
                         className={`w-4 h-4 mr-1 ${syncingId === connection.id ? "animate-spin" : ""}`}
+                        aria-hidden="true"
                       />
-                      Sync now
+                      {syncingId === connection.id ? "Syncing…" : "Sync now"}
                     </Button>
                   </div>
                 </div>
@@ -245,9 +259,12 @@ export function Integrations() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Client</Label>
+              <Label htmlFor="connection-client">Client</Label>
               <Select value={clientPartyId} onValueChange={setClientPartyId}>
-                <SelectTrigger data-testid="select-connection-client">
+                <SelectTrigger
+                  id="connection-client"
+                  data-testid="select-connection-client"
+                >
                   <SelectValue placeholder="Pick a client" />
                 </SelectTrigger>
                 <SelectContent>
@@ -260,9 +277,12 @@ export function Integrations() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Connector</Label>
+              <Label htmlFor="connection-connector">Connector</Label>
               <Select value={connectorKey} onValueChange={setConnectorKey}>
-                <SelectTrigger data-testid="select-connector">
+                <SelectTrigger
+                  id="connection-connector"
+                  data-testid="select-connector"
+                >
                   <SelectValue placeholder="Pick the package" />
                 </SelectTrigger>
                 <SelectContent>

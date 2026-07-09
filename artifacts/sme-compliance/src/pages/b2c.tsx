@@ -11,42 +11,25 @@ import {
   type B2cReportBatch,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
+import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { RequireClientScope } from "@/components/require-client-scope";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
-import { Store, Clock3, Lock, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
-import { formatNaira, formatDate } from "@/lib/format";
+import { isFeatureDisabled } from "@/lib/errors";
+import { Store, Clock3, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  formatNaira,
+  formatDate,
+  formatDateTime,
+  batchStatusLabel,
+  batchBadgeClasses,
+} from "@/lib/format";
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
-
-function isNotFound(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    (error as { status?: unknown }).status === 404
-  );
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-const BATCH_BADGES: Record<string, string> = {
-  open: "bg-amber-100 text-amber-800 border-amber-200",
-  reported: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  breached: "bg-red-100 text-red-800 border-red-200",
-};
 
 // Re-render every 30s so the deadline countdown stays live without a refresh.
 function useNow(intervalMs = 30_000): number {
@@ -64,7 +47,7 @@ function Countdown({ deadlineAt, now }: { deadlineAt: string; now: number }) {
   if (remaining <= 0) {
     return (
       <span className="inline-flex items-center gap-1 text-sm font-medium text-destructive">
-        <Clock3 className="w-4 h-4" /> Deadline passed
+        <Clock3 className="w-4 h-4" aria-hidden="true" /> Deadline passed
       </span>
     );
   }
@@ -77,14 +60,19 @@ function Countdown({ deadlineAt, now }: { deadlineAt: string; now: number }) {
         urgent ? "text-destructive" : "text-foreground"
       }`}
     >
-      <Clock3 className="w-4 h-4" />
+      <Clock3 className="w-4 h-4" aria-hidden="true" />
       {hours}h {String(minutes).padStart(2, "0")}m left to report
     </span>
   );
 }
 
 function BatchItems({ batchId }: { batchId: string }) {
-  const { data: items, isLoading } = useListB2cReportItems(batchId, {
+  const {
+    data: items,
+    isLoading,
+    isError,
+    refetch,
+  } = useListB2cReportItems(batchId, {
     query: {
       enabled: !!batchId,
       queryKey: getListB2cReportItemsQueryKey(batchId),
@@ -104,6 +92,19 @@ function BatchItems({ batchId }: { batchId: string }) {
       <div className="space-y-2 pt-2">
         <Skeleton className="h-10" />
         <Skeleton className="h-10" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <p className="text-sm text-destructive" data-testid="text-error">
+          Unable to load this batch's items.
+        </p>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          Try again
+        </Button>
       </div>
     );
   }
@@ -132,14 +133,33 @@ function BatchItems({ batchId }: { batchId: string }) {
               Added {formatDate(item.createdAt)}
             </p>
           </div>
-          <span className="font-semibold shrink-0">{formatNaira(item.amount)}</span>
+          <span className="font-semibold shrink-0 tabular-nums">
+            {formatNaira(item.amount)}
+          </span>
         </div>
       ))}
     </div>
   );
 }
 
+function PageHeader() {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+          B2C reports
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Consumer sales are batched into 24-hour windows — report each batch
+          before its deadline.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function B2cReports() {
+  usePageTitle("B2C reports");
   const { data: me } = useGetMe();
   const clientPartyId = me?.clientPartyId || "";
   const { toast } = useToast();
@@ -149,7 +169,9 @@ export function B2cReports() {
   const {
     data: batches,
     isLoading,
+    isError,
     error,
+    refetch,
   } = useListB2cReports(
     { clientPartyId },
     {
@@ -185,25 +207,11 @@ export function B2cReports() {
     }
   };
 
-  if (isNotFound(error)) {
+  if (isFeatureDisabled(error)) {
     return (
-      <div className="space-y-6 animate-in fade-in duration-500">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">B2C Reports</h1>
-          <p className="text-muted-foreground">
-            24-hour reporting windows for your consumer sales.
-          </p>
-        </div>
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Lock className="w-10 h-10 text-muted-foreground mb-3" />
-            <p className="font-medium">B2C reporting is not yet enabled for this firm</p>
-            <p className="text-sm text-muted-foreground">
-              Ask your operator to enable it, then your consumer sales batches will appear
-              here.
-            </p>
-          </CardContent>
-        </Card>
+      <div className="space-y-6">
+        <PageHeader />
+        <FeatureUnavailable feature="B2C reporting" />
       </div>
     );
   }
@@ -213,105 +221,102 @@ export function B2cReports() {
   );
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">B2C Reports</h1>
-        <p className="text-muted-foreground">
-          Consumer sales are batched into 24-hour windows — report each batch before its
-          deadline.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader />
 
-      {isLoading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-        </div>
-      ) : sorted.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Store className="w-10 h-10 text-muted-foreground mb-3" />
-            <p className="font-medium">No B2C batches yet</p>
-            <p className="text-sm text-muted-foreground">
-              Stamp a consumer (B2C) invoice and a reporting batch opens automatically.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {sorted.map((batch) => {
-            const needsReport =
-              batch.status === "open" ||
-              (batch.status === "breached" && !batch.reportedAt);
-            const expanded = expandedId === batch.id;
-            return (
-              <Card key={batch.id}>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">
-                          Window from {formatDateTime(batch.windowStart)}
-                        </span>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full border capitalize ${
-                            BATCH_BADGES[batch.status] ||
-                            "bg-slate-100 text-slate-600 border-slate-200"
-                          }`}
-                        >
-                          {batch.status}
-                        </span>
+      <RequireClientScope thing="B2C reporting batches">
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-24" />
+            ))}
+          </div>
+        ) : isError ? (
+          <QueryError thing="your B2C reporting batches" onRetry={() => refetch()} />
+        ) : sorted.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 flex flex-col items-center text-center gap-2">
+              <Store className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
+              <p className="font-semibold" data-testid="text-empty">
+                No B2C batches yet
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Stamp a consumer (B2C) invoice and a reporting batch opens automatically.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {sorted.map((batch) => {
+              const needsReport =
+                batch.status === "open" ||
+                (batch.status === "breached" && !batch.reportedAt);
+              const expanded = expandedId === batch.id;
+              return (
+                <Card key={batch.id}>
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold">
+                            Window from {formatDateTime(batch.windowStart)}
+                          </span>
+                          <span className={batchBadgeClasses(batch.status)}>
+                            {batchStatusLabel(batch.status)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {batch.itemCount} sale(s) · {formatNaira(batch.totalAmount)} ·
+                          Deadline {formatDateTime(batch.deadlineAt)}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {batch.itemCount} sale(s) · {formatNaira(batch.totalAmount)} ·
-                        Deadline {formatDateTime(batch.deadlineAt)}
-                      </p>
+                      <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                        {batch.status === "open" && (
+                          <Countdown deadlineAt={batch.deadlineAt} now={now} />
+                        )}
+                        {batch.reportedAt && (
+                          <span className="inline-flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-400">
+                            <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> Reported{" "}
+                            {formatDateTime(batch.reportedAt)}
+                          </span>
+                        )}
+                        {batch.status === "breached" && !batch.reportedAt && (
+                          <span className="text-sm font-medium text-destructive">
+                            Deadline missed — report now
+                          </span>
+                        )}
+                        {needsReport && (
+                          <Button
+                            size="sm"
+                            onClick={() => markReported(batch)}
+                            disabled={reportingId === batch.id}
+                          >
+                            {reportingId === batch.id ? "Reporting…" : "Mark reported"}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {batch.status === "open" && (
-                        <Countdown deadlineAt={batch.deadlineAt} now={now} />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedId(expanded ? null : batch.id)}
+                      aria-expanded={expanded}
+                    >
+                      {expanded ? (
+                        <ChevronUp className="w-4 h-4 mr-1" aria-hidden="true" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 mr-1" aria-hidden="true" />
                       )}
-                      {batch.reportedAt && (
-                        <span className="inline-flex items-center gap-1 text-sm text-emerald-700">
-                          <CheckCircle2 className="w-4 h-4" /> Reported{" "}
-                          {formatDateTime(batch.reportedAt)}
-                        </span>
-                      )}
-                      {batch.status === "breached" && !batch.reportedAt && (
-                        <span className="text-sm font-medium text-destructive">
-                          Deadline missed — report now
-                        </span>
-                      )}
-                      {needsReport && (
-                        <Button
-                          size="sm"
-                          onClick={() => markReported(batch)}
-                          disabled={reportingId === batch.id}
-                        >
-                          {reportingId === batch.id ? "Reporting…" : "Mark reported"}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setExpandedId(expanded ? null : batch.id)}
-                  >
-                    {expanded ? (
-                      <ChevronUp className="w-4 h-4 mr-1" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 mr-1" />
-                    )}
-                    {expanded ? "Hide items" : `View items (${batch.itemCount})`}
-                  </Button>
-                  {expanded && <BatchItems batchId={batch.id} />}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+                      {expanded ? "Hide items" : `View items (${batch.itemCount})`}
+                    </Button>
+                    {expanded && <BatchItems batchId={batch.id} />}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </RequireClientScope>
     </div>
   );
 }

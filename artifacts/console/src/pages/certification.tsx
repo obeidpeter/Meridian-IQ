@@ -13,8 +13,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { QueryError } from "@/components/query-error";
 import { isFeatureDisabled } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   Award,
   BookOpen,
@@ -23,12 +25,11 @@ import {
   Clock,
   GraduationCap,
 } from "lucide-react";
-import { formatDate } from "@/lib/format";
-
-const STATUS_BADGES: Record<CpdEnrollmentView["status"], string> = {
-  enrolled: "bg-amber-100 text-amber-800 border-amber-200",
-  completed: "bg-emerald-100 text-emerald-800 border-emerald-200",
-};
+import {
+  formatDate,
+  enrollmentBadgeClasses,
+  enrollmentLabel,
+} from "@/lib/format";
 
 function CourseCard({
   course,
@@ -51,11 +52,11 @@ function CourseCard({
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-start justify-between gap-2">
           <span className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-primary shrink-0" />
+            <BookOpen className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
             {course.title}
           </span>
           <span className="text-xs font-normal text-muted-foreground flex items-center gap-1 whitespace-nowrap">
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-3.5 h-3.5" aria-hidden="true" />
             {course.cpdHours} CPD hr{course.cpdHours === 1 ? "" : "s"}
           </span>
         </CardTitle>
@@ -66,14 +67,15 @@ function CourseCard({
         )}
         <button
           type="button"
-          className="flex items-center gap-1 text-sm font-medium text-primary"
+          className="flex items-center gap-1 text-sm font-medium text-primary rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-expanded={expanded}
           onClick={() => setExpanded((e) => !e)}
           data-testid={`button-modules-${course.key}`}
         >
           {expanded ? (
-            <ChevronUp className="w-4 h-4" />
+            <ChevronUp className="w-4 h-4" aria-hidden="true" />
           ) : (
-            <ChevronDown className="w-4 h-4" />
+            <ChevronDown className="w-4 h-4" aria-hidden="true" />
           )}
           {modules.length} module{modules.length === 1 ? "" : "s"}
         </button>
@@ -92,15 +94,15 @@ function CourseCard({
 
         {enrollment?.status === "completed" ? (
           <div
-            className="flex items-center gap-2 border border-emerald-200 bg-emerald-50 rounded-md px-3 py-2"
+            className="flex items-center gap-2 border border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40 rounded-md px-3 py-2"
             data-testid={`text-certificate-${course.key}`}
           >
-            <Award className="w-4 h-4 text-emerald-700 shrink-0" />
+            <Award className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <div className="min-w-0">
-              <p className="text-xs text-emerald-800">
+              <p className="text-xs text-emerald-800 dark:text-emerald-300">
                 Completed {formatDate(enrollment.completedAt)}
               </p>
-              <p className="text-sm font-mono font-semibold text-emerald-900 break-all">
+              <p className="text-sm font-mono font-semibold text-emerald-900 dark:text-emerald-200 break-all">
                 {enrollment.certificateSerial}
               </p>
             </div>
@@ -112,7 +114,8 @@ function CourseCard({
             disabled={busy}
             data-testid={`button-complete-${course.key}`}
           >
-            <Award className="w-4 h-4 mr-1" /> Mark complete
+            <Award className="w-4 h-4 mr-1" aria-hidden="true" />
+            {busy ? "Completing…" : "Mark complete"}
           </Button>
         ) : (
           <Button
@@ -122,7 +125,8 @@ function CourseCard({
             disabled={busy}
             data-testid={`button-enroll-${course.key}`}
           >
-            <GraduationCap className="w-4 h-4 mr-1" /> Enroll
+            <GraduationCap className="w-4 h-4 mr-1" aria-hidden="true" />
+            {busy ? "Enrolling…" : "Enroll"}
           </Button>
         )}
       </CardContent>
@@ -131,16 +135,19 @@ function CourseCard({
 }
 
 export function Certification() {
+  usePageTitle("Certification");
   const { data: me } = useGetMe();
   const {
     data: courses,
     isLoading: coursesLoading,
     error: coursesError,
+    refetch: refetchCourses,
   } = useListCpdCourses();
   const {
     data: enrollments,
     isLoading: enrollmentsLoading,
     error: enrollmentsError,
+    refetch: refetchEnrollments,
   } = useListCpdEnrollments();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -152,6 +159,8 @@ export function Certification() {
     courseTitle: string;
     serial: string;
   } | null>(null);
+  // Only the card whose action fired disables (§7) — not every sibling.
+  const [pendingCourseId, setPendingCourseId] = useState<string | null>(null);
 
   const refresh = () =>
     queryClient.invalidateQueries({
@@ -159,6 +168,7 @@ export function Certification() {
     });
 
   const handleEnroll = (course: CpdCourse) => {
+    setPendingCourseId(course.id);
     enroll.mutate(
       { id: course.id },
       {
@@ -168,11 +178,13 @@ export function Certification() {
         },
         onError: () =>
           toast({ title: "Could not enroll", variant: "destructive" }),
+        onSettled: () => setPendingCourseId(null),
       },
     );
   };
 
   const handleComplete = (course: CpdCourse) => {
+    setPendingCourseId(course.id);
     complete.mutate(
       { id: course.id },
       {
@@ -196,6 +208,7 @@ export function Certification() {
             title: "Could not mark complete",
             variant: "destructive",
           }),
+        onSettled: () => setPendingCourseId(null),
       },
     );
   };
@@ -225,11 +238,23 @@ export function Certification() {
     );
   }
 
-  if (coursesError || !courses) {
+  if (coursesError || enrollmentsError || !courses) {
     return (
-      <p className="text-destructive" data-testid="text-error">
-        Unable to load certification courses.
-      </p>
+      <div className="space-y-6">
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
+          Certification
+        </h1>
+        <QueryError
+          thing="certification courses"
+          onRetry={() => {
+            refetchCourses();
+            refetchEnrollments();
+          }}
+        />
+      </div>
     );
   }
 
@@ -238,7 +263,7 @@ export function Certification() {
       .filter((e) => e.userId === me?.userId)
       .map((e) => [e.courseId, e] as const),
   );
-  const busy = enroll.isPending || complete.isPending;
+
 
   return (
     <div className="space-y-6">
@@ -254,17 +279,17 @@ export function Certification() {
 
       {lastCertificate && (
         <Card
-          className="border-emerald-300 bg-emerald-50"
+          className="border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40"
           data-testid="card-minted-certificate"
         >
           <CardContent className="pt-6 flex items-center gap-4">
-            <Award className="w-10 h-10 text-emerald-700 shrink-0" />
+            <Award className="w-10 h-10 text-emerald-700 dark:text-emerald-400 shrink-0" aria-hidden="true" />
             <div className="min-w-0">
-              <p className="text-sm text-emerald-800">
+              <p className="text-sm text-emerald-800 dark:text-emerald-300">
                 Certificate minted — {lastCertificate.courseTitle}
               </p>
               <p
-                className="text-xl md:text-2xl font-bold font-mono text-emerald-900 break-all"
+                className="text-xl md:text-2xl font-bold font-mono text-emerald-900 dark:text-emerald-200 break-all"
                 data-testid="text-certificate-serial"
               >
                 {lastCertificate.serial}
@@ -287,7 +312,10 @@ export function Certification() {
               enrollment={enrollmentByCourse.get(course.id)}
               onEnroll={() => handleEnroll(course)}
               onComplete={() => handleComplete(course)}
-              busy={busy}
+              busy={
+                (enroll.isPending || complete.isPending) &&
+                pendingCourseId === course.id
+              }
             />
           ))}
         </div>
@@ -331,10 +359,8 @@ export function Certification() {
                         {e.userName ?? e.userId}
                       </td>
                       <td className="py-2.5">
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full border capitalize ${STATUS_BADGES[e.status]}`}
-                        >
-                          {e.status}
+                        <span className={enrollmentBadgeClasses(e.status)}>
+                          {enrollmentLabel(e.status)}
                         </span>
                       </td>
                       <td className="py-2.5 text-muted-foreground">
