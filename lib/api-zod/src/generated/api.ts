@@ -827,6 +827,24 @@ export const VerifyStampResponse = zod.object({
 })
 
 
+/**
+ * @summary Recent outbound messages with delivery status (PL-04)
+ */
+export const ListMessagesResponseItem = zod.object({
+  "id": zod.string(),
+  "channel": zod.enum(['whatsapp', 'sms', 'email']),
+  "recipientRef": zod.string(),
+  "templateKey": zod.string(),
+  "entityType": zod.string().nullish(),
+  "entityId": zod.string().nullish(),
+  "status": zod.enum(['queued', 'sent', 'delivered', 'failed']),
+  "providerMessageId": zod.string().nullish(),
+  "failoverFrom": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListMessagesResponse = zod.array(ListMessagesResponseItem)
+
+
 export const SendMessageBody = zod.object({
   "channel": zod.enum(['whatsapp', 'sms', 'email']),
   "recipientRef": zod.string(),

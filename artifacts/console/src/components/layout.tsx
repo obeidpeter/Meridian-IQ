@@ -20,6 +20,7 @@ import {
   BookOpen,
   Gauge,
   ShieldCheck,
+  GitMerge,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ const NAV_LINKS: {
   // Revenue-share statements are billing surface (GET /billing/statements).
   { href: "/statements", label: "Statements", icon: FileText, capability: "billing.read" },
   { href: "/operator-queue", label: "Operator queue", icon: ListChecks, capability: "operator.queue.read" },
+  { href: "/parties", label: "Party integrity", icon: GitMerge, capability: "party.merge" },
   { href: "/catalogue", label: "Error catalogue", icon: BookOpen, capability: "catalogue.write" },
   { href: "/platform-ops", label: "Platform ops", icon: Activity, capability: "operator.queue.read" },
   { href: "/gate-metrics", label: "Gate metrics", icon: Gauge, capability: "operator.queue.read" },

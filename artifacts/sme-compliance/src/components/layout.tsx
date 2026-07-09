@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, FileText, Calendar as CalendarIcon, Bell, Upload, Landmark, Store, Menu, LogOut, Grid2x2 } from "lucide-react";
+import { LayoutDashboard, FileText, Calendar as CalendarIcon, Bell, Upload, Landmark, Store, Menu, LogOut, Grid2x2, ShieldCheck } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
@@ -27,6 +27,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { href: "/b2c", label: "B2C Reports", icon: Store },
     { href: "/calendar", label: "Calendar", icon: CalendarIcon },
     { href: "/alerts", label: "Alerts", icon: Bell },
+    { href: "/consent", label: "Consent", icon: ShieldCheck },
   ];
 
   const NavLinks = () => (

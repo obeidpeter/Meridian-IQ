@@ -3,15 +3,18 @@ import {
   useReplayDeadLetter,
   useReconcilePipeline,
   useListRailStates,
+  useListMessages,
   getListDeadLettersQueryKey,
   getListRailStatesQueryKey,
+  getListMessagesQueryKey,
 } from "@workspace/api-client-react";
-import type { OutboxEvent, RailState } from "@workspace/api-client-react";
+import type { OutboxEvent, RailState, Message } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { isFeatureDisabled } from "@/lib/errors";
 import {
   Activity,
   CheckCircle2,
@@ -19,6 +22,7 @@ import {
   RefreshCw,
   RotateCcw,
   Inbox,
+  MessageSquare,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 
@@ -174,6 +178,80 @@ function DeadLettersSection() {
   );
 }
 
+// PL-04 delivery visibility: pointer-only message rows (SEC-12) with their
+// delivery status. 404 while messaging_notifications is dark.
+function messageBadge(status: Message["status"]): string {
+  switch (status) {
+    case "delivered":
+      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    case "failed":
+      return "bg-red-100 text-red-800 border-red-200";
+    case "sent":
+      return "bg-blue-100 text-blue-800 border-blue-200";
+    default:
+      return "bg-slate-100 text-slate-700 border-slate-200";
+  }
+}
+
+function MessagesSection() {
+  const { data, isLoading, error } = useListMessages({
+    query: { queryKey: getListMessagesQueryKey(), retry: false },
+  });
+
+  return (
+    <Card data-testid="card-messages">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-primary" /> Message deliveries
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isFeatureDisabled(error) ? (
+          <p className="text-sm text-muted-foreground" data-testid="text-messages-dark">
+            Notifications ship dark (`messaging_notifications`). Flip the flag
+            on the Feature flags page to start sending — deliveries appear here.
+          </p>
+        ) : isLoading ? (
+          <Skeleton className="h-16" />
+        ) : (data ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground" data-testid="text-messages-empty">
+            No messages sent yet.
+          </p>
+        ) : (
+          <div className="divide-y">
+            {(data ?? []).map((m) => (
+              <div
+                key={m.id}
+                className="py-2.5 flex items-center justify-between gap-3"
+                data-testid={`message-${m.id}`}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {m.templateKey}
+                    <span className="text-muted-foreground font-normal">
+                      {" "}
+                      · {m.channel}
+                      {m.failoverFrom ? ` (failover from ${m.failoverFrom})` : ""}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDateTime(m.createdAt)}
+                  </p>
+                </div>
+                <span
+                  className={`text-xs font-medium px-2.5 py-1 rounded-full border shrink-0 ${messageBadge(m.status)}`}
+                >
+                  {m.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function PlatformOps() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -228,6 +306,7 @@ export function PlatformOps() {
 
       <RailsSection />
       <DeadLettersSection />
+      <MessagesSection />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { Reconciliation } from "@/pages/reconciliation";
 import { B2cReports } from "@/pages/b2c";
 import { Calendar } from "@/pages/calendar";
 import { Alerts } from "@/pages/alerts";
+import { Consent } from "@/pages/consent";
 
 // A 401 must not retry-spin — the session guard redirects to the portal instead.
 const queryClient = new QueryClient({
@@ -42,6 +43,7 @@ function Router() {
         <Route path="/b2c" component={B2cReports} />
         <Route path="/calendar" component={Calendar} />
         <Route path="/alerts" component={Alerts} />
+        <Route path="/consent" component={Consent} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

@@ -116,6 +116,11 @@ const DEFAULT_WORKSPACE: Partial<
 
 const DEMO_ACCOUNTS: { label: string; email: string; opens: string }[] = [
   {
+    label: "SME owner (Adaeze Foods)",
+    email: "owner@adaezefoods.example",
+    opens: "Compliance App — owns the consent decisions",
+  },
+  {
     label: "SME firm staff (Adaeze Foods)",
     email: "demo.staff@meridianiq.example",
     opens: "Compliance App (with live data)",

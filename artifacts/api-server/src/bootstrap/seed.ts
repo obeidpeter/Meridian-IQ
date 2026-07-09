@@ -1,4 +1,4 @@
-import { eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -530,6 +530,7 @@ export const CONSOLE = {
   adminUserId: "44444444-4444-4444-8444-4444444444a0",
   operatorUserId: "99999999-9999-4999-8999-999999999999",
   auditorUserId: "88888888-8888-4888-8888-888888888888",
+  clientOwnerUserId: "ce000001-0000-4000-8000-00000000ce01",
   clients: {
     kano: "cb000002-0000-4000-8000-0000000000b2",
     pharma: "cb000003-0000-4000-8000-0000000000b3",
@@ -570,6 +571,13 @@ async function seedConsoleDemo(): Promise<void> {
         email: "audit@meridianiq.example",
         fullName: "Read-only Auditor",
       },
+      // The client persona (Appendix C): the SME owner herself — the account
+      // that owns consent decisions for Adaeze Foods.
+      {
+        id: CONSOLE.clientOwnerUserId,
+        email: "owner@adaezefoods.example",
+        fullName: "Adaeze Obi",
+      },
     ])
     .onConflictDoNothing({ target: usersTable.id });
 
@@ -607,6 +615,18 @@ async function seedConsoleDemo(): Promise<void> {
     })
     .onConflictDoNothing();
 
+  // Client owner: the client_user persona, scoped to the Adaeze Foods party —
+  // the account that grants/revokes consent layers in the SME app.
+  await getDb()
+    .insert(membershipsTable)
+    .values({
+      userId: CONSOLE.clientOwnerUserId,
+      firmId: DEMO.firmId,
+      role: "client_user",
+      clientPartyId: DEMO.clientPartyId,
+    })
+    .onConflictDoNothing();
+
   // Additional client businesses under the demo firm so the portfolio has a
   // multi-client book with a spread of penalty risk.
   await getDb()
@@ -619,6 +639,7 @@ async function seedConsoleDemo(): Promise<void> {
         tin: "50000000-0005",
         tinValidated: true,
         cacNumber: "RC2222222",
+        street: "7 Bompai Industrial Road",
         city: "Kano",
         countryCode: "NG",
       },
@@ -629,6 +650,7 @@ async function seedConsoleDemo(): Promise<void> {
         tin: "60000000-0006",
         tinValidated: true,
         cacNumber: "RC3333333",
+        street: "12 Trans-Amadi Layout",
         city: "Port Harcourt",
         countryCode: "NG",
       },
@@ -639,11 +661,43 @@ async function seedConsoleDemo(): Promise<void> {
         tin: "70000000-0007",
         tinValidated: true,
         cacNumber: "RC4444444",
+        street: "31 Eric Moore Road",
         city: "Lagos",
         countryCode: "NG",
       },
     ])
     .onConflictDoNothing({ target: partiesTable.id });
+
+  // Demo-client completeness so every demo client can submit and issue credit
+  // notes: UBL needs a street and submission needs layer-1 consent. The street
+  // update backfills databases seeded before streets were added (the insert
+  // above cannot amend existing rows); consent inserts only where absent.
+  const CLIENT_STREETS: { id: string; street: string }[] = [
+    { id: CONSOLE.clients.kano, street: "7 Bompai Industrial Road" },
+    { id: CONSOLE.clients.pharma, street: "12 Trans-Amadi Layout" },
+    { id: CONSOLE.clients.build, street: "31 Eric Moore Road" },
+  ];
+  for (const c of CLIENT_STREETS) {
+    await getDb()
+      .update(partiesTable)
+      .set({ street: c.street })
+      .where(and(eq(partiesTable.id, c.id), isNull(partiesTable.street)));
+    const [hasConsent] = await getDb()
+      .select({ id: consentRecordsTable.id })
+      .from(consentRecordsTable)
+      .where(eq(consentRecordsTable.partyId, c.id))
+      .limit(1);
+    if (!hasConsent) {
+      await getDb().insert(consentRecordsTable).values({
+        partyId: c.id,
+        layer: 1,
+        action: "grant",
+        scope: "compliance_submission",
+        basis: "contract",
+        channel: "seed",
+      });
+    }
+  }
 
   const engagements: { id: string; clientPartyId: string; title: string }[] = [
     {

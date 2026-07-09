@@ -1,9 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { desc } from "drizzle-orm";
+import { getDb, messagesTable } from "@workspace/db";
 import {
   SendMessageBody,
   SendMessageResponse,
   RecordMessageDeliveryParams,
   RecordMessageDeliveryBody,
+  ListMessagesResponse,
 } from "@workspace/api-zod";
 import { sendMessage, markDelivery } from "../modules/messaging/messaging";
 import { assertCan } from "../modules/auth/rbac";
@@ -27,6 +30,20 @@ async function assertMessagingEnabled(
   }
   return true;
 }
+
+// PL-04 delivery visibility: the operator's message log. Rows are pointers
+// only (SEC-12) — template key, channel, status — so no tenant data leaks
+// across the cross-tenant read.
+router.get("/messages", async (req, res): Promise<void> => {
+  if (!(await assertMessagingEnabled(req, res))) return;
+  assertCan(req.principal, "operator.queue.read");
+  const rows = await getDb()
+    .select()
+    .from(messagesTable)
+    .orderBy(desc(messagesTable.createdAt))
+    .limit(50);
+  res.json(ListMessagesResponse.parse(rows));
+});
 
 router.post("/messages", async (req, res): Promise<void> => {
   if (!(await assertMessagingEnabled(req, res))) return;
