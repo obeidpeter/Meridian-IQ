@@ -24,7 +24,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import {
   ClipboardCheck,
   ShieldAlert,
@@ -32,7 +34,14 @@ import {
   AlertTriangle,
   FileSearch,
 } from "lucide-react";
-import { formatNaira } from "@/lib/format";
+import {
+  formatNaira,
+  humanize,
+  bandBadgeClasses,
+  bandLabel,
+  priorityBadgeClasses,
+  pillClasses,
+} from "@/lib/format";
 
 // ADV-01 (readiness assessment) and ADV-02 (VAT-risk check): the R0 advisory
 // field kit, surfaced for accountants. Both write to the spine as Engagements.
@@ -41,37 +50,28 @@ const CSV_PLACEHOLDER = `invoice number,supplier tin,supplier name,irn,csid,invo
 INV-1003,20000000-0002,Adaeze Foods Ltd,IRN-DEMO-1003,CSID-DEMO-1003,720000,54000
 INV-9001,99000000-0009,Ghost Traders Ltd,IRN-FAKE-1,CSID-FAKE-1,250000,18750`;
 
-function bandBadge(band: AssessmentReport["band"]): string {
-  switch (band) {
-    case "ready":
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    case "partial":
-      return "bg-amber-100 text-amber-800 border-amber-200";
-    default:
-      return "bg-red-100 text-red-800 border-red-200";
-  }
-}
-
-function severityBadge(severity: string): string {
-  switch (severity) {
-    case "high":
-      return "bg-red-100 text-red-800 border-red-200";
-    case "medium":
-      return "bg-amber-100 text-amber-800 border-amber-200";
-    default:
-      return "bg-slate-100 text-slate-700 border-slate-200";
-  }
-}
-
 function AssessmentTab() {
   const { data: portfolio } = useGetPortfolio();
-  const { data: template, isLoading } = useGetAssessmentQuestionnaire();
+  const {
+    data: template,
+    isLoading,
+    error,
+    refetch,
+  } = useGetAssessmentQuestionnaire();
   const run = useRunAssessment();
   const { toast } = useToast();
 
   const [clientPartyId, setClientPartyId] = useState("");
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   const [report, setReport] = useState<AssessmentReport | null>(null);
+
+  // Answers describe one client — switching clients starts a fresh sheet.
+  const selectClient = (id: string) => {
+    if (id === clientPartyId) return;
+    setClientPartyId(id);
+    setAnswers({});
+    setReport(null);
+  };
 
   const questionCount = useMemo(
     () => (template?.sections ?? []).reduce((n, s) => n + s.questions.length, 0),
@@ -95,7 +95,7 @@ function AssessmentTab() {
         onSuccess: (result) => {
           setReport(result);
           toast({
-            title: `Assessment complete — ${result.score}% (${result.band.replace("_", " ")})`,
+            title: `Assessment complete — ${result.score}% (${bandLabel(result.band)})`,
             description: "Findings are recorded on the client's engagement.",
           });
         },
@@ -105,7 +105,24 @@ function AssessmentTab() {
     );
   };
 
-  if (isLoading) return <Skeleton className="h-72" />;
+  if (isLoading) {
+    return (
+      <div className="space-y-5">
+        <Skeleton className="h-28" />
+        <Skeleton className="h-48" />
+        <Skeleton className="h-48" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <QueryError
+        thing="the assessment questionnaire"
+        onRetry={() => refetch()}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -114,16 +131,23 @@ function AssessmentTab() {
           <CardTitle className="text-base">Client</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={clientPartyId} onValueChange={setClientPartyId}>
+          <Select value={clientPartyId} onValueChange={selectClient}>
             <SelectTrigger className="max-w-sm" data-testid="select-client">
               <SelectValue placeholder="Pick the client being assessed" />
             </SelectTrigger>
             <SelectContent>
-              {(portfolio?.clients ?? []).map((c) => (
-                <SelectItem key={c.clientPartyId} value={c.clientPartyId}>
-                  {c.legalName}
-                </SelectItem>
-              ))}
+              {portfolio && portfolio.clients.length === 0 ? (
+                <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                  No clients yet — import your client book from the Client
+                  import page first.
+                </p>
+              ) : (
+                (portfolio?.clients ?? []).map((c) => (
+                  <SelectItem key={c.clientPartyId} value={c.clientPartyId}>
+                    {c.legalName}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         </CardContent>
@@ -176,7 +200,7 @@ function AssessmentTab() {
           disabled={!clientPartyId || run.isPending}
           data-testid="button-run-assessment"
         >
-          <ClipboardCheck className="w-4 h-4 mr-1" />
+          <ClipboardCheck className="w-4 h-4 mr-1" aria-hidden="true" />
           {run.isPending ? "Scoring…" : "Run assessment"}
         </Button>
         <span className="text-sm text-muted-foreground">
@@ -189,17 +213,15 @@ function AssessmentTab() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between gap-2 text-base">
               <span>Gap report</span>
-              <span
-                className={`text-xs font-medium px-2.5 py-1 rounded-full border ${bandBadge(report.band)}`}
-              >
-                {report.score}% · {report.band.replace("_", " ")}
+              <span className={bandBadgeClasses(report.band)}>
+                {report.score}% · {bandLabel(report.band)}
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {report.gaps.length === 0 ? (
-              <p className="text-sm text-emerald-700 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" /> No gaps — this client is
+              <p className="text-sm text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> No gaps — this client is
                 submission-ready.
               </p>
             ) : (
@@ -216,9 +238,9 @@ function AssessmentTab() {
                       </p>
                     </div>
                     <span
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${severityBadge(gap.severity)}`}
+                      className={`${priorityBadgeClasses(gap.severity)} shrink-0`}
                     >
-                      {gap.severity}
+                      {humanize(gap.severity)}
                     </span>
                   </div>
                 ))}
@@ -305,7 +327,7 @@ function VatRiskTab() {
             disabled={!csv.trim() || analyze.isPending}
             data-testid="button-analyze-vat"
           >
-            <FileSearch className="w-4 h-4 mr-1" />
+            <FileSearch className="w-4 h-4 mr-1" aria-hidden="true" />
             {analyze.isPending ? "Verifying stamps…" : "Analyze exposure"}
           </Button>
         </CardContent>
@@ -317,13 +339,13 @@ function VatRiskTab() {
             <Card data-testid="stat-rows">
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">Rows checked</p>
-                <p className="text-2xl font-bold mt-1">{report.rowCount}</p>
+                <p className="text-2xl font-bold mt-1 tabular-nums">{report.rowCount}</p>
               </CardContent>
             </Card>
             <Card data-testid="stat-verified">
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">Verified stamps</p>
-                <p className="text-2xl font-bold mt-1 text-emerald-700">
+                <p className="text-2xl font-bold mt-1 tabular-nums text-emerald-700 dark:text-emerald-400">
                   {report.verifiedCount}
                 </p>
               </CardContent>
@@ -331,7 +353,7 @@ function VatRiskTab() {
             <Card data-testid="stat-at-risk">
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">Rows at risk</p>
-                <p className="text-2xl font-bold mt-1 text-red-600">
+                <p className="text-2xl font-bold mt-1 tabular-nums text-red-600 dark:text-red-400">
                   {report.atRiskCount}
                 </p>
               </CardContent>
@@ -339,7 +361,7 @@ function VatRiskTab() {
             <Card data-testid="stat-vat-at-risk">
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">Input VAT at risk</p>
-                <p className="text-2xl font-bold mt-1 text-red-600">
+                <p className="text-2xl font-bold mt-1 tabular-nums text-red-600 dark:text-red-400">
                   {formatNaira(report.totalVatAtRisk)}
                 </p>
               </CardContent>
@@ -349,7 +371,7 @@ function VatRiskTab() {
           <Card data-testid="card-vat-rows">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-primary" /> Per-invoice
+                <ShieldAlert className="w-4 h-4 text-primary" aria-hidden="true" /> Per-invoice
                 results
               </CardTitle>
             </CardHeader>
@@ -373,12 +395,13 @@ function VatRiskTab() {
                       </p>
                     </div>
                     {row.stampValid ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-200 shrink-0">
-                        <CheckCircle2 className="w-3 h-3" /> valid
+                      <span className={`${pillClasses("emerald")} shrink-0`}>
+                        <CheckCircle2 className="w-3 h-3" aria-hidden="true" />{" "}
+                        Valid
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border bg-red-100 text-red-800 border-red-200 shrink-0">
-                        <AlertTriangle className="w-3 h-3" />{" "}
+                      <span className={`${pillClasses("red")} shrink-0`}>
+                        <AlertTriangle className="w-3 h-3" aria-hidden="true" />{" "}
                         {formatNaira(row.vatAtRisk)} at risk
                       </span>
                     )}
@@ -394,6 +417,7 @@ function VatRiskTab() {
 }
 
 export function Advisory() {
+  usePageTitle("Advisory");
   return (
     <div className="space-y-6">
       <div>
@@ -417,10 +441,20 @@ export function Advisory() {
             VAT-risk check
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="assessment" className="mt-5">
+        {/* forceMount keeps both tabs mounted so a generated report or a
+            pasted CSV survives switching tabs and back. */}
+        <TabsContent
+          value="assessment"
+          forceMount
+          className="mt-5 data-[state=inactive]:hidden"
+        >
           <AssessmentTab />
         </TabsContent>
-        <TabsContent value="vat-risk" className="mt-5">
+        <TabsContent
+          value="vat-risk"
+          forceMount
+          className="mt-5 data-[state=inactive]:hidden"
+        >
           <VatRiskTab />
         </TabsContent>
       </Tabs>

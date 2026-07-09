@@ -9,6 +9,19 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import {
   Upload,
@@ -124,6 +137,7 @@ function isExcel(name: string): boolean {
 }
 
 export function Import() {
+  usePageTitle("Bulk import");
   const { data: me } = useGetMe();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -134,6 +148,7 @@ export function Import() {
   const [fileRows, setFileRows] = useState<InvoiceImportRow[] | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<InvoiceImportResult | null>(null);
+  const [confirmCommit, setConfirmCommit] = useState(false);
 
   const rows = useMemo(
     () => fileRows ?? parseCsv(raw),
@@ -192,6 +207,19 @@ export function Import() {
     }
   };
 
+  // Committing while the last validation still shows invalid rows silently
+  // skips them — make that explicit before anything is created.
+  const knownInvalidCount =
+    result && !result.committed ? result.invalidCount : 0;
+
+  const onCommitClick = () => {
+    if (knownInvalidCount > 0) {
+      setConfirmCommit(true);
+    } else {
+      run(true);
+    }
+  };
+
   const downloadResults = () => {
     if (!result) return;
     const head = "rowNumber,invoiceNumber,status,errors";
@@ -209,12 +237,16 @@ export function Import() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Bulk Import</h1>
-        <p className="text-muted-foreground">
-          Upload a spreadsheet of invoices — we validate every row before creating anything.
-        </p>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
+            Bulk import
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Upload a spreadsheet of invoices — we validate every row before creating anything.
+          </p>
+        </div>
       </div>
 
       <Card>
@@ -228,32 +260,43 @@ export function Import() {
               type="file"
               accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onFile(file);
+                // Allow re-selecting the same (fixed) file.
+                e.target.value = "";
+              }}
             />
             <Button variant="outline" onClick={() => fileRef.current?.click()}>
-              <Upload className="w-4 h-4 mr-2" /> Upload Excel or CSV
+              <Upload className="w-4 h-4 mr-2" aria-hidden="true" /> Upload Excel or CSV
             </Button>
             <Button
               variant="ghost"
               onClick={() => download("meridianiq-template.csv", TEMPLATE)}
             >
-              <Download className="w-4 h-4 mr-2" /> CSV template
+              <Download className="w-4 h-4 mr-2" aria-hidden="true" /> CSV template
             </Button>
             <Button variant="ghost" onClick={downloadExcelTemplate}>
-              <Download className="w-4 h-4 mr-2" /> Excel template
+              <Download className="w-4 h-4 mr-2" aria-hidden="true" /> Excel template
             </Button>
           </div>
-          <textarea
-            className="w-full min-h-[140px] rounded-md border border-input bg-transparent p-3 text-sm font-mono"
-            placeholder="…or paste CSV rows here (first line = column headers)"
-            value={raw}
-            onChange={(e) => {
-              setRaw(e.target.value);
-              setFileRows(null);
-              setFileName(null);
-              setResult(null);
-            }}
-          />
+          <div>
+            <Label htmlFor="import-rows" className="sr-only">
+              Paste CSV rows
+            </Label>
+            <Textarea
+              id="import-rows"
+              className="min-h-[140px] font-mono"
+              placeholder="…or paste CSV rows here (first line = column headers)"
+              value={raw}
+              onChange={(e) => {
+                setRaw(e.target.value);
+                setFileRows(null);
+                setFileName(null);
+                setResult(null);
+              }}
+            />
+          </div>
           {fileName && (
             <p className="text-sm text-muted-foreground">
               Loaded <span className="font-medium">{fileName}</span> — {rows.length} row(s).
@@ -276,13 +319,40 @@ export function Import() {
           Validate rows
         </Button>
         <Button
-          onClick={() => run(true)}
+          onClick={onCommitClick}
           disabled={rows.length === 0 || importMut.isPending}
         >
-          <FileSpreadsheet className="w-4 h-4 mr-2" />
+          <FileSpreadsheet className="w-4 h-4 mr-2" aria-hidden="true" />
           {importMut.isPending ? "Working…" : "Import valid rows"}
         </Button>
       </div>
+
+      <AlertDialog open={confirmCommit} onOpenChange={setConfirmCommit}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Skip {knownInvalidCount} invalid row(s)?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Only valid rows become invoices — the {knownInvalidCount} row(s)
+              with issues are skipped and stay in your file. You can fix and
+              re-import them later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back and fix</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmCommit(false);
+                run(true);
+              }}
+              data-testid="button-confirm-import"
+            >
+              Import valid rows
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {result && (
         <Card>
@@ -291,13 +361,15 @@ export function Import() {
               {result.committed ? "Import results" : "Validation preview"}
             </CardTitle>
             <Button variant="ghost" size="sm" onClick={downloadResults}>
-              <Download className="w-4 h-4 mr-2" /> Download
+              <Download className="w-4 h-4 mr-2" aria-hidden="true" /> Download
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-4 text-sm">
               <span>Total: {result.total}</span>
-              <span className="text-emerald-700">Valid: {result.validCount}</span>
+              <span className="text-emerald-700 dark:text-emerald-400">
+                Valid: {result.validCount}
+              </span>
               <span className="text-destructive">Invalid: {result.invalidCount}</span>
               {result.committed && <span>Created: {result.createdCount}</span>}
             </div>
@@ -308,16 +380,22 @@ export function Import() {
                   className="flex items-start gap-2 text-sm border rounded-md px-3 py-2"
                 >
                   {r.status === "invalid" ? (
-                    <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                    <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" aria-hidden="true" />
                   ) : (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
                   )}
                   <div className="min-w-0">
                     <p className="font-medium">
                       Row {r.rowNumber}
                       {r.invoiceNumber ? ` · ${r.invoiceNumber}` : ""}{" "}
-                      <span className="capitalize text-muted-foreground font-normal">
-                        ({r.status})
+                      <span className="text-muted-foreground font-normal">
+                        (
+                        {r.status === "invalid"
+                          ? "Invalid"
+                          : r.status === "created"
+                            ? "Created"
+                            : "Valid"}
+                        )
                       </span>
                     </p>
                     {r.errors.length > 0 && (

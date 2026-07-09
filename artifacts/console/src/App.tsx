@@ -9,7 +9,7 @@ import { errorStatus } from "@/lib/errors";
 import { Layout } from "@/components/layout";
 import { RequireSession } from "@/components/require-session";
 import { CapabilityGate } from "@/components/capability-gate";
-import { Portfolio } from "@/pages/portfolio";
+import { Portfolio, PortfolioSkeleton } from "@/pages/portfolio";
 import { ClientDetail } from "@/pages/client-detail";
 import { ClientImport } from "@/pages/client-import";
 import { Pipeline } from "@/pages/pipeline";
@@ -47,7 +47,9 @@ const queryClient = new QueryClient({
 // lands on the work queue it signed in for.
 function Home() {
   const { data: me } = useGetMe();
-  if (!me) return null;
+  // While /me resolves, mirror the most likely destination (the portfolio)
+  // instead of a blank pane.
+  if (!me) return <PortfolioSkeleton />;
   const caps = new Set(me.capabilities);
   if (!caps.has("console.portfolio.read") && caps.has("operator.queue.read")) {
     return <Redirect to="/operator-queue" replace />;

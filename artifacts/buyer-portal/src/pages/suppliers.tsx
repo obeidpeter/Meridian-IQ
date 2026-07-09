@@ -16,19 +16,28 @@ import {
   FileText,
   BadgeCheck,
 } from "lucide-react";
-import { formatNaira, formatDateTime } from "@/lib/format";
+import {
+  formatNaira,
+  formatCompactNaira,
+  formatDateTime,
+  pillClasses,
+} from "@/lib/format";
 import { isFeatureDisabled } from "@/lib/errors";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { QueryError } from "@/components/query-error";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 function StatCard({
   label,
   value,
+  title,
   icon: Icon,
   tone,
   testId,
 }: {
   label: string;
   value: string;
+  title?: string;
   icon: typeof Building2;
   tone?: "danger" | "success";
   testId: string;
@@ -39,14 +48,17 @@ function StatCard({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold mt-1">{value}</p>
+            <p className="text-2xl font-bold mt-1 tabular-nums" title={title}>
+              {value}
+            </p>
           </div>
           <Icon
+            aria-hidden="true"
             className={`w-8 h-8 ${
               tone === "danger"
-                ? "text-red-500"
+                ? "text-red-500 dark:text-red-400"
                 : tone === "success"
-                  ? "text-emerald-500"
+                  ? "text-emerald-500 dark:text-emerald-400"
                   : "text-primary"
             }`}
           />
@@ -56,38 +68,71 @@ function StatCard({
   );
 }
 
+function PageHeader({ computedAt }: { computedAt?: string }) {
+  return (
+    <div>
+      <h1
+        className="text-2xl md:text-3xl font-bold"
+        data-testid="text-page-title"
+      >
+        Supplier verification
+      </h1>
+      <p className="text-muted-foreground mt-1">
+        Input-VAT exposure across your suppliers
+        {computedAt !== undefined && (
+          <>
+            {" "}
+            · refreshed{" "}
+            <span data-testid="text-computed-at">
+              {formatDateTime(computedAt)}
+            </span>
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
 export function Suppliers() {
-  const { data, isLoading, error } = useGetBuyerExposure();
+  usePageTitle("Supplier verification");
+  const { data, isLoading, error, refetch } = useGetBuyerExposure();
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-9 w-64" />
+      <div className="space-y-6">
+        <div>
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-4 w-96 max-w-full mt-2" />
+        </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-28" />
           ))}
         </div>
-        <Skeleton className="h-96" />
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   if (error || !data) {
-    if (isFeatureDisabled(error)) {
-      return (
-        <div className="space-y-6">
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-            Supplier verification
-          </h1>
-          <FeatureUnavailable feature="Supplier verification" />
-        </div>
-      );
-    }
     return (
-      <p className="text-destructive" data-testid="text-error">
-        Unable to load your VAT exposure.
-      </p>
+      <div className="space-y-6">
+        <PageHeader />
+        {isFeatureDisabled(error) ? (
+          <FeatureUnavailable feature="Supplier verification" />
+        ) : (
+          <QueryError thing="your VAT exposure" onRetry={() => refetch()} />
+        )}
+      </div>
     );
   }
 
@@ -97,29 +142,21 @@ export function Suppliers() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-          Supplier verification
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Input-VAT exposure across your suppliers · refreshed{" "}
-          <span data-testid="text-computed-at">
-            {formatDateTime(data.computedAt)}
-          </span>
-        </p>
-      </div>
+      <PageHeader computedAt={data.computedAt} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Protected VAT"
-          value={formatNaira(data.protectedVat)}
+          value={formatCompactNaira(data.protectedVat)}
+          title={formatNaira(data.protectedVat)}
           icon={ShieldCheck}
           tone="success"
           testId="stat-protected-vat"
         />
         <StatCard
           label="VAT at risk"
-          value={formatNaira(data.atRiskVat)}
+          value={formatCompactNaira(data.atRiskVat)}
+          title={formatNaira(data.atRiskVat)}
           icon={ShieldAlert}
           tone="danger"
           testId="stat-at-risk-vat"
@@ -144,9 +181,19 @@ export function Suppliers() {
         </CardHeader>
         <CardContent>
           {breakdown.length === 0 ? (
-            <p className="text-sm text-muted-foreground" data-testid="text-empty">
-              No suppliers in the exposure snapshot yet.
-            </p>
+            <div className="py-12 flex flex-col items-center text-center gap-2">
+              <Building2
+                className="w-10 h-10 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <p className="font-semibold" data-testid="text-empty">
+                No suppliers in the exposure snapshot yet
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Suppliers appear here once they address invoices to your
+                organization on MeridianIQ.
+              </p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -178,14 +225,18 @@ export function Suppliers() {
                           </span>
                           {s.tinValidated ? (
                             <span
-                              className="inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-200"
+                              className={pillClasses("emerald")}
                               data-testid={`badge-tin-${s.supplierPartyId}`}
                             >
-                              <BadgeCheck className="w-3 h-3" /> Validated
+                              <BadgeCheck
+                                className="w-3 h-3"
+                                aria-hidden="true"
+                              />{" "}
+                              Validated
                             </span>
                           ) : (
                             <span
-                              className="text-xs font-medium px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200"
+                              className={pillClasses("slate")}
                               data-testid={`badge-tin-${s.supplierPartyId}`}
                             >
                               Unvalidated
@@ -193,22 +244,22 @@ export function Suppliers() {
                           )}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {s.invoiceCount}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {s.stampedCount}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {s.eligibleCount}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right tabular-nums">
                         {formatNaira(s.totalAmount)}
                       </TableCell>
-                      <TableCell className="text-right text-emerald-700">
+                      <TableCell className="text-right tabular-nums text-emerald-700 dark:text-emerald-400">
                         {formatNaira(s.vatProtected)}
                       </TableCell>
-                      <TableCell className="text-right font-medium text-red-700">
+                      <TableCell className="text-right tabular-nums font-medium text-red-700 dark:text-red-400">
                         {formatNaira(s.vatAtRisk)}
                       </TableCell>
                     </TableRow>

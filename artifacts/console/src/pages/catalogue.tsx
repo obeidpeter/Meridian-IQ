@@ -24,7 +24,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { AlertTriangle, BookOpen, Pencil, Plus, Search } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 
@@ -49,9 +51,10 @@ const EMPTY_FORM: EntryForm = {
 };
 
 export function Catalogue() {
+  usePageTitle("Error catalogue");
   const { data: me } = useGetMe();
   const canWrite = (me?.capabilities ?? []).includes("catalogue.write");
-  const { data: entries, isLoading } = useListErrorCatalogue();
+  const { data: entries, isLoading, error, refetch } = useListErrorCatalogue();
   const { data: unmapped } = useListUnmappedErrorCodes({
     query: {
       enabled: canWrite,
@@ -143,20 +146,24 @@ export function Catalogue() {
         </div>
         {canWrite && (
           <Button onClick={() => openNew()} data-testid="button-new-entry">
-            <Plus className="w-4 h-4 mr-1" /> New entry
+            <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New entry
           </Button>
         )}
       </div>
 
       {canWrite && (unmapped ?? []).length > 0 && (
-        <Card className="border-amber-200 bg-amber-50/50" data-testid="card-unmapped">
+        <Card
+          className="border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/40"
+          data-testid="card-unmapped"
+        >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-amber-900">
-              <AlertTriangle className="w-4 h-4" /> Unmapped failure codes
+            <CardTitle className="flex items-center gap-2 text-base text-amber-900 dark:text-amber-200">
+              <AlertTriangle className="w-4 h-4" aria-hidden="true" /> Unmapped
+              failure codes
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-sm text-amber-900/80">
+            <p className="text-sm text-amber-900/80 dark:text-amber-200/80">
               These codes appeared on submission attempts but have no catalogue
               entry (INT-02 target: under 2% of failures unmapped).
             </p>
@@ -165,14 +172,14 @@ export function Catalogue() {
                 <button
                   key={u.code}
                   onClick={() => openNew(u.code)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-medium hover:bg-amber-100 transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-card px-3 py-1.5 min-h-9 text-xs font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   data-testid={`button-map-${u.code}`}
                 >
                   <code>{u.code}</code>
                   <span className="text-muted-foreground">
                     ×{u.occurrences}
                   </span>
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3 h-3" aria-hidden="true" />
                 </button>
               ))}
             </div>
@@ -181,8 +188,15 @@ export function Catalogue() {
       )}
 
       <div className="relative max-w-sm">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Label htmlFor="catalogue-search" className="sr-only">
+          Search the catalogue
+        </Label>
+        <Search
+          className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"
+          aria-hidden="true"
+        />
         <Input
+          id="catalogue-search"
           className="pl-8"
           placeholder="Search code, cause or fix…"
           value={search}
@@ -197,10 +211,37 @@ export function Catalogue() {
             <Skeleton key={i} className="h-24" />
           ))}
         </div>
+      ) : error ? (
+        <QueryError thing="the error catalogue" onRetry={() => refetch()} />
       ) : filtered.length === 0 ? (
-        <p className="text-muted-foreground" data-testid="text-empty">
-          No catalogue entries match.
-        </p>
+        <Card>
+          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
+            <BookOpen
+              className="w-10 h-10 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p className="font-semibold" data-testid="text-empty">
+              {search.trim()
+                ? "No entries match your search"
+                : "No catalogue entries yet"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {search.trim()
+                ? "Try a different code, cause or fix."
+                : "Entries appear as operators map failure codes to plain-language causes and fixes."}
+            </p>
+            {search.trim() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSearch("")}
+                data-testid="button-clear-search"
+              >
+                Clear search
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-3">
           {filtered.map((entry) => (
@@ -209,7 +250,7 @@ export function Catalogue() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1.5">
                     <p className="font-mono text-sm font-semibold flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-primary shrink-0" />
+                      <BookOpen className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />
                       {entry.code}
                       {entry.category && (
                         <span className="rounded-full border px-2 py-0.5 text-xs font-sans font-normal text-muted-foreground">
@@ -217,13 +258,13 @@ export function Catalogue() {
                         </span>
                       )}
                       {entry.retriable && (
-                        <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-xs font-sans font-normal text-emerald-800">
-                          retriable
+                        <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-xs font-sans font-normal text-emerald-800 dark:bg-emerald-950 dark:border-emerald-900 dark:text-emerald-300">
+                          Retriable
                         </span>
                       )}
                       {entry.source === "operator" && (
-                        <span className="rounded-full bg-blue-100 border border-blue-200 px-2 py-0.5 text-xs font-sans font-normal text-blue-800">
-                          operator-edited
+                        <span className="rounded-full bg-blue-100 border border-blue-200 px-2 py-0.5 text-xs font-sans font-normal text-blue-800 dark:bg-blue-950 dark:border-blue-900 dark:text-blue-300">
+                          Operator-edited
                         </span>
                       )}
                     </p>
@@ -246,9 +287,10 @@ export function Catalogue() {
                       size="sm"
                       variant="ghost"
                       onClick={() => openEdit(entry)}
+                      aria-label={`Edit ${entry.code}`}
                       data-testid={`button-edit-${entry.code}`}
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil className="w-4 h-4" aria-hidden="true" />
                     </Button>
                   )}
                 </div>

@@ -40,7 +40,7 @@ export function CapabilityGate({
         <Card data-testid="card-access-denied">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
-              <Lock className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
+              <Lock className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
               <div className="space-y-3">
                 <div>
                   <p className="font-medium">Not available for your account</p>
@@ -55,20 +55,17 @@ export function CapabilityGate({
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Link href="/">
-                    <Button size="sm" data-testid="button-console-home">
-                      Console home
-                    </Button>
-                  </Link>
-                  <a href="/">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      data-testid="button-switch-account"
-                    >
-                      Switch account
-                    </Button>
-                  </a>
+                  <Button size="sm" asChild data-testid="button-console-home">
+                    <Link href="/">Console home</Link>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    asChild
+                    data-testid="button-switch-account"
+                  >
+                    <a href="/">Switch account</a>
+                  </Button>
                 </div>
               </div>
             </div>

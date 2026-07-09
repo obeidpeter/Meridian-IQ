@@ -2,9 +2,12 @@ import {
   useGetGateMetrics,
   getGetGateMetricsQueryKey,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
+import { usePageTitle } from "@/hooks/use-page-title";
+import { pillClasses } from "@/lib/format";
 import { Target, TrendingUp } from "lucide-react";
 
 // Roadmap Appendix A ("Platform gates"): the analytics that measure the gates
@@ -45,21 +48,15 @@ function GateCard({
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm text-muted-foreground">{label}</p>
           {met !== undefined && (
-            <span
-              className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${
-                met
-                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                  : "bg-amber-100 text-amber-800 border-amber-200"
-              }`}
-            >
-              {met ? "on gate" : "below gate"}
+            <span className={`${pillClasses(met ? "emerald" : "amber")} shrink-0`}>
+              {met ? "On gate" : "Below gate"}
             </span>
           )}
         </div>
-        <p className="text-2xl font-bold">{value}</p>
+        <p className="text-2xl font-bold tabular-nums">{value}</p>
         {progress !== undefined && <Progress value={Math.min(100, progress)} />}
         <p className="text-xs text-muted-foreground">
-          <Target className="w-3 h-3 inline mr-1" />
+          <Target className="w-3 h-3 inline mr-1" aria-hidden="true" />
           {gate}
           {detail ? ` · ${detail}` : ""}
         </p>
@@ -69,7 +66,8 @@ function GateCard({
 }
 
 export function GateMetrics() {
-  const { data, isLoading } = useGetGateMetrics({
+  usePageTitle("Gate metrics");
+  const { data, isLoading, error, refetch } = useGetGateMetrics({
     query: { queryKey: getGetGateMetricsQueryKey() },
   });
 
@@ -88,17 +86,20 @@ export function GateMetrics() {
         </p>
       </div>
 
-      {isLoading || !data ? (
+      {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-36" />
           ))}
         </div>
+      ) : error || !data ? (
+        // A failed fetch must not skeleton forever — offer a retry.
+        <QueryError thing="gate metrics" onRetry={() => refetch()} />
       ) : (
         <>
           <div>
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4" /> R1 exit criteria
+              <TrendingUp className="w-4 h-4" aria-hidden="true" /> R1 exit criteria
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <GateCard
@@ -138,7 +139,7 @@ export function GateMetrics() {
 
           <div>
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4" /> R2 north star & guardrails
+              <TrendingUp className="w-4 h-4" aria-hidden="true" /> R2 north star & guardrails
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <GateCard

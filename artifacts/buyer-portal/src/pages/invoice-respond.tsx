@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import {
   useListBuyerInvoices,
@@ -21,7 +21,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
@@ -30,6 +43,7 @@ import {
   XCircle,
   Banknote,
   CalendarClock,
+  FileQuestion,
 } from "lucide-react";
 import {
   formatNaira,
@@ -38,9 +52,13 @@ import {
   statusLabel,
   confirmationLabel,
   confirmationBadgeClasses,
+  stampBadge,
+  eligibleBadge,
 } from "@/lib/format";
-import { isFeatureDisabled } from "@/lib/errors";
+import { isFeatureDisabled, errorStatus } from "@/lib/errors";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { QueryError } from "@/components/query-error";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 type ResponseState = Extract<
   ConfirmationInputState,
@@ -57,94 +75,167 @@ const RESPONSE_OPTIONS: Array<{
     state: "confirmed",
     label: "Confirm",
     icon: CheckCircle2,
-    activeClasses: "border-emerald-500 bg-emerald-50 text-emerald-800",
+    activeClasses:
+      "data-[state=on]:border-emerald-500 data-[state=on]:bg-emerald-50 data-[state=on]:text-emerald-800 dark:data-[state=on]:bg-emerald-950/40 dark:data-[state=on]:text-emerald-300",
   },
   {
     state: "queried",
     label: "Query",
     icon: HelpCircle,
-    activeClasses: "border-blue-500 bg-blue-50 text-blue-800",
+    activeClasses:
+      "data-[state=on]:border-blue-500 data-[state=on]:bg-blue-50 data-[state=on]:text-blue-800 dark:data-[state=on]:bg-blue-950/40 dark:data-[state=on]:text-blue-300",
   },
   {
     state: "rejected",
     label: "Reject",
     icon: XCircle,
-    activeClasses: "border-red-500 bg-red-50 text-red-800",
+    activeClasses:
+      "data-[state=on]:border-red-500 data-[state=on]:bg-red-50 data-[state=on]:text-red-800 dark:data-[state=on]:bg-red-950/40 dark:data-[state=on]:text-red-300",
   },
 ];
 
-function errorDescription(error: unknown): string | undefined {
-  return error instanceof Error ? error.message : undefined;
+const SUBMIT_LABELS: Record<ResponseState, string> = {
+  confirmed: "Confirm invoice",
+  queried: "Send query",
+  rejected: "Reject invoice",
+};
+
+/** Map raw mutation failures to human copy; fall back to the server message. */
+function errorDescription(error: unknown): string {
+  const status = errorStatus(error);
+  if (status === 401)
+    return "Your session has expired — sign in again from the portal.";
+  if (status === 403)
+    return "Your account doesn't have permission to do this.";
+  if (status === 409)
+    return "This invoice was already responded to — refresh to see the latest state.";
+  if (status !== undefined && status >= 500)
+    return "MeridianIQ had a problem recording this. Try again in a moment.";
+  const message = error instanceof Error ? error.message : undefined;
+  return message ?? "Something went wrong — try again.";
 }
 
 export function InvoiceRespond() {
   const params = useParams();
   const id = params.id as string;
-  const { data: invoices, isLoading, error } = useListBuyerInvoices();
+  const { data: invoices, isLoading, error, refetch } = useListBuyerInvoices();
   const { data: me } = useGetMe();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [response, setResponse] = useState<ResponseState>("confirmed");
+  const [response, setResponse] = useState<ResponseState | null>(null);
   const [method, setMethod] = useState("portal");
   const [note, setNote] = useState("");
+  const [noteError, setNoteError] = useState(false);
   const [noSetOff, setNoSetOff] = useState(false);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   const confirm = useCreateConfirmation();
   const flag = useFlagPayment();
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-24" />
-        <Skeleton className="h-96" />
-      </div>
-    );
-  }
+  const invoice = invoices?.find((i) => i.id === id);
+  usePageTitle(invoice ? invoice.invoiceNumber : "Invoice");
 
   const backLink = (
     <Link
       href="/"
-      className="inline-flex items-center gap-2 text-sm text-primary"
+      className="inline-flex items-center gap-2 text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
       data-testid="link-back"
     >
-      <ArrowLeft className="w-4 h-4" /> Back to confirmations
+      <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to confirmations
     </Link>
   );
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        {backLink}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <Skeleton className="h-9 w-48" />
+            <Skeleton className="h-4 w-72 max-w-full mt-2" />
+          </div>
+          <Skeleton className="h-7 w-32 rounded-full" />
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-32" />
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-5 w-24" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-64" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-10 w-40" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (error || !invoices) {
     return (
       <div className="space-y-4">
         {backLink}
         {isFeatureDisabled(error) ? (
-          <FeatureUnavailable feature="Buyer rails" />
+          <FeatureUnavailable feature="Buyer Rails" />
         ) : (
-          <p className="text-destructive" data-testid="text-error">
-            Unable to load this invoice.
-          </p>
+          <QueryError thing="this invoice" onRetry={() => refetch()} />
         )}
       </div>
     );
   }
 
-  const invoice = invoices.find((i) => i.id === id);
-
   if (!invoice) {
     return (
       <div className="space-y-4">
         {backLink}
-        <p className="text-destructive" data-testid="text-error">
-          This invoice is not addressed to your organization.
-        </p>
+        <Card data-testid="card-unknown-invoice">
+          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
+            <FileQuestion
+              className="w-10 h-10 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p className="font-semibold" data-testid="text-error">
+              We couldn't find this invoice
+            </p>
+            <p className="text-sm text-muted-foreground max-w-md">
+              It may not be addressed to your organization, or the link may be
+              out of date. Your confirmation queue lists every invoice you can
+              act on.
+            </p>
+            <Button asChild variant="outline" data-testid="button-back-to-queue">
+              <Link href="/">Back to confirmations</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   const awaitingResponse = invoice.confirmationState === "requested";
   const noteRequired = response === "queried" || response === "rejected";
+  const stamp = stampBadge(invoice.stampValid);
+  const eligible = eligibleBadge(invoice.eligible);
+  const pendingFlag = flag.isPending
+    ? flag.variables?.data.paymentStatus
+    : undefined;
 
   const handleSubmit = () => {
+    if (!response) return;
     if (!me?.buyerPartyId) {
       toast({
         title: "Buyer identity not resolved yet",
@@ -154,11 +245,8 @@ export function InvoiceRespond() {
       return;
     }
     if (noteRequired && note.trim() === "") {
-      toast({
-        title: `A note is required to ${response === "queried" ? "query" : "reject"} an invoice`,
-        description: "Tell the supplier what the problem is.",
-        variant: "destructive",
-      });
+      setNoteError(true);
+      noteRef.current?.focus();
       return;
     }
     confirm.mutate(
@@ -238,7 +326,7 @@ export function InvoiceRespond() {
           </p>
         </div>
         <span
-          className={`text-xs font-medium px-2.5 py-1 rounded-full border ${confirmationBadgeClasses(invoice.confirmationState)}`}
+          className={confirmationBadgeClasses(invoice.confirmationState)}
           data-testid="badge-confirmation-state"
         >
           {confirmationLabel(invoice.confirmationState)}
@@ -253,13 +341,18 @@ export function InvoiceRespond() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <p className="text-muted-foreground">Amount</p>
-              <p className="font-medium" data-testid="text-grand-total">
+              <p
+                className="font-medium tabular-nums"
+                data-testid="text-grand-total"
+              >
                 {formatNaira(invoice.grandTotal)}
               </p>
             </div>
             <div>
               <p className="text-muted-foreground">VAT</p>
-              <p className="font-medium">{formatNaira(invoice.vatTotal)}</p>
+              <p className="font-medium tabular-nums">
+                {formatNaira(invoice.vatTotal)}
+              </p>
             </div>
             <div>
               <p className="text-muted-foreground">Due date</p>
@@ -267,35 +360,17 @@ export function InvoiceRespond() {
             </div>
             <div>
               <p className="text-muted-foreground">Status</p>
-              <span
-                className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full border ${badgeClasses(invoice.status)}`}
-              >
+              <span className={badgeClasses(invoice.status)}>
                 {statusLabel(invoice.status)}
               </span>
             </div>
           </div>
           <div className="mt-4 pt-4 border-t flex flex-wrap gap-2">
-            <span
-              className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                invoice.stampValid
-                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                  : "bg-slate-100 text-slate-600 border-slate-200"
-              }`}
-              data-testid="badge-stamp"
-            >
-              {invoice.stampValid ? "Stamp valid" : "No valid stamp"}
+            <span className={stamp.classes} data-testid="badge-stamp">
+              {stamp.label}
             </span>
-            <span
-              className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                invoice.eligible
-                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                  : "bg-amber-100 text-amber-800 border-amber-200"
-              }`}
-              data-testid="badge-eligible"
-            >
-              {invoice.eligible
-                ? "Eligible for input VAT"
-                : "Not yet eligible for input VAT"}
+            <span className={eligible.classes} data-testid="badge-eligible">
+              {eligible.label}
             </span>
           </div>
         </CardContent>
@@ -307,25 +382,31 @@ export function InvoiceRespond() {
             <CardTitle>Respond to confirmation request</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-2">
+            <ToggleGroup
+              type="single"
+              value={response ?? ""}
+              onValueChange={(v) => {
+                setResponse(v === "" ? null : (v as ResponseState));
+                setNoteError(false);
+              }}
+              aria-label="Your response"
+              className="grid grid-cols-3 gap-2 w-full"
+            >
               {RESPONSE_OPTIONS.map((opt) => {
                 const Icon = opt.icon;
-                const isActive = response === opt.state;
                 return (
-                  <button
+                  <ToggleGroupItem
                     key={opt.state}
-                    onClick={() => setResponse(opt.state)}
+                    value={opt.state}
                     data-testid={`button-response-${opt.state}`}
-                    className={`flex flex-col items-center gap-1.5 border rounded-md py-3 px-2 text-sm font-medium transition-colors ${
-                      isActive ? opt.activeClasses : "hover:bg-muted"
-                    }`}
+                    className={`flex h-auto flex-col items-center gap-1.5 border rounded-md py-3 px-2 text-sm font-medium transition-colors hover:bg-muted ${opt.activeClasses}`}
                   >
-                    <Icon className="w-5 h-5" />
+                    <Icon className="w-5 h-5" aria-hidden="true" />
                     {opt.label}
-                  </button>
+                  </ToggleGroupItem>
                 );
               })}
-            </div>
+            </ToggleGroup>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -349,8 +430,19 @@ export function InvoiceRespond() {
               </Label>
               <Textarea
                 id="note"
+                ref={noteRef}
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
+                onChange={(e) => {
+                  setNote(e.target.value);
+                  if (e.target.value.trim() !== "") setNoteError(false);
+                }}
+                aria-invalid={noteError}
+                aria-describedby={noteError ? "note-error" : undefined}
+                className={
+                  noteError
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : undefined
+                }
                 placeholder={
                   noteRequired
                     ? "Explain what needs correcting on this invoice…"
@@ -358,32 +450,55 @@ export function InvoiceRespond() {
                 }
                 data-testid="input-note"
               />
+              {noteError && (
+                <p
+                  id="note-error"
+                  role="alert"
+                  className="text-sm text-destructive"
+                >
+                  A note is required when querying or rejecting.
+                </p>
+              )}
             </div>
 
             {response === "confirmed" && (
-              <div className="flex items-start gap-2 border rounded-md p-3">
-                <Checkbox
-                  id="no-set-off"
-                  checked={noSetOff}
-                  onCheckedChange={(v) => setNoSetOff(v === true)}
-                  data-testid="checkbox-no-set-off"
-                />
-                <Label
-                  htmlFor="no-set-off"
-                  className="text-sm font-normal leading-snug"
-                >
-                  We acknowledge no set-off will be applied against this
-                  invoice
-                </Label>
+              <div className="border rounded-md p-3 space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="no-set-off"
+                    checked={noSetOff}
+                    onCheckedChange={(v) => setNoSetOff(v === true)}
+                    data-testid="checkbox-no-set-off"
+                  />
+                  <Label
+                    htmlFor="no-set-off"
+                    className="text-sm font-normal leading-snug"
+                  >
+                    We acknowledge no set-off will be applied against this
+                    invoice
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  Confirming without set-off makes this invoice financeable.
+                </p>
               </div>
             )}
 
             <Button
               onClick={handleSubmit}
-              disabled={confirm.isPending}
+              disabled={!response || confirm.isPending}
+              variant={response === "rejected" ? "destructive" : "default"}
               data-testid="button-submit-response"
             >
-              {confirm.isPending ? "Submitting…" : "Submit response"}
+              {confirm.isPending ? (
+                <>
+                  <Spinner className="mr-2 size-4" /> Submitting…
+                </>
+              ) : response ? (
+                SUBMIT_LABELS[response]
+              ) : (
+                "Choose a response"
+              )}
             </Button>
           </CardContent>
         </Card>
@@ -413,19 +528,63 @@ export function InvoiceRespond() {
             <Button
               variant="outline"
               onClick={() => handleFlag("scheduled")}
-              disabled={flag.isPending}
+              disabled={pendingFlag === "scheduled"}
               data-testid="button-flag-scheduled"
             >
-              <CalendarClock className="w-4 h-4 mr-2" /> Mark payment scheduled
+              {pendingFlag === "scheduled" ? (
+                <>
+                  <Spinner className="mr-2 size-4" /> Marking…
+                </>
+              ) : (
+                <>
+                  <CalendarClock className="w-4 h-4 mr-2" aria-hidden="true" />{" "}
+                  Mark payment scheduled
+                </>
+              )}
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleFlag("paid")}
-              disabled={flag.isPending}
-              data-testid="button-flag-paid"
-            >
-              <Banknote className="w-4 h-4 mr-2" /> Mark paid
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  disabled={pendingFlag === "paid"}
+                  data-testid="button-flag-paid"
+                >
+                  {pendingFlag === "paid" ? (
+                    <>
+                      <Spinner className="mr-2 size-4" /> Marking…
+                    </>
+                  ) : (
+                    <>
+                      <Banknote className="w-4 h-4 mr-2" aria-hidden="true" />{" "}
+                      Mark paid
+                    </>
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Mark this invoice as paid?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This records a settlement event on the supplier's
+                    compliance record and can't be undone. Mark{" "}
+                    {formatNaira(invoice.grandTotal)} as paid?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-cancel-paid">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => handleFlag("paid")}
+                    data-testid="button-confirm-paid"
+                  >
+                    Mark paid
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </CardContent>
       </Card>

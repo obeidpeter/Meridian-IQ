@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   useListDeadLetters,
   useReplayDeadLetter,
@@ -8,12 +9,14 @@ import {
   getListRailStatesQueryKey,
   getListMessagesQueryKey,
 } from "@workspace/api-client-react";
-import type { OutboxEvent, RailState, Message } from "@workspace/api-client-react";
+import type { OutboxEvent, Message } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { isFeatureDisabled } from "@/lib/errors";
 import {
   Activity,
@@ -24,69 +27,57 @@ import {
   Inbox,
   MessageSquare,
 } from "lucide-react";
-import { formatDateTime } from "@/lib/format";
-
-// Rail circuit-breaker states: closed = healthy, half_open = probing after a
-// trip, open = failing fast until the cool-off elapses.
-function railBadge(state: RailState["state"]): {
-  cls: string;
-  label: string;
-} {
-  switch (state) {
-    case "open":
-      return { cls: "bg-red-100 text-red-800 border-red-200", label: "Circuit open" };
-    case "half_open":
-      return { cls: "bg-amber-100 text-amber-800 border-amber-200", label: "Half-open (probing)" };
-    default:
-      return { cls: "bg-emerald-100 text-emerald-800 border-emerald-200", label: "Healthy" };
-  }
-}
+import {
+  formatDateTime,
+  railBadgeClasses,
+  railStateLabel,
+  messageBadgeClasses,
+  messageStatusLabel,
+} from "@/lib/format";
 
 function RailsSection() {
-  const { data, isLoading } = useListRailStates();
+  const { data, isLoading, error, refetch } = useListRailStates();
 
   return (
     <Card data-testid="card-rails">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Activity className="w-5 h-5 text-primary" /> Submission rails
+          <Activity className="w-5 h-5 text-primary" aria-hidden="true" />{" "}
+          Submission rails
         </CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-16" />
+        ) : error ? (
+          <QueryError thing="rail states" onRetry={() => refetch()} />
         ) : (data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground" data-testid="text-rails-empty">
             No rail activity yet — states appear after the first submission.
           </p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {(data ?? []).map((rail) => {
-              const badge = railBadge(rail.state);
-              return (
-                <div
-                  key={rail.rail}
-                  className="border rounded-md p-3 flex items-start justify-between gap-3"
-                  data-testid={`rail-${rail.rail}`}
-                >
-                  <div>
-                    <p className="font-medium">{rail.rail}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {rail.failureCount} recent failure
-                      {rail.failureCount === 1 ? "" : "s"}
-                      {rail.openedAt
-                        ? ` · opened ${formatDateTime(rail.openedAt)}`
-                        : ""}
-                    </p>
-                  </div>
-                  <span
-                    className={`text-xs font-medium px-2.5 py-1 rounded-full border shrink-0 ${badge.cls}`}
-                  >
-                    {badge.label}
-                  </span>
+            {(data ?? []).map((rail) => (
+              <div
+                key={rail.rail}
+                className="border rounded-md p-3 flex items-start justify-between gap-3"
+                data-testid={`rail-${rail.rail}`}
+              >
+                <div>
+                  <p className="font-medium">{rail.rail}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {rail.failureCount} recent failure
+                    {rail.failureCount === 1 ? "" : "s"}
+                    {rail.openedAt
+                      ? ` · opened ${formatDateTime(rail.openedAt)}`
+                      : ""}
+                  </p>
                 </div>
-              );
-            })}
+                <span className={`${railBadgeClasses(rail.state)} shrink-0`}>
+                  {railStateLabel(rail.state)}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </CardContent>
@@ -95,12 +86,15 @@ function RailsSection() {
 }
 
 function DeadLettersSection() {
-  const { data, isLoading } = useListDeadLetters();
+  const { data, isLoading, error, refetch } = useListDeadLetters();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const replay = useReplayDeadLetter();
+  // Only the row whose Replay fired disables (§7).
+  const [replayingId, setReplayingId] = useState<string | null>(null);
 
   const handleReplay = (event: OutboxEvent) => {
+    setReplayingId(event.id);
     replay.mutate(
       { id: event.id },
       {
@@ -112,6 +106,7 @@ function DeadLettersSection() {
         },
         onError: () =>
           toast({ title: "Could not replay event", variant: "destructive" }),
+        onSettled: () => setReplayingId(null),
       },
     );
   };
@@ -120,18 +115,25 @@ function DeadLettersSection() {
     <Card data-testid="card-dead-letters">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Inbox className="w-5 h-5 text-primary" /> Dead-lettered events
+          <Inbox className="w-5 h-5 text-primary" aria-hidden="true" />{" "}
+          Dead-lettered events
         </CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-24" />
+        ) : error ? (
+          // A failed fetch must never read as "all delivered".
+          <QueryError thing="dead-lettered events" onRetry={() => refetch()} />
         ) : (data ?? []).length === 0 ? (
           <p
             className="text-sm text-muted-foreground flex items-center gap-2"
             data-testid="text-dead-letters-empty"
           >
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <CheckCircle2
+              className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
             Nothing dead-lettered — every queued event delivered.
           </p>
         ) : (
@@ -153,8 +155,11 @@ function DeadLettersSection() {
                       {formatDateTime(event.createdAt)}
                     </p>
                     {event.lastError && (
-                      <p className="text-xs text-red-700 mt-1 flex items-start gap-1">
-                        <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      <p className="text-xs text-red-700 dark:text-red-400 mt-1 flex items-start gap-1">
+                        <AlertTriangle
+                          className="w-3.5 h-3.5 mt-0.5 shrink-0"
+                          aria-hidden="true"
+                        />
                         <span className="break-all">{event.lastError}</span>
                       </p>
                     )}
@@ -162,11 +167,15 @@ function DeadLettersSection() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    disabled={replay.isPending}
+                    disabled={replayingId === event.id}
                     onClick={() => handleReplay(event)}
                     data-testid={`button-replay-${event.id}`}
                   >
-                    <RotateCcw className="w-4 h-4 mr-1" /> Replay
+                    <RotateCcw
+                      className={`w-4 h-4 mr-1 ${replayingId === event.id ? "animate-spin" : ""}`}
+                      aria-hidden="true"
+                    />
+                    {replayingId === event.id ? "Replaying…" : "Replay"}
                   </Button>
                 </div>
               </div>
@@ -180,21 +189,8 @@ function DeadLettersSection() {
 
 // PL-04 delivery visibility: pointer-only message rows (SEC-12) with their
 // delivery status. 404 while messaging_notifications is dark.
-function messageBadge(status: Message["status"]): string {
-  switch (status) {
-    case "delivered":
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    case "failed":
-      return "bg-red-100 text-red-800 border-red-200";
-    case "sent":
-      return "bg-blue-100 text-blue-800 border-blue-200";
-    default:
-      return "bg-slate-100 text-slate-700 border-slate-200";
-  }
-}
-
 function MessagesSection() {
-  const { data, isLoading, error } = useListMessages({
+  const { data, isLoading, error, refetch } = useListMessages({
     query: { queryKey: getListMessagesQueryKey(), retry: false },
   });
 
@@ -202,7 +198,8 @@ function MessagesSection() {
     <Card data-testid="card-messages">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-primary" /> Message deliveries
+          <MessageSquare className="w-5 h-5 text-primary" aria-hidden="true" />{" "}
+          Message deliveries
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -213,13 +210,15 @@ function MessagesSection() {
           </p>
         ) : isLoading ? (
           <Skeleton className="h-16" />
+        ) : error ? (
+          <QueryError thing="message deliveries" onRetry={() => refetch()} />
         ) : (data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground" data-testid="text-messages-empty">
             No messages sent yet.
           </p>
         ) : (
           <div className="divide-y">
-            {(data ?? []).map((m) => (
+            {(data ?? []).map((m: Message) => (
               <div
                 key={m.id}
                 className="py-2.5 flex items-center justify-between gap-3"
@@ -238,10 +237,8 @@ function MessagesSection() {
                     {formatDateTime(m.createdAt)}
                   </p>
                 </div>
-                <span
-                  className={`text-xs font-medium px-2.5 py-1 rounded-full border shrink-0 ${messageBadge(m.status)}`}
-                >
-                  {m.status}
+                <span className={`${messageBadgeClasses(m.status)} shrink-0`}>
+                  {messageStatusLabel(m.status)}
                 </span>
               </div>
             ))}
@@ -253,6 +250,7 @@ function MessagesSection() {
 }
 
 export function PlatformOps() {
+  usePageTitle("Platform ops");
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const reconcile = useReconcilePipeline();
@@ -299,8 +297,9 @@ export function PlatformOps() {
         >
           <RefreshCw
             className={`w-4 h-4 mr-1 ${reconcile.isPending ? "animate-spin" : ""}`}
+            aria-hidden="true"
           />
-          Reconcile pipeline
+          {reconcile.isPending ? "Reconciling…" : "Reconcile pipeline"}
         </Button>
       </div>
 

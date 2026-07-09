@@ -25,6 +25,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -35,7 +36,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { isFeatureDisabled, errorStatus } from "@/lib/errors";
+import { QueryError } from "@/components/query-error";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -49,43 +53,20 @@ import {
   Banknote,
   Ban,
   Undo2,
+  FileQuestion,
 } from "lucide-react";
 import {
   formatNaira,
   formatDate,
+  formatDateTime,
   statusLabel,
   badgeClasses,
   statusTone,
+  humanize,
+  pillClasses,
+  confirmationLabel,
+  confirmationBadgeClasses,
 } from "@/lib/format";
-
-function isNotFound(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    (error as { status?: unknown }).status === 404
-  );
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-const CONFIRMATION_BADGES: Record<string, string> = {
-  requested: "bg-amber-100 text-amber-800 border-amber-200",
-  confirmed: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  queried: "bg-blue-100 text-blue-800 border-blue-200",
-  rejected: "bg-red-100 text-red-800 border-red-200",
-};
 
 const SETTLEMENT_SOURCE_LABELS: Record<string, string> = {
   statement_match: "Statement match",
@@ -100,10 +81,11 @@ export function InvoiceDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useGetInvoice(id, {
+  const { data, isLoading, isError, error, refetch } = useGetInvoice(id, {
     query: { enabled: !!id, queryKey: getGetInvoiceQueryKey(id) },
   });
   const invoice = data?.invoice;
+  usePageTitle(invoice ? invoice.invoiceNumber : "Invoice");
   const tone = invoice ? statusTone(invoice.status) : "draft";
   // Settled/credited invoices were stamped first, so keep their stamp visible.
   const stampedFamily =
@@ -272,11 +254,71 @@ export function InvoiceDetail() {
     }
   };
 
-  if (isLoading || !invoice) {
+  if (isLoading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64" />
+      <div className="space-y-6">
+        <Skeleton className="h-5 w-32" />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-4 w-96 max-w-full" />
+          </div>
+          <Skeleton className="h-9 w-44" />
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-10" />
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError && errorStatus(error) !== 404) {
+    // A fetch failure (network blip, 5xx) is not a missing invoice — show the
+    // shared destructive error state with a retry, matching the other apps.
+    return (
+      <div className="space-y-6">
+        <Link
+          href="/invoices"
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to vault
+        </Link>
+        <QueryError thing="this invoice" onRetry={() => refetch()} />
+      </div>
+    );
+  }
+
+  if (isError || !invoice) {
+    // Genuinely missing record (404): neutral not-found card.
+    return (
+      <div className="space-y-6">
+        <Link
+          href="/invoices"
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to vault
+        </Link>
+        <Card data-testid="card-unknown-invoice">
+          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
+            <FileQuestion className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
+            <p className="font-semibold" data-testid="text-error">
+              We couldn't find this invoice
+            </p>
+            <p className="text-sm text-muted-foreground">
+              It may have been removed, or the link may be out of date.
+            </p>
+            <Button asChild className="mt-2">
+              <Link href="/invoices">Back to vault</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -291,7 +333,7 @@ export function InvoiceDetail() {
   const canCredit =
     invoice.kind === "invoice" &&
     ["stamped", "confirmed", "settled"].includes(invoice.status);
-  const confirmationsDark = isNotFound(confirmationsError);
+  const confirmationsDark = isFeatureDisabled(confirmationsError);
   const confirmationTimeline = [...(confirmations || [])].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
@@ -304,23 +346,21 @@ export function InvoiceDetail() {
         latestConfirmation.state !== "confirmed"));
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6">
       <Link
         href="/invoices"
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="w-4 h-4 mr-1" /> Back to vault
+        <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to vault
       </Link>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
               {invoice.invoiceNumber}
             </h1>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-full border ${badgeClasses(invoice.status)}`}
-            >
+            <span className={badgeClasses(invoice.status)}>
               {statusLabel(invoice.status)}
             </span>
           </div>
@@ -331,7 +371,7 @@ export function InvoiceDetail() {
         <div className="flex flex-wrap gap-2">
           {canSubmit && (
             <Button onClick={handleSubmit} disabled={validate.isPending || submit.isPending}>
-              <Send className="w-4 h-4 mr-2" />
+              <Send className="w-4 h-4 mr-2" aria-hidden="true" />
               {validate.isPending || submit.isPending ? "Submitting…" : "Submit for stamping"}
             </Button>
           )}
@@ -341,7 +381,7 @@ export function InvoiceDetail() {
               onClick={() => setAdjustKind("credit")}
               data-testid="button-credit-note"
             >
-              <Undo2 className="w-4 h-4 mr-2" /> Issue credit note
+              <Undo2 className="w-4 h-4 mr-2" aria-hidden="true" /> Issue credit note
             </Button>
           )}
           {canCancel && (
@@ -351,7 +391,7 @@ export function InvoiceDetail() {
               onClick={() => setAdjustKind("cancel")}
               data-testid="button-cancel-invoice"
             >
-              <Ban className="w-4 h-4 mr-2" /> Cancel invoice
+              <Ban className="w-4 h-4 mr-2" aria-hidden="true" /> Cancel invoice
             </Button>
           )}
         </div>
@@ -377,12 +417,18 @@ export function InvoiceDetail() {
                 : "A credit note referencing this invoice is created and submitted for stamping. Once stamped, this invoice becomes Credited — a terminal, recorded state."}
             </DialogDescription>
           </DialogHeader>
-          <Textarea
-            placeholder="Reason (required — it is recorded on the ledger)"
-            value={adjustReason}
-            onChange={(e) => setAdjustReason(e.target.value)}
-            data-testid="input-adjust-reason"
-          />
+          <div>
+            <Label htmlFor="adjust-reason" className="sr-only">
+              Reason
+            </Label>
+            <Textarea
+              id="adjust-reason"
+              placeholder="Reason (required — it is recorded on the ledger)"
+              value={adjustReason}
+              onChange={(e) => setAdjustReason(e.target.value)}
+              data-testid="input-adjust-reason"
+            />
+          </div>
           <DialogFooter>
             <Button
               variant="ghost"
@@ -414,10 +460,10 @@ export function InvoiceDetail() {
       </Dialog>
 
       {stampedFamily && stamp && (
-        <Card className="border-emerald-200 bg-emerald-50/50">
+        <Card className="border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/40">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-emerald-800">
-              <ShieldCheck className="w-4 h-4" /> FIRS stamped
+            <CardTitle className="flex items-center gap-2 text-base text-emerald-800 dark:text-emerald-300">
+              <ShieldCheck className="w-4 h-4" aria-hidden="true" /> FIRS stamped
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-1">
@@ -437,7 +483,7 @@ export function InvoiceDetail() {
         <Card className="border-destructive/30 bg-destructive/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base text-destructive">
-              <AlertTriangle className="w-4 h-4" /> Submission failed
+              <AlertTriangle className="w-4 h-4" aria-hidden="true" /> Submission failed
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -467,11 +513,15 @@ export function InvoiceDetail() {
 
             {!showEscalate ? (
               <Button variant="outline" size="sm" onClick={() => setShowEscalate(true)}>
-                <LifeBuoy className="w-4 h-4 mr-2" /> Escalate to my firm
+                <LifeBuoy className="w-4 h-4 mr-2" aria-hidden="true" /> Escalate to my firm
               </Button>
             ) : (
               <div className="space-y-2">
+                <Label htmlFor="escalate-reason" className="sr-only">
+                  What you've already tried
+                </Label>
                 <Textarea
+                  id="escalate-reason"
                   placeholder="Describe what you've already tried…"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -504,14 +554,14 @@ export function InvoiceDetail() {
                   {(Number(l.vatRate) * 100).toFixed(1)}%
                 </p>
               </div>
-              <span className="font-medium">
+              <span className="font-medium tabular-nums">
                 {formatNaira(Number(l.lineExtension) + Number(l.vatAmount))}
               </span>
             </div>
           ))}
           <div className="flex justify-between pt-2 font-semibold">
             <span>Total</span>
-            <span>{formatNaira(invoice.grandTotal)}</span>
+            <span className="tabular-nums">{formatNaira(invoice.grandTotal)}</span>
           </div>
         </CardContent>
       </Card>
@@ -519,7 +569,7 @@ export function InvoiceDetail() {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="flex items-center gap-2 text-base">
-            <MailCheck className="w-4 h-4" /> Buyer confirmation
+            <MailCheck className="w-4 h-4" aria-hidden="true" /> Buyer confirmation
           </CardTitle>
           {canRequestConfirmation && (
             <Button
@@ -528,7 +578,7 @@ export function InvoiceDetail() {
               onClick={handleRequestConfirmation}
               disabled={createConfirmation.isPending}
             >
-              <Send className="w-4 h-4 mr-2" />
+              <Send className="w-4 h-4 mr-2" aria-hidden="true" />
               {createConfirmation.isPending ? "Requesting…" : "Request confirmation"}
             </Button>
           )}
@@ -536,8 +586,8 @@ export function InvoiceDetail() {
         <CardContent>
           {confirmationsDark ? (
             <p className="text-sm text-muted-foreground">
-              Buyer confirmations are not yet enabled for this firm. Ask your operator to
-              enable it.
+              Buyer confirmations are not yet enabled for this organization. Ask your
+              operator to enable it.
             </p>
           ) : confirmationTimeline.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -565,23 +615,16 @@ export function InvoiceDetail() {
                     }`}
                   />
                   <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full border capitalize ${
-                        CONFIRMATION_BADGES[c.state] ||
-                        "bg-slate-100 text-slate-600 border-slate-200"
-                      }`}
-                    >
-                      {c.state}
+                    <span className={confirmationBadgeClasses(c.state)}>
+                      {confirmationLabel(c.state)}
                     </span>
                     {c.method && (
-                      <span className="text-xs text-muted-foreground capitalize">
-                        via {c.method}
+                      <span className="text-xs text-muted-foreground">
+                        via {humanize(c.method)}
                       </span>
                     )}
                     {c.noSetOff && (
-                      <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200">
-                        No set-off
-                      </span>
+                      <span className={pillClasses("slate")}>No set-off</span>
                     )}
                   </div>
                   {c.note && (
@@ -607,7 +650,7 @@ export function InvoiceDetail() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Banknote className="w-4 h-4" /> Settlement events
+              <Banknote className="w-4 h-4" aria-hidden="true" /> Settlement events
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -615,22 +658,20 @@ export function InvoiceDetail() {
               <div key={s.id} className="text-sm border rounded-md px-3 py-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200">
-                      {SETTLEMENT_SOURCE_LABELS[s.source] || s.source}
+                    <span className={pillClasses("slate")}>
+                      {SETTLEMENT_SOURCE_LABELS[s.source] || humanize(s.source)}
                     </span>
                     {s.paymentStatus && (
                       <span
-                        className={`text-xs px-2 py-0.5 rounded-full border capitalize ${
-                          s.paymentStatus === "paid"
-                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                            : "bg-amber-100 text-amber-800 border-amber-200"
-                        }`}
+                        className={pillClasses(
+                          s.paymentStatus === "paid" ? "emerald" : "amber",
+                        )}
                       >
-                        {s.paymentStatus}
+                        {humanize(s.paymentStatus)}
                       </span>
                     )}
                   </div>
-                  <span className="font-semibold">{formatNaira(s.amount)}</span>
+                  <span className="font-semibold tabular-nums">{formatNaira(s.amount)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   {formatDateTime(s.occurredAt)}
@@ -652,15 +693,15 @@ export function InvoiceDetail() {
               .map((a) => (
                 <div key={a.id} className="flex items-start gap-3 text-sm">
                   {a.status === "rejected" || a.status === "error" ? (
-                    <XCircle className="w-4 h-4 text-destructive mt-0.5" />
+                    <XCircle className="w-4 h-4 text-destructive mt-0.5" aria-hidden="true" />
                   ) : a.status === "accepted" ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5" aria-hidden="true" />
                   ) : (
-                    <Clock className="w-4 h-4 text-muted-foreground mt-0.5" />
+                    <Clock className="w-4 h-4 text-muted-foreground mt-0.5" aria-hidden="true" />
                   )}
                   <div>
                     <p>
-                      Attempt {a.attemptNo} · <span className="capitalize">{a.status}</span>{" "}
+                      Attempt {a.attemptNo} · {humanize(a.status)}{" "}
                       <span className="text-muted-foreground uppercase text-xs">({a.rail})</span>
                     </p>
                     {a.errorCode && (
@@ -683,7 +724,7 @@ export function InvoiceDetail() {
             {escalations.map((e) => (
               <div key={e.id} className="text-sm border rounded-md px-3 py-2">
                 <div className="flex justify-between">
-                  <span className="capitalize font-medium">{e.status}</span>
+                  <span className="font-medium">{humanize(e.status)}</span>
                   <span className="text-xs text-muted-foreground">{formatDate(e.createdAt)}</span>
                 </div>
                 <p className="text-muted-foreground">{e.reason}</p>

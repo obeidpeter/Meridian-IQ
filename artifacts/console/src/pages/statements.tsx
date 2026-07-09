@@ -11,9 +11,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Download, FileText } from "lucide-react";
-import { formatNaira, formatDate } from "@/lib/format";
+import { formatNaira, formatDate, humanize } from "@/lib/format";
+
+const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+// Statements cover closed periods — default to the previous month.
+function previousMonth(): string {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
 function pct(v: string) {
   return `${(Number(v) * 100).toFixed(1)}%`;
@@ -56,15 +68,17 @@ function toCsv(rows: RevenueShareStatement[]): string {
 }
 
 export function Statements() {
-  const [period, setPeriod] = useState(() =>
-    new Date().toISOString().slice(0, 7),
-  );
-  const { data, isLoading } = useListStatements();
+  usePageTitle("Statements");
+  const [period, setPeriod] = useState(previousMonth);
+  const { data, isLoading, error, refetch } = useListStatements();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const generate = useGenerateStatements();
 
+  const periodValid = PERIOD_PATTERN.test(period);
+
   const handleGenerate = () => {
+    if (!periodValid) return;
     generate.mutate(
       { data: { period } },
       {
@@ -109,7 +123,7 @@ export function Statements() {
             onClick={() => exportCsv(statements, "all")}
             data-testid="button-export-all"
           >
-            <Download className="w-4 h-4 mr-2" /> Export all
+            <Download className="w-4 h-4 mr-2" aria-hidden="true" /> Export all
           </Button>
         )}
       </div>
@@ -121,33 +135,74 @@ export function Statements() {
         <CardContent>
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <Label htmlFor="period">Period (YYYY-MM)</Label>
+              <Label htmlFor="period">Period</Label>
               <Input
                 id="period"
+                type="month"
                 value={period}
                 onChange={(e) => setPeriod(e.target.value)}
                 placeholder="2026-06"
-                className="w-40"
+                className={`w-44 ${periodValid ? "" : "border-destructive"}`}
+                aria-invalid={!periodValid}
+                aria-describedby={periodValid ? undefined : "period-error"}
                 data-testid="input-period"
               />
             </div>
             <Button
               onClick={handleGenerate}
-              disabled={generate.isPending}
+              disabled={generate.isPending || !periodValid}
               data-testid="button-generate"
             >
-              Generate
+              {generate.isPending ? "Generating…" : "Generate"}
             </Button>
           </div>
+          {!periodValid && (
+            <p
+              id="period-error"
+              role="alert"
+              className="text-sm text-destructive mt-2"
+              data-testid="text-period-error"
+            >
+              Pick a month in YYYY-MM format, e.g. 2026-06.
+            </p>
+          )}
         </CardContent>
       </Card>
 
       {isLoading ? (
-        <Skeleton className="h-72" />
+        <div className="space-y-4">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="pt-6 space-y-4">
+                <Skeleton className="h-5 w-64" />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {Array.from({ length: 4 }).map((_, j) => (
+                    <Skeleton key={j} className="h-10" />
+                  ))}
+                </div>
+                <Skeleton className="h-8" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : error ? (
+        <QueryError thing="statements" onRetry={() => refetch()} />
       ) : statements.length === 0 ? (
-        <p className="text-muted-foreground" data-testid="text-empty">
-          No statements yet. Generate one for a closed period.
-        </p>
+        <Card>
+          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
+            <FileText
+              className="w-10 h-10 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p className="font-semibold" data-testid="text-empty">
+              No statements generated yet
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Pick a closed month above and generate the first revenue-share
+              statement — each firm's share is reconciled to billing.
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-4">
           {statements.map((s) => (
@@ -156,11 +211,11 @@ export function Statements() {
                 <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                   <div>
                     <p className="font-semibold flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-primary" />
+                      <FileText className="w-4 h-4 text-primary" aria-hidden="true" />
                       {s.firmName ?? "Firm"} · {s.period}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {s.tierKey.replace(/_/g, " ")} · generated{" "}
+                      {humanize(s.tierKey)} · generated{" "}
                       {formatDate(s.generatedAt)}
                     </p>
                   </div>
@@ -170,7 +225,7 @@ export function Statements() {
                     onClick={() => exportCsv([s], `${s.firmName ?? s.firmId}-${s.period}`)}
                     data-testid={`button-export-${s.id}`}
                   >
-                    <Download className="w-4 h-4 mr-1" /> Export
+                    <Download className="w-4 h-4 mr-1" aria-hidden="true" /> Export
                   </Button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -185,17 +240,17 @@ export function Statements() {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Subscription</p>
-                    <p className="font-medium">
+                    <p className="font-medium tabular-nums">
                       {formatNaira(s.subscriptionAmount)}
                     </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Overage</p>
-                    <p className="font-medium">{formatNaira(s.overageAmount)}</p>
+                    <p className="font-medium tabular-nums">{formatNaira(s.overageAmount)}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Billing total</p>
-                    <p className="font-medium">{formatNaira(s.billingAmount)}</p>
+                    <p className="font-medium tabular-nums">{formatNaira(s.billingAmount)}</p>
                   </div>
                 </div>
                 <div className="mt-4 pt-4 border-t flex items-center justify-between">
@@ -203,7 +258,7 @@ export function Statements() {
                     Revenue share ({pct(s.revenueSharePct)})
                   </span>
                   <span
-                    className="text-lg font-bold text-primary"
+                    className="text-lg font-bold text-primary tabular-nums"
                     data-testid={`text-share-${s.id}`}
                   >
                     {formatNaira(s.revenueShareAmount)}
