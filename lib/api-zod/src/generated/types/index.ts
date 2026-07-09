@@ -42,6 +42,7 @@ export * from './canonicalParty';
 export * from './caseEscalation';
 export * from './caseEscalationContext';
 export * from './casePlaybook';
+export * from './changePasswordInput';
 export * from './clientImportInput';
 export * from './clientImportResult';
 export * from './clientImportRow';

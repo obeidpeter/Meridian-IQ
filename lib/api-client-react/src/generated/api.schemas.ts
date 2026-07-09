@@ -36,6 +36,13 @@ export interface LoginInput {
   password: string;
 }
 
+export interface ChangePasswordInput {
+  /** @minLength 1 */
+  currentPassword: string;
+  /** @minLength 8 */
+  newPassword: string;
+}
+
 /**
  * @nullable
  */

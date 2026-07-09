@@ -8,6 +8,7 @@ import {
   useGetMe,
   useLogin,
   useLogout,
+  useChangePassword,
   getGetMeQueryKey,
 } from "@workspace/api-client-react";
 import type { Me } from "@workspace/api-client-react";
@@ -22,6 +23,8 @@ import {
   Loader2,
   ShieldCheck,
   AlertCircle,
+  KeyRound,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -376,6 +379,113 @@ function SignInPanel() {
   );
 }
 
+function ChangePasswordForm() {
+  const changePassword = useChangePassword();
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await changePassword.mutateAsync({
+        data: { currentPassword: current, newPassword: next },
+      });
+      setDone(true);
+      setCurrent("");
+      setNext("");
+      setTimeout(() => {
+        setDone(false);
+        setOpen(false);
+      }, 2500);
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      setError(
+        status === 401
+          ? "Current password is incorrect."
+          : status === 400
+            ? "New password must be at least 8 characters."
+            : "Could not change the password. Try again.",
+      );
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+        data-testid="button-show-change-password"
+      >
+        <KeyRound className="h-3.5 w-3.5" /> Change password
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-3 space-y-2 rounded-lg border p-3">
+      <p className="text-xs font-medium">Change password</p>
+      <Input
+        type="password"
+        autoComplete="current-password"
+        placeholder="Current password"
+        value={current}
+        onChange={(e) => setCurrent(e.target.value)}
+        required
+        data-testid="input-current-password"
+      />
+      <Input
+        type="password"
+        autoComplete="new-password"
+        placeholder="New password (min 8 characters)"
+        value={next}
+        onChange={(e) => setNext(e.target.value)}
+        required
+        minLength={8}
+        data-testid="input-new-password"
+      />
+      {error && (
+        <p className="flex items-start gap-1.5 text-xs text-destructive">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {error}
+        </p>
+      )}
+      {done && (
+        <p
+          className="flex items-center gap-1.5 text-xs text-emerald-700"
+          data-testid="text-password-changed"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" /> Password changed.
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={changePassword.isPending || !current || next.length < 8}
+          data-testid="button-change-password"
+        >
+          {changePassword.isPending ? "Saving…" : "Save"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setOpen(false);
+            setError(null);
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function SignedInPanel({ me }: { me: Me }) {
   const qc = useQueryClient();
   const logout = useLogout();
@@ -411,6 +521,7 @@ function SignedInPanel({ me }: { me: Me }) {
           {me.email ? `${me.email} · ` : ""}
           {roleLabel(me.role)}
         </p>
+        <ChangePasswordForm />
       </div>
       <p className="mt-3 text-sm text-muted-foreground">
         Open a workspace highlighted below, or switch accounts.
