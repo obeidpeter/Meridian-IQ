@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   useListOperatorCases,
+  useGetOperatorQueueStats,
   useClaimOperatorCase,
   useResolveOperatorCase,
   getListOperatorCasesQueryKey,
+  getGetOperatorQueueStatsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   OperatorCaseView,
@@ -158,37 +160,21 @@ function CaseCard({
 export function OperatorQueue() {
   const [status, setStatus] = useState<ListOperatorCasesStatus>("open");
   const { data, isLoading, error } = useListOperatorCases({ status });
-  const { data: allCases, error: allCasesError } = useListOperatorCases();
+  const { data: stats, error: statsError } = useGetOperatorQueueStats();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const claim = useClaimOperatorCase();
   const resolve = useResolveOperatorCase();
 
-  const invalidate = () =>
+  const invalidate = () => {
     queryClient.invalidateQueries({
       queryKey: getListOperatorCasesQueryKey(),
     });
-
-  const stats = useMemo(() => {
-    const cases = allCases ?? [];
-    const resolved = cases.filter(
-      (c) => c.status === "resolved" && c.handleSeconds != null,
-    );
-    const avg =
-      resolved.length > 0
-        ? Math.round(
-            resolved.reduce((s, c) => s + (c.handleSeconds ?? 0), 0) /
-              resolved.length,
-          )
-        : null;
-    return {
-      open: cases.filter((c) => c.status === "open").length,
-      inProgress: cases.filter((c) => c.status === "in_progress").length,
-      resolved: resolved.length,
-      avg,
-    };
-  }, [allCases]);
+    queryClient.invalidateQueries({
+      queryKey: getGetOperatorQueueStatsQueryKey(),
+    });
+  };
 
   const handleClaim = (c: OperatorCaseView) => {
     claim.mutate(
@@ -221,7 +207,7 @@ export function OperatorQueue() {
   // The operator endpoints answer 403 unless the signed-in principal is an
   // operator. A firm_admin/firm_staff reaching this page should see a friendly
   // prompt instead of an infinite spinner or a crash.
-  if (isForbidden(error) || isForbidden(allCasesError)) {
+  if (isForbidden(error) || isForbidden(statsError)) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
@@ -260,30 +246,42 @@ export function OperatorQueue() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card data-testid="stat-open">
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Open</p>
-            <p className="text-2xl font-bold mt-1">{stats.open}</p>
+            <p className="text-2xl font-bold mt-1">{stats?.openCount ?? "—"}</p>
           </CardContent>
         </Card>
         <Card data-testid="stat-in-progress">
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">In progress</p>
-            <p className="text-2xl font-bold mt-1">{stats.inProgress}</p>
+            <p className="text-2xl font-bold mt-1">
+              {stats?.inProgressCount ?? "—"}
+            </p>
           </CardContent>
         </Card>
         <Card data-testid="stat-resolved">
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Resolved</p>
-            <p className="text-2xl font-bold mt-1">{stats.resolved}</p>
+            <p className="text-2xl font-bold mt-1">
+              {stats?.resolvedCount ?? "—"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card data-testid="stat-clients-served">
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Clients served</p>
+            <p className="text-2xl font-bold mt-1">
+              {stats?.clientsServed ?? "—"}
+            </p>
           </CardContent>
         </Card>
         <Card data-testid="stat-avg-handle">
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Avg handle time</p>
             <p className="text-2xl font-bold mt-1">
-              {formatDuration(stats.avg)}
+              {formatDuration(stats?.avgHandleSeconds)}
             </p>
           </CardContent>
         </Card>

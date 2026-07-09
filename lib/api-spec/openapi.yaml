@@ -1963,6 +1963,12 @@ components:
           type: string
         role:
           type: string
+        # Display identity for signed-in UI. Null for principals that do not
+        # resolve to a users row (e.g. dev-header principals).
+        email:
+          type: ["string", "null"]
+        fullName:
+          type: ["string", "null"]
         firmId:
           type: ["string", "null"]
         clientPartyId:
