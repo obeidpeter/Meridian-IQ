@@ -46,9 +46,9 @@ Roadmap R0–R2 built; R3+ dormant behind gates).
 
 ## Product
 
-- Portal (`/`): the front door. Central email+password sign-in sets an origin-wide session cookie, then role-aware tiles route to each workspace (Compliance App, Console, Buyer Rails) or straight into the public Penalty Calculator. One sign-in unlocks every workspace the account's role allows.
+- Portal (`/`): the front door. Central email+password sign-in sets an origin-wide session cookie; after sign-in the account is redirected to its role's default workspace (operator → console operator queue, firm roles → console/app, buyer → Buyer Rails) and the role-aware tiles cover the rest. Demo accounts sign in with one click; login errors surface the server message. Every app's sidebar shows the signed-in identity (from `/me`, which returns email/fullName) with "All apps" + "Sign out".
 - SME app: guided invoicing, bulk import (5,000-row bulk path), submission + vault, deadline/penalty alerts, reconciliation upload with match proposals, B2C 24-hour report clocks, confirmation timeline.
-- Accountant console: portfolio risk, onboarding pipeline, unearned income, billing/revenue share, operator queue; R2 adds white-label branding + subdomain, bulk client import, CPD certification portal.
+- Accountant console: role-aware nav filtered by the principal's capabilities. Firm roles get portfolio risk, onboarding pipeline, unearned income, billing/revenue share; R2 adds white-label branding + subdomain, bulk client import, CPD certification portal. The operator gets the queue (server-side stats incl. clients served), Platform ops (rail health, dead-letter replay, pipeline reconcile) and Feature flags (read for firm_admin, write for operator); console `/` redirects operators to the queue. Direct URL hits on pages a role lacks show a capability card, not raw 403s.
 - Buyer portal (`/buyer/`): confirmation queue and responses (method + no-set-off captured), payment flags, supplier verification with daily input-VAT exposure, exportable compliance scoreboard.
 - Credit layer (R3+) remains dormant: schema exists, flags dark, no user-facing surface.
 
@@ -64,6 +64,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 - Identity resolution order (`middleware/principal.ts`): dev `x-mock-*` headers (never honoured in production) → first-party session cookie → Clerk (production). The browser apps send NO mock headers — they authenticate purely via the shared session cookie set by the portal login; automated tests/curl use `x-mock-*`. Clerk middleware mounts only when `CLERK_SECRET_KEY` is set.
 - Path-routed origin: the portal owns `/` and its `public/sw.js` is a no-op self-healing worker that evicts the stale root service worker returning browsers cached when the SME app lived at `/`. Adding/moving an app at `/` needs the same self-heal, and any app-scoped service worker must not reach outside its own path prefix.
 - `memberships` unique index is NULLS NOT DISTINCT — seed inserts dedupe correctly; extend the index if you add another scoping column.
+- Login 401s with "Account has no active membership" for any user without a memberships row — every seeded demo user needs one (cross-tenant staff like the operator carry `firmId: null`).
 - express JSON body limit is 8mb (5,000-row imports, statement uploads).
 - See `.agents/memory/` for DB guardrails, RBAC, artifact base-path and service-worker invariants.
 

@@ -10,6 +10,10 @@ export interface Me {
   userId: string;
   role: string;
   /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  fullName?: string | null;
+  /** @nullable */
   firmId?: string | null;
   /** @nullable */
   clientPartyId?: string | null;

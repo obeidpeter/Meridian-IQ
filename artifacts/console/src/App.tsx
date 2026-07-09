@@ -1,5 +1,6 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useGetMe } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -7,6 +8,7 @@ import { errorStatus } from "@/lib/errors";
 
 import { Layout } from "@/components/layout";
 import { RequireSession } from "@/components/require-session";
+import { CapabilityGate } from "@/components/capability-gate";
 import { Portfolio } from "@/pages/portfolio";
 import { ClientDetail } from "@/pages/client-detail";
 import { ClientImport } from "@/pages/client-import";
@@ -14,6 +16,8 @@ import { Pipeline } from "@/pages/pipeline";
 import { UnearnedIncomePage } from "@/pages/unearned-income";
 import { Billing } from "@/pages/billing";
 import { OperatorQueue } from "@/pages/operator-queue";
+import { PlatformOps } from "@/pages/platform-ops";
+import { FeatureFlags } from "@/pages/feature-flags";
 import { Statements } from "@/pages/statements";
 import { WhiteLabel } from "@/pages/whitelabel";
 import { Certification } from "@/pages/certification";
@@ -32,21 +36,84 @@ const queryClient = new QueryClient({
   },
 });
 
+// The console front door is role-aware: firm principals land on the client
+// portfolio; the Compliance Desk operator (cross-tenant, no portfolio access)
+// lands on the work queue it signed in for.
+function Home() {
+  const { data: me } = useGetMe();
+  if (!me) return null;
+  const caps = new Set(me.capabilities);
+  if (!caps.has("console.portfolio.read") && caps.has("operator.queue.read")) {
+    return <Redirect to="/operator-queue" replace />;
+  }
+  return (
+    <CapabilityGate capability="console.portfolio.read">
+      <Portfolio />
+    </CapabilityGate>
+  );
+}
+
 function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Portfolio} />
+        <Route path="/" component={Home} />
         {/* Static /clients/import must register before the /clients/:id param route. */}
-        <Route path="/clients/import" component={ClientImport} />
-        <Route path="/clients/:id" component={ClientDetail} />
-        <Route path="/pipeline" component={Pipeline} />
-        <Route path="/unearned-income" component={UnearnedIncomePage} />
-        <Route path="/billing" component={Billing} />
-        <Route path="/whitelabel" component={WhiteLabel} />
-        <Route path="/certification" component={Certification} />
-        <Route path="/operator-queue" component={OperatorQueue} />
-        <Route path="/statements" component={Statements} />
+        <Route path="/clients/import">
+          <CapabilityGate capability="clients.import">
+            <ClientImport />
+          </CapabilityGate>
+        </Route>
+        <Route path="/clients/:id">
+          <CapabilityGate capability="console.portfolio.read">
+            <ClientDetail />
+          </CapabilityGate>
+        </Route>
+        <Route path="/pipeline">
+          <CapabilityGate capability="console.portfolio.read">
+            <Pipeline />
+          </CapabilityGate>
+        </Route>
+        <Route path="/unearned-income">
+          <CapabilityGate capability="console.portfolio.read">
+            <UnearnedIncomePage />
+          </CapabilityGate>
+        </Route>
+        <Route path="/billing">
+          <CapabilityGate capability="billing.read">
+            <Billing />
+          </CapabilityGate>
+        </Route>
+        <Route path="/whitelabel">
+          <CapabilityGate capability="theme.write">
+            <WhiteLabel />
+          </CapabilityGate>
+        </Route>
+        <Route path="/certification">
+          <CapabilityGate capability="certification.read">
+            <Certification />
+          </CapabilityGate>
+        </Route>
+        <Route path="/operator-queue">
+          <CapabilityGate capability="operator.queue.read">
+            <OperatorQueue />
+          </CapabilityGate>
+        </Route>
+        <Route path="/platform-ops">
+          <CapabilityGate capability="operator.queue.read">
+            <PlatformOps />
+          </CapabilityGate>
+        </Route>
+        <Route path="/feature-flags">
+          <CapabilityGate capability="flags.read">
+            <FeatureFlags />
+          </CapabilityGate>
+        </Route>
+        <Route path="/statements">
+          <CapabilityGate capability="billing.read">
+            <Statements />
+          </CapabilityGate>
+        </Route>
         <Route component={NotFound} />
       </Switch>
     </Layout>

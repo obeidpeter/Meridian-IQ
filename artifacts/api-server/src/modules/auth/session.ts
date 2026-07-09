@@ -106,13 +106,18 @@ export async function verifySessionToken(
 export async function authenticate(
   email: string,
   password: string,
-): Promise<{ userId: string } | null> {
+): Promise<{ userId: string; email: string; fullName: string | null } | null> {
   const [user] = await getDb()
-    .select({ id: usersTable.id, passwordHash: usersTable.passwordHash })
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      fullName: usersTable.fullName,
+      passwordHash: usersTable.passwordHash,
+    })
     .from(usersTable)
     .where(eq(usersTable.email, email.trim().toLowerCase()))
     .limit(1);
   if (!user?.passwordHash) return null;
   if (!verifyPassword(password, user.passwordHash)) return null;
-  return { userId: user.id };
+  return { userId: user.id, email: user.email, fullName: user.fullName };
 }

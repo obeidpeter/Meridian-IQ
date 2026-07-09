@@ -74,6 +74,8 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     LoginResponse.parse({
       userId: result.userId,
       role: membership.role,
+      email: result.email,
+      fullName: result.fullName,
       firmId: membership.firmId,
       clientPartyId: membership.clientPartyId,
       buyerPartyId: membership.buyerPartyId,

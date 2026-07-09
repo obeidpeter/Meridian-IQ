@@ -19,6 +19,18 @@ export function formatDate(value: string | Date | null | undefined): string {
   });
 }
 
+export function formatDateTime(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 type StatusTone =
   | "draft"
   | "pending"
