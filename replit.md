@@ -77,3 +77,4 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
 - Requirement IDs in code comments (CORE-xx, SME-xx, BR-xx, PL-xx, INT-xx, NFR-xx, SEC-xx) refer to the MeridianIQ Technical Requirements Document v1.1
+- `docs/USER_MANUAL.md` — the end-user manual: every workspace, role, flow, flag, lifecycle state, plus admin/runbook, troubleshooting and glossary
