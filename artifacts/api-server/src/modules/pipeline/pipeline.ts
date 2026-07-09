@@ -14,6 +14,7 @@ import { appendAudit } from "../audit/audit";
 import { buildCanonical } from "../invoice/service";
 import { canTransition, recordTransition } from "../invoice/lifecycle";
 import { submitWithFailover } from "../rails/adapter";
+import { openInvoiceCase } from "../desk/cases";
 import { isRetriable } from "../errors";
 
 // Async submission pipeline (INT-09, SME-03 backend). A transactional outbox row
@@ -340,6 +341,7 @@ export async function processOne(): Promise<boolean> {
             nextAttemptAt: new Date(),
           })
           .where(eq(outboxTable.id, event.id));
+        await openCaseForDeadEvent(event, outcome.error);
       } else {
         const dead = attempts >= event.maxAttempts;
         await getDb()
@@ -354,27 +356,53 @@ export async function processOne(): Promise<boolean> {
               : new Date(Date.now() + backoffMs(attempts)),
           })
           .where(eq(outboxTable.id, event.id));
+        if (dead) await openCaseForDeadEvent(event, outcome.error);
       }
       return true;
     } catch (err) {
       // Unexpected error: re-queue with backoff (or dead-letter past maxAttempts).
       const attempts = event.attempts + 1;
       const dead = attempts >= event.maxAttempts;
+      const message = err instanceof Error ? err.message : String(err);
       await getDb()
         .update(outboxTable)
         .set({
           status: dead ? "dead" : "pending",
           attempts,
           lockedAt: null,
-          lastError: err instanceof Error ? err.message : String(err),
+          lastError: message,
           nextAttemptAt: dead
             ? new Date()
             : new Date(Date.now() + backoffMs(attempts)),
         })
         .where(eq(outboxTable.id, event.id));
+      if (dead) await openCaseForDeadEvent(event, message);
       return true;
     }
   });
+}
+
+// SME-06/CON-04: a dead-lettered invoice event is by definition an unresolved
+// failure, so it enters the Compliance Desk queue the moment the pipeline
+// gives up. Non-invoice aggregates stay visible via the dead-letter list.
+async function openCaseForDeadEvent(
+  event: OutboxEvent,
+  error: string,
+): Promise<void> {
+  if (event.aggregateType !== "invoice") return;
+  try {
+    await openInvoiceCase({
+      invoiceId: event.aggregateId,
+      title: (invoiceNumber) =>
+        event.type === "invoice.submit"
+          ? `${invoiceNumber} failed: ${error}`
+          : `${invoiceNumber} stuck in ${event.type}`,
+      errorCode: error,
+      priority: "high",
+    });
+  } catch {
+    // Case intake must never fail the outbox bookkeeping it follows.
+  }
 }
 
 async function claimnextSafe(): Promise<OutboxEvent | null> {

@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { and, desc, isNotNull, notInArray, sql } from "drizzle-orm";
+import { getDb, submissionAttemptsTable, errorCatalogueTable } from "@workspace/db";
 import {
   ListErrorCatalogueResponse,
   GetErrorCatalogueEntryParams,
@@ -8,6 +10,7 @@ import {
   UpdateErrorCatalogueEntryParams,
   UpdateErrorCatalogueEntryBody,
   UpdateErrorCatalogueEntryResponse,
+  ListUnmappedErrorCodesResponse,
 } from "@workspace/api-zod";
 import { assertCan } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
@@ -27,6 +30,40 @@ const router: IRouter = Router();
 router.get("/error-catalogue", async (_req, res): Promise<void> => {
   const rows = await listCatalogue();
   res.json(ListErrorCatalogueResponse.parse(rows));
+});
+
+// INT-02: failure codes observed on submission attempts that have no catalogue
+// entry — the operator's to-do list for keeping the unmapped rate under 2%.
+// Must register before /error-catalogue/:code or "unmapped" is read as a code.
+router.get("/error-catalogue/unmapped", async (req, res): Promise<void> => {
+  assertCan(req.principal, "catalogue.write");
+  const known = getDb()
+    .select({ code: errorCatalogueTable.code })
+    .from(errorCatalogueTable);
+  const rows = await getDb()
+    .select({
+      code: submissionAttemptsTable.errorCode,
+      occurrences: sql<number>`count(*)::int`,
+      lastSeenAt: sql<Date>`max(${submissionAttemptsTable.createdAt})`,
+    })
+    .from(submissionAttemptsTable)
+    .where(
+      and(
+        isNotNull(submissionAttemptsTable.errorCode),
+        notInArray(submissionAttemptsTable.errorCode, known),
+      ),
+    )
+    .groupBy(submissionAttemptsTable.errorCode)
+    .orderBy(desc(sql`max(${submissionAttemptsTable.createdAt})`));
+  res.json(
+    ListUnmappedErrorCodesResponse.parse(
+      rows.map((r) => ({
+        code: r.code as string,
+        occurrences: r.occurrences,
+        lastSeenAt: r.lastSeenAt,
+      })),
+    ),
+  );
 });
 
 router.get("/error-catalogue/:code", async (req, res): Promise<void> => {

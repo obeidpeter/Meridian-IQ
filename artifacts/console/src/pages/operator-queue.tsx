@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  useGetMe,
   useListOperatorCases,
   useGetOperatorQueueStats,
   useClaimOperatorCase,
@@ -19,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { isForbidden } from "@/lib/errors";
-import { Clock, Zap, ShieldCheck, Lock } from "lucide-react";
+import { Clock, Zap, ShieldCheck, Lock, LifeBuoy } from "lucide-react";
 
 function formatDuration(seconds?: number | null): string {
   if (seconds == null) return "—";
@@ -46,12 +47,14 @@ function CaseCard({
   onResolve,
   claiming,
   resolving,
+  canAct,
 }: {
   c: OperatorCaseView;
   onClaim: (c: OperatorCaseView) => void;
   onResolve: (c: OperatorCaseView, code: string, note: string) => void;
   claiming: boolean;
   resolving: boolean;
+  canAct: boolean;
 }) {
   const [note, setNote] = useState("");
 
@@ -92,6 +95,19 @@ function CaseCard({
           </div>
         )}
 
+        {(c.escalations ?? []).length > 0 && (
+          <div className="rounded-md border border-amber-200 bg-amber-50/60 p-3 text-sm space-y-1.5">
+            <p className="font-medium flex items-center gap-1.5 text-amber-900">
+              <LifeBuoy className="w-4 h-4" /> Client escalation
+            </p>
+            {(c.escalations ?? []).map((e) => (
+              <p key={e.id} className="text-amber-900/80">
+                “{e.reason}”
+              </p>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" /> Handle:{" "}
@@ -100,7 +116,7 @@ function CaseCard({
           <span className="capitalize">{c.status.replace("_", " ")}</span>
         </div>
 
-        {c.status === "open" && (
+        {c.status === "open" && canAct && (
           <Button
             size="sm"
             className="w-full"
@@ -112,7 +128,7 @@ function CaseCard({
           </Button>
         )}
 
-        {c.status === "in_progress" && (
+        {c.status === "in_progress" && canAct && (
           <div className="space-y-2">
             <Input
               placeholder="Resolution note (optional)"
@@ -159,6 +175,10 @@ function CaseCard({
 
 export function OperatorQueue() {
   const [status, setStatus] = useState<ListOperatorCasesStatus>("open");
+  const { data: me } = useGetMe();
+  // Auditors hold operator.queue.read but not .act — the queue renders
+  // read-only for them instead of offering buttons that 403.
+  const canAct = (me?.capabilities ?? []).includes("operator.queue.act");
   const { data, isLoading, error } = useListOperatorCases({ status });
   const { data: stats, error: statsError } = useGetOperatorQueueStats();
   const queryClient = useQueryClient();
@@ -324,6 +344,7 @@ export function OperatorQueue() {
               onResolve={handleResolve}
               claiming={claim.isPending}
               resolving={resolve.isPending}
+              canAct={canAct}
             />
           ))}
         </div>

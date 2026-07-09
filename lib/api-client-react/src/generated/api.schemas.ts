@@ -639,6 +639,12 @@ export interface CancelInvoiceInput {
   reason: string;
 }
 
+export interface CreditNoteInput {
+  /** @minLength 1 */
+  reason: string;
+  creditNoteNumber?: string;
+}
+
 export type MessageChannel = typeof MessageChannel[keyof typeof MessageChannel];
 
 
@@ -1518,6 +1524,22 @@ export const OperatorCaseViewStatus = {
   resolved: 'resolved',
 } as const;
 
+/**
+ * @nullable
+ */
+export type CaseEscalationContext = { [key: string]: unknown } | null;
+
+export interface CaseEscalation {
+  id: string;
+  reason: string;
+  /** @nullable */
+  errorCode?: string | null;
+  status: string;
+  /** @nullable */
+  context?: CaseEscalationContext;
+  createdAt: string;
+}
+
 export interface OperatorCaseView {
   id: string;
   firmId: string;
@@ -1550,6 +1572,8 @@ export interface OperatorCaseView {
   /** @nullable */
   handleSeconds?: number | null;
   playbook?: CasePlaybook | null;
+  /** @nullable */
+  escalations?: CaseEscalation[] | null;
 }
 
 export interface ResolveCaseInput {
@@ -1564,6 +1588,28 @@ export interface OperatorQueueStats {
   clientsServed: number;
   /** @nullable */
   avgHandleSeconds: number | null;
+}
+
+export interface UnmappedErrorCode {
+  code: string;
+  occurrences: number;
+  lastSeenAt: string;
+}
+
+export interface GateMetrics {
+  subscribedFirms: number;
+  activeClients: number;
+  stampedInvoices: number;
+  /** @nullable */
+  medianHoursToStamp: number | null;
+  failedInvoicesTotal: number;
+  /** @nullable */
+  failureSelfResolutionRate: number | null;
+  creditObservableCount: number;
+  confirmationsLast30d: number;
+  /** @nullable */
+  reconciliationAcceptRate: number | null;
+  openEscalations: number;
 }
 
 export type BankStatementStatus = typeof BankStatementStatus[keyof typeof BankStatementStatus];

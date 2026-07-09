@@ -40,6 +40,7 @@ import { isFeatureEnabled } from "../modules/flags/flags";
 import { openBatchesFor } from "../modules/b2c/service";
 import { sendMessage } from "../modules/messaging/messaging";
 import { appendAudit } from "../modules/audit/audit";
+import { openInvoiceCase } from "../modules/desk/cases";
 import { DomainError } from "../modules/errors";
 
 const router: IRouter = Router();
@@ -784,6 +785,14 @@ router.post("/invoices/:id/escalations", async (req, res): Promise<void> => {
       context: parsed.data.context ?? null,
     })
     .returning();
+  // SME-06: an escalation is not just a record — it enters the Compliance
+  // Desk work queue with full context, no re-entry by the operator.
+  await openInvoiceCase({
+    invoiceId: invoice.id,
+    title: `${invoice.invoiceNumber} escalated by client`,
+    errorCode: row.errorCode,
+    priority: "high",
+  });
   await appendAudit({
     actorId: req.principal.userId,
     firmId: invoice.firmId,

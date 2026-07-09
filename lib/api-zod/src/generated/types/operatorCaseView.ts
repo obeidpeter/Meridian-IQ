@@ -5,6 +5,7 @@
  * MeridianIQ platform API — data spine, compliance rails and consent.
  * OpenAPI spec version: 0.1.0
  */
+import type { CaseEscalation } from './caseEscalation';
 import type { CasePlaybook } from './casePlaybook';
 import type { OperatorCaseViewPriority } from './operatorCaseViewPriority';
 import type { OperatorCaseViewStatus } from './operatorCaseViewStatus';
@@ -41,4 +42,6 @@ export interface OperatorCaseView {
   /** @nullable */
   handleSeconds?: number | null;
   playbook?: CasePlaybook | null;
+  /** @nullable */
+  escalations?: CaseEscalation[] | null;
 }

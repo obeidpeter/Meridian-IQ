@@ -551,6 +551,30 @@ paths:
                 $ref: "#/components/schemas/Invoice"
         "409":
           $ref: "#/components/responses/Conflict"
+  /invoices/{id}/credit-note:
+    post:
+      operationId: creditNoteInvoice
+      tags: [lifecycle]
+      summary: Issue a credit note against a stamped invoice (CORE-09)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditNoteInput"
+      responses:
+        "202":
+          description: >-
+            Credit note created and submitted for stamping; the original
+            transitions to credited when the credit note stamps (C1 async).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /invoices/{id}/confirmations:
     get:
@@ -781,6 +805,32 @@ paths:
                 $ref: "#/components/schemas/ErrorCatalogueEntry"
         "404":
           $ref: "#/components/responses/NotFound"
+  /error-catalogue/unmapped:
+    get:
+      operationId: listUnmappedErrorCodes
+      tags: [operator]
+      summary: Failure codes seen on submissions with no catalogue entry (INT-02)
+      responses:
+        "200":
+          description: Unmapped error codes, most recent first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UnmappedErrorCode"
+  /operator/gate-metrics:
+    get:
+      operationId: getGateMetrics
+      tags: [operator]
+      summary: Live measurements of the roadmap release-gate metrics
+      responses:
+        "200":
+          description: Gate metrics computed from the spine
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GateMetrics"
   /operator/dead-letters:
     get:
       operationId: listDeadLetters
@@ -2659,6 +2709,17 @@ components:
         reason:
           type: string
           minLength: 1
+    CreditNoteInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+        # Reference of the stamped credit-note document issued on the rail;
+        # generated when omitted so demo flows stay one-click.
+        creditNoteNumber:
+          type: string
 
     Message:
       type: object
@@ -3925,6 +3986,30 @@ components:
           oneOf:
             - $ref: "#/components/schemas/CasePlaybook"
             - type: "null"
+        # Client escalations on the case's invoice (SME-06): the operator sees
+        # what the client already tried without asking for re-entry.
+        escalations:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/CaseEscalation"
+    CaseEscalation:
+      type: object
+      required: [id, reason, status, createdAt]
+      properties:
+        id:
+          type: string
+        reason:
+          type: string
+        errorCode:
+          type: ["string", "null"]
+        status:
+          type: string
+        context:
+          type: ["object", "null"]
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
     ResolveCaseInput:
       type: object
       required: [resolutionCode]
@@ -3954,6 +4039,56 @@ components:
           type: integer
         avgHandleSeconds:
           type: ["integer", "null"]
+    UnmappedErrorCode:
+      type: object
+      required: [code, occurrences, lastSeenAt]
+      properties:
+        code:
+          type: string
+        occurrences:
+          type: integer
+        lastSeenAt:
+          type: string
+          format: date-time
+    # Live measurements of the roadmap's release-gate metrics (Roadmap
+    # Appendix A "Platform gates"; R1/R2 exit criteria). Targets are roadmap
+    # constants and render client-side; this object is measurement only.
+    GateMetrics:
+      type: object
+      required:
+        [
+          subscribedFirms,
+          activeClients,
+          stampedInvoices,
+          medianHoursToStamp,
+          failedInvoicesTotal,
+          failureSelfResolutionRate,
+          creditObservableCount,
+          confirmationsLast30d,
+          reconciliationAcceptRate,
+          openEscalations,
+        ]
+      properties:
+        subscribedFirms:
+          type: integer
+        activeClients:
+          type: integer
+        stampedInvoices:
+          type: integer
+        medianHoursToStamp:
+          type: ["number", "null"]
+        failedInvoicesTotal:
+          type: integer
+        failureSelfResolutionRate:
+          type: ["number", "null"]
+        creditObservableCount:
+          type: integer
+        confirmationsLast30d:
+          type: integer
+        reconciliationAcceptRate:
+          type: ["number", "null"]
+        openEscalations:
+          type: integer
 
     # ---- R2 schemas: statements & reconciliation (INT-05, SME-07) ----
     BankStatement:

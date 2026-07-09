@@ -15,6 +15,11 @@ import {
   LogOut,
   Activity,
   ToggleRight,
+  ClipboardCheck,
+  Plug,
+  BookOpen,
+  Gauge,
+  ShieldCheck,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -34,15 +39,20 @@ const NAV_LINKS: {
   { href: "/", label: "Portfolio", icon: Users, capability: "console.portfolio.read" },
   { href: "/pipeline", label: "Onboarding", icon: GitBranch, capability: "console.portfolio.read" },
   { href: "/clients/import", label: "Client import", icon: Upload, capability: "clients.import" },
+  { href: "/advisory", label: "Advisory", icon: ClipboardCheck, capability: "engagement.write" },
   { href: "/unearned-income", label: "Unearned income", icon: TrendingUp, capability: "console.portfolio.read" },
   { href: "/billing", label: "Plans & billing", icon: CreditCard, capability: "billing.read" },
+  { href: "/integrations", label: "Integrations", icon: Plug, capability: "connector.read" },
   { href: "/whitelabel", label: "White-label", icon: Palette, capability: "theme.write" },
   { href: "/certification", label: "Certification", icon: GraduationCap, capability: "certification.read" },
   // Revenue-share statements are billing surface (GET /billing/statements).
   { href: "/statements", label: "Statements", icon: FileText, capability: "billing.read" },
   { href: "/operator-queue", label: "Operator queue", icon: ListChecks, capability: "operator.queue.read" },
+  { href: "/catalogue", label: "Error catalogue", icon: BookOpen, capability: "catalogue.write" },
   { href: "/platform-ops", label: "Platform ops", icon: Activity, capability: "operator.queue.read" },
+  { href: "/gate-metrics", label: "Gate metrics", icon: Gauge, capability: "operator.queue.read" },
   { href: "/feature-flags", label: "Feature flags", icon: ToggleRight, capability: "flags.read" },
+  { href: "/audit", label: "Audit & evidence", icon: ShieldCheck, capability: "audit.read" },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -63,18 +73,19 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const capabilities = new Set(me?.capabilities ?? []);
   const links = NAV_LINKS.filter((l) => capabilities.has(l.capability));
-  const isOperator = me?.role === "operator";
+  const subtitle =
+    me?.role === "operator"
+      ? "Compliance Desk"
+      : me?.role === "auditor"
+        ? "Read-only audit view"
+        : "Accountant console";
 
   const NavLinks = () => (
     <nav className="flex flex-col gap-1 p-4 h-full min-h-0">
       <div className="mb-5 px-2">
         <h2 className="text-lg font-bold text-primary">MeridianIQ</h2>
         <p className="text-xs text-muted-foreground truncate">
-          {me
-            ? isOperator
-              ? "Compliance Desk"
-              : "Accountant console"
-            : "Loading…"}
+          {me ? subtitle : "Loading…"}
         </p>
       </div>
       {links.map((link) => {

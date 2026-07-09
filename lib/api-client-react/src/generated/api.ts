@@ -52,6 +52,7 @@ import type {
   CpdCourse,
   CpdEnrollment,
   CpdEnrollmentView,
+  CreditNoteInput,
   DashboardSummary,
   Engagement,
   EngagementInput,
@@ -74,6 +75,7 @@ import type {
   FirmTheme,
   FirmThemeInput,
   ForbiddenResponse,
+  GateMetrics,
   GenerateStatementsInput,
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
@@ -136,6 +138,7 @@ import type {
   UblDocument,
   UnauthorizedResponse,
   UnearnedIncome,
+  UnmappedErrorCode,
   User,
   UserInput,
   ValidationResult,
@@ -2434,6 +2437,77 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getCancelInvoiceMutationOptions(options));
     }
 
+export const getCreditNoteInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/credit-note`
+}
+
+/**
+ * @summary Issue a credit note against a stamped invoice (CORE-09)
+ */
+export const creditNoteInvoice = async (id: string,
+    creditNoteInput: CreditNoteInput, options?: RequestInit): Promise<Invoice> => {
+
+  return customFetch<Invoice>(getCreditNoteInvoiceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(creditNoteInput)
+  }
+);}
+
+
+
+
+export const getCreditNoteInvoiceMutationOptions = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof creditNoteInvoice>>, TError,{id: string;data: BodyType<CreditNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof creditNoteInvoice>>, TError,{id: string;data: BodyType<CreditNoteInput>}, TContext> => {
+
+const mutationKey = ['creditNoteInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof creditNoteInvoice>>, {id: string;data: BodyType<CreditNoteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  creditNoteInvoice(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreditNoteInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof creditNoteInvoice>>>
+    export type CreditNoteInvoiceMutationBody = BodyType<CreditNoteInput>
+    export type CreditNoteInvoiceMutationError = ErrorType<ConflictResponse>
+
+    /**
+ * @summary Issue a credit note against a stamped invoice (CORE-09)
+ */
+export const useCreditNoteInvoice = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof creditNoteInvoice>>, TError,{id: string;data: BodyType<CreditNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof creditNoteInvoice>>,
+        TError,
+        {id: string;data: BodyType<CreditNoteInput>},
+        TContext
+      > => {
+      return useMutation(getCreditNoteInvoiceMutationOptions(options));
+    }
+
 export const getListConfirmationsUrl = (id: string,) => {
 
 
@@ -3370,6 +3444,160 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getUpdateErrorCatalogueEntryMutationOptions(options));
     }
+
+export const getListUnmappedErrorCodesUrl = () => {
+
+
+
+
+  return `/api/error-catalogue/unmapped`
+}
+
+/**
+ * @summary Failure codes seen on submissions with no catalogue entry (INT-02)
+ */
+export const listUnmappedErrorCodes = async ( options?: RequestInit): Promise<UnmappedErrorCode[]> => {
+
+  return customFetch<UnmappedErrorCode[]>(getListUnmappedErrorCodesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListUnmappedErrorCodesQueryKey = () => {
+    return [
+    `/api/error-catalogue/unmapped`
+    ] as const;
+    }
+
+
+export const getListUnmappedErrorCodesQueryOptions = <TData = Awaited<ReturnType<typeof listUnmappedErrorCodes>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnmappedErrorCodes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListUnmappedErrorCodesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listUnmappedErrorCodes>>> = ({ signal }) => listUnmappedErrorCodes({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listUnmappedErrorCodes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListUnmappedErrorCodesQueryResult = NonNullable<Awaited<ReturnType<typeof listUnmappedErrorCodes>>>
+export type ListUnmappedErrorCodesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Failure codes seen on submissions with no catalogue entry (INT-02)
+ */
+
+export function useListUnmappedErrorCodes<TData = Awaited<ReturnType<typeof listUnmappedErrorCodes>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnmappedErrorCodes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListUnmappedErrorCodesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGateMetricsUrl = () => {
+
+
+
+
+  return `/api/operator/gate-metrics`
+}
+
+/**
+ * @summary Live measurements of the roadmap release-gate metrics
+ */
+export const getGateMetrics = async ( options?: RequestInit): Promise<GateMetrics> => {
+
+  return customFetch<GateMetrics>(getGetGateMetricsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGateMetricsQueryKey = () => {
+    return [
+    `/api/operator/gate-metrics`
+    ] as const;
+    }
+
+
+export const getGetGateMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getGateMetrics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGateMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGateMetricsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGateMetrics>>> = ({ signal }) => getGateMetrics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGateMetrics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGateMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getGateMetrics>>>
+export type GetGateMetricsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Live measurements of the roadmap release-gate metrics
+ */
+
+export function useGetGateMetrics<TData = Awaited<ReturnType<typeof getGateMetrics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGateMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGateMetricsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListDeadLettersUrl = () => {
 
