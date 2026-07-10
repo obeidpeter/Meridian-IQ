@@ -19,7 +19,15 @@ export function requireDatabaseUrl(): string {
   return url;
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// A dropped/unroutable connection must fail fast and loud rather than hang the
+// caller forever: pg has no default connect timeout, so without this a boot-time
+// DB reach problem would silently block startup. keepAlive avoids idle NAT/proxy
+// drops on long-lived pooled connections in the deployed environment.
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  connectionTimeoutMillis: 10_000,
+  keepAlive: true,
+});
 export const db = drizzle(pool, { schema });
 
 export type Database = typeof db;
