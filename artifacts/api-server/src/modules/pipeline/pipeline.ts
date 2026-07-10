@@ -316,14 +316,33 @@ export async function processOne(): Promise<boolean> {
   // bypass tenant RLS, and a single transaction makes each event's domain writes
   // and its outbox bookkeeping atomic. A thrown error rolls the claim back so the
   // event returns to `pending` and is retried, never left stuck in `processing`.
-  return runInBypassContext(async () => {
-    const event = await claimnextSafe();
-    if (!event) return false;
-    const handler = HANDLERS[event.type];
-    try {
-      const outcome: HandlerOutcome = handler
-        ? await handler(event)
-        : { kind: "dead", error: `No handler for ${event.type}` };
+  // An UNEXPECTED handler throw must not commit the handler's partial domain
+  // writes (CON-03). The old code caught the throw and re-queued in the SAME
+  // transaction, so a deadlock after a stamp/status write already succeeded
+  // committed those writes and the retry appended duplicate immutable lifecycle
+  // and audit rows. Handlers signal expected failures by RETURNING a retry/dead
+  // outcome (those commit their bookkeeping normally); anything that THROWS
+  // propagates out of the transaction so it rolls back — discarding both the
+  // partial writes and the `processing` claim (the event returns to `pending`).
+  // The failed attempt is then recorded in a SEPARATE transaction so the retry
+  // stays bounded and backed-off without re-running the handler.
+  let claimedEvent: OutboxEvent | null = null;
+  let handlerError: string | null = null;
+  try {
+    return await runInBypassContext(async () => {
+      const event = await claimnextSafe();
+      if (!event) return false;
+      claimedEvent = event;
+      const handler = HANDLERS[event.type];
+      let outcome: HandlerOutcome;
+      try {
+        outcome = handler
+          ? await handler(event)
+          : { kind: "dead", error: `No handler for ${event.type}` };
+      } catch (err) {
+        handlerError = err instanceof Error ? err.message : String(err);
+        throw err; // roll back partial domain writes + the claim
+      }
       const attempts = event.attempts + 1;
       if (outcome.kind === "done") {
         await getDb()
@@ -359,11 +378,19 @@ export async function processOne(): Promise<boolean> {
         if (dead) await openCaseForDeadEvent(event, outcome.error);
       }
       return true;
-    } catch (err) {
-      // Unexpected error: re-queue with backoff (or dead-letter past maxAttempts).
+    });
+  } catch (err) {
+    // Distinguish a handler throw (which we rolled back on purpose) from an
+    // infrastructure/claim error unrelated to a handler.
+    if (claimedEvent === null || handlerError === null) throw err;
+    const event: OutboxEvent = claimedEvent;
+    const message: string = handlerError;
+    // Fresh transaction: the domain writes and the claim were rolled back, so
+    // record only the failed attempt + backoff (or dead-letter). No handler
+    // runs here, so no partial ledger rows can be written.
+    await runInBypassContext(async () => {
       const attempts = event.attempts + 1;
       const dead = attempts >= event.maxAttempts;
-      const message = err instanceof Error ? err.message : String(err);
       await getDb()
         .update(outboxTable)
         .set({
@@ -377,9 +404,9 @@ export async function processOne(): Promise<boolean> {
         })
         .where(eq(outboxTable.id, event.id));
       if (dead) await openCaseForDeadEvent(event, message);
-      return true;
-    }
-  });
+    });
+    return true;
+  }
 }
 
 // SME-06/CON-04: a dead-lettered invoice event is by definition an unresolved
