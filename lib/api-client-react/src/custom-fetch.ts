@@ -349,6 +349,16 @@ export async function customFetch<T = unknown>(
     headers.set("accept", DEFAULT_JSON_ACCEPT);
   }
 
+  // CSRF defense (custom-header pattern). The web session cookie is
+  // SameSite=None so it rides cross-site requests; the API therefore requires
+  // this custom header on cookie-authenticated state-changing calls. A
+  // cross-site attacker cannot set a custom header on a no-preflight "simple
+  // request", and the API's CORS policy will not grant the preflight, so a
+  // forged request is rejected. Harmless on safe methods and same-origin calls.
+  if (!headers.has("x-meridian-csrf")) {
+    headers.set("x-meridian-csrf", "1");
+  }
+
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
   if (_authTokenGetter && !headers.has("authorization")) {

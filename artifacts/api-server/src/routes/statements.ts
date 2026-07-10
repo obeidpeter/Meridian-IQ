@@ -26,8 +26,10 @@ import {
 } from "@workspace/api-zod";
 import {
   assertCan,
+  assertClientPartyScope,
   assertPartyAccess,
   assertSameTenant,
+  clientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { isFeatureEnabled } from "../modules/flags/flags";
@@ -83,7 +85,12 @@ router.get("/statements", async (req, res): Promise<void> => {
   }
   assertCan(req.principal, "statement.read");
   const query = ListBankStatementsQueryParams.safeParse(req.query);
-  const clientPartyId = query.success ? query.data.clientPartyId : undefined;
+  let clientPartyId = query.success ? query.data.clientPartyId : undefined;
+  // A client_user is confined to its own client party (SEC-03): reject an
+  // explicit sibling id and always constrain the list to its own party.
+  if (clientPartyId) assertClientPartyScope(req.principal, clientPartyId);
+  const scope = clientPartyScope(req.principal);
+  if (scope) clientPartyId = scope;
   const tenant = tenantFirmId(req.principal);
   const conditions = [];
   if (tenant) conditions.push(eq(bankStatementsTable.firmId, tenant));
@@ -113,6 +120,8 @@ async function loadStatementForTenant(
     .limit(1);
   if (!statement) throw new DomainError("NOT_FOUND", "Statement not found", 404);
   assertSameTenant(req.principal, statement.firmId);
+  // A client_user only reaches its own client party's statements (SEC-03).
+  assertClientPartyScope(req.principal, statement.clientPartyId);
   return statement;
 }
 

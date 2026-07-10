@@ -48,8 +48,10 @@ import {
 } from "@workspace/api-zod";
 import {
   assertCan,
+  assertClientPartyScope,
   assertSameTenant,
   assertBuyerPartyAccess,
+  clientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import {
@@ -76,6 +78,10 @@ async function loadForTenant(req: { principal: import("../modules/auth/rbac").Pr
   const bundle = await getInvoiceWithLines(id);
   if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
   assertSameTenant(req.principal, bundle.invoice.firmId);
+  // A client_user may only reach invoices where it is the supplier — not a
+  // sibling client's invoice within the same firm (SEC-03). No-op for firm
+  // staff/admin and cross-tenant roles.
+  assertClientPartyScope(req.principal, bundle.invoice.supplierPartyId);
   return bundle;
 }
 
@@ -86,6 +92,10 @@ router.get("/invoices", async (req, res): Promise<void> => {
   const tenant = tenantFirmId(req.principal);
   const conditions = [];
   if (tenant) conditions.push(eq(invoicesTable.firmId, tenant));
+  // A client_user only sees invoices where it is the supplier — not sibling
+  // clients of the same firm (SEC-03).
+  const scope = clientPartyScope(req.principal);
+  if (scope) conditions.push(eq(invoicesTable.supplierPartyId, scope));
   if (status) conditions.push(eq(invoicesTable.status, status as never));
   const rows = conditions.length
     ? await getDb()

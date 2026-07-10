@@ -6,7 +6,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { runRequestContext } from "@workspace/db";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { resolvePrincipal } from "./middleware/principal";
+import { resolvePrincipal, requireCsrfHeader } from "./middleware/principal";
 import { errorHandler } from "./middleware/error";
 
 // Cross-tenant staff (operator/auditor/bank_user), buyer-organization users
@@ -219,11 +219,16 @@ app.use(
 );
 app.use(cors());
 // 5,000-row imports (NFR-03) and full bank-statement uploads (INT-05) arrive
-// as JSON bodies well beyond the 100kb express default.
+// as JSON bodies well beyond the 100kb express default. Only JSON is parsed:
+// urlencoded parsing is deliberately NOT enabled so a cross-site HTML <form>
+// (a no-preflight "simple request") cannot deliver a parseable body (SEC-02).
 app.use(express.json({ limit: "8mb" }));
-app.use(express.urlencoded({ extended: true }));
 // Session cookie (modules/auth/session.ts) is read by the principal middleware.
 app.use(cookieParser());
+// CSRF guard: require a custom header on cookie-authenticated state-changing
+// requests. Runs after cookie-parser so it can see the session cookie, and
+// before principal resolution (SEC-02).
+app.use(requireCsrfHeader);
 
 // Verify the Clerk session (if any) from cookie/Bearer token and attach auth to
 // the request. resolvePrincipal reads getAuth(req) to build the tenant-scoped

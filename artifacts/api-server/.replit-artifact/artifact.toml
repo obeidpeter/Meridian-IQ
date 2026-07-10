@@ -27,6 +27,10 @@ args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 [services.production.run.env]
 PORT = "8080"
 NODE_ENV = "production"
+# This is the public demo deployment: opt in to seeding the one-click demo
+# accounts. A real production deployment must NOT set this (or set it to
+# "false") so no known-password accounts are ever created (SEC-01).
+SEED_DEMO = "true"
 
 [services.production.health.startup]
 path = "/api/healthz"

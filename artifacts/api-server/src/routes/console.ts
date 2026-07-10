@@ -560,9 +560,12 @@ const TIER_FIELDS = [
 ] as const;
 
 router.put("/billing/tiers/:id", async (req, res): Promise<void> => {
-  // A price review is a config change gated on billing.write (firm_admin) and
-  // recorded with an audit entry + price-review history rows (PL-01).
-  assertCan(req.principal, "billing.write");
+  // billing_tiers is a platform-global table (no firm scope), so tier price
+  // reviews are operator-only (SEC-04). A firm_admin's billing.write governs
+  // only firm-scoped billing (its own subscription and revenue-share
+  // statements) and must NOT reach the shared pricing rows. Recorded with an
+  // audit entry + price-review history rows (PL-01).
+  assertCan(req.principal, "billing.tiers.write");
   const params = UpdateTierParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });

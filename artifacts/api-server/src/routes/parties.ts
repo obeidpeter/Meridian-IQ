@@ -17,6 +17,7 @@ import { getDb, partiesTable, engagementsTable } from "@workspace/db";
 import {
   assertCan,
   assertPartyAccess,
+  clientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import {
@@ -46,7 +47,12 @@ router.get("/parties", async (req, res): Promise<void> => {
       .select({ pid: engagementsTable.clientPartyId })
       .from(engagementsTable)
       .where(eq(engagementsTable.firmId, tenant));
-    const ids = engagements.map((e) => e.pid);
+    // A client_user is confined to its own client party (SEC-03): drop any
+    // sibling clients the firm engages.
+    const scope = clientPartyScope(req.principal);
+    const ids = engagements
+      .map((e) => e.pid)
+      .filter((id) => scope === null || id === scope);
     rows = ids.length
       ? await getDb()
           .select()

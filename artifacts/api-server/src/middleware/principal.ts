@@ -44,6 +44,40 @@ const PUBLIC_PATHS = new Set([
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
+const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const CSRF_HEADER = "x-meridian-csrf";
+
+// CSRF guard (SEC-02). The first-party session cookie is issued SameSite=None so
+// it works inside the cross-site preview iframe, which means the browser also
+// attaches it to cross-site requests — the classic CSRF exposure. We require a
+// custom request header on state-changing, cookie-authenticated requests: the
+// browser will not let a cross-site page set a custom header without a CORS
+// preflight, and the API's CORS policy does not grant that preflight, so a
+// forged <form>/simple request is rejected. Requests authenticated by dev
+// x-mock headers, a Bearer token or Clerk carry no session cookie and cannot be
+// forged cross-site, so they pass through. Public endpoints (login/logout/health
+// /verify-stamp/theme) are exempt so unauthenticated and tooling calls still
+// work. Must run after cookie-parser so req.cookies is populated.
+export function requireCsrfHeader(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (CSRF_SAFE_METHODS.has(req.method) || PUBLIC_PATHS.has(req.path)) {
+    next();
+    return;
+  }
+  const cookies = (req as Request & { cookies?: Record<string, string> }).cookies;
+  const hasSessionCookie = Boolean(cookies?.[SESSION_COOKIE]);
+  if (!hasSessionCookie || header(req, CSRF_HEADER)) {
+    next();
+    return;
+  }
+  res
+    .status(403)
+    .json({ error: "Missing or invalid CSRF header" });
+}
+
 function header(req: Request, name: string): string | null {
   const v = req.headers[name];
   if (Array.isArray(v)) return v[0] ?? null;
