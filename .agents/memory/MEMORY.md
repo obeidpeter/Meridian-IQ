@@ -1,5 +1,5 @@
-- [Iframe cookie auth](iframe-cookie-auth.md) — web apps run in a cross-site iframe; session cookies need SameSite=None+Secure AND client credentials:include, else login 200 then /api/me 401. Notes the CSRF tradeoff.
-- [Cross-artifact navigation](cross-artifact-navigation.md) — to link BETWEEN path-routed artifacts (incl. back to landing at origin `/`), use a plain `<a href="/...">`, never wouter `<Link>` (Links are base-prefixed and stay inside the app).
+- [Iframe cookie auth](iframe-cookie-auth.md) — cross-site iframe needs cookies SameSite=None+Secure AND client credentials:include, else login 200 then /api/me 401.
+- [Cross-artifact navigation](cross-artifact-navigation.md) — link BETWEEN path-routed artifacts with a plain `<a href="/...">`, never wouter `<Link>` (Links are base-prefixed).
 - [MeridianIQ platform](meridianiq-platform.md) — overview of the product, artifacts, and domain.
 - [Artifact base path](artifact-base-path.md) — how each artifact's base path prefix works and how to build URLs correctly.
 - [Artifact workflow naming](artifact-workflow-naming.md) — convention for artifact/workflow names.
@@ -15,4 +15,5 @@
 - [Stamp verification](stamp-verification.md) — invoice stamp/QR verification invariants.
 - [API server testing](api-server-testing.md) — how to run/verify api-server tests.
 - [Shell UUID capture](shell-uuid-capture.md) — capturing generated UUIDs in shell for scripted checks.
-- [Deploy hang diagnostic](deploy-hang-diagnostic.md) — Publish "port never opened" + 60s silent stdout = startup HANG on a blocking DB/net op before listen(), not a crash (crashes log fast). Open port before DB work; add client connect timeouts.
+- [Deploy hang diagnostic](deploy-hang-diagnostic.md) — Publish "port never opened" + silent stdout = startup HANG on a blocking DB/net op before listen(); open the port first, add connect timeouts.
+- [RLS SET ROLE in prod](rls-set-role-prod.md) — "permission denied to set role meridian_app" 500s prod only: dev superuser hides a missing PG16 membership SET option; app self-heals with GRANT ... WITH SET at boot.

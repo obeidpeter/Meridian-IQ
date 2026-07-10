@@ -1,5 +1,10 @@
 import app from "./app";
-import { pool, applyMigrations, requireDatabaseUrl } from "@workspace/db";
+import {
+  pool,
+  applyMigrations,
+  requireDatabaseUrl,
+  ensureAppRoleAssumable,
+} from "@workspace/db";
 import { logger } from "./lib/logger";
 import { startWorker, stopWorker } from "./modules/pipeline/pipeline";
 import { seedPlatform } from "./bootstrap/seed";
@@ -55,6 +60,41 @@ async function verifyProductionGuardrails(): Promise<void> {
   }
 }
 
+// Repair the login role's ability to assume the restricted RLS role at startup.
+// See ensureAppRoleAssumable() in @workspace/db for why this is required in a
+// deployment (non-superuser login missing the PG16 SET membership option) and a
+// no-op in development. Never throws: a failure is logged loudly so a broken RLS
+// role surfaces in the deployment logs instead of taking the server down.
+async function ensureRlsRoleAssumable(): Promise<void> {
+  try {
+    const status = await ensureAppRoleAssumable();
+    if (status === "granted") {
+      logger.warn(
+        "Granted the login role the SET privilege on meridian_app; the RLS " +
+          "role is now assumable (SET ROLE meridian_app will succeed).",
+      );
+    } else if (status === "already-assumable") {
+      logger.info("RLS role meridian_app is assumable");
+    } else if (status === "role-missing") {
+      logger.error(
+        "SECURITY: role meridian_app is MISSING, so SET ROLE will fail and no " +
+          "tenant-scoped request can run. Provision the production database via " +
+          "Replit Publish 'overwrite data' (dev->prod copy).",
+      );
+    } else {
+      logger.error(
+        "SECURITY: could not obtain the SET privilege on meridian_app; SET ROLE " +
+          "will keep failing. The login role needs ADMIN on meridian_app.",
+      );
+    }
+  } catch (err) {
+    logger.error(
+      { err },
+      "Could not ensure the RLS role is assumable; SET ROLE meridian_app may fail",
+    );
+  }
+}
+
 async function main(): Promise<void> {
   // Fail fast on a missing database before serving anything (the pool itself
   // is lazy so that pure-function tests can import the schema without a DB).
@@ -74,10 +114,6 @@ async function main(): Promise<void> {
     logger.info({ port }, "Server listening");
   });
 
-  // In-process polling worker. Every loop is unref'd and swallows its own errors,
-  // so it is safe to start before the database is confirmed reachable.
-  startWorker();
-
   const shutdown = (signal: string) => {
     logger.info({ signal }, "Shutting down");
     stopWorker();
@@ -86,13 +122,29 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
 
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // Before anything assumes the restricted RLS role, make sure the login role can
+  // actually `SET ROLE meridian_app` (both requests and the worker depend on it).
+  // In production the non-superuser login is a member of meridian_app but lacks
+  // the PG16 "SET" membership option, so this repair is what makes login work at
+  // all; in development the superuser login already can, so it is a no-op. Done
+  // before startWorker() so the first worker loop can enter its bypass context.
+  if (isProduction) {
+    await ensureRlsRoleAssumable();
+  }
+
+  // In-process polling worker. Every loop is unref'd and swallows its own errors,
+  // so it is safe to start before the database is confirmed reachable.
+  startWorker();
+
   // Schema and seed data for PRODUCTION are owned by Replit's Publish flow (the
   // schema diff applied on publish) and the one-time dev->prod data copy — NOT by
   // the application. Running startup-time DDL migrations or demo seeding against
   // production is unsafe (and disallowed), so bootstrap only runs outside
   // production. It is wrapped so a failure is logged without taking the server
   // down or blocking the port.
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProduction) {
     try {
       const applied = await applyMigrations(pool);
       logger.info(
