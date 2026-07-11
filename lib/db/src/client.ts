@@ -19,7 +19,18 @@ export function requireDatabaseUrl(): string {
   return url;
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Explicit pool sizing (CON-M4). The worker (drain + reconcile + compliance
+// sweeps, each now reentrancy-guarded so at most one of each runs at a time) and
+// all HTTP request transactions share this pool; the pg default of 10 is easily
+// starved under pipeline load, stalling requests until the 30s request-tx
+// timeout. Size it explicitly with headroom and make it env-tunable, and fail a
+// request that cannot get a connection rather than hanging indefinitely.
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.PGPOOL_MAX ?? 20),
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 15_000,
+});
 export const db = drizzle(pool, { schema });
 
 export type Database = typeof db;

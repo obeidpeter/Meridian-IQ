@@ -560,9 +560,12 @@ const TIER_FIELDS = [
 ] as const;
 
 router.put("/billing/tiers/:id", async (req, res): Promise<void> => {
-  // A price review is a config change gated on billing.write (firm_admin) and
-  // recorded with an audit entry + price-review history rows (PL-01).
-  assertCan(req.principal, "billing.write");
+  // billing_tiers is a platform-global table (no firm scope), so tier price
+  // reviews are operator-only (SEC-04). A firm_admin's billing.write governs
+  // only firm-scoped billing (its own subscription and revenue-share
+  // statements) and must NOT reach the shared pricing rows. Recorded with an
+  // audit entry + price-review history rows (PL-01).
+  assertCan(req.principal, "billing.tiers.write");
   const params = UpdateTierParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -1008,6 +1011,9 @@ router.post("/operator/cases/:id/claim", async (req, res): Promise<void> => {
     return;
   }
   const existing = await loadCase(params.data.id);
+  // Compare-and-set on status so two operators can't both claim the same open
+  // case (lost update); the loser gets a 409 instead of a silent overwrite
+  // (CON-M5).
   const [row] = await getDb()
     .update(operatorCasesTable)
     .set({
@@ -1015,8 +1021,20 @@ router.post("/operator/cases/:id/claim", async (req, res): Promise<void> => {
       assignedOperatorId: req.principal.userId,
       firstActionAt: existing.firstActionAt ?? new Date(),
     })
-    .where(eq(operatorCasesTable.id, existing.id))
+    .where(
+      and(
+        eq(operatorCasesTable.id, existing.id),
+        eq(operatorCasesTable.status, "open"),
+      ),
+    )
     .returning();
+  if (!row) {
+    throw new DomainError(
+      "CASE_NOT_CLAIMABLE",
+      "Case is no longer open — it was claimed or resolved by another operator",
+      409,
+    );
+  }
   await appendAudit({
     actorId: req.principal.userId,
     firmId: row.firmId,
@@ -1049,6 +1067,9 @@ router.post("/operator/cases/:id/resolve", async (req, res): Promise<void> => {
     0,
     Math.round((now.getTime() - handleStart.getTime()) / 1000),
   );
+  // Compare-and-set: only an open/in-progress case can be resolved, so a
+  // concurrent double-resolve loses the race with a 409 rather than
+  // overwriting the first resolution (CON-M5).
   const [row] = await getDb()
     .update(operatorCasesTable)
     .set({
@@ -1060,8 +1081,20 @@ router.post("/operator/cases/:id/resolve", async (req, res): Promise<void> => {
       resolutionCode: parsed.data.resolutionCode,
       resolutionNote: parsed.data.note ?? null,
     })
-    .where(eq(operatorCasesTable.id, existing.id))
+    .where(
+      and(
+        eq(operatorCasesTable.id, existing.id),
+        inArray(operatorCasesTable.status, ["open", "in_progress"]),
+      ),
+    )
     .returning();
+  if (!row) {
+    throw new DomainError(
+      "CASE_ALREADY_RESOLVED",
+      "Case has already been resolved",
+      409,
+    );
+  }
   await appendAudit({
     actorId: req.principal.userId,
     firmId: row.firmId,

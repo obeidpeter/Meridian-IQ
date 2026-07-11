@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   getDb,
   partiesTable,
@@ -122,10 +122,19 @@ export async function mergeParties(
   if (duplicate.mergedIntoId) {
     throw new DomainError("ALREADY_MERGED", "Duplicate already merged", 409);
   }
-  await getDb()
+  // Compare-and-set: fold the "not yet merged" precondition into the UPDATE so a
+  // concurrent merge of the same duplicate loses the race with a 409 instead of
+  // a lost update / inconsistent lineage (CON-M6).
+  const [merged] = await getDb()
     .update(partiesTable)
     .set({ mergedIntoId: survivorId })
-    .where(eq(partiesTable.id, duplicateId));
+    .where(
+      and(eq(partiesTable.id, duplicateId), isNull(partiesTable.mergedIntoId)),
+    )
+    .returning({ id: partiesTable.id });
+  if (!merged) {
+    throw new DomainError("ALREADY_MERGED", "Duplicate already merged", 409);
+  }
   await appendAudit({
     actorId,
     action: "party.merge",

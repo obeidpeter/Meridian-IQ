@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb, operatorCasesTable, invoicesTable } from "@workspace/db";
 
 // Compliance Desk case intake (SME-06, CON-04): client escalations and
@@ -30,6 +30,17 @@ export async function openInvoiceCase(input: {
   // Cases require a firm to bill the work against; an unreadable invoice
   // stays visible through the dead-letter queue instead.
   if (!invoice) return;
+
+  // "One live case per invoice" is a check-then-insert, and this runs from both
+  // the request path (client escalation) and the worker path (dead-letter) in
+  // separate transactions, so under READ COMMITTED two callers can both see no
+  // live case and both insert. Serialize per invoice with a transaction-scoped
+  // advisory lock (namespaced so it can't collide with the credit-note lock);
+  // the second caller then observes the first's committed case and dedups
+  // (CON-M1). Released when the ambient transaction ends.
+  await getDb().execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${"case:" + invoice.id}))`,
+  );
 
   const title =
     typeof input.title === "function"

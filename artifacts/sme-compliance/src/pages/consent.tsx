@@ -238,9 +238,16 @@ export function Consent() {
                 </CardHeader>
                 <CardContent>
                   {(records ?? []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground" data-testid="text-empty">
-                      No consent events yet.
-                    </p>
+                    <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+                      <ShieldCheck className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
+                      <p className="font-semibold" data-testid="text-empty">
+                        No consent events yet
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Grants and revocations you make appear here as ledger
+                        events, each with its own timestamp and lineage.
+                      </p>
+                    </div>
                   ) : (
                     <div className="divide-y">
                       {[...(records ?? [])]

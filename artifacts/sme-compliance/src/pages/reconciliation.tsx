@@ -162,7 +162,11 @@ export function Reconciliation() {
       });
       setReport(res);
       if (commit) {
-        await queryClient.invalidateQueries();
+        // Not awaited: a background refetch rejection must not surface as a
+        // false "commit failed" error after the statement already committed.
+        queryClient.invalidateQueries({
+          queryKey: getListBankStatementsQueryKey({ clientPartyId }),
+        });
         setCsv("");
         setFilename(null);
         if (res.statementId) setSelectedId(res.statementId);
@@ -193,7 +197,14 @@ export function Reconciliation() {
       } else {
         await reject.mutateAsync({ id: proposal.id });
       }
-      await queryClient.invalidateQueries();
+      // Not awaited: a background refetch rejection must not surface as a false
+      // "could not save decision" error after the decision already recorded.
+      queryClient.invalidateQueries({
+        queryKey: getListBankStatementsQueryKey({ clientPartyId }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getListBankStatementProposalsQueryKey(selectedId || ""),
+      });
       toast({
         title: action === "accept" ? "Match accepted" : "Match rejected",
         description:

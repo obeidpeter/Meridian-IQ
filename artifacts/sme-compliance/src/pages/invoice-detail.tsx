@@ -148,7 +148,12 @@ export function InvoiceDetail() {
       if (invoice.status === "draft") {
         const res = await validate.mutateAsync({ id });
         if (!res.ok) {
-          await queryClient.invalidateQueries();
+          // Not awaited: a background refetch rejection must not mask the real
+          // validation-failed message below with a generic submission error.
+          queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
+          queryClient.invalidateQueries({
+            queryKey: getListSubmissionAttemptsQueryKey(id),
+          });
           toast({
             title: "Validation failed",
             description: res.errors[0]?.message || "Fix the issues and try again.",
@@ -158,7 +163,10 @@ export function InvoiceDetail() {
         }
       }
       await submit.mutateAsync({ id });
-      await queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
+      queryClient.invalidateQueries({
+        queryKey: getListSubmissionAttemptsQueryKey(id),
+      });
       toast({
         title: "Submitted for stamping",
         description: "We'll notify you once it clears the rail.",
@@ -181,7 +189,7 @@ export function InvoiceDetail() {
       });
       setReason("");
       setShowEscalate(false);
-      await queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: getListEscalationsQueryKey(id) });
       toast({
         title: "Escalated to your firm",
         description: "An operator will pick this up.",
@@ -220,7 +228,10 @@ export function InvoiceDetail() {
       }
       setAdjustKind(null);
       setAdjustReason("");
-      await queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
+      queryClient.invalidateQueries({
+        queryKey: getListSubmissionAttemptsQueryKey(id),
+      });
     } catch (e) {
       toast({
         title:
@@ -240,7 +251,7 @@ export function InvoiceDetail() {
         id,
         data: { buyerPartyId: invoice.buyerPartyId, state: "requested" },
       });
-      await queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: getListConfirmationsQueryKey(id) });
       toast({
         title: "Confirmation requested",
         description: "Your buyer will be asked to confirm receipt of this invoice.",

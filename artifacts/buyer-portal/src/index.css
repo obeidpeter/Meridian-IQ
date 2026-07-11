@@ -64,12 +64,12 @@
   --secondary-foreground: 222 47% 11%;
 
   --muted: 214 32% 91%;
-  --muted-foreground: 215 16% 47%;
+  --muted-foreground: 215 18% 42%;
 
   --accent: 221 83% 93%;
   --accent-foreground: 221 83% 32%;
 
-  --destructive: 0 84% 60%;
+  --destructive: 0 72% 45%;
   --destructive-foreground: 0 0% 100%;
 
   --border: 214 32% 91%;
@@ -119,5 +119,17 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+/* Respect the OS reduced-motion preference (WCAG 2.3.3 / 2.2.2). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

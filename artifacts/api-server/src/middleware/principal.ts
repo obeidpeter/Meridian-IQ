@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { getDb, usersTable, membershipsTable, type Role } from "@workspace/db";
 import type { Principal } from "../modules/auth/rbac";
 import { SESSION_COOKIE, verifySessionToken } from "../modules/auth/session";
+import { logger } from "../lib/logger";
 
 // Principal resolution.
 //
@@ -43,6 +44,59 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+// The dev-header auth shim (x-mock-*) is a full identity bypass, so it is
+// enabled ONLY when explicitly opted in, and never in production (SEC-M7).
+// NODE_ENV "development"/"test" opt in by default (local dev and the CI e2e
+// harness, which boots with NODE_ENV=development); anything else — including an
+// UNSET or misspelled NODE_ENV — fails closed, so a misconfigured staging or
+// production deployment never honours client-supplied identity headers.
+const DEV_AUTH_ENABLED =
+  !IS_PRODUCTION &&
+  (process.env.ENABLE_DEV_AUTH === "true" ||
+    process.env.NODE_ENV === "development" ||
+    process.env.NODE_ENV === "test");
+
+if (DEV_AUTH_ENABLED) {
+  logger.warn(
+    "Dev-header auth shim ENABLED: x-mock-* identity headers are honoured. " +
+      "This is a full auth bypass and must never be enabled in production.",
+  );
+}
+
+const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const CSRF_HEADER = "x-meridian-csrf";
+
+// CSRF guard (SEC-02). The first-party session cookie is issued SameSite=None so
+// it works inside the cross-site preview iframe, which means the browser also
+// attaches it to cross-site requests — the classic CSRF exposure. We require a
+// custom request header on state-changing, cookie-authenticated requests: the
+// browser will not let a cross-site page set a custom header without a CORS
+// preflight, and the API's CORS policy does not grant that preflight, so a
+// forged <form>/simple request is rejected. Requests authenticated by dev
+// x-mock headers, a Bearer token or Clerk carry no session cookie and cannot be
+// forged cross-site, so they pass through. Public endpoints (login/logout/health
+// /verify-stamp/theme) are exempt so unauthenticated and tooling calls still
+// work. Must run after cookie-parser so req.cookies is populated.
+export function requireCsrfHeader(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (CSRF_SAFE_METHODS.has(req.method) || PUBLIC_PATHS.has(req.path)) {
+    next();
+    return;
+  }
+  const cookies = (req as Request & { cookies?: Record<string, string> }).cookies;
+  const hasSessionCookie = Boolean(cookies?.[SESSION_COOKIE]);
+  if (!hasSessionCookie || header(req, CSRF_HEADER)) {
+    next();
+    return;
+  }
+  res
+    .status(403)
+    .json({ error: "Missing or invalid CSRF header" });
+}
 
 function header(req: Request, name: string): string | null {
   const v = req.headers[name];
@@ -149,11 +203,11 @@ export function resolvePrincipal(
     next();
     return;
   }
-  // Resolution order: explicit dev headers (never honoured in production) win
-  // for tests and tooling; then the first-party session cookie; then a
-  // Clerk-verified session in production.
+  // Resolution order: explicit dev headers (only when DEV_AUTH_ENABLED — never
+  // in production or a misconfigured env) win for tests and tooling; then the
+  // first-party session cookie; then a Clerk-verified session in production.
   const resolve = (async (): Promise<Principal | null> => {
-    if (!IS_PRODUCTION) {
+    if (DEV_AUTH_ENABLED) {
       const dev = resolveDevPrincipal(req);
       if (dev) return dev;
     }

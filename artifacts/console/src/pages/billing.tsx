@@ -45,8 +45,12 @@ function pct(v: string) {
 }
 
 function PriceReviewHistory({ tierId }: { tierId: string }) {
-  const { data, isLoading } = useListPriceReviews(tierId);
+  const { data, isLoading, isError, refetch } = useListPriceReviews(tierId);
   if (isLoading) return <Skeleton className="h-24" />;
+  if (isError)
+    return (
+      <QueryError thing="the price review history" onRetry={() => refetch()} />
+    );
   if (!data || data.length === 0)
     return (
       <p className="text-sm text-muted-foreground">

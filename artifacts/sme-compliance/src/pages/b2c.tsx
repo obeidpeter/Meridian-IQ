@@ -191,7 +191,11 @@ export function B2cReports() {
     setReportingId(batch.id);
     try {
       await submit.mutateAsync({ id: batch.id });
-      await queryClient.invalidateQueries();
+      // Not awaited: a background refetch rejection must not surface as a false
+      // "could not mark reported" error after the batch already filed.
+      queryClient.invalidateQueries({
+        queryKey: getListB2cReportsQueryKey({ clientPartyId }),
+      });
       toast({
         title: "Batch reported",
         description: "This B2C window is now filed with the rail.",

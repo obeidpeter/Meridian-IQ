@@ -132,7 +132,11 @@ function AssessmentTab() {
         </CardHeader>
         <CardContent>
           <Select value={clientPartyId} onValueChange={selectClient}>
-            <SelectTrigger className="max-w-sm" data-testid="select-client">
+            <SelectTrigger
+              className="max-w-sm"
+              aria-label="Client being assessed"
+              data-testid="select-client"
+            >
               <SelectValue placeholder="Pick the client being assessed" />
             </SelectTrigger>
             <SelectContent>

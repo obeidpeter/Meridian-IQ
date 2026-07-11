@@ -13,7 +13,9 @@ import {
 } from "@workspace/api-zod";
 import {
   assertCan,
+  assertClientPartyScope,
   assertSameTenant,
+  clientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { isFeatureEnabled } from "../modules/flags/flags";
@@ -35,8 +37,13 @@ router.get("/b2c/reports", async (req, res): Promise<void> => {
   }
   assertCan(req.principal, "b2c.read");
   const query = ListB2cReportsQueryParams.safeParse(req.query);
-  const clientPartyId = query.success ? query.data.clientPartyId : undefined;
+  let clientPartyId = query.success ? query.data.clientPartyId : undefined;
   const status = query.success ? query.data.status : undefined;
+  // A client_user is confined to its own client party (SEC-03): reject an
+  // explicit sibling id and always constrain the list to its own party.
+  if (clientPartyId) assertClientPartyScope(req.principal, clientPartyId);
+  const scope = clientPartyScope(req.principal);
+  if (scope) clientPartyId = scope;
   const tenant = tenantFirmId(req.principal);
   const conditions = [];
   if (tenant) conditions.push(eq(b2cReportBatchesTable.firmId, tenant));
@@ -67,6 +74,8 @@ async function loadBatchForTenant(
     .limit(1);
   if (!batch) throw new DomainError("NOT_FOUND", "Batch not found", 404);
   assertSameTenant(req.principal, batch.firmId);
+  // A client_user only reaches its own client party's batches (SEC-03).
+  assertClientPartyScope(req.principal, batch.clientPartyId);
   return batch;
 }
 

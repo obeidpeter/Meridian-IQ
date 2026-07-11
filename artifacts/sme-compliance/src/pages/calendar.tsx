@@ -12,10 +12,10 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { CalendarClock, AlertTriangle, ChevronRight } from "lucide-react";
 import { formatDate, severityBadgeClasses } from "@/lib/format";
 
-function daysAway(due: string): string {
-  const diff = Math.round(
-    (new Date(due).getTime() - Date.now()) / (24 * 60 * 60 * 1000),
-  );
+function daysAway(due: string): string | null {
+  const ms = new Date(due).getTime();
+  if (Number.isNaN(ms)) return null;
+  const diff = Math.round((ms - Date.now()) / (24 * 60 * 60 * 1000));
   if (diff < 0) return `${Math.abs(diff)} day${Math.abs(diff) === 1 ? "" : "s"} overdue`;
   if (diff === 0) return "Due today";
   return `In ${diff} day${diff === 1 ? "" : "s"}`;
@@ -78,7 +78,9 @@ export function Calendar() {
           </Card>
         ) : (
           <div className="space-y-3">
-            {deadlines.map((d) => (
+            {deadlines.map((d) => {
+              const relative = daysAway(d.dueDate);
+              return (
               <Card
                 key={d.id}
                 className={d.status === "overdue" ? "border-destructive/40" : ""}
@@ -100,9 +102,11 @@ export function Calendar() {
                         </p>
                       )}
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <span className={severityBadgeClasses(d.severity)}>
-                          {daysAway(d.dueDate)}
-                        </span>
+                        {relative && (
+                          <span className={severityBadgeClasses(d.severity)}>
+                            {relative}
+                          </span>
+                        )}
                         <span className="text-xs text-muted-foreground">
                           Due {formatDate(d.dueDate)}
                         </span>
@@ -119,7 +123,8 @@ export function Calendar() {
                   )}
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </RequireClientScope>

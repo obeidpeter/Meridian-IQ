@@ -233,6 +233,9 @@ export function InvoiceRespond() {
   const pendingFlag = flag.isPending
     ? flag.variables?.data.paymentStatus
     : undefined;
+  // A `paid` flag settles the invoice server-side; once settled it must not be
+  // flagged paid again (a second settlement POST would be a duplicate event).
+  const isSettled = invoice.status === "settled";
 
   const handleSubmit = () => {
     if (!response) return;
@@ -281,6 +284,10 @@ export function InvoiceRespond() {
   };
 
   const handleFlag = (paymentStatus: "scheduled" | "paid") => {
+    // Financial action: block a double-click from firing a second settlement
+    // POST while the first is still in flight, and refuse to re-settle.
+    if (flag.isPending) return;
+    if (paymentStatus === "paid" && isSettled) return;
     flag.mutate(
       { id: invoice.id, data: { paymentStatus } },
       {
@@ -317,9 +324,11 @@ export function InvoiceRespond() {
         <div>
           <h1
             className="text-2xl md:text-3xl font-bold"
-            data-testid="text-invoice-number"
+            data-testid="text-page-title"
           >
-            {invoice.invoiceNumber}
+            <span data-testid="text-invoice-number">
+              {invoice.invoiceNumber}
+            </span>
           </h1>
           <p className="text-muted-foreground mt-1">
             {invoice.supplierName} · issued {formatDate(invoice.issueDate)}
@@ -546,7 +555,7 @@ export function InvoiceRespond() {
               <AlertDialogTrigger asChild>
                 <Button
                   variant="outline"
-                  disabled={pendingFlag === "paid"}
+                  disabled={pendingFlag === "paid" || isSettled}
                   data-testid="button-flag-paid"
                 >
                   {pendingFlag === "paid" ? (
@@ -578,6 +587,7 @@ export function InvoiceRespond() {
                   </AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => handleFlag("paid")}
+                    disabled={flag.isPending || isSettled}
                     data-testid="button-confirm-paid"
                   >
                     Mark paid

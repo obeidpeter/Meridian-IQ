@@ -88,8 +88,12 @@ export function Alerts() {
   const save = async () => {
     try {
       await update.mutateAsync({ id: clientPartyId, data: form });
-      await queryClient.invalidateQueries();
-      toast({ title: "Preferences saved", description: "Alert settings updated." });
+      // Not awaited: a background refetch rejection must not surface as a false
+      // save error after the preferences already persisted.
+      queryClient.invalidateQueries({
+        queryKey: getGetAlertPreferencesQueryKey(clientPartyId),
+      });
+      toast({ title: "Alert settings saved", description: "Alert settings updated." });
     } catch (e) {
       toast({
         title: "Couldn't save alert preferences",
@@ -140,7 +144,7 @@ export function Alerts() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-            Alert preferences
+            Alert settings
           </h1>
           <p className="text-muted-foreground mt-1">
             Choose how and where you want to be reminded.

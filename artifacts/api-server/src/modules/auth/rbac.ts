@@ -33,6 +33,10 @@ export type Capability =
   | "pipeline.write"
   | "billing.read"
   | "billing.write"
+  // Platform-global pricing (billing_tiers). Operator-only: the tier table has
+  // no firm scope, so a firm_admin holding billing.write must NOT edit it
+  // (SEC-04). billing.write stays firm-scoped (own subscription, own statements).
+  | "billing.tiers.write"
   | "operator.queue.read"
   | "operator.queue.act"
   | "catalogue.write"
@@ -78,6 +82,7 @@ const ALL: Capability[] = [
   "pipeline.write",
   "billing.read",
   "billing.write",
+  "billing.tiers.write",
   "operator.queue.read",
   "operator.queue.act",
   "catalogue.write",
@@ -193,6 +198,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "party.merge",
     "flags.read",
     "flags.write",
+    "billing.tiers.write",
     "audit.read",
     "audit.export",
     "consent.read",
@@ -224,6 +230,33 @@ export function assertCan(principal: Principal, capability: Capability): void {
       403,
     );
   }
+}
+
+// Sub-tenant scoping for the client_user role (SEC-03). A client_user
+// membership is bound to a single client Party (principal.clientPartyId), but
+// firm-keyed RLS shares the whole firm across all its client_users. Without this
+// guard a client_user could read a sibling client's data by passing another
+// party's id (or via un-scoped firm-wide list queries). This narrows a
+// client_user to its own client party; firm_admin/firm_staff (who legitimately
+// act across the firm's clients) and cross-tenant roles pass through unchanged.
+export function assertClientPartyScope(
+  principal: Principal,
+  clientPartyId: string,
+): void {
+  if (principal.role !== "client_user") return;
+  if (principal.clientPartyId !== clientPartyId) {
+    throw new DomainError(
+      "CROSS_CLIENT",
+      "Resource is not within your client scope",
+      403,
+    );
+  }
+}
+
+// The client party a client_user is confined to, or null for any other role
+// (which is not sub-tenant scoped). Used to constrain firm-wide list queries.
+export function clientPartyScope(principal: Principal): string | null {
+  return principal.role === "client_user" ? principal.clientPartyId : null;
 }
 
 // Row-level tenant isolation (CON-01, SEC-02/03). Returns the firmId a
@@ -296,6 +329,9 @@ export async function assertPartyAccess(
   principal: Principal,
   partyId: string,
 ): Promise<void> {
+  // A client_user may only touch its own client party (SEC-03), even within its
+  // firm; firm staff/admin may touch any party the firm engages.
+  assertClientPartyScope(principal, partyId);
   const tenant = tenantFirmId(principal);
   if (tenant === null) return;
   const [engagement] = await getDb()

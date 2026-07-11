@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import {
   getDb,
   invoicesTable,
@@ -12,7 +12,7 @@ import {
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
 import { isPurposePermitted } from "../consent/consent";
-import { assertTransition, recordTransition } from "./lifecycle";
+import { applyTransition, recordTransition } from "./lifecycle";
 import {
   validateCanonical,
   type CanonicalInvoice,
@@ -82,6 +82,16 @@ export async function createDraft(
         400,
       );
     }
+    // Serialize adjustment creation per original (CON-09). The "one live
+    // adjustment" check below is a read-then-insert: under READ COMMITTED two
+    // concurrent credit notes for the same original both see no live sibling
+    // and both insert, producing duplicate stamped credit notes. A
+    // transaction-scoped advisory lock keyed on the original id makes the
+    // second request wait for the first to commit, then observe the sibling and
+    // reject. The lock is released when the ambient request transaction ends.
+    await getDb().execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${input.relatedInvoiceId}))`,
+    );
     const [original] = await getDb()
       .select()
       .from(invoicesTable)
@@ -367,11 +377,11 @@ export async function validateInvoice(
   if (errors.length > 0) {
     return { ok: false, errors };
   }
-  assertTransition(bundle.invoice.status, "validated");
-  await getDb()
-    .update(invoicesTable)
-    .set({ status: "validated" })
-    .where(eq(invoicesTable.id, invoiceId));
+  // Compare-and-set: a concurrent submit/cancel between the read above and this
+  // write must not be clobbered by an unconditional UPDATE (CON-01 TOCTOU).
+  // applyTransition folds the from-status into the WHERE clause and 409s if the
+  // invoice moved under us, before any lifecycle event is appended.
+  await applyTransition(invoiceId, bundle.invoice.status, "validated");
   await recordTransition({
     invoiceId,
     firmId: bundle.invoice.firmId,
@@ -410,12 +420,15 @@ export async function submitInvoice(
       403,
     );
   }
-  assertTransition(bundle.invoice.status, "submitted");
-  const [updated] = await getDb()
-    .update(invoicesTable)
-    .set({ status: "submitted" })
-    .where(eq(invoicesTable.id, invoiceId))
-    .returning();
+  // Compare-and-set before enqueueing: a double-submit (double-click or
+  // timeout-retry) must not append two lifecycle events and two outbox jobs.
+  // applyTransition 409s the second caller because the row is no longer
+  // `validated`, so exactly one `invoice.submit` is enqueued (CON-01).
+  const updated = await applyTransition(
+    invoiceId,
+    bundle.invoice.status,
+    "submitted",
+  );
   await getDb().insert(outboxTable).values({
     aggregateType: "invoice",
     aggregateId: invoiceId,

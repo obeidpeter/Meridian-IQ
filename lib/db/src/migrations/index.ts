@@ -36,27 +36,43 @@ export async function appliedVersions(client: Executor): Promise<number[]> {
 
 // Apply all forward migrations. Idempotent: `up` SQL is re-runnable, so this is
 // also called on boot to guarantee the guardrails exist.
+// Fixed key for the boot-migration advisory lock (CON-L5).
+const MIGRATION_LOCK_ID = 991_001;
+
 export async function applyMigrations(pool: pg.Pool): Promise<number[]> {
   await ensureTracking(pool);
   const applied: number[] = [];
-  for (const m of migrations) {
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query(m.up);
-      await client.query(
-        `INSERT INTO _schema_migrations (version, name) VALUES ($1, $2)
-         ON CONFLICT (version) DO UPDATE SET name = EXCLUDED.name`,
-        [m.version, m.name],
-      );
-      await client.query("COMMIT");
-      applied.push(m.version);
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
+  // Hold a session-level advisory lock across the whole apply so two instances
+  // booting at once (or a boot racing a `drizzle push`) serialize instead of
+  // deadlocking on the self-join delete / CREATE OR REPLACE FUNCTION in the
+  // guardrail migrations (CON-L5). The lock spans the per-migration
+  // transactions below (session scope, not transaction scope) and auto-releases
+  // if the process dies. The waiter finds everything already applied — every
+  // `up` is idempotent.
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
+    for (const m of migrations) {
+      try {
+        await client.query("BEGIN");
+        await client.query(m.up);
+        await client.query(
+          `INSERT INTO _schema_migrations (version, name) VALUES ($1, $2)
+           ON CONFLICT (version) DO UPDATE SET name = EXCLUDED.name`,
+          [m.version, m.name],
+        );
+        await client.query("COMMIT");
+        applied.push(m.version);
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      }
     }
+  } finally {
+    await client
+      .query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_ID])
+      .catch(() => {});
+    client.release();
   }
   return applied;
 }

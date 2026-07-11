@@ -136,7 +136,7 @@ export function Suppliers() {
     );
   }
 
-  const breakdown = [...data.breakdown].sort(
+  const breakdown = [...(data.breakdown ?? [])].sort(
     (a, b) => Number(b.vatAtRisk) - Number(a.vatAtRisk),
   );
 
@@ -177,7 +177,9 @@ export function Suppliers() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Per-supplier breakdown</CardTitle>
+          <CardTitle id="suppliers-breakdown-heading">
+            Per-supplier breakdown
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {breakdown.length === 0 ? (
@@ -195,8 +197,13 @@ export function Suppliers() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+            <div
+              className="overflow-x-auto"
+              tabIndex={0}
+              role="region"
+              aria-label="Per-supplier breakdown table, scrollable"
+            >
+              <Table aria-labelledby="suppliers-breakdown-heading">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Supplier</TableHead>

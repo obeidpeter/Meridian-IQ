@@ -30,13 +30,18 @@ const router: IRouter = Router();
 // counter to shared storage.
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
+// Hard cap on distinct throttle keys held in memory. With req.ip now trustworthy
+// (app.set("trust proxy") in app.ts), an attacker can no longer mint unbounded
+// keys by spoofing X-Forwarded-For, so this is a backstop rather than the
+// primary defence (SEC-M4).
+const LOGIN_MAX_KEYS = 10_000;
 const failures = new Map<string, { count: number; windowStart: number }>();
 
 function throttleKey(req: Request, email: string): string {
-  const ip =
-    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-    req.socket.remoteAddress ||
-    "unknown";
+  // req.ip is derived from the trusted-proxy hop count (app.set("trust proxy")),
+  // so it reflects the real client address and cannot be spoofed by a
+  // client-supplied X-Forwarded-For header (SEC-M4).
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
   return `${email.trim().toLowerCase()}|${ip}`;
 }
 
@@ -62,10 +67,17 @@ function recordFailure(key: string): void {
   } else {
     entry.count += 1;
   }
-  // Opportunistic pruning keeps the map bounded without a timer.
-  if (failures.size > 10_000) {
+  // Opportunistic pruning keeps the map bounded without a timer: evict expired
+  // windows first, then — if still over the cap — the oldest-inserted entries
+  // (Map preserves insertion order), so memory stays bounded under churn.
+  if (failures.size > LOGIN_MAX_KEYS) {
     for (const [k, v] of failures) {
       if (now - v.windowStart > LOGIN_WINDOW_MS) failures.delete(k);
+    }
+    while (failures.size > LOGIN_MAX_KEYS) {
+      const oldest = failures.keys().next().value;
+      if (oldest === undefined) break;
+      failures.delete(oldest);
     }
   }
 }
