@@ -24,6 +24,7 @@ import certificationRouter from "./certification";
 import connectorsRouter from "./connectors";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
+import "../modules/push/register";
 
 const router: IRouter = Router();
 

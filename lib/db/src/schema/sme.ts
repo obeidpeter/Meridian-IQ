@@ -87,6 +87,24 @@ export const pushDevicesTable = pgTable("push_devices", {
     .$onUpdate(() => new Date()),
 });
 
+// Pending Expo push-receipt checks (SME-05/08 hygiene). Expo materialises push
+// receipts asynchronously (often ~15 minutes after the send), so a token whose
+// death is only visible in a late receipt survives the immediate post-send
+// check. Each successful send ticket is persisted here with its token; a
+// periodic sweep re-checks receipts for tickets older than the receipt delay,
+// prunes push_devices rows whose receipts report DeviceNotRegistered, and
+// deletes processed/expired rows so the table never grows unbounded. Internal
+// ops table: only written by the push module and read by the bypass-context
+// sweep — never exposed to tenant request paths.
+export const pushTicketsTable = pgTable("push_tickets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ticketId: text("ticket_id").notNull().unique(),
+  expoPushToken: text("expo_push_token").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const insertAlertPreferencesSchema = createInsertSchema(
   alertPreferencesTable,
 ).omit({ updatedAt: true });
