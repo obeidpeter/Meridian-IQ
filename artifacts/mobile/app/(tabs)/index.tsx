@@ -160,6 +160,12 @@ export default function HomeScreen() {
               onPress={() => router.push("/invoice")}
             />
             <AppButton
+              label="Reconcile bank payments"
+              icon="credit-card"
+              variant="secondary"
+              onPress={() => router.push("/reconciliation")}
+            />
+            <AppButton
               label="Penalty estimator"
               icon="trending-up"
               variant="secondary"
