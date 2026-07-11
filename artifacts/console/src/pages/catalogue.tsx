@@ -28,7 +28,7 @@ import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { AlertTriangle, BookOpen, Pencil, Plus, Search } from "lucide-react";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, pillClasses } from "@/lib/format";
 
 // ADV-03: the living error catalogue, updatable by operators within one
 // working day of a new failure appearing. INT-02: codes seen on submissions
@@ -258,12 +258,12 @@ export function Catalogue() {
                         </span>
                       )}
                       {entry.retriable && (
-                        <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-xs font-sans font-normal text-emerald-800 dark:bg-emerald-950 dark:border-emerald-900 dark:text-emerald-300">
+                        <span className={`${pillClasses("emerald")} font-sans`}>
                           Retriable
                         </span>
                       )}
                       {entry.source === "operator" && (
-                        <span className="rounded-full bg-blue-100 border border-blue-200 px-2 py-0.5 text-xs font-sans font-normal text-blue-800 dark:bg-blue-950 dark:border-blue-900 dark:text-blue-300">
+                        <span className={`${pillClasses("blue")} font-sans`}>
                           Operator-edited
                         </span>
                       )}

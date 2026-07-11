@@ -54,6 +54,7 @@ export function Integrations() {
   } = useListConnectors();
   const {
     data: connections,
+    isLoading: connectionsLoading,
     error: connectionsError,
     refetch: refetchConnections,
   } = useListErpConnections();
@@ -181,7 +182,9 @@ export function Integrations() {
           <CardTitle className="text-base">Client connections</CardTitle>
         </CardHeader>
         <CardContent>
-          {connectionsError ? (
+          {connectionsLoading ? (
+            <Skeleton className="h-16" />
+          ) : connectionsError ? (
             <QueryError
               thing="client connections"
               onRetry={() => refetchConnections()}

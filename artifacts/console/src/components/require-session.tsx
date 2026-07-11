@@ -40,7 +40,10 @@ export function RequireSession({
   if (isLoading) {
     return (
       <BrandSplash>
-        <Spinner className="size-6 text-muted-foreground" />
+        <div role="status" className="flex flex-col items-center gap-2">
+          <Spinner className="size-6 text-muted-foreground" aria-hidden="true" />
+          <span className="sr-only">Loading your workspace…</span>
+        </div>
       </BrandSplash>
     );
   }

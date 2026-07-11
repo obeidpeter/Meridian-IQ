@@ -81,13 +81,18 @@ export function WhiteLabel() {
       {
         id: firm.id,
         data: {
+          // The subdomain pattern requires 3–63 chars, so "" is not a valid
+          // value and the server ignores a falsy one — a subdomain can't be
+          // cleared through this endpoint, only replaced. Send it only when set.
           ...(subdomain ? { subdomain } : {}),
-          // Replace-not-patch on the server: carry unknown theme keys forward.
+          // Replace-not-patch on the server: carry unknown theme keys forward,
+          // but send logoInitials explicitly (even empty) so clearing the field
+          // actually removes it rather than leaving the previous value behind.
           theme: {
             ...(firm.theme ?? {}),
             brandName,
             primary,
-            ...(logoInitials ? { logoInitials } : {}),
+            logoInitials,
           },
         },
       },
