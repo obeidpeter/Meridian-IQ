@@ -117,6 +117,9 @@ import type {
   PriceReview,
   ProspectInput,
   ProspectUpdate,
+  PushDevice,
+  PushDeviceInput,
+  PushDeviceUnregisterInput,
   QuestionnaireTemplate,
   RailState,
   ReconcileResult,
@@ -4871,6 +4874,223 @@ export const useSendTestAlert = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSendTestAlertMutationOptions(options));
+    }
+
+export const getListPushDevicesUrl = () => {
+
+
+
+
+  return `/api/push/devices`
+}
+
+/**
+ * @summary List the signed-in user's registered push devices
+ */
+export const listPushDevices = async ( options?: RequestInit): Promise<PushDevice[]> => {
+
+  return customFetch<PushDevice[]>(getListPushDevicesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPushDevicesQueryKey = () => {
+    return [
+    `/api/push/devices`
+    ] as const;
+    }
+
+
+export const getListPushDevicesQueryOptions = <TData = Awaited<ReturnType<typeof listPushDevices>>, TError = ErrorType<UnauthorizedResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPushDevices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPushDevicesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPushDevices>>> = ({ signal }) => listPushDevices({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPushDevices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPushDevicesQueryResult = NonNullable<Awaited<ReturnType<typeof listPushDevices>>>
+export type ListPushDevicesQueryError = ErrorType<UnauthorizedResponse>
+
+
+/**
+ * @summary List the signed-in user's registered push devices
+ */
+
+export function useListPushDevices<TData = Awaited<ReturnType<typeof listPushDevices>>, TError = ErrorType<UnauthorizedResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPushDevices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPushDevicesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRegisterPushDeviceUrl = () => {
+
+
+
+
+  return `/api/push/devices`
+}
+
+/**
+ * @summary Register (or refresh) an Expo push token for this user
+ */
+export const registerPushDevice = async (pushDeviceInput: PushDeviceInput, options?: RequestInit): Promise<PushDevice> => {
+
+  return customFetch<PushDevice>(getRegisterPushDeviceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(pushDeviceInput)
+  }
+);}
+
+
+
+
+export const getRegisterPushDeviceMutationOptions = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerPushDevice>>, TError,{data: BodyType<PushDeviceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerPushDevice>>, TError,{data: BodyType<PushDeviceInput>}, TContext> => {
+
+const mutationKey = ['registerPushDevice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerPushDevice>>, {data: BodyType<PushDeviceInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerPushDevice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterPushDeviceMutationResult = NonNullable<Awaited<ReturnType<typeof registerPushDevice>>>
+    export type RegisterPushDeviceMutationBody = BodyType<PushDeviceInput>
+    export type RegisterPushDeviceMutationError = ErrorType<UnauthorizedResponse>
+
+    /**
+ * @summary Register (or refresh) an Expo push token for this user
+ */
+export const useRegisterPushDevice = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerPushDevice>>, TError,{data: BodyType<PushDeviceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerPushDevice>>,
+        TError,
+        {data: BodyType<PushDeviceInput>},
+        TContext
+      > => {
+      return useMutation(getRegisterPushDeviceMutationOptions(options));
+    }
+
+export const getUnregisterPushDeviceUrl = () => {
+
+
+
+
+  return `/api/push/devices/unregister`
+}
+
+/**
+ * @summary Remove an Expo push token (sign-out or notifications off)
+ */
+export const unregisterPushDevice = async (pushDeviceUnregisterInput: PushDeviceUnregisterInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getUnregisterPushDeviceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(pushDeviceUnregisterInput)
+  }
+);}
+
+
+
+
+export const getUnregisterPushDeviceMutationOptions = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unregisterPushDevice>>, TError,{data: BodyType<PushDeviceUnregisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unregisterPushDevice>>, TError,{data: BodyType<PushDeviceUnregisterInput>}, TContext> => {
+
+const mutationKey = ['unregisterPushDevice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unregisterPushDevice>>, {data: BodyType<PushDeviceUnregisterInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  unregisterPushDevice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnregisterPushDeviceMutationResult = NonNullable<Awaited<ReturnType<typeof unregisterPushDevice>>>
+    export type UnregisterPushDeviceMutationBody = BodyType<PushDeviceUnregisterInput>
+    export type UnregisterPushDeviceMutationError = ErrorType<UnauthorizedResponse>
+
+    /**
+ * @summary Remove an Expo push token (sign-out or notifications off)
+ */
+export const useUnregisterPushDevice = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unregisterPushDevice>>, TError,{data: BodyType<PushDeviceUnregisterInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unregisterPushDevice>>,
+        TError,
+        {data: BodyType<PushDeviceUnregisterInput>},
+        TContext
+      > => {
+      return useMutation(getUnregisterPushDeviceMutationOptions(options));
     }
 
 export const getListEscalationsUrl = (id: string,) => {

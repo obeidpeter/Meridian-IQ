@@ -16,7 +16,7 @@ export interface MessageTemplate {
 export const TEMPLATES: Record<string, MessageTemplate> = {
   deadline_reminder: {
     key: "deadline_reminder",
-    channels: ["whatsapp", "sms", "email"],
+    channels: ["whatsapp", "sms", "email", "push"],
     description: "A filing/payment deadline is approaching.",
   },
   invoice_stamped: {
@@ -33,16 +33,19 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
   // only (SEC-12): the message names no amounts, counts or client details.
   b2c_window_alert: {
     key: "b2c_window_alert",
-    channels: ["whatsapp", "sms", "email"],
+    channels: ["whatsapp", "sms", "email", "push"],
     description: "A B2C reporting window is about to breach.",
   },
 };
 
-// Channel failover order when a provider fails.
+// Channel failover order when a provider fails. Push is terminal: if the Expo
+// push provider rejects, there is no cheaper channel to fall back to that the
+// user has not already opted into separately.
 const FAILOVER: Record<MessageChannel, MessageChannel | null> = {
   whatsapp: "sms",
   sms: "email",
   email: null,
+  push: null,
 };
 
 export interface SendInput {

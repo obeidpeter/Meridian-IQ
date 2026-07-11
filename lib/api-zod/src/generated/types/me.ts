@@ -20,4 +20,6 @@ export interface Me {
   /** @nullable */
   buyerPartyId?: string | null;
   capabilities: string[];
+  /** @nullable */
+  token?: string | null;
 }

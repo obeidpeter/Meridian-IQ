@@ -39,6 +39,7 @@ import { createDraft, bulkCreateDrafts, getInvoiceWithLines } from "../modules/i
 import { isFeatureEnabled } from "../modules/flags/flags";
 import { openBatchesFor } from "../modules/b2c/service";
 import { sendMessage } from "../modules/messaging/messaging";
+import { sendPushAlert } from "../modules/push/push";
 import { appendAudit } from "../modules/audit/audit";
 import { openInvoiceCase } from "../modules/desk/cases";
 import { DomainError } from "../modules/errors";
@@ -617,6 +618,7 @@ const DEFAULT_PREFS = {
   whatsappEnabled: true,
   smsEnabled: false,
   emailEnabled: true,
+  pushEnabled: true,
   whatsappTo: null,
   phone: null,
   email: null,
@@ -712,7 +714,7 @@ router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
   if (prefs.emailEnabled) enabled.push("email");
 
   const results: {
-    channel: "whatsapp" | "sms" | "email";
+    channel: "whatsapp" | "sms" | "email" | "push";
     messageId: string | null;
     status: "sent" | "delivered" | "failed" | "skipped";
     detail: string | null;
@@ -741,6 +743,14 @@ router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
         detail: err instanceof Error ? err.message : "Send failed",
       });
     }
+  }
+  if (prefs.pushEnabled) {
+    const push = await sendPushAlert({
+      clientPartyId: params.data.id,
+      firmId: req.principal.firmId,
+      templateKey: "deadline_reminder",
+    });
+    results.push({ channel: "push", ...push });
   }
   res.json(SendTestAlertResponse.parse(results));
 });

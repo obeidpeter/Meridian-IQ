@@ -11,6 +11,7 @@ import {
 import { DomainError } from "../errors.ts";
 import { appendAudit } from "../audit/audit";
 import { sendMessage } from "../messaging/messaging";
+import { sendPushAlert } from "../push/push";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
 
@@ -158,6 +159,19 @@ async function firePreBreachAlerts(now: Date): Promise<number> {
           });
         } catch {
           // Channel failures are recorded by the messaging module itself.
+        }
+      }
+      if (!prefs || prefs.pushEnabled) {
+        try {
+          await sendPushAlert({
+            clientPartyId: batch.clientPartyId,
+            firmId: batch.firmId,
+            templateKey: "b2c_window_alert",
+            entityType: "b2c_report_batch",
+            entityId: `batch-${batch.id.replace(/[^a-z]/gi, "").slice(0, 6)}`,
+          });
+        } catch {
+          // Push failures are recorded in the messages ledger by the module.
         }
       }
     }

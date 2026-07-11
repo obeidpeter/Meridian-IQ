@@ -13,4 +13,5 @@ export const AlertDeliveryResultChannel = {
   whatsapp: 'whatsapp',
   sms: 'sms',
   email: 'email',
+  push: 'push',
 } as const;

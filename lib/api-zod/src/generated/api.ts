@@ -28,7 +28,8 @@ export const GetMeResponse = zod.object({
   "firmId": zod.string().nullish(),
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
-  "capabilities": zod.array(zod.string())
+  "capabilities": zod.array(zod.string()),
+  "token": zod.string().nullish()
 })
 
 
@@ -53,7 +54,8 @@ export const LoginResponse = zod.object({
   "firmId": zod.string().nullish(),
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
-  "capabilities": zod.array(zod.string())
+  "capabilities": zod.array(zod.string()),
+  "token": zod.string().nullish()
 })
 
 
@@ -848,7 +850,7 @@ export const VerifyStampResponse = zod.object({
  */
 export const ListMessagesResponseItem = zod.object({
   "id": zod.string(),
-  "channel": zod.enum(['whatsapp', 'sms', 'email']),
+  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push']),
   "recipientRef": zod.string(),
   "templateKey": zod.string(),
   "entityType": zod.string().nullish(),
@@ -862,7 +864,7 @@ export const ListMessagesResponse = zod.array(ListMessagesResponseItem)
 
 
 export const SendMessageBody = zod.object({
-  "channel": zod.enum(['whatsapp', 'sms', 'email']),
+  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push']),
   "recipientRef": zod.string(),
   "templateKey": zod.string(),
   "entityType": zod.string().optional(),
@@ -871,7 +873,7 @@ export const SendMessageBody = zod.object({
 
 export const SendMessageResponse = zod.object({
   "id": zod.string(),
-  "channel": zod.enum(['whatsapp', 'sms', 'email']),
+  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push']),
   "recipientRef": zod.string(),
   "templateKey": zod.string(),
   "entityType": zod.string().nullish(),
@@ -1339,6 +1341,7 @@ export const GetAlertPreferencesResponse = zod.object({
   "whatsappEnabled": zod.boolean(),
   "smsEnabled": zod.boolean(),
   "emailEnabled": zod.boolean(),
+  "pushEnabled": zod.boolean(),
   "whatsappTo": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "email": zod.string().nullish(),
@@ -1357,6 +1360,7 @@ export const UpdateAlertPreferencesBody = zod.object({
   "whatsappEnabled": zod.boolean().optional(),
   "smsEnabled": zod.boolean().optional(),
   "emailEnabled": zod.boolean().optional(),
+  "pushEnabled": zod.boolean().optional(),
   "whatsappTo": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "email": zod.string().nullish(),
@@ -1370,6 +1374,7 @@ export const UpdateAlertPreferencesResponse = zod.object({
   "whatsappEnabled": zod.boolean(),
   "smsEnabled": zod.boolean(),
   "emailEnabled": zod.boolean(),
+  "pushEnabled": zod.boolean(),
   "whatsappTo": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "email": zod.string().nullish(),
@@ -1388,12 +1393,62 @@ export const SendTestAlertParams = zod.object({
 })
 
 export const SendTestAlertResponseItem = zod.object({
-  "channel": zod.enum(['whatsapp', 'sms', 'email']),
+  "channel": zod.enum(['whatsapp', 'sms', 'email', 'push']),
   "messageId": zod.string().nullish(),
   "status": zod.enum(['sent', 'delivered', 'failed', 'skipped']),
   "detail": zod.string().nullish()
 })
 export const SendTestAlertResponse = zod.array(SendTestAlertResponseItem)
+
+
+/**
+ * @summary List the signed-in user's registered push devices
+ */
+export const ListPushDevicesResponseItem = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "clientPartyId": zod.string().nullish(),
+  "expoPushToken": zod.string(),
+  "platform": zod.enum(['android', 'ios', 'web']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListPushDevicesResponse = zod.array(ListPushDevicesResponseItem)
+
+
+/**
+ * @summary Register (or refresh) an Expo push token for this user
+ */
+
+
+
+export const RegisterPushDeviceBody = zod.object({
+  "expoPushToken": zod.string().min(1),
+  "platform": zod.enum(['android', 'ios', 'web'])
+})
+
+export const RegisterPushDeviceResponse = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "clientPartyId": zod.string().nullish(),
+  "expoPushToken": zod.string(),
+  "platform": zod.enum(['android', 'ios', 'web']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Remove an Expo push token (sign-out or notifications off)
+ */
+
+
+
+export const UnregisterPushDeviceBody = zod.object({
+  "expoPushToken": zod.string().min(1)
+})
+
+export const UnregisterPushDeviceResponse = zod.void()
 
 
 export const ListEscalationsParams = zod.object({

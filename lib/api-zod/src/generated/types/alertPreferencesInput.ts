@@ -10,6 +10,7 @@ export interface AlertPreferencesInput {
   whatsappEnabled?: boolean;
   smsEnabled?: boolean;
   emailEnabled?: boolean;
+  pushEnabled?: boolean;
   /** @nullable */
   whatsappTo?: string | null;
   /** @nullable */

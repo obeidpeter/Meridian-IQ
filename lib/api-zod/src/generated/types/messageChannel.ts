@@ -13,4 +13,5 @@ export const MessageChannel = {
   whatsapp: 'whatsapp',
   sms: 'sms',
   email: 'email',
+  push: 'push',
 } as const;

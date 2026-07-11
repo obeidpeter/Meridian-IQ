@@ -168,6 +168,27 @@ async function resolveSessionPrincipal(req: Request): Promise<Principal | null> 
     SESSION_COOKIE
   ];
   if (!token) return null;
+  return principalFromSessionToken(req, token);
+}
+
+// Bearer variant of the same first-party session: native mobile clients (the
+// Expo companion app) cannot rely on the HttpOnly cookie, so /auth/login also
+// returns the signed session token in the response body and the app presents
+// it as `Authorization: Bearer <token>`. Verification and membership
+// resolution are identical to the cookie path; bearer requests carry no cookie
+// so the CSRF guard already passes them through.
+async function resolveBearerPrincipal(req: Request): Promise<Principal | null> {
+  const authz = header(req, "authorization");
+  if (!authz || !authz.toLowerCase().startsWith("bearer ")) return null;
+  const token = authz.slice(7).trim();
+  if (!token) return null;
+  return principalFromSessionToken(req, token);
+}
+
+async function principalFromSessionToken(
+  req: Request,
+  token: string,
+): Promise<Principal | null> {
   const userId = await verifySessionToken(token);
   if (!userId) return null;
   const memberships = await getDb()
@@ -204,13 +225,16 @@ export function resolvePrincipal(
     return;
   }
   // Resolution order: explicit dev headers (only when DEV_AUTH_ENABLED — never
-  // in production or a misconfigured env) win for tests and tooling; then the
-  // first-party session cookie; then a Clerk-verified session in production.
+  // in production or a misconfigured env) win for tests and tooling; then a
+  // Bearer session token (mobile); then the first-party session cookie; then a
+  // Clerk-verified session in production.
   const resolve = (async (): Promise<Principal | null> => {
     if (DEV_AUTH_ENABLED) {
       const dev = resolveDevPrincipal(req);
       if (dev) return dev;
     }
+    const bearer = await resolveBearerPrincipal(req);
+    if (bearer) return bearer;
     const session = await resolveSessionPrincipal(req);
     if (session) return session;
     if (IS_PRODUCTION) return resolveClerkPrincipal(req);

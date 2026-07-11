@@ -138,6 +138,11 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   const membership = memberships[0];
   const token = await issueSessionToken(result.userId);
   res.cookie(SESSION_COOKIE, token, cookieOptions(req));
+  // Only native/mobile clients (which cannot use HttpOnly cookies) receive the
+  // bearer token in the response body; they identify themselves with the
+  // X-Meridian-Client header. Browser apps stay cookie-only so an XSS cannot
+  // read a replayable session token out of the login response (SEC-02).
+  const isMobileClient = req.get("x-meridian-client") === "mobile";
   await appendAudit({
     actorId: result.userId,
     firmId: membership.firmId,
@@ -156,6 +161,9 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       clientPartyId: membership.clientPartyId,
       buyerPartyId: membership.buyerPartyId,
       capabilities: ROLE_CAPABILITIES[membership.role] ?? [],
+      // Same signed session token as the cookie, for native mobile clients
+      // that cannot use HttpOnly cookies (sent as Authorization: Bearer).
+      ...(isMobileClient ? { token } : {}),
     }),
   );
 });

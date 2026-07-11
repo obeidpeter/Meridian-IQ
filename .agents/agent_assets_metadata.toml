@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "0P_deD4bikaAZbDwQqgIv"
+uri = "file://artifacts/mobile/assets/images/icon.png"
+type = "image"
+title = "MeridianIQ app icon"

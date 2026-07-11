@@ -27,6 +27,8 @@ export interface Me {
   /** @nullable */
   buyerPartyId?: string | null;
   capabilities: string[];
+  /** @nullable */
+  token?: string | null;
 }
 
 export interface LoginInput {
@@ -659,6 +661,7 @@ export const MessageChannel = {
   whatsapp: 'whatsapp',
   sms: 'sms',
   email: 'email',
+  push: 'push',
 } as const;
 
 export type MessageStatus = typeof MessageStatus[keyof typeof MessageStatus];
@@ -695,6 +698,7 @@ export const MessageInputChannel = {
   whatsapp: 'whatsapp',
   sms: 'sms',
   email: 'email',
+  push: 'push',
 } as const;
 
 export interface MessageInput {
@@ -1141,6 +1145,7 @@ export interface AlertPreferences {
   whatsappEnabled: boolean;
   smsEnabled: boolean;
   emailEnabled: boolean;
+  pushEnabled: boolean;
   /** @nullable */
   whatsappTo?: string | null;
   /** @nullable */
@@ -1157,6 +1162,7 @@ export interface AlertPreferencesInput {
   whatsappEnabled?: boolean;
   smsEnabled?: boolean;
   emailEnabled?: boolean;
+  pushEnabled?: boolean;
   /** @nullable */
   whatsappTo?: string | null;
   /** @nullable */
@@ -1168,6 +1174,46 @@ export interface AlertPreferencesInput {
   penaltyAlerts?: boolean;
 }
 
+export type PushDevicePlatform = typeof PushDevicePlatform[keyof typeof PushDevicePlatform];
+
+
+export const PushDevicePlatform = {
+  android: 'android',
+  ios: 'ios',
+  web: 'web',
+} as const;
+
+export interface PushDevice {
+  id: string;
+  userId: string;
+  /** @nullable */
+  clientPartyId?: string | null;
+  expoPushToken: string;
+  platform: PushDevicePlatform;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PushDeviceInputPlatform = typeof PushDeviceInputPlatform[keyof typeof PushDeviceInputPlatform];
+
+
+export const PushDeviceInputPlatform = {
+  android: 'android',
+  ios: 'ios',
+  web: 'web',
+} as const;
+
+export interface PushDeviceInput {
+  /** @minLength 1 */
+  expoPushToken: string;
+  platform: PushDeviceInputPlatform;
+}
+
+export interface PushDeviceUnregisterInput {
+  /** @minLength 1 */
+  expoPushToken: string;
+}
+
 export type AlertDeliveryResultChannel = typeof AlertDeliveryResultChannel[keyof typeof AlertDeliveryResultChannel];
 
 
@@ -1175,6 +1221,7 @@ export const AlertDeliveryResultChannel = {
   whatsapp: 'whatsapp',
   sms: 'sms',
   email: 'email',
+  push: 'push',
 } as const;
 
 export type AlertDeliveryResultStatus = typeof AlertDeliveryResultStatus[keyof typeof AlertDeliveryResultStatus];

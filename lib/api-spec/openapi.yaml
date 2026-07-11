@@ -1101,6 +1101,59 @@ paths:
                 items:
                   $ref: "#/components/schemas/AlertDeliveryResult"
 
+  /push/devices:
+    get:
+      operationId: listPushDevices
+      tags: [sme]
+      summary: List the signed-in user's registered push devices
+      responses:
+        "200":
+          description: Registered devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PushDevice"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: registerPushDevice
+      tags: [sme]
+      summary: Register (or refresh) an Expo push token for this user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushDeviceInput"
+      responses:
+        "200":
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushDevice"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /push/devices/unregister:
+    post:
+      operationId: unregisterPushDevice
+      tags: [sme]
+      summary: Remove an Expo push token (sign-out or notifications off)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushDeviceUnregisterInput"
+      responses:
+        "204":
+          description: Device removed (idempotent)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /invoices/{id}/escalations:
     get:
       operationId: listEscalations
@@ -2058,6 +2111,11 @@ components:
           type: array
           items:
             type: string
+        # Bearer session token, returned ONLY by /auth/login for native mobile
+        # clients that cannot rely on the HttpOnly cookie (Expo). Same signed
+        # token as the cookie; sent as `Authorization: Bearer <token>`.
+        token:
+          type: ["string", "null"]
     LoginInput:
       type: object
       required: [email, password]
@@ -2768,7 +2826,7 @@ components:
           type: string
         channel:
           type: string
-          enum: [whatsapp, sms, email]
+          enum: [whatsapp, sms, email, push]
         recipientRef:
           type: string
         templateKey:
@@ -2793,7 +2851,7 @@ components:
       properties:
         channel:
           type: string
-          enum: [whatsapp, sms, email]
+          enum: [whatsapp, sms, email, push]
         recipientRef:
           type: string
         templateKey:
@@ -3436,6 +3494,7 @@ components:
           whatsappEnabled,
           smsEnabled,
           emailEnabled,
+          pushEnabled,
           deadlineAlerts,
           failureAlerts,
           penaltyAlerts,
@@ -3449,6 +3508,8 @@ components:
         smsEnabled:
           type: boolean
         emailEnabled:
+          type: boolean
+        pushEnabled:
           type: boolean
         whatsappTo:
           type: ["string", "null"]
@@ -3474,6 +3535,8 @@ components:
           type: boolean
         emailEnabled:
           type: boolean
+        pushEnabled:
+          type: boolean
         whatsappTo:
           type: ["string", "null"]
         phone:
@@ -3486,13 +3549,51 @@ components:
           type: boolean
         penaltyAlerts:
           type: boolean
+    PushDevice:
+      type: object
+      required: [id, userId, expoPushToken, platform, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        clientPartyId:
+          type: ["string", "null"]
+        expoPushToken:
+          type: string
+        platform:
+          type: string
+          enum: [android, ios, web]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PushDeviceInput:
+      type: object
+      required: [expoPushToken, platform]
+      properties:
+        expoPushToken:
+          type: string
+          minLength: 1
+        platform:
+          type: string
+          enum: [android, ios, web]
+    PushDeviceUnregisterInput:
+      type: object
+      required: [expoPushToken]
+      properties:
+        expoPushToken:
+          type: string
+          minLength: 1
     AlertDeliveryResult:
       type: object
       required: [channel, status]
       properties:
         channel:
           type: string
-          enum: [whatsapp, sms, email]
+          enum: [whatsapp, sms, email, push]
         messageId:
           type: ["string", "null"]
         status:
