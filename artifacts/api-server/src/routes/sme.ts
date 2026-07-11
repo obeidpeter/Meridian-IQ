@@ -34,6 +34,7 @@ import {
   assertSameTenant,
   assertPartyAccess,
   tenantFirmId,
+  type Principal,
 } from "../modules/auth/rbac";
 import { createDraft, bulkCreateDrafts, getInvoiceWithLines } from "../modules/invoice/service";
 import { isFeatureEnabled } from "../modules/flags/flags";
@@ -648,8 +649,17 @@ router.get("/clients/:id/alert-preferences", async (req, res): Promise<void> => 
   res.json(GetAlertPreferencesResponse.parse(prefs));
 });
 
+// Alert preferences are managed by firm staff (messaging.send) AND by the SME
+// client itself: a client_user may update the preferences of its own client
+// party — assertPartyAccess below pins client_user to exactly that party — but
+// holds no general messaging capability.
+function assertCanManageAlerts(principal: Principal): void {
+  if (principal.role === "client_user") return;
+  assertCan(principal, "messaging.send");
+}
+
 router.put("/clients/:id/alert-preferences", async (req, res): Promise<void> => {
-  assertCan(req.principal, "messaging.send");
+  assertCanManageAlerts(req.principal);
   const params = UpdateAlertPreferencesParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -693,7 +703,7 @@ function recipientRefFor(clientPartyId: string): string {
 }
 
 router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
-  assertCan(req.principal, "messaging.send");
+  assertCanManageAlerts(req.principal);
   const params = SendTestAlertParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
