@@ -59,6 +59,19 @@ const SCHEMA_VERSIONS: { version: number; description: string }[] = [
   { version: 3, description: "R2 spine: statements/reconciliation, B2C batches, buyer rails columns, certification, connectors" },
 ];
 
+// Demo seeding creates login-capable accounts (operator, firm admin, auditor,
+// buyers, SME owner) and sets a shared, repo-committed password on them
+// (seedDemoPasswords). That must NEVER run on a real production deployment
+// (SEC-01): a fresh boot would otherwise ship a working operator login anyone
+// who reads this repo could use. It is therefore opt-in via SEED_DEMO and
+// defaults OFF in production. Non-production defaults ON for local/CI use. The
+// Replit demo deployment sets SEED_DEMO=true in its run env so its one-click
+// demo accounts keep working. Essential platform bootstrap (feature flags,
+// schema versions, error catalogue, CPD course content) always seeds.
+const SEED_DEMO = process.env.SEED_DEMO
+  ? process.env.SEED_DEMO === "true"
+  : process.env.NODE_ENV !== "production";
+
 // Trusted internal work: seeding runs with tenant RLS bypassed (CON-01/SEC-02).
 export async function seedPlatform(): Promise<void> {
   await runInBypassContext(async () => {
@@ -75,14 +88,25 @@ export async function seedPlatform(): Promise<void> {
         .onConflictDoNothing({ target: schemaVersionsTable.version });
     }
     await seedCatalogue();
-    await seedDemo();
-    await seedConsoleDemo();
-    await seedBuyerDemo();
     await seedCpdCourses();
-    await seedDemoPasswords();
+    if (SEED_DEMO) {
+      await seedDemo();
+      await seedConsoleDemo();
+      await seedBuyerDemo();
+      await seedDemoPasswords();
+    } else {
+      logger.warn(
+        "Demo seeding disabled (SEED_DEMO not 'true'): no demo accounts or " +
+          "shared demo passwords were created. Set SEED_DEMO=true to enable.",
+      );
+    }
   });
   logger.info(
-    { flags: FLAGS.length, schemaVersions: SCHEMA_VERSIONS.length },
+    {
+      flags: FLAGS.length,
+      schemaVersions: SCHEMA_VERSIONS.length,
+      demoSeeded: SEED_DEMO,
+    },
     "Platform seed complete",
   );
 }

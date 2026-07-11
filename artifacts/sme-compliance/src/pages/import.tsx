@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import {
   useGetMe,
   useImportInvoices,
+  getListInvoicesQueryKey,
   type InvoiceImportRow,
   type InvoiceImportResult,
 } from "@workspace/api-client-react";
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { RequireClientScope } from "@/components/require-client-scope";
 import {
   Upload,
   Download,
@@ -187,7 +189,9 @@ export function Import() {
       });
       setResult(res);
       if (commit) {
-        await queryClient.invalidateQueries();
+        // Not awaited: a background refetch rejection must not surface as a
+        // false "import failed" error after the rows were already created.
+        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
         toast({
           title: "Import complete",
           description: `${res.createdCount} invoice(s) created.`,
@@ -249,6 +253,7 @@ export function Import() {
         </div>
       </div>
 
+      <RequireClientScope thing="bulk import">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">1. Add your rows</CardTitle>
@@ -414,6 +419,7 @@ export function Import() {
           </CardContent>
         </Card>
       )}
+      </RequireClientScope>
     </div>
   );
 }

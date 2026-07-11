@@ -133,7 +133,17 @@ export function Parties() {
 
   const runMerge = async () => {
     if (!mergeGroup || !survivorId) return;
-    const duplicates = mergeGroup.parties.filter((p) => p.id !== survivorId);
+    // Recompute this group's still-live members from fresh data before
+    // firing. If a previous attempt merged some rows and then failed, those
+    // rows now carry a mergedIntoId — dropping them here means a retry never
+    // re-submits an already-merged party.
+    const freshGroup = findDuplicateGroups(parties ?? []).find(
+      (g) => g.key === mergeGroup.key,
+    );
+    const duplicates = (freshGroup ?? mergeGroup).parties.filter(
+      (p) => p.id !== survivorId && !p.mergedIntoId,
+    );
+    let mergedCount = 0;
     try {
       // The API merges one pair at a time; a group folds sequentially into
       // the chosen survivor, each step audit-logged with lineage.
@@ -141,20 +151,28 @@ export function Parties() {
         await merge.mutateAsync({
           data: { survivorId, duplicateId: dup.id },
         });
+        mergedCount += 1;
       }
       toast({
-        title: `Merged ${duplicates.length} record${duplicates.length === 1 ? "" : "s"}`,
+        title: `Merged ${mergedCount} record${mergedCount === 1 ? "" : "s"}`,
         description: "History preserved — merged rows keep their lineage.",
       });
-      setMergeGroup(null);
-      setSurvivorId("");
-      invalidate();
     } catch (e) {
       toast({
-        title: "Merge failed",
+        title:
+          mergedCount > 0
+            ? `Merged ${mergedCount}, then stopped`
+            : "Merge failed",
         description: e instanceof Error ? e.message : "Please try again.",
         variant: "destructive",
       });
+    } finally {
+      // Close the dialog and refresh either way: a partial failure must still
+      // reflect the rows that did merge, and the duplicate cards recompute
+      // from the fresh party list so a retry starts from a clean set.
+      setMergeGroup(null);
+      setSurvivorId("");
+      invalidate();
     }
   };
 

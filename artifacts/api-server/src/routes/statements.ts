@@ -26,8 +26,10 @@ import {
 } from "@workspace/api-zod";
 import {
   assertCan,
+  assertClientPartyScope,
   assertPartyAccess,
   assertSameTenant,
+  clientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { isFeatureEnabled } from "../modules/flags/flags";
@@ -40,6 +42,12 @@ import {
 
 // Bank-statement ingestion and reconciliation v1 (INT-05, SME-07). All surfaces
 // are gated by the R2 `reconciliation` flag: unreachable while dark (PL-02).
+
+// Hard cap on an uploaded statement's CSV payload. The reconciliation matcher is
+// O(lines × invoices), so an unbounded string (up to the 8mb body limit) is an
+// authenticated resource-exhaustion vector; 4 MB of CSV is far beyond any real
+// bank export (SEC-M3).
+const MAX_STATEMENT_CSV_CHARS = 4_000_000;
 
 const router: IRouter = Router();
 
@@ -63,6 +71,12 @@ router.post("/statements", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  if (parsed.data.csv.length > MAX_STATEMENT_CSV_CHARS) {
+    res.status(413).json({
+      error: "Statement file is too large to process",
+    });
+    return;
+  }
   await assertPartyAccess(req.principal, parsed.data.clientPartyId);
   const result = await ingestStatement({
     firmId,
@@ -83,7 +97,12 @@ router.get("/statements", async (req, res): Promise<void> => {
   }
   assertCan(req.principal, "statement.read");
   const query = ListBankStatementsQueryParams.safeParse(req.query);
-  const clientPartyId = query.success ? query.data.clientPartyId : undefined;
+  let clientPartyId = query.success ? query.data.clientPartyId : undefined;
+  // A client_user is confined to its own client party (SEC-03): reject an
+  // explicit sibling id and always constrain the list to its own party.
+  if (clientPartyId) assertClientPartyScope(req.principal, clientPartyId);
+  const scope = clientPartyScope(req.principal);
+  if (scope) clientPartyId = scope;
   const tenant = tenantFirmId(req.principal);
   const conditions = [];
   if (tenant) conditions.push(eq(bankStatementsTable.firmId, tenant));
@@ -113,6 +132,8 @@ async function loadStatementForTenant(
     .limit(1);
   if (!statement) throw new DomainError("NOT_FOUND", "Statement not found", 404);
   assertSameTenant(req.principal, statement.firmId);
+  // A client_user only reaches its own client party's statements (SEC-03).
+  assertClientPartyScope(req.principal, statement.clientPartyId);
   return statement;
 }
 

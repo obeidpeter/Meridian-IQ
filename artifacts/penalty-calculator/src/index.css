@@ -111,19 +111,19 @@
   --popover-border: 214 32% 91%;
 
   /* Bold deliberate color: A rich teal for trust and calm */
-  --primary: 173 80% 30%;
+  --primary: 173 80% 27%;
   --primary-foreground: 0 0% 100%;
 
   --secondary: 214 32% 91%;
   --secondary-foreground: 222 47% 11%;
 
   --muted: 214 32% 91%;
-  --muted-foreground: 215 16% 47%;
+  --muted-foreground: 215 18% 42%;
 
   --accent: 173 80% 90%;
   --accent-foreground: 173 80% 25%;
 
-  --destructive: 0 84% 60%;
+  --destructive: 0 72% 45%;
   --destructive-foreground: 0 0% 100%;
 
   --chart-1: 173 80% 30%;
@@ -242,5 +242,17 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+/* Respect the OS reduced-motion preference (WCAG 2.3.3 / 2.2.2). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

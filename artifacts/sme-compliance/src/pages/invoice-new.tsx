@@ -5,6 +5,7 @@ import {
   useListParties,
   useCreateInvoice,
   useListErrorCatalogue,
+  getListInvoicesQueryKey,
   type InvoiceLineInput,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { RequireClientScope } from "@/components/require-client-scope";
 import { formatNaira } from "@/lib/format";
 import { Plus, Trash2, CheckCircle2, Circle, Cloud, ShieldCheck } from "lucide-react";
 
@@ -202,7 +204,9 @@ export function InvoiceNew() {
         },
       });
       localStorage.removeItem(DRAFT_KEY);
-      await queryClient.invalidateQueries();
+      // Not awaited: a background refetch rejection must not surface as a false
+      // "could not create invoice" error after the save already succeeded.
+      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       toast({ title: "Invoice created", description: "Saved to your vault." });
       navigate(`/invoices/${res.invoice.id}`);
     } catch (e) {
@@ -254,6 +258,7 @@ export function InvoiceNew() {
         )}
       </div>
 
+      <RequireClientScope thing="invoice form">
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
           <Card>
@@ -328,7 +333,7 @@ export function InvoiceNew() {
                     id="buyer-tin-note"
                     role={showErrors ? "alert" : undefined}
                     className={`text-sm mt-1 ${
-                      showErrors ? "text-destructive" : "text-amber-600 dark:text-amber-400"
+                      showErrors ? "text-destructive" : "text-amber-700 dark:text-amber-400"
                     }`}
                   >
                     {errors.buyerTin}
@@ -505,7 +510,10 @@ export function InvoiceNew() {
                   ) : (
                     <Circle className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden="true" />
                   )}
-                  <span className={c.ok ? "" : "text-muted-foreground"}>{c.label}</span>
+                  <span className={c.ok ? "" : "text-muted-foreground"}>
+                    {c.label}
+                    <span className="sr-only">{c.ok ? " — complete" : " — not yet"}</span>
+                  </span>
                 </div>
               ))}
               <div className="border-t pt-3 space-y-1 text-sm">
@@ -534,6 +542,7 @@ export function InvoiceNew() {
           </Card>
         </div>
       </div>
+      </RequireClientScope>
     </div>
   );
 }

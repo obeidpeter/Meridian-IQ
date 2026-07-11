@@ -49,6 +49,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // SMEs must submit an issued invoice for stamping within this window; past it the
 // invoice is on penalty watch (SME-05).
 const SUBMISSION_WINDOW_DAYS = 7;
+// Hard cap on a single import (NFR-03 budgets ~5,000 rows). Bounds the work a
+// single authenticated request can do inside one DB transaction (SEC-M3); the
+// 8mb body limit alone would otherwise admit tens of thousands of rows.
+const MAX_IMPORT_ROWS = 5000;
 
 function daysUntil(target: Date, from: Date): number {
   return Math.floor((target.getTime() - from.getTime()) / DAY_MS);
@@ -386,6 +390,12 @@ router.post("/invoices/import", async (req, res): Promise<void> => {
   }
   const { clientPartyId, rows } = parsed.data;
   const commit = parsed.data.commit ?? false;
+  if (rows.length > MAX_IMPORT_ROWS) {
+    res.status(413).json({
+      error: `Too many rows: ${rows.length} exceeds the ${MAX_IMPORT_ROWS}-row import limit`,
+    });
+    return;
+  }
   await assertPartyAccess(req.principal, clientPartyId);
   const firmId = tenantFirmId(req.principal);
   if (!firmId) {

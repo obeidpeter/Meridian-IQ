@@ -6,7 +6,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { runRequestContext } from "@workspace/db";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { resolvePrincipal } from "./middleware/principal";
+import { resolvePrincipal, requireCsrfHeader } from "./middleware/principal";
 import { errorHandler } from "./middleware/error";
 
 // Cross-tenant staff (operator/auditor/bank_user), buyer-organization users
@@ -198,6 +198,27 @@ function tenantContext(req: Request, res: Response, next: NextFunction): void {
 
 const app: Express = express();
 
+// Trust one proxy hop so req.ip reflects the real client address (from the
+// platform's ingress proxy) rather than the socket peer or a client-supplied
+// X-Forwarded-For. The login throttle keys on req.ip, so this closes the
+// header-spoofing bypass and the unbounded-map growth it enabled (SEC-M4).
+app.set("trust proxy", 1);
+
+// Baseline security response headers (SEC-M2). No dependency; applied to every
+// API response. nosniff blocks MIME-confusion on any user-influenced payload;
+// Referrer-Policy avoids leaking URLs; HSTS enforces TLS on the shared origin.
+// NOTE: the frontends are served by their own static layer and are INTENTIONALLY
+// embedded in the preview iframe, so their anti-clickjacking control must be a
+// CSP `frame-ancestors` allowlist configured at that layer — not X-Frame-Options
+// here (which is safe on JSON API responses but does not cover the framed HTML).
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Strict-Transport-Security", "max-age=15552000");
+  next();
+});
+
 app.use(
   pinoHttp({
     logger,
@@ -219,11 +240,16 @@ app.use(
 );
 app.use(cors());
 // 5,000-row imports (NFR-03) and full bank-statement uploads (INT-05) arrive
-// as JSON bodies well beyond the 100kb express default.
+// as JSON bodies well beyond the 100kb express default. Only JSON is parsed:
+// urlencoded parsing is deliberately NOT enabled so a cross-site HTML <form>
+// (a no-preflight "simple request") cannot deliver a parseable body (SEC-02).
 app.use(express.json({ limit: "8mb" }));
-app.use(express.urlencoded({ extended: true }));
 // Session cookie (modules/auth/session.ts) is read by the principal middleware.
 app.use(cookieParser());
+// CSRF guard: require a custom header on cookie-authenticated state-changing
+// requests. Runs after cookie-parser so it can see the session cookie, and
+// before principal resolution (SEC-02).
+app.use(requireCsrfHeader);
 
 // Verify the Clerk session (if any) from cookie/Bearer token and attach auth to
 // the request. resolvePrincipal reads getAuth(req) to build the tenant-scoped

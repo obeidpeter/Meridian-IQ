@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Users,
@@ -100,6 +100,14 @@ export function Layout({ children }: { children: ReactNode }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const { data: me } = useGetMe();
   const logout = useLogout();
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Move keyboard/SR focus to the main region on every route change so a
+  // single-page navigation announces the new page instead of stranding focus
+  // on the link that was just activated.
+  useEffect(() => {
+    mainRef.current?.focus();
+  }, [location]);
 
   const signOut = async () => {
     try {
@@ -210,6 +218,13 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      <a
+        href="#main-content"
+        className={`sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground ${FOCUS_RING}`}
+        data-testid="link-skip-to-content"
+      >
+        Skip to content
+      </a>
       <div className="md:hidden flex items-center justify-between p-4 border-b bg-card">
         <BrandMark />
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -234,7 +249,12 @@ export function Layout({ children }: { children: ReactNode }) {
         <NavLinks />
       </div>
 
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
+      <main
+        ref={mainRef}
+        id="main-content"
+        tabIndex={-1}
+        className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full focus:outline-none"
+      >
         {children}
       </main>
     </div>

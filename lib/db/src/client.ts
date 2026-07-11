@@ -19,12 +19,21 @@ export function requireDatabaseUrl(): string {
   return url;
 }
 
-// A dropped/unroutable connection must fail fast and loud rather than hang the
-// caller forever: pg has no default connect timeout, so without this a boot-time
-// DB reach problem would silently block startup. keepAlive avoids idle NAT/proxy
-// drops on long-lived pooled connections in the deployed environment.
+// Explicit pool sizing (CON-M4). The worker (drain + reconcile + compliance
+// sweeps, each now reentrancy-guarded so at most one of each runs at a time) and
+// all HTTP request transactions share this pool; the pg default of 10 is easily
+// starved under pipeline load, stalling requests until the 30s request-tx
+// timeout. Size it explicitly with headroom and make it env-tunable, and fail a
+// request that cannot get a connection rather than hanging indefinitely.
+//
+// A dropped/unroutable connection must also fail fast and loud rather than hang
+// the caller forever: pg has no default connect timeout, so without this a
+// boot-time DB reach problem would silently block startup. keepAlive avoids idle
+// NAT/proxy drops on long-lived pooled connections in the deployed environment.
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.PGPOOL_MAX ?? 20),
+  idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
   keepAlive: true,
 });
