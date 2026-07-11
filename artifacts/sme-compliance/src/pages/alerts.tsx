@@ -88,8 +88,12 @@ export function Alerts() {
   const save = async () => {
     try {
       await update.mutateAsync({ id: clientPartyId, data: form });
-      await queryClient.invalidateQueries();
-      toast({ title: "Preferences saved", description: "Alert settings updated." });
+      // Not awaited: a background refetch rejection must not surface as a false
+      // save error after the preferences already persisted.
+      queryClient.invalidateQueries({
+        queryKey: getGetAlertPreferencesQueryKey(clientPartyId),
+      });
+      toast({ title: "Alert settings saved", description: "Alert settings updated." });
     } catch (e) {
       toast({
         title: "Couldn't save alert preferences",
