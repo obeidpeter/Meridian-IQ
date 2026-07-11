@@ -22,3 +22,4 @@
 - [Expo web preview CORS](expo-web-cors.md) — credentialed calls from the Expo dev origin need an explicit CORS allowlist + credentials:true; wildcard cors() shows OPTIONS-but-never-POST.
 - [Android push real device](android-push-real-device.md) — Expo Go Android can't receive push (SDK 53+, dev build needed); Android 8+ needs a notification channel or alerts are dropped.
 - [Autoscale wake-up sweep](autoscale-wakeup-sweep.md) — prod scales to zero; overnight alerts need an external ~5-min ping of the public /api/internal/sweep trigger (separate Scheduled Deployment app).
+- [CI DB-backed tests](ci-db-backed-tests.md) — quality-gate must push schema AND apply guardrail migrations (meridian_app grants/RLS) before api-server tests; suites opening pg pools need --test-force-exit.

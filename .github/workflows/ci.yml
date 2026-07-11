@@ -61,6 +61,15 @@ jobs:
       - name: Typecheck (all packages)
         run: pnpm run typecheck
 
+      # The api-server suite now includes DB-backed route tests (party access,
+      # alert prefs, push registration) that run inside the RLS contexts, so both
+      # the schema AND the guardrail migrations (meridian_app role grants, RLS
+      # policies) must exist before they run.
+      - name: Prepare database (schema + guardrail migrations)
+        run: |
+          pnpm --filter @workspace/db run push
+          pnpm --filter @workspace/db run migrate
+
       # Golden-file UBL round-trips, lifecycle, matcher, connector contract —
       # the error catalogue doubling as the regression suite.
       - name: api-server unit tests
@@ -69,9 +78,7 @@ jobs:
       # CORE-06: tables come from drizzle push; the versioned guardrail
       # migrations (triggers, RLS, retention) must apply AND roll back cleanly.
       - name: Migration rollback test (real Postgres)
-        run: |
-          pnpm --filter @workspace/db run push
-          pnpm --filter @workspace/db run test
+        run: pnpm --filter @workspace/db run test
 
       - name: Build landing
         run: pnpm --filter @workspace/landing run build
