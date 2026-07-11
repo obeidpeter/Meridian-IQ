@@ -57,6 +57,15 @@ export function formatDate(value: string | Date): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/** Short date with time, e.g. "5 Mar 2027, 14:05". */
+export function formatDateTime(value: string | Date): string {
+  const d = toDate(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${formatDate(d)}, ${hours}:${minutes}`;
+}
+
 /** Month + year grouping key label, e.g. "March 2027". */
 export function formatMonthYear(value: string | Date): string {
   const d = toDate(value);

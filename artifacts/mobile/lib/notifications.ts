@@ -8,11 +8,11 @@ import { PushDeviceInputPlatform } from "@workspace/api-client-react";
 // Push payloads are pointer-only (PL-04/SEC-12): the notification `data`
 // carries just a template key, never client details. Each key maps to the
 // screen where the alert's details live, so a tap lands the user in the
-// right place. Both current templates surface in the Deadlines tab — deadline
-// reminders directly, and B2C window alerts as `b2c_report` deadlines.
+// right place. Deadline reminders surface in the Deadlines tab; B2C window
+// alerts land on the dedicated B2C batches screen.
 const TEMPLATE_ROUTES: Record<string, Href> = {
   deadline_reminder: "/(tabs)/deadlines",
-  b2c_window_alert: "/(tabs)/deadlines",
+  b2c_window_alert: "/(tabs)/b2c",
 };
 
 /**

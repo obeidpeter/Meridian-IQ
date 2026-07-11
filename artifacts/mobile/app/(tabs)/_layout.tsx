@@ -24,6 +24,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "calendar", selected: "calendar" }} />
         <Label>Deadlines</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="b2c">
+        <Icon sf={{ default: "bag", selected: "bag.fill" }} />
+        <Label>B2C</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="invoice">
         <Icon sf={{ default: "doc.badge.plus", selected: "doc.badge.plus" }} />
         <Label>Invoice</Label>
@@ -50,6 +54,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { name: "index", title: "Home", sf: "house", feather: "home" },
   { name: "deadlines", title: "Deadlines", sf: "calendar", feather: "calendar" },
+  { name: "b2c", title: "B2C Reports", sf: "bag", feather: "shopping-bag" },
   { name: "invoice", title: "New Invoice", sf: "doc.badge.plus", feather: "file-plus" },
   { name: "estimator", title: "Estimator", sf: "percent", feather: "percent" },
   { name: "settings", title: "Settings", sf: "gearshape", feather: "settings" },
