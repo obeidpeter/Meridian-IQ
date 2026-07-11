@@ -54,13 +54,31 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
       await policyExists(pool, "b2c_report_batches"),
       "R2 RLS policy on b2c_report_batches should exist after apply",
     );
+    assert.ok(
+      await policyExists(pool, "push_devices"),
+      "push RLS policy on push_devices should exist after apply",
+    );
     const versions = await appliedVersions(pool);
     assert.ok(versions.includes(1), "version 1 should be tracked after apply");
     assert.ok(versions.includes(2), "version 2 should be tracked after apply");
+    assert.ok(versions.includes(3), "version 3 should be tracked after apply");
 
-    // Roll back newest first: 0002 (R2 guardrails)...
+    // Roll back newest first: 0003 (push guardrails)...
+    const rolled3 = await rollbackLast(pool);
+    assert.equal(rolled3, 3, "first rollback should be version 3");
+    assert.equal(
+      await policyExists(pool, "push_devices"),
+      false,
+      "push RLS policy should be gone after rolling back 0003",
+    );
+    assert.ok(
+      await policyExists(pool, "bank_statements"),
+      "R2 RLS policy must survive the 0003 rollback",
+    );
+
+    // ...then 0002 (R2 guardrails)...
     const rolled2 = await rollbackLast(pool);
-    assert.equal(rolled2, 2, "first rollback should be version 2");
+    assert.equal(rolled2, 2, "second rollback should be version 2");
     assert.equal(
       await policyExists(pool, "bank_statements"),
       false,
@@ -73,7 +91,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0001 (base guardrails).
     const rolled1 = await rollbackLast(pool);
-    assert.equal(rolled1, 1, "second rollback should be version 1");
+    assert.equal(rolled1, 1, "third rollback should be version 1");
     assert.equal(
       await functionExists(pool, "meridian_block_mutations"),
       false,
@@ -94,6 +112,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
     await applyMigrations(pool);
     assert.ok(await policyExists(pool, "invoices"));
     assert.ok(await policyExists(pool, "bank_statements"));
+    assert.ok(await policyExists(pool, "push_devices"));
   } finally {
     await pool.end();
   }

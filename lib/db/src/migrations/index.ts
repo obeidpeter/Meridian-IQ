@@ -1,6 +1,7 @@
 import type pg from "pg";
 import { migration0001 } from "./0001_guardrails.ts";
 import { migration0002 } from "./0002_r2_guardrails.ts";
+import { migration0003 } from "./0003_push_guardrails.ts";
 
 export interface Migration {
   version: number;
@@ -12,7 +13,11 @@ export interface Migration {
 // Ordered forward migrations (CORE-06). Each is applied inside a transaction and
 // recorded in `_schema_migrations`; every `up` is idempotent so it can be safely
 // re-asserted on boot, and every `down` is reversible (covered by rollback test).
-export const migrations: Migration[] = [migration0001, migration0002];
+export const migrations: Migration[] = [
+  migration0001,
+  migration0002,
+  migration0003,
+];
 
 type Executor = Pick<pg.Pool, "query">;
 
