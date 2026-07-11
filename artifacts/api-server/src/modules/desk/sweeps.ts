@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, isNotNull, like, notInArray, sql } from "drizzle-orm";
 import {
   getDb,
+  runInBypassContext,
   submissionAttemptsTable,
   errorCatalogueTable,
   operatorCasesTable,
@@ -17,6 +18,16 @@ import { registerSweep } from "../pipeline/pipeline";
 const UNMAPPED_TITLE_PREFIX = "Unmapped code ";
 
 export async function sweepUnmappedCodes(): Promise<void> {
+  // Run inside a bypass transaction (CON-M2). Without an ambient context every
+  // getDb() call falls back to the raw pool and autocommits independently, so
+  // the dedup SELECT and the INSERT below had no snapshot consistency and no
+  // atomicity on a mid-sweep throw. Its sibling sweeps already do this.
+  await runInBypassContext(async () => {
+    await sweepUnmappedCodesInner();
+  });
+}
+
+async function sweepUnmappedCodesInner(): Promise<void> {
   const known = getDb()
     .select({ code: errorCatalogueTable.code })
     .from(errorCatalogueTable);

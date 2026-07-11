@@ -16,6 +16,7 @@ import { canTransition, recordTransition } from "../invoice/lifecycle";
 import { submitWithFailover } from "../rails/adapter";
 import { openInvoiceCase } from "../desk/cases";
 import { isRetriable } from "../errors";
+import { logger } from "../../lib/logger";
 
 // Async submission pipeline (INT-09, SME-03 backend). A transactional outbox row
 // is written when an invoice is submitted; this worker drains it, calls the rail
@@ -576,22 +577,61 @@ export function registerSweep(sweep: () => Promise<unknown>): void {
 // a third loop runs the registered R2 compliance sweeps.
 export function startWorker(intervalMs = 1_500): void {
   if (timer) return;
+
+  // Per-loop reentrancy guards (CON-M3): each interval fires on a fixed clock
+  // regardless of whether the previous run finished. Without a guard, a run
+  // that exceeds its period overlaps the next tick and double-processes (which
+  // drives the sweep/reconcile duplication races). Skip a tick while its prior
+  // run is still in flight, and log — rather than silently swallow — errors so a
+  // persistently failing loop is visible.
+  let draining = false;
+  let reconciling = false;
+  let sweeping = false;
+
   timer = setInterval(() => {
-    void drain().catch(() => {});
+    if (draining) return;
+    draining = true;
+    void drain()
+      .catch((err) => logger.error({ err }, "outbox drain failed"))
+      .finally(() => {
+        draining = false;
+      });
   }, intervalMs);
   // Do not keep the event loop alive solely for the worker.
   timer.unref?.();
 
   reconcileTimer = setInterval(() => {
-    void reconcile().catch(() => {});
-    void reconcileDuplicateStamps().catch(() => {});
+    if (reconciling) return;
+    reconciling = true;
+    void (async () => {
+      try {
+        await reconcile();
+        await reconcileDuplicateStamps();
+      } catch (err) {
+        logger.error({ err }, "pipeline reconcile sweep failed");
+      } finally {
+        reconciling = false;
+      }
+    })();
   }, RECONCILE_INTERVAL_MS);
   reconcileTimer.unref?.();
 
   sweepTimer = setInterval(() => {
-    for (const sweep of SWEEPS) {
-      void sweep().catch(() => {});
-    }
+    if (sweeping) return;
+    sweeping = true;
+    void (async () => {
+      // Run sweeps sequentially so one guard covers the whole pass and they
+      // don't contend for pool connections; a failing sweep is logged, not
+      // silently dropped, and does not abort its siblings.
+      for (const sweep of SWEEPS) {
+        try {
+          await sweep();
+        } catch (err) {
+          logger.error({ err }, "compliance sweep failed");
+        }
+      }
+      sweeping = false;
+    })();
   }, SWEEP_INTERVAL_MS);
   sweepTimer.unref?.();
 }

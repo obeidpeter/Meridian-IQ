@@ -1011,6 +1011,9 @@ router.post("/operator/cases/:id/claim", async (req, res): Promise<void> => {
     return;
   }
   const existing = await loadCase(params.data.id);
+  // Compare-and-set on status so two operators can't both claim the same open
+  // case (lost update); the loser gets a 409 instead of a silent overwrite
+  // (CON-M5).
   const [row] = await getDb()
     .update(operatorCasesTable)
     .set({
@@ -1018,8 +1021,20 @@ router.post("/operator/cases/:id/claim", async (req, res): Promise<void> => {
       assignedOperatorId: req.principal.userId,
       firstActionAt: existing.firstActionAt ?? new Date(),
     })
-    .where(eq(operatorCasesTable.id, existing.id))
+    .where(
+      and(
+        eq(operatorCasesTable.id, existing.id),
+        eq(operatorCasesTable.status, "open"),
+      ),
+    )
     .returning();
+  if (!row) {
+    throw new DomainError(
+      "CASE_NOT_CLAIMABLE",
+      "Case is no longer open — it was claimed or resolved by another operator",
+      409,
+    );
+  }
   await appendAudit({
     actorId: req.principal.userId,
     firmId: row.firmId,
@@ -1052,6 +1067,9 @@ router.post("/operator/cases/:id/resolve", async (req, res): Promise<void> => {
     0,
     Math.round((now.getTime() - handleStart.getTime()) / 1000),
   );
+  // Compare-and-set: only an open/in-progress case can be resolved, so a
+  // concurrent double-resolve loses the race with a 409 rather than
+  // overwriting the first resolution (CON-M5).
   const [row] = await getDb()
     .update(operatorCasesTable)
     .set({
@@ -1063,8 +1081,20 @@ router.post("/operator/cases/:id/resolve", async (req, res): Promise<void> => {
       resolutionCode: parsed.data.resolutionCode,
       resolutionNote: parsed.data.note ?? null,
     })
-    .where(eq(operatorCasesTable.id, existing.id))
+    .where(
+      and(
+        eq(operatorCasesTable.id, existing.id),
+        inArray(operatorCasesTable.status, ["open", "in_progress"]),
+      ),
+    )
     .returning();
+  if (!row) {
+    throw new DomainError(
+      "CASE_ALREADY_RESOLVED",
+      "Case has already been resolved",
+      409,
+    );
+  }
   await appendAudit({
     actorId: req.principal.userId,
     firmId: row.firmId,
