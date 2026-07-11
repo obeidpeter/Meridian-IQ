@@ -76,7 +76,7 @@ export async function ensureAppRoleAssumable(): Promise<AppRoleStatus> {
   await pool.query(`GRANT meridian_app TO CURRENT_USER WITH SET TRUE`);
 
   const { rows: after } = await pool.query<{ can_set: boolean }>(
-    `SELECT pg_has_role(current_user, 'meridian_app', 'USAGE') AS can_set`,
+    `SELECT pg_has_role(current_user, 'meridian_app', 'SET') AS can_set`,
   );
   return after[0]?.can_set === true ? "granted" : "still-denied";
 }
