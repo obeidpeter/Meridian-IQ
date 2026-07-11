@@ -14,6 +14,12 @@
         "buildType": "apk"
       }
     },
+    "development-simulator": {
+      "extends": "development",
+      "ios": {
+        "simulator": true
+      }
+    },
     "preview": {
       "distribution": "internal",
       "env": {
@@ -24,7 +30,10 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "meridian-iq.replit.app"
+      }
     }
   },
   "submit": {
