@@ -37,12 +37,31 @@ export interface PushNotification {
   body: string;
 }
 
+// One ticket per notification, in the same order as the request (Expo's
+// contract). `error` carries Expo's machine-readable code from
+// details.error — "DeviceNotRegistered" means the token is dead and its
+// push_devices row must be pruned.
+export interface PushTicket {
+  status: "ok" | "error";
+  id?: string;
+  message?: string;
+  error?: string;
+}
+
 // Transport is injectable so tests never touch the network.
 export type PushTransport = (
   notifications: PushNotification[],
-) => Promise<{ ok: boolean; detail?: string }>;
+) => Promise<{ ok: boolean; detail?: string; tickets?: PushTicket[] }>;
+
+// Receipt lookup keyed by ticket id. Best-effort: receipts may not be
+// available yet (Expo materialises them asynchronously); absent ids are
+// simply not in the map.
+export type PushReceiptTransport = (
+  ticketIds: string[],
+) => Promise<Record<string, { status: string; error?: string }>>;
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
 
 const expoTransport: PushTransport = async (notifications) => {
   const resp = await fetch(EXPO_PUSH_URL, {
@@ -57,20 +76,56 @@ const expoTransport: PushTransport = async (notifications) => {
     return { ok: false, detail: `Expo push service returned ${resp.status}` };
   }
   const payload = (await resp.json().catch(() => null)) as {
-    data?: { status?: string; message?: string }[];
+    data?: {
+      status?: string;
+      id?: string;
+      message?: string;
+      details?: { error?: string };
+    }[];
   } | null;
-  const tickets = payload?.data ?? [];
+  const rawTickets = payload?.data ?? [];
+  const tickets: PushTicket[] = rawTickets.map((t) => ({
+    status: t.status === "ok" ? "ok" : "error",
+    id: t.id,
+    message: t.message,
+    error: t.details?.error,
+  }));
   const okCount = tickets.filter((t) => t.status === "ok").length;
   if (tickets.length > 0 && okCount === 0) {
     return {
       ok: false,
-      detail: tickets[0]?.message ?? "All push tickets were rejected",
+      detail: rawTickets[0]?.message ?? "All push tickets were rejected",
+      tickets,
     };
   }
-  return { ok: true };
+  return { ok: true, tickets };
+};
+
+const expoReceiptTransport: PushReceiptTransport = async (ticketIds) => {
+  const resp = await fetch(EXPO_RECEIPTS_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({ ids: ticketIds }),
+  });
+  if (!resp.ok) return {};
+  const payload = (await resp.json().catch(() => null)) as {
+    data?: Record<
+      string,
+      { status?: string; details?: { error?: string } }
+    >;
+  } | null;
+  const receipts: Record<string, { status: string; error?: string }> = {};
+  for (const [id, r] of Object.entries(payload?.data ?? {})) {
+    receipts[id] = { status: r.status ?? "error", error: r.details?.error };
+  }
+  return receipts;
 };
 
 let transport: PushTransport = expoTransport;
+let receiptTransport: PushReceiptTransport = expoReceiptTransport;
 
 export function setPushTransport(t: PushTransport): void {
   transport = t;
@@ -78,6 +133,14 @@ export function setPushTransport(t: PushTransport): void {
 
 export function resetPushTransport(): void {
   transport = expoTransport;
+}
+
+export function setPushReceiptTransport(t: PushReceiptTransport): void {
+  receiptTransport = t;
+}
+
+export function resetPushReceiptTransport(): void {
+  receiptTransport = expoReceiptTransport;
 }
 
 // Opaque, PII-free recipient reference derived from the party id (letters
@@ -137,15 +200,53 @@ export async function sendPushAlert(opts: {
   const recipientRef = recipientRefFor(opts.clientPartyId);
   let ok = false;
   let detail: string | null = null;
+  let tickets: PushTicket[] = [];
   try {
     const result = await transport(
       devices.map((d) => ({ to: d.expoPushToken, ...copy })),
     );
     ok = result.ok;
     detail = result.detail ?? null;
+    tickets = result.tickets ?? [];
   } catch (err) {
     ok = false;
     detail = err instanceof Error ? err.message : "Push transport failed";
+  }
+
+  // Prune tokens Expo reports as dead (uninstalled app / expired token), so
+  // future fan-outs skip them instead of accumulating failed ledger rows.
+  // Ticket order mirrors the notifications array, so tickets[i] belongs to
+  // devices[i]. Receipts are checked best-effort right after the send; any
+  // DeviceNotRegistered surfaced there is pruned too. Pruning failures never
+  // fail the send itself.
+  try {
+    const deadTokens = new Set<string>();
+    const ticketIdToToken = new Map<string, string>();
+    tickets.forEach((ticket, i) => {
+      const token = devices[i]?.expoPushToken;
+      if (!token) return;
+      if (ticket.status === "error" && ticket.error === "DeviceNotRegistered") {
+        deadTokens.add(token);
+      } else if (ticket.status === "ok" && ticket.id) {
+        ticketIdToToken.set(ticket.id, token);
+      }
+    });
+    if (ticketIdToToken.size > 0) {
+      const receipts = await receiptTransport([...ticketIdToToken.keys()]);
+      for (const [id, receipt] of Object.entries(receipts)) {
+        if (receipt.error === "DeviceNotRegistered") {
+          const token = ticketIdToToken.get(id);
+          if (token) deadTokens.add(token);
+        }
+      }
+    }
+    if (deadTokens.size > 0) {
+      await getDb()
+        .delete(pushDevicesTable)
+        .where(inArray(pushDevicesTable.expoPushToken, [...deadTokens]));
+    }
+  } catch {
+    // Best-effort cleanup; the next send retries it.
   }
 
   const providerMessageId = ok ? `expo_push_${Date.now()}` : undefined;
