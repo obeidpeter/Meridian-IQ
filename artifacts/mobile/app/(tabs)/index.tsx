@@ -20,8 +20,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   AppButton,
   AppText,
-  Badge,
-  BadgeTone,
   Card,
   CardSkeleton,
   Divider,
@@ -38,17 +36,16 @@ import {
 } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
-const RISK_TONE: Record<DashboardSummaryPenaltyRisk, BadgeTone> = {
-  low: "success",
-  medium: "warning",
-  high: "critical",
-};
-
 const RISK_COPY: Record<DashboardSummaryPenaltyRisk, string> = {
   low: "You're on track. Keep issuing compliant invoices.",
   medium: "Some invoices need attention to avoid penalty exposure.",
   high: "Urgent: unresolved items may trigger significant penalties.",
 };
+
+// Fallback copy when the API returns a penaltyRisk value we don't map, so a
+// text child is never `undefined`.
+const RISK_COPY_FALLBACK =
+  "Review your compliance status to stay ahead of penalties.";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -123,41 +120,10 @@ export default function HomeScreen() {
         />
       ) : summary ? (
         <View style={{ gap: 16 }}>
-          <Card
-            style={{
-              backgroundColor:
-                summary.penaltyRisk === "high"
-                  ? colors.destructive
-                  : summary.penaltyRisk === "medium"
-                    ? colors.warning
-                    : colors.primary,
-            }}
-          >
-            <View style={styles.rowBetween}>
-              <AppText variant="caption" color="#ffffff">
-                PENALTY RISK
-              </AppText>
-              <Badge
-                label={humanize(summary.penaltyRisk)}
-                tone={RISK_TONE[summary.penaltyRisk]}
-              />
-            </View>
-            <AppText variant="heading" color="#ffffff" style={{ marginTop: 10 }}>
-              {RISK_COPY[summary.penaltyRisk]}
-            </AppText>
-            <Pressable
-              onPress={() => router.push("/estimator")}
-              style={({ pressed }) => [
-                styles.riskLink,
-                { opacity: pressed ? 0.7 : 1 },
-              ]}
-            >
-              <AppText variant="label" color="#ffffff">
-                Estimate my exposure
-              </AppText>
-              <Feather name="arrow-right" size={16} color="#ffffff" />
-            </Pressable>
-          </Card>
+          <PenaltyRiskCard
+            risk={summary.penaltyRisk}
+            onEstimate={() => router.push("/estimator")}
+          />
 
           <View style={{ flexDirection: "row", gap: 12 }}>
             <StatTile
@@ -168,7 +134,7 @@ export default function HomeScreen() {
             <StatTile
               label="At risk"
               value={String(summary.atRiskCount)}
-              tone={summary.atRiskCount > 0 ? colors.destructive : undefined}
+              tone={summary.atRiskCount > 0 ? colors.destructiveText : undefined}
             />
           </View>
           <View style={{ flexDirection: "row", gap: 12 }}>
@@ -233,6 +199,67 @@ export default function HomeScreen() {
   );
 }
 
+function PenaltyRiskCard({
+  risk,
+  onEstimate,
+}: {
+  risk: DashboardSummaryPenaltyRisk;
+  onEstimate: () => void;
+}) {
+  const colors = useColors();
+  // Card fill by risk. The matching *Foreground token flips to readable ink in
+  // dark mode where these fills lighten — plain white failed AA there
+  // (white-on-lightened-teal 2.51:1, white-on-amber 2.91:1).
+  const bg =
+    risk === "high"
+      ? colors.destructive
+      : risk === "medium"
+        ? colors.warning
+        : colors.primary;
+  const fg =
+    risk === "high"
+      ? colors.destructiveForeground
+      : risk === "medium"
+        ? colors.warningForeground
+        : colors.primaryForeground;
+  const copy = RISK_COPY[risk] ?? RISK_COPY_FALLBACK;
+
+  return (
+    <Card style={{ backgroundColor: bg }}>
+      <View style={styles.rowBetween}>
+        <AppText variant="caption" color={fg}>
+          PENALTY RISK
+        </AppText>
+        {/* Inverted chip: fill = foreground token, text = card fill. That pair
+            is AA by construction, so the pill stays visible on all three
+            colored cards — a tone-matched Badge vanished into the fill. */}
+        <View style={[styles.riskBadge, { backgroundColor: fg }]}>
+          <AppText variant="caption" color={bg}>
+            {humanize(risk) || "Unknown"}
+          </AppText>
+        </View>
+      </View>
+      <AppText variant="heading" color={fg} style={{ marginTop: 10 }}>
+        {copy}
+      </AppText>
+      <Pressable
+        onPress={onEstimate}
+        accessibilityRole="button"
+        accessibilityLabel="Estimate my penalty exposure"
+        style={({ pressed }) => [
+          styles.riskLink,
+          { opacity: pressed ? 0.7 : 1 },
+        ]}
+      >
+        <AppText variant="label" color={fg}>
+          Estimate my exposure
+        </AppText>
+        <Feather name="arrow-right" size={16} color={fg} />
+      </Pressable>
+    </Card>
+  );
+}
+
 function NextDeadlineCard({
   deadline,
   onPress,
@@ -242,7 +269,13 @@ function NextDeadlineCard({
 }) {
   const colors = useColors();
   return (
-    <Pressable onPress={onPress}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Next deadline: ${deadline.title}, due ${formatDate(
+        deadline.dueDate,
+      )}, ${countdownLabel(deadline.dueDate)}`}
+    >
       <Card>
         <View style={styles.rowBetween}>
           <AppText variant="caption" color={colors.mutedForeground}>
@@ -286,7 +319,7 @@ function ActivityRow({
         <Feather
           name={failed ? "alert-triangle" : "file-text"}
           size={14}
-          color={failed ? "#ffffff" : colors.primary}
+          color={failed ? colors.destructiveForeground : colors.primary}
         />
       </View>
       <View style={{ flex: 1 }}>
@@ -314,9 +347,20 @@ function ActivityRow({
   );
 
   if (!onPress) return content;
+  const a11yLabel = [
+    item.label,
+    item.invoiceNumber,
+    item.status ? humanize(item.status) : null,
+    timeAgo(item.at),
+  ]
+    .filter(Boolean)
+    .join(", ");
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
+      accessibilityHint="Opens invoice details"
       style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
       testID={`activity-item-${item.id}`}
     >
@@ -343,6 +387,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     marginTop: 14,
+  },
+  riskBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    alignSelf: "flex-start",
   },
   activityRow: {
     flexDirection: "row",
