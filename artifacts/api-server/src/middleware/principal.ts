@@ -32,11 +32,13 @@ const VALID_ROLES: Role[] = [
   "auditor",
 ];
 
-// Routes reachable without a principal (health probe, public stamp
-// verification, subdomain branding resolution — the white-label shell needs
-// its theme before any login — and the session endpoints themselves).
+// Routes reachable without a principal (health probe, the external sweep
+// wake-up trigger — an anonymous scheduler ping, see routes/sweep.ts — public
+// stamp verification, subdomain branding resolution — the white-label shell
+// needs its theme before any login — and the session endpoints themselves).
 const PUBLIC_PATHS = new Set([
   "/api/healthz",
+  "/api/internal/sweep",
   "/api/verify-stamp",
   "/api/public/theme",
   "/api/auth/login",

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import sweepRouter from "./sweep";
 import authRouter from "./auth";
 import identityRouter from "./identity";
 import partiesRouter from "./parties";
@@ -29,6 +30,7 @@ import "../modules/push/register";
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(sweepRouter);
 router.use(authRouter);
 router.use(identityRouter);
 router.use(partiesRouter);

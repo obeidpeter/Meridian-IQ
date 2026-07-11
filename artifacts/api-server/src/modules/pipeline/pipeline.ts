@@ -570,6 +570,81 @@ export function registerSweep(sweep: () => Promise<unknown>): void {
   SWEEPS.push(sweep);
 }
 
+// Module-level reentrancy guards shared by the interval loops AND the external
+// wake-up trigger (see runScheduledWorkOnce): a run that exceeds its period —
+// or an external trigger landing mid-pass — must skip, not overlap, or the
+// sweep/reconcile duplication races return (CON-M3).
+let draining = false;
+let reconciling = false;
+let sweeping = false;
+
+// One full pass of everything the in-process timers would run: outbox drain,
+// reconciliation sweeps, and the registered R2 compliance sweeps (pre-breach
+// alerts). Used by the public wake-up endpoint so an Autoscale deployment —
+// which scales to zero and freezes these timers while idle — still runs the
+// time-sensitive work whenever an external scheduler pings it. Everything is
+// awaited INSIDE the request so the work finishes before the instance can be
+// suspended again. Idempotent by construction: the sweeps guard with
+// preBreachAlertAt / batch status, the drain claims with SKIP LOCKED, and the
+// shared guards make a concurrent trigger a cheap no-op.
+export async function runScheduledWorkOnce(): Promise<{
+  ran: { drain: boolean; reconcile: boolean; sweeps: boolean };
+  drained: number;
+}> {
+  const ran = { drain: false, reconcile: false, sweeps: false };
+  let drained = 0;
+
+  if (!sweeping) {
+    sweeping = true;
+    try {
+      await runSweepPass();
+      ran.sweeps = true;
+    } finally {
+      sweeping = false;
+    }
+  }
+
+  if (!draining) {
+    draining = true;
+    try {
+      drained = await drain();
+      ran.drain = true;
+    } catch (err) {
+      logger.error({ err }, "outbox drain failed");
+    } finally {
+      draining = false;
+    }
+  }
+
+  if (!reconciling) {
+    reconciling = true;
+    try {
+      await reconcile();
+      await reconcileDuplicateStamps();
+      ran.reconcile = true;
+    } catch (err) {
+      logger.error({ err }, "pipeline reconcile sweep failed");
+    } finally {
+      reconciling = false;
+    }
+  }
+
+  return { ran, drained };
+}
+
+// Run sweeps sequentially so one guard covers the whole pass and they don't
+// contend for pool connections; a failing sweep is logged, not silently
+// dropped, and does not abort its siblings.
+async function runSweepPass(): Promise<void> {
+  for (const sweep of SWEEPS) {
+    try {
+      await sweep();
+    } catch (err) {
+      logger.error({ err }, "compliance sweep failed");
+    }
+  }
+}
+
 // In-process polling worker (modular monolith). Guarded against double-start.
 // A fast loop drains the outbox; a slower loop runs the scheduled
 // reconciliation sweeps (stuck-submission re-enqueue + duplicate-stamp
@@ -578,15 +653,13 @@ export function registerSweep(sweep: () => Promise<unknown>): void {
 export function startWorker(intervalMs = 1_500): void {
   if (timer) return;
 
-  // Per-loop reentrancy guards (CON-M3): each interval fires on a fixed clock
-  // regardless of whether the previous run finished. Without a guard, a run
-  // that exceeds its period overlaps the next tick and double-processes (which
-  // drives the sweep/reconcile duplication races). Skip a tick while its prior
-  // run is still in flight, and log — rather than silently swallow — errors so a
-  // persistently failing loop is visible.
-  let draining = false;
-  let reconciling = false;
-  let sweeping = false;
+  // Reentrancy guards are module-level (shared with runScheduledWorkOnce):
+  // each interval fires on a fixed clock regardless of whether the previous
+  // run finished. Without a guard, a run that exceeds its period overlaps the
+  // next tick and double-processes (which drives the sweep/reconcile
+  // duplication races). Skip a tick while its prior run is still in flight,
+  // and log — rather than silently swallow — errors so a persistently failing
+  // loop is visible.
 
   timer = setInterval(() => {
     if (draining) return;
@@ -619,19 +692,9 @@ export function startWorker(intervalMs = 1_500): void {
   sweepTimer = setInterval(() => {
     if (sweeping) return;
     sweeping = true;
-    void (async () => {
-      // Run sweeps sequentially so one guard covers the whole pass and they
-      // don't contend for pool connections; a failing sweep is logged, not
-      // silently dropped, and does not abort its siblings.
-      for (const sweep of SWEEPS) {
-        try {
-          await sweep();
-        } catch (err) {
-          logger.error({ err }, "compliance sweep failed");
-        }
-      }
+    void runSweepPass().finally(() => {
       sweeping = false;
-    })();
+    });
   }, SWEEP_INTERVAL_MS);
   sweepTimer.unref?.();
 }
