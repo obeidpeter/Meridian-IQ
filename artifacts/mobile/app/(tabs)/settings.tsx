@@ -41,6 +41,18 @@ type ToggleKey =
   | "failureAlerts"
   | "penaltyAlerts";
 
+// Present raw channel identifiers with their conventional casing.
+const CHANNEL_LABELS: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  sms: "SMS",
+  email: "Email",
+  push: "Push",
+};
+
+function channelLabel(channel: string): string {
+  return CHANNEL_LABELS[channel] ?? channel;
+}
+
 function SettingRow({
   title,
   subtitle,
@@ -73,6 +85,9 @@ function SettingRow({
         value={value}
         onValueChange={onValueChange}
         disabled={disabled}
+        accessibilityLabel={title}
+        accessibilityHint={subtitle}
+        accessibilityState={{ checked: value, disabled }}
         trackColor={{ true: colors.primary, false: colors.secondary }}
         thumbColor="#ffffff"
       />
@@ -83,7 +98,7 @@ function SettingRow({
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { me, clientPartyId, signOut, setPushToken, getPushToken } =
+  const { me, clientPartyId, signOut, switchClient, setPushToken, getPushToken } =
     useSession();
   const [pushBusy, setPushBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -233,7 +248,7 @@ export default function SettingsScreen() {
           }
           const lines = results.map((r) => {
             const status = r.status === "sent" ? "sent" : `failed`;
-            return `${r.channel}: ${status}${
+            return `${channelLabel(r.channel)}: ${status}${
               r.status !== "sent" && r.detail ? ` — ${r.detail}` : ""
             }`;
           });
@@ -375,6 +390,18 @@ export default function SettingsScreen() {
         >
           {me?.email ?? ""}
         </AppText>
+        {/* Firm principals (no bound client) can drop the chosen client and
+            re-open the client picker. */}
+        {!me?.clientPartyId ? (
+          <View style={{ marginTop: 14 }}>
+            <AppButton
+              label="Switch client"
+              icon="users"
+              variant="secondary"
+              onPress={() => void switchClient()}
+            />
+          </View>
+        ) : null}
         <View style={{ marginTop: 14 }}>
           <AppButton
             label="Sign out"

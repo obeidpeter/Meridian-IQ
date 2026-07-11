@@ -18,6 +18,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ClientPicker } from "@/components/client-picker";
+import { OfflineBanner } from "@/components/offline-banner";
 import { SignIn } from "@/components/sign-in";
 import { useColors } from "@/hooks/useColors";
 import { routeForTemplate } from "@/lib/notifications";
@@ -136,6 +137,7 @@ export default function RootLayout() {
             <KeyboardProvider>
               <SessionProvider>
                 <RootLayoutNav />
+                <OfflineBanner />
               </SessionProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>

@@ -30,6 +30,7 @@ import {
   AppText,
   Badge,
   BadgeTone,
+  Banner,
   Card,
   CardSkeleton,
   Divider,
@@ -82,7 +83,9 @@ export default function InvoiceDetailScreen() {
   const router = useRouter();
 
   const detailQuery = useGetInvoice(id, {
-    query: { enabled: !!id, queryKey: getGetInvoiceQueryKey(id) },
+    // A deleted or stale deep-linked invoice 404s — don't retry before we can
+    // show the EmptyState.
+    query: { enabled: !!id, queryKey: getGetInvoiceQueryKey(id), retry: false },
   });
   const attemptsQuery = useListSubmissionAttempts(id, {
     query: { enabled: !!id, queryKey: getListSubmissionAttemptsQueryKey(id) },
@@ -228,41 +231,7 @@ export default function InvoiceDetailScreen() {
         ) : invoice ? (
           <View style={{ gap: 16 }}>
             {banner ? (
-              <Card
-                style={{
-                  backgroundColor:
-                    banner.tone === "success"
-                      ? colors.accent
-                      : colors.destructive,
-                }}
-              >
-                <View style={styles.bannerRow}>
-                  <Feather
-                    name={
-                      banner.tone === "success"
-                        ? "check-circle"
-                        : "alert-triangle"
-                    }
-                    size={18}
-                    color={
-                      banner.tone === "success"
-                        ? colors.accentForeground
-                        : "#ffffff"
-                    }
-                  />
-                  <AppText
-                    variant="label"
-                    color={
-                      banner.tone === "success"
-                        ? colors.accentForeground
-                        : "#ffffff"
-                    }
-                    style={{ flex: 1 }}
-                  >
-                    {banner.message}
-                  </AppText>
-                </View>
-              </Card>
+              <Banner tone={banner.tone} message={banner.message} />
             ) : null}
 
             <Card>
@@ -299,7 +268,7 @@ export default function InvoiceDetailScreen() {
             {isFailed ? (
               <Card
                 style={{
-                  borderColor: colors.destructive,
+                  borderColor: colors.destructiveText,
                   borderWidth: 1,
                 }}
               >
@@ -307,9 +276,9 @@ export default function InvoiceDetailScreen() {
                   <Feather
                     name="alert-triangle"
                     size={18}
-                    color={colors.destructive}
+                    color={colors.destructiveText}
                   />
-                  <AppText variant="heading" color={colors.destructive}>
+                  <AppText variant="heading" color={colors.destructiveText}>
                     Transmission failed
                   </AppText>
                 </View>
@@ -481,7 +450,7 @@ export default function InvoiceDetailScreen() {
                       meta.toneKey === "success"
                         ? colors.primary
                         : meta.toneKey === "critical"
-                          ? colors.destructive
+                          ? colors.destructiveText
                           : colors.mutedForeground;
                     return (
                       <View key={a.id}>
@@ -505,7 +474,7 @@ export default function InvoiceDetailScreen() {
                             {attemptFailed(a) && a.errorCode ? (
                               <AppText
                                 variant="caption"
-                                color={colors.destructive}
+                                color={colors.destructiveText}
                                 style={{ marginTop: 2 }}
                               >
                                 Error code: {a.errorCode}

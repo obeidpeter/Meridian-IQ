@@ -59,6 +59,8 @@ interface SessionContextValue {
   signIn: (me: Me) => Promise<void>;
   signOut: () => Promise<void>;
   selectClient: (partyId: string) => Promise<void>;
+  /** Clear the chosen client so the picker re-appears (firm users only). */
+  switchClient: () => Promise<void>;
   /** Persist the Expo push token so sign-out can unregister it. */
   setPushToken: (token: string | null) => Promise<void>;
   getPushToken: () => Promise<string | null>;
@@ -159,6 +161,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const switchClient = useCallback(async () => {
+    setSelectedClientId(null);
+    // Drop any client-scoped cache so the next selection starts clean.
+    queryClient.clear();
+    try {
+      await AsyncStorage.removeItem(CLIENT_PARTY_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const setPushToken = useCallback(async (token: string | null) => {
     if (token) {
       await secureSet(PUSH_TOKEN_KEY, token);
@@ -182,6 +195,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signOut,
       selectClient,
+      switchClient,
       setPushToken,
       getPushToken,
     }),
@@ -193,6 +207,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signOut,
       selectClient,
+      switchClient,
       setPushToken,
       getPushToken,
     ],

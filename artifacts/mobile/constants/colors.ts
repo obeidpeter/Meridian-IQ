@@ -40,8 +40,12 @@ const colors = {
     accentForeground: "#0b6653", // 173 80% 25%
 
     // Destructive actions (delete, error states)
-    destructive: "#c62828", // 0 72% 45%
+    destructive: "#c62828", // 0 72% 45% — for FILLS with destructiveForeground
     destructiveForeground: "#ffffff",
+    // Destructive used as TEXT/ICON on a light surface. In light mode this is
+    // the same rich red (5.6:1 on white); the dark palette lightens it so error
+    // copy stays legible on dark cards (WCAG AA).
+    destructiveText: "#c62828",
 
     // Borders and input outlines
     border: "#dde5ee",
@@ -77,6 +81,9 @@ const colors = {
 
     destructive: "#c0392b",
     destructiveForeground: "#f1f5fb",
+    // Lighter red for destructive TEXT/ICON on dark cards (8.2:1 on #152439);
+    // the fill `destructive` stays dark for use with white foreground.
+    destructiveText: "#fca5a5",
 
     border: "#243247",
     input: "#243247",

@@ -11,6 +11,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  SectionList,
   StyleSheet,
   View,
 } from "react-native";
@@ -99,102 +100,191 @@ export default function DeadlinesScreen() {
 
   const deadlines = useMemo(() => query.data ?? [], [query.data]);
   const groups = useMemo(() => groupByMonth(deadlines), [deadlines]);
+  const sections = useMemo(
+    () =>
+      groups.map((group, index) => ({
+        key: group.key,
+        label: group.label,
+        index,
+        data: group.items,
+      })),
+    [groups],
+  );
   const overdueCount = deadlines.filter((d) => d.status === "overdue").length;
   const dueSoonCount = deadlines.filter((d) => d.status === "due_soon").length;
 
-  return (
-    <ScrollView
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[
-        styles.content,
-        { paddingBottom: insets.bottom + 100 },
-      ]}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={query.isRefetching}
-          onRefresh={onRefresh}
-          tintColor={colors.primary}
-        />
-      }
-    >
-      {query.isLoading ? (
+  const refreshControl = (
+    <RefreshControl
+      refreshing={query.isRefetching}
+      onRefresh={onRefresh}
+      tintColor={colors.primary}
+    />
+  );
+  const contentContainerStyle = [
+    styles.content,
+    { paddingBottom: insets.bottom + 100 },
+  ];
+
+  if (query.isLoading) {
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={contentContainerStyle}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={{ gap: 12 }}>
           <CardSkeleton lines={2} />
           <CardSkeleton lines={2} />
           <CardSkeleton lines={2} />
         </View>
-      ) : query.isError ? (
+      </ScrollView>
+    );
+  }
+
+  if (query.isError) {
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={contentContainerStyle}
+        showsVerticalScrollIndicator={false}
+        refreshControl={refreshControl}
+      >
         <ErrorState
           message="We couldn't load your compliance calendar."
           onRetry={onRefresh}
         />
-      ) : deadlines.length === 0 ? (
+      </ScrollView>
+    );
+  }
+
+  if (deadlines.length === 0) {
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={contentContainerStyle}
+        showsVerticalScrollIndicator={false}
+        refreshControl={refreshControl}
+      >
         <EmptyState
           icon="check-circle"
           title="No upcoming deadlines"
           message="You're all caught up. New deadlines will appear here."
         />
-      ) : (
-        <View style={{ gap: 20 }}>
-          {(overdueCount > 0 || dueSoonCount > 0) && (
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              {overdueCount > 0 ? (
-                <Card style={{ flex: 1, backgroundColor: colors.destructive }}>
-                  <AppText variant="title" color="#ffffff">
-                    {overdueCount}
-                  </AppText>
-                  <AppText variant="label" color="#ffffff">
-                    Overdue
-                  </AppText>
-                </Card>
-              ) : null}
-              {dueSoonCount > 0 ? (
-                <Card style={{ flex: 1, backgroundColor: colors.warning }}>
-                  <AppText variant="title" color="#ffffff">
-                    {dueSoonCount}
-                  </AppText>
-                  <AppText variant="label" color="#ffffff">
-                    Due soon
-                  </AppText>
-                </Card>
-              ) : null}
-            </View>
-          )}
+      </ScrollView>
+    );
+  }
 
-          {groups.map((group) => (
-            <View key={group.key} style={{ gap: 10 }}>
-              <AppText variant="heading">{group.label}</AppText>
-              <Card padded={false}>
-                {group.items.map((d, index) => (
-                  <View key={d.id}>
-                    {index > 0 ? <Divider /> : null}
-                    <DeadlineRow deadline={d} />
-                  </View>
-                ))}
-              </Card>
-            </View>
-          ))}
-        </View>
+  const statHeader =
+    overdueCount > 0 || dueSoonCount > 0 ? (
+      <View style={{ flexDirection: "row", gap: 12, marginBottom: 20 }}>
+        {overdueCount > 0 ? (
+          <Card style={{ flex: 1, backgroundColor: colors.destructive }}>
+            <AppText variant="title" color={colors.destructiveForeground}>
+              {overdueCount}
+            </AppText>
+            <AppText variant="label" color={colors.destructiveForeground}>
+              Overdue
+            </AppText>
+          </Card>
+        ) : null}
+        {dueSoonCount > 0 ? (
+          <Card style={{ flex: 1, backgroundColor: colors.warning }}>
+            <AppText variant="title" color={colors.warningForeground}>
+              {dueSoonCount}
+            </AppText>
+            <AppText variant="label" color={colors.warningForeground}>
+              Due soon
+            </AppText>
+          </Card>
+        ) : null}
+      </View>
+    ) : null;
+
+  // SectionList virtualizes rows so months/items aren't all mounted at once.
+  // Each item is wrapped in a card "cell" with rounded top/bottom corners on
+  // the first/last row so the group keeps its original single-card look.
+  return (
+    <SectionList
+      style={{ backgroundColor: colors.background }}
+      sections={sections}
+      keyExtractor={(item) => item.id}
+      renderItem={({ item, index, section }) => {
+        const isFirst = index === 0;
+        const isLast = index === section.data.length - 1;
+        return (
+          <View
+            style={[
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderLeftWidth: StyleSheet.hairlineWidth,
+                borderRightWidth: StyleSheet.hairlineWidth,
+              },
+              isFirst
+                ? {
+                    borderTopWidth: StyleSheet.hairlineWidth,
+                    borderTopLeftRadius: colors.radius,
+                    borderTopRightRadius: colors.radius,
+                  }
+                : null,
+              isLast
+                ? {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomLeftRadius: colors.radius,
+                    borderBottomRightRadius: colors.radius,
+                  }
+                : null,
+            ]}
+          >
+            {!isFirst ? <Divider /> : null}
+            <DeadlineRow deadline={item} />
+          </View>
+        );
+      }}
+      renderSectionHeader={({ section }) => (
+        <AppText
+          variant="heading"
+          style={{ marginTop: section.index === 0 ? 0 : 20, marginBottom: 10 }}
+        >
+          {section.label}
+        </AppText>
       )}
-    </ScrollView>
+      ListHeaderComponent={statHeader}
+      stickySectionHeadersEnabled={false}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={contentContainerStyle}
+      refreshControl={refreshControl}
+    />
   );
 }
 
 function DeadlineRow({ deadline }: { deadline: ComplianceDeadline }) {
   const colors = useColors();
   const days = daysUntil(deadline.dueDate);
+  // Fallbacks so an unmapped enum never sends `undefined` to Feather `name` or
+  // a Badge tone.
+  const statusTone = STATUS_TONE[deadline.status] ?? "neutral";
+  const severityIcon = SEVERITY_ICON[deadline.severity] ?? "info";
   const iconColor =
     deadline.severity === "critical"
-      ? colors.destructive
+      ? colors.destructiveText
       : deadline.severity === "warning"
         ? colors.warning
         : colors.mutedForeground;
+  const a11yLabel = [
+    deadline.title,
+    humanize(deadline.kind),
+    formatDate(deadline.dueDate),
+    humanize(deadline.status),
+    deadline.status !== "met" ? countdownLabel(deadline.dueDate) : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
-    <View style={styles.row}>
+    <View style={styles.row} accessible accessibilityLabel={a11yLabel}>
       <View style={styles.rowIcon}>
-        <Feather name={SEVERITY_ICON[deadline.severity]} size={20} color={iconColor} />
+        <Feather name={severityIcon} size={20} color={iconColor} />
       </View>
       <View style={{ flex: 1, gap: 4 }}>
         <AppText variant="label">{deadline.title}</AppText>
@@ -207,11 +297,11 @@ function DeadlineRow({ deadline }: { deadline: ComplianceDeadline }) {
           </AppText>
         ) : null}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 }}>
-          <Badge label={humanize(deadline.status)} tone={STATUS_TONE[deadline.status]} />
+          <Badge label={humanize(deadline.status)} tone={statusTone} />
           {deadline.status !== "met" ? (
             <AppText
               variant="caption"
-              color={days < 0 ? colors.destructive : colors.mutedForeground}
+              color={days < 0 ? colors.destructiveText : colors.mutedForeground}
             >
               {countdownLabel(deadline.dueDate)}
             </AppText>

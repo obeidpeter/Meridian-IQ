@@ -37,6 +37,9 @@ export function SignIn() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const onSubmit = () => {
+    // The keyboard "go" key and the button both call this; guard so an
+    // in-flight login can't be fired twice.
+    if (login.isPending) return;
     setFormError(null);
     if (!email.trim() || !password) {
       setFormError("Enter your email and password to continue.");
@@ -108,7 +111,7 @@ export function SignIn() {
             onSubmitEditing={onSubmit}
           />
           {formError ? (
-            <AppText variant="label" color={colors.destructive}>
+            <AppText variant="label" color={colors.destructiveText}>
               {formError}
             </AppText>
           ) : null}

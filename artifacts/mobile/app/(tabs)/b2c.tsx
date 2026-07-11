@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  getGetDashboardSummaryQueryKey,
   getListB2cReportItemsQueryKey,
   getListB2cReportsQueryKey,
   useListB2cReportItems,
@@ -10,6 +11,7 @@ import {
 import type { B2cReportBatch, B2cReportBatchStatus } from "@workspace/api-client-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  FlatList,
   Platform,
   RefreshControl,
   ScrollView,
@@ -32,7 +34,7 @@ import {
   Skeleton,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, humanize } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
@@ -125,6 +127,13 @@ export default function B2cBatchesScreen() {
             clientPartyId: clientPartyId ?? "",
           }),
         });
+        // The dashboard's at-risk / penalty counts derive from batch state, so
+        // refresh it too now that this batch is reported.
+        void queryClient.invalidateQueries({
+          queryKey: getGetDashboardSummaryQueryKey({
+            clientPartyId: clientPartyId ?? "",
+          }),
+        });
       } catch (e) {
         setSubmitError(
           e instanceof Error && e.message
@@ -150,39 +159,76 @@ export default function B2cBatchesScreen() {
     (b) => b.status === "breached" && !b.reportedAt,
   ).length;
 
-  return (
-    <ScrollView
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[
-        styles.content,
-        { paddingBottom: insets.bottom + 100 },
-      ]}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={query.isRefetching}
-          onRefresh={onRefresh}
-          tintColor={colors.primary}
-        />
-      }
-    >
-      <AppText
-        variant="caption"
-        color={colors.mutedForeground}
-        style={{ marginBottom: 12 }}
-      >
-        Consumer sales are batched into 24-hour windows — report each batch
-        before its window closes.
-      </AppText>
+  // M7: the 30s `useNow` tick keeps countdowns live, but the batch DATA never
+  // refetched — so a window that just closed still showed an "Open" badge. When
+  // a visible open batch's deadline has passed, invalidate the list so the
+  // server reclassifies it (open → breached). The flag self-resets once the
+  // refetched batch is no longer "open", so this fires once per closure rather
+  // than looping.
+  const hasClosedOpenBatch = useMemo(
+    () =>
+      batches.some(
+        (b) => b.status === "open" && new Date(b.deadlineAt).getTime() <= now,
+      ),
+    [batches, now],
+  );
+  useEffect(() => {
+    if (!hasClosedOpenBatch || !clientPartyId) return;
+    void queryClient.invalidateQueries({
+      queryKey: getListB2cReportsQueryKey({ clientPartyId }),
+    });
+  }, [hasClosedOpenBatch, clientPartyId, queryClient]);
 
-      {query.isLoading ? (
+  const refreshControl = (
+    <RefreshControl
+      refreshing={query.isRefetching}
+      onRefresh={onRefresh}
+      tintColor={colors.primary}
+    />
+  );
+  const contentContainerStyle = [
+    styles.content,
+    { paddingBottom: insets.bottom + 100 },
+  ];
+  const caption = (
+    <AppText
+      variant="caption"
+      color={colors.mutedForeground}
+      style={{ marginBottom: 12 }}
+    >
+      Consumer sales are batched into 24-hour windows — report each batch before
+      its window closes.
+    </AppText>
+  );
+
+  if (query.isLoading) {
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={contentContainerStyle}
+        showsVerticalScrollIndicator={false}
+        refreshControl={refreshControl}
+      >
+        {caption}
         <View style={{ gap: 12 }}>
           <CardSkeleton lines={2} />
           <CardSkeleton lines={2} />
           <CardSkeleton lines={2} />
         </View>
-      ) : query.isError ? (
-        isFeatureUnavailable(query.error) ? (
+      </ScrollView>
+    );
+  }
+
+  if (query.isError) {
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={contentContainerStyle}
+        showsVerticalScrollIndicator={false}
+        refreshControl={refreshControl}
+      >
+        {caption}
+        {isFeatureUnavailable(query.error) ? (
           <EmptyState
             icon="lock"
             title="B2C reporting isn't available"
@@ -193,60 +239,84 @@ export default function B2cBatchesScreen() {
             message="We couldn't load your B2C reporting batches."
             onRetry={onRefresh}
           />
-        )
-      ) : batches.length === 0 ? (
+        )}
+      </ScrollView>
+    );
+  }
+
+  if (batches.length === 0) {
+    return (
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        contentContainerStyle={contentContainerStyle}
+        showsVerticalScrollIndicator={false}
+        refreshControl={refreshControl}
+      >
+        {caption}
         <EmptyState
           icon="shopping-bag"
           title="No B2C batches yet"
           message="Stamp a consumer (B2C) invoice and a reporting batch opens automatically."
         />
-      ) : (
-        <View style={{ gap: 20 }}>
-          {(openCount > 0 || breachedCount > 0) && (
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              {openCount > 0 ? (
-                <Card style={{ flex: 1 }}>
-                  <AppText variant="title">{openCount}</AppText>
-                  <AppText variant="label" color={colors.mutedForeground}>
-                    Open
-                  </AppText>
-                </Card>
-              ) : null}
-              {breachedCount > 0 ? (
-                <Card style={{ flex: 1, backgroundColor: colors.destructive }}>
-                  <AppText variant="title" color="#ffffff">
-                    {breachedCount}
-                  </AppText>
-                  <AppText variant="label" color="#ffffff">
-                    Breached
-                  </AppText>
-                </Card>
-              ) : null}
-            </View>
-          )}
+      </ScrollView>
+    );
+  }
 
-          {submitError ? (
-            <Card>
-              <AppText variant="caption" color={colors.destructive}>
-                {submitError}
+  const listHeader = (
+    <View style={{ gap: 20, marginBottom: 20 }}>
+      {caption}
+      {openCount > 0 || breachedCount > 0 ? (
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          {openCount > 0 ? (
+            <Card style={{ flex: 1 }}>
+              <AppText variant="title">{openCount}</AppText>
+              <AppText variant="label" color={colors.mutedForeground}>
+                Open
               </AppText>
             </Card>
           ) : null}
-
-          <View style={{ gap: 12 }}>
-            {batches.map((batch) => (
-              <BatchCard
-                key={batch.id}
-                batch={batch}
-                now={now}
-                reporting={reportingId === batch.id}
-                onMarkReported={() => void markReported(batch)}
-              />
-            ))}
-          </View>
+          {breachedCount > 0 ? (
+            <Card style={{ flex: 1, backgroundColor: colors.destructive }}>
+              <AppText variant="title" color={colors.destructiveForeground}>
+                {breachedCount}
+              </AppText>
+              <AppText variant="label" color={colors.destructiveForeground}>
+                Breached
+              </AppText>
+            </Card>
+          ) : null}
         </View>
+      ) : null}
+      {submitError ? (
+        <Card>
+          <AppText variant="caption" color={colors.destructiveText}>
+            {submitError}
+          </AppText>
+        </Card>
+      ) : null}
+    </View>
+  );
+
+  // FlatList virtualizes the batches so they aren't all mounted at once.
+  return (
+    <FlatList
+      style={{ backgroundColor: colors.background }}
+      data={batches}
+      keyExtractor={(batch) => batch.id}
+      renderItem={({ item }) => (
+        <BatchCard
+          batch={item}
+          now={now}
+          reporting={reportingId === item.id}
+          onMarkReported={() => void markReported(item)}
+        />
       )}
-    </ScrollView>
+      ListHeaderComponent={listHeader}
+      ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={contentContainerStyle}
+      refreshControl={refreshControl}
+    />
   );
 }
 
@@ -283,7 +353,10 @@ function BatchCard({
               Window closes {formatDateTime(batch.deadlineAt)}
             </AppText>
           </View>
-          <Badge label={STATUS_LABEL[batch.status]} tone={STATUS_TONE[batch.status]} />
+          <Badge
+            label={STATUS_LABEL[batch.status] ?? humanize(batch.status)}
+            tone={STATUS_TONE[batch.status] ?? "neutral"}
+          />
         </View>
 
         {batch.status === "open" ? (
@@ -291,11 +364,11 @@ function BatchCard({
             <Feather
               name="clock"
               size={14}
-              color={timer.urgent ? colors.destructive : colors.mutedForeground}
+              color={timer.urgent ? colors.destructiveText : colors.mutedForeground}
             />
             <AppText
               variant="caption"
-              color={timer.urgent ? colors.destructive : colors.mutedForeground}
+              color={timer.urgent ? colors.destructiveText : colors.mutedForeground}
             >
               {timer.label}
             </AppText>
@@ -311,8 +384,8 @@ function BatchCard({
           </View>
         ) : batch.status === "breached" ? (
           <View style={styles.inlineRow}>
-            <Feather name="alert-triangle" size={14} color={colors.destructive} />
-            <AppText variant="caption" color={colors.destructive}>
+            <Feather name="alert-triangle" size={14} color={colors.destructiveText} />
+            <AppText variant="caption" color={colors.destructiveText}>
               Deadline missed — report now
             </AppText>
           </View>
@@ -330,6 +403,12 @@ function BatchCard({
         <TouchableOpacity
           onPress={() => setExpanded((v) => !v)}
           accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={
+            expanded
+              ? "Hide batch items"
+              : `View ${batch.itemCount} batch item${batch.itemCount === 1 ? "" : "s"}`
+          }
           style={styles.inlineRow}
         >
           <Feather
@@ -369,7 +448,7 @@ function BatchItems({ batchId }: { batchId: string }) {
 
   if (query.isError) {
     return (
-      <AppText variant="caption" color={colors.destructive}>
+      <AppText variant="caption" color={colors.destructiveText}>
         Unable to load this batch&apos;s items.
       </AppText>
     );
