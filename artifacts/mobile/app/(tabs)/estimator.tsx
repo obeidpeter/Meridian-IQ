@@ -1,14 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { AppText, Card, Divider, TextField } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import {
@@ -53,7 +48,7 @@ export default function EstimatorScreen() {
   const hasInput = (showAccess && days > 0) || (showInvoice && invoices > 0);
 
   return (
-    <ScrollView
+    <KeyboardAwareScrollViewCompat
       style={{ backgroundColor: colors.background }}
       contentContainerStyle={[
         styles.content,
@@ -61,6 +56,7 @@ export default function EstimatorScreen() {
       ]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      bottomOffset={24}
     >
       <AppText variant="body" color={colors.mutedForeground}>
         Estimate your exposure under the fiscalisation penalty regime. Works
@@ -78,6 +74,10 @@ export default function EstimatorScreen() {
               {index > 0 ? <Divider /> : null}
               <Pressable
                 onPress={() => setFilingType(option.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={option.label}
+                accessibilityHint={option.description}
                 style={({ pressed }) => [
                   styles.optionRow,
                   { opacity: pressed ? 0.7 : 1 },
@@ -117,6 +117,12 @@ export default function EstimatorScreen() {
                   {index > 0 ? <Divider /> : null}
                   <Pressable
                     onPress={() => setBand(option.band)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${option.label} — ${formatNaira(
+                      S104_PER_INVOICE[option.band],
+                    )} per invoice`}
+                    accessibilityHint={option.threshold}
                     style={({ pressed }) => [
                       styles.optionRow,
                       { opacity: pressed ? 0.7 : 1 },
@@ -203,7 +209,11 @@ export default function EstimatorScreen() {
           <AppText variant="heading">Total</AppText>
           <AppText
             variant="title"
-            color={hasInput && result.total > 0 ? colors.destructive : colors.foreground}
+            color={
+              hasInput && result.total > 0
+                ? colors.destructiveText
+                : colors.foreground
+            }
           >
             {formatNaira(result.total)}
           </AppText>
@@ -222,7 +232,7 @@ export default function EstimatorScreen() {
           authority.
         </AppText>
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollViewCompat>
   );
 }
 
