@@ -20,3 +20,4 @@
 - [Git ops in this workspace](git-ops-sandbox.md) — bash blocks all .git writes and leaves stale .lock files; sandbox git works for assigned merge tasks; NO push credentials — user pushes via Git pane.
 - [Mobile auth + orval hooks](mobile-auth-and-orval-hooks.md) — login token only with X-Meridian-Client header; generated hooks need explicit queryKey; serialize toggle-driven PUTs.
 - [Expo web preview CORS](expo-web-cors.md) — credentialed calls from the Expo dev origin need an explicit CORS allowlist + credentials:true; wildcard cors() shows OPTIONS-but-never-POST.
+- [Android push real device](android-push-real-device.md) — Expo Go Android can't receive push (SDK 53+, dev build needed); Android 8+ needs a notification channel or alerts are dropped.

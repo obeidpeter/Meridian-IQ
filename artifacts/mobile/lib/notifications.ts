@@ -1,4 +1,4 @@
-import Constants from "expo-constants";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
@@ -29,7 +29,32 @@ export async function acquireExpoPushToken(): Promise<PushTokenResult> {
     return { ok: false, reason: "Push notifications aren't available on web." };
   }
 
+  // Since SDK 53, Expo Go on Android no longer supports remote push
+  // notifications — a development build is required.
+  if (
+    Platform.OS === "android" &&
+    Constants.executionEnvironment === ExecutionEnvironment.StoreClient
+  ) {
+    return {
+      ok: false,
+      reason:
+        "Expo Go on Android can't receive push notifications. Install a development build of the app to enable them.",
+    };
+  }
+
   try {
+    // Android 8+ requires a notification channel for alerts to display.
+    // Expo's push service delivers to the "default" channel unless a
+    // channelId is specified, so make sure it exists with high importance.
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "Alerts",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#0d7c64",
+      });
+    }
+
     const settings = await Notifications.getPermissionsAsync();
     let granted =
       settings.granted ||
