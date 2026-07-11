@@ -153,13 +153,15 @@ export default function InvoiceScreen() {
       return;
     }
 
+    // The form collects VAT as a percentage (e.g. "7.5") but the API expects
+    // a fraction (e.g. "0.075") — same conversion the web entry form does.
     const payloadLines: InvoiceLineInput[] = lines
       .filter((l) => l.description.trim())
       .map((l) => ({
         description: l.description.trim(),
         quantity: l.quantity || "0",
         unitPrice: l.unitPrice || "0",
-        vatRate: l.vatRate || "0",
+        vatRate: String(num(l.vatRate) / 100),
       }));
 
     try {

@@ -214,7 +214,14 @@ export default function HomeScreen() {
                 {summary.recentActivity.slice(0, 6).map((item, index) => (
                   <View key={item.id}>
                     {index > 0 ? <Divider /> : null}
-                    <ActivityRow item={item} />
+                    <ActivityRow
+                      item={item}
+                      onPress={
+                        item.invoiceId
+                          ? () => router.push(`/invoices/${item.invoiceId}`)
+                          : undefined
+                      }
+                    />
                   </View>
                 ))}
               </Card>
@@ -259,12 +266,28 @@ function NextDeadlineCard({
   );
 }
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+function ActivityRow({
+  item,
+  onPress,
+}: {
+  item: ActivityItem;
+  onPress?: () => void;
+}) {
   const colors = useColors();
-  return (
+  const failed = item.kind === "failed" || item.status === "failed";
+  const content = (
     <View style={styles.activityRow}>
-      <View style={[styles.dot, { backgroundColor: colors.accent }]}>
-        <Feather name="file-text" size={14} color={colors.primary} />
+      <View
+        style={[
+          styles.dot,
+          { backgroundColor: failed ? colors.destructive : colors.accent },
+        ]}
+      >
+        <Feather
+          name={failed ? "alert-triangle" : "file-text"}
+          size={14}
+          color={failed ? "#ffffff" : colors.primary}
+        />
       </View>
       <View style={{ flex: 1 }}>
         <AppText variant="label" numberOfLines={1}>
@@ -284,7 +307,21 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       <AppText variant="caption" color={colors.mutedForeground}>
         {timeAgo(item.at)}
       </AppText>
+      {onPress ? (
+        <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+      ) : null}
     </View>
+  );
+
+  if (!onPress) return content;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+      testID={`activity-item-${item.id}`}
+    >
+      {content}
+    </Pressable>
   );
 }
 
