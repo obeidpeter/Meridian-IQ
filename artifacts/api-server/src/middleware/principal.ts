@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { getDb, usersTable, membershipsTable, type Role } from "@workspace/db";
 import type { Principal } from "../modules/auth/rbac";
 import { SESSION_COOKIE, verifySessionToken } from "../modules/auth/session";
+import { logger } from "../lib/logger";
 
 // Principal resolution.
 //
@@ -43,6 +44,25 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+// The dev-header auth shim (x-mock-*) is a full identity bypass, so it is
+// enabled ONLY when explicitly opted in, and never in production (SEC-M7).
+// NODE_ENV "development"/"test" opt in by default (local dev and the CI e2e
+// harness, which boots with NODE_ENV=development); anything else — including an
+// UNSET or misspelled NODE_ENV — fails closed, so a misconfigured staging or
+// production deployment never honours client-supplied identity headers.
+const DEV_AUTH_ENABLED =
+  !IS_PRODUCTION &&
+  (process.env.ENABLE_DEV_AUTH === "true" ||
+    process.env.NODE_ENV === "development" ||
+    process.env.NODE_ENV === "test");
+
+if (DEV_AUTH_ENABLED) {
+  logger.warn(
+    "Dev-header auth shim ENABLED: x-mock-* identity headers are honoured. " +
+      "This is a full auth bypass and must never be enabled in production.",
+  );
+}
 
 const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const CSRF_HEADER = "x-meridian-csrf";
@@ -183,11 +203,11 @@ export function resolvePrincipal(
     next();
     return;
   }
-  // Resolution order: explicit dev headers (never honoured in production) win
-  // for tests and tooling; then the first-party session cookie; then a
-  // Clerk-verified session in production.
+  // Resolution order: explicit dev headers (only when DEV_AUTH_ENABLED — never
+  // in production or a misconfigured env) win for tests and tooling; then the
+  // first-party session cookie; then a Clerk-verified session in production.
   const resolve = (async (): Promise<Principal | null> => {
-    if (!IS_PRODUCTION) {
+    if (DEV_AUTH_ENABLED) {
       const dev = resolveDevPrincipal(req);
       if (dev) return dev;
     }

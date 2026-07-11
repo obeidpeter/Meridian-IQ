@@ -198,6 +198,27 @@ function tenantContext(req: Request, res: Response, next: NextFunction): void {
 
 const app: Express = express();
 
+// Trust one proxy hop so req.ip reflects the real client address (from the
+// platform's ingress proxy) rather than the socket peer or a client-supplied
+// X-Forwarded-For. The login throttle keys on req.ip, so this closes the
+// header-spoofing bypass and the unbounded-map growth it enabled (SEC-M4).
+app.set("trust proxy", 1);
+
+// Baseline security response headers (SEC-M2). No dependency; applied to every
+// API response. nosniff blocks MIME-confusion on any user-influenced payload;
+// Referrer-Policy avoids leaking URLs; HSTS enforces TLS on the shared origin.
+// NOTE: the frontends are served by their own static layer and are INTENTIONALLY
+// embedded in the preview iframe, so their anti-clickjacking control must be a
+// CSP `frame-ancestors` allowlist configured at that layer — not X-Frame-Options
+// here (which is safe on JSON API responses but does not cover the framed HTML).
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Strict-Transport-Security", "max-age=15552000");
+  next();
+});
+
 app.use(
   pinoHttp({
     logger,
