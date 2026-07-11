@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   ClipboardCheck,
@@ -30,9 +30,11 @@ function BrandMark() {
   return (
     <span className="flex items-center gap-2">
       <span className="rounded-lg bg-primary p-1.5 text-primary-foreground">
-        <FileCheck2 className="w-4 h-4" aria-hidden="true" />
+        <FileCheck2 className="h-5 w-5" aria-hidden="true" />
       </span>
-      <span className="text-lg font-bold text-primary">MeridianIQ</span>
+      <span className="text-base font-bold leading-none text-primary">
+        MeridianIQ
+      </span>
     </span>
   );
 }
@@ -42,6 +44,19 @@ export function Layout({ children }: { children: ReactNode }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const { data: me } = useGetMe();
   const logout = useLogout();
+  const mainRef = useRef<HTMLElement>(null);
+  const isFirstRender = useRef(true);
+
+  // Move focus to the main region on client-side route changes so screen
+  // reader and keyboard users land on the new page's content (A11Y-M6).
+  // Skip the initial mount to avoid stealing focus on first load.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    mainRef.current?.focus();
+  }, [location]);
 
   const signOut = async () => {
     try {
@@ -161,7 +176,9 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <main
         id="main-content"
-        className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full"
+        ref={mainRef}
+        tabIndex={-1}
+        className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full focus:outline-none"
       >
         {children}
       </main>

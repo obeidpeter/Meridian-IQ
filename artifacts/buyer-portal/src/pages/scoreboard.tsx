@@ -158,7 +158,7 @@ export function Scoreboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Rankings</CardTitle>
+          <CardTitle id="scoreboard-rankings-heading">Rankings</CardTitle>
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (
@@ -177,8 +177,13 @@ export function Scoreboard() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <Table>
+              <div
+                className="overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label="Supplier rankings table, scrollable"
+              >
+                <Table aria-labelledby="scoreboard-rankings-heading">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-12">#</TableHead>
