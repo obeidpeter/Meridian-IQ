@@ -151,6 +151,9 @@ export function AppButton({
   return (
     <Pressable
       testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       onPress={() => {
         if (isDisabled) return;
         if (Platform.OS !== "web") {
@@ -165,7 +168,10 @@ export function AppButton({
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          height: 50,
+          // minHeight (not height) so large Dynamic Type can grow the control
+          // instead of clipping the label.
+          minHeight: 50,
+          paddingVertical: 12,
           paddingHorizontal: 20,
           borderRadius: colors.radius,
           backgroundColor: tone.bg,
@@ -177,22 +183,23 @@ export function AppButton({
         },
       ]}
     >
+      {/* The label stays mounted while loading so the control keeps an
+          accessible name and any "Submitting…" text actually renders; the
+          spinner simply replaces the leading icon. */}
       {loading ? (
         <ActivityIndicator color={tone.fg} />
-      ) : (
-        <>
-          {icon ? <Feather name={icon} size={18} color={tone.fg} /> : null}
-          <Text
-            style={{
-              fontFamily: "Inter_600SemiBold",
-              fontSize: 15,
-              color: tone.fg,
-            }}
-          >
-            {label}
-          </Text>
-        </>
-      )}
+      ) : icon ? (
+        <Feather name={icon} size={18} color={tone.fg} />
+      ) : null}
+      <Text
+        style={{
+          fontFamily: "Inter_600SemiBold",
+          fontSize: 15,
+          color: tone.fg,
+        }}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -254,10 +261,16 @@ export function TextField({
         {label}
       </Text>
       <TextInput
+        // Give the field an accessible name (the visible label) and expose the
+        // error/hint as a hint, so screen readers announce more than the
+        // placeholder.
+        accessibilityLabel={label}
+        accessibilityHint={error ?? hint}
         placeholderTextColor={colors.mutedForeground}
         style={[
           {
-            height: 48,
+            minHeight: 48,
+            paddingVertical: 10,
             borderRadius: colors.radius,
             borderWidth: 1,
             borderColor: error ? colors.destructive : colors.input,
@@ -272,7 +285,10 @@ export function TextField({
         {...inputProps}
       />
       {error ? (
-        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.destructive }}>
+        <Text
+          accessibilityLiveRegion="polite"
+          style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.destructiveText }}
+        >
           {error}
         </Text>
       ) : hint ? (
@@ -280,6 +296,57 @@ export function TextField({
           {hint}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Banner — accessible inline success/error/info message
+// ---------------------------------------------------------------------------
+
+export type BannerTone = "success" | "error" | "info" | "warning";
+
+/**
+ * A polite live-region banner so async success/error feedback is announced to
+ * screen readers (the previous ad-hoc banner Cards were silent). Render it
+ * conditionally at the top of a form; setting its message triggers the
+ * announcement.
+ */
+export function Banner({
+  tone,
+  message,
+}: {
+  tone: BannerTone;
+  message: string;
+}) {
+  const colors = useColors();
+  const map: Record<BannerTone, { bg: string; fg: string; icon: keyof typeof Feather.glyphMap }> = {
+    success: { bg: colors.accent, fg: colors.accentForeground, icon: "check-circle" },
+    error: { bg: colors.card, fg: colors.destructiveText, icon: "alert-triangle" },
+    info: { bg: colors.secondary, fg: colors.secondaryForeground, icon: "info" },
+    warning: { bg: colors.card, fg: colors.warning, icon: "alert-circle" },
+  };
+  const t = map[tone];
+  return (
+    <View
+      accessible
+      accessibilityLiveRegion="polite"
+      accessibilityRole="alert"
+      style={{
+        flexDirection: "row",
+        gap: 10,
+        alignItems: "flex-start",
+        backgroundColor: t.bg,
+        borderWidth: tone === "error" || tone === "warning" ? StyleSheet.hairlineWidth : 0,
+        borderColor: t.fg,
+        borderRadius: colors.radius,
+        padding: 14,
+      }}
+    >
+      <Feather name={t.icon} size={18} color={t.fg} style={{ marginTop: 1 }} />
+      <Text style={{ flex: 1, fontFamily: "Inter_500Medium", fontSize: 14, lineHeight: 20, color: t.fg }}>
+        {message}
+      </Text>
     </View>
   );
 }

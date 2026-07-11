@@ -1,8 +1,28 @@
 import {
   MutationCache,
+  onlineManager,
   QueryCache,
   QueryClient,
 } from "@tanstack/react-query";
+import * as Network from "expo-network";
+import { Platform } from "react-native";
+
+// Wire React Query's connectivity to the real device network state (SEC/reliability).
+// Without this, React Query in React Native never observes connectivity: queries
+// aren't paused offline and `refetchOnReconnect` never fires. On web the default
+// (browser online/offline events) is already correct, so only override on native.
+if (Platform.OS !== "web") {
+  onlineManager.setEventListener((setOnline) => {
+    // Seed with the current state, then subscribe to changes.
+    Network.getNetworkStateAsync()
+      .then((state) => setOnline(state.isConnected ?? true))
+      .catch(() => setOnline(true));
+    const subscription = Network.addNetworkStateListener((state) => {
+      setOnline(state.isConnected ?? true);
+    });
+    return () => subscription.remove();
+  });
+}
 
 /**
  * A single shared QueryClient for the whole app, wired with global error
@@ -46,6 +66,9 @@ export const queryClient = new QueryClient({
       retry: 1,
       staleTime: 30_000,
       refetchOnWindowFocus: false,
+      // Now that onlineManager tracks real connectivity, refetch stale data when
+      // the device comes back online.
+      refetchOnReconnect: true,
     },
   },
 });

@@ -18,6 +18,8 @@
  * below are MeridianIQ's stated model — surfaced as an estimate, not advice.
  */
 
+import { formatCurrency } from "./format";
+
 export type TurnoverBand = "small" | "medium" | "large";
 
 /** Upper bound (inclusive, in Naira) of the "small" turnover band. */
@@ -105,9 +107,7 @@ export function calculatePenalty(input: PenaltyInput): PenaltyResult {
  * Hermes/JSC ICU builds.
  */
 export function formatNaira(amount: number): string {
-  const safe = Math.round(toNonNegative(amount));
-  const grouped = safe.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `\u20A6${grouped}`;
+  return formatCurrency(Math.round(toNonNegative(amount)));
 }
 
 export const BAND_LABELS: Record<TurnoverBand, string> = {
