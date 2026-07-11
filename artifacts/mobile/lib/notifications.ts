@@ -1,8 +1,29 @@
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Notifications from "expo-notifications";
+import type { Href } from "expo-router";
 import { Platform } from "react-native";
 
 import { PushDeviceInputPlatform } from "@workspace/api-client-react";
+
+// Push payloads are pointer-only (PL-04/SEC-12): the notification `data`
+// carries just a template key, never client details. Each key maps to the
+// screen where the alert's details live, so a tap lands the user in the
+// right place. Both current templates surface in the Deadlines tab — deadline
+// reminders directly, and B2C window alerts as `b2c_report` deadlines.
+const TEMPLATE_ROUTES: Record<string, Href> = {
+  deadline_reminder: "/(tabs)/deadlines",
+  b2c_window_alert: "/(tabs)/deadlines",
+};
+
+/**
+ * Resolve the in-app route for a push notification's template key.
+ * Returns null for unknown/missing templates so callers leave the user
+ * wherever the app would normally open.
+ */
+export function routeForTemplate(template: unknown): Href | null {
+  if (typeof template !== "string") return null;
+  return TEMPLATE_ROUTES[template] ?? null;
+}
 
 /** The device platform value the API expects for push registration. */
 export function devicePlatform(): PushDeviceInputPlatform {

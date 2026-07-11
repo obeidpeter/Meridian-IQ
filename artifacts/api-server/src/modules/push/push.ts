@@ -35,6 +35,10 @@ export interface PushNotification {
   to: string;
   title: string;
   body: string;
+  // Pointer-only routing hint (PL-04/SEC-12): the template key alone — never
+  // amounts, names, TINs or client details — so the app can open the right
+  // screen when the notification is tapped.
+  data: { template: PushTemplateKey };
 }
 
 // One ticket per notification, in the same order as the request (Expo's
@@ -203,7 +207,11 @@ export async function sendPushAlert(opts: {
   let tickets: PushTicket[] = [];
   try {
     const result = await transport(
-      devices.map((d) => ({ to: d.expoPushToken, ...copy })),
+      devices.map((d) => ({
+        to: d.expoPushToken,
+        ...copy,
+        data: { template: opts.templateKey },
+      })),
     );
     ok = result.ok;
     detail = result.detail ?? null;

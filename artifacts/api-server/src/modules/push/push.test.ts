@@ -98,21 +98,28 @@ test("DeviceNotRegistered tokens are pruned from tickets AND receipts; live toke
   // Ticket order mirrors the notifications array; key behaviour off the `to`
   // token so DB row ordering never matters.
   const receiptIds = new Map<string, string>();
-  setPushTransport(async (notifications) => ({
-    ok: true,
-    tickets: notifications.map((n) => {
-      if (n.to === deadTicketToken) {
-        return {
-          status: "error" as const,
-          message: "not registered",
-          error: "DeviceNotRegistered",
-        };
-      }
-      const id = `ticket-${randomUUID()}`;
-      receiptIds.set(id, n.to);
-      return { status: "ok" as const, id };
-    }),
-  }));
+  setPushTransport(async (notifications) => {
+    // Pointer-only routing hint: every notification must carry the template
+    // key in `data` (and nothing else) so the app can deep-link on tap.
+    for (const n of notifications) {
+      assert.deepEqual(n.data, { template: "deadline_reminder" });
+    }
+    return {
+      ok: true,
+      tickets: notifications.map((n) => {
+        if (n.to === deadTicketToken) {
+          return {
+            status: "error" as const,
+            message: "not registered",
+            error: "DeviceNotRegistered",
+          };
+        }
+        const id = `ticket-${randomUUID()}`;
+        receiptIds.set(id, n.to);
+        return { status: "ok" as const, id };
+      }),
+    };
+  });
   setPushReceiptTransport(async (ids) => {
     const receipts: Record<string, { status: string; error?: string }> = {};
     for (const id of ids) {
