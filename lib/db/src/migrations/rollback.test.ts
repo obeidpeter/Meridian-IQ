@@ -30,6 +30,17 @@ async function policyExists(pool: pg.Pool, table: string): Promise<boolean> {
   return res.rowCount! > 0;
 }
 
+// 0004 widens the mutable-status window of the immutability triggers from
+// draft-only to draft/validated/failed; detect which variant is installed by
+// inspecting the function body.
+async function lineTriggerAllowsFailed(pool: pg.Pool): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT prosrc FROM pg_proc WHERE proname = 'meridian_enforce_line_immutability' LIMIT 1`,
+  );
+  const src: string | undefined = res.rows[0]?.prosrc;
+  return src !== undefined && src.includes("'failed'");
+}
+
 test("migrations apply and roll back cleanly in reverse order", async () => {
   const pool = makePool();
   try {
@@ -58,14 +69,32 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
       await policyExists(pool, "push_devices"),
       "push RLS policy on push_devices should exist after apply",
     );
+    assert.ok(
+      await lineTriggerAllowsFailed(pool),
+      "line immutability trigger should allow failed-status edits after apply",
+    );
     const versions = await appliedVersions(pool);
     assert.ok(versions.includes(1), "version 1 should be tracked after apply");
     assert.ok(versions.includes(2), "version 2 should be tracked after apply");
     assert.ok(versions.includes(3), "version 3 should be tracked after apply");
+    assert.ok(versions.includes(4), "version 4 should be tracked after apply");
 
-    // Roll back newest first: 0003 (push guardrails)...
+    // Roll back newest first: 0004 (fix-retry mutability)...
+    const rolled4 = await rollbackLast(pool);
+    assert.equal(rolled4, 4, "first rollback should be version 4");
+    assert.equal(
+      await lineTriggerAllowsFailed(pool),
+      false,
+      "line immutability trigger should be draft-only after rolling back 0004",
+    );
+    assert.ok(
+      await policyExists(pool, "push_devices"),
+      "push RLS policy must survive the 0004 rollback",
+    );
+
+    // ...then 0003 (push guardrails)...
     const rolled3 = await rollbackLast(pool);
-    assert.equal(rolled3, 3, "first rollback should be version 3");
+    assert.equal(rolled3, 3, "second rollback should be version 3");
     assert.equal(
       await policyExists(pool, "push_devices"),
       false,
@@ -78,7 +107,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0002 (R2 guardrails)...
     const rolled2 = await rollbackLast(pool);
-    assert.equal(rolled2, 2, "second rollback should be version 2");
+    assert.equal(rolled2, 2, "third rollback should be version 2");
     assert.equal(
       await policyExists(pool, "bank_statements"),
       false,
@@ -91,7 +120,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0001 (base guardrails).
     const rolled1 = await rollbackLast(pool);
-    assert.equal(rolled1, 1, "third rollback should be version 1");
+    assert.equal(rolled1, 1, "fourth rollback should be version 1");
     assert.equal(
       await functionExists(pool, "meridian_block_mutations"),
       false,

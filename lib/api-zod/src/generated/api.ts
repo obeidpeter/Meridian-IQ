@@ -238,6 +238,39 @@ export const GetPartyResponse = zod.object({
 })
 
 
+export const UpdatePartyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const UpdatePartyBody = zod.object({
+  "legalName": zod.string().min(1).optional(),
+  "tin": zod.string().nullish(),
+  "cacNumber": zod.string().nullish(),
+  "street": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "countryCode": zod.string().optional()
+})
+
+export const UpdatePartyResponse = zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['client_business', 'buyer', 'firm', 'bank']),
+  "legalName": zod.string(),
+  "tin": zod.string().nullish(),
+  "tinValidated": zod.boolean(),
+  "cacNumber": zod.string().nullish(),
+  "street": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "countryCode": zod.string(),
+  "mergedIntoId": zod.string().nullish(),
+  "schemaVersion": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
 export const MergePartiesBody = zod.object({
   "survivorId": zod.string(),
   "duplicateId": zod.string()
@@ -503,6 +536,66 @@ export const GetInvoiceParams = zod.object({
 })
 
 export const GetInvoiceResponse = zod.object({
+  "invoice": zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "supplierPartyId": zod.string(),
+  "buyerPartyId": zod.string(),
+  "kind": zod.enum(['invoice', 'credit_note', 'correction']),
+  "category": zod.enum(['b2b', 'b2g', 'b2c']),
+  "relatedInvoiceId": zod.string().nullish(),
+  "invoiceNumber": zod.string(),
+  "currency": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
+  "subtotal": zod.string(),
+  "vatTotal": zod.string(),
+  "grandTotal": zod.string(),
+  "notes": zod.string().nullish(),
+  "legalHold": zod.boolean(),
+  "retentionUntil": zod.string().nullish(),
+  "schemaVersion": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "lines": zod.array(zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "lineNo": zod.number(),
+  "description": zod.string(),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string(),
+  "lineExtension": zod.string(),
+  "vatAmount": zod.string()
+}))
+})
+
+
+export const UpdateInvoiceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+
+
+export const UpdateInvoiceBody = zod.object({
+  "invoiceNumber": zod.string().min(1).optional(),
+  "issueDate": zod.string().optional(),
+  "dueDate": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "lines": zod.array(zod.object({
+  "description": zod.string().min(1),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string()
+})).min(1).optional()
+})
+
+export const UpdateInvoiceResponse = zod.object({
   "invoice": zod.object({
   "id": zod.string(),
   "firmId": zod.string(),

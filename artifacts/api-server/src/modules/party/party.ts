@@ -83,6 +83,83 @@ export async function createParty(
   return row;
 }
 
+export interface UpdatePartyInput {
+  legalName?: string;
+  tin?: string | null;
+  cacNumber?: string | null;
+  street?: string | null;
+  city?: string | null;
+  countryCode?: string;
+}
+
+// Correct a party's registration data (fix-and-retry flow: a rejected TIN or
+// missing address is fixed here, then the failed invoice is re-submitted).
+// Merged duplicates are frozen — the survivor is the editable record.
+export async function updateParty(
+  id: string,
+  patch: UpdatePartyInput,
+  actorId?: string,
+): Promise<Party> {
+  const existing = await getParty(id);
+  if (!existing) throw new DomainError("NOT_FOUND", "Party not found", 404);
+  if (existing.mergedIntoId) {
+    throw new DomainError(
+      "PARTY_MERGED",
+      "This party was merged; edit the surviving party instead",
+      409,
+    );
+  }
+  const values: Partial<typeof partiesTable.$inferInsert> = {};
+  if (patch.legalName !== undefined) values.legalName = patch.legalName;
+  if (patch.tin !== undefined) {
+    if (patch.tin === null || patch.tin.trim() === "") {
+      values.tin = null;
+      values.tinValidated = false;
+    } else {
+      const check = validateTin(patch.tin);
+      if (!check.valid) {
+        throw new DomainError("INVALID_TIN", "TIN failed validation", 400);
+      }
+      values.tin = check.normalized;
+      values.tinValidated = true;
+    }
+  }
+  if (patch.cacNumber !== undefined) {
+    if (patch.cacNumber === null || patch.cacNumber.trim() === "") {
+      values.cacNumber = null;
+    } else {
+      const check = validateCac(patch.cacNumber);
+      if (!check.valid) {
+        throw new DomainError("INVALID_CAC", "CAC number failed validation", 400);
+      }
+      values.cacNumber = check.normalized;
+    }
+  }
+  if (patch.street !== undefined) values.street = patch.street;
+  if (patch.city !== undefined) values.city = patch.city;
+  if (patch.countryCode !== undefined) values.countryCode = patch.countryCode;
+  if (Object.keys(values).length === 0) return existing;
+
+  const [row] = await getDb()
+    .update(partiesTable)
+    .set(values)
+    .where(eq(partiesTable.id, id))
+    .returning();
+  await appendAudit({
+    actorId,
+    action: "party.update",
+    entityType: "party",
+    entityId: id,
+    before: {
+      legalName: existing.legalName,
+      tin: existing.tin,
+      cacNumber: existing.cacNumber,
+    },
+    after: { legalName: row.legalName, tin: row.tin, cacNumber: row.cacNumber },
+  });
+  return row;
+}
+
 export async function getParty(id: string): Promise<Party | null> {
   const [row] = await getDb()
     .select()

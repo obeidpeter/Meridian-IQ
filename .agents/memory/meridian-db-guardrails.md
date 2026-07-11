@@ -12,6 +12,15 @@ row triggers (e.g. `meridian_enforce_invoice_immutability`,
 `UPDATE`/`DELETE` — even for a freshly-created draft, which immediately falls under
 retention/legal hold. You cannot dedupe or clean rows after the fact.
 
+**Trigger mutability must stay in lockstep with the app lifecycle.** The invoice
+content/line triggers allow edits only while status is in draft/validated/failed —
+the same set as the lifecycle's `assertMutableContent`. If you widen or narrow
+mutability in one place, change the other via a new boot migration (CREATE OR
+REPLACE the trigger functions), or app-level 200s turn into DB 500s.
+**Why:** the original guardrail was draft-only while the app considered
+validated/failed mutable; the fix-and-retry flow hit the mismatch as a 500 on
+line replacement.
+
 **How to apply:** To reset demo data, use `TRUNCATE <table> CASCADE` — TRUNCATE
 bypasses row-level triggers (unlike DELETE). `TRUNCATE invoices CASCADE` clears all
 lifecycle children (lines, stamps, attempts, escalations, etc.). Then restart the

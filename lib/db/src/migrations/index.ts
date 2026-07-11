@@ -2,6 +2,7 @@ import type pg from "pg";
 import { migration0001 } from "./0001_guardrails.ts";
 import { migration0002 } from "./0002_r2_guardrails.ts";
 import { migration0003 } from "./0003_push_guardrails.ts";
+import { migration0004 } from "./0004_fix_retry_mutability.ts";
 
 export interface Migration {
   version: number;
@@ -17,6 +18,7 @@ export const migrations: Migration[] = [
   migration0001,
   migration0002,
   migration0003,
+  migration0004,
 ];
 
 type Executor = Pick<pg.Pool, "query">;

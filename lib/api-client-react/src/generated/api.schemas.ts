@@ -175,6 +175,20 @@ export interface PartyInput {
   countryCode?: string;
 }
 
+export interface PartyUpdateInput {
+  /** @minLength 1 */
+  legalName?: string;
+  /** @nullable */
+  tin?: string | null;
+  /** @nullable */
+  cacNumber?: string | null;
+  /** @nullable */
+  street?: string | null;
+  /** @nullable */
+  city?: string | null;
+  countryCode?: string;
+}
+
 export interface PartyMergeInput {
   survivorId: string;
   duplicateId: string;
@@ -429,6 +443,18 @@ export interface InvoiceInput {
   relatedInvoiceId?: string;
   notes?: string;
   lines: InvoiceLineInput[];
+}
+
+export interface InvoiceUpdateInput {
+  /** @minLength 1 */
+  invoiceNumber?: string;
+  issueDate?: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @minItems 1 */
+  lines?: InvoiceLineInput[];
 }
 
 export interface CanonicalParty {

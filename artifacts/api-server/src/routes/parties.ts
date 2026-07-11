@@ -5,6 +5,9 @@ import {
   CreatePartyResponse,
   GetPartyParams,
   GetPartyResponse,
+  UpdatePartyParams,
+  UpdatePartyBody,
+  UpdatePartyResponse,
   MergePartiesBody,
   SplitPartyParams,
   ValidateTinBody,
@@ -16,7 +19,8 @@ import { eq, inArray } from "drizzle-orm";
 import { getDb, partiesTable, engagementsTable } from "@workspace/db";
 import {
   assertCan,
-  assertPartyAccess,
+  assertPartyAccessOrInvoiceRef,
+  can,
   clientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
@@ -25,6 +29,7 @@ import {
   getParty,
   mergeParties,
   splitParty,
+  updateParty,
   validateTin,
   validateCac,
 } from "../modules/party/party";
@@ -119,6 +124,37 @@ router.post("/parties/validate-cac", async (req, res): Promise<void> => {
   res.json(ValidateCacResponse.parse(validateCac(parsed.data.cac)));
 });
 
+// Correct a party's registration data (fix-and-retry: rejected TIN, missing
+// address). Access: party.write (firm staff/admin, over engaged parties via
+// assertPartyAccess) — plus the one deliberate self-service carve-out: a
+// client_user may fix its OWN client party record (assertPartyAccess already
+// confines client_users to exactly that party), since a wrong supplier TIN is
+// the client's own data and the fix should not require firm staff.
+router.patch("/parties/:id", async (req, res): Promise<void> => {
+  const params = UpdatePartyParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const selfService =
+    req.principal.role === "client_user" &&
+    req.principal.clientPartyId === params.data.id;
+  if (!selfService && !can(req.principal, "party.write")) {
+    assertCan(req.principal, "party.write"); // throws the standard 403
+  }
+  // Engaged parties pass; firm staff additionally get the invoice-reference
+  // fallback so they can fix a buyer whose bad TIN failed one of the firm's
+  // invoices. client_users stay confined to their own party (SEC-03).
+  await assertPartyAccessOrInvoiceRef(req.principal, params.data.id);
+  const body = UpdatePartyBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const party = await updateParty(params.data.id, body.data, req.principal.userId);
+  res.json(UpdatePartyResponse.parse(party));
+});
+
 router.get("/parties/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.read");
   const params = GetPartyParams.safeParse(req.params);
@@ -126,7 +162,9 @@ router.get("/parties/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  await assertPartyAccess(req.principal, params.data.id);
+  // Same access model as PATCH: engagement OR the party appears on one of the
+  // firm's invoices — firm staff must be able to view a buyer they may edit.
+  await assertPartyAccessOrInvoiceRef(req.principal, params.data.id);
   const party = await getParty(params.data.id);
   if (!party) {
     res.status(404).json({ error: "Party not found" });

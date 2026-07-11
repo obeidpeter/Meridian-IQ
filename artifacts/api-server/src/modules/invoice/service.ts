@@ -12,7 +12,11 @@ import {
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
 import { isPurposePermitted } from "../consent/consent";
-import { applyTransition, recordTransition } from "./lifecycle";
+import {
+  applyTransition,
+  assertMutableContent,
+  recordTransition,
+} from "./lifecycle";
 import {
   validateCanonical,
   type CanonicalInvoice,
@@ -284,6 +288,117 @@ export async function bulkCreateDrafts(
     after: { count: out.length },
   });
   return out;
+}
+
+export interface UpdateInvoiceInput {
+  invoiceNumber?: string;
+  issueDate?: string;
+  dueDate?: string | null;
+  notes?: string | null;
+  lines?: LineInput[];
+}
+
+// Update the content of an invoice that is still mutable per the lifecycle
+// (draft, validated, failed — assertMutableContent is the authority). Used by
+// the fix-and-retry flow: a failed invoice's data is corrected in place and the
+// invoice re-submitted (failed → submitted). A validated invoice reverts to
+// draft on edit so the stale validation cannot be submitted as-is.
+export async function updateInvoiceContent(
+  invoiceId: string,
+  patch: UpdateInvoiceInput,
+  actorId?: string,
+): Promise<{ invoice: Invoice; lines: InvoiceLine[] }> {
+  const bundle = await getInvoiceWithLines(invoiceId);
+  if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
+  assertMutableContent(bundle.invoice);
+  if (patch.lines && patch.lines.length === 0) {
+    throw new DomainError("NO_LINES", "An invoice needs at least one line", 400);
+  }
+
+  const invoicePatch: Partial<typeof invoicesTable.$inferInsert> = {};
+  if (patch.invoiceNumber !== undefined) {
+    invoicePatch.invoiceNumber = patch.invoiceNumber;
+  }
+  if (patch.issueDate !== undefined) invoicePatch.issueDate = patch.issueDate;
+  if (patch.dueDate !== undefined) invoicePatch.dueDate = patch.dueDate;
+  if (patch.notes !== undefined) invoicePatch.notes = patch.notes;
+
+  let newLines = bundle.lines;
+  if (patch.lines) {
+    let subtotal = 0;
+    let vatTotal = 0;
+    const computed = patch.lines.map((l, idx) => {
+      const fin = computeLineFinancials(l);
+      subtotal += Number(fin.lineExtension);
+      vatTotal += Number(fin.vatAmount);
+      return { ...l, ...fin, lineNo: idx + 1 };
+    });
+    invoicePatch.subtotal = money(subtotal);
+    invoicePatch.vatTotal = money(vatTotal);
+    invoicePatch.grandTotal = money(subtotal + vatTotal);
+    await getDb()
+      .delete(invoiceLinesTable)
+      .where(eq(invoiceLinesTable.invoiceId, invoiceId));
+    newLines = await getDb()
+      .insert(invoiceLinesTable)
+      .values(
+        computed.map((c) => ({
+          invoiceId,
+          lineNo: c.lineNo,
+          description: c.description,
+          quantity: c.quantity,
+          unitPrice: c.unitPrice,
+          vatRate: c.vatRate,
+          lineExtension: c.lineExtension,
+          vatAmount: c.vatAmount,
+        })),
+      )
+      .returning();
+  }
+
+  let invoice = bundle.invoice;
+  if (Object.keys(invoicePatch).length > 0) {
+    const [updated] = await getDb()
+      .update(invoicesTable)
+      .set(invoicePatch)
+      .where(eq(invoicesTable.id, invoiceId))
+      .returning();
+    invoice = updated;
+  }
+
+  // A validated invoice's validation is stale once content changes: revert to
+  // draft (compare-and-set) so it must be re-validated before submission.
+  if (bundle.invoice.status === "validated") {
+    invoice = await applyTransition(invoiceId, "validated", "draft");
+    await recordTransition({
+      invoiceId,
+      firmId: bundle.invoice.firmId,
+      fromStatus: "validated",
+      toStatus: "draft",
+      actorId,
+      reason: "content edited",
+    });
+  }
+
+  await appendAudit({
+    actorId,
+    firmId: bundle.invoice.firmId,
+    action: "invoice.update",
+    entityType: "invoice",
+    entityId: invoiceId,
+    before: {
+      invoiceNumber: bundle.invoice.invoiceNumber,
+      grandTotal: bundle.invoice.grandTotal,
+      status: bundle.invoice.status,
+    },
+    after: {
+      invoiceNumber: invoice.invoiceNumber,
+      grandTotal: invoice.grandTotal,
+      status: invoice.status,
+      linesReplaced: Boolean(patch.lines),
+    },
+  });
+  return { invoice, lines: newLines };
 }
 
 export async function getInvoiceWithLines(

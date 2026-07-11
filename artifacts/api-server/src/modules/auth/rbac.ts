@@ -1,5 +1,10 @@
-import { and, eq } from "drizzle-orm";
-import { getDb, engagementsTable, type Role } from "@workspace/db";
+import { and, eq, or } from "drizzle-orm";
+import {
+  getDb,
+  engagementsTable,
+  invoicesTable,
+  type Role,
+} from "@workspace/db";
 import { DomainError } from "../errors";
 
 // Principal resolved from the request (see auth middleware). firmId is present
@@ -346,5 +351,45 @@ export async function assertPartyAccess(
     .limit(1);
   if (!engagement) {
     throw new DomainError("CROSS_TENANT", "Party is not in your tenant", 403);
+  }
+}
+
+// Like assertPartyAccess, but with a fallback for firm staff/admin: buyer
+// (and occasionally supplier) parties are usually not engagement subjects, yet
+// firm-scoped staff must still be able to read/correct a party that appears on
+// one of the firm's invoices — e.g. fixing a buyer TIN that failed a
+// transmission. client_users get NO fallback: they stay confined to their own
+// client party (SEC-03).
+export async function assertPartyAccessOrInvoiceRef(
+  principal: Principal,
+  partyId: string,
+): Promise<void> {
+  try {
+    await assertPartyAccess(principal, partyId);
+    return;
+  } catch (err) {
+    const tenant = tenantFirmId(principal);
+    if (
+      principal.role === "client_user" ||
+      tenant === null ||
+      !(err instanceof DomainError) ||
+      err.code !== "CROSS_TENANT"
+    ) {
+      throw err;
+    }
+    const [ref] = await getDb()
+      .select({ id: invoicesTable.id })
+      .from(invoicesTable)
+      .where(
+        and(
+          eq(invoicesTable.firmId, tenant),
+          or(
+            eq(invoicesTable.buyerPartyId, partyId),
+            eq(invoicesTable.supplierPartyId, partyId),
+          ),
+        ),
+      )
+      .limit(1);
+    if (!ref) throw err;
   }
 }

@@ -88,6 +88,7 @@ import type {
   InvoiceImportInput,
   InvoiceImportResult,
   InvoiceInput,
+  InvoiceUpdateInput,
   ListB2cReportsParams,
   ListBankStatementsParams,
   ListBuyerInvoicesParams,
@@ -112,6 +113,7 @@ import type {
   Party,
   PartyInput,
   PartyMergeInput,
+  PartyUpdateInput,
   PaymentFlagInput,
   PortfolioSummary,
   PriceReview,
@@ -1082,6 +1084,71 @@ export function useGetParty<TData = Awaited<ReturnType<typeof getParty>>, TError
 
 
 
+export const getUpdatePartyUrl = (id: string,) => {
+
+
+
+
+  return `/api/parties/${id}`
+}
+
+export const updateParty = async (id: string,
+    partyUpdateInput: PartyUpdateInput, options?: RequestInit): Promise<Party> => {
+
+  return customFetch<Party>(getUpdatePartyUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(partyUpdateInput)
+  }
+);}
+
+
+
+
+export const getUpdatePartyMutationOptions = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateParty>>, TError,{id: string;data: BodyType<PartyUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateParty>>, TError,{id: string;data: BodyType<PartyUpdateInput>}, TContext> => {
+
+const mutationKey = ['updateParty'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateParty>>, {id: string;data: BodyType<PartyUpdateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateParty(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePartyMutationResult = NonNullable<Awaited<ReturnType<typeof updateParty>>>
+    export type UpdatePartyMutationBody = BodyType<PartyUpdateInput>
+    export type UpdatePartyMutationError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse>
+
+    export const useUpdateParty = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateParty>>, TError,{id: string;data: BodyType<PartyUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateParty>>,
+        TError,
+        {id: string;data: BodyType<PartyUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdatePartyMutationOptions(options));
+    }
+
 export const getMergePartiesUrl = () => {
 
 
@@ -2033,6 +2100,71 @@ export function useGetInvoice<TData = Awaited<ReturnType<typeof getInvoice>>, TE
 
 
 
+
+export const getUpdateInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}`
+}
+
+export const updateInvoice = async (id: string,
+    invoiceUpdateInput: InvoiceUpdateInput, options?: RequestInit): Promise<InvoiceDetail> => {
+
+  return customFetch<InvoiceDetail>(getUpdateInvoiceUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invoiceUpdateInput)
+  }
+);}
+
+
+
+
+export const getUpdateInvoiceMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateInvoice>>, TError,{id: string;data: BodyType<InvoiceUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateInvoice>>, TError,{id: string;data: BodyType<InvoiceUpdateInput>}, TContext> => {
+
+const mutationKey = ['updateInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateInvoice>>, {id: string;data: BodyType<InvoiceUpdateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateInvoice(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof updateInvoice>>>
+    export type UpdateInvoiceMutationBody = BodyType<InvoiceUpdateInput>
+    export type UpdateInvoiceMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    export const useUpdateInvoice = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateInvoice>>, TError,{id: string;data: BodyType<InvoiceUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateInvoice>>,
+        TError,
+        {id: string;data: BodyType<InvoiceUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateInvoiceMutationOptions(options));
+    }
 
 export const getValidateInvoiceUrl = (id: string,) => {
 

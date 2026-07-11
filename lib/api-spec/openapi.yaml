@@ -232,6 +232,32 @@ paths:
                 $ref: "#/components/schemas/Party"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateParty
+      tags: [parties]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartyUpdateInput"
+      responses:
+        "200":
+          description: Updated party
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Party"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /parties/merge:
     post:
       operationId: mergeParties
@@ -460,6 +486,30 @@ paths:
                 $ref: "#/components/schemas/InvoiceDetail"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateInvoice
+      tags: [invoices]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceUpdateInput"
+      responses:
+        "200":
+          description: Updated invoice with lines
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /invoices/{id}/validate:
     post:
       operationId: validateInvoice
@@ -2288,6 +2338,22 @@ components:
           type: string
         countryCode:
           type: string
+    PartyUpdateInput:
+      type: object
+      properties:
+        legalName:
+          type: string
+          minLength: 1
+        tin:
+          type: ["string", "null"]
+        cacNumber:
+          type: ["string", "null"]
+        street:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        countryCode:
+          type: string
     PartyMergeInput:
       type: object
       required: [survivorId, duplicateId]
@@ -2548,6 +2614,24 @@ components:
           type: string
         lines:
           type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLineInput"
+
+    InvoiceUpdateInput:
+      type: object
+      properties:
+        invoiceNumber:
+          type: string
+          minLength: 1
+        issueDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        lines:
+          type: array
+          minItems: 1
           items:
             $ref: "#/components/schemas/InvoiceLineInput"
 

@@ -14,7 +14,7 @@ import type {
   SubmissionAttempt,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   Platform,
@@ -79,6 +79,7 @@ export default function InvoiceDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const detailQuery = useGetInvoice(id, {
     query: { enabled: !!id, queryKey: getGetInvoiceQueryKey(id) },
@@ -168,6 +169,13 @@ export default function InvoiceDetailScreen() {
   const canSubmit =
     invoice?.status === "draft" || invoice?.status === "validated";
   const retriableKnown = catalogue ? catalogue.retriable : true;
+
+  const goToFix = useCallback(() => {
+    router.push({
+      pathname: "/invoices/edit/[id]",
+      params: { id, ...(errorCode ? { code: errorCode } : {}) },
+    });
+  }, [router, id, errorCode]);
 
   return (
     <>
@@ -353,25 +361,56 @@ export default function InvoiceDetailScreen() {
                       : ""}
                   </AppText>
                 ) : null}
-                <View style={{ marginTop: 14 }}>
-                  <AppButton
-                    label={busy ? "Retrying…" : "Retry transmission"}
-                    icon="refresh-cw"
-                    onPress={handleSubmit}
-                    loading={busy}
-                    disabled={busy}
-                    testID="button-retry-transmission"
-                  />
-                  {!retriableKnown ? (
-                    <AppText
-                      variant="caption"
-                      color={colors.mutedForeground}
-                      style={{ marginTop: 8, textAlign: "center" }}
-                    >
-                      This error usually needs the invoice fixed first — a
-                      plain retry may fail again.
-                    </AppText>
-                  ) : null}
+                <View style={{ marginTop: 14, gap: 10 }}>
+                  {/* Non-retriable errors need the data fixed first, so the
+                      fix flow leads and a blind retry is demoted. */}
+                  {retriableKnown ? (
+                    <>
+                      <AppButton
+                        label={busy ? "Retrying…" : "Retry transmission"}
+                        icon="refresh-cw"
+                        onPress={handleSubmit}
+                        loading={busy}
+                        disabled={busy}
+                        testID="button-retry-transmission"
+                      />
+                      <AppButton
+                        label="Fix invoice details"
+                        icon="edit-3"
+                        variant="secondary"
+                        onPress={goToFix}
+                        disabled={busy}
+                        testID="button-fix-invoice"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <AppButton
+                        label="Fix invoice details"
+                        icon="edit-3"
+                        onPress={goToFix}
+                        disabled={busy}
+                        testID="button-fix-invoice"
+                      />
+                      <AppButton
+                        label={busy ? "Retrying…" : "Retry anyway"}
+                        icon="refresh-cw"
+                        variant="secondary"
+                        onPress={handleSubmit}
+                        loading={busy}
+                        disabled={busy}
+                        testID="button-retry-transmission"
+                      />
+                      <AppText
+                        variant="caption"
+                        color={colors.mutedForeground}
+                        style={{ textAlign: "center" }}
+                      >
+                        This error needs the invoice fixed first — a plain
+                        retry will fail again.
+                      </AppText>
+                    </>
+                  )}
                 </View>
               </Card>
             ) : null}

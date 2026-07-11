@@ -17,6 +17,9 @@ import {
   CreateInvoiceResponse,
   GetInvoiceParams,
   GetInvoiceResponse,
+  UpdateInvoiceParams,
+  UpdateInvoiceBody,
+  UpdateInvoiceResponse,
   ValidateInvoiceParams,
   ValidateInvoiceResponse,
   SubmitInvoiceParams,
@@ -60,6 +63,7 @@ import {
   buildCanonical,
   validateInvoice,
   submitInvoice,
+  updateInvoiceContent,
 } from "../modules/invoice/service";
 import {
   canTransition,
@@ -135,6 +139,31 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   }
   const bundle = await loadForTenant(req, params.data.id);
   res.json(GetInvoiceResponse.parse(bundle));
+});
+
+// Fix-and-retry: correct the content of an invoice that is still mutable per
+// the lifecycle (draft, validated, failed). The service is the authority —
+// assertMutableContent 409s for submitted/stamped/terminal invoices, and a
+// validated invoice reverts to draft so stale validation cannot be submitted.
+router.patch("/invoices/:id", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.write");
+  const params = UpdateInvoiceParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const body = UpdateInvoiceBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  await loadForTenant(req, params.data.id);
+  const bundle = await updateInvoiceContent(
+    params.data.id,
+    body.data,
+    req.principal.userId,
+  );
+  res.json(UpdateInvoiceResponse.parse(bundle));
 });
 
 router.post("/invoices/:id/validate", async (req, res): Promise<void> => {
