@@ -16,7 +16,9 @@
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "package": "com.meridianiq.mobile"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
