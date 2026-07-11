@@ -17,8 +17,8 @@ import { appendAudit } from "../modules/audit/audit";
 // re-registering moves it to the current user, so a shared device always
 // notifies whoever signed in last.
 //
-// These routes are part of the SME route family: every handler enforces the
-// same capability gate ("invoice.read" — the baseline SME compliance-monitoring
+// These routes live under the SME namespace (/sme/push/*): every handler
+// enforces the same capability gate ("invoice.read" — the baseline SME compliance-monitoring
 // capability) so roles outside the SME surface (bank_user, buyer_user) cannot
 // touch the device registry, and rows are user-owned (every query is scoped to
 // req.principal.userId). Tenant isolation is additionally enforced at the data
@@ -31,7 +31,7 @@ const router: IRouter = Router();
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-router.get("/push/devices", async (req, res): Promise<void> => {
+router.get("/sme/push/devices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   if (!UUID_RE.test(req.principal.userId)) {
     res.json(ListPushDevicesResponse.parse([]));
@@ -45,7 +45,7 @@ router.get("/push/devices", async (req, res): Promise<void> => {
   res.json(ListPushDevicesResponse.parse(rows));
 });
 
-router.post("/push/devices", async (req, res): Promise<void> => {
+router.post("/sme/push/devices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const parsed = RegisterPushDeviceBody.safeParse(req.body);
   if (!parsed.success) {
@@ -91,7 +91,7 @@ router.post("/push/devices", async (req, res): Promise<void> => {
 
 // Idempotent removal (sign-out or notifications toggled off). Only the owning
 // user can remove a token; unknown tokens still return 204.
-router.post("/push/devices/unregister", async (req, res): Promise<void> => {
+router.post("/sme/push/devices/unregister", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const parsed = UnregisterPushDeviceBody.safeParse(req.body);
   if (!parsed.success) {

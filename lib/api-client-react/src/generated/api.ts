@@ -4881,7 +4881,7 @@ export const getListPushDevicesUrl = () => {
 
 
 
-  return `/api/push/devices`
+  return `/api/sme/push/devices`
 }
 
 /**
@@ -4904,7 +4904,7 @@ export const listPushDevices = async ( options?: RequestInit): Promise<PushDevic
 
 export const getListPushDevicesQueryKey = () => {
     return [
-    `/api/push/devices`
+    `/api/sme/push/devices`
     ] as const;
     }
 
@@ -4958,7 +4958,7 @@ export const getRegisterPushDeviceUrl = () => {
 
 
 
-  return `/api/push/devices`
+  return `/api/sme/push/devices`
 }
 
 /**
@@ -5028,7 +5028,7 @@ export const getUnregisterPushDeviceUrl = () => {
 
 
 
-  return `/api/push/devices/unregister`
+  return `/api/sme/push/devices/unregister`
 }
 
 /**

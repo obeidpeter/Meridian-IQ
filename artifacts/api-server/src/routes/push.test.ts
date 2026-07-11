@@ -66,10 +66,10 @@ for (const role of DENIED_ROLES) {
     const { base, close } = await listen(appFor(principalFor(role)));
     closers.push(close);
 
-    const listRes = await fetch(`${base}/push/devices`);
+    const listRes = await fetch(`${base}/sme/push/devices`);
     assert.equal(listRes.status, 403, "list must be capability-gated");
 
-    const registerRes = await fetch(`${base}/push/devices`, {
+    const registerRes = await fetch(`${base}/sme/push/devices`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -79,7 +79,7 @@ for (const role of DENIED_ROLES) {
     });
     assert.equal(registerRes.status, 403, "register must be capability-gated");
 
-    const unregisterRes = await fetch(`${base}/push/devices/unregister`, {
+    const unregisterRes = await fetch(`${base}/sme/push/devices/unregister`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ expoPushToken: "ExponentPushToken[test]" }),
@@ -105,13 +105,13 @@ for (const role of ALLOWED_ROLES) {
 
     // Non-UUID dev userId: list short-circuits to [] without touching the DB —
     // a 200 here proves the capability gate passed for the SME role.
-    const listRes = await fetch(`${base}/push/devices`);
+    const listRes = await fetch(`${base}/sme/push/devices`);
     assert.equal(listRes.status, 200);
     assert.deepEqual(await listRes.json(), []);
 
     // Register rejects the non-UUID principal with 400 (not 403): past the
     // capability gate, failing only the real-session ownership guard.
-    const registerRes = await fetch(`${base}/push/devices`, {
+    const registerRes = await fetch(`${base}/sme/push/devices`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -122,7 +122,7 @@ for (const role of ALLOWED_ROLES) {
     assert.equal(registerRes.status, 400);
 
     // Unregister is idempotent and returns 204 without a DB row to delete.
-    const unregisterRes = await fetch(`${base}/push/devices/unregister`, {
+    const unregisterRes = await fetch(`${base}/sme/push/devices/unregister`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ expoPushToken: "ExponentPushToken[test]" }),
