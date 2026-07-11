@@ -18,30 +18,14 @@ import {
   type CanonicalInvoice,
   type FieldError,
 } from "./canonical";
+import {
+  assertPlausibleVatRates,
+  computeLineFinancials,
+  money,
+  type LineInput,
+} from "./lines";
 
-export interface LineInput {
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  vatRate: string; // fraction, e.g. "0.075"
-}
-
-function money(n: number): string {
-  return n.toFixed(2);
-}
-
-// Compute line + document financials from raw inputs.
-export function computeLineFinancials(line: LineInput) {
-  const qty = Number(line.quantity);
-  const price = Number(line.unitPrice);
-  const rate = Number(line.vatRate);
-  const lineExtension = qty * price;
-  const vatAmount = lineExtension * rate;
-  return {
-    lineExtension: money(lineExtension),
-    vatAmount: money(vatAmount),
-  };
-}
+export { computeLineFinancials, type LineInput };
 
 export interface CreateInvoiceInput {
   firmId: string;
@@ -70,6 +54,9 @@ export async function createDraft(
   if (input.lines.length === 0) {
     throw new DomainError("NO_LINES", "An invoice needs at least one line", 400);
   }
+  // Reject percent-style VAT rates before any row is written: a "7.5" that
+  // should have been "0.075" would otherwise create a 100x-inflated draft.
+  assertPlausibleVatRates(input.lines);
   // Corrections, cancellations and credit notes are first-class lifecycle
   // events (CORE-09): an adjustment must name a real, same-tenant, stamped
   // original; a plain invoice must not carry a relatedInvoiceId.
@@ -222,6 +209,10 @@ export async function bulkCreateDrafts(
 ): Promise<{ rowNumber: number; invoiceId: string; invoiceNumber: string }[]> {
   const out: { rowNumber: number; invoiceId: string; invoiceNumber: string }[] =
     [];
+  // Same guard as createDraft: percent-style VAT rates fail loudly instead of
+  // producing 100x-inflated drafts. Import routes pre-validate per-row, so a
+  // failure here indicates a caller bug, not user data.
+  assertPlausibleVatRates(rows.map((r) => r.line));
   for (let i = 0; i < rows.length; i += BULK_CHUNK) {
     const chunk = rows.slice(i, i + BULK_CHUNK);
     const computed = chunk.map((r) => {
