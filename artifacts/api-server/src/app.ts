@@ -238,7 +238,39 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// CORS: the mobile companion's web preview is served from the Expo dev domain,
+// a different origin than this API, and the shared fetch client always sends
+// credentials. A credentialed cross-origin request is rejected by browsers
+// unless the exact origin is echoed back with Allow-Credentials — the default
+// wildcard cors() silently blocks it after a "successful" preflight. Only
+// known first-party origins are allowed so arbitrary sites cannot make
+// credentialed (cookie + custom-header) calls; CSRF still additionally
+// requires the x-csrf header (SEC-02).
+const corsAllowedOrigins = new Set(
+  [
+    process.env.REPLIT_DEV_DOMAIN,
+    process.env.REPLIT_EXPO_DEV_DOMAIN,
+    ...(process.env.REPLIT_DOMAINS?.split(",") ?? []),
+  ]
+    .filter((domain): domain is string => Boolean(domain))
+    .map((domain) => `https://${domain.trim()}`),
+);
+const LOCALHOST_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Same-origin and non-browser requests (curl, server-to-server) carry
+      // no Origin header and need no CORS grant.
+      const allowed =
+        !origin ||
+        corsAllowedOrigins.has(origin) ||
+        (process.env.NODE_ENV !== "production" &&
+          LOCALHOST_ORIGIN_RE.test(origin));
+      callback(null, allowed);
+    },
+    credentials: true,
+  }),
+);
 // 5,000-row imports (NFR-03) and full bank-statement uploads (INT-05) arrive
 // as JSON bodies well beyond the 100kb express default. Only JSON is parsed:
 // urlencoded parsing is deliberately NOT enabled so a cross-site HTML <form>
