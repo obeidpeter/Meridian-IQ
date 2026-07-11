@@ -64,9 +64,11 @@ const SCHEMA_VERSIONS: { version: number; description: string }[] = [
 // (seedDemoPasswords). That must NEVER run on a real production deployment
 // (SEC-01): a fresh boot would otherwise ship a working operator login anyone
 // who reads this repo could use. It is therefore opt-in via SEED_DEMO and
-// defaults OFF in production. Non-production defaults ON for local/CI use. The
-// Replit demo deployment sets SEED_DEMO=true in its run env so its one-click
-// demo accounts keep working. Essential platform bootstrap (feature flags,
+// defaults OFF in production. Non-production defaults ON for local/CI use. Note
+// that in production the boot seeder is never invoked at all (bootstrap is
+// owned by Replit's Publish flow — see src/index.ts); the public demo
+// deployment's accounts come from the Publish dev->prod data copy, so this gate
+// is defense-in-depth there. Essential platform bootstrap (feature flags,
 // schema versions, error catalogue, CPD course content) always seeds.
 const SEED_DEMO = process.env.SEED_DEMO
   ? process.env.SEED_DEMO === "true"

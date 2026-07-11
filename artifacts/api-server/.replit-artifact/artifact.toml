@@ -27,10 +27,11 @@ args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
 [services.production.run.env]
 PORT = "8080"
 NODE_ENV = "production"
-# This is the public demo deployment: opt in to seeding the one-click demo
-# accounts. A real production deployment must NOT set this (or set it to
-# "false") so no known-password accounts are ever created (SEC-01).
-SEED_DEMO = "true"
+# The boot-time seeder never runs in production (schema and seed data are owned
+# by Replit's Publish flow — see src/index.ts), so the public demo deployment's
+# one-click demo accounts come from the Publish "overwrite data" dev->prod copy,
+# NOT from a startup seed. Per SEC-01, do not set SEED_DEMO here: it is inert in
+# production, and a real deployment must never create known-password accounts.
 
 [services.production.health.startup]
 path = "/api/healthz"
