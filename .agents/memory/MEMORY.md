@@ -17,3 +17,4 @@
 - [Shell UUID capture](shell-uuid-capture.md) — capturing generated UUIDs in shell for scripted checks.
 - [Deploy hang diagnostic](deploy-hang-diagnostic.md) — Publish "port never opened" + silent stdout = startup HANG on a blocking DB/net op before listen(); open the port first, add connect timeouts.
 - [RLS SET ROLE in prod](rls-set-role-prod.md) — "permission denied to set role meridian_app" 500s prod only: dev superuser hides a missing PG16 membership SET option; app self-heals with GRANT ... WITH SET at boot.
+- [Git ops in this workspace](git-ops-sandbox.md) — bash blocks all .git writes and leaves stale .lock files; sandbox git works for assigned merge tasks; NO push credentials — user pushes via Git pane.
