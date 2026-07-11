@@ -24,8 +24,18 @@ check for and remove stale locks.
 - Pre-flight merge conflicts read-only: diff both sides against
   `git merge-base` and intersect changed file lists (`git merge-tree
   --write-tree` writes objects and is blocked).
-- **Push to GitHub is NOT possible from the agent**: remote `origin` is plain
-  https with no credential helper, no token env vars, no GitHub connector. After
-  a local merge the user must push via the workspace Git pane.
+- **Push to GitHub IS possible** with the `GH_PUSH_TOKEN` secret (classic PAT
+  with repo+workflow scopes, provided July 2026):
+  `git -c credential.helper='!f() { echo username=x-access-token; echo password=$GH_PUSH_TOKEN; }; f' push origin main`.
+  The push itself succeeds; the sandbox then blocks the local remote-tracking
+  ref update (exit 254 mentioning `refs/remotes/origin/main.lock`) — that error
+  is cosmetic; verify with `git ls-remote origin main`. Pipe output through
+  `sed "s/$GH_PUSH_TOKEN/***/g"` so the token never prints.
+- The GitHub **connector** token (repo scope, no `workflow`) and the Git pane
+  both get rejected when a push touches `.github/workflows/*` ("refusing to
+  allow an OAuth App to ... without `workflow` scope"). The Git pane masks any
+  rejection as generic "PUSH_REJECTED / remote has commits not in local" — do
+  not trust that message; diagnose with `ls-remote` + a real push attempt.
 - Ignore the extra `gitsafe-backup` and `subrepl-*` remotes; `origin` is GitHub.
+  (`gitsafe-backup`'s main diverged long ago — never push there.)
 - Read-only git in bash still needs `--no-optional-locks`.
