@@ -23,6 +23,18 @@ to complete, then restart api-server. A missing `node_modules` (e.g. `vite:
 not found` on a web artifact) is the same root cause: post-merge `pnpm install`
 didn't finish.
 
+**Quieter failure mode (missing COLUMNS, not tables):** if the merge only adds
+columns, boot succeeds (guardrail migrations don't touch them) and everything
+looks healthy until one endpoint 500s with `column "<x>" does not exist`.
+Same fix: `pnpm --filter db push`, then restart api-server.
+
+**Stale api-server build after ANY merge:** the api-server workflow builds once
+at startup (`pnpm build && start`), unlike the Vite artifacts which HMR. After
+a task merge the running dist predates the merged code — symptoms are 404s on
+new routes or responses missing new fields (which can crash frontends that
+trust the generated types, e.g. `.length` on undefined). Always restart the
+api-server workflow after a merge touches it.
+
 ## drizzle-kit push gotchas (v0.31.x)
 - Adding a UNIQUE constraint to a **non-empty** table triggers an interactive
   "Do you want to truncate <table>?" prompt (Select, default index 0 = "No, add
