@@ -6,6 +6,7 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Manrope", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 @theme inline {
@@ -115,9 +116,35 @@
   * {
     @apply border-border;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
+}
+
+.landing-display {
+  font-family: "Manrope", "Inter", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
+.landing-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: #071a1c;
+  background-image: url("/opengraph.jpg");
+  background-position: center top;
+  background-size: cover;
+}
+
+.landing-hero::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  content: "";
+  background: rgb(4 24 26 / 96%);
 }
 
 /* Respect the OS reduced-motion preference (WCAG 2.3.3 / 2.2.2). */

@@ -11,7 +11,7 @@ import { errorStatus } from "@/lib/errors";
 // app serves SME client/firm users.
 const ALLOWED = ["firm_admin", "firm_staff", "client_user"];
 
-const PORTAL = "/";
+const PORTAL = "/login";
 
 function BrandSplash({ children }: { children: ReactNode }) {
   return (

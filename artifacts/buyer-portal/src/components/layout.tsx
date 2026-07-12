@@ -122,7 +122,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         )}
         <a
-          href="/"
+          href="/login"
           className={`flex items-center gap-3 px-3 py-2 rounded-md text-foreground hover:bg-muted transition-colors ${FOCUS_RING}`}
           data-testid="link-all-apps"
         >

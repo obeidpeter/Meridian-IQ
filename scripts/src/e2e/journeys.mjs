@@ -8,18 +8,24 @@ const DEMO_PASSWORD = "meridian2027";
 
 export async function runJourneys(page, BASE, check) {
   const signIn = async (demoTestId, waitUrl) => {
-    await page.goto(BASE + "/", { waitUntil: "networkidle" });
+    await page.goto(BASE + "/login", { waitUntil: "networkidle" });
     await page.getByTestId(demoTestId).click();
     await page.waitForURL(waitUrl, { timeout: 20000 });
   };
   const signOutFromApp = async () => {
     await page.getByTestId("button-sign-out").first().click();
-    await page.waitForURL(BASE + "/");
+    await page.waitForURL(BASE + "/login");
     await page.waitForSelector('[data-testid="input-email"]', { timeout: 10000 });
   };
 
-  // ---------- portal ----------
+  // ---------- public landing + portal ----------
   await page.goto(BASE + "/", { waitUntil: "networkidle" });
+  check(
+    "landing page links to the login portal",
+    await page.getByTestId("link-hero-login").isVisible(),
+  );
+  await page.getByTestId("link-hero-login").click();
+  await page.waitForURL(BASE + "/login");
   check("portal shows sign-in panel", await page.getByTestId("input-email").isVisible());
 
   await page.getByTestId("input-email").fill("ops@meridianiq.example");
@@ -168,7 +174,7 @@ export async function runJourneys(page, BASE, check) {
   }
 
   // ---------- change password round trip (restores the demo password) ----------
-  await page.goto(BASE + "/", { waitUntil: "networkidle" });
+  await page.goto(BASE + "/login", { waitUntil: "networkidle" });
   await page.waitForSelector('[data-testid="button-show-change-password"]', {
     timeout: 10000,
   });

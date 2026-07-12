@@ -66,8 +66,9 @@ Everything runs in one place, reached through **one front door**:
 
 ### The portal
 
-Open the site root (`/`). You'll see four workspace tiles and a **Sign in**
-panel. One sign-in unlocks every workspace your account is allowed to use —
+Open the public site at `/` and choose **Sign in**, or go directly to
+`/login`. You'll see four workspace tiles and a **Sign in** panel. One sign-in
+unlocks every workspace your account is allowed to use —
 after signing in you are taken straight to your main workspace, and the tiles
 you can open are highlighted.
 
@@ -619,8 +620,8 @@ never duplicate data.
 ### The frontends
 
 Each app is a Vite build configured by `BASE_PATH` (its path prefix) and
-served under one origin: landing at `/`, console at `/console/`, SME app at
-`/app/`, buyer portal at `/buyer/`, penalty calculator at
+served under one origin: public landing at `/`, login portal at `/login`,
+console at `/console/`, SME app at `/app/`, buyer portal at `/buyer/`, penalty calculator at
 `/penalty-calculator/`. In production each build has SPA rewrites, so deep
 links work.
 
@@ -632,7 +633,7 @@ links work.
   committed API clients must match `openapi.yaml`), the migration
   rollback test against a real Postgres, and all four production builds.
 - **e2e** — boots the built API server and built frontends behind a
-  path-router and drives **21 headless user-journey checks** (auth incl.
+  path-router and drives **22 headless user-journey checks** (auth incl.
   throttling and password change, the operator Desk, admin advisory, the
   auditor's read-only boundary, consent round-trip, and the credit-note
   lifecycle) against a freshly seeded database.

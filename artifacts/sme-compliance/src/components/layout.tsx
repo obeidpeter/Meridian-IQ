@@ -114,7 +114,7 @@ function NavLinks({
           </div>
         )}
         <a
-          href="/"
+          href="/login"
           className="flex items-center gap-3 px-3 py-2 rounded-md text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           data-testid="link-all-apps"
         >
