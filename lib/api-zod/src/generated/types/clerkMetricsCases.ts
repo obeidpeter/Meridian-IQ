@@ -14,4 +14,8 @@ export type ClerkMetricsCases = {
   byKind: ClerkMetricsCasesByKind;
   /** @nullable */
   avgDecisionMinutes?: number | null;
+  /** @nullable */
+  avgQueueWaitMinutes?: number | null;
+  /** @nullable */
+  avgActiveReviewMinutes?: number | null;
 };

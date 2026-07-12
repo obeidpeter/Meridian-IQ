@@ -2368,6 +2368,15 @@ export const ClerkCaseStatus = {
   failed: 'failed',
 } as const;
 
+export interface ClerkCorrection {
+  field: string;
+  /** @nullable */
+  extracted: string | null;
+  /** @nullable */
+  final: string | null;
+  changed: boolean;
+}
+
 export interface ClerkCase {
   id: string;
   kind: ClerkCaseKind;
@@ -2386,6 +2395,10 @@ export interface ClerkCase {
   answer?: ClerkAnswer | null;
   /** @nullable */
   firmId?: string | null;
+  /** @nullable */
+  claimedBy?: string | null;
+  /** @nullable */
+  claimedAt?: string | null;
   createdBy: string;
   /** @nullable */
   decidedBy?: string | null;
@@ -2393,6 +2406,8 @@ export interface ClerkCase {
   decisionAction?: string | null;
   /** @nullable */
   decisionReason?: string | null;
+  /** @nullable */
+  corrections?: ClerkCorrection[] | null;
   /** @nullable */
   createdInvoiceId?: string | null;
   /** @nullable */
@@ -2488,6 +2503,10 @@ export type ClerkMetricsCases = {
   byKind: ClerkMetricsCasesByKind;
   /** @nullable */
   avgDecisionMinutes?: number | null;
+  /** @nullable */
+  avgQueueWaitMinutes?: number | null;
+  /** @nullable */
+  avgActiveReviewMinutes?: number | null;
 };
 
 export type ClerkMetricsInferenceByOutcome = {[key: string]: number};
@@ -2514,6 +2533,13 @@ export type ClerkMetricsInference = {
   cohorts: ClerkMetricsInferenceCohortsItem[];
 };
 
+export type ClerkMetricsCorrectionsItem = {
+  field: string;
+  total: number;
+  overridden: number;
+  overrideRate: number;
+};
+
 export type ClerkMetricsAsk = {
   total: number;
   answered: number;
@@ -2525,6 +2551,7 @@ export interface ClerkMetrics {
   windowDays: number;
   cases: ClerkMetricsCases;
   inference: ClerkMetricsInference;
+  corrections: ClerkMetricsCorrectionsItem[];
   ask: ClerkMetricsAsk;
 }
 

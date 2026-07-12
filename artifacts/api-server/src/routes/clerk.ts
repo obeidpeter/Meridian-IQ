@@ -9,6 +9,10 @@ import {
   DecideClerkCaseParams,
   DecideClerkCaseBody,
   DecideClerkCaseResponse,
+  ClaimClerkCaseParams,
+  ClaimClerkCaseResponse,
+  ReleaseClerkCaseParams,
+  ReleaseClerkCaseResponse,
   AskClerkBody,
   AskClerkResponse,
   GetClerkMetricsQueryParams,
@@ -16,10 +20,12 @@ import {
 } from "@workspace/api-zod";
 import { assertCan } from "../modules/auth/rbac";
 import {
+  claimCase,
   createExtractionCase,
   listCases,
   getCase,
   decideCase,
+  releaseCase,
 } from "../modules/clerk/cases";
 import { askClerk } from "../modules/clerk/ask";
 import { getClerkMetrics } from "../modules/clerk/metrics";
@@ -86,6 +92,28 @@ router.post("/clerk/cases/:id/decision", async (req, res): Promise<void> => {
   }
   const row = await decideCase(params.data.id, parsed.data, req.principal.userId);
   res.json(DecideClerkCaseResponse.parse(row));
+});
+
+router.post("/clerk/cases/:id/claim", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const params = ClaimClerkCaseParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const row = await claimCase(params.data.id, req.principal.userId);
+  res.json(ClaimClerkCaseResponse.parse(row));
+});
+
+router.post("/clerk/cases/:id/release", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const params = ReleaseClerkCaseParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const row = await releaseCase(params.data.id, req.principal.userId);
+  res.json(ReleaseClerkCaseResponse.parse(row));
 });
 
 router.get("/clerk/metrics", async (req, res): Promise<void> => {

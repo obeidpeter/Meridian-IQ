@@ -2340,6 +2340,42 @@ paths:
           $ref: "#/components/responses/NotFound"
 
 
+  /clerk/cases/{id}/claim:
+    post:
+      operationId: claimClerkCase
+      tags: [clerk]
+      summary: Claim a case for active review (one operator at a time)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The claimed case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCase"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/cases/{id}/release:
+    post:
+      operationId: releaseClerkCase
+      tags: [clerk]
+      summary: Release a claimed case back to the queue
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The released case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCase"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /clerk/metrics:
     get:
       operationId: getClerkMetrics
@@ -5439,6 +5475,11 @@ components:
             - type: "null"
         firmId:
           type: ["string", "null"]
+        claimedBy:
+          type: ["string", "null"]
+        claimedAt:
+          type: ["string", "null"]
+          format: date-time
         createdBy:
           type: string
         decidedBy:
@@ -5447,6 +5488,10 @@ components:
           type: ["string", "null"]
         decisionReason:
           type: ["string", "null"]
+        corrections:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/ClerkCorrection"
         createdInvoiceId:
           type: ["string", "null"]
         failReason:
@@ -5529,7 +5574,7 @@ components:
           type: string
     ClerkMetrics:
       type: object
-      required: [windowDays, cases, inference, ask]
+      required: [windowDays, cases, inference, corrections, ask]
       properties:
         windowDays:
           type: integer
@@ -5548,6 +5593,10 @@ components:
               additionalProperties:
                 type: integer
             avgDecisionMinutes:
+              type: ["number", "null"]
+            avgQueueWaitMinutes:
+              type: ["number", "null"]
+            avgActiveReviewMinutes:
               type: ["number", "null"]
         inference:
           type: object
@@ -5585,6 +5634,20 @@ components:
                     type: integer
                   latencyP95Ms:
                     type: ["integer", "null"]
+        corrections:
+          type: array
+          items:
+            type: object
+            required: [field, total, overridden, overrideRate]
+            properties:
+              field:
+                type: string
+              total:
+                type: integer
+              overridden:
+                type: integer
+              overrideRate:
+                type: number
         ask:
           type: object
           required: [total, answered, refused, refusalRate]
@@ -5597,3 +5660,15 @@ components:
               type: integer
             refusalRate:
               type: number
+    ClerkCorrection:
+      type: object
+      required: [field, extracted, final, changed]
+      properties:
+        field:
+          type: string
+        extracted:
+          type: ["string", "null"]
+        final:
+          type: ["string", "null"]
+        changed:
+          type: boolean

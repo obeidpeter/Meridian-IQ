@@ -7,7 +7,7 @@
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
-    "test": "tsx --test --test-force-exit \"src/**/*.test.ts\"",
+    "test": "tsx --test --test-force-exit --test-concurrency=1 \"src/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "benchmark": "tsx ./src/bench/pipeline-benchmark.ts"
   },

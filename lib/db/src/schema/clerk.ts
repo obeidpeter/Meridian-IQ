@@ -160,6 +160,17 @@ export interface ClerkExtraction {
   model: string;
 }
 
+// Per-field record of what the operator changed between the model's proposal
+// and the approved values — the labeled-outcome exhaust the two-layer thesis
+// runs on (every extraction a human corrects is training signal for later
+// phases, and the honest measure of extraction quality today).
+export interface ClerkCorrection {
+  field: string;
+  extracted: string | null;
+  final: string | null;
+  changed: boolean;
+}
+
 // Assembled deterministically from an approved ClaimRecord (answered=true) or
 // a neutral refusal (answered=false). Never free model prose.
 export interface ClerkAnswer {
@@ -188,6 +199,9 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   // --- question cases ---
   question: text("question"),
   answer: jsonb("answer").$type<ClerkAnswer>(),
+  // --- review claim (one operator actively works a case at a time) ---
+  claimedBy: uuid("claimed_by").references(() => usersTable.id),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
   // --- review decision ---
   firmId: uuid("firm_id").references(() => firmsTable.id),
   createdBy: uuid("created_by")
@@ -196,6 +210,8 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   decidedBy: uuid("decided_by").references(() => usersTable.id),
   decisionAction: text("decision_action"),
   decisionReason: text("decision_reason"),
+  // Extraction-vs-approved diff, computed at approval (see computeCorrections).
+  corrections: jsonb("corrections").$type<ClerkCorrection[] | null>(),
   createdInvoiceId: uuid("created_invoice_id").references(
     () => invoicesTable.id,
   ),

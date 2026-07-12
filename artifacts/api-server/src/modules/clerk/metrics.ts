@@ -14,6 +14,8 @@ export interface ClerkMetrics {
     byStatus: Record<string, number>;
     byKind: Record<string, number>;
     avgDecisionMinutes: number | null;
+    avgQueueWaitMinutes: number | null;
+    avgActiveReviewMinutes: number | null;
   };
   inference: {
     total: number;
@@ -31,6 +33,12 @@ export interface ClerkMetrics {
       latencyP95Ms: number | null;
     }[];
   };
+  corrections: {
+    field: string;
+    total: number;
+    overridden: number;
+    overrideRate: number;
+  }[];
   ask: {
     total: number;
     answered: number;
@@ -83,6 +91,45 @@ export async function getClerkMetrics(
     decisionRows[0]?.avg_minutes != null
       ? Number(Number(decisionRows[0].avg_minutes).toFixed(1))
       : null;
+
+  // Claim timestamps split turnaround into queue-wait (created -> claimed) and
+  // active review (claimed -> decision) — the CLK-OPS-06 operator-time signal.
+  const timingRows = (
+    await db.execute(sql`
+      SELECT
+        AVG(EXTRACT(EPOCH FROM (claimed_at - created_at)) / 60.0)
+          AS queue_minutes,
+        AVG(EXTRACT(EPOCH FROM (updated_at - claimed_at)) / 60.0)
+          FILTER (WHERE decided_by IS NOT NULL) AS active_minutes
+      FROM clerk_cases
+      WHERE created_at >= ${since}
+        AND kind = 'extraction'
+        AND claimed_at IS NOT NULL
+    `)
+  ).rows as { queue_minutes: string | null; active_minutes: string | null }[];
+  const avgQueueWaitMinutes =
+    timingRows[0]?.queue_minutes != null
+      ? Number(Number(timingRows[0].queue_minutes).toFixed(1))
+      : null;
+  const avgActiveReviewMinutes =
+    timingRows[0]?.active_minutes != null
+      ? Number(Number(timingRows[0].active_minutes).toFixed(1))
+      : null;
+
+  // Per-field override rates from the correction exhaust: how often the
+  // operator changed each field the model proposed (approved cases only).
+  const correctionRows = (
+    await db.execute(sql`
+      SELECT
+        c ->> 'field' AS field,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE (c ->> 'changed')::boolean)::int AS overridden
+      FROM clerk_cases, LATERAL jsonb_array_elements(corrections) AS c
+      WHERE created_at >= ${since} AND corrections IS NOT NULL
+      GROUP BY 1
+      ORDER BY 3 DESC, 1
+    `)
+  ).rows as { field: string; total: number; overridden: number }[];
 
   const inferenceRows = (
     await db.execute(sql`
@@ -149,7 +196,14 @@ export async function getClerkMetrics(
 
   return {
     windowDays,
-    cases: { total, byStatus, byKind, avgDecisionMinutes },
+    cases: {
+      total,
+      byStatus,
+      byKind,
+      avgDecisionMinutes,
+      avgQueueWaitMinutes,
+      avgActiveReviewMinutes,
+    },
     inference: {
       total: inferenceTotal,
       byOutcome,
@@ -173,6 +227,12 @@ export async function getClerkMetrics(
         latencyP95Ms: c.p95 != null ? Math.round(Number(c.p95)) : null,
       })),
     },
+    corrections: correctionRows.map((c) => ({
+      field: c.field,
+      total: c.total,
+      overridden: c.overridden,
+      overrideRate: rate(c.overridden, c.total),
+    })),
     ask: {
       total: askTotal,
       answered,

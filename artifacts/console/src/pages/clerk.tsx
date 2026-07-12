@@ -4,6 +4,8 @@ import {
   useGetClerkCase,
   useCreateClerkCase,
   useDecideClerkCase,
+  useClaimClerkCase,
+  useReleaseClerkCase,
   useAskClerk,
   useGetClerkMetrics,
   useListFirms,
@@ -16,6 +18,7 @@ import type {
   ClerkCase,
   ClerkAnswer,
   ClerkCaseDecisionInputCategory,
+  ClerkMetricsCases,
   InvoiceLineInput,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -76,6 +79,50 @@ function fieldValue(kase: ClerkCase, field: string): string {
   return (
     kase.extraction?.fields.find((f) => f.field === field)?.value ?? ""
   );
+}
+
+// The generated client's ApiError carries the parsed JSON error body on
+// `data`; server errors are `{ error: string }`. Used to relay the server's
+// own words (409 CASE_CLAIMED / CASE_CLAIM_CONFLICT, 422 VOICE_*).
+function serverErrorMessage(err: unknown): string | undefined {
+  const data = (err as { data?: { error?: unknown } } | null)?.data;
+  return typeof data?.error === "string" ? data.error : undefined;
+}
+
+// Read a File into plain base64. Bytes are encoded directly (chunked to stay
+// under the argument limit), so no data: URL prefix is ever produced — the
+// backend strips one anyway.
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+// The server caps voice uploads at 5 MB; reject oversized files before
+// wasting time base64-encoding them.
+const MAX_VOICE_BYTES = 5 * 1024 * 1024;
+
+// Coarse "n min ago" for claim ages — precision doesn't matter here.
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60_000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
+// Operator ids are opaque — show enough to tell operators apart.
+function shortActor(id: string | null | undefined): string {
+  if (!id) return "unknown";
+  return id.length > 10 ? `${id.slice(0, 8)}…` : id;
 }
 
 interface ApproveForm {
@@ -200,6 +247,31 @@ function fmtMs(ms: number | null | undefined): string {
   return `${Math.round(ms)} ms`;
 }
 
+// The Cases tile packs the flow timings into its detail line: decision
+// turnaround plus its claim-based split into queue-wait and active-review
+// (the split appears only once cases have claim timestamps).
+function casesTileDetail(cases: ClerkMetricsCases): string | undefined {
+  const parts: string[] = [];
+  if (cases.avgDecisionMinutes != null) {
+    parts.push(`avg decision ${Math.round(cases.avgDecisionMinutes)} min`);
+  }
+  if (cases.avgQueueWaitMinutes != null) {
+    parts.push(`queue wait ${Math.round(cases.avgQueueWaitMinutes)}m`);
+  }
+  if (cases.avgActiveReviewMinutes != null) {
+    parts.push(`active review ${Math.round(cases.avgActiveReviewMinutes)}m`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+// Override-rate cells go red above 25% (extraction quality needs prompt
+// attention) and amber above 10% (worth a watchful eye).
+function overrideRateClass(rate: number): string {
+  if (rate > 0.25) return "text-red-600 dark:text-red-400 font-medium";
+  if (rate > 0.1) return "text-amber-700 dark:text-amber-400 font-medium";
+  return "";
+}
+
 function StatTile({
   label,
   value,
@@ -317,11 +389,7 @@ function HealthPanel() {
             <StatTile
               label="Cases"
               value={String(metrics.cases.total)}
-              detail={
-                metrics.cases.avgDecisionMinutes != null
-                  ? `avg decision ${Math.round(metrics.cases.avgDecisionMinutes)} min`
-                  : undefined
-              }
+              detail={casesTileDetail(metrics.cases)}
               testId="stat-cases-total"
             />
             <StatTile
@@ -417,6 +485,71 @@ function HealthPanel() {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Field corrections</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                How often operators corrected each extracted field before
+                approval — the extraction-quality signal (labeled outcomes).
+              </p>
+              {metrics.corrections.length === 0 ? (
+                <p
+                  className="text-sm text-muted-foreground"
+                  data-testid="text-corrections-empty"
+                >
+                  No corrections yet — they appear once cases are approved.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table
+                    className="w-full text-sm"
+                    data-testid="table-corrections"
+                  >
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-3 font-medium">Field</th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Total
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Overridden
+                        </th>
+                        <th className="py-2 font-medium text-right">
+                          Override rate
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {metrics.corrections.map((c) => (
+                        <tr
+                          key={c.field}
+                          data-testid={`row-correction-${c.field}`}
+                        >
+                          <td className="py-2 pr-3">
+                            <code className="text-xs">{c.field}</code>
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {c.total}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {c.overridden}
+                          </td>
+                          <td
+                            className={`py-2 text-right tabular-nums ${overrideRateClass(c.overrideRate)}`}
+                          >
+                            {fmtRatePct(c.overrideRate)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
@@ -458,6 +591,7 @@ export function ClerkWorkspace() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureText, setCaptureText] = useState("");
   const [captureFile, setCaptureFile] = useState<File | null>(null);
+  const [captureVoice, setCaptureVoice] = useState<File | null>(null);
 
   // Decision form
   const [form, setForm] = useState<ApproveForm | null>(null);
@@ -485,10 +619,12 @@ export function ClerkWorkspace() {
       });
       return;
     }
-    const body = (err as { body?: { error?: string } } | null)?.body;
+    // Relay the server's own words when it sent any — typed rejections
+    // (VOICE_UNREADABLE / VOICE_NO_SPEECH 422s, CASE_CLAIMED /
+    // CASE_CLAIM_CONFLICT 409s) carry an actionable message.
     toast({
       title: "Something went wrong",
-      description: body?.error ?? fallback,
+      description: serverErrorMessage(err) ?? fallback,
       variant: "destructive",
     });
   };
@@ -510,6 +646,7 @@ export function ClerkWorkspace() {
         setCaptureOpen(false);
         setCaptureText("");
         setCaptureFile(null);
+        setCaptureVoice(null);
         setDisabledBanner(false);
         toast({
           title:
@@ -545,6 +682,42 @@ export function ClerkWorkspace() {
     },
   });
 
+  // Claiming is optional (a solo operator can decide straight from
+  // "extracted") — it just tells other operators someone is on the case. A
+  // 409 means someone else won the race, so refetch to show the real claimant.
+  const claimCase = useClaimClerkCase({
+    mutation: {
+      onSuccess: () => {
+        invalidateCases();
+        toast({
+          title: "Case claimed",
+          description:
+            "You're on it — other operators now see this case as in review.",
+        });
+      },
+      onError: (e) => {
+        if (errorStatus(e) === 409) invalidateCases();
+        handleGatewayError(e, "Could not claim the case.");
+      },
+    },
+  });
+
+  const releaseCase = useReleaseClerkCase({
+    mutation: {
+      onSuccess: () => {
+        invalidateCases();
+        toast({
+          title: "Case released",
+          description: "The case is back in the queue for any operator.",
+        });
+      },
+      onError: (e) => {
+        if (errorStatus(e) === 409) invalidateCases();
+        handleGatewayError(e, "Could not release the case.");
+      },
+    },
+  });
+
   const ask = useAskClerk({
     mutation: {
       onSuccess: () => {
@@ -557,18 +730,20 @@ export function ClerkWorkspace() {
   const [question, setQuestion] = useState("");
 
   const submitCapture = async () => {
-    if (captureFile) {
+    if (captureVoice) {
+      const b64 = await fileToBase64(captureVoice);
+      createCase.mutate({
+        data: {
+          sourceType: "voice",
+          audioBase64: b64,
+          name: captureVoice.name,
+        },
+      });
+    } else if (captureFile) {
       const isPdf =
         captureFile.type === "application/pdf" ||
         captureFile.name.toLowerCase().endsWith(".pdf");
-      const buf = await captureFile.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let binary = "";
-      const chunk = 0x8000;
-      for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-      }
-      const b64 = btoa(binary);
+      const b64 = await fileToBase64(captureFile);
       createCase.mutate({
         data: {
           sourceType: isPdf ? "pdf" : "image",
@@ -694,8 +869,40 @@ export function ClerkWorkspace() {
                       onChange={(e) =>
                         setCaptureFile(e.target.files?.[0] ?? null)
                       }
+                      disabled={captureVoice != null}
                       data-testid="input-capture-file"
                     />
+                    <Label htmlFor="capture-voice">
+                      or a voice note (max 5 MB)
+                    </Label>
+                    <Input
+                      id="capture-voice"
+                      type="file"
+                      accept="audio/*"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null;
+                        if (f && f.size > MAX_VOICE_BYTES) {
+                          toast({
+                            title: "Voice note too large",
+                            description: `Voice notes are capped at 5 MB; this file is ${(
+                              f.size /
+                              (1024 * 1024)
+                            ).toFixed(1)} MB. Record a shorter note.`,
+                            variant: "destructive",
+                          });
+                          e.target.value = "";
+                          setCaptureVoice(null);
+                          return;
+                        }
+                        setCaptureVoice(f);
+                      }}
+                      disabled={captureFile != null}
+                      data-testid="input-voice-file"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      English voice notes; the audio is transcribed and only
+                      the transcript is kept.
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       or paste the invoice text:
                     </p>
@@ -704,7 +911,7 @@ export function ClerkWorkspace() {
                       onChange={(e) => setCaptureText(e.target.value)}
                       placeholder="INVOICE No: ..."
                       rows={5}
-                      disabled={captureFile != null}
+                      disabled={captureFile != null || captureVoice != null}
                       data-testid="input-capture-text"
                     />
                     <Button
@@ -712,11 +919,17 @@ export function ClerkWorkspace() {
                       onClick={submitCapture}
                       disabled={
                         createCase.isPending ||
-                        (!captureFile && captureText.trim().length < 10)
+                        (!captureFile &&
+                          !captureVoice &&
+                          captureText.trim().length < 10)
                       }
                       data-testid="button-run-capture"
                     >
-                      {createCase.isPending ? "Reading…" : "Read with Clerk"}
+                      {createCase.isPending
+                        ? captureVoice
+                          ? "Transcribing…"
+                          : "Reading…"
+                        : "Read with Clerk"}
                     </Button>
                   </div>
                 )}
@@ -747,6 +960,14 @@ export function ClerkWorkspace() {
                               {formatDateTime(c.createdAt)}
                             </p>
                           </div>
+                          {c.status === "in_review" && (
+                            <span
+                              className="text-[10px] uppercase text-muted-foreground"
+                              data-testid={`indicator-claimed-${c.id}`}
+                            >
+                              claimed
+                            </span>
+                          )}
                           <span
                             className={pillClasses(
                               STATUS_TONE[c.status] ?? "slate",
@@ -869,6 +1090,57 @@ export function ClerkWorkspace() {
                         <p className="text-sm font-medium">
                           Review and approve — creates a draft invoice only
                         </p>
+                        {/* Claiming is optional: deciding straight from
+                            "extracted" stays possible (solo-operator fast
+                            path). A claim only marks the case as actively
+                            being reviewed so a second operator doesn't start
+                            the same work. */}
+                        {selected.status === "extracted" &&
+                          !selected.claimedBy && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  claimCase.mutate({ id: selected.id })
+                                }
+                                disabled={claimCase.isPending}
+                                data-testid="button-claim-case"
+                              >
+                                {claimCase.isPending
+                                  ? "Claiming…"
+                                  : "Claim for review"}
+                              </Button>
+                              <p className="text-xs text-muted-foreground">
+                                Optional — deciding below works without
+                                claiming.
+                              </p>
+                            </div>
+                          )}
+                        {selected.status === "in_review" && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={pillClasses("amber")}
+                              data-testid="badge-claimed"
+                            >
+                              Claimed by {shortActor(selected.claimedBy)} ·{" "}
+                              {relativeTime(selected.claimedAt)}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                releaseCase.mutate({ id: selected.id })
+                              }
+                              disabled={releaseCase.isPending}
+                              data-testid="button-release-case"
+                            >
+                              {releaseCase.isPending
+                                ? "Releasing…"
+                                : "Release"}
+                            </Button>
+                          </div>
+                        )}
                         <div className="grid sm:grid-cols-3 gap-3">
                           <div className="space-y-1">
                             <Label>Firm</Label>

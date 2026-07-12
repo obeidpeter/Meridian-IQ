@@ -8,6 +8,7 @@
 import type { ClerkAnswer } from './clerkAnswer';
 import type { ClerkCaseKind } from './clerkCaseKind';
 import type { ClerkCaseStatus } from './clerkCaseStatus';
+import type { ClerkCorrection } from './clerkCorrection';
 import type { ClerkExtraction } from './clerkExtraction';
 
 export interface ClerkCase {
@@ -28,6 +29,10 @@ export interface ClerkCase {
   answer?: ClerkAnswer | null;
   /** @nullable */
   firmId?: string | null;
+  /** @nullable */
+  claimedBy?: string | null;
+  /** @nullable */
+  claimedAt?: Date | null;
   createdBy: string;
   /** @nullable */
   decidedBy?: string | null;
@@ -35,6 +40,8 @@ export interface ClerkCase {
   decisionAction?: string | null;
   /** @nullable */
   decisionReason?: string | null;
+  /** @nullable */
+  corrections?: ClerkCorrection[] | null;
   /** @nullable */
   createdInvoiceId?: string | null;
   /** @nullable */
