@@ -128,6 +128,9 @@ export const clerkSourceTypeEnum = pgEnum("clerk_source_type", [
   "image",
   "pdf",
   "text",
+  // Voice notes are transcribed on intake; only the transcript is retained
+  // (sourceText) — raw audio is never stored (OPEN-8 minimisation posture).
+  "voice",
 ]);
 
 // One extraction candidate per canonical invoice field. `critical` fields

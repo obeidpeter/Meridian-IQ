@@ -14,6 +14,7 @@ import {
   useListConfirmations,
   useCreateConfirmation,
   useListSettlements,
+  useGetInvoiceStatusLight,
   getGetInvoiceQueryKey,
   getListSubmissionAttemptsQueryKey,
   getGetInvoiceStampQueryKey,
@@ -21,7 +22,9 @@ import {
   getGetErrorCatalogueEntryQueryKey,
   getListConfirmationsQueryKey,
   getListSettlementsQueryKey,
+  getGetInvoiceStatusLightQueryKey,
 } from "@workspace/api-client-react";
+import type { StatusLightLight } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -67,6 +70,38 @@ import {
   confirmationLabel,
   confirmationBadgeClasses,
 } from "@/lib/format";
+
+// AI Feature Brief §3.3: deterministic green/amber/red light with plain-language
+// reasons and ONE recommended action. Icon + word pair with the colour so the
+// colour is never the only signal.
+const LIGHT_META: Record<
+  StatusLightLight,
+  {
+    label: string;
+    Icon: typeof CheckCircle2;
+    dot: string;
+    text: string;
+  }
+> = {
+  green: {
+    label: "Green",
+    Icon: CheckCircle2,
+    dot: "bg-emerald-500",
+    text: "text-emerald-700 dark:text-emerald-400",
+  },
+  amber: {
+    label: "Amber",
+    Icon: AlertTriangle,
+    dot: "bg-amber-500",
+    text: "text-amber-700 dark:text-amber-400",
+  },
+  red: {
+    label: "Red",
+    Icon: XCircle,
+    dot: "bg-red-500",
+    text: "text-red-700 dark:text-red-400",
+  },
+};
 
 const SETTLEMENT_SOURCE_LABELS: Record<string, string> = {
   statement_match: "Statement match",
@@ -117,6 +152,17 @@ export function InvoiceDetail() {
       retry: false,
     },
   });
+  // Progressive enhancement: if the light can't load, the card simply doesn't
+  // render — it must never break the rest of the page.
+  const { data: statusLight, isLoading: statusLightLoading } =
+    useGetInvoiceStatusLight(id, {
+      query: {
+        enabled: !!id,
+        queryKey: getGetInvoiceStatusLightQueryKey(id),
+        retry: false,
+        staleTime: 30_000,
+      },
+    });
 
   const latestFailed = (attempts || [])
     .filter((a) => (a.status === "rejected" || a.status === "error") && a.errorCode)
@@ -355,6 +401,8 @@ export function InvoiceDetail() {
     (!latestConfirmation ||
       (latestConfirmation.state !== "requested" &&
         latestConfirmation.state !== "confirmed"));
+  const lightMeta = statusLight ? LIGHT_META[statusLight.light] : null;
+  const LightIcon = lightMeta?.Icon;
 
   return (
     <div className="space-y-6">
@@ -469,6 +517,56 @@ export function InvoiceDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {statusLightLoading ? (
+        <Card data-testid="card-compliance-status">
+          <CardHeader>
+            <CardTitle className="text-base">Compliance status</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-4 w-72 max-w-full" />
+            <Skeleton className="h-4 w-56 max-w-full" />
+          </CardContent>
+        </Card>
+      ) : statusLight && lightMeta && LightIcon ? (
+        <Card data-testid="card-compliance-status">
+          <CardHeader>
+            <CardTitle className="text-base">Compliance status</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${lightMeta.dot}`}
+                aria-hidden="true"
+              />
+              <LightIcon
+                className={`w-4 h-4 ${lightMeta.text}`}
+                aria-hidden="true"
+              />
+              <span
+                className={`font-semibold ${lightMeta.text}`}
+                data-testid="text-status-light"
+              >
+                {lightMeta.label}
+              </span>
+            </div>
+            {statusLight.reasons.length > 0 && (
+              <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
+                {statusLight.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            )}
+            <p data-testid="text-recommended-action">
+              <span className="font-medium">Recommended action:</span>{" "}
+              <span className="text-muted-foreground">
+                {statusLight.recommendedAction}
+              </span>
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {stampedFamily && stamp && (
         <Card className="border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/40">

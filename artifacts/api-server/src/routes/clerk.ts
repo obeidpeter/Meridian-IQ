@@ -11,6 +11,8 @@ import {
   DecideClerkCaseResponse,
   AskClerkBody,
   AskClerkResponse,
+  GetClerkMetricsQueryParams,
+  GetClerkMetricsResponse,
 } from "@workspace/api-zod";
 import { assertCan } from "../modules/auth/rbac";
 import {
@@ -20,6 +22,7 @@ import {
   decideCase,
 } from "../modules/clerk/cases";
 import { askClerk } from "../modules/clerk/ask";
+import { getClerkMetrics } from "../modules/clerk/metrics";
 import { getClerkGateway } from "../modules/clerk/provider";
 
 const router: IRouter = Router();
@@ -83,6 +86,14 @@ router.post("/clerk/cases/:id/decision", async (req, res): Promise<void> => {
   }
   const row = await decideCase(params.data.id, parsed.data, req.principal.userId);
   res.json(DecideClerkCaseResponse.parse(row));
+});
+
+router.get("/clerk/metrics", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const query = GetClerkMetricsQueryParams.safeParse(req.query);
+  const windowDays = query.success ? (query.data.windowDays ?? 30) : 30;
+  const metrics = await getClerkMetrics(windowDays);
+  res.json(GetClerkMetricsResponse.parse(metrics));
 });
 
 router.post("/clerk/ask", async (req, res): Promise<void> => {

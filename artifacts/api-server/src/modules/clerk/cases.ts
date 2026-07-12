@@ -15,9 +15,15 @@ import { appendAudit } from "../audit/audit";
 import { createDraft, type LineInput } from "../invoice/service";
 import {
   assertClerkEnabled,
+  recordExternalCall,
   type ClerkGateway,
   type UserContent,
 } from "./gateway";
+import {
+  TRANSCRIBE_MODEL,
+  transcribeVoiceProd,
+  type VoiceTranscriber,
+} from "./provider";
 import {
   CANONICAL_FIELDS,
   CRITICAL_FIELDS,
@@ -45,12 +51,13 @@ const ALLOWED_IMAGE_TYPES = new Set([
 ]);
 
 export interface CreateCaseInput {
-  sourceType: "image" | "pdf" | "text";
+  sourceType: "image" | "pdf" | "text" | "voice";
   name?: string | null;
   contentType?: string | null;
   imageBase64?: string;
   pdfBase64?: string;
   text?: string;
+  audioBase64?: string;
 }
 
 function decodeBase64Checked(b64: string, label: string): Buffer {
@@ -121,6 +128,7 @@ export async function createExtractionCase(
   input: CreateCaseInput,
   actorId: string,
   gateway: ClerkGateway,
+  transcriber: VoiceTranscriber = transcribeVoiceProd,
 ): Promise<ClerkCase> {
   await assertClerkEnabled();
 
@@ -129,7 +137,61 @@ export async function createExtractionCase(
   let user: UserContent;
   let inputForHash: string;
 
-  if (input.sourceType === "text") {
+  if (input.sourceType === "voice") {
+    // C1 scope: English voice notes. The audio is transcribed on intake and
+    // then handled exactly like a text document; ONLY the transcript is kept
+    // (OPEN-8 minimisation — raw audio is never persisted). The transcription
+    // itself is a model call, so it lands in the append-only ledger like any
+    // other, success or failure.
+    if (!input.audioBase64) {
+      throw new DomainError(
+        "BAD_UPLOAD",
+        "audioBase64 is required for a voice source",
+        400,
+      );
+    }
+    const buf = decodeBase64Checked(input.audioBase64, "Audio");
+    const audioB64 = buf.toString("base64");
+    const startedAt = Date.now();
+    let transcript: string;
+    try {
+      transcript = (await transcriber(buf)).trim();
+    } catch (err) {
+      await recordExternalCall({
+        purpose: "transcribe_voice",
+        model: TRANSCRIBE_MODEL,
+        promptVersion: "transcribe-v1",
+        inputForHash: audioB64,
+        outcome: "error",
+        errorText: err instanceof Error ? err.message : String(err),
+        latencyMs: Date.now() - startedAt,
+      });
+      throw new DomainError(
+        "VOICE_UNREADABLE",
+        "The voice note could not be transcribed. Re-record it in a quieter spot, or type the details instead.",
+        422,
+      );
+    }
+    await recordExternalCall({
+      purpose: "transcribe_voice",
+      model: TRANSCRIBE_MODEL,
+      promptVersion: "transcribe-v1",
+      inputForHash: audioB64,
+      outcome: "ok",
+      outputChars: transcript.length,
+      latencyMs: Date.now() - startedAt,
+    });
+    if (!transcript) {
+      throw new DomainError(
+        "VOICE_NO_SPEECH",
+        "No speech was detected in the voice note. Re-record it, or type the details instead.",
+        422,
+      );
+    }
+    sourceText = transcript;
+    inputForHash = transcript;
+    user = fenceDocument(transcript);
+  } else if (input.sourceType === "text") {
     if (!input.text?.trim()) {
       throw new DomainError("BAD_UPLOAD", "text is required for a text source", 400);
     }

@@ -5,10 +5,12 @@ import {
   useCreateClerkCase,
   useDecideClerkCase,
   useAskClerk,
+  useGetClerkMetrics,
   useListFirms,
   useListParties,
   getListClerkCasesQueryKey,
   getGetClerkCaseQueryKey,
+  getGetClerkMetricsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   ClerkCase,
@@ -38,6 +40,7 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { errorStatus } from "@/lib/errors";
 import { formatDateTime, pillClasses, type BadgeTone } from "@/lib/format";
 import {
+  Activity,
   AlertTriangle,
   Bot,
   FileUp,
@@ -171,6 +174,245 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+// ---- Health tab -----------------------------------------------------------
+// Read-only operational metrics for the Clerk: case flow, ask refusals and
+// inference quality per model+prompt cohort. Numbers come straight from
+// /clerk/metrics; the window selector re-queries the server.
+
+const HEALTH_WINDOWS = [7, 30, 90];
+
+const OUTCOME_TONE: Record<string, BadgeTone> = {
+  ok: "emerald",
+  invalid_discarded: "amber",
+  error: "red",
+};
+
+function fmtRatePct(rate: number | null | undefined): string {
+  if (rate === null || rate === undefined) return "—";
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
+function fmtMs(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined) return "—";
+  return `${Math.round(ms)} ms`;
+}
+
+function StatTile({
+  label,
+  value,
+  detail,
+  testId,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  testId: string;
+}) {
+  return (
+    <Card data-testid={testId}>
+      <CardContent className="pt-6 space-y-1">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="text-2xl font-bold tabular-nums">{value}</p>
+        {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BreakdownRow({
+  title,
+  entries,
+  tones,
+  testId,
+}: {
+  title: string;
+  entries: Record<string, number>;
+  tones: Record<string, BadgeTone>;
+  testId: string;
+}) {
+  const items = Object.entries(entries).sort((a, b) => b[1] - a[1]);
+  return (
+    <div data-testid={testId}>
+      <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+        {title}
+      </p>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nothing in this window.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {items.map(([key, count]) => (
+            <span key={key} className={pillClasses(tones[key] ?? "slate")}>
+              {key.replace(/_/g, " ")}
+              <span className="tabular-nums font-semibold">{count}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HealthPanel() {
+  const [windowDays, setWindowDays] = useState(30);
+  const params = { windowDays };
+  const {
+    data: metrics,
+    isLoading,
+    error,
+    refetch,
+  } = useGetClerkMetrics(params, {
+    query: { queryKey: getGetClerkMetricsQueryKey(params) },
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm text-muted-foreground">
+          How the Clerk is behaving — case flow, refusals and inference
+          quality.
+        </p>
+        <div className="w-36">
+          <Select
+            value={String(windowDays)}
+            onValueChange={(v) => setWindowDays(Number(v))}
+          >
+            <SelectTrigger
+              aria-label="Metrics window"
+              data-testid="select-health-window"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {HEALTH_WINDOWS.map((d) => (
+                <SelectItem key={d} value={String(d)}>
+                  Last {d} days
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
+        </div>
+      ) : error || !metrics ? (
+        <QueryError thing="Clerk health metrics" onRetry={() => refetch()} />
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatTile
+              label="Cases"
+              value={String(metrics.cases.total)}
+              detail={
+                metrics.cases.avgDecisionMinutes != null
+                  ? `avg decision ${Math.round(metrics.cases.avgDecisionMinutes)} min`
+                  : undefined
+              }
+              testId="stat-cases-total"
+            />
+            <StatTile
+              label="Ask refusal rate"
+              value={fmtRatePct(metrics.ask.refusalRate)}
+              detail={`${metrics.ask.refused} of ${metrics.ask.total} questions refused`}
+              testId="stat-refusal-rate"
+            />
+            <StatTile
+              label="Invalid inference rate"
+              value={fmtRatePct(metrics.inference.invalidRate)}
+              detail={`error rate ${fmtRatePct(metrics.inference.errorRate)} of ${metrics.inference.total} calls`}
+              testId="stat-invalid-rate"
+            />
+            <StatTile
+              label="Latency p95"
+              value={fmtMs(metrics.inference.latencyP95Ms)}
+              detail={`p50 ${fmtMs(metrics.inference.latencyP50Ms)}`}
+              testId="stat-latency-p95"
+            />
+          </div>
+
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <BreakdownRow
+                title="Cases by status"
+                entries={metrics.cases.byStatus}
+                tones={STATUS_TONE}
+                testId="breakdown-by-status"
+              />
+              <BreakdownRow
+                title="Inference by outcome"
+                entries={metrics.inference.byOutcome}
+                tones={OUTCOME_TONE}
+                testId="breakdown-by-outcome"
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                Inference cohorts (model × prompt)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {metrics.inference.cohorts.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No inference calls in this window.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-3 font-medium">Model</th>
+                        <th className="py-2 pr-3 font-medium">Prompt</th>
+                        <th className="py-2 pr-3 font-medium">Purpose</th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Total
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">OK</th>
+                        <th className="py-2 font-medium text-right">p95</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {metrics.inference.cohorts.map((c) => (
+                        <tr
+                          key={`${c.model}-${c.promptVersion}-${c.purpose}`}
+                          data-testid={`row-cohort-${c.model}-${c.promptVersion}-${c.purpose}`}
+                        >
+                          <td className="py-2 pr-3">
+                            <code className="text-xs">{c.model}</code>
+                          </td>
+                          <td className="py-2 pr-3">
+                            <code className="text-xs">{c.promptVersion}</code>
+                          </td>
+                          <td className="py-2 pr-3">{c.purpose}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {c.total}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {c.okCount}
+                          </td>
+                          <td className="py-2 text-right tabular-nums">
+                            {fmtMs(c.latencyP95Ms)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -413,6 +655,9 @@ export function ClerkWorkspace() {
           <TabsTrigger value="ask" data-testid="tab-ask">
             <MessageCircleQuestion className="w-4 h-4 mr-1" aria-hidden="true" />{" "}
             Ask Clerk
+          </TabsTrigger>
+          <TabsTrigger value="health" data-testid="tab-health">
+            <Activity className="w-4 h-4 mr-1" aria-hidden="true" /> Health
           </TabsTrigger>
         </TabsList>
 
@@ -895,6 +1140,10 @@ export function ClerkWorkspace() {
             </Card>
             {ask.data?.answer && <AnswerCard answer={ask.data.answer} />}
           </div>
+        </TabsContent>
+
+        <TabsContent value="health" className="mt-4">
+          <HealthPanel />
         </TabsContent>
       </Tabs>
     </div>

@@ -45,3 +45,24 @@ export async function getClerkGateway(): Promise<ClerkGateway> {
   }
   return cached;
 }
+
+// Voice transcription (C1: English voice notes). Kept beside the completion
+// provider so tests can inject a fake transcriber the same way they inject a
+// fake gateway. Format is sniffed from the bytes; mp4/ogg are converted where
+// the runtime supports it, everything else transcribes directly.
+export const TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe";
+
+export type VoiceTranscriber = (audio: Buffer) => Promise<string>;
+
+export async function transcribeVoiceProd(audio: Buffer): Promise<string> {
+  const { speechToText, detectAudioFormat, ensureCompatibleFormat } =
+    await import("@workspace/integrations-openai-ai-server/audio");
+  const detected = detectAudioFormat(audio);
+  if (detected === "wav" || detected === "mp3" || detected === "webm") {
+    return speechToText(audio, detected);
+  }
+  // mp4/ogg (or unknown) go through conversion; failures surface as a typed
+  // error to the caller, which records the ledger row and fails the intake.
+  const compatible = await ensureCompatibleFormat(audio);
+  return speechToText(compatible.buffer, compatible.format);
+}

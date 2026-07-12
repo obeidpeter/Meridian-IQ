@@ -2,15 +2,18 @@ import { Feather } from "@expo/vector-icons";
 import {
   getGetErrorCatalogueEntryQueryKey,
   getGetInvoiceQueryKey,
+  getGetInvoiceStatusLightQueryKey,
   getListSubmissionAttemptsQueryKey,
   useGetErrorCatalogueEntry,
   useGetInvoice,
+  useGetInvoiceStatusLight,
   useListSubmissionAttempts,
   useSubmitInvoice,
   useValidateInvoice,
 } from "@workspace/api-client-react";
 import type {
   InvoiceStatus,
+  StatusLightLight,
   SubmissionAttempt,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -36,6 +39,7 @@ import {
   Divider,
   EmptyState,
   ErrorState,
+  Skeleton,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import {
@@ -74,6 +78,18 @@ function attemptFailed(a: SubmissionAttempt): boolean {
   return a.status === "rejected" || a.status === "error";
 }
 
+// Deterministic compliance light (AI Feature Brief §3.3): icon + the word
+// Green/Amber/Red always pair with the coloured dot so colour is never the
+// only signal. Never percentages or predictions.
+const LIGHT_META: Record<
+  StatusLightLight,
+  { icon: keyof typeof Feather.glyphMap; label: string }
+> = {
+  green: { icon: "check-circle", label: "Green" },
+  amber: { icon: "alert-triangle", label: "Amber" },
+  red: { icon: "x-circle", label: "Red" },
+};
+
 export default function InvoiceDetailScreen() {
   const { id: rawId } = useLocalSearchParams<{ id: string }>();
   const id = typeof rawId === "string" ? rawId : "";
@@ -90,6 +106,17 @@ export default function InvoiceDetailScreen() {
   const attemptsQuery = useListSubmissionAttempts(id, {
     query: { enabled: !!id, queryKey: getListSubmissionAttemptsQueryKey(id) },
   });
+  // Progressive enhancement — if the light can't load, its card simply
+  // doesn't render. Never let it break the rest of the screen.
+  const statusLightQuery = useGetInvoiceStatusLight(id, {
+    query: {
+      enabled: !!id,
+      queryKey: getGetInvoiceStatusLightQueryKey(id),
+      retry: false,
+      staleTime: 30_000,
+    },
+  });
+  const statusLight = statusLightQuery.data;
 
   const invoice = detailQuery.data?.invoice;
   const lines = detailQuery.data?.lines ?? [];
@@ -180,6 +207,27 @@ export default function InvoiceDetailScreen() {
     });
   }, [router, id, errorCode]);
 
+  // Icons/dots carry the light colour; text stays on foreground tokens for
+  // contrast (destructiveText is the one red tuned for text on cards).
+  const lightMeta = statusLight ? LIGHT_META[statusLight.light] : null;
+  const lightDotColor =
+    statusLight?.light === "green"
+      ? colors.success
+      : statusLight?.light === "amber"
+        ? colors.warning
+        : colors.destructive;
+  const lightIconColor =
+    statusLight?.light === "red" ? colors.destructiveText : lightDotColor;
+  const lightLabelColor =
+    statusLight?.light === "red" ? colors.destructiveText : colors.foreground;
+  const lightA11yLabel = statusLight
+    ? [
+        `Compliance status: ${lightMeta?.label}`,
+        ...statusLight.reasons,
+        `Recommended action: ${statusLight.recommendedAction}`,
+      ].join(". ")
+    : undefined;
+
   return (
     <>
       <Stack.Screen
@@ -264,6 +312,56 @@ export default function InvoiceDetailScreen() {
                 </AppText>
               </View>
             </Card>
+
+            {statusLightQuery.isLoading ? (
+              <Card>
+                <View style={{ gap: 8 }}>
+                  <Skeleton height={16} width="35%" />
+                  <Skeleton height={12} width="80%" />
+                </View>
+              </Card>
+            ) : statusLight && lightMeta ? (
+              <Card>
+                <View
+                  accessible
+                  accessibilityLabel={lightA11yLabel}
+                  testID="card-status-light"
+                >
+                  <View style={styles.bannerRow}>
+                    <View
+                      style={[
+                        styles.lightDot,
+                        { backgroundColor: lightDotColor },
+                      ]}
+                    />
+                    <Feather
+                      name={lightMeta.icon}
+                      size={18}
+                      color={lightIconColor}
+                    />
+                    <AppText variant="heading" color={lightLabelColor}>
+                      {lightMeta.label}
+                    </AppText>
+                  </View>
+                  {statusLight.reasons.length > 0 ? (
+                    <View style={{ marginTop: 8, gap: 2 }}>
+                      {statusLight.reasons.map((r, i) => (
+                        <AppText
+                          key={i}
+                          variant="caption"
+                          color={colors.mutedForeground}
+                        >
+                          {r}
+                        </AppText>
+                      ))}
+                    </View>
+                  ) : null}
+                  <AppText variant="label" style={{ marginTop: 10 }}>
+                    Recommended action: {statusLight.recommendedAction}
+                  </AppText>
+                </View>
+              </Card>
+            ) : null}
 
             {isFailed ? (
               <Card
@@ -523,6 +621,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     alignItems: "center",
+  },
+  lightDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   attemptRow: {
     flexDirection: "row",

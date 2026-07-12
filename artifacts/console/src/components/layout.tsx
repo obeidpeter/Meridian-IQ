@@ -79,7 +79,7 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
       { href: "/gate-metrics", label: "Gate metrics", icon: Gauge, capability: "operator.queue.read" },
       { href: "/feature-flags", label: "Feature flags", icon: ToggleRight, capability: "flags.read" },
       { href: "/audit", label: "Audit & evidence", icon: ShieldCheck, capability: "audit.read" },
-      { href: "/claims", label: "Claims register", icon: BookMarked, capability: "claims.read" },
+      { href: "/clerk/claims", label: "Claims register", icon: BookMarked, capability: "claims.read" },
       { href: "/clerk", label: "Clerk", icon: Bot, capability: "clerk.use" },
     ],
   },
@@ -138,7 +138,11 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const isLinkActive = (href: string) => {
     if (location === href) return true;
-    if (href !== "/" && location.startsWith(href)) return true;
+    // The Claims register (/clerk/claims) is its own entry — don't also light
+    // up the Clerk entry when we're on it.
+    if (href === "/clerk" && location.startsWith("/clerk/claims")) return false;
+    // Prefix matches stop at a path boundary ("/clerkX" never matches "/clerk").
+    if (href !== "/" && location.startsWith(`${href}/`)) return true;
     // Client detail pages live under the Portfolio entry (import is its own).
     if (
       href === "/" &&

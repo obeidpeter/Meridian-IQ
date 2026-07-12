@@ -2340,6 +2340,27 @@ paths:
           $ref: "#/components/responses/NotFound"
 
 
+  /clerk/metrics:
+    get:
+      operationId: getClerkMetrics
+      tags: [clerk]
+      summary: Operational metrics from cases and the inference ledger (CLK-OBS-04)
+      parameters:
+        - name: windowDays
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+      responses:
+        "200":
+          description: Aggregated Clerk health metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkMetrics"
+
 components:
   parameters:
     IdParam:
@@ -5442,7 +5463,7 @@ components:
       properties:
         sourceType:
           type: string
-          enum: [image, pdf, text]
+          enum: [image, pdf, text, voice]
         name:
           type: string
         contentType:
@@ -5452,6 +5473,8 @@ components:
         pdfBase64:
           type: string
         text:
+          type: string
+        audioBase64:
           type: string
     ClerkCaseDecisionInput:
       type: object
@@ -5504,3 +5527,73 @@ components:
             type: string
         recommendedAction:
           type: string
+    ClerkMetrics:
+      type: object
+      required: [windowDays, cases, inference, ask]
+      properties:
+        windowDays:
+          type: integer
+        cases:
+          type: object
+          required: [total, byStatus, byKind]
+          properties:
+            total:
+              type: integer
+            byStatus:
+              type: object
+              additionalProperties:
+                type: integer
+            byKind:
+              type: object
+              additionalProperties:
+                type: integer
+            avgDecisionMinutes:
+              type: ["number", "null"]
+        inference:
+          type: object
+          required: [total, byOutcome, invalidRate, errorRate, cohorts]
+          properties:
+            total:
+              type: integer
+            byOutcome:
+              type: object
+              additionalProperties:
+                type: integer
+            invalidRate:
+              type: number
+            errorRate:
+              type: number
+            latencyP50Ms:
+              type: ["integer", "null"]
+            latencyP95Ms:
+              type: ["integer", "null"]
+            cohorts:
+              type: array
+              items:
+                type: object
+                required: [model, promptVersion, purpose, total, okCount]
+                properties:
+                  model:
+                    type: string
+                  promptVersion:
+                    type: string
+                  purpose:
+                    type: string
+                  total:
+                    type: integer
+                  okCount:
+                    type: integer
+                  latencyP95Ms:
+                    type: ["integer", "null"]
+        ask:
+          type: object
+          required: [total, answered, refused, refusalRate]
+          properties:
+            total:
+              type: integer
+            answered:
+              type: integer
+            refused:
+              type: integer
+            refusalRate:
+              type: number
