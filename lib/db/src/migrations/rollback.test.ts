@@ -73,15 +73,37 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
       await lineTriggerAllowsFailed(pool),
       "line immutability trigger should allow failed-status edits after apply",
     );
+    assert.ok(
+      await policyExists(pool, "clerk_cases"),
+      "Clerk RLS policy on clerk_cases should exist after apply",
+    );
+    assert.ok(
+      await policyExists(pool, "clerk_field_candidates"),
+      "Clerk RLS policy on clerk_field_candidates should exist after apply",
+    );
     const versions = await appliedVersions(pool);
     assert.ok(versions.includes(1), "version 1 should be tracked after apply");
     assert.ok(versions.includes(2), "version 2 should be tracked after apply");
     assert.ok(versions.includes(3), "version 3 should be tracked after apply");
     assert.ok(versions.includes(4), "version 4 should be tracked after apply");
+    assert.ok(versions.includes(5), "version 5 should be tracked after apply");
 
-    // Roll back newest first: 0004 (fix-retry mutability)...
+    // Roll back newest first: 0005 (Clerk guardrails)...
+    const rolled5 = await rollbackLast(pool);
+    assert.equal(rolled5, 5, "first rollback should be version 5");
+    assert.equal(
+      await policyExists(pool, "clerk_cases"),
+      false,
+      "Clerk RLS policy should be gone after rolling back 0005",
+    );
+    assert.ok(
+      await lineTriggerAllowsFailed(pool),
+      "0004 trigger variant must survive the 0005 rollback",
+    );
+
+    // ...then 0004 (fix-retry mutability)...
     const rolled4 = await rollbackLast(pool);
-    assert.equal(rolled4, 4, "first rollback should be version 4");
+    assert.equal(rolled4, 4, "second rollback should be version 4");
     assert.equal(
       await lineTriggerAllowsFailed(pool),
       false,
@@ -94,7 +116,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0003 (push guardrails)...
     const rolled3 = await rollbackLast(pool);
-    assert.equal(rolled3, 3, "second rollback should be version 3");
+    assert.equal(rolled3, 3, "third rollback should be version 3");
     assert.equal(
       await policyExists(pool, "push_devices"),
       false,
@@ -107,7 +129,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0002 (R2 guardrails)...
     const rolled2 = await rollbackLast(pool);
-    assert.equal(rolled2, 2, "third rollback should be version 2");
+    assert.equal(rolled2, 2, "fourth rollback should be version 2");
     assert.equal(
       await policyExists(pool, "bank_statements"),
       false,
@@ -120,7 +142,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0001 (base guardrails).
     const rolled1 = await rollbackLast(pool);
-    assert.equal(rolled1, 1, "fourth rollback should be version 1");
+    assert.equal(rolled1, 1, "fifth rollback should be version 1");
     assert.equal(
       await functionExists(pool, "meridian_block_mutations"),
       false,
@@ -142,6 +164,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
     assert.ok(await policyExists(pool, "invoices"));
     assert.ok(await policyExists(pool, "bank_statements"));
     assert.ok(await policyExists(pool, "push_devices"));
+    assert.ok(await policyExists(pool, "clerk_cases"));
   } finally {
     await pool.end();
   }

@@ -30,6 +30,7 @@ tags:
   - name: whitelabel
   - name: certification
   - name: connectors
+  - name: clerk
 paths:
   /healthz:
     get:
@@ -2069,6 +2070,300 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+
+  # ---- Clerk: controlled AI compliance operator (Clerk Supplemental TRD) ----
+  /clerk/claims:
+    get:
+      operationId: listClaimRecords
+      tags: [clerk]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: claimKey
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Claim records (all versions, newest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClaimRecord"
+    post:
+      operationId: createClaimRecord
+      tags: [clerk]
+      summary: Create a draft claim record (maker step)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimRecordInput"
+      responses:
+        "200":
+          description: Draft claim record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /clerk/claims/{id}/submit:
+    post:
+      operationId: submitClaimRecord
+      tags: [clerk]
+      summary: Submit a draft for independent review
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Record now in review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/claims/{id}/approve:
+    post:
+      operationId: approveClaimRecord
+      tags: [clerk]
+      summary: Approve a reviewed record (checker step; author cannot approve own)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimApproveInput"
+      responses:
+        "200":
+          description: Active claim record (previous active version superseded)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/claims/{id}/reject:
+    post:
+      operationId: rejectClaimRecord
+      tags: [clerk]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimReasonInput"
+      responses:
+        "200":
+          description: Rejected record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/claims/{id}/suspend:
+    post:
+      operationId: suspendClaimRecord
+      tags: [clerk]
+      summary: Emergency withdrawal (CLK-KB-06); blocks runtime use immediately
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimReasonInput"
+      responses:
+        "200":
+          description: Suspended record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/cases:
+    get:
+      operationId: listClerkCases
+      tags: [clerk]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Clerk cases, queue-ordered (priority, then age)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClerkCase"
+    post:
+      operationId: createClerkCase
+      tags: [clerk]
+      summary: Capture a source and run extraction into reviewable candidates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkCaseInput"
+      responses:
+        "200":
+          description: The processed case with field candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCaseDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /clerk/cases/{id}:
+    get:
+      operationId: getClerkCase
+      tags: [clerk]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Case with sources, candidates, runs and decisions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCaseDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clerk/cases/{id}/review:
+    post:
+      operationId: reviewClerkCase
+      tags: [clerk]
+      summary: Record an operator decision (approve/edit/reject/escalate)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkReviewInput"
+      responses:
+        "200":
+          description: Updated case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCaseDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/answers:
+    post:
+      operationId: askClerk
+      tags: [clerk]
+      summary: Register-only answer with deterministic protected facts, or refusal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkAskInput"
+      responses:
+        "200":
+          description: Answer assembled from an active claim record, or a refusal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkAnswer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /clerk/explain:
+    post:
+      operationId: explainRejection
+      tags: [clerk]
+      summary: Catalogue-grounded rejection explanation (CLK-KB-05), or refusal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkExplainInput"
+      responses:
+        "200":
+          description: Explanation grounded in the error catalogue, or a refusal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkExplanation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /clerk/kill-switches:
+    get:
+      operationId: listClerkKillSwitches
+      tags: [clerk]
+      responses:
+        "200":
+          description: Global and per-capability kill switches (CLK-AI-11)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClerkKillSwitch"
+  /clerk/kill-switches/{capability}:
+    post:
+      operationId: setClerkKillSwitch
+      tags: [clerk]
+      parameters:
+        - name: capability
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkKillSwitchInput"
+      responses:
+        "200":
+          description: Updated switch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkKillSwitch"
+        "400":
+          $ref: "#/components/responses/BadRequest"
 
 components:
   parameters:
@@ -4926,3 +5221,419 @@ components:
         finishedAt:
           type: ["string", "null"]
           format: date-time
+
+    # ---- Clerk schemas (Clerk Supplemental TRD v1.0) ----
+    ClaimProtectedFact:
+      type: object
+      required: [key, kind, value]
+      properties:
+        key:
+          type: string
+        kind:
+          type: string
+          enum: [amount, rate, date, threshold, citation, text]
+        value:
+          type: string
+        unit:
+          type: string
+    ClaimRecord:
+      type: object
+      required: [id, claimKey, version, status, jurisdiction, proposition, legalInstrument, legalSection, protectedFacts, effectiveFrom, reviewDueAt, clerkQuotable, authorId, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        claimKey:
+          type: string
+        version:
+          type: integer
+        status:
+          type: string
+          enum: [draft, review, active, suspended, superseded, expired, rejected]
+        jurisdiction:
+          type: string
+        taxpayerClasses:
+          type: array
+          items:
+            type: string
+        transactionClasses:
+          type: array
+          items:
+            type: string
+        proposition:
+          type: string
+        legalInstrument:
+          type: string
+        legalSection:
+          type: string
+        protectedFacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClaimProtectedFact"
+        sourceEvidenceRef:
+          type: ["string", "null"]
+        effectiveFrom:
+          type: string
+        effectiveTo:
+          type: ["string", "null"]
+        reviewDueAt:
+          type: string
+        clerkQuotable:
+          type: boolean
+        authorId:
+          type: string
+        approverId:
+          type: ["string", "null"]
+        approvalEvidence:
+          type: ["string", "null"]
+        supersedesId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ClaimRecordInput:
+      type: object
+      required: [claimKey, proposition, legalInstrument, legalSection, effectiveFrom, reviewDueAt]
+      properties:
+        claimKey:
+          type: string
+          minLength: 3
+        jurisdiction:
+          type: string
+        taxpayerClasses:
+          type: array
+          items:
+            type: string
+        transactionClasses:
+          type: array
+          items:
+            type: string
+        proposition:
+          type: string
+          minLength: 10
+        legalInstrument:
+          type: string
+          minLength: 2
+        legalSection:
+          type: string
+          minLength: 1
+        protectedFacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClaimProtectedFact"
+        sourceEvidenceRef:
+          type: string
+        effectiveFrom:
+          type: string
+        effectiveTo:
+          type: string
+        reviewDueAt:
+          type: string
+        clerkQuotable:
+          type: boolean
+    ClerkCase:
+      type: object
+      required: [id, firmId, clientPartyId, channel, state, priority, language, createdByUserId, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        clientPartyId:
+          type: string
+        channel:
+          type: string
+          enum: [console, pwa, whatsapp]
+        state:
+          type: string
+          enum: [received, consent_checked, quarantined, pre_processed, draft_mapped, clarification_required, ready_for_review, approved, validated, awaiting_submission_approval, queued, closed, rejected, refused, escalated]
+        priority:
+          type: string
+          enum: [low, medium, high]
+        language:
+          type: string
+        intent:
+          type: ["string", "null"]
+        invoiceId:
+          type: ["string", "null"]
+        createdByUserId:
+          type: string
+        assignedToUserId:
+          type: ["string", "null"]
+        refusalReason:
+          type: ["string", "null"]
+        escalationReason:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ClerkCaseInput:
+      type: object
+      required: [clientPartyId, sourceText]
+      properties:
+        clientPartyId:
+          type: string
+        sourceText:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        filename:
+          type: string
+        language:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high]
+    ClerkSourceArtifact:
+      type: object
+      required: [id, caseId, kind, contentHash, createdAt]
+      properties:
+        id:
+          type: string
+        caseId:
+          type: string
+        kind:
+          type: string
+          enum: [text, image, pdf, voice]
+        filename:
+          type: ["string", "null"]
+        mime:
+          type: ["string", "null"]
+        contentText:
+          type: ["string", "null"]
+        contentHash:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ClerkFieldCandidate:
+      type: object
+      required: [id, caseId, fieldKey, value, confidence, critical, extractorVersion, reviewState, createdAt]
+      properties:
+        id:
+          type: string
+        caseId:
+          type: string
+        fieldKey:
+          type: string
+        value:
+          type: string
+        confidence:
+          type: string
+        critical:
+          type: boolean
+        sourceArtifactId:
+          type: ["string", "null"]
+        sourceRegion:
+          type: ["object", "null"]
+          properties:
+            line:
+              type: integer
+            start:
+              type: integer
+            end:
+              type: integer
+        extractorVersion:
+          type: string
+        reviewState:
+          type: string
+          enum: [proposed, confirmed, edited, rejected]
+        editedValue:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    ClerkInferenceRun:
+      type: object
+      required: [id, purpose, model, promptVersion, policyVersion, outcome, latencyMs, createdAt]
+      properties:
+        id:
+          type: string
+        caseId:
+          type: ["string", "null"]
+        purpose:
+          type: string
+          enum: [extraction, intent, answer, explanation]
+        model:
+          type: string
+        promptVersion:
+          type: string
+        policyVersion:
+          type: string
+        outcome:
+          type: string
+          enum: [allowed, refused, blocked, error]
+        confidence:
+          type: ["string", "null"]
+        latencyMs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    ClerkReviewDecision:
+      type: object
+      required: [id, caseId, actorUserId, actorRole, decision, reasonCode, createdAt]
+      properties:
+        id:
+          type: string
+        caseId:
+          type: string
+        actorUserId:
+          type: string
+        actorRole:
+          type: string
+        decision:
+          type: string
+          enum: [approve, edit, reject, escalate]
+        reasonCode:
+          type: string
+        diff:
+          type: ["object", "null"]
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+    ClerkCaseDetail:
+      type: object
+      required: [case, sources, candidates, runs, decisions]
+      properties:
+        case:
+          $ref: "#/components/schemas/ClerkCase"
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkSourceArtifact"
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkFieldCandidate"
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkInferenceRun"
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkReviewDecision"
+    ClerkReviewInput:
+      type: object
+      required: [decision, reasonCode]
+      properties:
+        decision:
+          type: string
+          enum: [approve, edit, reject, escalate]
+        reasonCode:
+          type: string
+          minLength: 2
+        fields:
+          type: array
+          items:
+            type: object
+            required: [candidateId, action]
+            properties:
+              candidateId:
+                type: string
+              action:
+                type: string
+                enum: [confirm, edit, reject]
+              value:
+                type: string
+    ClerkAskInput:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          minLength: 3
+          maxLength: 2000
+        clientPartyId:
+          type: string
+    ClerkAnswer:
+      type: object
+      required: [outcome, escalated]
+      properties:
+        outcome:
+          type: string
+          enum: [answered, refused]
+        answer:
+          type: ["string", "null"]
+        claimKey:
+          type: ["string", "null"]
+        claimVersion:
+          type: ["integer", "null"]
+        citation:
+          type: ["string", "null"]
+        protectedFacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClaimProtectedFact"
+        refusalReason:
+          type: ["string", "null"]
+        escalated:
+          type: boolean
+    ClerkExplainInput:
+      type: object
+      required: [errorCode]
+      properties:
+        errorCode:
+          type: string
+          minLength: 1
+    ClerkExplanation:
+      type: object
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [explained, refused]
+        code:
+          type: ["string", "null"]
+        cause:
+          type: ["string", "null"]
+        fix:
+          type: ["string", "null"]
+        retriable:
+          type: ["boolean", "null"]
+        catalogueSource:
+          type: ["string", "null"]
+        refusalReason:
+          type: ["string", "null"]
+    ClerkKillSwitch:
+      type: object
+      required: [capability, disabled, changedAt]
+      properties:
+        capability:
+          type: string
+        disabled:
+          type: boolean
+        reason:
+          type: ["string", "null"]
+        changedBy:
+          type: ["string", "null"]
+        changedAt:
+          type: string
+          format: date-time
+    ClaimApproveInput:
+      type: object
+      properties:
+        approvalEvidence:
+          type: string
+    ClaimReasonInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+    ClerkKillSwitchInput:
+      type: object
+      required: [disabled]
+      properties:
+        disabled:
+          type: boolean
+        reason:
+          type: string

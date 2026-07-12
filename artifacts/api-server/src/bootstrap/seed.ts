@@ -21,6 +21,7 @@ import {
   revenueShareStatementsTable,
   cpdCoursesTable,
   escalationsTable,
+  claimRecordsTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { seedCatalogue } from "../modules/catalogue/catalogue";
@@ -49,6 +50,7 @@ const FLAGS: {
   { key: "buyer_rails", enabled: false, releaseTag: "R2", description: "Buyer Rails v1: supplier verification, payment flags, scoreboard (BR-01..BR-05)" },
   { key: "white_label", enabled: false, releaseTag: "R2", description: "White-label theming, subdomains, bulk client import, certification (CON-05)" },
   { key: "erp_connectors", enabled: false, releaseTag: "R2", description: "ERP connector contract and first two connectors (PL-03, INT-06)" },
+  { key: "clerk", enabled: false, releaseTag: "R2", description: "Clerk: controlled AI compliance operator, C0/C1 foundation + operator shadow (Clerk Supplemental TRD v1.0)" },
   { key: "credit_readiness", enabled: false, releaseTag: "R3", description: "Layer-3 credit readiness scoring" },
   { key: "bank_data_room", enabled: false, releaseTag: "R4", description: "Bank data room and financing origination" },
 ];
@@ -1065,5 +1067,53 @@ async function seedConsoleDemo(): Promise<void> {
         overagePrice: "100",
       },
     })
+    .onConflictDoNothing();
+
+  // Clerk demo claims (Supplemental CLK-KB-01..04). DEMO DATA: propositions
+  // and citations are illustrative, not counsel-approved — which is why they
+  // exist only behind SEED_DEMO. Author and approver differ (maker-checker).
+  await getDb()
+    .insert(claimRecordsTable)
+    .values([
+      {
+        claimKey: "b2c.late_report.penalty",
+        version: 1,
+        status: "active",
+        proposition:
+          "Late B2C reporting attracts a penalty of {penaltyPerDay} for each day the report is late beyond the {reportingWindow} window.",
+        legalInstrument: "Fiscalisation Regulations (demo)",
+        legalSection: "s.23(4)",
+        protectedFacts: [
+          { key: "penaltyPerDay", kind: "amount", value: "50000", unit: "NGN" },
+          { key: "reportingWindow", kind: "threshold", value: "24", unit: "hour" },
+        ],
+        sourceEvidenceRef: "DEMO — not counsel-approved",
+        effectiveFrom: "2026-01-01",
+        reviewDueAt: "2027-01-01",
+        clerkQuotable: true,
+        authorId: "demo-tax-lead",
+        approverId: "demo-counsel",
+        approvalEvidence: "demo seed",
+      },
+      {
+        claimKey: "vat.standard_rate",
+        version: 1,
+        status: "active",
+        proposition:
+          "The standard VAT rate on taxable supplies is {vatRate}.",
+        legalInstrument: "VAT Act (demo)",
+        legalSection: "s.4",
+        protectedFacts: [
+          { key: "vatRate", kind: "rate", value: "7.5", unit: "%" },
+        ],
+        sourceEvidenceRef: "DEMO — not counsel-approved",
+        effectiveFrom: "2026-01-01",
+        reviewDueAt: "2027-01-01",
+        clerkQuotable: true,
+        authorId: "demo-tax-lead",
+        approverId: "demo-counsel",
+        approvalEvidence: "demo seed",
+      },
+    ])
     .onConflictDoNothing();
 }
