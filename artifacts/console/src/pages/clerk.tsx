@@ -90,21 +90,33 @@ interface ApproveForm {
 // The API takes VAT rates as FRACTIONS ("0.075" = 7.5%) and rejects
 // percent-style values loudly. The operator edits a percent in this form, so
 // we normalise the extracted value to percent for display and convert back to
-// a fraction on submit.
+// a fraction on submit. If extraction found no usable VAT rate we leave the
+// field EMPTY — never invent a default tax rate; the operator must enter one
+// deliberately before approval is allowed.
 function vatPercentFromRaw(raw: string | null): string {
-  if (!raw) return "7.5";
+  if (!raw) return "";
   const trimmed = String(raw).trim();
   const n = Number(trimmed.replace("%", "").trim());
-  if (!Number.isFinite(n) || n < 0) return "7.5";
+  if (!Number.isFinite(n) || n < 0) return "";
   if (trimmed.includes("%")) return String(n);
   // Round away float artifacts (0.07 * 100 → 7.000000000000001).
   return String(n <= 1 ? Number((n * 100).toFixed(6)) : n);
 }
 
 function vatFractionFromPercent(pct: string): string {
-  const n = Number(String(pct).replace("%", "").trim());
+  const trimmed = String(pct).replace("%", "").trim();
+  if (!trimmed) return "";
+  const n = Number(trimmed);
   if (!Number.isFinite(n)) return pct;
   return String(n / 100);
+}
+
+// A line's VAT % is submittable only if it is an explicit number in [0, 100].
+function vatPercentInvalid(pct: string): boolean {
+  const trimmed = String(pct).replace("%", "").trim();
+  if (!trimmed) return true;
+  const n = Number(trimmed);
+  return !Number.isFinite(n) || n < 0 || n > 100;
 }
 
 function approveFormFromCase(kase: ClerkCase): ApproveForm {
@@ -344,7 +356,11 @@ export function ClerkWorkspace() {
     !form.issueDate ||
     form.lines.length === 0 ||
     form.lines.some(
-      (l) => !l.description.trim() || !l.quantity || !l.unitPrice,
+      (l) =>
+        !l.description.trim() ||
+        !l.quantity ||
+        !l.unitPrice ||
+        vatPercentInvalid(l.vatRate),
     );
 
   if (isLoading) {

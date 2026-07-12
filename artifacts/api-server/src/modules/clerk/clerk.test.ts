@@ -31,7 +31,12 @@ import {
   intentValidator,
   type ExtractionOutput,
 } from "./prompts.ts";
-import { normalizeExtraction, createExtractionCase, decideCase } from "./cases.ts";
+import {
+  normalizeExtraction,
+  createExtractionCase,
+  decideCase,
+  getCase,
+} from "./cases.ts";
 import { computeStatusLight } from "./status-light.ts";
 import { formatFact, renderProposition, askClerk } from "./ask.ts";
 import {
@@ -588,6 +593,43 @@ test("approval with percent-style VAT rates is rejected loudly", async () => {
       return true;
     },
   );
+});
+
+test("approval with a missing VAT rate is rejected — never auto-filled with a default", async () => {
+  const gateway = fakeGateway(() =>
+    JSON.stringify({ fields: [], lines: [] } satisfies ExtractionOutput),
+  );
+  const kase = await createExtractionCase(
+    { sourceType: "text", text: `Invoice missing-VAT test ${suffix}` },
+    makerId,
+    gateway,
+  );
+  await assert.rejects(
+    decideCase(
+      kase.id,
+      {
+        action: "approve",
+        firmId,
+        supplierPartyId: supplierId,
+        buyerPartyId: buyerId,
+        invoiceNumber: `CLK-NOVAT-${suffix}`,
+        issueDate: "2026-07-01",
+        lines: [
+          { description: "x", quantity: "1", unitPrice: "100", vatRate: "" },
+        ],
+      },
+      checkerId,
+    ),
+    (err: unknown) => {
+      expectDomainError(err, "VAT_RATE_IMPLAUSIBLE", 400);
+      assert.match(String((err as Error).message), /required/i);
+      return true;
+    },
+  );
+  // The rejected approval must leave the case undecided (status unchanged).
+  const after = await getCase(kase.id);
+  assert.equal(after.status, kase.status);
+  assert.notEqual(after.status, "approved");
 });
 
 // ---------------------------------------------------------------------------
