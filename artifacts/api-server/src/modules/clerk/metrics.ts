@@ -79,9 +79,10 @@ export async function getClerkMetrics(
         AND decided_by IS NOT NULL
     `)
   ).rows as { avg_minutes: string | null }[];
-  const avgDecisionMinutes = decisionRows[0]?.avg_minutes
-    ? Number(Number(decisionRows[0].avg_minutes).toFixed(1))
-    : null;
+  const avgDecisionMinutes =
+    decisionRows[0]?.avg_minutes != null
+      ? Number(Number(decisionRows[0].avg_minutes).toFixed(1))
+      : null;
 
   const inferenceRows = (
     await db.execute(sql`
@@ -154,15 +155,22 @@ export async function getClerkMetrics(
       byOutcome,
       invalidRate: rate(byOutcome["invalid_discarded"] ?? 0, inferenceTotal),
       errorRate: rate(byOutcome["error"] ?? 0, inferenceTotal),
-      latencyP50Ms: latencyRows[0]?.p50 ? Math.round(Number(latencyRows[0].p50)) : null,
-      latencyP95Ms: latencyRows[0]?.p95 ? Math.round(Number(latencyRows[0].p95)) : null,
+      // != null, not truthiness: a 0 ms percentile is a real value.
+      latencyP50Ms:
+        latencyRows[0]?.p50 != null
+          ? Math.round(Number(latencyRows[0].p50))
+          : null,
+      latencyP95Ms:
+        latencyRows[0]?.p95 != null
+          ? Math.round(Number(latencyRows[0].p95))
+          : null,
       cohorts: cohortRows.map((c) => ({
         model: c.model,
         promptVersion: c.prompt_version,
         purpose: c.purpose,
         total: c.total,
         okCount: c.ok_count,
-        latencyP95Ms: c.p95 ? Math.round(Number(c.p95)) : null,
+        latencyP95Ms: c.p95 != null ? Math.round(Number(c.p95)) : null,
       })),
     },
     ask: {
