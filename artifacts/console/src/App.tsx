@@ -27,6 +27,9 @@ import { Catalogue } from "@/pages/catalogue";
 import { AuditEvidence } from "@/pages/audit-evidence";
 import { GateMetrics } from "@/pages/gate-metrics";
 import { Parties } from "@/pages/parties";
+import { Clerk } from "@/pages/clerk";
+import { ClerkCase } from "@/pages/clerk-case";
+import { ClerkClaims } from "@/pages/clerk-claims";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
 // up, so fail fast to the "not yet enabled" card instead of spinning.
@@ -125,6 +128,22 @@ function Router() {
         <Route path="/catalogue">
           <CapabilityGate capability="catalogue.write">
             <Catalogue />
+          </CapabilityGate>
+        </Route>
+        {/* Static /clerk/claims and the param route register before /clerk. */}
+        <Route path="/clerk/claims">
+          <CapabilityGate capability="clerk.read">
+            <ClerkClaims />
+          </CapabilityGate>
+        </Route>
+        <Route path="/clerk/cases/:id">
+          <CapabilityGate capability="clerk.read">
+            <ClerkCase />
+          </CapabilityGate>
+        </Route>
+        <Route path="/clerk">
+          <CapabilityGate capability="clerk.read">
+            <Clerk />
           </CapabilityGate>
         </Route>
         <Route path="/platform-ops">
