@@ -303,7 +303,14 @@ function HealthPanel() {
           ))}
         </div>
       ) : error || !metrics ? (
-        <QueryError thing="Clerk health metrics" onRetry={() => refetch()} />
+        <QueryError
+          thing="Clerk health metrics"
+          onRetry={() => refetch()}
+          // The fetch error message carries the HTTP status ("HTTP 404 …"),
+          // which instantly separates a stale api-server build (404 — rebuild
+          // and restart the server) from a server fault (500).
+          detail={error instanceof Error ? error.message : undefined}
+        />
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
