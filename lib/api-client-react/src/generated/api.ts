@@ -23,6 +23,7 @@ import type {
   AlertDeliveryResult,
   AlertPreferences,
   AlertPreferencesInput,
+  AskClerkInput,
   AssessmentReport,
   AuditBundle,
   AuditVerification,
@@ -39,6 +40,13 @@ import type {
   CancelInvoiceInput,
   CanonicalInvoice,
   ChangePasswordInput,
+  ClaimDecisionInput,
+  ClaimDraftInput,
+  ClaimRecord,
+  ClaimUpdateInput,
+  ClerkCase,
+  ClerkCaseCreateInput,
+  ClerkCaseDecisionInput,
   ClientImportInput,
   ClientImportResult,
   ClientPortfolioDetail,
@@ -92,6 +100,8 @@ import type {
   ListB2cReportsParams,
   ListBankStatementsParams,
   ListBuyerInvoicesParams,
+  ListClaimsParams,
+  ListClerkCasesParams,
   ListErpConnectionsParams,
   ListInvoicesParams,
   ListOperatorCasesParams,
@@ -136,6 +146,7 @@ import type {
   StampVerifyResult,
   StatementImportInput,
   StatementImportResult,
+  StatusLight,
   SubmissionAttempt,
   SubscriptionUpdate,
   SubscriptionView,
@@ -8717,6 +8728,886 @@ export function useListErpSyncRuns<TData = Awaited<ReturnType<typeof listErpSync
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListErpSyncRunsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListClaimsUrl = (params?: ListClaimsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/claims?${stringifiedParams}` : `/api/claims`
+}
+
+/**
+ * @summary All claim record versions in the register
+ */
+export const listClaims = async (params?: ListClaimsParams, options?: RequestInit): Promise<ClaimRecord[]> => {
+
+  return customFetch<ClaimRecord[]>(getListClaimsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClaimsQueryKey = (params?: ListClaimsParams,) => {
+    return [
+    `/api/claims`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListClaimsQueryOptions = <TData = Awaited<ReturnType<typeof listClaims>>, TError = ErrorType<unknown>>(params?: ListClaimsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClaims>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClaimsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClaims>>> = ({ signal }) => listClaims(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClaims>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClaimsQueryResult = NonNullable<Awaited<ReturnType<typeof listClaims>>>
+export type ListClaimsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary All claim record versions in the register
+ */
+
+export function useListClaims<TData = Awaited<ReturnType<typeof listClaims>>, TError = ErrorType<unknown>>(
+ params?: ListClaimsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClaims>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClaimsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateClaimUrl = () => {
+
+
+
+
+  return `/api/claims`
+}
+
+/**
+ * @summary Draft a new version of a claim (maker)
+ */
+export const createClaim = async (claimDraftInput: ClaimDraftInput, options?: RequestInit): Promise<ClaimRecord> => {
+
+  return customFetch<ClaimRecord>(getCreateClaimUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(claimDraftInput)
+  }
+);}
+
+
+
+
+export const getCreateClaimMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClaim>>, TError,{data: BodyType<ClaimDraftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClaim>>, TError,{data: BodyType<ClaimDraftInput>}, TContext> => {
+
+const mutationKey = ['createClaim'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClaim>>, {data: BodyType<ClaimDraftInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createClaim(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateClaimMutationResult = NonNullable<Awaited<ReturnType<typeof createClaim>>>
+    export type CreateClaimMutationBody = BodyType<ClaimDraftInput>
+    export type CreateClaimMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Draft a new version of a claim (maker)
+ */
+export const useCreateClaim = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClaim>>, TError,{data: BodyType<ClaimDraftInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createClaim>>,
+        TError,
+        {data: BodyType<ClaimDraftInput>},
+        TContext
+      > => {
+      return useMutation(getCreateClaimMutationOptions(options));
+    }
+
+export const getGetClaimUrl = (id: string,) => {
+
+
+
+
+  return `/api/claims/${id}`
+}
+
+export const getClaim = async (id: string, options?: RequestInit): Promise<ClaimRecord> => {
+
+  return customFetch<ClaimRecord>(getGetClaimUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClaimQueryKey = (id: string,) => {
+    return [
+    `/api/claims/${id}`
+    ] as const;
+    }
+
+
+export const getGetClaimQueryOptions = <TData = Awaited<ReturnType<typeof getClaim>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClaim>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClaimQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClaim>>> = ({ signal }) => getClaim(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClaim>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClaimQueryResult = NonNullable<Awaited<ReturnType<typeof getClaim>>>
+export type GetClaimQueryError = ErrorType<NotFoundResponse>
+
+
+
+export function useGetClaim<TData = Awaited<ReturnType<typeof getClaim>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClaim>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClaimQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateClaimUrl = (id: string,) => {
+
+
+
+
+  return `/api/claims/${id}`
+}
+
+/**
+ * @summary Edit a draft claim version
+ */
+export const updateClaim = async (id: string,
+    claimUpdateInput: ClaimUpdateInput, options?: RequestInit): Promise<ClaimRecord> => {
+
+  return customFetch<ClaimRecord>(getUpdateClaimUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(claimUpdateInput)
+  }
+);}
+
+
+
+
+export const getUpdateClaimMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClaim>>, TError,{id: string;data: BodyType<ClaimUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateClaim>>, TError,{id: string;data: BodyType<ClaimUpdateInput>}, TContext> => {
+
+const mutationKey = ['updateClaim'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateClaim>>, {id: string;data: BodyType<ClaimUpdateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateClaim(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateClaimMutationResult = NonNullable<Awaited<ReturnType<typeof updateClaim>>>
+    export type UpdateClaimMutationBody = BodyType<ClaimUpdateInput>
+    export type UpdateClaimMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Edit a draft claim version
+ */
+export const useUpdateClaim = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClaim>>, TError,{id: string;data: BodyType<ClaimUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateClaim>>,
+        TError,
+        {id: string;data: BodyType<ClaimUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateClaimMutationOptions(options));
+    }
+
+export const getSubmitClaimUrl = (id: string,) => {
+
+
+
+
+  return `/api/claims/${id}/submit`
+}
+
+/**
+ * @summary Move a draft claim to review (maker step)
+ */
+export const submitClaim = async (id: string, options?: RequestInit): Promise<ClaimRecord> => {
+
+  return customFetch<ClaimRecord>(getSubmitClaimUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSubmitClaimMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitClaim>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitClaim>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['submitClaim'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitClaim>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  submitClaim(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitClaimMutationResult = NonNullable<Awaited<ReturnType<typeof submitClaim>>>
+
+    export type SubmitClaimMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Move a draft claim to review (maker step)
+ */
+export const useSubmitClaim = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitClaim>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitClaim>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getSubmitClaimMutationOptions(options));
+    }
+
+export const getDecideClaimUrl = (id: string,) => {
+
+
+
+
+  return `/api/claims/${id}/decision`
+}
+
+/**
+ * @summary Approve, reject, suspend or resume a claim (checker — never the author)
+ */
+export const decideClaim = async (id: string,
+    claimDecisionInput: ClaimDecisionInput, options?: RequestInit): Promise<ClaimRecord> => {
+
+  return customFetch<ClaimRecord>(getDecideClaimUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(claimDecisionInput)
+  }
+);}
+
+
+
+
+export const getDecideClaimMutationOptions = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideClaim>>, TError,{id: string;data: BodyType<ClaimDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideClaim>>, TError,{id: string;data: BodyType<ClaimDecisionInput>}, TContext> => {
+
+const mutationKey = ['decideClaim'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideClaim>>, {id: string;data: BodyType<ClaimDecisionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  decideClaim(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideClaimMutationResult = NonNullable<Awaited<ReturnType<typeof decideClaim>>>
+    export type DecideClaimMutationBody = BodyType<ClaimDecisionInput>
+    export type DecideClaimMutationError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Approve, reject, suspend or resume a claim (checker — never the author)
+ */
+export const useDecideClaim = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideClaim>>, TError,{id: string;data: BodyType<ClaimDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideClaim>>,
+        TError,
+        {id: string;data: BodyType<ClaimDecisionInput>},
+        TContext
+      > => {
+      return useMutation(getDecideClaimMutationOptions(options));
+    }
+
+export const getListClerkCasesUrl = (params?: ListClerkCasesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/cases?${stringifiedParams}` : `/api/clerk/cases`
+}
+
+/**
+ * @summary Clerk case queue (content columns omitted; see detail)
+ */
+export const listClerkCases = async (params?: ListClerkCasesParams, options?: RequestInit): Promise<ClerkCase[]> => {
+
+  return customFetch<ClerkCase[]>(getListClerkCasesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClerkCasesQueryKey = (params?: ListClerkCasesParams,) => {
+    return [
+    `/api/clerk/cases`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListClerkCasesQueryOptions = <TData = Awaited<ReturnType<typeof listClerkCases>>, TError = ErrorType<unknown>>(params?: ListClerkCasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClerkCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClerkCasesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClerkCases>>> = ({ signal }) => listClerkCases(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClerkCases>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClerkCasesQueryResult = NonNullable<Awaited<ReturnType<typeof listClerkCases>>>
+export type ListClerkCasesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Clerk case queue (content columns omitted; see detail)
+ */
+
+export function useListClerkCases<TData = Awaited<ReturnType<typeof listClerkCases>>, TError = ErrorType<unknown>>(
+ params?: ListClerkCasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClerkCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClerkCasesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateClerkCaseUrl = () => {
+
+
+
+
+  return `/api/clerk/cases`
+}
+
+/**
+ * @summary Upload an invoice document for extraction
+ */
+export const createClerkCase = async (clerkCaseCreateInput: ClerkCaseCreateInput, options?: RequestInit): Promise<ClerkCase> => {
+
+  return customFetch<ClerkCase>(getCreateClerkCaseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clerkCaseCreateInput)
+  }
+);}
+
+
+
+
+export const getCreateClerkCaseMutationOptions = <TError = ErrorType<BadRequestResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClerkCase>>, TError,{data: BodyType<ClerkCaseCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClerkCase>>, TError,{data: BodyType<ClerkCaseCreateInput>}, TContext> => {
+
+const mutationKey = ['createClerkCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClerkCase>>, {data: BodyType<ClerkCaseCreateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createClerkCase(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateClerkCaseMutationResult = NonNullable<Awaited<ReturnType<typeof createClerkCase>>>
+    export type CreateClerkCaseMutationBody = BodyType<ClerkCaseCreateInput>
+    export type CreateClerkCaseMutationError = ErrorType<BadRequestResponse | Error>
+
+    /**
+ * @summary Upload an invoice document for extraction
+ */
+export const useCreateClerkCase = <TError = ErrorType<BadRequestResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClerkCase>>, TError,{data: BodyType<ClerkCaseCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createClerkCase>>,
+        TError,
+        {data: BodyType<ClerkCaseCreateInput>},
+        TContext
+      > => {
+      return useMutation(getCreateClerkCaseMutationOptions(options));
+    }
+
+export const getGetClerkCaseUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/cases/${id}`
+}
+
+export const getClerkCase = async (id: string, options?: RequestInit): Promise<ClerkCase> => {
+
+  return customFetch<ClerkCase>(getGetClerkCaseUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkCaseQueryKey = (id: string,) => {
+    return [
+    `/api/clerk/cases/${id}`
+    ] as const;
+    }
+
+
+export const getGetClerkCaseQueryOptions = <TData = Awaited<ReturnType<typeof getClerkCase>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkCase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkCaseQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkCase>>> = ({ signal }) => getClerkCase(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkCase>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkCaseQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkCase>>>
+export type GetClerkCaseQueryError = ErrorType<NotFoundResponse>
+
+
+
+export function useGetClerkCase<TData = Awaited<ReturnType<typeof getClerkCase>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkCase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkCaseQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDecideClerkCaseUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/cases/${id}/decision`
+}
+
+/**
+ * @summary Operator decision — approve creates a DRAFT invoice only
+ */
+export const decideClerkCase = async (id: string,
+    clerkCaseDecisionInput: ClerkCaseDecisionInput, options?: RequestInit): Promise<ClerkCase> => {
+
+  return customFetch<ClerkCase>(getDecideClerkCaseUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clerkCaseDecisionInput)
+  }
+);}
+
+
+
+
+export const getDecideClerkCaseMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideClerkCase>>, TError,{id: string;data: BodyType<ClerkCaseDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideClerkCase>>, TError,{id: string;data: BodyType<ClerkCaseDecisionInput>}, TContext> => {
+
+const mutationKey = ['decideClerkCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideClerkCase>>, {id: string;data: BodyType<ClerkCaseDecisionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  decideClerkCase(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideClerkCaseMutationResult = NonNullable<Awaited<ReturnType<typeof decideClerkCase>>>
+    export type DecideClerkCaseMutationBody = BodyType<ClerkCaseDecisionInput>
+    export type DecideClerkCaseMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Operator decision — approve creates a DRAFT invoice only
+ */
+export const useDecideClerkCase = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideClerkCase>>, TError,{id: string;data: BodyType<ClerkCaseDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideClerkCase>>,
+        TError,
+        {id: string;data: BodyType<ClerkCaseDecisionInput>},
+        TContext
+      > => {
+      return useMutation(getDecideClerkCaseMutationOptions(options));
+    }
+
+export const getAskClerkUrl = () => {
+
+
+
+
+  return `/api/clerk/ask`
+}
+
+/**
+ * @summary Register-only Q&A — answers verbatim from approved claims or refuses
+ */
+export const askClerk = async (askClerkInput: AskClerkInput, options?: RequestInit): Promise<ClerkCase> => {
+
+  return customFetch<ClerkCase>(getAskClerkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(askClerkInput)
+  }
+);}
+
+
+
+
+export const getAskClerkMutationOptions = <TError = ErrorType<BadRequestResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askClerk>>, TError,{data: BodyType<AskClerkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof askClerk>>, TError,{data: BodyType<AskClerkInput>}, TContext> => {
+
+const mutationKey = ['askClerk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof askClerk>>, {data: BodyType<AskClerkInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  askClerk(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AskClerkMutationResult = NonNullable<Awaited<ReturnType<typeof askClerk>>>
+    export type AskClerkMutationBody = BodyType<AskClerkInput>
+    export type AskClerkMutationError = ErrorType<BadRequestResponse | Error>
+
+    /**
+ * @summary Register-only Q&A — answers verbatim from approved claims or refuses
+ */
+export const useAskClerk = <TError = ErrorType<BadRequestResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askClerk>>, TError,{data: BodyType<AskClerkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof askClerk>>,
+        TError,
+        {data: BodyType<AskClerkInput>},
+        TContext
+      > => {
+      return useMutation(getAskClerkMutationOptions(options));
+    }
+
+export const getGetInvoiceStatusLightUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/status-light`
+}
+
+/**
+ * @summary Deterministic red/amber/green light with reasons (no AI involved)
+ */
+export const getInvoiceStatusLight = async (id: string, options?: RequestInit): Promise<StatusLight> => {
+
+  return customFetch<StatusLight>(getGetInvoiceStatusLightUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInvoiceStatusLightQueryKey = (id: string,) => {
+    return [
+    `/api/invoices/${id}/status-light`
+    ] as const;
+    }
+
+
+export const getGetInvoiceStatusLightQueryOptions = <TData = Awaited<ReturnType<typeof getInvoiceStatusLight>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceStatusLight>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInvoiceStatusLightQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvoiceStatusLight>>> = ({ signal }) => getInvoiceStatusLight(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInvoiceStatusLight>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInvoiceStatusLightQueryResult = NonNullable<Awaited<ReturnType<typeof getInvoiceStatusLight>>>
+export type GetInvoiceStatusLightQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Deterministic red/amber/green light with reasons (no AI involved)
+ */
+
+export function useGetInvoiceStatusLight<TData = Awaited<ReturnType<typeof getInvoiceStatusLight>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceStatusLight>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInvoiceStatusLightQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

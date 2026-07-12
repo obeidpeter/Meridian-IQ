@@ -68,7 +68,15 @@ export type Capability =
   | "certification.read"
   | "certification.write"
   | "connector.read"
-  | "connector.write";
+  | "connector.write"
+  // Clerk v0 (Task #40). claims.read is broad reference data; claims.write /
+  // claims.approve are operator-only because claim records are platform-global
+  // governance data (same rationale as billing.tiers.write). clerk.use gates
+  // every AI surface (capture, review, Ask Clerk) — operator-only.
+  | "claims.read"
+  | "claims.write"
+  | "claims.approve"
+  | "clerk.use";
 
 const ALL: Capability[] = [
   "invoice.read",
@@ -115,6 +123,10 @@ const ALL: Capability[] = [
   "certification.write",
   "connector.read",
   "connector.write",
+  "claims.read",
+  "claims.write",
+  "claims.approve",
+  "clerk.use",
 ];
 
 const READ_ONLY: Capability[] = ALL.filter(
@@ -155,6 +167,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "certification.write",
     "connector.read",
     "connector.write",
+    "claims.read",
   ],
   firm_staff: [
     "invoice.read",
@@ -180,6 +193,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "b2c.write",
     "certification.read",
     "certification.write",
+    "claims.read",
   ],
   client_user: [
     "invoice.read",
@@ -210,6 +224,10 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "identity.read",
     "identity.write",
     "messaging.send",
+    "claims.read",
+    "claims.write",
+    "claims.approve",
+    "clerk.use",
   ],
   bank_user: ["buyer.verify", "audit.read"],
   // Buyer Rails role (Appendix C "Y (buyer org)"): verification, confirmation

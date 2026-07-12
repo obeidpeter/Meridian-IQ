@@ -23,6 +23,8 @@ import b2cRouter from "./b2c";
 import whitelabelRouter from "./whitelabel";
 import certificationRouter from "./certification";
 import connectorsRouter from "./connectors";
+import claimsRouter from "./claims";
+import clerkRouter from "./clerk";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 import "../modules/push/register";
@@ -53,5 +55,7 @@ router.use(b2cRouter);
 router.use(whitelabelRouter);
 router.use(certificationRouter);
 router.use(connectorsRouter);
+router.use(claimsRouter);
+router.use(clerkRouter);
 
 export default router;

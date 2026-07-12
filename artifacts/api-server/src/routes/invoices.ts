@@ -48,7 +48,10 @@ import {
   CreateSettlementParams,
   CreateSettlementBody,
   CreateSettlementResponse,
+  GetInvoiceStatusLightParams,
+  GetInvoiceStatusLightResponse,
 } from "@workspace/api-zod";
+import { computeStatusLight } from "../modules/clerk/status-light";
 import {
   assertCan,
   assertClientPartyScope,
@@ -372,6 +375,41 @@ router.get("/invoices/:id/attempts", async (req, res): Promise<void> => {
     .where(eq(submissionAttemptsTable.invoiceId, params.data.id))
     .orderBy(asc(submissionAttemptsTable.attemptNo));
   res.json(ListSubmissionAttemptsResponse.parse(rows));
+});
+
+// Task #40: deterministic status light. Pure rules over spine data — no AI
+// involved — so it is safe for every invoice reader and needs no flag.
+router.get("/invoices/:id/status-light", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const params = GetInvoiceStatusLightParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const { invoice } = await loadForTenant(req, params.data.id);
+  const [attempts, confirmations, stamps] = await Promise.all([
+    getDb()
+      .select()
+      .from(submissionAttemptsTable)
+      .where(eq(submissionAttemptsTable.invoiceId, params.data.id)),
+    getDb()
+      .select()
+      .from(confirmationsTable)
+      .where(eq(confirmationsTable.invoiceId, params.data.id)),
+    getDb()
+      .select()
+      .from(stampRecordsTable)
+      .where(eq(stampRecordsTable.invoiceId, params.data.id))
+      .orderBy(asc(stampRecordsTable.createdAt))
+      .limit(1),
+  ]);
+  const light = computeStatusLight({
+    invoice,
+    attempts,
+    confirmations,
+    stamp: stamps[0] ?? null,
+  });
+  res.json(GetInvoiceStatusLightResponse.parse(light));
 });
 
 router.get("/invoices/:id/confirmations", async (req, res): Promise<void> => {

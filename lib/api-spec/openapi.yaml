@@ -30,6 +30,8 @@ tags:
   - name: whitelabel
   - name: certification
   - name: connectors
+  - name: claims
+  - name: clerk
 paths:
   /healthz:
     get:
@@ -2066,6 +2068,274 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ErpSyncRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /claims:
+    get:
+      operationId: listClaims
+      tags: [claims]
+      summary: All claim record versions in the register
+      parameters:
+        - name: claimKey
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Claim records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClaimRecord"
+    post:
+      operationId: createClaim
+      tags: [claims]
+      summary: Draft a new version of a claim (maker)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimDraftInput"
+      responses:
+        "201":
+          description: Draft claim version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /claims/{id}:
+    get:
+      operationId: getClaim
+      tags: [claims]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Claim record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateClaim
+      tags: [claims]
+      summary: Edit a draft claim version
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimUpdateInput"
+      responses:
+        "200":
+          description: Updated claim record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /claims/{id}/submit:
+    post:
+      operationId: submitClaim
+      tags: [claims]
+      summary: Move a draft claim to review (maker step)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Claim now in review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /claims/{id}/decision:
+    post:
+      operationId: decideClaim
+      tags: [claims]
+      summary: Approve, reject, suspend or resume a claim (checker — never the author)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimDecisionInput"
+      responses:
+        "200":
+          description: Decided claim record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/cases:
+    get:
+      operationId: listClerkCases
+      tags: [clerk]
+      summary: Clerk case queue (content columns omitted; see detail)
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [extraction, question]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, extracted, in_review, approved, rejected, escalated, failed]
+      responses:
+        "200":
+          description: Clerk cases, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClerkCase"
+    post:
+      operationId: createClerkCase
+      tags: [clerk]
+      summary: Upload an invoice document for extraction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkCaseCreateInput"
+      responses:
+        "201":
+          description: Case with extraction candidates (or escalated/failed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          description: Upload exceeds the 5 MB limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Document unreadable (e.g. PDF with no selectable text)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Clerk AI disabled by the kill switch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /clerk/cases/{id}:
+    get:
+      operationId: getClerkCase
+      tags: [clerk]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Full clerk case including source content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCase"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clerk/cases/{id}/decision:
+    post:
+      operationId: decideClerkCase
+      tags: [clerk]
+      summary: Operator decision — approve creates a DRAFT invoice only
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkCaseDecisionInput"
+      responses:
+        "200":
+          description: Decided case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/ask:
+    post:
+      operationId: askClerk
+      tags: [clerk]
+      summary: Register-only Q&A — answers verbatim from approved claims or refuses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AskClerkInput"
+      responses:
+        "200":
+          description: Question case with a register-backed answer or a refusal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          description: Clerk AI disabled by the kill switch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /invoices/{id}/status-light:
+    get:
+      operationId: getInvoiceStatusLight
+      tags: [invoices]
+      summary: Deterministic red/amber/green light with reasons (no AI involved)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Status light
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusLight"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -4926,3 +5196,311 @@ components:
         finishedAt:
           type: ["string", "null"]
           format: date-time
+    ProtectedFact:
+      type: object
+      required: [key, label, kind, value]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [rate, amount, duration, date, count, text]
+        value:
+          type: string
+        unit:
+          type: string
+    ClaimApplicability:
+      type: object
+      additionalProperties:
+        type: string
+    ClaimRecord:
+      type: object
+      required:
+        [id, claimKey, version, state, title, proposition, protectedFacts, citation, applicability, effectiveFrom, createdBy, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        claimKey:
+          type: string
+        version:
+          type: integer
+        state:
+          type: string
+          enum: [draft, review, active, suspended, superseded, expired, rejected]
+        title:
+          type: string
+        proposition:
+          type: string
+        protectedFacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProtectedFact"
+        citation:
+          type: string
+        applicability:
+          $ref: "#/components/schemas/ClaimApplicability"
+        effectiveFrom:
+          type: string
+        effectiveTo:
+          type: ["string", "null"]
+        createdBy:
+          type: string
+        submittedBy:
+          type: ["string", "null"]
+        decidedBy:
+          type: ["string", "null"]
+        decisionNote:
+          type: ["string", "null"]
+        supersededById:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ClaimDraftInput:
+      type: object
+      required: [claimKey, title, proposition, protectedFacts, citation, effectiveFrom]
+      properties:
+        claimKey:
+          type: string
+          minLength: 3
+        title:
+          type: string
+          minLength: 3
+        proposition:
+          type: string
+          minLength: 10
+        protectedFacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProtectedFact"
+        citation:
+          type: string
+          minLength: 3
+        applicability:
+          $ref: "#/components/schemas/ClaimApplicability"
+        effectiveFrom:
+          type: string
+        effectiveTo:
+          type: ["string", "null"]
+    ClaimUpdateInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 3
+        proposition:
+          type: string
+          minLength: 10
+        protectedFacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProtectedFact"
+        citation:
+          type: string
+          minLength: 3
+        applicability:
+          $ref: "#/components/schemas/ClaimApplicability"
+        effectiveFrom:
+          type: string
+        effectiveTo:
+          type: ["string", "null"]
+    ClaimDecisionInput:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [approve, reject, suspend, resume]
+        note:
+          type: ["string", "null"]
+    ClerkExtractionField:
+      type: object
+      required: [field, value, confidence, sourceSnippet, critical, flagged]
+      properties:
+        field:
+          type: string
+        value:
+          type: ["string", "null"]
+        confidence:
+          type: number
+        sourceSnippet:
+          type: ["string", "null"]
+        critical:
+          type: boolean
+        flagged:
+          type: boolean
+    ClerkExtractionLine:
+      type: object
+      required: [description, quantity, unitPrice, vatRate, confidence]
+      properties:
+        description:
+          type: ["string", "null"]
+        quantity:
+          type: ["string", "null"]
+        unitPrice:
+          type: ["string", "null"]
+        vatRate:
+          type: ["string", "null"]
+        confidence:
+          type: number
+    ClerkExtraction:
+      type: object
+      required: [fields, lines, promptVersion, model]
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkExtractionField"
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkExtractionLine"
+        promptVersion:
+          type: string
+        model:
+          type: string
+    ClerkAnswer:
+      type: object
+      required: [answered]
+      properties:
+        answered:
+          type: boolean
+        claimId:
+          type: string
+        claimKey:
+          type: string
+        claimVersion:
+          type: integer
+        proposition:
+          type: string
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProtectedFact"
+        citation:
+          type: string
+        refusalReason:
+          type: string
+    ClerkCase:
+      type: object
+      required: [id, kind, status, createdBy, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [extraction, question]
+        status:
+          type: string
+          enum: [pending, extracted, in_review, approved, rejected, escalated, failed]
+        sourceType:
+          type: ["string", "null"]
+        sourceName:
+          type: ["string", "null"]
+        sourceText:
+          type: ["string", "null"]
+        sourceImageB64:
+          type: ["string", "null"]
+        extraction:
+          anyOf:
+            - $ref: "#/components/schemas/ClerkExtraction"
+            - type: "null"
+        question:
+          type: ["string", "null"]
+        answer:
+          anyOf:
+            - $ref: "#/components/schemas/ClerkAnswer"
+            - type: "null"
+        firmId:
+          type: ["string", "null"]
+        createdBy:
+          type: string
+        decidedBy:
+          type: ["string", "null"]
+        decisionAction:
+          type: ["string", "null"]
+        decisionReason:
+          type: ["string", "null"]
+        createdInvoiceId:
+          type: ["string", "null"]
+        failReason:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ClerkCaseCreateInput:
+      type: object
+      required: [sourceType]
+      properties:
+        sourceType:
+          type: string
+          enum: [image, pdf, text]
+        name:
+          type: string
+        contentType:
+          type: string
+        imageBase64:
+          type: string
+        pdfBase64:
+          type: string
+        text:
+          type: string
+    ClerkCaseDecisionInput:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [approve, reject, escalate]
+        reason:
+          type: ["string", "null"]
+        firmId:
+          type: string
+        supplierPartyId:
+          type: string
+        buyerPartyId:
+          type: string
+        invoiceNumber:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        currency:
+          type: string
+        category:
+          type: string
+          enum: [b2b, b2g, b2c]
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLineInput"
+    AskClerkInput:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          minLength: 3
+          maxLength: 2000
+    StatusLight:
+      type: object
+      required: [light, reasons, recommendedAction]
+      properties:
+        light:
+          type: string
+          enum: [green, amber, red]
+        reasons:
+          type: array
+          items:
+            type: string
+        recommendedAction:
+          type: string

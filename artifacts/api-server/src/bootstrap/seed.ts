@@ -21,6 +21,7 @@ import {
   revenueShareStatementsTable,
   cpdCoursesTable,
   escalationsTable,
+  claimRecordsTable,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { seedCatalogue } from "../modules/catalogue/catalogue";
@@ -51,12 +52,16 @@ const FLAGS: {
   { key: "erp_connectors", enabled: false, releaseTag: "R2", description: "ERP connector contract and first two connectors (PL-03, INT-06)" },
   { key: "credit_readiness", enabled: false, releaseTag: "R3", description: "Layer-3 credit readiness scoring" },
   { key: "bank_data_room", enabled: false, releaseTag: "R4", description: "Bank data room and financing origination" },
+  // Clerk v0 kill switch (Task #40): flipping this off instantly disables every
+  // Clerk AI surface (capture extraction, Ask Clerk); manual flows keep working.
+  { key: "clerk_ai", enabled: true, releaseTag: "R3", description: "Clerk AI copilot: capture extraction and register-backed Q&A (operator-only)" },
 ];
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [
   { version: 1, description: "Initial data spine (parties, invoices, lifecycle, consent, audit, platform, credit)" },
   { version: 2, description: "Persisted operator-editable error catalogue (ADV-03)" },
   { version: 3, description: "R2 spine: statements/reconciliation, B2C batches, buyer rails columns, certification, connectors" },
+  { version: 4, description: "Clerk v0: claims register, clerk cases, inference ledger (Task #40)" },
 ];
 
 // Demo seeding creates login-capable accounts (operator, firm admin, auditor,
@@ -95,6 +100,7 @@ export async function seedPlatform(): Promise<void> {
       await seedDemo();
       await seedConsoleDemo();
       await seedBuyerDemo();
+      await seedClerkDemo();
       await seedDemoPasswords();
     } else {
       logger.warn(
@@ -1066,4 +1072,122 @@ async function seedConsoleDemo(): Promise<void> {
       },
     })
     .onConflictDoNothing();
+}
+
+// --- Clerk v0 demo data (Task #40) -------------------------------------------
+// A second operator so the maker-checker rule is demonstrable (the author of a
+// claim version can never approve it), plus a small register of ACTIVE claims
+// so Ask Clerk answers from approved facts out of the box, and one claim in
+// review so the approval flow can be exercised live.
+export const CLERK = {
+  approverUserId: "9a000002-0000-4000-8000-0000000000a2",
+  claims: {
+    vatRate: "c1a00001-0000-4000-8000-000000000001",
+    b2cWindow: "c1a00002-0000-4000-8000-000000000002",
+    vatThreshold: "c1a00003-0000-4000-8000-000000000003",
+    citSmallCompany: "c1a00004-0000-4000-8000-000000000004",
+  },
+} as const;
+
+async function seedClerkDemo(): Promise<void> {
+  await getDb()
+    .insert(usersTable)
+    .values({
+      id: CLERK.approverUserId,
+      email: "claims.approver@meridianiq.example",
+      fullName: "Claims Approver",
+    })
+    .onConflictDoNothing({ target: usersTable.id });
+
+  await getDb()
+    .insert(membershipsTable)
+    .values({
+      userId: CLERK.approverUserId,
+      firmId: null,
+      role: "operator",
+      clientPartyId: null,
+    })
+    .onConflictDoNothing();
+
+  await getDb()
+    .insert(claimRecordsTable)
+    .values([
+      {
+        id: CLERK.claims.vatRate,
+        claimKey: "vat.standard_rate",
+        version: 1,
+        state: "active",
+        title: "Standard VAT rate",
+        proposition:
+          "The standard VAT rate on taxable supplies of goods and services is {rate}.",
+        protectedFacts: [
+          { key: "rate", label: "Standard VAT rate", kind: "rate", value: "7.5", unit: "%" },
+        ],
+        citation: "VAT Act, s.4 (as amended by Finance Act 2019, s.34)",
+        applicability: {},
+        effectiveFrom: "2020-02-01",
+        createdBy: CONSOLE.operatorUserId,
+        submittedBy: CONSOLE.operatorUserId,
+        decidedBy: CLERK.approverUserId,
+      },
+      {
+        id: CLERK.claims.b2cWindow,
+        claimKey: "b2c.reporting_window",
+        version: 1,
+        state: "active",
+        title: "B2C reporting window and threshold",
+        proposition:
+          "B2C transactions of {threshold} or more must be reported to the MBS platform within {window} of the transaction.",
+        protectedFacts: [
+          { key: "threshold", label: "B2C reporting threshold", kind: "amount", value: "50000", unit: "NGN" },
+          { key: "window", label: "Reporting window", kind: "duration", value: "24", unit: "hours" },
+        ],
+        citation: "FIRS e-invoicing guidelines (2026), B2C reporting rule",
+        applicability: { category: "b2c" },
+        effectiveFrom: "2026-01-01",
+        createdBy: CONSOLE.operatorUserId,
+        submittedBy: CONSOLE.operatorUserId,
+        decidedBy: CLERK.approverUserId,
+      },
+      {
+        id: CLERK.claims.vatThreshold,
+        claimKey: "vat.registration_threshold",
+        version: 1,
+        state: "active",
+        title: "VAT registration threshold",
+        proposition:
+          "A business must register for VAT once its annual taxable turnover reaches {threshold}.",
+        protectedFacts: [
+          { key: "threshold", label: "Annual turnover threshold", kind: "amount", value: "25000000", unit: "NGN" },
+        ],
+        citation: "VAT Act, s.15 (as amended by Finance Act 2019)",
+        applicability: {},
+        effectiveFrom: "2020-02-01",
+        createdBy: CONSOLE.operatorUserId,
+        submittedBy: CONSOLE.operatorUserId,
+        decidedBy: CLERK.approverUserId,
+      },
+      {
+        // In review: lets the demo walk the maker-checker approval live. The
+        // maker is the primary operator, so only the approver account (or any
+        // other operator) can approve it.
+        id: CLERK.claims.citSmallCompany,
+        claimKey: "cit.small_company_rate",
+        version: 1,
+        state: "review",
+        title: "Small company CIT rate",
+        proposition:
+          "A small company with annual gross turnover below {threshold} is charged companies income tax at {rate}.",
+        protectedFacts: [
+          { key: "threshold", label: "Small company turnover threshold", kind: "amount", value: "25000000", unit: "NGN" },
+          { key: "rate", label: "CIT rate", kind: "rate", value: "0", unit: "%" },
+        ],
+        citation: "CITA, s.40 (as amended by Finance Act 2019)",
+        applicability: {},
+        effectiveFrom: "2020-02-01",
+        createdBy: CONSOLE.operatorUserId,
+        submittedBy: CONSOLE.operatorUserId,
+      },
+    ])
+    .onConflictDoNothing({ target: claimRecordsTable.id });
 }

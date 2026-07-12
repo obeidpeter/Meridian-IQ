@@ -3,6 +3,7 @@ import { useGetClientPortfolio } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
+import { InvoiceStatusLight } from "@/components/status-light";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 import {
   formatNaira,
@@ -174,6 +175,7 @@ export function ClientDetail() {
                       <span className={badgeClasses(inv.status)}>
                         {statusLabel(inv.status)}
                       </span>
+                      <InvoiceStatusLight invoiceId={inv.id} />
                     </div>
                   );
                 })}

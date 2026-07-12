@@ -2199,6 +2199,283 @@ export interface ErpSyncRun {
   finishedAt?: string | null;
 }
 
+export type ProtectedFactKind = typeof ProtectedFactKind[keyof typeof ProtectedFactKind];
+
+
+export const ProtectedFactKind = {
+  rate: 'rate',
+  amount: 'amount',
+  duration: 'duration',
+  date: 'date',
+  count: 'count',
+  text: 'text',
+} as const;
+
+export interface ProtectedFact {
+  key: string;
+  label: string;
+  kind: ProtectedFactKind;
+  value: string;
+  unit?: string;
+}
+
+export interface ClaimApplicability {[key: string]: string}
+
+export type ClaimRecordState = typeof ClaimRecordState[keyof typeof ClaimRecordState];
+
+
+export const ClaimRecordState = {
+  draft: 'draft',
+  review: 'review',
+  active: 'active',
+  suspended: 'suspended',
+  superseded: 'superseded',
+  expired: 'expired',
+  rejected: 'rejected',
+} as const;
+
+export interface ClaimRecord {
+  id: string;
+  claimKey: string;
+  version: number;
+  state: ClaimRecordState;
+  title: string;
+  proposition: string;
+  protectedFacts: ProtectedFact[];
+  citation: string;
+  applicability: ClaimApplicability;
+  effectiveFrom: string;
+  /** @nullable */
+  effectiveTo?: string | null;
+  createdBy: string;
+  /** @nullable */
+  submittedBy?: string | null;
+  /** @nullable */
+  decidedBy?: string | null;
+  /** @nullable */
+  decisionNote?: string | null;
+  /** @nullable */
+  supersededById?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClaimDraftInput {
+  /** @minLength 3 */
+  claimKey: string;
+  /** @minLength 3 */
+  title: string;
+  /** @minLength 10 */
+  proposition: string;
+  protectedFacts: ProtectedFact[];
+  /** @minLength 3 */
+  citation: string;
+  applicability?: ClaimApplicability;
+  effectiveFrom: string;
+  /** @nullable */
+  effectiveTo?: string | null;
+}
+
+export interface ClaimUpdateInput {
+  /** @minLength 3 */
+  title?: string;
+  /** @minLength 10 */
+  proposition?: string;
+  protectedFacts?: ProtectedFact[];
+  /** @minLength 3 */
+  citation?: string;
+  applicability?: ClaimApplicability;
+  effectiveFrom?: string;
+  /** @nullable */
+  effectiveTo?: string | null;
+}
+
+export type ClaimDecisionInputAction = typeof ClaimDecisionInputAction[keyof typeof ClaimDecisionInputAction];
+
+
+export const ClaimDecisionInputAction = {
+  approve: 'approve',
+  reject: 'reject',
+  suspend: 'suspend',
+  resume: 'resume',
+} as const;
+
+export interface ClaimDecisionInput {
+  action: ClaimDecisionInputAction;
+  /** @nullable */
+  note?: string | null;
+}
+
+export interface ClerkExtractionField {
+  field: string;
+  /** @nullable */
+  value: string | null;
+  confidence: number;
+  /** @nullable */
+  sourceSnippet: string | null;
+  critical: boolean;
+  flagged: boolean;
+}
+
+export interface ClerkExtractionLine {
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  quantity: string | null;
+  /** @nullable */
+  unitPrice: string | null;
+  /** @nullable */
+  vatRate: string | null;
+  confidence: number;
+}
+
+export interface ClerkExtraction {
+  fields: ClerkExtractionField[];
+  lines: ClerkExtractionLine[];
+  promptVersion: string;
+  model: string;
+}
+
+export interface ClerkAnswer {
+  answered: boolean;
+  claimId?: string;
+  claimKey?: string;
+  claimVersion?: number;
+  proposition?: string;
+  facts?: ProtectedFact[];
+  citation?: string;
+  refusalReason?: string;
+}
+
+export type ClerkCaseKind = typeof ClerkCaseKind[keyof typeof ClerkCaseKind];
+
+
+export const ClerkCaseKind = {
+  extraction: 'extraction',
+  question: 'question',
+} as const;
+
+export type ClerkCaseStatus = typeof ClerkCaseStatus[keyof typeof ClerkCaseStatus];
+
+
+export const ClerkCaseStatus = {
+  pending: 'pending',
+  extracted: 'extracted',
+  in_review: 'in_review',
+  approved: 'approved',
+  rejected: 'rejected',
+  escalated: 'escalated',
+  failed: 'failed',
+} as const;
+
+export interface ClerkCase {
+  id: string;
+  kind: ClerkCaseKind;
+  status: ClerkCaseStatus;
+  /** @nullable */
+  sourceType?: string | null;
+  /** @nullable */
+  sourceName?: string | null;
+  /** @nullable */
+  sourceText?: string | null;
+  /** @nullable */
+  sourceImageB64?: string | null;
+  extraction?: ClerkExtraction | null;
+  /** @nullable */
+  question?: string | null;
+  answer?: ClerkAnswer | null;
+  /** @nullable */
+  firmId?: string | null;
+  createdBy: string;
+  /** @nullable */
+  decidedBy?: string | null;
+  /** @nullable */
+  decisionAction?: string | null;
+  /** @nullable */
+  decisionReason?: string | null;
+  /** @nullable */
+  createdInvoiceId?: string | null;
+  /** @nullable */
+  failReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClerkCaseCreateInputSourceType = typeof ClerkCaseCreateInputSourceType[keyof typeof ClerkCaseCreateInputSourceType];
+
+
+export const ClerkCaseCreateInputSourceType = {
+  image: 'image',
+  pdf: 'pdf',
+  text: 'text',
+} as const;
+
+export interface ClerkCaseCreateInput {
+  sourceType: ClerkCaseCreateInputSourceType;
+  name?: string;
+  contentType?: string;
+  imageBase64?: string;
+  pdfBase64?: string;
+  text?: string;
+}
+
+export type ClerkCaseDecisionInputAction = typeof ClerkCaseDecisionInputAction[keyof typeof ClerkCaseDecisionInputAction];
+
+
+export const ClerkCaseDecisionInputAction = {
+  approve: 'approve',
+  reject: 'reject',
+  escalate: 'escalate',
+} as const;
+
+export type ClerkCaseDecisionInputCategory = typeof ClerkCaseDecisionInputCategory[keyof typeof ClerkCaseDecisionInputCategory];
+
+
+export const ClerkCaseDecisionInputCategory = {
+  b2b: 'b2b',
+  b2g: 'b2g',
+  b2c: 'b2c',
+} as const;
+
+export interface ClerkCaseDecisionInput {
+  action: ClerkCaseDecisionInputAction;
+  /** @nullable */
+  reason?: string | null;
+  firmId?: string;
+  supplierPartyId?: string;
+  buyerPartyId?: string;
+  invoiceNumber?: string;
+  issueDate?: string;
+  /** @nullable */
+  dueDate?: string | null;
+  currency?: string;
+  category?: ClerkCaseDecisionInputCategory;
+  lines?: InvoiceLineInput[];
+}
+
+export interface AskClerkInput {
+  /**
+     * @minLength 3
+     * @maxLength 2000
+     */
+  question: string;
+}
+
+export type StatusLightLight = typeof StatusLightLight[keyof typeof StatusLightLight];
+
+
+export const StatusLightLight = {
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+} as const;
+
+export interface StatusLight {
+  light: StatusLightLight;
+  reasons: string[];
+  recommendedAction: string;
+}
+
 /**
  * Bad request
  */
@@ -2293,4 +2570,34 @@ subdomain: string;
 export type ListErpConnectionsParams = {
 clientPartyId?: string;
 };
+
+export type ListClaimsParams = {
+claimKey?: string;
+};
+
+export type ListClerkCasesParams = {
+kind?: ListClerkCasesKind;
+status?: ListClerkCasesStatus;
+};
+
+export type ListClerkCasesKind = typeof ListClerkCasesKind[keyof typeof ListClerkCasesKind];
+
+
+export const ListClerkCasesKind = {
+  extraction: 'extraction',
+  question: 'question',
+} as const;
+
+export type ListClerkCasesStatus = typeof ListClerkCasesStatus[keyof typeof ListClerkCasesStatus];
+
+
+export const ListClerkCasesStatus = {
+  pending: 'pending',
+  extracted: 'extracted',
+  in_review: 'in_review',
+  approved: 'approved',
+  rejected: 'rejected',
+  escalated: 'escalated',
+  failed: 'failed',
+} as const;
 

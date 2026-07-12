@@ -22,6 +22,8 @@ import {
   ShieldCheck,
   GitMerge,
   FileCheck2,
+  BookMarked,
+  Bot,
 } from "lucide-react";
 import {
   Sheet,
@@ -77,6 +79,8 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
       { href: "/gate-metrics", label: "Gate metrics", icon: Gauge, capability: "operator.queue.read" },
       { href: "/feature-flags", label: "Feature flags", icon: ToggleRight, capability: "flags.read" },
       { href: "/audit", label: "Audit & evidence", icon: ShieldCheck, capability: "audit.read" },
+      { href: "/claims", label: "Claims register", icon: BookMarked, capability: "claims.read" },
+      { href: "/clerk", label: "Clerk", icon: Bot, capability: "clerk.use" },
     ],
   },
 ];
