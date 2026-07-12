@@ -13,4 +13,5 @@ export const ClerkCaseCreateInputSourceType = {
   image: 'image',
   pdf: 'pdf',
   text: 'text',
+  voice: 'voice',
 } as const;

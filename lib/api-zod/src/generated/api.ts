@@ -3030,12 +3030,13 @@ export const ListClerkCasesResponse = zod.array(ListClerkCasesResponseItem)
  * @summary Upload an invoice document for extraction
  */
 export const CreateClerkCaseBody = zod.object({
-  "sourceType": zod.enum(['image', 'pdf', 'text']),
+  "sourceType": zod.enum(['image', 'pdf', 'text', 'voice']),
   "name": zod.string().optional(),
   "contentType": zod.string().optional(),
   "imageBase64": zod.string().optional(),
   "pdfBase64": zod.string().optional(),
-  "text": zod.string().optional()
+  "text": zod.string().optional(),
+  "audioBase64": zod.string().optional()
 })
 
 export const CreateClerkCaseResponse = zod.object({
@@ -3318,6 +3319,50 @@ export const GetInvoiceStatusLightResponse = zod.object({
   "light": zod.enum(['green', 'amber', 'red']),
   "reasons": zod.array(zod.string()),
   "recommendedAction": zod.string()
+})
+
+
+/**
+ * @summary Operational metrics from cases and the inference ledger (CLK-OBS-04)
+ */
+export const getClerkMetricsQueryWindowDaysMax = 365;
+
+
+
+export const GetClerkMetricsQueryParams = zod.object({
+  "windowDays": zod.coerce.number().min(1).max(getClerkMetricsQueryWindowDaysMax).optional()
+})
+
+export const GetClerkMetricsResponse = zod.object({
+  "windowDays": zod.number(),
+  "cases": zod.object({
+  "total": zod.number(),
+  "byStatus": zod.record(zod.string(), zod.number()),
+  "byKind": zod.record(zod.string(), zod.number()),
+  "avgDecisionMinutes": zod.number().nullish()
+}),
+  "inference": zod.object({
+  "total": zod.number(),
+  "byOutcome": zod.record(zod.string(), zod.number()),
+  "invalidRate": zod.number(),
+  "errorRate": zod.number(),
+  "latencyP50Ms": zod.number().nullish(),
+  "latencyP95Ms": zod.number().nullish(),
+  "cohorts": zod.array(zod.object({
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "purpose": zod.string(),
+  "total": zod.number(),
+  "okCount": zod.number(),
+  "latencyP95Ms": zod.number().nullish()
+}))
+}),
+  "ask": zod.object({
+  "total": zod.number(),
+  "answered": zod.number(),
+  "refused": zod.number(),
+  "refusalRate": zod.number()
+})
 })
 
 

@@ -2408,6 +2408,7 @@ export const ClerkCaseCreateInputSourceType = {
   image: 'image',
   pdf: 'pdf',
   text: 'text',
+  voice: 'voice',
 } as const;
 
 export interface ClerkCaseCreateInput {
@@ -2417,6 +2418,7 @@ export interface ClerkCaseCreateInput {
   imageBase64?: string;
   pdfBase64?: string;
   text?: string;
+  audioBase64?: string;
 }
 
 export type ClerkCaseDecisionInputAction = typeof ClerkCaseDecisionInputAction[keyof typeof ClerkCaseDecisionInputAction];
@@ -2474,6 +2476,56 @@ export interface StatusLight {
   light: StatusLightLight;
   reasons: string[];
   recommendedAction: string;
+}
+
+export type ClerkMetricsCasesByStatus = {[key: string]: number};
+
+export type ClerkMetricsCasesByKind = {[key: string]: number};
+
+export type ClerkMetricsCases = {
+  total: number;
+  byStatus: ClerkMetricsCasesByStatus;
+  byKind: ClerkMetricsCasesByKind;
+  /** @nullable */
+  avgDecisionMinutes?: number | null;
+};
+
+export type ClerkMetricsInferenceByOutcome = {[key: string]: number};
+
+export type ClerkMetricsInferenceCohortsItem = {
+  model: string;
+  promptVersion: string;
+  purpose: string;
+  total: number;
+  okCount: number;
+  /** @nullable */
+  latencyP95Ms?: number | null;
+};
+
+export type ClerkMetricsInference = {
+  total: number;
+  byOutcome: ClerkMetricsInferenceByOutcome;
+  invalidRate: number;
+  errorRate: number;
+  /** @nullable */
+  latencyP50Ms?: number | null;
+  /** @nullable */
+  latencyP95Ms?: number | null;
+  cohorts: ClerkMetricsInferenceCohortsItem[];
+};
+
+export type ClerkMetricsAsk = {
+  total: number;
+  answered: number;
+  refused: number;
+  refusalRate: number;
+};
+
+export interface ClerkMetrics {
+  windowDays: number;
+  cases: ClerkMetricsCases;
+  inference: ClerkMetricsInference;
+  ask: ClerkMetricsAsk;
 }
 
 /**
@@ -2600,4 +2652,12 @@ export const ListClerkCasesStatus = {
   escalated: 'escalated',
   failed: 'failed',
 } as const;
+
+export type GetClerkMetricsParams = {
+/**
+ * @minimum 1
+ * @maximum 365
+ */
+windowDays?: number;
+};
 

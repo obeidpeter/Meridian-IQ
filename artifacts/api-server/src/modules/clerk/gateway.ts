@@ -36,7 +36,10 @@ export interface ClerkProvider {
   complete(req: CompletionRequest): Promise<string>;
 }
 
-export type ClerkPurpose = "extract_invoice" | "classify_intent";
+export type ClerkPurpose =
+  | "extract_invoice"
+  | "classify_intent"
+  | "transcribe_voice";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;
@@ -63,6 +66,38 @@ export interface ClerkGateway {
 
 export function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex");
+}
+
+// Ledger a model call that doesn't go through the JSON-schema completion path
+// (audio transcription). Same discipline as infer(): every call that leaves
+// the platform lands in the append-only ledger, success or failure. The
+// transcript itself is NOT stored here — it lives on the case row; the ledger
+// records provenance (model, input hash, outcome, latency) plus a length so
+// drift in transcript size is observable without retaining content twice.
+export async function recordExternalCall(input: {
+  caseId?: string | null;
+  purpose: ClerkPurpose;
+  model: string;
+  promptVersion: string;
+  inputForHash: string;
+  outcome: "ok" | "error";
+  outputChars?: number;
+  errorText?: string;
+  latencyMs: number;
+}): Promise<void> {
+  await getDb().insert(clerkInferenceCallsTable).values({
+    caseId: input.caseId ?? null,
+    purpose: input.purpose,
+    model: input.model,
+    promptVersion: input.promptVersion,
+    inputRef: sha256(input.inputForHash),
+    outputJson:
+      input.outcome === "ok" ? { chars: input.outputChars ?? 0 } : null,
+    schemaValid: input.outcome === "ok",
+    outcome: input.outcome,
+    errorText: input.errorText?.slice(0, 2000) ?? null,
+    latencyMs: input.latencyMs,
+  });
 }
 
 // Throws CLERK_DISABLED (503) when the kill switch is off. Routes call this

@@ -47,6 +47,7 @@ import type {
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseDecisionInput,
+  ClerkMetrics,
   ClientImportInput,
   ClientImportResult,
   ClientPortfolioDetail,
@@ -86,6 +87,7 @@ import type {
   ForbiddenResponse,
   GateMetrics,
   GenerateStatementsInput,
+  GetClerkMetricsParams,
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
   GetPublicThemeParams,
@@ -9608,6 +9610,90 @@ export function useGetInvoiceStatusLight<TData = Awaited<ReturnType<typeof getIn
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetInvoiceStatusLightQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetClerkMetricsUrl = (params?: GetClerkMetricsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/metrics?${stringifiedParams}` : `/api/clerk/metrics`
+}
+
+/**
+ * @summary Operational metrics from cases and the inference ledger (CLK-OBS-04)
+ */
+export const getClerkMetrics = async (params?: GetClerkMetricsParams, options?: RequestInit): Promise<ClerkMetrics> => {
+
+  return customFetch<ClerkMetrics>(getGetClerkMetricsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkMetricsQueryKey = (params?: GetClerkMetricsParams,) => {
+    return [
+    `/api/clerk/metrics`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetClerkMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getClerkMetrics>>, TError = ErrorType<unknown>>(params?: GetClerkMetricsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkMetricsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkMetrics>>> = ({ signal }) => getClerkMetrics(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkMetrics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkMetrics>>>
+export type GetClerkMetricsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Operational metrics from cases and the inference ledger (CLK-OBS-04)
+ */
+
+export function useGetClerkMetrics<TData = Awaited<ReturnType<typeof getClerkMetrics>>, TError = ErrorType<unknown>>(
+ params?: GetClerkMetricsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkMetrics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkMetricsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
