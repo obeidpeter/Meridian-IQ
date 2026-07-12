@@ -22,6 +22,8 @@ import {
   ShieldCheck,
   GitMerge,
   FileCheck2,
+  Bot,
+  Scale,
 } from "lucide-react";
 import {
   Sheet,
@@ -71,6 +73,8 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
     title: "Platform",
     links: [
       { href: "/operator-queue", label: "Operator queue", icon: ListChecks, capability: "operator.queue.read" },
+      { href: "/clerk", label: "Clerk workspace", icon: Bot, capability: "clerk.read" },
+      { href: "/clerk/claims", label: "Claims register", icon: Scale, capability: "clerk.read" },
       { href: "/parties", label: "Party integrity", icon: GitMerge, capability: "party.merge" },
       { href: "/catalogue", label: "Error catalogue", icon: BookOpen, capability: "catalogue.write" },
       { href: "/platform-ops", label: "Platform ops", icon: Activity, capability: "operator.queue.read" },
@@ -134,6 +138,9 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const isLinkActive = (href: string) => {
     if (location === href) return true;
+    // /clerk/claims is its own entry; the workspace link covers /clerk plus
+    // the case-detail pages, not the claims register.
+    if (href === "/clerk") return location.startsWith("/clerk/cases");
     if (href !== "/" && location.startsWith(href)) return true;
     // Client detail pages live under the Portfolio entry (import is its own).
     if (

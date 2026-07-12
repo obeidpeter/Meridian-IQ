@@ -2701,3 +2701,630 @@ export const ListErpSyncRunsResponseItem = zod.object({
 export const ListErpSyncRunsResponse = zod.array(ListErpSyncRunsResponseItem)
 
 
+export const ListClaimRecordsQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "claimKey": zod.coerce.string().optional()
+})
+
+export const ListClaimRecordsResponseItem = zod.object({
+  "id": zod.string(),
+  "claimKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.enum(['draft', 'review', 'active', 'suspended', 'superseded', 'expired', 'rejected']),
+  "jurisdiction": zod.string(),
+  "taxpayerClasses": zod.array(zod.string()).optional(),
+  "transactionClasses": zod.array(zod.string()).optional(),
+  "proposition": zod.string(),
+  "legalInstrument": zod.string(),
+  "legalSection": zod.string(),
+  "protectedFacts": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['amount', 'rate', 'date', 'threshold', 'citation', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "sourceEvidenceRef": zod.string().nullish(),
+  "effectiveFrom": zod.string(),
+  "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string(),
+  "clerkQuotable": zod.boolean(),
+  "authorId": zod.string(),
+  "approverId": zod.string().nullish(),
+  "approvalEvidence": zod.string().nullish(),
+  "supersedesId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListClaimRecordsResponse = zod.array(ListClaimRecordsResponseItem)
+
+
+/**
+ * @summary Create a draft claim record (maker step)
+ */
+export const createClaimRecordBodyClaimKeyMin = 3;
+
+export const createClaimRecordBodyPropositionMin = 10;
+
+export const createClaimRecordBodyLegalInstrumentMin = 2;
+
+
+
+
+export const CreateClaimRecordBody = zod.object({
+  "claimKey": zod.string().min(createClaimRecordBodyClaimKeyMin),
+  "jurisdiction": zod.string().optional(),
+  "taxpayerClasses": zod.array(zod.string()).optional(),
+  "transactionClasses": zod.array(zod.string()).optional(),
+  "proposition": zod.string().min(createClaimRecordBodyPropositionMin),
+  "legalInstrument": zod.string().min(createClaimRecordBodyLegalInstrumentMin),
+  "legalSection": zod.string().min(1),
+  "protectedFacts": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['amount', 'rate', 'date', 'threshold', 'citation', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})).optional(),
+  "sourceEvidenceRef": zod.string().optional(),
+  "effectiveFrom": zod.string(),
+  "effectiveTo": zod.string().optional(),
+  "reviewDueAt": zod.string(),
+  "clerkQuotable": zod.boolean().optional()
+})
+
+export const CreateClaimRecordResponse = zod.object({
+  "id": zod.string(),
+  "claimKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.enum(['draft', 'review', 'active', 'suspended', 'superseded', 'expired', 'rejected']),
+  "jurisdiction": zod.string(),
+  "taxpayerClasses": zod.array(zod.string()).optional(),
+  "transactionClasses": zod.array(zod.string()).optional(),
+  "proposition": zod.string(),
+  "legalInstrument": zod.string(),
+  "legalSection": zod.string(),
+  "protectedFacts": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['amount', 'rate', 'date', 'threshold', 'citation', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "sourceEvidenceRef": zod.string().nullish(),
+  "effectiveFrom": zod.string(),
+  "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string(),
+  "clerkQuotable": zod.boolean(),
+  "authorId": zod.string(),
+  "approverId": zod.string().nullish(),
+  "approvalEvidence": zod.string().nullish(),
+  "supersedesId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Submit a draft for independent review
+ */
+export const SubmitClaimRecordParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const SubmitClaimRecordResponse = zod.object({
+  "id": zod.string(),
+  "claimKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.enum(['draft', 'review', 'active', 'suspended', 'superseded', 'expired', 'rejected']),
+  "jurisdiction": zod.string(),
+  "taxpayerClasses": zod.array(zod.string()).optional(),
+  "transactionClasses": zod.array(zod.string()).optional(),
+  "proposition": zod.string(),
+  "legalInstrument": zod.string(),
+  "legalSection": zod.string(),
+  "protectedFacts": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['amount', 'rate', 'date', 'threshold', 'citation', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "sourceEvidenceRef": zod.string().nullish(),
+  "effectiveFrom": zod.string(),
+  "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string(),
+  "clerkQuotable": zod.boolean(),
+  "authorId": zod.string(),
+  "approverId": zod.string().nullish(),
+  "approvalEvidence": zod.string().nullish(),
+  "supersedesId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Approve a reviewed record (checker step; author cannot approve own)
+ */
+export const ApproveClaimRecordParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ApproveClaimRecordBody = zod.object({
+  "approvalEvidence": zod.string().optional()
+})
+
+export const ApproveClaimRecordResponse = zod.object({
+  "id": zod.string(),
+  "claimKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.enum(['draft', 'review', 'active', 'suspended', 'superseded', 'expired', 'rejected']),
+  "jurisdiction": zod.string(),
+  "taxpayerClasses": zod.array(zod.string()).optional(),
+  "transactionClasses": zod.array(zod.string()).optional(),
+  "proposition": zod.string(),
+  "legalInstrument": zod.string(),
+  "legalSection": zod.string(),
+  "protectedFacts": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['amount', 'rate', 'date', 'threshold', 'citation', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "sourceEvidenceRef": zod.string().nullish(),
+  "effectiveFrom": zod.string(),
+  "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string(),
+  "clerkQuotable": zod.boolean(),
+  "authorId": zod.string(),
+  "approverId": zod.string().nullish(),
+  "approvalEvidence": zod.string().nullish(),
+  "supersedesId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const RejectClaimRecordParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const rejectClaimRecordBodyReasonMin = 3;
+
+
+
+export const RejectClaimRecordBody = zod.object({
+  "reason": zod.string().min(rejectClaimRecordBodyReasonMin)
+})
+
+export const RejectClaimRecordResponse = zod.object({
+  "id": zod.string(),
+  "claimKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.enum(['draft', 'review', 'active', 'suspended', 'superseded', 'expired', 'rejected']),
+  "jurisdiction": zod.string(),
+  "taxpayerClasses": zod.array(zod.string()).optional(),
+  "transactionClasses": zod.array(zod.string()).optional(),
+  "proposition": zod.string(),
+  "legalInstrument": zod.string(),
+  "legalSection": zod.string(),
+  "protectedFacts": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['amount', 'rate', 'date', 'threshold', 'citation', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "sourceEvidenceRef": zod.string().nullish(),
+  "effectiveFrom": zod.string(),
+  "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string(),
+  "clerkQuotable": zod.boolean(),
+  "authorId": zod.string(),
+  "approverId": zod.string().nullish(),
+  "approvalEvidence": zod.string().nullish(),
+  "supersedesId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Emergency withdrawal (CLK-KB-06); blocks runtime use immediately
+ */
+export const SuspendClaimRecordParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const suspendClaimRecordBodyReasonMin = 3;
+
+
+
+export const SuspendClaimRecordBody = zod.object({
+  "reason": zod.string().min(suspendClaimRecordBodyReasonMin)
+})
+
+export const SuspendClaimRecordResponse = zod.object({
+  "id": zod.string(),
+  "claimKey": zod.string(),
+  "version": zod.number(),
+  "status": zod.enum(['draft', 'review', 'active', 'suspended', 'superseded', 'expired', 'rejected']),
+  "jurisdiction": zod.string(),
+  "taxpayerClasses": zod.array(zod.string()).optional(),
+  "transactionClasses": zod.array(zod.string()).optional(),
+  "proposition": zod.string(),
+  "legalInstrument": zod.string(),
+  "legalSection": zod.string(),
+  "protectedFacts": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['amount', 'rate', 'date', 'threshold', 'citation', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "sourceEvidenceRef": zod.string().nullish(),
+  "effectiveFrom": zod.string(),
+  "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string(),
+  "clerkQuotable": zod.boolean(),
+  "authorId": zod.string(),
+  "approverId": zod.string().nullish(),
+  "approvalEvidence": zod.string().nullish(),
+  "supersedesId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const ListClerkCasesQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().optional(),
+  "state": zod.coerce.string().optional()
+})
+
+export const ListClerkCasesResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "channel": zod.enum(['console', 'pwa', 'whatsapp']),
+  "state": zod.enum(['received', 'consent_checked', 'quarantined', 'pre_processed', 'draft_mapped', 'clarification_required', 'ready_for_review', 'approved', 'validated', 'awaiting_submission_approval', 'queued', 'closed', 'rejected', 'refused', 'escalated']),
+  "priority": zod.enum(['low', 'medium', 'high']),
+  "language": zod.string(),
+  "intent": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "createdByUserId": zod.string(),
+  "assignedToUserId": zod.string().nullish(),
+  "refusalReason": zod.string().nullish(),
+  "escalationReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListClerkCasesResponse = zod.array(ListClerkCasesResponseItem)
+
+
+/**
+ * @summary Capture a source and run extraction into reviewable candidates
+ */
+export const createClerkCaseBodySourceTextMax = 20000;
+
+
+
+export const CreateClerkCaseBody = zod.object({
+  "clientPartyId": zod.string(),
+  "sourceText": zod.string().min(1).max(createClerkCaseBodySourceTextMax),
+  "filename": zod.string().optional(),
+  "language": zod.string().optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional()
+})
+
+export const CreateClerkCaseResponse = zod.object({
+  "case": zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "channel": zod.enum(['console', 'pwa', 'whatsapp']),
+  "state": zod.enum(['received', 'consent_checked', 'quarantined', 'pre_processed', 'draft_mapped', 'clarification_required', 'ready_for_review', 'approved', 'validated', 'awaiting_submission_approval', 'queued', 'closed', 'rejected', 'refused', 'escalated']),
+  "priority": zod.enum(['low', 'medium', 'high']),
+  "language": zod.string(),
+  "intent": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "createdByUserId": zod.string(),
+  "assignedToUserId": zod.string().nullish(),
+  "refusalReason": zod.string().nullish(),
+  "escalationReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string(),
+  "kind": zod.enum(['text', 'image', 'pdf', 'voice']),
+  "filename": zod.string().nullish(),
+  "mime": zod.string().nullish(),
+  "contentText": zod.string().nullish(),
+  "contentHash": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "candidates": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string(),
+  "fieldKey": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.string(),
+  "critical": zod.boolean(),
+  "sourceArtifactId": zod.string().nullish(),
+  "sourceRegion": zod.object({
+  "line": zod.number().optional(),
+  "start": zod.number().optional(),
+  "end": zod.number().optional()
+}).nullish(),
+  "extractorVersion": zod.string(),
+  "reviewState": zod.enum(['proposed', 'confirmed', 'edited', 'rejected']),
+  "editedValue": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "runs": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string().nullish(),
+  "purpose": zod.enum(['extraction', 'intent', 'answer', 'explanation']),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "policyVersion": zod.string(),
+  "outcome": zod.enum(['allowed', 'refused', 'blocked', 'error']),
+  "confidence": zod.string().nullish(),
+  "latencyMs": zod.number(),
+  "createdAt": zod.coerce.date()
+})),
+  "decisions": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string(),
+  "actorUserId": zod.string(),
+  "actorRole": zod.string(),
+  "decision": zod.enum(['approve', 'edit', 'reject', 'escalate']),
+  "reasonCode": zod.string(),
+  "diff": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+export const GetClerkCaseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetClerkCaseResponse = zod.object({
+  "case": zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "channel": zod.enum(['console', 'pwa', 'whatsapp']),
+  "state": zod.enum(['received', 'consent_checked', 'quarantined', 'pre_processed', 'draft_mapped', 'clarification_required', 'ready_for_review', 'approved', 'validated', 'awaiting_submission_approval', 'queued', 'closed', 'rejected', 'refused', 'escalated']),
+  "priority": zod.enum(['low', 'medium', 'high']),
+  "language": zod.string(),
+  "intent": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "createdByUserId": zod.string(),
+  "assignedToUserId": zod.string().nullish(),
+  "refusalReason": zod.string().nullish(),
+  "escalationReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string(),
+  "kind": zod.enum(['text', 'image', 'pdf', 'voice']),
+  "filename": zod.string().nullish(),
+  "mime": zod.string().nullish(),
+  "contentText": zod.string().nullish(),
+  "contentHash": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "candidates": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string(),
+  "fieldKey": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.string(),
+  "critical": zod.boolean(),
+  "sourceArtifactId": zod.string().nullish(),
+  "sourceRegion": zod.object({
+  "line": zod.number().optional(),
+  "start": zod.number().optional(),
+  "end": zod.number().optional()
+}).nullish(),
+  "extractorVersion": zod.string(),
+  "reviewState": zod.enum(['proposed', 'confirmed', 'edited', 'rejected']),
+  "editedValue": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "runs": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string().nullish(),
+  "purpose": zod.enum(['extraction', 'intent', 'answer', 'explanation']),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "policyVersion": zod.string(),
+  "outcome": zod.enum(['allowed', 'refused', 'blocked', 'error']),
+  "confidence": zod.string().nullish(),
+  "latencyMs": zod.number(),
+  "createdAt": zod.coerce.date()
+})),
+  "decisions": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string(),
+  "actorUserId": zod.string(),
+  "actorRole": zod.string(),
+  "decision": zod.enum(['approve', 'edit', 'reject', 'escalate']),
+  "reasonCode": zod.string(),
+  "diff": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Record an operator decision (approve/edit/reject/escalate)
+ */
+export const ReviewClerkCaseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const reviewClerkCaseBodyReasonCodeMin = 2;
+
+
+
+export const ReviewClerkCaseBody = zod.object({
+  "decision": zod.enum(['approve', 'edit', 'reject', 'escalate']),
+  "reasonCode": zod.string().min(reviewClerkCaseBodyReasonCodeMin),
+  "fields": zod.array(zod.object({
+  "candidateId": zod.string(),
+  "action": zod.enum(['confirm', 'edit', 'reject']),
+  "value": zod.string().optional()
+})).optional()
+})
+
+export const ReviewClerkCaseResponse = zod.object({
+  "case": zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "channel": zod.enum(['console', 'pwa', 'whatsapp']),
+  "state": zod.enum(['received', 'consent_checked', 'quarantined', 'pre_processed', 'draft_mapped', 'clarification_required', 'ready_for_review', 'approved', 'validated', 'awaiting_submission_approval', 'queued', 'closed', 'rejected', 'refused', 'escalated']),
+  "priority": zod.enum(['low', 'medium', 'high']),
+  "language": zod.string(),
+  "intent": zod.string().nullish(),
+  "invoiceId": zod.string().nullish(),
+  "createdByUserId": zod.string(),
+  "assignedToUserId": zod.string().nullish(),
+  "refusalReason": zod.string().nullish(),
+  "escalationReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "sources": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string(),
+  "kind": zod.enum(['text', 'image', 'pdf', 'voice']),
+  "filename": zod.string().nullish(),
+  "mime": zod.string().nullish(),
+  "contentText": zod.string().nullish(),
+  "contentHash": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "candidates": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string(),
+  "fieldKey": zod.string(),
+  "value": zod.string(),
+  "confidence": zod.string(),
+  "critical": zod.boolean(),
+  "sourceArtifactId": zod.string().nullish(),
+  "sourceRegion": zod.object({
+  "line": zod.number().optional(),
+  "start": zod.number().optional(),
+  "end": zod.number().optional()
+}).nullish(),
+  "extractorVersion": zod.string(),
+  "reviewState": zod.enum(['proposed', 'confirmed', 'edited', 'rejected']),
+  "editedValue": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "runs": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string().nullish(),
+  "purpose": zod.enum(['extraction', 'intent', 'answer', 'explanation']),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "policyVersion": zod.string(),
+  "outcome": zod.enum(['allowed', 'refused', 'blocked', 'error']),
+  "confidence": zod.string().nullish(),
+  "latencyMs": zod.number(),
+  "createdAt": zod.coerce.date()
+})),
+  "decisions": zod.array(zod.object({
+  "id": zod.string(),
+  "caseId": zod.string(),
+  "actorUserId": zod.string(),
+  "actorRole": zod.string(),
+  "decision": zod.enum(['approve', 'edit', 'reject', 'escalate']),
+  "reasonCode": zod.string(),
+  "diff": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Register-only answer with deterministic protected facts, or refusal
+ */
+export const askClerkBodyQuestionMin = 3;
+export const askClerkBodyQuestionMax = 2000;
+
+
+
+export const AskClerkBody = zod.object({
+  "question": zod.string().min(askClerkBodyQuestionMin).max(askClerkBodyQuestionMax),
+  "clientPartyId": zod.string().optional()
+})
+
+export const AskClerkResponse = zod.object({
+  "outcome": zod.enum(['answered', 'refused']),
+  "answer": zod.string().nullish(),
+  "claimKey": zod.string().nullish(),
+  "claimVersion": zod.number().nullish(),
+  "citation": zod.string().nullish(),
+  "protectedFacts": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['amount', 'rate', 'date', 'threshold', 'citation', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})).optional(),
+  "refusalReason": zod.string().nullish(),
+  "escalated": zod.boolean()
+})
+
+
+/**
+ * @summary Catalogue-grounded rejection explanation (CLK-KB-05), or refusal
+ */
+
+
+
+export const ExplainRejectionBody = zod.object({
+  "errorCode": zod.string().min(1)
+})
+
+export const ExplainRejectionResponse = zod.object({
+  "outcome": zod.enum(['explained', 'refused']),
+  "code": zod.string().nullish(),
+  "cause": zod.string().nullish(),
+  "fix": zod.string().nullish(),
+  "retriable": zod.boolean().nullish(),
+  "catalogueSource": zod.string().nullish(),
+  "refusalReason": zod.string().nullish()
+})
+
+
+export const ListClerkKillSwitchesResponseItem = zod.object({
+  "capability": zod.string(),
+  "disabled": zod.boolean(),
+  "reason": zod.string().nullish(),
+  "changedBy": zod.string().nullish(),
+  "changedAt": zod.coerce.date()
+})
+export const ListClerkKillSwitchesResponse = zod.array(ListClerkKillSwitchesResponseItem)
+
+
+export const SetClerkKillSwitchParams = zod.object({
+  "capability": zod.coerce.string()
+})
+
+export const SetClerkKillSwitchBody = zod.object({
+  "disabled": zod.boolean(),
+  "reason": zod.string().optional()
+})
+
+export const SetClerkKillSwitchResponse = zod.object({
+  "capability": zod.string(),
+  "disabled": zod.boolean(),
+  "reason": zod.string().nullish(),
+  "changedBy": zod.string().nullish(),
+  "changedAt": zod.coerce.date()
+})
+
+

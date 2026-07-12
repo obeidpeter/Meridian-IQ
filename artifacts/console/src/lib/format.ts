@@ -295,6 +295,84 @@ export function importRowBadgeClasses(status: string): string {
   }
 }
 
+// ---- Clerk case lifecycle (clerk workspace) ---------------------------------
+// Amber = waiting on a human, green = cleared for the next hop, red = stopped.
+
+export function clerkCaseStateLabel(state: string): string {
+  switch (state) {
+    case "ready_for_review":
+      return "Needs review";
+    case "clarification_required":
+      return "Clarification required";
+    case "awaiting_submission_approval":
+      return "Approved — awaiting submission";
+    default:
+      return humanize(state);
+  }
+}
+
+export function clerkCaseStateBadgeClasses(state: string): string {
+  switch (state) {
+    case "ready_for_review":
+    case "clarification_required":
+      return pillClasses("amber");
+    case "approved":
+    case "validated":
+    case "awaiting_submission_approval":
+      return pillClasses("emerald");
+    case "escalated":
+    case "rejected":
+      return pillClasses("red");
+    // refused / closed / intake states fall back to neutral.
+    default:
+      return pillClasses("slate");
+  }
+}
+
+/** States the case machine can still move out of on its own. */
+export function isClerkCaseTerminal(state: string): boolean {
+  return state === "closed" || state === "rejected" || state === "refused";
+}
+
+// ---- Claim records (claims register) -----------------------------------------
+
+export function claimStatusBadgeClasses(status: string): string {
+  switch (status) {
+    case "review":
+      return pillClasses("amber");
+    case "active":
+      return pillClasses("emerald");
+    case "suspended":
+      return pillClasses("red");
+    // draft, superseded, expired, rejected read as muted history.
+    default:
+      return pillClasses("slate");
+  }
+}
+
+// ---- Clerk extraction confidence ----------------------------------------------
+// CLK-AI-05 routing bands: ≥0.90 auto-proposable, ≥0.75 review, below = suspect.
+
+export function clerkConfidenceBadgeClasses(confidence: number): string {
+  if (confidence >= 0.9) return pillClasses("emerald");
+  if (confidence >= 0.75) return pillClasses("amber");
+  return pillClasses("red");
+}
+
+export function clerkRunOutcomeBadgeClasses(outcome: string): string {
+  switch (outcome) {
+    case "allowed":
+      return pillClasses("emerald");
+    case "refused":
+      return pillClasses("amber");
+    case "blocked":
+    case "error":
+      return pillClasses("red");
+    default:
+      return pillClasses("slate");
+  }
+}
+
 // ---- Assessment bands (advisory) ---------------------------------------------
 
 export function bandLabel(band: string): string {

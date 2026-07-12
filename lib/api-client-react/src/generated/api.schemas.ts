@@ -2199,6 +2199,420 @@ export interface ErpSyncRun {
   finishedAt?: string | null;
 }
 
+export type ClaimProtectedFactKind = typeof ClaimProtectedFactKind[keyof typeof ClaimProtectedFactKind];
+
+
+export const ClaimProtectedFactKind = {
+  amount: 'amount',
+  rate: 'rate',
+  date: 'date',
+  threshold: 'threshold',
+  citation: 'citation',
+  text: 'text',
+} as const;
+
+export interface ClaimProtectedFact {
+  key: string;
+  kind: ClaimProtectedFactKind;
+  value: string;
+  unit?: string;
+}
+
+export type ClaimRecordStatus = typeof ClaimRecordStatus[keyof typeof ClaimRecordStatus];
+
+
+export const ClaimRecordStatus = {
+  draft: 'draft',
+  review: 'review',
+  active: 'active',
+  suspended: 'suspended',
+  superseded: 'superseded',
+  expired: 'expired',
+  rejected: 'rejected',
+} as const;
+
+export interface ClaimRecord {
+  id: string;
+  claimKey: string;
+  version: number;
+  status: ClaimRecordStatus;
+  jurisdiction: string;
+  taxpayerClasses?: string[];
+  transactionClasses?: string[];
+  proposition: string;
+  legalInstrument: string;
+  legalSection: string;
+  protectedFacts: ClaimProtectedFact[];
+  /** @nullable */
+  sourceEvidenceRef?: string | null;
+  effectiveFrom: string;
+  /** @nullable */
+  effectiveTo?: string | null;
+  reviewDueAt: string;
+  clerkQuotable: boolean;
+  authorId: string;
+  /** @nullable */
+  approverId?: string | null;
+  /** @nullable */
+  approvalEvidence?: string | null;
+  /** @nullable */
+  supersedesId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClaimRecordInput {
+  /** @minLength 3 */
+  claimKey: string;
+  jurisdiction?: string;
+  taxpayerClasses?: string[];
+  transactionClasses?: string[];
+  /** @minLength 10 */
+  proposition: string;
+  /** @minLength 2 */
+  legalInstrument: string;
+  /** @minLength 1 */
+  legalSection: string;
+  protectedFacts?: ClaimProtectedFact[];
+  sourceEvidenceRef?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  reviewDueAt: string;
+  clerkQuotable?: boolean;
+}
+
+export type ClerkCaseChannel = typeof ClerkCaseChannel[keyof typeof ClerkCaseChannel];
+
+
+export const ClerkCaseChannel = {
+  console: 'console',
+  pwa: 'pwa',
+  whatsapp: 'whatsapp',
+} as const;
+
+export type ClerkCaseState = typeof ClerkCaseState[keyof typeof ClerkCaseState];
+
+
+export const ClerkCaseState = {
+  received: 'received',
+  consent_checked: 'consent_checked',
+  quarantined: 'quarantined',
+  pre_processed: 'pre_processed',
+  draft_mapped: 'draft_mapped',
+  clarification_required: 'clarification_required',
+  ready_for_review: 'ready_for_review',
+  approved: 'approved',
+  validated: 'validated',
+  awaiting_submission_approval: 'awaiting_submission_approval',
+  queued: 'queued',
+  closed: 'closed',
+  rejected: 'rejected',
+  refused: 'refused',
+  escalated: 'escalated',
+} as const;
+
+export type ClerkCasePriority = typeof ClerkCasePriority[keyof typeof ClerkCasePriority];
+
+
+export const ClerkCasePriority = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export interface ClerkCase {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  channel: ClerkCaseChannel;
+  state: ClerkCaseState;
+  priority: ClerkCasePriority;
+  language: string;
+  /** @nullable */
+  intent?: string | null;
+  /** @nullable */
+  invoiceId?: string | null;
+  createdByUserId: string;
+  /** @nullable */
+  assignedToUserId?: string | null;
+  /** @nullable */
+  refusalReason?: string | null;
+  /** @nullable */
+  escalationReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClerkCaseInputPriority = typeof ClerkCaseInputPriority[keyof typeof ClerkCaseInputPriority];
+
+
+export const ClerkCaseInputPriority = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export interface ClerkCaseInput {
+  clientPartyId: string;
+  /**
+     * @minLength 1
+     * @maxLength 20000
+     */
+  sourceText: string;
+  filename?: string;
+  language?: string;
+  priority?: ClerkCaseInputPriority;
+}
+
+export type ClerkSourceArtifactKind = typeof ClerkSourceArtifactKind[keyof typeof ClerkSourceArtifactKind];
+
+
+export const ClerkSourceArtifactKind = {
+  text: 'text',
+  image: 'image',
+  pdf: 'pdf',
+  voice: 'voice',
+} as const;
+
+export interface ClerkSourceArtifact {
+  id: string;
+  caseId: string;
+  kind: ClerkSourceArtifactKind;
+  /** @nullable */
+  filename?: string | null;
+  /** @nullable */
+  mime?: string | null;
+  /** @nullable */
+  contentText?: string | null;
+  contentHash: string;
+  createdAt: string;
+}
+
+/**
+ * @nullable
+ */
+export type ClerkFieldCandidateSourceRegion = {
+  line?: number;
+  start?: number;
+  end?: number;
+} | null;
+
+export type ClerkFieldCandidateReviewState = typeof ClerkFieldCandidateReviewState[keyof typeof ClerkFieldCandidateReviewState];
+
+
+export const ClerkFieldCandidateReviewState = {
+  proposed: 'proposed',
+  confirmed: 'confirmed',
+  edited: 'edited',
+  rejected: 'rejected',
+} as const;
+
+export interface ClerkFieldCandidate {
+  id: string;
+  caseId: string;
+  fieldKey: string;
+  value: string;
+  confidence: string;
+  critical: boolean;
+  /** @nullable */
+  sourceArtifactId?: string | null;
+  /** @nullable */
+  sourceRegion?: ClerkFieldCandidateSourceRegion;
+  extractorVersion: string;
+  reviewState: ClerkFieldCandidateReviewState;
+  /** @nullable */
+  editedValue?: string | null;
+  createdAt: string;
+}
+
+export type ClerkInferenceRunPurpose = typeof ClerkInferenceRunPurpose[keyof typeof ClerkInferenceRunPurpose];
+
+
+export const ClerkInferenceRunPurpose = {
+  extraction: 'extraction',
+  intent: 'intent',
+  answer: 'answer',
+  explanation: 'explanation',
+} as const;
+
+export type ClerkInferenceRunOutcome = typeof ClerkInferenceRunOutcome[keyof typeof ClerkInferenceRunOutcome];
+
+
+export const ClerkInferenceRunOutcome = {
+  allowed: 'allowed',
+  refused: 'refused',
+  blocked: 'blocked',
+  error: 'error',
+} as const;
+
+export interface ClerkInferenceRun {
+  id: string;
+  /** @nullable */
+  caseId?: string | null;
+  purpose: ClerkInferenceRunPurpose;
+  model: string;
+  promptVersion: string;
+  policyVersion: string;
+  outcome: ClerkInferenceRunOutcome;
+  /** @nullable */
+  confidence?: string | null;
+  latencyMs: number;
+  createdAt: string;
+}
+
+export type ClerkReviewDecisionDecision = typeof ClerkReviewDecisionDecision[keyof typeof ClerkReviewDecisionDecision];
+
+
+export const ClerkReviewDecisionDecision = {
+  approve: 'approve',
+  edit: 'edit',
+  reject: 'reject',
+  escalate: 'escalate',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ClerkReviewDecisionDiff = { [key: string]: unknown } | null;
+
+export interface ClerkReviewDecision {
+  id: string;
+  caseId: string;
+  actorUserId: string;
+  actorRole: string;
+  decision: ClerkReviewDecisionDecision;
+  reasonCode: string;
+  /** @nullable */
+  diff?: ClerkReviewDecisionDiff;
+  createdAt: string;
+}
+
+export interface ClerkCaseDetail {
+  case: ClerkCase;
+  sources: ClerkSourceArtifact[];
+  candidates: ClerkFieldCandidate[];
+  runs: ClerkInferenceRun[];
+  decisions: ClerkReviewDecision[];
+}
+
+export type ClerkReviewInputDecision = typeof ClerkReviewInputDecision[keyof typeof ClerkReviewInputDecision];
+
+
+export const ClerkReviewInputDecision = {
+  approve: 'approve',
+  edit: 'edit',
+  reject: 'reject',
+  escalate: 'escalate',
+} as const;
+
+export type ClerkReviewInputFieldsItemAction = typeof ClerkReviewInputFieldsItemAction[keyof typeof ClerkReviewInputFieldsItemAction];
+
+
+export const ClerkReviewInputFieldsItemAction = {
+  confirm: 'confirm',
+  edit: 'edit',
+  reject: 'reject',
+} as const;
+
+export type ClerkReviewInputFieldsItem = {
+  candidateId: string;
+  action: ClerkReviewInputFieldsItemAction;
+  value?: string;
+};
+
+export interface ClerkReviewInput {
+  decision: ClerkReviewInputDecision;
+  /** @minLength 2 */
+  reasonCode: string;
+  fields?: ClerkReviewInputFieldsItem[];
+}
+
+export interface ClerkAskInput {
+  /**
+     * @minLength 3
+     * @maxLength 2000
+     */
+  question: string;
+  clientPartyId?: string;
+}
+
+export type ClerkAnswerOutcome = typeof ClerkAnswerOutcome[keyof typeof ClerkAnswerOutcome];
+
+
+export const ClerkAnswerOutcome = {
+  answered: 'answered',
+  refused: 'refused',
+} as const;
+
+export interface ClerkAnswer {
+  outcome: ClerkAnswerOutcome;
+  /** @nullable */
+  answer?: string | null;
+  /** @nullable */
+  claimKey?: string | null;
+  /** @nullable */
+  claimVersion?: number | null;
+  /** @nullable */
+  citation?: string | null;
+  protectedFacts?: ClaimProtectedFact[];
+  /** @nullable */
+  refusalReason?: string | null;
+  escalated: boolean;
+}
+
+export interface ClerkExplainInput {
+  /** @minLength 1 */
+  errorCode: string;
+}
+
+export type ClerkExplanationOutcome = typeof ClerkExplanationOutcome[keyof typeof ClerkExplanationOutcome];
+
+
+export const ClerkExplanationOutcome = {
+  explained: 'explained',
+  refused: 'refused',
+} as const;
+
+export interface ClerkExplanation {
+  outcome: ClerkExplanationOutcome;
+  /** @nullable */
+  code?: string | null;
+  /** @nullable */
+  cause?: string | null;
+  /** @nullable */
+  fix?: string | null;
+  /** @nullable */
+  retriable?: boolean | null;
+  /** @nullable */
+  catalogueSource?: string | null;
+  /** @nullable */
+  refusalReason?: string | null;
+}
+
+export interface ClerkKillSwitch {
+  capability: string;
+  disabled: boolean;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  changedBy?: string | null;
+  changedAt: string;
+}
+
+export interface ClaimApproveInput {
+  approvalEvidence?: string;
+}
+
+export interface ClaimReasonInput {
+  /** @minLength 3 */
+  reason: string;
+}
+
+export interface ClerkKillSwitchInput {
+  disabled: boolean;
+  reason?: string;
+}
+
 /**
  * Bad request
  */
@@ -2292,5 +2706,15 @@ subdomain: string;
 
 export type ListErpConnectionsParams = {
 clientPartyId?: string;
+};
+
+export type ListClaimRecordsParams = {
+status?: string;
+claimKey?: string;
+};
+
+export type ListClerkCasesParams = {
+clientPartyId?: string;
+state?: string;
 };
 

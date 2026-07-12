@@ -68,7 +68,16 @@ export type Capability =
   | "certification.read"
   | "certification.write"
   | "connector.read"
-  | "connector.write";
+  | "connector.write"
+  // Clerk — controlled AI compliance operator (Clerk Supplemental TRD).
+  // claims.write/approve are maker-checker halves: platform Tax/Counsel
+  // (operator role) hold both, but the service refuses self-approval.
+  | "clerk.read"
+  | "clerk.case.write"
+  | "clerk.review"
+  | "clerk.kill"
+  | "claims.write"
+  | "claims.approve";
 
 const ALL: Capability[] = [
   "invoice.read",
@@ -115,6 +124,12 @@ const ALL: Capability[] = [
   "certification.write",
   "connector.read",
   "connector.write",
+  "clerk.read",
+  "clerk.case.write",
+  "clerk.review",
+  "clerk.kill",
+  "claims.write",
+  "claims.approve",
 ];
 
 const READ_ONLY: Capability[] = ALL.filter(
@@ -155,6 +170,9 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "certification.write",
     "connector.read",
     "connector.write",
+    "clerk.read",
+    "clerk.case.write",
+    "clerk.review",
   ],
   firm_staff: [
     "invoice.read",
@@ -180,6 +198,9 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "b2c.write",
     "certification.read",
     "certification.write",
+    "clerk.read",
+    "clerk.case.write",
+    "clerk.review",
   ],
   client_user: [
     "invoice.read",
@@ -193,6 +214,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "statement.read",
     "reconciliation.read",
     "b2c.read",
+    "clerk.read",
   ],
   operator: [
     "invoice.read",
@@ -210,6 +232,11 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "identity.read",
     "identity.write",
     "messaging.send",
+    "clerk.read",
+    "clerk.review",
+    "clerk.kill",
+    "claims.write",
+    "claims.approve",
   ],
   bank_user: ["buyer.verify", "audit.read"],
   // Buyer Rails role (Appendix C "Y (buyer org)"): verification, confirmation
