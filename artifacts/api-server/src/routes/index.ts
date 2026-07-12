@@ -27,6 +27,7 @@ import claimsRouter from "./claims";
 import clerkRouter from "./clerk";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
+import "../modules/clerk/watchdog";
 import "../modules/push/register";
 
 const router: IRouter = Router();

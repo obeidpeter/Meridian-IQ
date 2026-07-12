@@ -3014,10 +3014,18 @@ export const ListClerkCasesResponseItem = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
   "decidedBy": zod.string().nullish(),
   "decisionAction": zod.string().nullish(),
   "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
   "createdInvoiceId": zod.string().nullish(),
   "failReason": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
@@ -3084,10 +3092,18 @@ export const CreateClerkCaseResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
   "decidedBy": zod.string().nullish(),
   "decisionAction": zod.string().nullish(),
   "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
   "createdInvoiceId": zod.string().nullish(),
   "failReason": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
@@ -3144,10 +3160,18 @@ export const GetClerkCaseResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
   "decidedBy": zod.string().nullish(),
   "decisionAction": zod.string().nullish(),
   "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
   "createdInvoiceId": zod.string().nullish(),
   "failReason": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
@@ -3229,10 +3253,18 @@ export const DecideClerkCaseResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
   "decidedBy": zod.string().nullish(),
   "decisionAction": zod.string().nullish(),
   "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
   "createdInvoiceId": zod.string().nullish(),
   "failReason": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
@@ -3297,10 +3329,18 @@ export const AskClerkResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
   "decidedBy": zod.string().nullish(),
   "decisionAction": zod.string().nullish(),
   "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
   "createdInvoiceId": zod.string().nullish(),
   "failReason": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
@@ -3323,6 +3363,148 @@ export const GetInvoiceStatusLightResponse = zod.object({
 
 
 /**
+ * @summary Claim a case for active review (one operator at a time)
+ */
+export const ClaimClerkCaseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ClaimClerkCaseResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.enum(['extraction', 'question']),
+  "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
+  "sourceType": zod.string().nullish(),
+  "sourceName": zod.string().nullish(),
+  "sourceText": zod.string().nullish(),
+  "sourceImageB64": zod.string().nullish(),
+  "extraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "lines": zod.array(zod.object({
+  "description": zod.string().nullable(),
+  "quantity": zod.string().nullable(),
+  "unitPrice": zod.string().nullable(),
+  "vatRate": zod.string().nullable(),
+  "confidence": zod.number()
+})),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "question": zod.string().nullish(),
+  "answer": zod.union([zod.object({
+  "answered": zod.boolean(),
+  "claimId": zod.string().optional(),
+  "claimKey": zod.string().optional(),
+  "claimVersion": zod.number().optional(),
+  "proposition": zod.string().optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})).optional(),
+  "citation": zod.string().optional(),
+  "refusalReason": zod.string().optional()
+}),zod.null()]).optional(),
+  "firmId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
+  "createdBy": zod.string(),
+  "decidedBy": zod.string().nullish(),
+  "decisionAction": zod.string().nullish(),
+  "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
+  "createdInvoiceId": zod.string().nullish(),
+  "failReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Release a claimed case back to the queue
+ */
+export const ReleaseClerkCaseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ReleaseClerkCaseResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.enum(['extraction', 'question']),
+  "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
+  "sourceType": zod.string().nullish(),
+  "sourceName": zod.string().nullish(),
+  "sourceText": zod.string().nullish(),
+  "sourceImageB64": zod.string().nullish(),
+  "extraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "lines": zod.array(zod.object({
+  "description": zod.string().nullable(),
+  "quantity": zod.string().nullable(),
+  "unitPrice": zod.string().nullable(),
+  "vatRate": zod.string().nullable(),
+  "confidence": zod.number()
+})),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "question": zod.string().nullish(),
+  "answer": zod.union([zod.object({
+  "answered": zod.boolean(),
+  "claimId": zod.string().optional(),
+  "claimKey": zod.string().optional(),
+  "claimVersion": zod.number().optional(),
+  "proposition": zod.string().optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})).optional(),
+  "citation": zod.string().optional(),
+  "refusalReason": zod.string().optional()
+}),zod.null()]).optional(),
+  "firmId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
+  "createdBy": zod.string(),
+  "decidedBy": zod.string().nullish(),
+  "decisionAction": zod.string().nullish(),
+  "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
+  "createdInvoiceId": zod.string().nullish(),
+  "failReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Operational metrics from cases and the inference ledger (CLK-OBS-04)
  */
 export const getClerkMetricsQueryWindowDaysMax = 365;
@@ -3339,7 +3521,9 @@ export const GetClerkMetricsResponse = zod.object({
   "total": zod.number(),
   "byStatus": zod.record(zod.string(), zod.number()),
   "byKind": zod.record(zod.string(), zod.number()),
-  "avgDecisionMinutes": zod.number().nullish()
+  "avgDecisionMinutes": zod.number().nullish(),
+  "avgQueueWaitMinutes": zod.number().nullish(),
+  "avgActiveReviewMinutes": zod.number().nullish()
 }),
   "inference": zod.object({
   "total": zod.number(),
@@ -3357,6 +3541,12 @@ export const GetClerkMetricsResponse = zod.object({
   "latencyP95Ms": zod.number().nullish()
 }))
 }),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "total": zod.number(),
+  "overridden": zod.number(),
+  "overrideRate": zod.number()
+})),
   "ask": zod.object({
   "total": zod.number(),
   "answered": zod.number(),

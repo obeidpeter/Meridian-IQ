@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import {
   getDb,
   clerkCasesTable,
@@ -7,6 +7,8 @@ import {
   invoicesTable,
   firmsTable,
   type ClerkCase,
+  type ClerkCorrection,
+  type ClerkExtraction,
   type ExtractionField,
   type ExtractionLine,
 } from "@workspace/db";
@@ -334,10 +336,13 @@ export async function listCases(filter: {
       question: clerkCasesTable.question,
       answer: clerkCasesTable.answer,
       firmId: clerkCasesTable.firmId,
+      claimedBy: clerkCasesTable.claimedBy,
+      claimedAt: clerkCasesTable.claimedAt,
       createdBy: clerkCasesTable.createdBy,
       decidedBy: clerkCasesTable.decidedBy,
       decisionAction: clerkCasesTable.decisionAction,
       decisionReason: clerkCasesTable.decisionReason,
+      corrections: clerkCasesTable.corrections,
       createdInvoiceId: clerkCasesTable.createdInvoiceId,
       failReason: clerkCasesTable.failReason,
       createdAt: clerkCasesTable.createdAt,
@@ -395,6 +400,119 @@ async function assertPartyInFirm(firmId: string, partyId: string, label: string)
   );
 }
 
+// The labeled-outcome exhaust (item: correction capture). Diff the model's
+// proposal against the operator-approved values for every field both sides
+// can express. Party identities are chosen as IDs at approval and have no
+// extracted-string equivalence, so they are not compared. Totals come from
+// the created draft invoice, whose arithmetic is the platform's own.
+export function computeCorrections(
+  extraction: ClerkExtraction | null,
+  approved: {
+    invoiceNumber: string;
+    issueDate: string;
+    dueDate: string | null;
+    currency: string;
+    subtotal: string;
+    vatTotal: string;
+    grandTotal: string;
+  },
+): ClerkCorrection[] {
+  const extracted = new Map(
+    (extraction?.fields ?? []).map((f) => [f.field, f.value]),
+  );
+  const numericEq = (a: string | null, b: string | null): boolean => {
+    if (a === null || b === null) return a === b;
+    const na = Number(a);
+    const nb = Number(b);
+    return Number.isFinite(na) && Number.isFinite(nb)
+      ? Math.abs(na - nb) < 0.005
+      : a.trim() === b.trim();
+  };
+  const textEq = (a: string | null, b: string | null): boolean =>
+    (a ?? "").trim() === (b ?? "").trim();
+
+  const compare: {
+    field: string;
+    final: string | null;
+    eq: (a: string | null, b: string | null) => boolean;
+  }[] = [
+    { field: "invoiceNumber", final: approved.invoiceNumber, eq: textEq },
+    { field: "issueDate", final: approved.issueDate, eq: textEq },
+    { field: "dueDate", final: approved.dueDate, eq: textEq },
+    { field: "currency", final: approved.currency, eq: textEq },
+    { field: "subtotal", final: approved.subtotal, eq: numericEq },
+    { field: "vatTotal", final: approved.vatTotal, eq: numericEq },
+    { field: "grandTotal", final: approved.grandTotal, eq: numericEq },
+  ];
+  return compare.map(({ field, final, eq }) => {
+    const raw = extracted.get(field) ?? null;
+    return { field, extracted: raw, final, changed: !eq(raw, final) };
+  });
+}
+
+// One operator actively works a case at a time. Claiming is a compare-and-set
+// on (status = extracted, unclaimed) so two operators cannot both win, and the
+// claim timestamp splits decision turnaround into queue-wait and active-review
+// time (CLK-OPS-06).
+export async function claimCase(id: string, actorId: string): Promise<ClerkCase> {
+  const existing = await getCase(id);
+  const [row] = await getDb()
+    .update(clerkCasesTable)
+    .set({ status: "in_review", claimedBy: actorId, claimedAt: new Date() })
+    .where(
+      and(
+        eq(clerkCasesTable.id, id),
+        eq(clerkCasesTable.status, "extracted"),
+        isNull(clerkCasesTable.claimedBy),
+      ),
+    )
+    .returning();
+  if (!row) {
+    throw new DomainError(
+      "CASE_CLAIM_CONFLICT",
+      existing.claimedBy
+        ? "Another operator has already claimed this case"
+        : `A '${existing.status}' case cannot be claimed`,
+      409,
+    );
+  }
+  await appendAudit({
+    actorId,
+    action: "clerk.case.claim",
+    entityType: "clerk_case",
+    entityId: id,
+    after: { claimedBy: actorId },
+  });
+  return row;
+}
+
+// Any operator may release a stuck claim (small-team reality: the holder may
+// be gone); the audit row records who did it.
+export async function releaseCase(id: string, actorId: string): Promise<ClerkCase> {
+  const [row] = await getDb()
+    .update(clerkCasesTable)
+    .set({ status: "extracted", claimedBy: null, claimedAt: null })
+    .where(
+      and(eq(clerkCasesTable.id, id), eq(clerkCasesTable.status, "in_review")),
+    )
+    .returning();
+  if (!row) {
+    const existing = await getCase(id);
+    throw new DomainError(
+      "CASE_BAD_STATE",
+      `A '${existing.status}' case cannot be released`,
+      409,
+    );
+  }
+  await appendAudit({
+    actorId,
+    action: "clerk.case.release",
+    entityType: "clerk_case",
+    entityId: id,
+  });
+  return row;
+}
+
 export interface CaseDecisionInput {
   action: "approve" | "reject" | "escalate";
   reason?: string | null;
@@ -428,6 +546,19 @@ export async function decideCase(
     throw new DomainError(
       "CASE_BAD_STATE",
       `Case is '${existing.status}' and can no longer be decided`,
+      409,
+    );
+  }
+  // A claimed case is decided only by its holder; release it first to hand
+  // over (any operator may release).
+  if (
+    existing.status === "in_review" &&
+    existing.claimedBy &&
+    existing.claimedBy !== actorId
+  ) {
+    throw new DomainError(
+      "CASE_CLAIMED",
+      "Another operator has claimed this case. Release it first to take over.",
       409,
     );
   }
@@ -503,6 +634,16 @@ export async function decideCase(
     actorId,
   );
 
+  const corrections = computeCorrections(existing.extraction, {
+    invoiceNumber: invoice.invoiceNumber,
+    issueDate: invoice.issueDate,
+    dueDate: invoice.dueDate ?? null,
+    currency: invoice.currency,
+    subtotal: invoice.subtotal,
+    vatTotal: invoice.vatTotal,
+    grandTotal: invoice.grandTotal,
+  });
+
   const [row] = await getDb()
     .update(clerkCasesTable)
     .set({
@@ -511,6 +652,7 @@ export async function decideCase(
       decidedBy: actorId,
       decisionAction: "approve",
       decisionReason: input.reason ?? null,
+      corrections,
       createdInvoiceId: invoice.id,
     })
     .where(eq(clerkCasesTable.id, id))

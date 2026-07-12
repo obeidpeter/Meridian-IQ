@@ -9622,6 +9622,146 @@ export function useGetInvoiceStatusLight<TData = Awaited<ReturnType<typeof getIn
 
 
 
+export const getClaimClerkCaseUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/cases/${id}/claim`
+}
+
+/**
+ * @summary Claim a case for active review (one operator at a time)
+ */
+export const claimClerkCase = async (id: string, options?: RequestInit): Promise<ClerkCase> => {
+
+  return customFetch<ClerkCase>(getClaimClerkCaseUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getClaimClerkCaseMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimClerkCase>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof claimClerkCase>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['claimClerkCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof claimClerkCase>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  claimClerkCase(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClaimClerkCaseMutationResult = NonNullable<Awaited<ReturnType<typeof claimClerkCase>>>
+
+    export type ClaimClerkCaseMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Claim a case for active review (one operator at a time)
+ */
+export const useClaimClerkCase = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimClerkCase>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof claimClerkCase>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getClaimClerkCaseMutationOptions(options));
+    }
+
+export const getReleaseClerkCaseUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/cases/${id}/release`
+}
+
+/**
+ * @summary Release a claimed case back to the queue
+ */
+export const releaseClerkCase = async (id: string, options?: RequestInit): Promise<ClerkCase> => {
+
+  return customFetch<ClerkCase>(getReleaseClerkCaseUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getReleaseClerkCaseMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseClerkCase>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof releaseClerkCase>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['releaseClerkCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof releaseClerkCase>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  releaseClerkCase(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReleaseClerkCaseMutationResult = NonNullable<Awaited<ReturnType<typeof releaseClerkCase>>>
+
+    export type ReleaseClerkCaseMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Release a claimed case back to the queue
+ */
+export const useReleaseClerkCase = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseClerkCase>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof releaseClerkCase>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getReleaseClerkCaseMutationOptions(options));
+    }
+
 export const getGetClerkMetricsUrl = (params?: GetClerkMetricsParams,) => {
   const normalizedParams = new URLSearchParams();
 
