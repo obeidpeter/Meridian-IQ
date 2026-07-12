@@ -161,7 +161,7 @@ export function Layout({ children }: { children: ReactNode }) {
     } catch {
       /* clearing the cookie is best-effort; redirect regardless */
     }
-    window.location.href = "/";
+    window.location.href = "/login";
   };
 
   return (

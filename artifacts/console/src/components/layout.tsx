@@ -117,7 +117,7 @@ export function Layout({ children }: { children: ReactNode }) {
     }
     // Full navigation to the portal so every app re-resolves the (now absent)
     // session instead of trusting cached queries.
-    window.location.href = "/";
+    window.location.href = "/login";
   };
 
   const capabilities = new Set(me?.capabilities ?? []);

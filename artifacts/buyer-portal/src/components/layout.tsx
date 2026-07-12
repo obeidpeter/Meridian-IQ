@@ -65,7 +65,7 @@ export function Layout({ children }: { children: ReactNode }) {
       /* clearing the cookie is best-effort; leave regardless */
     }
     // Full navigation to the portal so every app re-resolves the session.
-    window.location.href = "/";
+    window.location.href = "/login";
   };
 
   const links = [

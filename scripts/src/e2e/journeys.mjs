@@ -26,6 +26,7 @@ export async function runJourneys(page, BASE, check) {
   );
   await page.getByTestId("link-hero-login").click();
   await page.waitForURL(BASE + "/login");
+  await page.waitForSelector('[data-testid="input-email"]', { timeout: 10000 });
   check("portal shows sign-in panel", await page.getByTestId("input-email").isVisible());
 
   await page.getByTestId("input-email").fill("ops@meridianiq.example");
