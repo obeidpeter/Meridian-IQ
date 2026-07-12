@@ -117,7 +117,7 @@ export function Layout({ children }: { children: ReactNode }) {
     }
     // Full navigation to the portal so every app re-resolves the (now absent)
     // session instead of trusting cached queries.
-    window.location.href = "/";
+    window.location.href = "/login";
   };
 
   const capabilities = new Set(me?.capabilities ?? []);
@@ -196,7 +196,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         )}
         <a
-          href="/"
+          href="/login"
           className={`flex items-center gap-3 px-3 py-2 rounded-md text-foreground hover:bg-muted transition-colors ${FOCUS_RING}`}
           data-testid="link-all-apps"
         >

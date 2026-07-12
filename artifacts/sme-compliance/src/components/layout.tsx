@@ -114,7 +114,7 @@ function NavLinks({
           </div>
         )}
         <a
-          href="/"
+          href="/login"
           className="flex items-center gap-3 px-3 py-2 rounded-md text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           data-testid="link-all-apps"
         >
@@ -161,7 +161,7 @@ export function Layout({ children }: { children: ReactNode }) {
     } catch {
       /* clearing the cookie is best-effort; redirect regardless */
     }
-    window.location.href = "/";
+    window.location.href = "/login";
   };
 
   return (

@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import LandingPage from "@/LandingPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -782,7 +783,11 @@ function Portal() {
       </a>
       <header className="border-b bg-card/70 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-2.5">
+          <a
+            href="/"
+            className="flex items-center gap-2.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label="MeridianIQ home"
+          >
             <div className="rounded-lg bg-primary p-1.5 text-primary-foreground">
               <FileCheck2 className="h-5 w-5" aria-hidden="true" />
             </div>
@@ -792,8 +797,8 @@ function Portal() {
                 Compliance & verified receivables
               </p>
             </div>
-          </div>
-          {me && (
+          </a>
+          {me ? (
             <span
               className="max-w-[50%] truncate rounded-full border bg-background px-3 py-1 text-xs font-medium text-muted-foreground"
               data-testid="badge-session"
@@ -801,6 +806,14 @@ function Portal() {
               {me.fullName ?? me.email ?? roleLabel(me.role)} ·{" "}
               {roleLabel(me.role)}
             </span>
+          ) : (
+            <a
+              href="/"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground"
+              data-testid="link-back-to-website"
+            >
+              Back to website
+            </a>
           )}
         </div>
       </header>
@@ -896,6 +909,12 @@ function Portal() {
 }
 
 export default function App() {
+  const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
+
+  if (pathname !== "/login") {
+    return <LandingPage />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <Portal />

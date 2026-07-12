@@ -6,9 +6,9 @@ import { Spinner } from "@/components/ui/spinner";
 import { errorStatus } from "@/lib/errors";
 
 function goToPortal() {
-  // Full navigation back to the origin's landing page (not a wouter route) —
-  // sign-in and role selection live at "/", outside this app's basename.
-  window.location.href = "/";
+  // Full navigation back to the origin's login portal (not a wouter route) —
+  // sign-in and role selection live at "/login", outside this app's basename.
+  window.location.href = "/login";
 }
 
 function BrandSplash({ children }: { children: ReactNode }) {
