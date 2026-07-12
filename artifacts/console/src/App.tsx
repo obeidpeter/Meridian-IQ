@@ -27,7 +27,7 @@ import { Catalogue } from "@/pages/catalogue";
 import { AuditEvidence } from "@/pages/audit-evidence";
 import { GateMetrics } from "@/pages/gate-metrics";
 import { Parties } from "@/pages/parties";
-import { ClaimsRegister } from "@/pages/claims-register";
+import { ClerkClaims } from "@/pages/clerk-claims";
 import { ClerkWorkspace } from "@/pages/clerk";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
@@ -149,15 +149,22 @@ function Router() {
             <FeatureFlags />
           </CapabilityGate>
         </Route>
-        <Route path="/claims">
+        {/* Static /clerk/claims registers before the bare /clerk route. Reads
+            are gated on claims.read; mutations render regardless — the server
+            enforces claims.write / claims.approve. */}
+        <Route path="/clerk/claims">
           <CapabilityGate capability="claims.read">
-            <ClaimsRegister />
+            <ClerkClaims />
           </CapabilityGate>
         </Route>
         <Route path="/clerk">
           <CapabilityGate capability="clerk.use">
             <ClerkWorkspace />
           </CapabilityGate>
+        </Route>
+        {/* The register used to live at /claims — keep old links working. */}
+        <Route path="/claims">
+          <Redirect to="/clerk/claims" replace />
         </Route>
         <Route path="/statements">
           <CapabilityGate capability="billing.read">
