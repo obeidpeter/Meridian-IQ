@@ -10,7 +10,6 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
 

@@ -11,7 +11,6 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { invoicesTable, invoiceStatusEnum } from "./invoices.ts";
 import { partiesTable } from "./parties.ts";
 import { usersTable, firmsTable } from "./organizations.ts";
