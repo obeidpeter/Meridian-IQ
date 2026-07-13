@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import { errorStatus } from "@/lib/errors";
 
 import { Layout } from "@/components/layout";
 import { RequireSession } from "@/components/require-session";
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: (count, err: unknown) => {
-        const status = (err as { status?: number })?.status;
+        const status = errorStatus(err);
         if (status && status >= 400 && status < 500) return false;
         return count < 2;
       },

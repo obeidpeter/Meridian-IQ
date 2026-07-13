@@ -17,24 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-
-// The generated client throws an ApiError whose `data` carries the server's
-// `{ error }` body (e.g. the invalid-TIN 400). The package does not export the
-// class itself, so duck-type the field — mirrors invoices.tsx / lib/errors.ts.
-function serverErrorMessage(error: unknown): string {
-  if (error && typeof error === "object" && "data" in error) {
-    const data = (error as { data: unknown }).data;
-    if (
-      data &&
-      typeof data === "object" &&
-      "error" in data &&
-      typeof (data as { error: unknown }).error === "string"
-    ) {
-      return (data as { error: string }).error;
-    }
-  }
-  return error instanceof Error ? error.message : "Please try again.";
-}
+import { serverErrorMessage } from "@/lib/errors";
 
 interface AddCustomerDialogProps {
   open: boolean;

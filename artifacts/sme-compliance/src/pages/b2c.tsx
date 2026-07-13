@@ -14,6 +14,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { RequireClientScope } from "@/components/require-client-scope";
@@ -142,22 +144,6 @@ function BatchItems({ batchId }: { batchId: string }) {
   );
 }
 
-function PageHeader() {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-          B2C reports
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Consumer sales are batched into 24-hour windows — report each batch
-          before its deadline.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export function B2cReports() {
   usePageTitle("B2C reports");
   const { data: me } = useGetMe();
@@ -214,7 +200,10 @@ export function B2cReports() {
   if (isFeatureDisabled(error)) {
     return (
       <div className="space-y-6">
-        <PageHeader />
+        <PageHeader
+          title="B2C reports"
+          description="Consumer sales are batched into 24-hour windows — report each batch before its deadline."
+        />
         <FeatureUnavailable feature="B2C reporting" />
       </div>
     );
@@ -226,7 +215,10 @@ export function B2cReports() {
 
   return (
     <div className="space-y-6">
-      <PageHeader />
+      <PageHeader
+        title="B2C reports"
+        description="Consumer sales are batched into 24-hour windows — report each batch before its deadline."
+      />
 
       <RequireClientScope thing="B2C reporting batches">
         {isLoading ? (
@@ -239,15 +231,11 @@ export function B2cReports() {
           <QueryError thing="your B2C reporting batches" onRetry={() => refetch()} />
         ) : sorted.length === 0 ? (
           <Card>
-            <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-              <Store className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
-              <p className="font-semibold" data-testid="text-empty">
-                No B2C batches yet
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Stamp a consumer (B2C) invoice and a reporting batch opens automatically.
-              </p>
-            </CardContent>
+            <EmptyState
+              icon={Store}
+              title="No B2C batches yet"
+              description="Stamp a consumer (B2C) invoice and a reporting batch opens automatically."
+            />
           </Card>
         ) : (
           <div className="space-y-3">

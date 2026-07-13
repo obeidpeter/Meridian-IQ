@@ -28,9 +28,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { serverErrorMessage } from "@/lib/errors";
 import {
   Search,
   FileText,
@@ -61,53 +64,18 @@ const FILTERS = [
 // newest-first bounded mode, so we never pull the unbounded legacy list.
 const PAGE_SIZE = 50;
 
-// The generated client throws an ApiError whose `data` carries the server's
-// `{ error }` body (e.g. the 403 "consent required" refusal). The package does
-// not export the class itself, so duck-type the field — mirrors lib/errors.ts.
-function serverErrorMessage(error: unknown): string {
-  if (error && typeof error === "object" && "data" in error) {
-    const data = (error as { data: unknown }).data;
-    if (
-      data &&
-      typeof data === "object" &&
-      "error" in data &&
-      typeof (data as { error: unknown }).error === "string"
-    ) {
-      return (data as { error: string }).error;
-    }
-  }
-  return error instanceof Error ? error.message : "Please try again.";
-}
-
-export function Invoices() {
-  usePageTitle("Invoices");
-  const { data: me } = useGetMe();
-  const { data: parties } = useListParties();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const bulkSubmit = useBulkSubmitInvoices();
-  const [search, setSearch] = useState("");
-  // Bulk submit dialog: `bulkReport === null` is the confirmation step; a
-  // report switches it to the results view. Rows accumulate across batches,
-  // deduped by invoiceId (an invalid draft stays pending by design, so it
-  // reappears in every batch until fixed).
-  const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkReport, setBulkReport] = useState<{
-    rows: BulkSubmitRowResult[];
-    remaining: number;
-  } | null>(null);
+// Offset-paged accumulation of GET /invoices for the vault list: debounces
+// the search box into the server-side `q`, keeps every fetched page for the
+// current term, and exposes load-more / reset-to-first-page controls plus the
+// derived loading flags. `query` is the debounced term the pages were fetched
+// with (the CSV export URL must be built from it, not the live input).
+function useAccumulatedInvoicePages(search: string) {
   // Debounced server-side search plus paging cursor, kept in one state object
   // so a new search term resets to the first page in the same update.
   const [paging, setPaging] = useState<{ q: string; offset: number }>({
     q: "",
     offset: 0,
   });
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
-  const [showFilters, setShowFilters] = useState(false);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [minAmount, setMinAmount] = useState("");
-  const [maxAmount, setMaxAmount] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -170,6 +138,294 @@ export function Invoices() {
   const loadingMore = isFetching && hasLoaded && !lastPage;
   const initialLoading = isLoading && !hasLoaded;
 
+  const loadMore = () =>
+    setPaging((prev) => ({
+      ...prev,
+      offset: prev.offset + PAGE_SIZE,
+    }));
+
+  // Drop the accumulated pages and jump back to the first page so the
+  // refreshed statuses show instead of stale later pages.
+  const resetToFirstPage = () => {
+    setPaging((prev) => (prev.offset === 0 ? prev : { ...prev, offset: 0 }));
+    setPages((prev) => ({ q: prev.q, byOffset: {} }));
+  };
+
+  return {
+    loaded,
+    hasLoaded,
+    hasMore,
+    loadingMore,
+    initialLoading,
+    isError,
+    refetch,
+    loadMore,
+    resetToFirstPage,
+    query: paging.q,
+  };
+}
+
+// The two-step bulk-submit dialog: `report === null` is the confirmation
+// step; a report switches it to the results view. Purely presentational —
+// the mutation, report merging, and query invalidations live in the parent.
+function BulkSubmitDialog({
+  open,
+  report,
+  isPending,
+  onConfirm,
+  onClose,
+}: {
+  open: boolean;
+  report: { rows: BulkSubmitRowResult[]; remaining: number } | null;
+  isPending: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const bulkRows = report?.rows ?? [];
+  const bulkSubmitted = bulkRows.filter((r) => r.outcome === "submitted").length;
+  const bulkNeedsAttention = bulkRows.filter((r) => r.outcome !== "submitted");
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent>
+        {report === null ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Submit all pending drafts?</DialogTitle>
+              <DialogDescription>
+                This validates every pending draft (draft or validated,
+                oldest first) and submits the valid ones to the FIRS stamping
+                rail, in batches of up to 200. Submission cannot be undone.
+                Drafts that fail validation stay pending, with their issues
+                listed so you can fix them.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                onClick={onClose}
+                disabled={isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={onConfirm}
+                disabled={isPending}
+                data-testid="button-confirm-bulk-submit"
+              >
+                {isPending ? "Submitting…" : "Validate & submit"}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle data-testid="text-bulk-headline">
+                {bulkRows.length === 0
+                  ? "No pending drafts"
+                  : `Submitted ${bulkSubmitted} of ${bulkRows.length}`}
+              </DialogTitle>
+              <DialogDescription>
+                {bulkRows.length === 0
+                  ? "There was nothing to validate — every invoice is already past the draft stage."
+                  : bulkNeedsAttention.length === 0
+                    ? "Every pending draft in this run is now on the stamping rail."
+                    : `${bulkNeedsAttention.length} draft(s) need a fix before they can be submitted.`}
+              </DialogDescription>
+            </DialogHeader>
+            {bulkNeedsAttention.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Needs attention</p>
+                <ul className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {bulkNeedsAttention.map((r) => (
+                    <li
+                      key={r.invoiceId}
+                      className="text-sm border border-destructive/40 bg-destructive/5 rounded-md px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Link
+                          href={`/invoices/${r.invoiceId}`}
+                          onClick={onClose}
+                          className="font-semibold truncate hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                          data-testid={`link-bulk-row-${r.invoiceId}`}
+                        >
+                          {r.invoiceNumber}
+                        </Link>
+                        <span
+                          className={pillClasses(
+                            r.outcome === "invalid" ? "amber" : "red",
+                          )}
+                        >
+                          {r.outcome === "invalid" ? "Invalid" : "Failed"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-destructive mt-1">
+                        {r.errors[0]
+                          ? `${r.errors[0].field}: ${r.errors[0].message}`
+                          : r.error ||
+                            "Submission failed — open the invoice for details."}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {report.remaining > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {report.remaining} more pending draft
+                {report.remaining === 1 ? "" : "s"} — invalid drafts stay
+                pending until fixed, so they count toward this total.
+              </p>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={onClose}>
+                Close
+              </Button>
+              {report.remaining > 0 && (
+                <Button
+                  onClick={onConfirm}
+                  disabled={isPending}
+                  data-testid="button-bulk-next-batch"
+                >
+                  {isPending ? "Submitting…" : "Submit next batch"}
+                </Button>
+              )}
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type AdvancedFilterValues = {
+  fromDate: string;
+  toDate: string;
+  minAmount: string;
+  maxAmount: string;
+};
+
+// Controlled advanced-filters card: the parent owns the four filter values
+// (the row filtering and the Filters toggle button read them); the card
+// derives its own has-values flag for the Clear button.
+function AdvancedFiltersCard({
+  values,
+  onChange,
+  onClear,
+}: {
+  values: AdvancedFilterValues;
+  onChange: (values: AdvancedFilterValues) => void;
+  onClear: () => void;
+}) {
+  const hasValues =
+    !!values.fromDate || !!values.toDate || !!values.minAmount || !!values.maxAmount;
+  return (
+    <Card>
+      <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6">
+        <div>
+          <Label htmlFor="filter-from" className="text-xs">
+            Issued from
+          </Label>
+          <Input
+            id="filter-from"
+            type="date"
+            value={values.fromDate}
+            onChange={(e) => onChange({ ...values, fromDate: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label htmlFor="filter-to" className="text-xs">
+            Issued to
+          </Label>
+          <Input
+            id="filter-to"
+            type="date"
+            value={values.toDate}
+            onChange={(e) => onChange({ ...values, toDate: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label htmlFor="filter-min" className="text-xs">
+            Min amount (₦)
+          </Label>
+          <Input
+            id="filter-min"
+            type="number"
+            min="0"
+            inputMode="decimal"
+            placeholder="0"
+            value={values.minAmount}
+            onChange={(e) => onChange({ ...values, minAmount: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label htmlFor="filter-max" className="text-xs">
+            Max amount (₦)
+          </Label>
+          <Input
+            id="filter-max"
+            type="number"
+            min="0"
+            inputMode="decimal"
+            placeholder="Any"
+            value={values.maxAmount}
+            onChange={(e) => onChange({ ...values, maxAmount: e.target.value })}
+          />
+        </div>
+        {hasValues && (
+          <div className="sm:col-span-2">
+            <Button variant="ghost" size="sm" onClick={onClear}>
+              Clear filters
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function Invoices() {
+  usePageTitle("Invoices");
+  const { data: me } = useGetMe();
+  const { data: parties } = useListParties();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const bulkSubmit = useBulkSubmitInvoices();
+  const [search, setSearch] = useState("");
+  // Bulk submit dialog: `bulkReport === null` is the confirmation step; a
+  // report switches it to the results view. Rows accumulate across batches,
+  // deduped by invoiceId (an invalid draft stays pending by design, so it
+  // reappears in every batch until fixed).
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkReport, setBulkReport] = useState<{
+    rows: BulkSubmitRowResult[];
+    remaining: number;
+  } | null>(null);
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
+  const [showFilters, setShowFilters] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+
+  const {
+    loaded,
+    hasLoaded,
+    hasMore,
+    loadingMore,
+    initialLoading,
+    isError,
+    refetch,
+    loadMore,
+    resetToFirstPage,
+    query,
+  } = useAccumulatedInvoicePages(search);
+
   const partyName = useMemo(() => {
     const map = new Map<string, string>();
     (parties || []).forEach((p) => map.set(p.id, p.legalName));
@@ -204,8 +460,8 @@ export function Invoices() {
   // The status tabs are client-side tone groupings, so no status param is sent.
   const exportCsv = () => {
     window.location.assign(
-      paging.q
-        ? `/api/invoices/export?q=${encodeURIComponent(paging.q)}`
+      query
+        ? `/api/invoices/export?q=${encodeURIComponent(query)}`
         : "/api/invoices/export",
     );
   };
@@ -239,10 +495,7 @@ export function Invoices() {
       queryClient.invalidateQueries({
         queryKey: getGetReceivablesSummaryQueryKey(),
       });
-      // Drop the accumulated pages and jump back to the first page so the
-      // refreshed statuses show instead of stale later pages.
-      setPaging((prev) => (prev.offset === 0 ? prev : { ...prev, offset: 0 }));
-      setPages((prev) => ({ q: prev.q, byOffset: {} }));
+      resetToFirstPage();
     } catch (e) {
       toast({
         title: "Bulk submit failed",
@@ -251,10 +504,6 @@ export function Invoices() {
       });
     }
   };
-
-  const bulkRows = bulkReport?.rows ?? [];
-  const bulkSubmitted = bulkRows.filter((r) => r.outcome === "submitted").length;
-  const bulkNeedsAttention = bulkRows.filter((r) => r.outcome !== "submitted");
 
   // The client's own invoice book — the base every filter applies to. The
   // search is server-side (q matches the invoice number or either party's
@@ -289,15 +538,10 @@ export function Invoices() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-            Invoice vault
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Every invoice, write-once and searchable.
-          </p>
-        </div>
+      <PageHeader
+        title="Invoice vault"
+        description="Every invoice, write-once and searchable."
+      >
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
@@ -323,122 +567,15 @@ export function Invoices() {
             <Link href="/invoices/new">New invoice</Link>
           </Button>
         </div>
-      </div>
+      </PageHeader>
 
-      <Dialog
+      <BulkSubmitDialog
         open={bulkOpen}
-        onOpenChange={(open) => {
-          if (!open) closeBulk();
-        }}
-      >
-        <DialogContent>
-          {bulkReport === null ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>Submit all pending drafts?</DialogTitle>
-                <DialogDescription>
-                  This validates every pending draft (draft or validated,
-                  oldest first) and submits the valid ones to the FIRS stamping
-                  rail, in batches of up to 200. Submission cannot be undone.
-                  Drafts that fail validation stay pending, with their issues
-                  listed so you can fix them.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  variant="ghost"
-                  onClick={closeBulk}
-                  disabled={bulkSubmit.isPending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={runBulkSubmit}
-                  disabled={bulkSubmit.isPending}
-                  data-testid="button-confirm-bulk-submit"
-                >
-                  {bulkSubmit.isPending ? "Submitting…" : "Validate & submit"}
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle data-testid="text-bulk-headline">
-                  {bulkRows.length === 0
-                    ? "No pending drafts"
-                    : `Submitted ${bulkSubmitted} of ${bulkRows.length}`}
-                </DialogTitle>
-                <DialogDescription>
-                  {bulkRows.length === 0
-                    ? "There was nothing to validate — every invoice is already past the draft stage."
-                    : bulkNeedsAttention.length === 0
-                      ? "Every pending draft in this run is now on the stamping rail."
-                      : `${bulkNeedsAttention.length} draft(s) need a fix before they can be submitted.`}
-                </DialogDescription>
-              </DialogHeader>
-              {bulkNeedsAttention.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Needs attention</p>
-                  <ul className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {bulkNeedsAttention.map((r) => (
-                      <li
-                        key={r.invoiceId}
-                        className="text-sm border border-destructive/40 bg-destructive/5 rounded-md px-3 py-2"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <Link
-                            href={`/invoices/${r.invoiceId}`}
-                            onClick={closeBulk}
-                            className="font-semibold truncate hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-                            data-testid={`link-bulk-row-${r.invoiceId}`}
-                          >
-                            {r.invoiceNumber}
-                          </Link>
-                          <span
-                            className={pillClasses(
-                              r.outcome === "invalid" ? "amber" : "red",
-                            )}
-                          >
-                            {r.outcome === "invalid" ? "Invalid" : "Failed"}
-                          </span>
-                        </div>
-                        <p className="text-xs text-destructive mt-1">
-                          {r.errors[0]
-                            ? `${r.errors[0].field}: ${r.errors[0].message}`
-                            : r.error ||
-                              "Submission failed — open the invoice for details."}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {bulkReport.remaining > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  {bulkReport.remaining} more pending draft
-                  {bulkReport.remaining === 1 ? "" : "s"} — invalid drafts stay
-                  pending until fixed, so they count toward this total.
-                </p>
-              )}
-              <DialogFooter>
-                <Button variant="ghost" onClick={closeBulk}>
-                  Close
-                </Button>
-                {bulkReport.remaining > 0 && (
-                  <Button
-                    onClick={runBulkSubmit}
-                    disabled={bulkSubmit.isPending}
-                    data-testid="button-bulk-next-batch"
-                  >
-                    {bulkSubmit.isPending ? "Submitting…" : "Submit next batch"}
-                  </Button>
-                )}
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+        report={bulkReport}
+        isPending={bulkSubmit.isPending}
+        onConfirm={runBulkSubmit}
+        onClose={closeBulk}
+      />
 
       <div className="relative">
         <Search
@@ -501,67 +638,16 @@ export function Invoices() {
       </div>
 
       {showFilters && (
-        <Card>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6">
-            <div>
-              <Label htmlFor="filter-from" className="text-xs">
-                Issued from
-              </Label>
-              <Input
-                id="filter-from"
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="filter-to" className="text-xs">
-                Issued to
-              </Label>
-              <Input
-                id="filter-to"
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="filter-min" className="text-xs">
-                Min amount (₦)
-              </Label>
-              <Input
-                id="filter-min"
-                type="number"
-                min="0"
-                inputMode="decimal"
-                placeholder="0"
-                value={minAmount}
-                onChange={(e) => setMinAmount(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="filter-max" className="text-xs">
-                Max amount (₦)
-              </Label>
-              <Input
-                id="filter-max"
-                type="number"
-                min="0"
-                inputMode="decimal"
-                placeholder="Any"
-                value={maxAmount}
-                onChange={(e) => setMaxAmount(e.target.value)}
-              />
-            </div>
-            {hasAdvanced && (
-              <div className="sm:col-span-2">
-                <Button variant="ghost" size="sm" onClick={clearAdvanced}>
-                  Clear filters
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <AdvancedFiltersCard
+          values={{ fromDate, toDate, minAmount, maxAmount }}
+          onChange={(next) => {
+            setFromDate(next.fromDate);
+            setToDate(next.toDate);
+            setMinAmount(next.minAmount);
+            setMaxAmount(next.maxAmount);
+          }}
+          onClear={clearAdvanced}
+        />
       )}
 
       {initialLoading ? (
@@ -575,38 +661,36 @@ export function Invoices() {
       ) : rows.length === 0 ? (
         scoped.length === 0 && !hasAnyFilter ? (
           <Card>
-            <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-              <FileText className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
-              <p className="font-semibold" data-testid="text-empty">
-                No invoices yet
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Create your first invoice, or bring your whole book across in one
-                go with{" "}
-                <Link href="/import" className="text-primary hover:underline">
-                  bulk import
-                </Link>
-                .
-              </p>
+            <EmptyState
+              icon={FileText}
+              title="No invoices yet"
+              description={
+                <>
+                  Create your first invoice, or bring your whole book across in one
+                  go with{" "}
+                  <Link href="/import" className="text-primary hover:underline">
+                    bulk import
+                  </Link>
+                  .
+                </>
+              }
+            >
               <Button asChild className="mt-2">
                 <Link href="/invoices/new">Create your first invoice</Link>
               </Button>
-            </CardContent>
+            </EmptyState>
           </Card>
         ) : (
           <Card>
-            <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-              <FileText className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
-              <p className="font-semibold" data-testid="text-empty">
-                No matches
-              </p>
-              <p className="text-sm text-muted-foreground">
-                No invoices match the current search and filters.
-              </p>
+            <EmptyState
+              icon={FileText}
+              title="No matches"
+              description="No invoices match the current search and filters."
+            >
               <Button variant="outline" className="mt-2" onClick={clearAllFilters}>
                 Clear filters
               </Button>
-            </CardContent>
+            </EmptyState>
           </Card>
         )
       ) : (
@@ -660,12 +744,7 @@ export function Invoices() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                setPaging((prev) => ({
-                  ...prev,
-                  offset: prev.offset + PAGE_SIZE,
-                }))
-              }
+              onClick={loadMore}
               disabled={loadingMore}
               data-testid="button-load-more"
             >

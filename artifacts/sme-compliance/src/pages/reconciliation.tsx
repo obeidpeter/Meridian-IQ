@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { RequireClientScope } from "@/components/require-client-scope";
@@ -50,19 +52,6 @@ function percent(rate: number | string): string {
   const n = Number(rate);
   if (Number.isNaN(n)) return "—";
   return `${Math.round(n * 100)}%`;
-}
-
-function PageHeader({ description }: { description: string }) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-          Reconciliation
-        </h1>
-        <p className="text-muted-foreground mt-1">{description}</p>
-      </div>
-    </div>
-  );
 }
 
 export function Reconciliation() {
@@ -284,7 +273,10 @@ export function Reconciliation() {
   if (isFeatureDisabled(statementsError)) {
     return (
       <div className="space-y-6">
-        <PageHeader description="Match bank-statement lines to your stamped invoices." />
+        <PageHeader
+          title="Reconciliation"
+          description="Match bank-statement lines to your stamped invoices."
+        />
         <FeatureUnavailable feature="Reconciliation" />
       </div>
     );
@@ -292,7 +284,10 @@ export function Reconciliation() {
 
   return (
     <div className="space-y-6">
-      <PageHeader description="Upload your bank statement and we match every credit to an invoice." />
+      <PageHeader
+        title="Reconciliation"
+        description="Upload your bank statement and we match every credit to an invoice."
+      />
 
       <RequireClientScope thing="reconciliation workspace">
         <div className="space-y-6">
@@ -462,15 +457,12 @@ export function Reconciliation() {
               ) : statementsIsError ? (
                 <QueryError thing="your bank statements" onRetry={() => refetchStatements()} />
               ) : (statements || []).length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
-                  <Landmark className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
-                  <p className="font-semibold" data-testid="text-empty">
-                    No statements yet
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Upload a bank CSV above to start reconciling.
-                  </p>
-                </div>
+                <EmptyState
+                  icon={Landmark}
+                  title="No statements yet"
+                  description="Upload a bank CSV above to start reconciling."
+                  className="px-0 py-8 justify-center"
+                />
               ) : (
                 (statements || []).map((s) => (
                   <button
@@ -545,8 +537,7 @@ export function Reconciliation() {
                 ) : proposalsIsError ? (
                   <QueryError thing="match proposals" onRetry={() => refetchProposals()} />
                 ) : (proposals || []).length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
-                    <ScanSearch className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
+                  <EmptyState icon={ScanSearch} className="px-0 py-8 justify-center">
                     {selectedStatement && selectedStatement.status !== "reconciled" ? (
                       <>
                         <p className="font-semibold">Matching in progress…</p>
@@ -565,7 +556,7 @@ export function Reconciliation() {
                         </p>
                       </>
                     )}
-                  </div>
+                  </EmptyState>
                 ) : (
                   (proposals || []).map((p) => (
                     <div key={p.id} className="border rounded-md px-3 py-2 text-sm space-y-2">
