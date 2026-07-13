@@ -10,6 +10,7 @@ import {
   Store,
   Menu,
   LogOut,
+  Repeat,
   Grid2x2,
   ShieldCheck,
   FileCheck2,
@@ -35,6 +36,7 @@ type NavLink = { href: string; label: string; icon: typeof LayoutDashboard };
 const LINKS: NavLink[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/recurring", label: "Recurring", icon: Repeat },
   { href: "/import", label: "Import", icon: Upload },
   { href: "/reconciliation", label: "Reconciliation", icon: Landmark },
   { href: "/b2c", label: "B2C reports", icon: Store },

@@ -5,6 +5,7 @@ import { migration0003 } from "./0003_push_guardrails.ts";
 import { migration0004 } from "./0004_fix_retry_mutability.ts";
 import { migration0005 } from "./0005_clerk_guardrails.ts";
 import { migration0006 } from "./0006_clerk_eval_guardrails.ts";
+import { migration0007 } from "./0007_recurring_reminder_guardrails.ts";
 
 export interface Migration {
   version: number;
@@ -23,6 +24,7 @@ export const migrations: Migration[] = [
   migration0004,
   migration0005,
   migration0006,
+  migration0007,
 ];
 
 type Executor = Pick<pg.Pool, "query">;

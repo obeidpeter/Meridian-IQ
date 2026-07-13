@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.5.0
+ * OpenAPI spec version: 0.6.0
  */
 export interface HealthStatus {
   status: string;
@@ -668,6 +668,62 @@ export interface StampVerifyResult {
   eligible: boolean;
   /** @nullable */
   invoiceStatus?: string | null;
+}
+
+export type RecurringInvoiceTemplateInputCadence = typeof RecurringInvoiceTemplateInputCadence[keyof typeof RecurringInvoiceTemplateInputCadence];
+
+
+export const RecurringInvoiceTemplateInputCadence = {
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;
+
+export interface RecurringInvoiceTemplateInput {
+  supplierPartyId: string;
+  buyerPartyId: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+  cadence: RecurringInvoiceTemplateInputCadence;
+  startDate: string;
+  currency?: string;
+  notes?: string;
+  /** @minItems 1 */
+  lines: InvoiceLineInput[];
+}
+
+export interface RecurringInvoiceTemplateUpdateInput {
+  active: boolean;
+}
+
+export type RecurringInvoiceTemplateCadence = typeof RecurringInvoiceTemplateCadence[keyof typeof RecurringInvoiceTemplateCadence];
+
+
+export const RecurringInvoiceTemplateCadence = {
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;
+
+export interface RecurringInvoiceTemplate {
+  id: string;
+  firmId: string;
+  supplierPartyId: string;
+  buyerPartyId: string;
+  name: string;
+  cadence: RecurringInvoiceTemplateCadence;
+  nextRunDate: string;
+  active: boolean;
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  lines: InvoiceLineInput[];
+  /** @nullable */
+  lastInvoiceId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CancelInvoiceInput {

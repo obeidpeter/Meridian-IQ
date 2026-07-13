@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.5.0
+ * OpenAPI spec version: 0.6.0
  */
 import {
   useMutation,
@@ -150,6 +150,9 @@ import type {
   RailState,
   ReceivablesSummary,
   ReconcileResult,
+  RecurringInvoiceTemplate,
+  RecurringInvoiceTemplateInput,
+  RecurringInvoiceTemplateUpdateInput,
   ResolveCaseInput,
   RevenueShareStatement,
   RunAssessmentInput,
@@ -4567,6 +4570,301 @@ export function useExportAudit<TData = Awaited<ReturnType<typeof exportAudit>>, 
 
 
 
+
+export const getExportAuditCsvUrl = () => {
+
+
+
+
+  return `/api/audit/export/csv`
+}
+
+/**
+ * @summary Download the audit ledger as CSV (spreadsheet-friendly companion to the JSON bundle)
+ */
+export const exportAuditCsv = async ( options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportAuditCsvUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportAuditCsvQueryKey = () => {
+    return [
+    `/api/audit/export/csv`
+    ] as const;
+    }
+
+
+export const getExportAuditCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportAuditCsv>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAuditCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportAuditCsvQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAuditCsv>>> = ({ signal }) => exportAuditCsv({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAuditCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportAuditCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportAuditCsv>>>
+export type ExportAuditCsvQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Download the audit ledger as CSV (spreadsheet-friendly companion to the JSON bundle)
+ */
+
+export function useExportAuditCsv<TData = Awaited<ReturnType<typeof exportAuditCsv>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAuditCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportAuditCsvQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListRecurringInvoicesUrl = () => {
+
+
+
+
+  return `/api/recurring-invoices`
+}
+
+/**
+ * @summary List the caller-visible recurring invoice templates
+ */
+export const listRecurringInvoices = async ( options?: RequestInit): Promise<RecurringInvoiceTemplate[]> => {
+
+  return customFetch<RecurringInvoiceTemplate[]>(getListRecurringInvoicesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRecurringInvoicesQueryKey = () => {
+    return [
+    `/api/recurring-invoices`
+    ] as const;
+    }
+
+
+export const getListRecurringInvoicesQueryOptions = <TData = Awaited<ReturnType<typeof listRecurringInvoices>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecurringInvoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRecurringInvoicesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRecurringInvoices>>> = ({ signal }) => listRecurringInvoices({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRecurringInvoices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRecurringInvoicesQueryResult = NonNullable<Awaited<ReturnType<typeof listRecurringInvoices>>>
+export type ListRecurringInvoicesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List the caller-visible recurring invoice templates
+ */
+
+export function useListRecurringInvoices<TData = Awaited<ReturnType<typeof listRecurringInvoices>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecurringInvoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRecurringInvoicesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateRecurringInvoiceUrl = () => {
+
+
+
+
+  return `/api/recurring-invoices`
+}
+
+/**
+ * @summary Create a standing instruction that drafts the same invoice on a schedule
+ */
+export const createRecurringInvoice = async (recurringInvoiceTemplateInput: RecurringInvoiceTemplateInput, options?: RequestInit): Promise<RecurringInvoiceTemplate> => {
+
+  return customFetch<RecurringInvoiceTemplate>(getCreateRecurringInvoiceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recurringInvoiceTemplateInput)
+  }
+);}
+
+
+
+
+export const getCreateRecurringInvoiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRecurringInvoice>>, TError,{data: BodyType<RecurringInvoiceTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createRecurringInvoice>>, TError,{data: BodyType<RecurringInvoiceTemplateInput>}, TContext> => {
+
+const mutationKey = ['createRecurringInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRecurringInvoice>>, {data: BodyType<RecurringInvoiceTemplateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createRecurringInvoice(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateRecurringInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof createRecurringInvoice>>>
+    export type CreateRecurringInvoiceMutationBody = BodyType<RecurringInvoiceTemplateInput>
+    export type CreateRecurringInvoiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a standing instruction that drafts the same invoice on a schedule
+ */
+export const useCreateRecurringInvoice = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRecurringInvoice>>, TError,{data: BodyType<RecurringInvoiceTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createRecurringInvoice>>,
+        TError,
+        {data: BodyType<RecurringInvoiceTemplateInput>},
+        TContext
+      > => {
+      return useMutation(getCreateRecurringInvoiceMutationOptions(options));
+    }
+
+export const getUpdateRecurringInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/recurring-invoices/${id}`
+}
+
+/**
+ * @summary Pause or resume a recurring template
+ */
+export const updateRecurringInvoice = async (id: string,
+    recurringInvoiceTemplateUpdateInput: RecurringInvoiceTemplateUpdateInput, options?: RequestInit): Promise<RecurringInvoiceTemplate> => {
+
+  return customFetch<RecurringInvoiceTemplate>(getUpdateRecurringInvoiceUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recurringInvoiceTemplateUpdateInput)
+  }
+);}
+
+
+
+
+export const getUpdateRecurringInvoiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRecurringInvoice>>, TError,{id: string;data: BodyType<RecurringInvoiceTemplateUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateRecurringInvoice>>, TError,{id: string;data: BodyType<RecurringInvoiceTemplateUpdateInput>}, TContext> => {
+
+const mutationKey = ['updateRecurringInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateRecurringInvoice>>, {id: string;data: BodyType<RecurringInvoiceTemplateUpdateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateRecurringInvoice(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateRecurringInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof updateRecurringInvoice>>>
+    export type UpdateRecurringInvoiceMutationBody = BodyType<RecurringInvoiceTemplateUpdateInput>
+    export type UpdateRecurringInvoiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Pause or resume a recurring template
+ */
+export const useUpdateRecurringInvoice = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRecurringInvoice>>, TError,{id: string;data: BodyType<RecurringInvoiceTemplateUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateRecurringInvoice>>,
+        TError,
+        {id: string;data: BodyType<RecurringInvoiceTemplateUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateRecurringInvoiceMutationOptions(options));
+    }
 
 export const getGetAssessmentQuestionnaireUrl = () => {
 

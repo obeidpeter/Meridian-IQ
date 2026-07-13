@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.5.0
+ * OpenAPI spec version: 0.6.0
  */
 import * as zod from 'zod';
 
@@ -1263,6 +1263,130 @@ export const ExportAuditResponse = zod.object({
   "brokenAtSeq": zod.number().nullish()
 }),
   "exportedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Download the audit ledger as CSV (spreadsheet-friendly companion to the JSON bundle)
+ */
+export const ExportAuditCsvResponse = zod.unknown()
+
+
+/**
+ * @summary List the caller-visible recurring invoice templates
+ */
+
+
+
+export const ListRecurringInvoicesResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "supplierPartyId": zod.string(),
+  "buyerPartyId": zod.string(),
+  "name": zod.string(),
+  "cadence": zod.enum(['weekly', 'monthly']),
+  "nextRunDate": zod.string(),
+  "active": zod.boolean(),
+  "currency": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "lines": zod.array(zod.object({
+  "description": zod.string().min(1),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string()
+})),
+  "lastInvoiceId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListRecurringInvoicesResponse = zod.array(ListRecurringInvoicesResponseItem)
+
+
+/**
+ * @summary Create a standing instruction that drafts the same invoice on a schedule
+ */
+export const createRecurringInvoiceBodyNameMax = 120;
+
+
+
+
+
+export const CreateRecurringInvoiceBody = zod.object({
+  "supplierPartyId": zod.string(),
+  "buyerPartyId": zod.string(),
+  "name": zod.string().min(1).max(createRecurringInvoiceBodyNameMax),
+  "cadence": zod.enum(['weekly', 'monthly']),
+  "startDate": zod.string(),
+  "currency": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "lines": zod.array(zod.object({
+  "description": zod.string().min(1),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string()
+})).min(1)
+})
+
+
+
+
+export const CreateRecurringInvoiceResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "supplierPartyId": zod.string(),
+  "buyerPartyId": zod.string(),
+  "name": zod.string(),
+  "cadence": zod.enum(['weekly', 'monthly']),
+  "nextRunDate": zod.string(),
+  "active": zod.boolean(),
+  "currency": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "lines": zod.array(zod.object({
+  "description": zod.string().min(1),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string()
+})),
+  "lastInvoiceId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Pause or resume a recurring template
+ */
+export const UpdateRecurringInvoiceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateRecurringInvoiceBody = zod.object({
+  "active": zod.boolean()
+})
+
+
+
+
+export const UpdateRecurringInvoiceResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "supplierPartyId": zod.string(),
+  "buyerPartyId": zod.string(),
+  "name": zod.string(),
+  "cadence": zod.enum(['weekly', 'monthly']),
+  "nextRunDate": zod.string(),
+  "active": zod.boolean(),
+  "currency": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "lines": zod.array(zod.object({
+  "description": zod.string().min(1),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string()
+})),
+  "lastInvoiceId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
 })
 
 

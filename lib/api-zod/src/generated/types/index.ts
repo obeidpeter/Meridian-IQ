@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.5.0
+ * OpenAPI spec version: 0.6.0
  */
 
 export * from './activityItem';
@@ -272,6 +272,11 @@ export * from './receivablesSummaryGroupsItem';
 export * from './receivablesSummaryGroupsItemBuckets';
 export * from './receivablesSummaryTopDebtorsItem';
 export * from './reconcileResult';
+export * from './recurringInvoiceTemplate';
+export * from './recurringInvoiceTemplateCadence';
+export * from './recurringInvoiceTemplateInput';
+export * from './recurringInvoiceTemplateInputCadence';
+export * from './recurringInvoiceTemplateUpdateInput';
 export * from './remediationItem';
 export * from './resolveCaseInput';
 export * from './revenueShareStatement';
