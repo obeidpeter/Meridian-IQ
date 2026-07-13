@@ -15,6 +15,14 @@ Two separate mechanisms manage the schema, and confusing them causes boot failur
   append-only triggers, retention functions. They `ALTER TABLE <t> ENABLE ROW
   LEVEL SECURITY` on tables they assume already exist.
 
+**Root cause of repeated post-merge failures (fixed July 2026):**
+`scripts/post-merge.sh` used plain `pnpm --filter db push`; post-merge runs
+with stdin closed, so any confirmation prompt got EOF → script failed → the
+workflow reconciliation (which restarts and thus rebuilds api-server) never
+ran. Script now uses `push-force`. If a merge crash pattern recurs (404 on new
+routes / missing response fields / `column does not exist`), check the
+post-merge run actually succeeded before manual fixing.
+
 **Failure mode:** if the post-merge push doesn't run/complete, the new tables
 don't exist, and api-server boot dies in `applyMigrations` with
 `relation "<table>" does not exist` (e.g. a migration enabling RLS on R2 tables
