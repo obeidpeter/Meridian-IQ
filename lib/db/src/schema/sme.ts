@@ -5,6 +5,7 @@ import {
   boolean,
   jsonb,
   pgEnum,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { firmsTable, usersTable } from "./organizations.ts";
@@ -31,6 +32,40 @@ export const alertPreferencesTable = pgTable("alert_preferences", {
   penaltyAlerts: boolean("penalty_alerts").notNull().default(true),
   updatedAt: updatedAt(),
 });
+
+// The deadline-reminder sweep's idempotency ledger: one row per (invoice,
+// threshold). A client is reminded once when an unsubmitted invoice enters
+// the due-soon window and once more if it goes overdue — never again on
+// subsequent sweep ticks. Rows are written even while messaging is dark so
+// enabling the flag later does not blast reminders for old invoices.
+export const deadlineReminderKindEnum = pgEnum("deadline_reminder_kind", [
+  "due_soon",
+  "overdue",
+]);
+
+export const deadlineReminderSendsTable = pgTable(
+  "deadline_reminder_sends",
+  {
+    id: id(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoicesTable.id),
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    kind: deadlineReminderKindEnum("kind").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("deadline_reminder_invoice_kind_uq").on(t.invoiceId, t.kind),
+  ],
+);
+
+export type DeadlineReminderSend =
+  typeof deadlineReminderSendsTable.$inferSelect;
 
 // Guided failure resolution can hand off to a human operator (SME-06). An
 // escalation records why an invoice needs attention and tracks its handling.

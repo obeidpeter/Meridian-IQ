@@ -2,6 +2,7 @@ export * from "./parties.ts";
 export * from "./organizations.ts";
 export * from "./engagements.ts";
 export * from "./invoices.ts";
+export * from "./recurring.ts";
 export * from "./lifecycle.ts";
 export * from "./consent.ts";
 export * from "./audit.ts";

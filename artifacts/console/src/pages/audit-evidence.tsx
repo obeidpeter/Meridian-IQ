@@ -17,6 +17,7 @@ import {
   Download,
   Link2,
   FileJson,
+  FileSpreadsheet,
 } from "lucide-react";
 
 // CORE-05: the hash-chained audit log is the artifact a regulator, a bank or
@@ -56,6 +57,13 @@ export function AuditEvidence() {
     } finally {
       setExporting(false);
     }
+  };
+
+  // CSV as a plain browser navigation (no react-query): the endpoint answers
+  // with a Content-Disposition attachment and auth rides the session cookie,
+  // so the browser just downloads the file.
+  const downloadCsv = () => {
+    window.location.assign("/api/audit/export/csv");
   };
 
   return (
@@ -137,16 +145,28 @@ export function AuditEvidence() {
           <p className="text-sm text-muted-foreground">
             The bundle contains every audit event plus the chain verification
             result, self-contained so a third party can re-verify the hashes
-            without access to this system.
+            without access to this system. The CSV ledger is its
+            spreadsheet-friendly companion — each row carries its hash, but the
+            JSON bundle stays the verifiable artifact.
           </p>
-          <Button
-            onClick={downloadBundle}
-            disabled={exporting}
-            data-testid="button-export-bundle"
-          >
-            <Download className="w-4 h-4 mr-1" aria-hidden="true" />
-            {exporting ? "Preparing bundle…" : "Download audit bundle"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={downloadBundle}
+              disabled={exporting}
+              data-testid="button-export-bundle"
+            >
+              <Download className="w-4 h-4 mr-1" aria-hidden="true" />
+              {exporting ? "Preparing bundle…" : "Download audit bundle"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={downloadCsv}
+              data-testid="button-export-csv"
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-1" aria-hidden="true" />
+              Download CSV ledger
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

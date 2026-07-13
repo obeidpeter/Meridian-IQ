@@ -7,6 +7,7 @@ import partiesRouter from "./parties";
 import consentRouter from "./consent";
 import engagementsRouter from "./engagements";
 import invoicesRouter from "./invoices";
+import recurringRouter from "./recurring";
 import verificationRouter from "./verification";
 import messagingRouter from "./messaging";
 import platformRouter from "./platform";
@@ -29,6 +30,7 @@ import clerkRouter from "./clerk";
 import "../modules/desk/sweeps";
 import "../modules/clerk/watchdog";
 import "../modules/push/register";
+import "../modules/invoice/register";
 
 const router: IRouter = Router();
 
@@ -40,6 +42,7 @@ router.use(partiesRouter);
 router.use(consentRouter);
 router.use(engagementsRouter);
 router.use(invoicesRouter);
+router.use(recurringRouter);
 router.use(verificationRouter);
 router.use(messagingRouter);
 router.use(platformRouter);

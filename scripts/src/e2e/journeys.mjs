@@ -312,6 +312,13 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   await page.waitForSelector("text=Submit all pending drafts?", { timeout: 10000 });
   await page.getByRole("button", { name: "Cancel" }).click();
   check("bulk-submit confirmation opens and cancels", true);
+
+  // Recurring invoices page renders with its create entry point.
+  await page.goto(BASE + "/app/recurring", { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="button-new-recurring"]', {
+    timeout: 15000,
+  });
+  check("recurring invoices page renders", true);
 }
 
 // ---------- change password round trip (restores the demo password) ----------
