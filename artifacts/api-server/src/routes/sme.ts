@@ -12,6 +12,8 @@ import {
 import {
   GetDashboardSummaryQueryParams,
   GetDashboardSummaryResponse,
+  GetReceivablesSummaryQueryParams,
+  GetReceivablesSummaryResponse,
   ImportInvoicesBody,
   ImportInvoicesResponse,
   GetComplianceCalendarQueryParams,
@@ -37,6 +39,7 @@ import {
   type Principal,
 } from "../modules/auth/rbac";
 import { createDraft, bulkCreateDrafts, getInvoiceWithLines } from "../modules/invoice/service";
+import { getReceivablesSummary } from "../modules/invoice/receivables";
 import { isFeatureEnabled } from "../modules/flags/flags";
 import { openBatchesFor } from "../modules/b2c/service";
 import { sendMessage } from "../modules/messaging/messaging";
@@ -306,6 +309,22 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
     recentActivity,
   };
   res.json(GetDashboardSummaryResponse.parse(summary));
+});
+
+// Receivables aging: who owes this client what, and how old. Same access
+// posture as the dashboard summary (party access + tenant scoping).
+router.get("/dashboard/receivables", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = GetReceivablesSummaryQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+  const clientPartyId = query.data.clientPartyId;
+  await assertPartyAccess(req.principal, clientPartyId);
+  const tenant = tenantFirmId(req.principal);
+  const summary = await getReceivablesSummary(clientPartyId, tenant);
+  res.json(GetReceivablesSummaryResponse.parse(summary));
 });
 
 router.get("/compliance/calendar", async (req, res): Promise<void> => {

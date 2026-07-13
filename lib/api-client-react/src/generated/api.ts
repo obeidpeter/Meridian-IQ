@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import {
   useMutation,
@@ -93,6 +93,7 @@ import type {
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
   GetPublicThemeParams,
+  GetReceivablesSummaryParams,
   HealthStatus,
   IdentifierCheck,
   Invoice,
@@ -110,6 +111,7 @@ import type {
   ListErpConnectionsParams,
   ListInvoicesParams,
   ListOperatorCasesParams,
+  ListPartiesParams,
   ListStatementsParams,
   LoginInput,
   MatchDecisionResult,
@@ -139,6 +141,7 @@ import type {
   PushDeviceUnregisterInput,
   QuestionnaireTemplate,
   RailState,
+  ReceivablesSummary,
   ReconcileResult,
   ResolveCaseInput,
   RevenueShareStatement,
@@ -894,17 +897,24 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getCreateMembershipMutationOptions(options));
     }
 
-export const getListPartiesUrl = () => {
+export const getListPartiesUrl = (params?: ListPartiesParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/parties`
+  return stringifiedParams.length > 0 ? `/api/parties?${stringifiedParams}` : `/api/parties`
 }
 
-export const listParties = async ( options?: RequestInit): Promise<Party[]> => {
+export const listParties = async (params?: ListPartiesParams, options?: RequestInit): Promise<Party[]> => {
 
-  return customFetch<Party[]>(getListPartiesUrl(),
+  return customFetch<Party[]>(getListPartiesUrl(params),
   {
     ...options,
     method: 'GET'
@@ -917,23 +927,23 @@ export const listParties = async ( options?: RequestInit): Promise<Party[]> => {
 
 
 
-export const getListPartiesQueryKey = () => {
+export const getListPartiesQueryKey = (params?: ListPartiesParams,) => {
     return [
-    `/api/parties`
+    `/api/parties`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListPartiesQueryOptions = <TData = Awaited<ReturnType<typeof listParties>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listParties>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListPartiesQueryOptions = <TData = Awaited<ReturnType<typeof listParties>>, TError = ErrorType<unknown>>(params?: ListPartiesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listParties>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListPartiesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListPartiesQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listParties>>> = ({ signal }) => listParties({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listParties>>> = ({ signal }) => listParties(params, { signal, ...requestOptions });
 
 
 
@@ -948,11 +958,11 @@ export type ListPartiesQueryError = ErrorType<unknown>
 
 
 export function useListParties<TData = Awaited<ReturnType<typeof listParties>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listParties>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListPartiesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listParties>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListPartiesQueryOptions(options)
+  const queryOptions = getListPartiesQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1919,6 +1929,9 @@ export const getListInvoicesUrl = (params?: ListInvoicesParams,) => {
   return stringifiedParams.length > 0 ? `/api/invoices?${stringifiedParams}` : `/api/invoices`
 }
 
+/**
+ * Without limit/offset/q the full tenant-scoped list is returned oldest first (legacy behaviour, kept for existing clients). When any of the paging/search parameters are present the list is returned NEWEST first and bounded (limit defaults to 50).
+ */
 export const listInvoices = async (params?: ListInvoicesParams, options?: RequestInit): Promise<Invoice[]> => {
 
   return customFetch<Invoice[]>(getListInvoicesUrl(params),
@@ -4652,6 +4665,90 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardSummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetReceivablesSummaryUrl = (params: GetReceivablesSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/receivables?${stringifiedParams}` : `/api/dashboard/receivables`
+}
+
+/**
+ * @summary Outstanding receivables aged into buckets, with top debtors
+ */
+export const getReceivablesSummary = async (params: GetReceivablesSummaryParams, options?: RequestInit): Promise<ReceivablesSummary> => {
+
+  return customFetch<ReceivablesSummary>(getGetReceivablesSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReceivablesSummaryQueryKey = (params?: GetReceivablesSummaryParams,) => {
+    return [
+    `/api/dashboard/receivables`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetReceivablesSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getReceivablesSummary>>, TError = ErrorType<unknown>>(params: GetReceivablesSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReceivablesSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReceivablesSummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReceivablesSummary>>> = ({ signal }) => getReceivablesSummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReceivablesSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetReceivablesSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getReceivablesSummary>>>
+export type GetReceivablesSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Outstanding receivables aged into buckets, with top debtors
+ */
+
+export function useGetReceivablesSummary<TData = Awaited<ReturnType<typeof getReceivablesSummary>>, TError = ErrorType<unknown>>(
+ params: GetReceivablesSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReceivablesSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReceivablesSummaryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

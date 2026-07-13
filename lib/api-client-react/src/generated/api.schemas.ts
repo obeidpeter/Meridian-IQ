@@ -3,10 +3,11 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 export interface HealthStatus {
   status: string;
+  contractVersion: string;
 }
 
 export interface Error {
@@ -1046,6 +1047,41 @@ export interface ActivityItem {
   /** @nullable */
   status?: string | null;
   at: string;
+}
+
+export interface ReceivablesBucket {
+  amount: string;
+  count: number;
+}
+
+export type ReceivablesSummaryGroupsItemBuckets = {
+  current: ReceivablesBucket;
+  days31to60: ReceivablesBucket;
+  days61to90: ReceivablesBucket;
+  days90plus: ReceivablesBucket;
+};
+
+export type ReceivablesSummaryGroupsItem = {
+  currency: string;
+  outstandingTotal: string;
+  invoiceCount: number;
+  buckets: ReceivablesSummaryGroupsItemBuckets;
+};
+
+export type ReceivablesSummaryTopDebtorsItem = {
+  buyerPartyId: string;
+  buyerName: string;
+  currency: string;
+  outstanding: string;
+  invoiceCount: number;
+  /** @nullable */
+  oldestDueDate: string | null;
+};
+
+export interface ReceivablesSummary {
+  asOf: string;
+  groups: ReceivablesSummaryGroupsItem[];
+  topDebtors: ReceivablesSummaryTopDebtorsItem[];
 }
 
 export type DashboardSummaryPenaltyRisk = typeof DashboardSummaryPenaltyRisk[keyof typeof DashboardSummaryPenaltyRisk];
@@ -2671,11 +2707,37 @@ export type NotFoundResponse = Error;
  */
 export type ConflictResponse = Error;
 
+export type ListPartiesParams = {
+/**
+ * Matches the legal name or TIN.
+ * @maxLength 120
+ */
+q?: string;
+};
+
 export type ListInvoicesParams = {
 status?: string;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
+/**
+ * Matches the invoice number or either party's legal name.
+ * @maxLength 120
+ */
+q?: string;
 };
 
 export type GetDashboardSummaryParams = {
+clientPartyId: string;
+};
+
+export type GetReceivablesSummaryParams = {
 clientPartyId: string;
 };
 
@@ -2748,6 +2810,15 @@ claimKey?: string;
 export type ListClerkCasesParams = {
 kind?: ListClerkCasesKind;
 status?: ListClerkCasesStatus;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };
 
 export type ListClerkCasesKind = typeof ListClerkCasesKind[keyof typeof ListClerkCasesKind];

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
   getDb,
   invoicesTable,
@@ -92,10 +92,19 @@ async function loadForTenant(req: { principal: import("../modules/auth/rbac").Pr
   return bundle;
 }
 
+// Escape LIKE wildcards so a user typing "50%" searches for the literal
+// characters instead of matching everything.
+function likePattern(q: string): string {
+  return `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+}
+
 router.get("/invoices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = ListInvoicesQueryParams.safeParse(req.query);
   const status = query.success ? query.data.status : undefined;
+  const limit = query.success ? query.data.limit : undefined;
+  const offset = query.success ? query.data.offset : undefined;
+  const q = query.success ? query.data.q?.trim() : undefined;
   const tenant = tenantFirmId(req.principal);
   const conditions = [];
   if (tenant) conditions.push(eq(invoicesTable.firmId, tenant));
@@ -104,13 +113,33 @@ router.get("/invoices", async (req, res): Promise<void> => {
   const scope = clientPartyScope(req.principal);
   if (scope) conditions.push(eq(invoicesTable.supplierPartyId, scope));
   if (status) conditions.push(eq(invoicesTable.status, status as never));
-  const rows = conditions.length
-    ? await getDb()
-        .select()
-        .from(invoicesTable)
-        .where(and(...conditions))
-        .orderBy(asc(invoicesTable.createdAt))
-    : await getDb().select().from(invoicesTable).orderBy(asc(invoicesTable.createdAt));
+  // Search matches the invoice number or either party's legal name.
+  if (q) {
+    const pattern = likePattern(q);
+    conditions.push(sql`(
+      ${invoicesTable.invoiceNumber} ILIKE ${pattern}
+      OR EXISTS (
+        SELECT 1 FROM parties p
+        WHERE (p.id = ${invoicesTable.supplierPartyId}
+            OR p.id = ${invoicesTable.buyerPartyId})
+          AND p.legal_name ILIKE ${pattern}
+      )
+    )`);
+  }
+
+  // Paged/search requests are newest-first and bounded; a bare request keeps
+  // the legacy full-list oldest-first behaviour for existing clients (mobile).
+  const paged = limit !== undefined || offset !== undefined || !!q;
+  let builder = getDb()
+    .select()
+    .from(invoicesTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(
+      paged ? desc(invoicesTable.createdAt) : asc(invoicesTable.createdAt),
+    )
+    .$dynamic();
+  if (paged) builder = builder.limit(limit ?? 50).offset(offset ?? 0);
+  const rows = await builder;
   res.json(ListInvoicesResponse.parse(rows));
 });
 

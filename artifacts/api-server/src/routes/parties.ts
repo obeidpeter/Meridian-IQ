@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import {
+  ListPartiesQueryParams,
   ListPartiesResponse,
   CreatePartyBody,
   CreatePartyResponse,
@@ -15,7 +16,7 @@ import {
   ValidateCacBody,
   ValidateCacResponse,
 } from "@workspace/api-zod";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb, partiesTable, engagementsTable } from "@workspace/db";
 import {
   assertCan,
@@ -38,6 +39,13 @@ const router: IRouter = Router();
 
 router.get("/parties", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.read");
+  const query = ListPartiesQueryParams.safeParse(req.query);
+  const q = query.success ? query.data.q?.trim() : undefined;
+  // Search matches the legal name or TIN; wildcards in the query are literal.
+  const search: SQL | undefined = q
+    ? sql`(${partiesTable.legalName} ILIKE ${`%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`}
+        OR ${partiesTable.tin} ILIKE ${`%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`})`
+    : undefined;
   const tenant = tenantFirmId(req.principal);
   let rows;
   if (tenant === null) {
@@ -45,6 +53,7 @@ router.get("/parties", async (req, res): Promise<void> => {
     rows = await getDb()
       .select()
       .from(partiesTable)
+      .where(search)
       .orderBy(partiesTable.createdAt);
   } else {
     // Firm-scoped principals only see parties they have an engagement with.
@@ -62,7 +71,11 @@ router.get("/parties", async (req, res): Promise<void> => {
       ? await getDb()
           .select()
           .from(partiesTable)
-          .where(inArray(partiesTable.id, ids))
+          .where(
+            search
+              ? and(inArray(partiesTable.id, ids), search)
+              : inArray(partiesTable.id, ids),
+          )
           .orderBy(partiesTable.createdAt)
       : [];
   }

@@ -419,11 +419,13 @@ export function fenceDocument(text: string): string {
 export async function listCases(filter: {
   kind?: "extraction" | "question";
   status?: ClerkCase["status"];
+  limit?: number;
+  offset?: number;
 }): Promise<Omit<ClerkCase, "sourceImageB64" | "sourceText">[]> {
   const conditions = [];
   if (filter.kind) conditions.push(eq(clerkCasesTable.kind, filter.kind));
   if (filter.status) conditions.push(eq(clerkCasesTable.status, filter.status));
-  return getDb()
+  let builder = getDb()
     .select({
       id: clerkCasesTable.id,
       kind: clerkCasesTable.kind,
@@ -449,7 +451,13 @@ export async function listCases(filter: {
     })
     .from(clerkCasesTable)
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(clerkCasesTable.createdAt));
+    .orderBy(desc(clerkCasesTable.createdAt))
+    .$dynamic();
+  // Absent bounds keep the legacy full-list behaviour for existing clients.
+  if (filter.limit !== undefined || filter.offset !== undefined) {
+    builder = builder.limit(filter.limit ?? 100).offset(filter.offset ?? 0);
+  }
+  return builder;
 }
 
 export async function getCase(id: string): Promise<ClerkCase> {

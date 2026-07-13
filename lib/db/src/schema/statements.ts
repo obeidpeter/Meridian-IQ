@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
   unique,
+  index,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -83,7 +84,9 @@ export const bankStatementLinesTable = pgTable("bank_statement_lines", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+},
+// Every reconciliation view loads a statement's lines by this FK.
+(t) => [index("bank_statement_lines_statement_idx").on(t.statementId)]);
 
 // Reconciliation proposals (SME-07): the matcher scores candidate invoices per
 // credit line; a firm user accepts or rejects. Accepting writes the

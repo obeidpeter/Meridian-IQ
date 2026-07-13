@@ -151,13 +151,13 @@ test("scorePartyCandidates ranks a TIN hit above a name-only hit", () => {
       id: "a",
       legalName: "Adekunle Textiles Ltd",
       tin: "12345678-0001",
-      type: "client_business",
+      type: "client_business" as const,
     },
     {
       id: "b",
       legalName: "Adekunle Textiles International Ltd",
       tin: "55555555-0001",
-      type: "client_business",
+      type: "client_business" as const,
     },
   ];
   const scored = scorePartyCandidates(

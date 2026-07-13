@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
 export * from './activityItem';
@@ -163,6 +163,7 @@ export * from './getClerkMetricsParams';
 export * from './getComplianceCalendarParams';
 export * from './getDashboardSummaryParams';
 export * from './getPublicThemeParams';
+export * from './getReceivablesSummaryParams';
 export * from './graphEdge';
 export * from './graphNode';
 export * from './graphNodeKind';
@@ -198,6 +199,7 @@ export * from './listErpConnectionsParams';
 export * from './listInvoicesParams';
 export * from './listOperatorCasesParams';
 export * from './listOperatorCasesStatus';
+export * from './listPartiesParams';
 export * from './listStatementsParams';
 export * from './loginInput';
 export * from './matchDecisionResult';
@@ -251,6 +253,11 @@ export * from './questionnaireSection';
 export * from './questionnaireTemplate';
 export * from './railState';
 export * from './railStateState';
+export * from './receivablesBucket';
+export * from './receivablesSummary';
+export * from './receivablesSummaryGroupsItem';
+export * from './receivablesSummaryGroupsItemBuckets';
+export * from './receivablesSummaryTopDebtorsItem';
 export * from './reconcileResult';
 export * from './remediationItem';
 export * from './resolveCaseInput';

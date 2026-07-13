@@ -6,6 +6,7 @@ import {
   jsonb,
   integer,
   pgEnum,
+  index,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -48,7 +49,12 @@ export const engagementsTable = pgTable("engagements", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-});
+},
+// Firm scoping and party-in-firm checks probe these on nearly every request.
+(t) => [
+  index("engagements_firm_idx").on(t.firmId),
+  index("engagements_client_party_idx").on(t.clientPartyId),
+]);
 
 export const insertEngagementSchema = createInsertSchema(engagementsTable).omit({
   id: true,

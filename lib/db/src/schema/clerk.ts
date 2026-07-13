@@ -10,6 +10,7 @@ import {
   pgEnum,
   unique,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -229,7 +230,13 @@ export const clerkCasesTable = pgTable("clerk_cases", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-});
+},
+// The duplicate-intake guard probes source_hash on every case creation; the
+// queue lists filter by status.
+(t) => [
+  index("clerk_cases_source_hash_idx").on(t.sourceHash),
+  index("clerk_cases_status_idx").on(t.status),
+]);
 
 // Append-only ledger of every model invocation (enforced by trigger in
 // migration 0005): model, prompt version, input reference (hash — never the
@@ -261,7 +268,12 @@ export const clerkInferenceCallsTable = pgTable("clerk_inference_calls", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+},
+// The watchdog and metrics scan recent windows; case joins walk case_id.
+(t) => [
+  index("clerk_inference_calls_created_idx").on(t.createdAt),
+  index("clerk_inference_calls_case_idx").on(t.caseId),
+]);
 
 // One fixture's outcome inside an evaluation run (§13.1). Expected/actual
 // values are synthetic C1 fixture data, never client content.
