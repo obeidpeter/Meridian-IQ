@@ -20,7 +20,7 @@ import {
   type ClerkGateway,
   type ClerkProvider,
 } from "./gateway.ts";
-import { isFeatureEnabled, setFlag } from "../flags/flags.ts";
+import { setFlag } from "../flags/flags.ts";
 import {
   claimCase,
   computeCorrections,

@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { eq, inArray, like, sql } from "drizzle-orm";
+import { eq, like, sql } from "drizzle-orm";
 import {
   getDb,
   usersTable,
@@ -10,7 +10,6 @@ import {
   engagementsTable,
   invoicesTable,
   claimRecordsTable,
-  clerkCasesTable,
   clerkInferenceCallsTable,
   featureFlagsTable,
   type ClaimRecord,

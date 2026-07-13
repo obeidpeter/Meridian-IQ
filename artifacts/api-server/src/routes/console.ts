@@ -40,7 +40,6 @@ import {
   ListPriceReviewsResponse,
   GetSubscriptionResponse,
   UpdateSubscriptionBody,
-  UpdateSubscriptionResponse,
   ListStatementsQueryParams,
   ListStatementsResponse,
   GenerateStatementsBody,

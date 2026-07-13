@@ -16,8 +16,8 @@ import {
   ValidateCacBody,
   ValidateCacResponse,
 } from "@workspace/api-zod";
-import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { getDb, partiesTable, engagementsTable } from "@workspace/db";
+import { and, sql, type SQL } from "drizzle-orm";
+import { getDb, partiesTable } from "@workspace/db";
 import { likePattern } from "../lib/sql";
 import {
   assertCan,
