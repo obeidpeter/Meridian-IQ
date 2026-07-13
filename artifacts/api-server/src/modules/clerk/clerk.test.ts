@@ -4,26 +4,21 @@ import { randomUUID } from "node:crypto";
 import { eq, like, sql } from "drizzle-orm";
 import {
   getDb,
-  usersTable,
-  firmsTable,
-  partiesTable,
-  engagementsTable,
   invoicesTable,
   claimRecordsTable,
   clerkInferenceCallsTable,
-  featureFlagsTable,
   type ClaimRecord,
   type ProtectedFact,
 } from "@workspace/db";
-import { DomainError } from "../errors.ts";
-import {
-  CLERK_FLAG_KEY,
-  assertClerkEnabled,
-  createGateway,
-  type ClerkGateway,
-  type ClerkProvider,
-} from "./gateway.ts";
+import { CLERK_FLAG_KEY, assertClerkEnabled } from "./gateway.ts";
 import { setFlag } from "../flags/flags.ts";
+import { expectDomainError } from "../../test-helpers/assertions.ts";
+import {
+  saveAndEnableClerkFlag,
+  restoreClerkFlag,
+  ensureClerkFixtures,
+  fakeGateway,
+} from "./test-support.ts";
 import {
   CANONICAL_FIELDS,
   CRITICAL_FIELDS,
@@ -51,7 +46,6 @@ import {
 // Clerk refuses anything outside the approved register.
 
 const suffix = randomUUID().slice(0, 8);
-const FAKE_MODEL = "fake-model-test";
 // Fixed test users: clerk_cases and the inference ledger are append-only
 // audit artifacts (DB triggers forbid deletion), so the users they reference
 // must persist. Fixed IDs keep reruns from accumulating users.
@@ -63,22 +57,6 @@ const checkerId = "cccc0002-0000-4000-8000-00000000cc02";
 const firmId = "cccc0003-0000-4000-8000-00000000cc03";
 const supplierId = "cccc0004-0000-4000-8000-00000000cc04";
 const buyerId = "cccc0005-0000-4000-8000-00000000cc05";
-
-let flagWasEnabled: boolean | null = null;
-
-function fakeGateway(respond: () => string | Promise<string>): ClerkGateway {
-  const provider: ClerkProvider = {
-    model: FAKE_MODEL,
-    complete: async () => respond(),
-  };
-  return createGateway(provider);
-}
-
-function expectDomainError(err: unknown, code: string, status: number): void {
-  assert.ok(err instanceof DomainError, `expected DomainError, got ${err}`);
-  assert.equal(err.code, code);
-  assert.equal(err.status, status);
-}
 
 const RATE_FACT: ProtectedFact = {
   key: "rate",
@@ -107,65 +85,20 @@ async function activateTestClaim(claimKey: string): Promise<ClaimRecord> {
 }
 
 before(async () => {
-  const db = getDb();
-  // Remember + force the kill switch ON so tests exercise real code paths.
-  const [flag] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY))
-    .limit(1);
-  flagWasEnabled = flag ? flag.enabled : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: CLERK_FLAG_KEY, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
-
-  await db
-    .insert(usersTable)
-    .values([
+  await saveAndEnableClerkFlag();
+  await ensureClerkFixtures({
+    users: [
       { id: makerId, email: "clerk-test-maker@test.local" },
       { id: checkerId, email: "clerk-test-checker@test.local" },
-    ])
-    .onConflictDoNothing();
-  await db
-    .insert(firmsTable)
-    .values({ id: firmId, name: "Clerk Test Firm" })
-    .onConflictDoNothing();
-  await db
-    .insert(partiesTable)
-    .values([
-      {
-        id: supplierId,
-        type: "client_business",
-        legalName: "Clerk Test Supplier",
-      },
-      { id: buyerId, type: "buyer", legalName: "Clerk Test Buyer" },
-    ])
-    .onConflictDoNothing();
-  // Party-in-firm linkage runs through engagements.
-  const existing = await db
-    .select({ id: engagementsTable.id })
-    .from(engagementsTable)
-    .where(eq(engagementsTable.firmId, firmId));
-  if (existing.length === 0) {
-    await db.insert(engagementsTable).values([
-      {
-        firmId,
-        clientPartyId: supplierId,
-        type: "readiness_assessment",
-        title: "test",
-      },
-      {
-        firmId,
-        clientPartyId: buyerId,
-        type: "readiness_assessment",
-        title: "test",
-      },
-    ]);
-  }
+    ],
+    firmId,
+    firmName: "Clerk Test Firm",
+    supplierId,
+    supplierName: "Clerk Test Supplier",
+    buyerId,
+    buyerName: "Clerk Test Buyer",
+    engagementTitle: "test",
+  });
 });
 
 after(async () => {
@@ -178,13 +111,7 @@ after(async () => {
   await db
     .delete(claimRecordsTable)
     .where(like(claimRecordsTable.claimKey, "test.%"));
-  if (flagWasEnabled === null) {
-    await db
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY));
-  } else {
-    await setFlag(CLERK_FLAG_KEY, flagWasEnabled);
-  }
+  await restoreClerkFlag();
 });
 
 // ---------------------------------------------------------------------------

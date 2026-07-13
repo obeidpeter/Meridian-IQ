@@ -3,24 +3,19 @@ import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
 import {
   getDb,
-  featureFlagsTable,
-  usersTable,
-  firmsTable,
-  partiesTable,
-  engagementsTable,
   auditEventsTable,
   clerkInferenceCallsTable,
   type ClerkExtraction,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { DomainError } from "../errors.ts";
+import { isDomainError } from "../../test-helpers/assertions.ts";
+import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import {
-  CLERK_FLAG_KEY,
-  createGateway,
-  type ClerkGateway,
-  type ClerkProvider,
-} from "./gateway.ts";
-import { setFlag } from "../flags/flags.ts";
+  saveAndEnableClerkFlag,
+  restoreClerkFlag,
+  ensureClerkFixtures,
+  fakeGateway,
+} from "./test-support.ts";
 import {
   claimCase,
   computeCorrections,
@@ -39,22 +34,12 @@ const FAKE_MODEL = "fake-model-test";
 // Case rows persist across runs of the shared database, and the v0.3
 // duplicate-document guard hashes the source text — salt it per run so a
 // previous run's live case is never a false duplicate.
-const RUN_SALT = `${Date.now()}-${process.pid}`;
+const RUN_SALT = makeRunSalt();
 const opA = "dddd0001-0000-4000-8000-00000000dd01";
 const opB = "dddd0002-0000-4000-8000-00000000dd02";
 const firmId = "dddd0003-0000-4000-8000-00000000dd03";
 const supplierId = "dddd0004-0000-4000-8000-00000000dd04";
 const buyerId = "dddd0005-0000-4000-8000-00000000dd05";
-
-let flagWasEnabled: boolean | null = null;
-
-function fakeGateway(respond: () => string): ClerkGateway {
-  const provider: ClerkProvider = {
-    model: FAKE_MODEL,
-    complete: async () => respond(),
-  };
-  return createGateway(provider);
-}
 
 const EXTRACTION_JSON = JSON.stringify({
   fields: [
@@ -67,68 +52,24 @@ const EXTRACTION_JSON = JSON.stringify({
 });
 
 before(async () => {
-  const db = getDb();
-  const [flag] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY))
-    .limit(1);
-  flagWasEnabled = flag ? flag.enabled : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: CLERK_FLAG_KEY, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
-  await db
-    .insert(usersTable)
-    .values([
+  await saveAndEnableClerkFlag();
+  await ensureClerkFixtures({
+    users: [
       { id: opA, email: "clerk-ops-a@test.local" },
       { id: opB, email: "clerk-ops-b@test.local" },
-    ])
-    .onConflictDoNothing();
-  await db
-    .insert(firmsTable)
-    .values({ id: firmId, name: "Clerk Ops Test Firm" })
-    .onConflictDoNothing();
-  await db
-    .insert(partiesTable)
-    .values([
-      { id: supplierId, type: "client_business", legalName: "Ops Supplier" },
-      { id: buyerId, type: "buyer", legalName: "Ops Buyer" },
-    ])
-    .onConflictDoNothing();
-  const existing = await db
-    .select({ id: engagementsTable.id })
-    .from(engagementsTable)
-    .where(eq(engagementsTable.firmId, firmId));
-  if (existing.length === 0) {
-    await db.insert(engagementsTable).values([
-      {
-        firmId,
-        clientPartyId: supplierId,
-        type: "readiness_assessment",
-        title: "ops test",
-      },
-      {
-        firmId,
-        clientPartyId: buyerId,
-        type: "readiness_assessment",
-        title: "ops test",
-      },
-    ]);
-  }
+    ],
+    firmId,
+    firmName: "Clerk Ops Test Firm",
+    supplierId,
+    supplierName: "Ops Supplier",
+    buyerId,
+    buyerName: "Ops Buyer",
+    engagementTitle: "ops test",
+  });
 });
 
 after(async () => {
-  if (flagWasEnabled === null) {
-    await getDb()
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY));
-  } else {
-    await setFlag(CLERK_FLAG_KEY, flagWasEnabled);
-  }
+  await restoreClerkFlag();
 });
 
 // ---------------------------------------------------------------------------
@@ -172,7 +113,7 @@ test("computeCorrections marks kept vs overridden fields", () => {
 });
 
 test("approval stores the correction exhaust on the case", async () => {
-  const gateway = fakeGateway(() => EXTRACTION_JSON);
+  const gateway = fakeGateway(() => EXTRACTION_JSON, FAKE_MODEL);
   const kase = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-500 ${RUN_SALT}` },
     opA,
@@ -211,7 +152,7 @@ test("approval stores the correction exhaust on the case", async () => {
 // ---------------------------------------------------------------------------
 
 test("claiming is first-wins; the holder decides; release hands over", async () => {
-  const gateway = fakeGateway(() => EXTRACTION_JSON);
+  const gateway = fakeGateway(() => EXTRACTION_JSON, FAKE_MODEL);
   const kase = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-501 ${RUN_SALT}` },
     opA,
@@ -226,13 +167,13 @@ test("claiming is first-wins; the holder decides; release hands over", async () 
   // Second claim loses.
   await assert.rejects(
     claimCase(kase.id, opB),
-    (e: unknown) => e instanceof DomainError && e.code === "CASE_CLAIM_CONFLICT",
+    isDomainError("CASE_CLAIM_CONFLICT"),
   );
 
   // A non-holder cannot decide a claimed case.
   await assert.rejects(
     decideCase(kase.id, { action: "reject", reason: "not mine" }, opB),
-    (e: unknown) => e instanceof DomainError && e.code === "CASE_CLAIMED",
+    isDomainError("CASE_CLAIMED"),
   );
 
   // Release puts it back in the queue; the other operator can then decide.
@@ -248,7 +189,7 @@ test("claiming is first-wins; the holder decides; release hands over", async () 
 });
 
 test("only extracted cases can be claimed", async () => {
-  const gateway = fakeGateway(() => EXTRACTION_JSON);
+  const gateway = fakeGateway(() => EXTRACTION_JSON, FAKE_MODEL);
   const kase = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-502 ${RUN_SALT}` },
     opA,
@@ -257,7 +198,7 @@ test("only extracted cases can be claimed", async () => {
   await decideCase(kase.id, { action: "escalate", reason: "test" }, opA);
   await assert.rejects(
     claimCase(kase.id, opA),
-    (e: unknown) => e instanceof DomainError && e.code === "CASE_CLAIM_CONFLICT",
+    isDomainError("CASE_CLAIM_CONFLICT"),
   );
 });
 

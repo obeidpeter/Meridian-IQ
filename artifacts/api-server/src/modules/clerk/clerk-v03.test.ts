@@ -3,22 +3,17 @@ import assert from "node:assert/strict";
 import { eq, sql } from "drizzle-orm";
 import {
   getDb,
-  featureFlagsTable,
-  usersTable,
-  firmsTable,
-  partiesTable,
-  engagementsTable,
   auditEventsTable,
   clerkInferenceCallsTable,
 } from "@workspace/db";
-import { DomainError } from "../errors.ts";
+import { isDomainError } from "../../test-helpers/assertions.ts";
+import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import {
-  CLERK_FLAG_KEY,
-  createGateway,
-  type ClerkGateway,
-  type ClerkProvider,
-} from "./gateway.ts";
-import { setFlag } from "../flags/flags.ts";
+  saveAndEnableClerkFlag,
+  restoreClerkFlag,
+  ensureClerkFixtures,
+  fakeGateway,
+} from "./test-support.ts";
 import {
   computeLineCorrections,
   createExtractionCase,
@@ -49,19 +44,7 @@ const firmId = "eeee0003-0000-4000-8000-00000000ee03";
 const supplierId = "eeee0004-0000-4000-8000-00000000ee04";
 const buyerId = "eeee0005-0000-4000-8000-00000000ee05";
 
-const RUN_SALT = `${Date.now()}-${process.pid}`;
-
-let flagWasEnabled: boolean | null = null;
-
-function fakeGateway(
-  respond: () => string | { content: string; promptTokens?: number | null; completionTokens?: number | null },
-): ClerkGateway {
-  const provider: ClerkProvider = {
-    model: FAKE_MODEL,
-    complete: async () => respond(),
-  };
-  return createGateway(provider);
-}
+const RUN_SALT = makeRunSalt();
 
 const EXTRACTION_WITH_LINES = JSON.stringify({
   fields: [
@@ -82,68 +65,24 @@ const EXTRACTION_WITH_LINES = JSON.stringify({
 });
 
 before(async () => {
-  const db = getDb();
-  const [flag] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY))
-    .limit(1);
-  flagWasEnabled = flag ? flag.enabled : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: CLERK_FLAG_KEY, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
-  await db
-    .insert(usersTable)
-    .values([
+  await saveAndEnableClerkFlag();
+  await ensureClerkFixtures({
+    users: [
       { id: opA, email: "clerk-v03-a@test.local" },
       { id: opB, email: "clerk-v03-b@test.local" },
-    ])
-    .onConflictDoNothing();
-  await db
-    .insert(firmsTable)
-    .values({ id: firmId, name: "Clerk V03 Test Firm" })
-    .onConflictDoNothing();
-  await db
-    .insert(partiesTable)
-    .values([
-      { id: supplierId, type: "client_business", legalName: "V03 Supplier" },
-      { id: buyerId, type: "buyer", legalName: "V03 Buyer" },
-    ])
-    .onConflictDoNothing();
-  const existing = await db
-    .select({ id: engagementsTable.id })
-    .from(engagementsTable)
-    .where(eq(engagementsTable.firmId, firmId));
-  if (existing.length === 0) {
-    await db.insert(engagementsTable).values([
-      {
-        firmId,
-        clientPartyId: supplierId,
-        type: "readiness_assessment",
-        title: "v03 test",
-      },
-      {
-        firmId,
-        clientPartyId: buyerId,
-        type: "readiness_assessment",
-        title: "v03 test",
-      },
-    ]);
-  }
+    ],
+    firmId,
+    firmName: "Clerk V03 Test Firm",
+    supplierId,
+    supplierName: "V03 Supplier",
+    buyerId,
+    buyerName: "V03 Buyer",
+    engagementTitle: "v03 test",
+  });
 });
 
 after(async () => {
-  if (flagWasEnabled === null) {
-    await getDb()
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY));
-  } else {
-    await setFlag(CLERK_FLAG_KEY, flagWasEnabled);
-  }
+  await restoreClerkFlag();
 });
 
 // ---------------------------------------------------------------------------
@@ -197,7 +136,7 @@ test("computeLineCorrections treats a real VAT change and null-vs-value as overr
 });
 
 test("approval stores line-level corrections alongside header corrections", async () => {
-  const gateway = fakeGateway(() => EXTRACTION_WITH_LINES);
+  const gateway = fakeGateway(() => EXTRACTION_WITH_LINES, FAKE_MODEL);
   const kase = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-900 lines ${RUN_SALT}` },
     opA,
@@ -237,7 +176,7 @@ test("approval stores line-level corrections alongside header corrections", asyn
 // ---------------------------------------------------------------------------
 
 test("the same document is rejected as a duplicate unless deliberately overridden", async () => {
-  const gateway = fakeGateway(() => EXTRACTION_WITH_LINES);
+  const gateway = fakeGateway(() => EXTRACTION_WITH_LINES, FAKE_MODEL);
   const text = `Invoice INV-901 duplicate probe ${RUN_SALT}`;
   const first = await createExtractionCase(
     { sourceType: "text", text },
@@ -249,10 +188,7 @@ test("the same document is rejected as a duplicate unless deliberately overridde
 
   await assert.rejects(
     createExtractionCase({ sourceType: "text", text }, opA, gateway),
-    (e: unknown) =>
-      e instanceof DomainError &&
-      e.code === "DUPLICATE_SOURCE" &&
-      e.status === 409,
+    isDomainError("DUPLICATE_SOURCE", 409),
   );
 
   // The operator saw the warning and insists: allowDuplicate bypasses.
@@ -271,7 +207,7 @@ test("a failed or rejected case does not block re-upload", async () => {
     calls += 1;
     if (calls === 1) throw new Error("provider down");
     return EXTRACTION_WITH_LINES;
-  });
+  }, FAKE_MODEL);
   const text = `Invoice INV-902 failed-then-reupload ${RUN_SALT}`;
   const failed = await createExtractionCase(
     { sourceType: "text", text },
@@ -294,7 +230,7 @@ test("retry re-runs extraction on the stored source of a failed case", async () 
     calls += 1;
     if (calls === 1) throw new Error("provider down");
     return EXTRACTION_WITH_LINES;
-  });
+  }, FAKE_MODEL);
   const kase = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-903 retry ${RUN_SALT}` },
     opA,
@@ -311,7 +247,7 @@ test("retry re-runs extraction on the stored source of a failed case", async () 
   // Only failed cases can be retried — an extracted case cannot be re-rolled.
   await assert.rejects(
     retryExtraction(kase.id, opA, flaky),
-    (e: unknown) => e instanceof DomainError && e.code === "CASE_BAD_STATE",
+    isDomainError("CASE_BAD_STATE"),
   );
 });
 
@@ -320,11 +256,14 @@ test("retry re-runs extraction on the stored source of a failed case", async () 
 // ---------------------------------------------------------------------------
 
 test("the gateway records token usage in the ledger and metrics report cost", async () => {
-  const gateway = fakeGateway(() => ({
-    content: EXTRACTION_WITH_LINES,
-    promptTokens: 111,
-    completionTokens: 22,
-  }));
+  const gateway = fakeGateway(
+    () => ({
+      content: EXTRACTION_WITH_LINES,
+      promptTokens: 111,
+      completionTokens: 22,
+    }),
+    FAKE_MODEL,
+  );
   const kase = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-904 tokens ${RUN_SALT}` },
     opA,
