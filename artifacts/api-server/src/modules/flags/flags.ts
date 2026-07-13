@@ -1,3 +1,4 @@
+import type { RequestHandler } from "express";
 import { and, eq } from "drizzle-orm";
 import {
   getDb,
@@ -32,6 +33,27 @@ export async function isFeatureEnabled(
     .where(eq(featureFlagsTable.key, key))
     .limit(1);
   return flag?.enabled ?? false;
+}
+
+// Route-level flag gate (PL-02): while the flag is dark the route is
+// unreachable and 404s. Firm-scoped by default (per-firm overrides apply);
+// pass { global: true } for routes whose callers carry no firm (e.g. buyer
+// principals or public endpoints), so the platform default alone decides.
+export function requireFlag(
+  key: string,
+  opts?: { global?: boolean },
+): RequestHandler {
+  return async (req, res, next): Promise<void> => {
+    const enabled = await isFeatureEnabled(
+      key,
+      opts?.global ? null : req.principal.firmId,
+    );
+    if (!enabled) {
+      res.sendStatus(404);
+      return;
+    }
+    next();
+  };
 }
 
 export async function listFlags(): Promise<FeatureFlag[]> {

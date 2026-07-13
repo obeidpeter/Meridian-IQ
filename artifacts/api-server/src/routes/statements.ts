@@ -35,7 +35,7 @@ import {
   clientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
-import { isFeatureEnabled } from "../modules/flags/flags";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import {
   ingestStatement,
@@ -55,15 +55,7 @@ const MAX_STATEMENT_CSV_CHARS = 4_000_000;
 
 const router: IRouter = Router();
 
-async function gate(req: { principal: import("../modules/auth/rbac").Principal }): Promise<boolean> {
-  return isFeatureEnabled("reconciliation", req.principal.firmId);
-}
-
-router.post("/statements", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.post("/statements", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.write");
   const firmId = tenantFirmId(req.principal);
   if (!firmId) {
@@ -94,11 +86,7 @@ router.post("/statements", async (req, res): Promise<void> => {
   res.json(ImportBankStatementResponse.parse(result));
 });
 
-router.get("/statements", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/statements", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.read");
   const query = ListBankStatementsQueryParams.safeParse(req.query);
   let clientPartyId = query.success ? query.data.clientPartyId : undefined;
@@ -112,16 +100,11 @@ router.get("/statements", async (req, res): Promise<void> => {
   if (tenant) conditions.push(eq(bankStatementsTable.firmId, tenant));
   if (clientPartyId)
     conditions.push(eq(bankStatementsTable.clientPartyId, clientPartyId));
-  const rows = conditions.length
-    ? await getDb()
-        .select()
-        .from(bankStatementsTable)
-        .where(and(...conditions))
-        .orderBy(desc(bankStatementsTable.createdAt))
-    : await getDb()
-        .select()
-        .from(bankStatementsTable)
-        .orderBy(desc(bankStatementsTable.createdAt));
+  const rows = await getDb()
+    .select()
+    .from(bankStatementsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(bankStatementsTable.createdAt));
   res.json(ListBankStatementsResponse.parse(rows));
 });
 
@@ -141,11 +124,7 @@ async function loadStatementForTenant(
   return statement;
 }
 
-router.get("/statements/:id", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/statements/:id", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.read");
   const params = GetBankStatementParams.safeParse(req.params);
   if (!params.success) {
@@ -156,11 +135,7 @@ router.get("/statements/:id", async (req, res): Promise<void> => {
   res.json(GetBankStatementResponse.parse(statement));
 });
 
-router.get("/statements/:id/lines", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/statements/:id/lines", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.read");
   const params = ListBankStatementLinesParams.safeParse(req.params);
   if (!params.success) {
@@ -176,11 +151,7 @@ router.get("/statements/:id/lines", async (req, res): Promise<void> => {
   res.json(ListBankStatementLinesResponse.parse(rows));
 });
 
-router.get("/statements/:id/proposals", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "reconciliation.read");
   const params = ListBankStatementProposalsParams.safeParse(req.params);
   if (!params.success) {
@@ -255,11 +226,8 @@ router.get("/statements/:id/proposals", async (req, res): Promise<void> => {
 
 router.post(
   "/reconciliation/proposals/:id/accept",
+  requireFlag("reconciliation"),
   async (req, res): Promise<void> => {
-    if (!(await gate(req))) {
-      res.sendStatus(404);
-      return;
-    }
     assertCan(req.principal, "reconciliation.act");
     const params = AcceptMatchProposalParams.safeParse(req.params);
     if (!params.success) {
@@ -290,11 +258,8 @@ router.post(
 // settlement event, lifecycle transition and audit row).
 router.post(
   "/reconciliation/statements/:id/bulk-accept",
+  requireFlag("reconciliation"),
   async (req, res): Promise<void> => {
-    if (!(await gate(req))) {
-      res.sendStatus(404);
-      return;
-    }
     assertCan(req.principal, "reconciliation.act");
     const params = BulkAcceptMatchProposalsParams.safeParse(req.params);
     if (!params.success) {
@@ -331,11 +296,8 @@ router.post(
 
 router.post(
   "/reconciliation/proposals/:id/reject",
+  requireFlag("reconciliation"),
   async (req, res): Promise<void> => {
-    if (!(await gate(req))) {
-      res.sendStatus(404);
-      return;
-    }
     assertCan(req.principal, "reconciliation.act");
     const params = RejectMatchProposalParams.safeParse(req.params);
     if (!params.success) {

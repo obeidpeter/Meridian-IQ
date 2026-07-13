@@ -16,7 +16,7 @@ import {
   assertBuyerPartyAccess,
   buyerPartyId,
 } from "../modules/auth/rbac";
-import { isFeatureEnabled } from "../modules/flags/flags";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
 import {
@@ -35,16 +35,10 @@ import {
 
 const router: IRouter = Router();
 
-async function gate(): Promise<boolean> {
-  // Buyer principals carry no firm; the flag is evaluated globally.
-  return isFeatureEnabled("buyer_rails", null);
-}
+// Buyer principals carry no firm; the flag is evaluated globally.
+const requireBuyerRails = requireFlag("buyer_rails", { global: true });
 
-router.get("/buyer/invoices", async (req, res): Promise<void> => {
-  if (!(await gate())) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/buyer/invoices", requireBuyerRails, async (req, res): Promise<void> => {
   assertCan(req.principal, "buyer.rails.read");
   const party = buyerPartyId(req.principal);
   const query = ListBuyerInvoicesQueryParams.safeParse(req.query);
@@ -90,11 +84,7 @@ router.get("/buyer/invoices", async (req, res): Promise<void> => {
 // append-only SettlementEvent with source=buyer_flag and the flagging user
 // recorded; a `paid` flag settles the invoice (an allowed settlement source in
 // the mandatory-source hierarchy, Plan 7.4).
-router.post("/invoices/:id/payment-flags", async (req, res): Promise<void> => {
-  if (!(await gate())) {
-    res.sendStatus(404);
-    return;
-  }
+router.post("/invoices/:id/payment-flags", requireBuyerRails, async (req, res): Promise<void> => {
   assertCan(req.principal, "settlement.flag");
   const params = FlagPaymentParams.safeParse(req.params);
   if (!params.success) {
@@ -187,22 +177,14 @@ router.post("/invoices/:id/payment-flags", async (req, res): Promise<void> => {
 
 // BR-01: supplier verification view — per-supplier stamp validity and
 // input-VAT exposure, served from the (at least daily) snapshot.
-router.get("/buyer/suppliers", async (req, res): Promise<void> => {
-  if (!(await gate())) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/buyer/suppliers", requireBuyerRails, async (req, res): Promise<void> => {
   assertCan(req.principal, "buyer.rails.read");
   const party = buyerPartyId(req.principal);
   const exposure = await getOrRefreshExposure(party);
   res.json(ListBuyerSuppliersResponse.parse(exposure.breakdown));
 });
 
-router.get("/buyer/exposure", async (req, res): Promise<void> => {
-  if (!(await gate())) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/buyer/exposure", requireBuyerRails, async (req, res): Promise<void> => {
   assertCan(req.principal, "buyer.rails.read");
   const party = buyerPartyId(req.principal);
   const exposure = await getOrRefreshExposure(party);
@@ -210,11 +192,7 @@ router.get("/buyer/exposure", async (req, res): Promise<void> => {
 });
 
 // BR-05: the supplier compliance scoreboard.
-router.get("/buyer/scoreboard", async (req, res): Promise<void> => {
-  if (!(await gate())) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/buyer/scoreboard", requireBuyerRails, async (req, res): Promise<void> => {
   assertCan(req.principal, "buyer.rails.read");
   const party = buyerPartyId(req.principal);
   const scoreboard = await computeScoreboard(party);

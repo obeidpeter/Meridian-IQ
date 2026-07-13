@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter } from "express";
 import { desc } from "drizzle-orm";
 import { getDb, messagesTable } from "@workspace/db";
 import {
@@ -10,32 +10,17 @@ import {
 } from "@workspace/api-zod";
 import { sendMessage, markDelivery } from "../modules/messaging/messaging";
 import { assertCan } from "../modules/auth/rbac";
-import { isFeatureEnabled } from "../modules/flags/flags";
+import { requireFlag } from "../modules/flags/flags";
 
 const router: IRouter = Router();
 
 // Notifications ship dark behind the messaging_notifications flag (PL-02): a
-// dark feature is unreachable, so the route 404s until the flag is flipped.
-async function assertMessagingEnabled(
-  req: Request,
-  res: Response,
-): Promise<boolean> {
-  const on = await isFeatureEnabled(
-    "messaging_notifications",
-    req.principal.firmId,
-  );
-  if (!on) {
-    res.sendStatus(404);
-    return false;
-  }
-  return true;
-}
+// dark feature is unreachable, so every route 404s until the flag is flipped.
 
 // PL-04 delivery visibility: the operator's message log. Rows are pointers
 // only (SEC-12) — template key, channel, status — so no tenant data leaks
 // across the cross-tenant read.
-router.get("/messages", async (req, res): Promise<void> => {
-  if (!(await assertMessagingEnabled(req, res))) return;
+router.get("/messages", requireFlag("messaging_notifications"), async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
   const rows = await getDb()
     .select()
@@ -45,8 +30,7 @@ router.get("/messages", async (req, res): Promise<void> => {
   res.json(ListMessagesResponse.parse(rows));
 });
 
-router.post("/messages", async (req, res): Promise<void> => {
-  if (!(await assertMessagingEnabled(req, res))) return;
+router.post("/messages", requireFlag("messaging_notifications"), async (req, res): Promise<void> => {
   assertCan(req.principal, "messaging.send");
   const parsed = SendMessageBody.safeParse(req.body);
   if (!parsed.success) {
@@ -63,8 +47,7 @@ router.post("/messages", async (req, res): Promise<void> => {
   res.status(201).json(SendMessageResponse.parse(row));
 });
 
-router.post("/messages/:id/delivery", async (req, res): Promise<void> => {
-  if (!(await assertMessagingEnabled(req, res))) return;
+router.post("/messages/:id/delivery", requireFlag("messaging_notifications"), async (req, res): Promise<void> => {
   assertCan(req.principal, "messaging.send");
   const params = RecordMessageDeliveryParams.safeParse(req.params);
   if (!params.success) {

@@ -11,7 +11,7 @@ import {
   ListCpdEnrollmentsResponse,
 } from "@workspace/api-zod";
 import { assertCan, tenantFirmId } from "../modules/auth/rbac";
-import { isFeatureEnabled } from "../modules/flags/flags";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
 
@@ -22,15 +22,7 @@ import { appendAudit } from "../modules/audit/audit";
 
 const router: IRouter = Router();
 
-async function gate(req: { principal: import("../modules/auth/rbac").Principal }): Promise<boolean> {
-  return isFeatureEnabled("white_label", req.principal.firmId);
-}
-
-router.get("/certification/courses", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/certification/courses", requireFlag("white_label"), async (req, res): Promise<void> => {
   assertCan(req.principal, "certification.read");
   const rows = await getDb()
     .select()
@@ -42,11 +34,8 @@ router.get("/certification/courses", async (req, res): Promise<void> => {
 
 router.post(
   "/certification/courses/:id/enroll",
+  requireFlag("white_label"),
   async (req, res): Promise<void> => {
-    if (!(await gate(req))) {
-      res.sendStatus(404);
-      return;
-    }
     assertCan(req.principal, "certification.write");
     const firmId = tenantFirmId(req.principal);
     if (!firmId) {
@@ -109,11 +98,8 @@ router.post(
 
 router.post(
   "/certification/courses/:id/complete",
+  requireFlag("white_label"),
   async (req, res): Promise<void> => {
-    if (!(await gate(req))) {
-      res.sendStatus(404);
-      return;
-    }
     assertCan(req.principal, "certification.write");
     const firmId = tenantFirmId(req.principal);
     if (!firmId) {
@@ -168,11 +154,7 @@ router.post(
   },
 );
 
-router.get("/certification/enrollments", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/certification/enrollments", requireFlag("white_label"), async (req, res): Promise<void> => {
   assertCan(req.principal, "certification.read");
   const tenant = tenantFirmId(req.principal);
   const base = getDb()

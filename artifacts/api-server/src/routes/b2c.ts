@@ -18,7 +18,7 @@ import {
   clientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
-import { isFeatureEnabled } from "../modules/flags/flags";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { submitBatch } from "../modules/b2c/service";
 
@@ -26,15 +26,7 @@ import { submitBatch } from "../modules/b2c/service";
 
 const router: IRouter = Router();
 
-async function gate(req: { principal: import("../modules/auth/rbac").Principal }): Promise<boolean> {
-  return isFeatureEnabled("b2c_reporting", req.principal.firmId);
-}
-
-router.get("/b2c/reports", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/b2c/reports", requireFlag("b2c_reporting"), async (req, res): Promise<void> => {
   assertCan(req.principal, "b2c.read");
   const query = ListB2cReportsQueryParams.safeParse(req.query);
   let clientPartyId = query.success ? query.data.clientPartyId : undefined;
@@ -50,16 +42,11 @@ router.get("/b2c/reports", async (req, res): Promise<void> => {
   if (clientPartyId)
     conditions.push(eq(b2cReportBatchesTable.clientPartyId, clientPartyId));
   if (status) conditions.push(eq(b2cReportBatchesTable.status, status));
-  const rows = conditions.length
-    ? await getDb()
-        .select()
-        .from(b2cReportBatchesTable)
-        .where(and(...conditions))
-        .orderBy(desc(b2cReportBatchesTable.deadlineAt))
-    : await getDb()
-        .select()
-        .from(b2cReportBatchesTable)
-        .orderBy(desc(b2cReportBatchesTable.deadlineAt));
+  const rows = await getDb()
+    .select()
+    .from(b2cReportBatchesTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(b2cReportBatchesTable.deadlineAt));
   res.json(ListB2cReportsResponse.parse(rows));
 });
 
@@ -79,11 +66,7 @@ async function loadBatchForTenant(
   return batch;
 }
 
-router.get("/b2c/reports/:id", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/b2c/reports/:id", requireFlag("b2c_reporting"), async (req, res): Promise<void> => {
   assertCan(req.principal, "b2c.read");
   const params = GetB2cReportParams.safeParse(req.params);
   if (!params.success) {
@@ -94,11 +77,7 @@ router.get("/b2c/reports/:id", async (req, res): Promise<void> => {
   res.json(GetB2cReportResponse.parse(batch));
 });
 
-router.get("/b2c/reports/:id/items", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/b2c/reports/:id/items", requireFlag("b2c_reporting"), async (req, res): Promise<void> => {
   assertCan(req.principal, "b2c.read");
   const params = ListB2cReportItemsParams.safeParse(req.params);
   if (!params.success) {
@@ -114,11 +93,7 @@ router.get("/b2c/reports/:id/items", async (req, res): Promise<void> => {
   res.json(ListB2cReportItemsResponse.parse(rows));
 });
 
-router.post("/b2c/reports/:id/submit", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.post("/b2c/reports/:id/submit", requireFlag("b2c_reporting"), async (req, res): Promise<void> => {
   assertCan(req.principal, "b2c.write");
   const params = SubmitB2cReportParams.safeParse(req.params);
   if (!params.success) {

@@ -64,18 +64,18 @@ import {
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
 import { getFirmReceivables } from "../modules/invoice/receivables";
+import {
+  daysUntil,
+  isStamped,
+  isUnsubmitted,
+  penaltyRisk as computePenaltyRisk,
+  submissionDeadline,
+} from "../modules/invoice/compliance-window";
 
 const router: IRouter = Router();
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const SUBMISSION_WINDOW_DAYS = 7;
-
 // Invoice statuses that count as processed volume for billing/overages.
 const BILLED_STATUSES = ["submitted", "stamped", "confirmed", "settled"] as const;
-
-function daysUntil(target: Date, from: Date): number {
-  return Math.floor((target.getTime() - from.getTime()) / DAY_MS);
-}
 
 // The firm a console request is scoped to. Firm roles use their bound firm;
 // cross-tenant staff (operator/auditor) fall back to their bound firm if any.
@@ -111,13 +111,6 @@ type ClientRisk = {
   failingInvoiceIds: string[];
 };
 
-function isUnsubmitted(s: Invoice["status"]): boolean {
-  return s === "draft" || s === "validated";
-}
-function isStamped(s: Invoice["status"]): boolean {
-  return s === "stamped" || s === "confirmed" || s === "settled";
-}
-
 // Penalty-risk view for one client, computed from its invoice book plus the
 // statutory submission window (CON-02). Deterministic so risk flags reflect the
 // current data on every read (recompute-on-read, well under five minutes).
@@ -142,8 +135,7 @@ function computeClientRisk(
     if (isUnsubmitted(inv.status)) {
       unsubmittedCount += 1;
       unsubmittedValue += Number(inv.grandTotal);
-      const submitBy = new Date(new Date(inv.issueDate).getTime());
-      submitBy.setUTCDate(submitBy.getUTCDate() + SUBMISSION_WINDOW_DAYS);
+      const submitBy = submissionDeadline(inv.issueDate);
       const days = daysUntil(submitBy, now);
       if (days < 0) {
         overdueCount += 1;
@@ -164,12 +156,7 @@ function computeClientRisk(
     }
   }
 
-  const penaltyRisk: "low" | "medium" | "high" =
-    overdueCount > 0 || failedCount > 1
-      ? "high"
-      : failedCount > 0 || dueSoon
-        ? "medium"
-        : "low";
+  const penaltyRisk = computePenaltyRisk(overdueCount, failedCount, dueSoon);
 
   const nextDeadline = earliestOverdue
     ? {
@@ -765,16 +752,11 @@ router.get("/billing/statements", async (req, res): Promise<void> => {
   const tenant = tenantFirmId(req.principal);
   // Firm principals see their own statements; operator/auditor may pass firmId.
   const scope = tenant ?? query.data.firmId ?? null;
-  const rows = scope
-    ? await getDb()
-        .select()
-        .from(revenueShareStatementsTable)
-        .where(eq(revenueShareStatementsTable.firmId, scope))
-        .orderBy(desc(revenueShareStatementsTable.period))
-    : await getDb()
-        .select()
-        .from(revenueShareStatementsTable)
-        .orderBy(desc(revenueShareStatementsTable.period));
+  const rows = await getDb()
+    .select()
+    .from(revenueShareStatementsTable)
+    .where(scope ? eq(revenueShareStatementsTable.firmId, scope) : undefined)
+    .orderBy(desc(revenueShareStatementsTable.period));
 
   const names = new Map<string, string | null>();
   for (const r of rows) {
