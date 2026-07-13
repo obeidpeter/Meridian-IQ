@@ -26,3 +26,18 @@ export function isFeatureDisabled(error: unknown): boolean {
 export function isForbidden(error: unknown): boolean {
   return errorStatus(error) === 403;
 }
+
+/**
+ * Clerk endpoints answer 503 while the clerk_ai kill switch is off.
+ */
+export function killSwitchTripped(err: unknown): boolean {
+  return errorStatus(err) === 503;
+}
+
+// The generated client's ApiError carries the parsed JSON error body on
+// `data`; server errors are `{ error: string }`. Used to relay the server's
+// own words (409 CASE_CLAIMED / CASE_CLAIM_CONFLICT, 422 VOICE_*).
+export function serverErrorMessage(err: unknown): string | undefined {
+  const data = (err as { data?: { error?: unknown } } | null)?.data;
+  return typeof data?.error === "string" ? data.error : undefined;
+}

@@ -9,6 +9,20 @@ export function formatNaira(value: string | number | null | undefined): string {
   }).format(n);
 }
 
+/**
+ * Fraction to percent: 0.075 → "7.5%". digits=0 matches Math.round for the
+ * non-negative rate domain these pages format.
+ */
+export function formatPct(
+  value: string | number | null | undefined,
+  digits = 1,
+): string {
+  if (value === null || value === undefined) return "—";
+  const n = Number(value);
+  if (Number.isNaN(n)) return "—";
+  return `${(n * 100).toFixed(digits)}%`;
+}
+
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
@@ -132,10 +146,6 @@ export function badgeClasses(status: string): string {
 }
 
 // ---- Deadline severity -----------------------------------------------------
-
-export function severityLabel(severity: string): string {
-  return humanize(severity);
-}
 
 export function severityBadgeClasses(severity: string): string {
   switch (severity) {

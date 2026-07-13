@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { pillClasses } from "@/lib/format";
+import { formatPct, pillClasses } from "@/lib/format";
 import { Target, TrendingUp } from "lucide-react";
 
 // Roadmap Appendix A ("Platform gates"): the analytics that measure the gates
@@ -18,11 +18,6 @@ function fmtHours(h: number | null | undefined): string {
   if (h === null || h === undefined) return "—";
   if (h < 1) return `${Math.round(h * 60)}m`;
   return `${h.toFixed(1)}h`;
-}
-
-function fmtPct(rate: number | null | undefined): string {
-  if (rate === null || rate === undefined) return "—";
-  return `${Math.round(rate * 100)}%`;
 }
 
 function GateCard({
@@ -125,7 +120,7 @@ export function GateMetrics() {
               <GateCard
                 label="Failure self-resolution"
                 gate="80%+ of failures resolve without escalation"
-                value={fmtPct(data.failureSelfResolutionRate)}
+                value={formatPct(data.failureSelfResolutionRate, 0)}
                 met={
                   data.failureSelfResolutionRate === null
                     ? undefined
@@ -160,7 +155,7 @@ export function GateMetrics() {
               <GateCard
                 label="Reconciliation accept rate"
                 gate="Guardrail: match proposals accepted"
-                value={fmtPct(data.reconciliationAcceptRate)}
+                value={formatPct(data.reconciliationAcceptRate, 0)}
                 testId="gate-reconciliation"
               />
             </div>

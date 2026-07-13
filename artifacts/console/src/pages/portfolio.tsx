@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
+import { StatTile } from "@/components/stat-tile";
 import {
   AlertTriangle,
   Users,
@@ -24,43 +25,6 @@ import {
   riskLabel,
 } from "@/lib/format";
 import { usePageTitle } from "@/hooks/use-page-title";
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  tone,
-  testId,
-}: {
-  label: string;
-  value: string;
-  icon: typeof Users;
-  tone?: "danger" | "warning";
-  testId: string;
-}) {
-  return (
-    <Card data-testid={testId}>
-      <CardContent className="pt-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold mt-1 tabular-nums">{value}</p>
-          </div>
-          <Icon
-            aria-hidden="true"
-            className={`w-8 h-8 ${
-              tone === "danger"
-                ? "text-red-500 dark:text-red-400"
-                : tone === "warning"
-                  ? "text-amber-500 dark:text-amber-400"
-                  : "text-primary"
-            }`}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 // Receivables amounts arrive as decimal strings. NGN rows use the shared
 // naira formatter; anything else gets a plain grouped number plus its
@@ -322,31 +286,31 @@ export function Portfolio() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
+        <StatTile
           label="Clients"
           value={String(data.clientCount)}
           icon={Users}
           testId="stat-clients"
         />
-        <StatCard
+        <StatTile
           label="High-risk clients"
           value={String(data.highRiskCount)}
           icon={AlertTriangle}
-          tone="danger"
+          iconTone="danger"
           testId="stat-high-risk"
         />
-        <StatCard
+        <StatTile
           label="Unsubmitted invoices"
           value={`${data.totalUnsubmittedCount} · ${formatNaira(data.totalUnsubmittedValue)}`}
           icon={FileWarning}
-          tone="warning"
+          iconTone="warning"
           testId="stat-unsubmitted"
         />
-        <StatCard
+        <StatTile
           label="Overdue deadlines"
           value={String(data.totalOverdueCount)}
           icon={Clock}
-          tone="danger"
+          iconTone="danger"
           testId="stat-overdue"
         />
       </div>

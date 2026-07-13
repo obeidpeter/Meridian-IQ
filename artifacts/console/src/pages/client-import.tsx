@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { StatTile } from "@/components/stat-tile";
 import { isFeatureDisabled } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -109,35 +110,6 @@ function download(filename: string, text: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-function SummaryTile({
-  label,
-  value,
-  testId,
-  tone,
-}: {
-  label: string;
-  value: number;
-  testId: string;
-  tone?: "success" | "warning" | "danger";
-}) {
-  const color =
-    tone === "success"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : tone === "warning"
-        ? "text-amber-700 dark:text-amber-400"
-        : tone === "danger"
-          ? "text-red-700 dark:text-red-400"
-          : "";
-  return (
-    <Card data-testid={testId}>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className={`text-2xl font-bold mt-1 tabular-nums ${color}`}>{value}</p>
-      </CardContent>
-    </Card>
-  );
 }
 
 export function ClientImport() {
@@ -306,24 +278,24 @@ export function ClientImport() {
       {result && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <SummaryTile
+            <StatTile
               label="Total rows"
               value={result.rowCount}
               testId="stat-total"
             />
-            <SummaryTile
+            <StatTile
               label={result.committed ? "Created" : "Would create"}
               value={result.createdCount}
               tone="success"
               testId="stat-created"
             />
-            <SummaryTile
+            <StatTile
               label="Already exist"
               value={result.existsCount}
               tone="warning"
               testId="stat-exists"
             />
-            <SummaryTile
+            <StatTile
               label="Invalid"
               value={result.invalidCount}
               tone="danger"
