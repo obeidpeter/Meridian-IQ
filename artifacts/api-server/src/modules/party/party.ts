@@ -2,7 +2,6 @@ import { and, eq, isNull } from "drizzle-orm";
 import {
   getDb,
   partiesTable,
-  invoicesTable,
   type Party,
   type PartyType,
 } from "@workspace/db";
@@ -175,20 +174,10 @@ export async function getParty(id: string): Promise<Party | null> {
   return row ?? null;
 }
 
-// Follow the merge chain to the surviving party.
-export async function resolveParty(id: string): Promise<Party | null> {
-  let current = await getParty(id);
-  const seen = new Set<string>();
-  while (current?.mergedIntoId && !seen.has(current.id)) {
-    seen.add(current.id);
-    current = await getParty(current.mergedIntoId);
-  }
-  return current;
-}
-
 // Merge a duplicate into a survivor. History is preserved: the duplicate row is
-// retained and flagged (mergedIntoId), future reads resolve through it, and the
-// action is audited.
+// retained and flagged (mergedIntoId), consumers exclude merged rows from live
+// views and matching (e.g. clerk party-match filters isNull(mergedIntoId) and
+// console party lists filter !mergedIntoId), and the action is audited.
 export async function mergeParties(
   survivorId: string,
   duplicateId: string,
@@ -252,13 +241,4 @@ export async function splitParty(
     before: { mergedIntoId: previous },
     after: { mergedIntoId: null },
   });
-}
-
-// Count invoices referencing a party (used to surface merge impact).
-export async function invoiceCountForParty(partyId: string): Promise<number> {
-  const rows = await getDb()
-    .select({ id: invoicesTable.id })
-    .from(invoicesTable)
-    .where(eq(invoicesTable.supplierPartyId, partyId));
-  return rows.length;
 }

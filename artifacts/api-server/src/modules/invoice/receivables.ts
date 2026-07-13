@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 
 // Receivables aging for the SME dashboard: who owes this client what, and how
@@ -40,7 +40,56 @@ export interface ReceivablesSummary {
 const OUTSTANDING = sql`i.kind = 'invoice'
   AND i.status IN ('submitted', 'stamped', 'confirmed')`;
 
+// The single definition of a receivable's reference date: age is measured
+// against the due date where one exists, otherwise the issue date.
+const REF_DATE = sql`COALESCE(i.due_date, i.issue_date)`;
+
 const ZERO: ReceivablesBucket = { amount: "0.00", count: 0 };
+
+// Top debtors (who owes, worst first) — the query, row-type cast and
+// snake-to-camel mapping shared by the client-level summary and the firm-level
+// rollup. The SEC-03 scoping condition (supplier vs firm) is built at each
+// call site and passed in, so scoping stays greppable where it is applied. The
+// limit is inlined as a literal (not a bind parameter) to keep the query text
+// identical to the pre-extraction queries.
+async function queryTopDebtors(
+  where: SQL,
+  limit: number,
+): Promise<ReceivablesSummary["topDebtors"]> {
+  const rows = (
+    await getDb().execute(sql`
+      SELECT
+        i.buyer_party_id,
+        p.legal_name,
+        i.currency,
+        SUM(i.grand_total)::numeric(18,2)::text AS outstanding,
+        COUNT(*)::int AS invoice_count,
+        MIN(${REF_DATE})::text AS oldest_due
+      FROM invoices i
+      JOIN parties p ON p.id = i.buyer_party_id
+      WHERE ${OUTSTANDING}
+        ${where}
+      GROUP BY i.buyer_party_id, p.legal_name, i.currency
+      ORDER BY SUM(i.grand_total) DESC
+      LIMIT ${sql.raw(String(limit))}
+    `)
+  ).rows as {
+    buyer_party_id: string;
+    legal_name: string;
+    currency: string;
+    outstanding: string;
+    invoice_count: number;
+    oldest_due: string | null;
+  }[];
+  return rows.map((d) => ({
+    buyerPartyId: d.buyer_party_id,
+    buyerName: d.legal_name,
+    currency: d.currency,
+    outstanding: d.outstanding,
+    invoiceCount: d.invoice_count,
+    oldestDueDate: d.oldest_due,
+  }));
+}
 
 export async function getReceivablesSummary(
   clientPartyId: string,
@@ -61,11 +110,11 @@ export async function getReceivablesSummary(
           i.currency,
           i.grand_total,
           CASE
-            WHEN current_date - COALESCE(i.due_date, i.issue_date) <= 30
+            WHEN current_date - ${REF_DATE} <= 30
               THEN 'current'
-            WHEN current_date - COALESCE(i.due_date, i.issue_date) <= 60
+            WHEN current_date - ${REF_DATE} <= 60
               THEN 'days31to60'
-            WHEN current_date - COALESCE(i.due_date, i.issue_date) <= 90
+            WHEN current_date - ${REF_DATE} <= 90
               THEN 'days61to90'
             ELSE 'days90plus'
           END AS bucket
@@ -117,44 +166,16 @@ export async function getReceivablesSummary(
   });
   groups.sort((a, b) => Number(b.outstandingTotal) - Number(a.outstandingTotal));
 
-  const debtorRows = (
-    await db.execute(sql`
-      SELECT
-        i.buyer_party_id,
-        p.legal_name,
-        i.currency,
-        SUM(i.grand_total)::numeric(18,2)::text AS outstanding,
-        COUNT(*)::int AS invoice_count,
-        MIN(COALESCE(i.due_date, i.issue_date))::text AS oldest_due
-      FROM invoices i
-      JOIN parties p ON p.id = i.buyer_party_id
-      WHERE ${OUTSTANDING}
-        AND i.supplier_party_id = ${clientPartyId}
-        ${firmCond}
-      GROUP BY i.buyer_party_id, p.legal_name, i.currency
-      ORDER BY SUM(i.grand_total) DESC
-      LIMIT 5
-    `)
-  ).rows as {
-    buyer_party_id: string;
-    legal_name: string;
-    currency: string;
-    outstanding: string;
-    invoice_count: number;
-    oldest_due: string | null;
-  }[];
+  const topDebtors = await queryTopDebtors(
+    sql`AND i.supplier_party_id = ${clientPartyId}
+        ${firmCond}`,
+    5,
+  );
 
   return {
     asOf: new Date().toISOString().slice(0, 10),
     groups,
-    topDebtors: debtorRows.map((d) => ({
-      buyerPartyId: d.buyer_party_id,
-      buyerName: d.legal_name,
-      currency: d.currency,
-      outstanding: d.outstanding,
-      invoiceCount: d.invoice_count,
-      oldestDueDate: d.oldest_due,
-    })),
+    topDebtors,
   };
 }
 
@@ -198,9 +219,9 @@ export async function getFirmReceivables(
         SUM(i.grand_total)::numeric(18,2)::text AS outstanding,
         COUNT(*)::int AS invoice_count,
         COALESCE(SUM(i.grand_total) FILTER (
-          WHERE current_date - COALESCE(i.due_date, i.issue_date) > 90
+          WHERE current_date - ${REF_DATE} > 90
         ), 0)::numeric(18,2)::text AS overdue_90,
-        MIN(COALESCE(i.due_date, i.issue_date))::text AS oldest_due
+        MIN(${REF_DATE})::text AS oldest_due
       FROM invoices i
       JOIN parties p ON p.id = i.supplier_party_id
       WHERE ${OUTSTANDING} AND i.firm_id = ${firmId}
@@ -218,30 +239,7 @@ export async function getFirmReceivables(
     oldest_due: string | null;
   }[];
 
-  const debtorRows = (
-    await db.execute(sql`
-      SELECT
-        i.buyer_party_id,
-        p.legal_name,
-        i.currency,
-        SUM(i.grand_total)::numeric(18,2)::text AS outstanding,
-        COUNT(*)::int AS invoice_count,
-        MIN(COALESCE(i.due_date, i.issue_date))::text AS oldest_due
-      FROM invoices i
-      JOIN parties p ON p.id = i.buyer_party_id
-      WHERE ${OUTSTANDING} AND i.firm_id = ${firmId}
-      GROUP BY i.buyer_party_id, p.legal_name, i.currency
-      ORDER BY SUM(i.grand_total) DESC
-      LIMIT 10
-    `)
-  ).rows as {
-    buyer_party_id: string;
-    legal_name: string;
-    currency: string;
-    outstanding: string;
-    invoice_count: number;
-    oldest_due: string | null;
-  }[];
+  const topDebtors = await queryTopDebtors(sql`AND i.firm_id = ${firmId}`, 10);
 
   return {
     asOf: new Date().toISOString().slice(0, 10),
@@ -254,14 +252,7 @@ export async function getFirmReceivables(
       overdue90Amount: r.overdue_90,
       oldestDueDate: r.oldest_due,
     })),
-    topDebtors: debtorRows.map((r) => ({
-      buyerPartyId: r.buyer_party_id,
-      buyerName: r.legal_name,
-      currency: r.currency,
-      outstanding: r.outstanding,
-      invoiceCount: r.invoice_count,
-      oldestDueDate: r.oldest_due,
-    })),
+    topDebtors,
   };
 }
 
@@ -292,13 +283,13 @@ export async function listOutstandingReceivables(
         p.legal_name,
         i.issue_date::text AS issue_date,
         i.due_date::text AS due_date,
-        (current_date - COALESCE(i.due_date, i.issue_date))::int AS age_days,
+        (current_date - ${REF_DATE})::int AS age_days,
         CASE
-          WHEN current_date - COALESCE(i.due_date, i.issue_date) <= 30
+          WHEN current_date - ${REF_DATE} <= 30
             THEN 'current'
-          WHEN current_date - COALESCE(i.due_date, i.issue_date) <= 60
+          WHEN current_date - ${REF_DATE} <= 60
             THEN '31-60'
-          WHEN current_date - COALESCE(i.due_date, i.issue_date) <= 90
+          WHEN current_date - ${REF_DATE} <= 90
             THEN '61-90'
           ELSE '90+'
         END AS bucket,
@@ -310,7 +301,7 @@ export async function listOutstandingReceivables(
       WHERE ${OUTSTANDING}
         AND i.supplier_party_id = ${clientPartyId}
         ${firmCond}
-      ORDER BY COALESCE(i.due_date, i.issue_date) ASC
+      ORDER BY ${REF_DATE} ASC
       LIMIT 50000
     `)
   ).rows as {
