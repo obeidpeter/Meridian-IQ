@@ -34,6 +34,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { roleLabel } from "@/components/capability-gate";
+import { StaleBuildBanner } from "@/components/stale-build-banner";
 
 // Every console page maps to the RBAC capability its API surface requires
 // (modules/auth/rbac.ts). The nav renders only what the signed-in principal
@@ -263,6 +264,9 @@ export function Layout({ children }: { children: ReactNode }) {
         tabIndex={-1}
         className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full focus:outline-none"
       >
+        {/* App-wide: a stale api-server build breaks pages in confusing
+            ways, so the version-skew warning sits above every page. */}
+        <StaleBuildBanner />
         {children}
       </main>
     </div>

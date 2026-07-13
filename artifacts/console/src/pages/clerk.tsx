@@ -28,6 +28,7 @@ import type {
   ClerkMetricsCases,
   ClerkPartySuggestion,
   InvoiceLineInput,
+  ListClerkCasesParams,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,6 +80,11 @@ const STATUS_TONE: Record<string, BadgeTone> = {
 };
 
 const CATEGORIES: ClerkCaseDecisionInputCategory[] = ["b2b", "b2g", "b2c"];
+
+// The case queue loads in pages: with limit/offset present the server
+// returns a bounded, newest-first slice instead of the full legacy list. A
+// full page means there may be more — "Load more" appends the next one.
+const PAGE_SIZE = 50;
 
 function killSwitchTripped(err: unknown): boolean {
   return errorStatus(err) === 503;
@@ -906,15 +912,50 @@ export function ClerkWorkspace() {
   const { toast } = useToast();
   const [disabledBanner, setDisabledBanner] = useState(false);
 
+  // Paged case queue. The Capture tab only ever shows extraction cases, so
+  // that kind filter now travels to the server with the page bounds (any
+  // filter change would restart from the first page — offset only ever grows
+  // within one filter set). Only the page at `offset` is a live query;
+  // earlier pages are kept in local state and re-appended below.
+  const [offset, setOffset] = useState(0);
+  const [earlierCases, setEarlierCases] = useState<ClerkCase[]>([]);
+  const caseParams: ListClerkCasesParams = {
+    kind: "extraction",
+    limit: PAGE_SIZE,
+    offset,
+  };
   const {
-    data: cases,
+    data: casePage,
     isLoading,
     error,
     refetch,
-  } = useListClerkCases(
-    {},
-    { query: { queryKey: getListClerkCasesQueryKey({}) } },
-  );
+  } = useListClerkCases(caseParams, {
+    query: { queryKey: getListClerkCasesQueryKey(caseParams) },
+  });
+
+  // The queue shifts while paging (a new capture pushes every row down one
+  // slot), so a case can be returned by two page fetches — dedupe by id to
+  // keep React keys unique.
+  const cases = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: ClerkCase[] = [];
+    for (const c of [...earlierCases, ...(casePage ?? [])]) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      merged.push(c);
+    }
+    return merged;
+  }, [earlierCases, casePage]);
+
+  // A short page is the end of the queue. When the total is an exact
+  // multiple of PAGE_SIZE the last click fetches one empty page — harmless.
+  const hasMoreCases = (casePage?.length ?? 0) === PAGE_SIZE;
+  const loadingMoreCases = isLoading && offset > 0;
+  const loadMoreCases = () => {
+    if (!casePage) return;
+    setEarlierCases((prev) => [...prev, ...casePage]);
+    setOffset((o) => o + PAGE_SIZE);
+  };
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data: selected } = useGetClerkCase(selectedId ?? "", {
@@ -1012,6 +1053,13 @@ export function ClerkWorkspace() {
   };
 
   const invalidateCases = () => {
+    // Reset paging before invalidating: fresh data trumps scroll position.
+    // Only the first page stays mounted, so the refetch starts from the top
+    // of the queue instead of stitching stale appended pages onto new data.
+    setEarlierCases([]);
+    setOffset(0);
+    // getListClerkCasesQueryKey({}) prefix-matches every paged/filtered
+    // variant of the list, so all cached pages go stale together.
     queryClient.invalidateQueries({ queryKey: getListClerkCasesQueryKey({}) });
     if (selectedId) {
       queryClient.invalidateQueries({
@@ -1283,9 +1331,7 @@ export function ClerkWorkspace() {
 
   const sortedCases = useMemo(
     () =>
-      [...(cases ?? [])].sort((a, b) =>
-        b.createdAt.localeCompare(a.createdAt),
-      ),
+      [...cases].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [cases],
   );
 
@@ -1305,7 +1351,9 @@ export function ClerkWorkspace() {
         vatPercentInvalid(l.vatRate),
     );
 
-  if (isLoading) {
+  // Only the FIRST page's load blanks the whole workspace; loading a later
+  // page keeps the rows already on screen and spins the Load more button.
+  if (isLoading && offset === 0) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-56" />
@@ -1522,51 +1570,62 @@ export function ClerkWorkspace() {
                     )}
                   </div>
                 )}
-                {sortedCases.filter((c) => c.kind === "extraction").length ===
-                0 ? (
+                {/* The query is already extraction-only (kind param), so no
+                    client-side kind filter is needed here anymore. */}
+                {sortedCases.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No documents read yet.
                   </p>
                 ) : (
                   <div className="divide-y">
-                    {sortedCases
-                      .filter((c) => c.kind === "extraction")
-                      .map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setSelectedId(c.id)}
-                          className={`w-full text-left flex items-center gap-2 py-2 -mx-2 px-2 rounded-md hover:bg-muted/50 ${
-                            selectedId === c.id ? "bg-muted/60" : ""
-                          }`}
-                          data-testid={`row-case-${c.id}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {c.sourceName ?? "Untitled"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDateTime(c.createdAt)}
-                            </p>
-                          </div>
-                          {c.status === "in_review" && (
-                            <span
-                              className="text-[10px] uppercase text-muted-foreground"
-                              data-testid={`indicator-claimed-${c.id}`}
-                            >
-                              claimed
-                            </span>
-                          )}
+                    {sortedCases.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSelectedId(c.id)}
+                        className={`w-full text-left flex items-center gap-2 py-2 -mx-2 px-2 rounded-md hover:bg-muted/50 ${
+                          selectedId === c.id ? "bg-muted/60" : ""
+                        }`}
+                        data-testid={`row-case-${c.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {c.sourceName ?? "Untitled"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDateTime(c.createdAt)}
+                          </p>
+                        </div>
+                        {c.status === "in_review" && (
                           <span
-                            className={pillClasses(
-                              STATUS_TONE[c.status] ?? "slate",
-                            )}
+                            className="text-[10px] uppercase text-muted-foreground"
+                            data-testid={`indicator-claimed-${c.id}`}
                           >
-                            {c.status.replace("_", " ")}
+                            claimed
                           </span>
-                        </button>
-                      ))}
+                        )}
+                        <span
+                          className={pillClasses(
+                            STATUS_TONE[c.status] ?? "slate",
+                          )}
+                        >
+                          {c.status.replace("_", " ")}
+                        </span>
+                      </button>
+                    ))}
                   </div>
+                )}
+                {(hasMoreCases || loadingMoreCases) && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={loadMoreCases}
+                    disabled={loadingMoreCases}
+                    data-testid="button-load-more-cases"
+                  >
+                    {loadingMoreCases ? "Loading…" : "Load more"}
+                  </Button>
                 )}
               </CardContent>
             </Card>
