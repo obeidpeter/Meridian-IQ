@@ -15,6 +15,8 @@ import {
   ListInvoicesResponse,
   CreateInvoiceBody,
   CreateInvoiceResponse,
+  BulkSubmitInvoicesBody,
+  BulkSubmitInvoicesResponse,
   GetInvoiceParams,
   GetInvoiceResponse,
   UpdateInvoiceParams,
@@ -57,9 +59,11 @@ import {
   assertClientPartyScope,
   assertSameTenant,
   assertBuyerPartyAccess,
+  assertPartyAccess,
   clientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
+import { bulkSubmit } from "../modules/invoice/bulk-submit";
 import {
   createDraft,
   getInvoiceWithLines,
@@ -160,6 +164,27 @@ router.post("/invoices", async (req, res): Promise<void> => {
     req.principal.userId,
   );
   res.status(201).json(CreateInvoiceResponse.parse(bundle));
+});
+
+// Bulk validate & submit: same capability, party-access and consent gates as
+// a single submit — the batch only adds iteration. Selection is server-side
+// (the client's pending drafts, oldest first) so a paginated UI doesn't have
+// to know every draft id.
+router.post("/invoices/bulk-submit", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.submit");
+  const body = BulkSubmitInvoicesBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  await assertPartyAccess(req.principal, body.data.clientPartyId);
+  const result = await bulkSubmit(
+    body.data.clientPartyId,
+    tenantFirmId(req.principal),
+    req.principal.userId,
+    body.data.limit,
+  );
+  res.json(BulkSubmitInvoicesResponse.parse(result));
 });
 
 router.get("/invoices/:id", async (req, res): Promise<void> => {

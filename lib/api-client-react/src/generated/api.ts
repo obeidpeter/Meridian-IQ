@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.2.0
+ * OpenAPI spec version: 0.3.0
  */
 import {
   useMutation,
@@ -33,6 +33,8 @@ import type {
   BankStatement,
   BankStatementLine,
   BillingTier,
+  BulkSubmitInput,
+  BulkSubmitResult,
   BuyerExposure,
   BuyerInvoice,
   BuyerSupplier,
@@ -2057,6 +2059,76 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCreateInvoiceMutationOptions(options));
+    }
+
+export const getBulkSubmitInvoicesUrl = () => {
+
+
+
+
+  return `/api/invoices/bulk-submit`
+}
+
+/**
+ * @summary Validate and submit a client's pending drafts in one batch
+ */
+export const bulkSubmitInvoices = async (bulkSubmitInput: BulkSubmitInput, options?: RequestInit): Promise<BulkSubmitResult> => {
+
+  return customFetch<BulkSubmitResult>(getBulkSubmitInvoicesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkSubmitInput)
+  }
+);}
+
+
+
+
+export const getBulkSubmitInvoicesMutationOptions = <TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkSubmitInvoices>>, TError,{data: BodyType<BulkSubmitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkSubmitInvoices>>, TError,{data: BodyType<BulkSubmitInput>}, TContext> => {
+
+const mutationKey = ['bulkSubmitInvoices'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkSubmitInvoices>>, {data: BodyType<BulkSubmitInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkSubmitInvoices(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkSubmitInvoicesMutationResult = NonNullable<Awaited<ReturnType<typeof bulkSubmitInvoices>>>
+    export type BulkSubmitInvoicesMutationBody = BodyType<BulkSubmitInput>
+    export type BulkSubmitInvoicesMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>
+
+    /**
+ * @summary Validate and submit a client's pending drafts in one batch
+ */
+export const useBulkSubmitInvoices = <TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkSubmitInvoices>>, TError,{data: BodyType<BulkSubmitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkSubmitInvoices>>,
+        TError,
+        {data: BodyType<BulkSubmitInput>},
+        TContext
+      > => {
+      return useMutation(getBulkSubmitInvoicesMutationOptions(options));
     }
 
 export const getGetInvoiceUrl = (id: string,) => {

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.2.0
+ * OpenAPI spec version: 0.3.0
  */
 import * as zod from 'zod';
 
@@ -550,6 +550,37 @@ export const CreateInvoiceResponse = zod.object({
   "vatRate": zod.string(),
   "lineExtension": zod.string(),
   "vatAmount": zod.string()
+}))
+})
+
+
+/**
+ * @summary Validate and submit a client's pending drafts in one batch
+ */
+export const bulkSubmitInvoicesBodyLimitMax = 200;
+
+
+
+export const BulkSubmitInvoicesBody = zod.object({
+  "clientPartyId": zod.string(),
+  "limit": zod.number().min(1).max(bulkSubmitInvoicesBodyLimitMax).optional()
+})
+
+export const BulkSubmitInvoicesResponse = zod.object({
+  "total": zod.number(),
+  "submittedCount": zod.number(),
+  "invalidCount": zod.number(),
+  "failedCount": zod.number(),
+  "remaining": zod.number(),
+  "rows": zod.array(zod.object({
+  "invoiceId": zod.string(),
+  "invoiceNumber": zod.string(),
+  "outcome": zod.enum(['submitted', 'invalid', 'failed']),
+  "errors": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})),
+  "error": zod.string().nullable()
 }))
 })
 

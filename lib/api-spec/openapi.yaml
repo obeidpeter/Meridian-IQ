@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.2.0
+  version: 0.3.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -510,6 +510,28 @@ paths:
                 $ref: "#/components/schemas/InvoiceDetail"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /invoices/bulk-submit:
+    post:
+      operationId: bulkSubmitInvoices
+      tags: [invoices]
+      summary: Validate and submit a client's pending drafts in one batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkSubmitInput"
+      responses:
+        "200":
+          description: Per-invoice outcomes for the processed batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkSubmitResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /invoices/{id}:
     get:
       operationId: getInvoice
@@ -4043,6 +4065,52 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InvoiceImportRow"
+    BulkSubmitInput:
+      type: object
+      required: [clientPartyId]
+      properties:
+        clientPartyId:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+    BulkSubmitRowResult:
+      type: object
+      required: [invoiceId, invoiceNumber, outcome, errors, error]
+      properties:
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        outcome:
+          type: string
+          enum: [submitted, invalid, failed]
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+        error:
+          type: ["string", "null"]
+    BulkSubmitResult:
+      type: object
+      required:
+        [total, submittedCount, invalidCount, failedCount, remaining, rows]
+      properties:
+        total:
+          type: integer
+        submittedCount:
+          type: integer
+        invalidCount:
+          type: integer
+        failedCount:
+          type: integer
+        remaining:
+          type: integer
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkSubmitRowResult"
     InvoiceImportRowResult:
       type: object
       required: [rowNumber, status, errors]

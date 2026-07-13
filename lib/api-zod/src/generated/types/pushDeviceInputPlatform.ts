@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.2.0
+ * OpenAPI spec version: 0.3.0
  */
 
 export type PushDeviceInputPlatform = typeof PushDeviceInputPlatform[keyof typeof PushDeviceInputPlatform];

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.2.0
+ * OpenAPI spec version: 0.3.0
  */
 export interface HealthStatus {
   status: string;
@@ -1172,6 +1172,42 @@ export interface InvoiceImportInput {
   clientPartyId: string;
   commit?: boolean;
   rows: InvoiceImportRow[];
+}
+
+export interface BulkSubmitInput {
+  clientPartyId: string;
+  /**
+     * @minimum 1
+     * @maximum 200
+     */
+  limit?: number;
+}
+
+export type BulkSubmitRowResultOutcome = typeof BulkSubmitRowResultOutcome[keyof typeof BulkSubmitRowResultOutcome];
+
+
+export const BulkSubmitRowResultOutcome = {
+  submitted: 'submitted',
+  invalid: 'invalid',
+  failed: 'failed',
+} as const;
+
+export interface BulkSubmitRowResult {
+  invoiceId: string;
+  invoiceNumber: string;
+  outcome: BulkSubmitRowResultOutcome;
+  errors: FieldError[];
+  /** @nullable */
+  error: string | null;
+}
+
+export interface BulkSubmitResult {
+  total: number;
+  submittedCount: number;
+  invalidCount: number;
+  failedCount: number;
+  remaining: number;
+  rows: BulkSubmitRowResult[];
 }
 
 export type InvoiceImportRowResultStatus = typeof InvoiceImportRowResultStatus[keyof typeof InvoiceImportRowResultStatus];
