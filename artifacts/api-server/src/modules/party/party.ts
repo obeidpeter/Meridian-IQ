@@ -41,6 +41,10 @@ export interface CreatePartyInput {
 export async function createParty(
   input: CreatePartyInput,
   actorId?: string,
+  // Provenance from the authenticated principal (never client input): lets a
+  // newly captured customer appear in its creator's party lists before any
+  // invoice references it. Parties remain shared spine entities (CORE-08).
+  createdByFirmId?: string | null,
 ): Promise<Party> {
   let tin = input.tin ?? null;
   let tinValidated = false;
@@ -71,6 +75,8 @@ export async function createParty(
       street: input.street ?? null,
       city: input.city ?? null,
       countryCode: input.countryCode ?? "NG",
+      createdByFirmId: createdByFirmId ?? null,
+      createdByUserId: actorId ?? null,
     })
     .returning();
   await appendAudit({

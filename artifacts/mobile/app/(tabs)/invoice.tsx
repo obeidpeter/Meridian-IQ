@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import {
   getGetDashboardSummaryQueryKey,
+  getGetReceivablesSummaryQueryKey,
   getListInvoicesQueryKey,
   InvoiceInputCategory,
   InvoiceInputKind,
@@ -273,6 +274,13 @@ export default function InvoiceScreen() {
       clientPartyId
         ? queryClient.invalidateQueries({
             queryKey: getGetDashboardSummaryQueryKey({ clientPartyId }),
+          })
+        : Promise.resolve(),
+      // A submitted invoice becomes an outstanding receivable, so the home
+      // card's aging buckets shift too.
+      clientPartyId
+        ? queryClient.invalidateQueries({
+            queryKey: getGetReceivablesSummaryQueryKey({ clientPartyId }),
           })
         : Promise.resolve(),
       // Prefix key matches every invoice-list query regardless of status filter.

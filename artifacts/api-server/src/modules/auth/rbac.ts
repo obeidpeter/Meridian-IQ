@@ -201,6 +201,11 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "invoice.submit",
     "engagement.read",
     "party.read",
+    // Capturing a new customer is part of writing an invoice. The write
+    // surface stays narrow: createParty adds a shared spine entry, and
+    // updateParty confines a client_user to its OWN party (SEC-03 — the
+    // invoice-reference fallback is firm-only).
+    "party.write",
     "confirmation.read",
     "consent.read",
     "consent.write",

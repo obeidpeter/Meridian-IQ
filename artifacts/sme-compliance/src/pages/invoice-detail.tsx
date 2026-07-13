@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useRoute, Link } from "wouter";
+import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetInvoice,
   useListSubmissionAttempts,
@@ -39,10 +39,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled, errorStatus } from "@/lib/errors";
 import { QueryError } from "@/components/query-error";
+import { DRAFT_KEY, type DraftState } from "@/pages/invoice-new";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -57,6 +68,7 @@ import {
   Ban,
   Undo2,
   FileQuestion,
+  FilePlus,
 } from "lucide-react";
 import {
   formatNaira,
@@ -113,6 +125,7 @@ const SETTLEMENT_SOURCE_LABELS: Record<string, string> = {
 export function InvoiceDetail() {
   const [, params] = useRoute("/invoices/:id");
   const id = params?.id || "";
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -187,6 +200,9 @@ export function InvoiceDetail() {
   // CORE-09 adjustment dialog: cancel or credit-note, both reason-first.
   const [adjustKind, setAdjustKind] = useState<"cancel" | "credit" | null>(null);
   const [adjustReason, setAdjustReason] = useState("");
+  // "New from this invoice" overwrite guard: only shown when the stored
+  // invoice-form draft already holds real work.
+  const [confirmNewFrom, setConfirmNewFrom] = useState(false);
 
   const handleSubmit = async () => {
     if (!invoice) return;
@@ -309,6 +325,68 @@ export function InvoiceDetail() {
         variant: "destructive",
       });
     }
+  };
+
+  // "New from this invoice": seed the invoice form's offline draft (the same
+  // DRAFT_KEY the form autosaves to) with this invoice's customer and lines,
+  // leaving the number blank so a fresh one is assigned. Quantities and prices
+  // are wire strings already, so they map 1:1; vatRate is normalised to the
+  // form's canonical fraction ("0.075" / "0") so the VAT select matches.
+  const buildDraftFromInvoice = (): DraftState | null => {
+    if (!invoice) return null;
+    const lines = (data?.lines ?? []).map((l) => ({
+      description: l.description,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      vatRate: String(Number(l.vatRate)),
+    }));
+    return {
+      invoiceNumber: "",
+      buyerPartyId: invoice.buyerPartyId,
+      issueDate: new Date().toISOString().slice(0, 10),
+      dueDate: "",
+      lines:
+        lines.length > 0
+          ? lines
+          : [{ description: "", quantity: "1", unitPrice: "", vatRate: "0.075" }],
+    };
+  };
+
+  // A stored draft with an invoice number, a picked customer, or any
+  // filled-in line is real work — ask before replacing it. A corrupt draft
+  // reads as empty (the form ignores it too).
+  const storedDraftHasWork = (): boolean => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw) as DraftState;
+      return Boolean(
+        d.invoiceNumber?.trim() ||
+          d.buyerPartyId ||
+          (d.lines ?? []).some((l) => l.description.trim() || l.unitPrice.trim()),
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const startNewFromInvoice = () => {
+    const draft = buildDraftFromInvoice();
+    if (!draft || !invoice) return;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    toast({
+      title: "New invoice drafted",
+      description: `Copied from ${invoice.invoiceNumber} — give it a new invoice number.`,
+    });
+    navigate("/invoices/new");
+  };
+
+  const handleNewFromInvoice = () => {
+    if (storedDraftHasWork()) {
+      setConfirmNewFrom(true);
+      return;
+    }
+    startNewFromInvoice();
   };
 
   if (isLoading) {
@@ -453,8 +531,41 @@ export function InvoiceDetail() {
               <Ban className="w-4 h-4 mr-2" aria-hidden="true" /> Cancel invoice
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={handleNewFromInvoice}
+            data-testid="button-new-from-invoice"
+          >
+            <FilePlus className="w-4 h-4 mr-2" aria-hidden="true" /> New from
+            this invoice
+          </Button>
         </div>
       </div>
+
+      <AlertDialog open={confirmNewFrom} onOpenChange={setConfirmNewFrom}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace your saved draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You already have an unfinished invoice draft. Starting a new
+              invoice from {invoice.invoiceNumber} replaces that draft — this
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep my draft</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmNewFrom(false);
+                startNewFromInvoice();
+              }}
+              data-testid="button-confirm-new-from-invoice"
+            >
+              Replace draft
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={adjustKind !== null}

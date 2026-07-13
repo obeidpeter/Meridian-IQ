@@ -23,20 +23,23 @@ import {
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { RequireClientScope } from "@/components/require-client-scope";
+import { AddCustomerDialog } from "@/components/add-customer-dialog";
 import { formatNaira } from "@/lib/format";
 import { Plus, Trash2, CheckCircle2, Circle, Cloud, ShieldCheck } from "lucide-react";
 
-const DRAFT_KEY = "meridianiq:invoice-draft";
+// Exported for invoice-detail's "New from this invoice", which seeds this
+// page's offline draft before navigating here.
+export const DRAFT_KEY = "meridianiq:invoice-draft";
 const VAT_STANDARD = "0.075";
 
-interface DraftLine {
+export interface DraftLine {
   description: string;
   quantity: string;
   unitPrice: string;
   vatRate: string;
 }
 
-interface DraftState {
+export interface DraftState {
   invoiceNumber: string;
   buyerPartyId: string;
   issueDate: string;
@@ -101,6 +104,7 @@ export function InvoiceNew() {
   const [draft, setDraft] = useState<DraftState>(loadDraft);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showErrors, setShowErrors] = useState(false);
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
 
   const buyers = useMemo(
     () => (parties || []).filter((p) => p.type === "buyer"),
@@ -259,6 +263,13 @@ export function InvoiceNew() {
       </div>
 
       <RequireClientScope thing="invoice form">
+      <AddCustomerDialog
+        open={addCustomerOpen}
+        onOpenChange={setAddCustomerOpen}
+        onCreated={(party) =>
+          setDraft((d) => ({ ...d, buyerPartyId: party.id }))
+        }
+      />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
           <Card>
@@ -286,44 +297,67 @@ export function InvoiceNew() {
               <div>
                 <Label htmlFor="buyer-select">Customer</Label>
                 {buyers.length === 0 ? (
-                  <p
+                  <div
                     id="buyer-select"
-                    className="text-sm text-muted-foreground border rounded-md px-3 py-2 mt-1"
+                    className="border rounded-md px-3 py-2 mt-1 flex flex-wrap items-center justify-between gap-2"
                     data-testid="text-no-buyers"
                   >
-                    No customers yet — ask your firm to add your buyers, then they
-                    appear here to pick from.
-                  </p>
-                ) : (
-                  <Select
-                    value={draft.buyerPartyId || undefined}
-                    onValueChange={(v) => setDraft((d) => ({ ...d, buyerPartyId: v }))}
-                  >
-                    <SelectTrigger
-                      id="buyer-select"
-                      aria-invalid={showErrors && !!(errors.buyerPartyId || errors.buyerTin)}
-                      aria-describedby={
-                        showErrors && errors.buyerPartyId
-                          ? "buyer-select-error"
-                          : errors.buyerTin
-                            ? "buyer-tin-note"
-                            : undefined
-                      }
-                      className={invalidClass(
-                        showErrors && !!(errors.buyerPartyId || errors.buyerTin),
-                      )}
+                    <span className="text-sm text-muted-foreground">
+                      No customers yet — add your first customer.
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAddCustomerOpen(true)}
+                      data-testid="button-add-first-customer"
                     >
-                      <SelectValue placeholder="Select a customer…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {buyers.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.legalName}
-                          {b.tin ? ` — ${b.tin}` : " (no TIN)"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                      <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add customer
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <Select
+                        value={draft.buyerPartyId || undefined}
+                        onValueChange={(v) => setDraft((d) => ({ ...d, buyerPartyId: v }))}
+                      >
+                        <SelectTrigger
+                          id="buyer-select"
+                          aria-invalid={showErrors && !!(errors.buyerPartyId || errors.buyerTin)}
+                          aria-describedby={
+                            showErrors && errors.buyerPartyId
+                              ? "buyer-select-error"
+                              : errors.buyerTin
+                                ? "buyer-tin-note"
+                                : undefined
+                          }
+                          className={invalidClass(
+                            showErrors && !!(errors.buyerPartyId || errors.buyerTin),
+                          )}
+                        >
+                          <SelectValue placeholder="Select a customer…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {buyers.map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                              {b.legalName}
+                              {b.tin ? ` — ${b.tin}` : " (no TIN)"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => setAddCustomerOpen(true)}
+                      data-testid="button-add-customer"
+                    >
+                      <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> Add customer
+                    </Button>
+                  </div>
                 )}
                 {showErrors && errors.buyerPartyId && (
                   <FieldError id="buyer-select-error">{errors.buyerPartyId}</FieldError>

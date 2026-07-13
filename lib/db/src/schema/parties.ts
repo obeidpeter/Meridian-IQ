@@ -35,6 +35,12 @@ export const partiesTable = pgTable("parties", {
   // When two duplicate parties are merged, the loser points at the survivor.
   // History is preserved: rows are never deleted (CORE-08).
   mergedIntoId: uuid("merged_into_id"),
+  // Provenance, not ownership: parties stay shared spine entities, but a
+  // newly captured customer must be visible to whoever captured it BEFORE any
+  // invoice references it (the list rules in routes/parties.ts). User id is
+  // text to match the audit convention (dev principals are not UUIDs).
+  createdByFirmId: uuid("created_by_firm_id"),
+  createdByUserId: text("created_by_user_id"),
   schemaVersion: integer("schema_version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -51,6 +57,9 @@ export const insertPartySchema = createInsertSchema(partiesTable).omit({
   schemaVersion: true,
   createdAt: true,
   updatedAt: true,
+  // Provenance is stamped from the authenticated principal, never from input.
+  createdByFirmId: true,
+  createdByUserId: true,
 });
 export type InsertParty = z.infer<typeof insertPartySchema>;
 export type Party = typeof partiesTable.$inferSelect;

@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetDashboardSummaryQueryKey,
+  getGetReceivablesSummaryQueryKey,
   getListBankStatementProposalsQueryKey,
   getListBankStatementsQueryKey,
   getListInvoicesQueryKey,
@@ -351,6 +352,12 @@ export default function ReconciliationScreen() {
         });
         void queryClient.invalidateQueries({
           queryKey: getGetDashboardSummaryQueryKey({
+            clientPartyId: clientPartyId ?? "",
+          }),
+        });
+        // A settled invoice leaves the receivables aging buckets.
+        void queryClient.invalidateQueries({
+          queryKey: getGetReceivablesSummaryQueryKey({
             clientPartyId: clientPartyId ?? "",
           }),
         });

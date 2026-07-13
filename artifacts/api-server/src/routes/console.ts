@@ -53,6 +53,7 @@ import {
   ResolveOperatorCaseParams,
   ResolveOperatorCaseBody,
   ResolveOperatorCaseResponse,
+  GetFirmReceivablesResponse,
 } from "@workspace/api-zod";
 import {
   assertCan,
@@ -62,6 +63,7 @@ import {
 } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
+import { getFirmReceivables } from "../modules/invoice/receivables";
 
 const router: IRouter = Router();
 
@@ -214,6 +216,15 @@ async function loadFirmClients(
     .where(eq(engagementsTable.firmId, firmId));
   return rows;
 }
+
+// Receivables across the firm's whole book: who is owed (per client) and who
+// owes (top debtors) — the advisor's chasing worklist, worst first.
+router.get("/console/receivables", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const firmId = firmScope(req.principal);
+  const rollup = await getFirmReceivables(firmId);
+  res.json(GetFirmReceivablesResponse.parse(rollup));
+});
 
 router.get("/console/portfolio", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");

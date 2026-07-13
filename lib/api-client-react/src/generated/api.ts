@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 import {
   useMutation,
@@ -90,6 +90,7 @@ import type {
   Firm,
   FirmInput,
   FirmMember,
+  FirmReceivables,
   FirmTheme,
   FirmThemeInput,
   ForbiddenResponse,
@@ -5723,6 +5724,83 @@ export const useEscalateInvoice = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getEscalateInvoiceMutationOptions(options));
     }
+
+export const getGetFirmReceivablesUrl = () => {
+
+
+
+
+  return `/api/console/receivables`
+}
+
+/**
+ * @summary Outstanding receivables across the firm's book, worst first
+ */
+export const getFirmReceivables = async ( options?: RequestInit): Promise<FirmReceivables> => {
+
+  return customFetch<FirmReceivables>(getGetFirmReceivablesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFirmReceivablesQueryKey = () => {
+    return [
+    `/api/console/receivables`
+    ] as const;
+    }
+
+
+export const getGetFirmReceivablesQueryOptions = <TData = Awaited<ReturnType<typeof getFirmReceivables>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFirmReceivables>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFirmReceivablesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFirmReceivables>>> = ({ signal }) => getFirmReceivables({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFirmReceivables>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFirmReceivablesQueryResult = NonNullable<Awaited<ReturnType<typeof getFirmReceivables>>>
+export type GetFirmReceivablesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Outstanding receivables across the firm's book, worst first
+ */
+
+export function useGetFirmReceivables<TData = Awaited<ReturnType<typeof getFirmReceivables>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFirmReceivables>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFirmReceivablesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetPortfolioUrl = () => {
 
