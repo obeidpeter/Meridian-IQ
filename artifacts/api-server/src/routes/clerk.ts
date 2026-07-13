@@ -15,6 +15,11 @@ import {
   ReleaseClerkCaseResponse,
   RetryClerkCaseParams,
   RetryClerkCaseResponse,
+  GetClerkPartySuggestionsParams,
+  GetClerkPartySuggestionsResponse,
+  RunClerkEvalResponse,
+  ListClerkEvalRunsQueryParams,
+  ListClerkEvalRunsResponse,
   AskClerkBody,
   AskClerkResponse,
   GetClerkMetricsQueryParams,
@@ -33,6 +38,12 @@ import {
 import { askClerk } from "../modules/clerk/ask";
 import { getClerkMetrics } from "../modules/clerk/metrics";
 import { getClerkGateway } from "../modules/clerk/provider";
+import { suggestPartiesForCase } from "../modules/clerk/party-match";
+import {
+  listEvalRuns,
+  runEvalCorpus,
+  withAccuracy,
+} from "../modules/clerk/eval";
 
 const router: IRouter = Router();
 
@@ -133,6 +144,35 @@ router.post("/clerk/cases/:id/retry", async (req, res): Promise<void> => {
     gateway,
   );
   res.json(RetryClerkCaseResponse.parse(row));
+});
+
+router.get(
+  "/clerk/cases/:id/party-suggestions",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const params = GetClerkPartySuggestionsParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const suggestions = await suggestPartiesForCase(params.data.id);
+    res.json(GetClerkPartySuggestionsResponse.parse(suggestions));
+  },
+);
+
+router.post("/clerk/eval/run", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const gateway = await getClerkGateway();
+  const run = await runEvalCorpus(req.principal.userId, gateway);
+  res.json(RunClerkEvalResponse.parse(withAccuracy(run)));
+});
+
+router.get("/clerk/eval/runs", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const query = ListClerkEvalRunsQueryParams.safeParse(req.query);
+  const limit = query.success ? (query.data.limit ?? 20) : 20;
+  const runs = await listEvalRuns(limit);
+  res.json(ListClerkEvalRunsResponse.parse(runs.map(withAccuracy)));
 });
 
 router.get("/clerk/metrics", async (req, res): Promise<void> => {

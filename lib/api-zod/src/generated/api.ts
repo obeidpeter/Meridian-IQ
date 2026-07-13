@@ -3593,6 +3593,110 @@ export const ReleaseClerkCaseResponse = zod.object({
 
 
 /**
+ * @summary Party candidates matched from the extracted names and TINs
+ */
+export const GetClerkPartySuggestionsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetClerkPartySuggestionsResponse = zod.object({
+  "supplier": zod.array(zod.object({
+  "partyId": zod.string(),
+  "legalName": zod.string(),
+  "tin": zod.string().nullable(),
+  "type": zod.string(),
+  "confidence": zod.number(),
+  "tinScore": zod.number(),
+  "nameScore": zod.number()
+})),
+  "buyer": zod.array(zod.object({
+  "partyId": zod.string(),
+  "legalName": zod.string(),
+  "tin": zod.string().nullable(),
+  "type": zod.string(),
+  "confidence": zod.number(),
+  "tinScore": zod.number(),
+  "nameScore": zod.number()
+}))
+})
+
+
+/**
+ * @summary Run the synthetic fixture corpus through the live gateway and score it
+ */
+export const RunClerkEvalResponse = zod.object({
+  "id": zod.string(),
+  "startedBy": zod.string(),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "fixtureCount": zod.number(),
+  "fieldsCompared": zod.number(),
+  "fieldsCorrect": zod.number(),
+  "accuracy": zod.number().nullable(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'skewed', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "fieldsCompared": zod.number(),
+  "fieldsCorrect": zod.number(),
+  "mismatches": zod.array(zod.object({
+  "field": zod.string(),
+  "expected": zod.string().nullable(),
+  "actual": zod.string().nullable()
+})),
+  "injectionResisted": zod.boolean().nullable()
+})),
+  "durationMs": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Past evaluation runs, newest first
+ */
+export const listClerkEvalRunsQueryLimitMax = 100;
+
+
+
+export const ListClerkEvalRunsQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(listClerkEvalRunsQueryLimitMax).optional()
+})
+
+export const ListClerkEvalRunsResponseItem = zod.object({
+  "id": zod.string(),
+  "startedBy": zod.string(),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "fixtureCount": zod.number(),
+  "fieldsCompared": zod.number(),
+  "fieldsCorrect": zod.number(),
+  "accuracy": zod.number().nullable(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'skewed', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "fieldsCompared": zod.number(),
+  "fieldsCorrect": zod.number(),
+  "mismatches": zod.array(zod.object({
+  "field": zod.string(),
+  "expected": zod.string().nullable(),
+  "actual": zod.string().nullable()
+})),
+  "injectionResisted": zod.boolean().nullable()
+})),
+  "durationMs": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListClerkEvalRunsResponse = zod.array(ListClerkEvalRunsResponseItem)
+
+
+/**
  * @summary Operational metrics from cases and the inference ledger (CLK-OBS-04)
  */
 export const getClerkMetricsQueryWindowDaysMax = 365;

@@ -47,7 +47,10 @@ export interface ClerkProvider {
 export type ClerkPurpose =
   | "extract_invoice"
   | "classify_intent"
-  | "transcribe_voice";
+  | "transcribe_voice"
+  // §13.1 evaluation traffic: same prompt and schema as extract_invoice, but
+  // its own purpose so metrics cohorts separate eval runs from production.
+  | "eval_extract";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;
