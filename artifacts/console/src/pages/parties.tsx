@@ -1,15 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useListParties,
   useMergeParties,
   useSplitParty,
   getListPartiesQueryKey,
 } from "@workspace/api-client-react";
-import type { Party } from "@workspace/api-client-react";
+import type { ListPartiesParams, Party } from "@workspace/api-client-react";
 import { humanize } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -38,6 +40,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Fingerprint,
+  X,
 } from "lucide-react";
 
 // CORE-08 party integrity: duplicate counterparty records are resolved with a
@@ -102,9 +105,34 @@ function findDuplicateGroups(parties: Party[]): DupGroup[] {
   return groups;
 }
 
+// Keystrokes settle for ~300 ms before a search hits the server.
+const SEARCH_DEBOUNCE_MS = 300;
+
 export function Parties() {
   usePageTitle("Party integrity");
-  const { data: parties, isLoading, error, refetch } = useListParties();
+  // Server-side search: `q` matches the legal name or TIN. The input is
+  // debounced so the parties query re-runs once typing settles, not on
+  // every keystroke; everything below (stats, duplicate groups, TIN status,
+  // lineage) recomputes from the filtered result.
+  const [search, setSearch] = useState("");
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const handle = setTimeout(
+      () => setQ(search.trim()),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(handle);
+  }, [search]);
+
+  const params: ListPartiesParams = q ? { q } : {};
+  const {
+    data: parties,
+    isLoading,
+    error,
+    refetch,
+  } = useListParties(params, {
+    query: { queryKey: getListPartiesQueryKey(params) },
+  });
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const merge = useMergeParties();
@@ -128,6 +156,8 @@ export function Parties() {
   const nameOf = (id: string | null | undefined) =>
     (parties ?? []).find((p) => p.id === id)?.legalName ?? id ?? "—";
 
+  // getListPartiesQueryKey() (no params) prefix-matches every search
+  // variant of the list, so all cached results go stale together.
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: getListPartiesQueryKey() });
 
@@ -206,6 +236,35 @@ export function Parties() {
         </p>
       </div>
 
+      <div className="max-w-sm space-y-1">
+        <Label htmlFor="party-search">Search parties</Label>
+        <div className="relative">
+          <Input
+            id="party-search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Legal name or TIN"
+            className="pr-8"
+            data-testid="input-party-search"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                // Clear immediately — no reason to sit out the debounce.
+                setSearch("");
+                setQ("");
+              }}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-testid="button-clear-party-search"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {isLoading ? (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -226,6 +285,15 @@ export function Parties() {
         </>
       ) : error ? (
         <QueryError thing="parties" onRetry={() => refetch()} />
+      ) : q && (parties ?? []).length === 0 ? (
+        // The stat tiles and cards would all read as vacuously "clean" on an
+        // empty search result — say what actually happened instead.
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="text-no-party-matches"
+        >
+          {`No parties match "${q}" by legal name or TIN.`}
+        </p>
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

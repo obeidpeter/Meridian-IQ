@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import * as zod from 'zod';
 
@@ -13,7 +13,8 @@ import * as zod from 'zod';
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
-  "status": zod.string()
+  "status": zod.string(),
+  "contractVersion": zod.string()
 })
 
 
@@ -168,6 +169,14 @@ export const CreateMembershipResponse = zod.object({
   "createdAt": zod.coerce.date()
 })
 
+
+export const listPartiesQueryQMax = 120;
+
+
+
+export const ListPartiesQueryParams = zod.object({
+  "q": zod.coerce.string().max(listPartiesQueryQMax).optional().describe('Matches the legal name or TIN.')
+})
 
 export const ListPartiesResponseItem = zod.object({
   "id": zod.string(),
@@ -440,8 +449,22 @@ export const UpdateEngagementResponse = zod.object({
 })
 
 
+/**
+ * Without limit/offset/q the full tenant-scoped list is returned oldest first (legacy behaviour, kept for existing clients). When any of the paging/search parameters are present the list is returned NEWEST first and bounded (limit defaults to 50).
+ */
+export const listInvoicesQueryLimitMax = 200;
+
+export const listInvoicesQueryOffsetMin = 0;
+
+export const listInvoicesQueryQMax = 120;
+
+
+
 export const ListInvoicesQueryParams = zod.object({
-  "status": zod.coerce.string().optional()
+  "status": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().min(1).max(listInvoicesQueryLimitMax).optional(),
+  "offset": zod.coerce.number().min(listInvoicesQueryOffsetMin).optional(),
+  "q": zod.coerce.string().max(listInvoicesQueryQMax).optional().describe('Matches the invoice number or either party\'s legal name.')
 })
 
 export const ListInvoicesResponseItem = zod.object({
@@ -1360,6 +1383,49 @@ export const GetDashboardSummaryResponse = zod.object({
   "label": zod.string(),
   "status": zod.string().nullish(),
   "at": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Outstanding receivables aged into buckets, with top debtors
+ */
+export const GetReceivablesSummaryQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const GetReceivablesSummaryResponse = zod.object({
+  "asOf": zod.string(),
+  "groups": zod.array(zod.object({
+  "currency": zod.string(),
+  "outstandingTotal": zod.string(),
+  "invoiceCount": zod.number(),
+  "buckets": zod.object({
+  "current": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "days31to60": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "days61to90": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "days90plus": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+})
+})
+})),
+  "topDebtors": zod.array(zod.object({
+  "buyerPartyId": zod.string(),
+  "buyerName": zod.string(),
+  "currency": zod.string(),
+  "outstanding": zod.string(),
+  "invoiceCount": zod.number(),
+  "oldestDueDate": zod.string().nullable()
 }))
 })
 
@@ -2972,9 +3038,17 @@ export const DecideClaimResponse = zod.object({
 /**
  * @summary Clerk case queue (content columns omitted; see detail)
  */
+export const listClerkCasesQueryLimitMax = 200;
+
+export const listClerkCasesQueryOffsetMin = 0;
+
+
+
 export const ListClerkCasesQueryParams = zod.object({
   "kind": zod.enum(['extraction', 'question']).optional(),
-  "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']).optional()
+  "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']).optional(),
+  "limit": zod.coerce.number().min(1).max(listClerkCasesQueryLimitMax).optional(),
+  "offset": zod.coerce.number().min(listClerkCasesQueryOffsetMin).optional()
 })
 
 export const ListClerkCasesResponseItem = zod.object({

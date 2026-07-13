@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import type { ListClerkCasesKind } from './listClerkCasesKind';
 import type { ListClerkCasesStatus } from './listClerkCasesStatus';
@@ -11,4 +11,13 @@ import type { ListClerkCasesStatus } from './listClerkCasesStatus';
 export type ListClerkCasesParams = {
 kind?: ListClerkCasesKind;
 status?: ListClerkCasesStatus;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };

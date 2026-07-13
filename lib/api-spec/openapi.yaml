@@ -2,7 +2,11 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
+  # The version is the frontend/server build handshake: codegen embeds it in
+  # both generated clients AND the server (via @workspace/api-zod), /healthz
+  # reports the server's copy, and the web apps show a "stale server build"
+  # banner on mismatch. Bump it whenever the contract changes.
+  version: 0.2.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -192,6 +196,14 @@ paths:
     get:
       operationId: listParties
       tags: [parties]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Matches the legal name or TIN.
+          schema:
+            type: string
+            maxLength: 120
       responses:
         "200":
           description: Parties
@@ -440,12 +452,37 @@ paths:
     get:
       operationId: listInvoices
       tags: [invoices]
+      description: >-
+        Without limit/offset/q the full tenant-scoped list is returned oldest
+        first (legacy behaviour, kept for existing clients). When any of the
+        paging/search parameters are present the list is returned NEWEST first
+        and bounded (limit defaults to 50).
       parameters:
         - name: status
           in: query
           required: false
           schema:
             type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - name: q
+          in: query
+          required: false
+          description: Matches the invoice number or either party's legal name.
+          schema:
+            type: string
+            maxLength: 120
       responses:
         "200":
           description: Invoices
@@ -1061,6 +1098,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/receivables:
+    get:
+      operationId: getReceivablesSummary
+      tags: [sme]
+      summary: Outstanding receivables aged into buckets, with top debtors
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Receivables aging summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceivablesSummary"
 
   /invoices/import:
     post:
@@ -2209,6 +2265,19 @@ paths:
           schema:
             type: string
             enum: [pending, extracted, in_review, approved, rejected, escalated, failed]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
       responses:
         "200":
           description: Clerk cases, newest first
@@ -2524,8 +2593,11 @@ components:
       properties:
         status:
           type: string
+        contractVersion:
+          type: string
       required:
         - status
+        - contractVersion
     Error:
       type: object
       properties:
@@ -3813,6 +3885,71 @@ components:
         at:
           type: string
           format: date-time
+    ReceivablesBucket:
+      type: object
+      required: [amount, count]
+      properties:
+        amount:
+          type: string
+        count:
+          type: integer
+    ReceivablesSummary:
+      type: object
+      required: [asOf, groups, topDebtors]
+      properties:
+        asOf:
+          type: string
+        groups:
+          type: array
+          items:
+            type: object
+            required:
+              [currency, outstandingTotal, invoiceCount, buckets]
+            properties:
+              currency:
+                type: string
+              outstandingTotal:
+                type: string
+              invoiceCount:
+                type: integer
+              buckets:
+                type: object
+                required: [current, days31to60, days61to90, days90plus]
+                properties:
+                  current:
+                    $ref: "#/components/schemas/ReceivablesBucket"
+                  days31to60:
+                    $ref: "#/components/schemas/ReceivablesBucket"
+                  days61to90:
+                    $ref: "#/components/schemas/ReceivablesBucket"
+                  days90plus:
+                    $ref: "#/components/schemas/ReceivablesBucket"
+        topDebtors:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                buyerPartyId,
+                buyerName,
+                currency,
+                outstanding,
+                invoiceCount,
+                oldestDueDate,
+              ]
+            properties:
+              buyerPartyId:
+                type: string
+              buyerName:
+                type: string
+              currency:
+                type: string
+              outstanding:
+                type: string
+              invoiceCount:
+                type: integer
+              oldestDueDate:
+                type: ["string", "null"]
     DashboardSummary:
       type: object
       required:

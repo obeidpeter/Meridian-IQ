@@ -8,6 +8,7 @@ import {
   integer,
   boolean,
   pgEnum,
+  index,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -87,7 +88,17 @@ export const invoicesTable = pgTable("invoices", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-});
+},
+// Hot-path indexes: every tenant query filters firm_id (+status), list pages
+// order by created_at, client scoping filters supplier_party_id, receivables
+// group by buyer_party_id. RLS policy checks run per candidate row, so
+// shrinking the candidate set matters twice here.
+(t) => [
+  index("invoices_firm_status_idx").on(t.firmId, t.status),
+  index("invoices_firm_created_idx").on(t.firmId, t.createdAt),
+  index("invoices_supplier_idx").on(t.supplierPartyId),
+  index("invoices_buyer_idx").on(t.buyerPartyId),
+]);
 
 export const invoiceLinesTable = pgTable("invoice_lines", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -103,7 +114,9 @@ export const invoiceLinesTable = pgTable("invoice_lines", {
   vatAmount: numeric("vat_amount", { precision: 18, scale: 2 })
     .notNull()
     .default("0"),
-});
+},
+// Every invoice detail load and cascade delete walks this FK.
+(t) => [index("invoice_lines_invoice_idx").on(t.invoiceId)]);
 
 export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({
   id: true,
