@@ -35,6 +35,7 @@ import {
 import {
   assertCan,
   assertSameTenant,
+  assertClientPartyScope,
   assertPartyAccess,
   tenantFirmId,
   type Principal,
@@ -833,6 +834,11 @@ async function loadInvoiceForTenant(
   const bundle = await getInvoiceWithLines(id);
   if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
   assertSameTenant(req.principal, bundle.invoice.firmId);
+  // SEC-03: a client_user may only reach its own invoices — not a sibling
+  // client's within the same firm (firm-keyed RLS is not a backstop here).
+  // Mirrors invoices.ts loadForTenant; without it the escalation read/write
+  // routes would let a client_user act on any invoice in the firm.
+  assertClientPartyScope(req.principal, bundle.invoice.supplierPartyId);
   return bundle.invoice;
 }
 

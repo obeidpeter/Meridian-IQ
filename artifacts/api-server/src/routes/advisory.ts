@@ -10,7 +10,12 @@ import {
   AnalyzeVatRiskBody,
   AnalyzeVatRiskResponse,
 } from "@workspace/api-zod";
-import { assertCan, assertSameTenant, tenantFirmId } from "../modules/auth/rbac";
+import {
+  assertCan,
+  assertClientPartyScope,
+  assertSameTenant,
+  tenantFirmId,
+} from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
 import {
   getQuestionnaireTemplate,
@@ -105,6 +110,9 @@ router.get("/assessments/:id", async (req, res): Promise<void> => {
     return;
   }
   assertSameTenant(req.principal, row.firmId);
+  // SEC-03: a client_user may only read its own client party's assessment,
+  // not a sibling client's readiness findings within the same firm.
+  assertClientPartyScope(req.principal, row.clientPartyId);
   const f = row.findings as Record<string, unknown>;
   res.json(
     GetAssessmentResponse.parse({

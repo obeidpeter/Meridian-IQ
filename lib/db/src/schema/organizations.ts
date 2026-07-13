@@ -3,6 +3,7 @@ import {
   uuid,
   text,
   jsonb,
+  integer,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -32,6 +33,11 @@ export const usersTable = pgTable("users", {
   // scrypt hash (salt:hash, hex) for cookie-session login. Null for users who
   // authenticate through Clerk only.
   passwordHash: text("password_hash"),
+  // Session-invalidation epoch (SEC-02). Signed into every issued session token;
+  // bumped on password change so previously-issued tokens (which carry the old
+  // epoch) stop resolving to a principal — the compromise-remediation path that
+  // a stateless HMAC token would otherwise leave open until its 7-day expiry.
+  sessionEpoch: integer("session_epoch").notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

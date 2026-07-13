@@ -24,18 +24,26 @@ import { appendAudit } from "../modules/audit/audit";
 const router: IRouter = Router();
 
 // ---- login throttling (SEC-02) ----------------------------------------------
-// In-memory fixed-window backoff per email+IP: uniform 401s stop credential
-// probing from learning anything, this stops it from being free. Suits the
-// single-process modular monolith; a multi-instance deployment would move the
-// counter to shared storage.
+// In-memory fixed-window backoff. Two independent counters, both of which must
+// pass, suit the single-process modular monolith (a multi-instance deployment
+// would move them to shared storage):
+//   1. per email+IP — a tight 5/15-min cap that stops probing from one source.
+//   2. per email — a looser account-scoped cap (50/hour) that a distributed
+//      credential-stuffing run (many source IPs) cannot evade, since it does
+//      not include the IP in the key. Deliberately looser so a bystander
+//      attacker cannot cheaply lock a victim out (availability), while still
+//      capping aggregate online guesses against one account.
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
+const ACCOUNT_WINDOW_MS = 60 * 60 * 1000;
+const ACCOUNT_MAX_FAILURES = 50;
 // Hard cap on distinct throttle keys held in memory. With req.ip now trustworthy
 // (app.set("trust proxy") in app.ts), an attacker can no longer mint unbounded
 // keys by spoofing X-Forwarded-For, so this is a backstop rather than the
 // primary defence (SEC-M4).
 const LOGIN_MAX_KEYS = 10_000;
 const failures = new Map<string, { count: number; windowStart: number }>();
+const accountFailures = new Map<string, { count: number; windowStart: number }>();
 
 function throttleKey(req: Request, email: string): string {
   // req.ip is derived from the trusted-proxy hop count (app.set("trust proxy")),
@@ -45,41 +53,70 @@ function throttleKey(req: Request, email: string): string {
   return `${email.trim().toLowerCase()}|${ip}`;
 }
 
-function isThrottled(key: string): number | null {
-  const entry = failures.get(key);
+function accountKey(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+// Seconds to wait if `key` in `map` is over `max` within `windowMs`, else null.
+function windowRetryAfter(
+  map: Map<string, { count: number; windowStart: number }>,
+  key: string,
+  windowMs: number,
+  max: number,
+): number | null {
+  const entry = map.get(key);
   if (!entry) return null;
   const elapsed = Date.now() - entry.windowStart;
-  if (elapsed > LOGIN_WINDOW_MS) {
-    failures.delete(key);
+  if (elapsed > windowMs) {
+    map.delete(key);
     return null;
   }
-  if (entry.count >= LOGIN_MAX_FAILURES) {
-    return Math.ceil((LOGIN_WINDOW_MS - elapsed) / 1000);
-  }
+  if (entry.count >= max) return Math.ceil((windowMs - elapsed) / 1000);
   return null;
 }
 
-function recordFailure(key: string): void {
+function isThrottled(req: Request, email: string): number | null {
+  return (
+    windowRetryAfter(failures, throttleKey(req, email), LOGIN_WINDOW_MS, LOGIN_MAX_FAILURES) ??
+    windowRetryAfter(accountFailures, accountKey(email), ACCOUNT_WINDOW_MS, ACCOUNT_MAX_FAILURES)
+  );
+}
+
+function bump(
+  map: Map<string, { count: number; windowStart: number }>,
+  key: string,
+  windowMs: number,
+): void {
   const now = Date.now();
-  const entry = failures.get(key);
-  if (!entry || now - entry.windowStart > LOGIN_WINDOW_MS) {
-    failures.set(key, { count: 1, windowStart: now });
+  const entry = map.get(key);
+  if (!entry || now - entry.windowStart > windowMs) {
+    map.set(key, { count: 1, windowStart: now });
   } else {
     entry.count += 1;
   }
   // Opportunistic pruning keeps the map bounded without a timer: evict expired
   // windows first, then — if still over the cap — the oldest-inserted entries
   // (Map preserves insertion order), so memory stays bounded under churn.
-  if (failures.size > LOGIN_MAX_KEYS) {
-    for (const [k, v] of failures) {
-      if (now - v.windowStart > LOGIN_WINDOW_MS) failures.delete(k);
+  if (map.size > LOGIN_MAX_KEYS) {
+    for (const [k, v] of map) {
+      if (now - v.windowStart > windowMs) map.delete(k);
     }
-    while (failures.size > LOGIN_MAX_KEYS) {
-      const oldest = failures.keys().next().value;
+    while (map.size > LOGIN_MAX_KEYS) {
+      const oldest = map.keys().next().value;
       if (oldest === undefined) break;
-      failures.delete(oldest);
+      map.delete(oldest);
     }
   }
+}
+
+function recordFailure(req: Request, email: string): void {
+  bump(failures, throttleKey(req, email), LOGIN_WINDOW_MS);
+  bump(accountFailures, accountKey(email), ACCOUNT_WINDOW_MS);
+}
+
+function clearFailures(req: Request, email: string): void {
+  failures.delete(throttleKey(req, email));
+  accountFailures.delete(accountKey(email));
 }
 
 function cookieOptions(req: { secure?: boolean; headers: Record<string, unknown> }) {
@@ -105,8 +142,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const key = throttleKey(req, parsed.data.email);
-  const retryAfter = isThrottled(key);
+  const retryAfter = isThrottled(req, parsed.data.email);
   if (retryAfter !== null) {
     res.setHeader("Retry-After", String(retryAfter));
     res.status(429).json({
@@ -116,12 +152,12 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
   const result = await authenticate(parsed.data.email, parsed.data.password);
   if (!result) {
-    recordFailure(key);
+    recordFailure(req, parsed.data.email);
     // Uniform message: never reveal whether the email exists.
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
-  failures.delete(key);
+  clearFailures(req, parsed.data.email);
   const memberships = await getDb()
     .select({
       firmId: membershipsTable.firmId,
@@ -136,7 +172,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
   const membership = memberships[0];
-  const token = await issueSessionToken(result.userId);
+  const token = await issueSessionToken(result.userId, result.sessionEpoch);
   res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   // Only native/mobile clients (which cannot use HttpOnly cookies) receive the
   // bearer token in the response body; they identify themselves with the
@@ -178,8 +214,10 @@ router.post("/auth/logout", (req, res): void => {
 
 // Authenticated password change (SEC-02). Requires the current password —
 // possession of a session cookie alone must not be enough to take over the
-// account. Existing session tokens stay valid until expiry (stateless HMAC);
-// the audit event records the rotation.
+// account. Bumping session_epoch invalidates every previously-issued token
+// (they carry the old epoch), so a stolen token stops working the instant the
+// victim rotates their password; the current device is kept signed in by
+// re-issuing its token with the new epoch. The audit event records the rotation.
 router.post("/auth/change-password", async (req, res): Promise<void> => {
   const parsed = ChangePasswordBody.safeParse(req.body);
   if (!parsed.success) {
@@ -187,7 +225,11 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     return;
   }
   const [user] = await getDb()
-    .select({ id: usersTable.id, passwordHash: usersTable.passwordHash })
+    .select({
+      id: usersTable.id,
+      passwordHash: usersTable.passwordHash,
+      sessionEpoch: usersTable.sessionEpoch,
+    })
     .from(usersTable)
     .where(eq(usersTable.id, req.principal.userId))
     .limit(1);
@@ -198,9 +240,13 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     res.status(401).json({ error: "Current password is incorrect" });
     return;
   }
+  const nextEpoch = user.sessionEpoch + 1;
   await getDb()
     .update(usersTable)
-    .set({ passwordHash: hashPassword(parsed.data.newPassword) })
+    .set({
+      passwordHash: hashPassword(parsed.data.newPassword),
+      sessionEpoch: nextEpoch,
+    })
     .where(eq(usersTable.id, user.id));
   await appendAudit({
     actorId: user.id,
@@ -208,8 +254,15 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     action: "auth.password_change",
     entityType: "user",
     entityId: user.id,
-    after: { rotated: true },
+    after: { rotated: true, sessionsRevoked: true },
   });
+  // Keep the caller's current (browser) session alive under the new epoch so a
+  // routine password change does not log the user out of the device they
+  // changed it on; every OTHER outstanding token is now stale. The mobile app
+  // does not expose this endpoint, so a bearer-token caller (rare) simply
+  // re-authenticates — the contract response stays 204.
+  const token = await issueSessionToken(user.id, nextEpoch);
+  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   res.sendStatus(204);
 });
 
