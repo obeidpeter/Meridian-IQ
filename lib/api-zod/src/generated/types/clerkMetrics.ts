@@ -8,12 +8,14 @@
 import type { ClerkMetricsAsk } from './clerkMetricsAsk';
 import type { ClerkMetricsCases } from './clerkMetricsCases';
 import type { ClerkMetricsCorrectionsItem } from './clerkMetricsCorrectionsItem';
+import type { ClerkMetricsCost } from './clerkMetricsCost';
 import type { ClerkMetricsInference } from './clerkMetricsInference';
 
 export interface ClerkMetrics {
   windowDays: number;
   cases: ClerkMetricsCases;
   inference: ClerkMetricsInference;
+  cost: ClerkMetricsCost;
   corrections: ClerkMetricsCorrectionsItem[];
   ask: ClerkMetricsAsk;
 }

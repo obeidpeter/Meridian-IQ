@@ -9622,6 +9622,76 @@ export function useGetInvoiceStatusLight<TData = Awaited<ReturnType<typeof getIn
 
 
 
+export const getRetryClerkCaseUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/cases/${id}/retry`
+}
+
+/**
+ * @summary Re-run extraction on a failed case from its stored source
+ */
+export const retryClerkCase = async (id: string, options?: RequestInit): Promise<ClerkCase> => {
+
+  return customFetch<ClerkCase>(getRetryClerkCaseUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetryClerkCaseMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryClerkCase>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryClerkCase>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['retryClerkCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryClerkCase>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  retryClerkCase(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryClerkCaseMutationResult = NonNullable<Awaited<ReturnType<typeof retryClerkCase>>>
+
+    export type RetryClerkCaseMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Re-run extraction on a failed case from its stored source
+ */
+export const useRetryClerkCase = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryClerkCase>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryClerkCase>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRetryClerkCaseMutationOptions(options));
+    }
+
 export const getClaimClerkCaseUrl = (id: string,) => {
 
 

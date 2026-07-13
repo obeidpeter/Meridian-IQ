@@ -31,9 +31,17 @@ export interface CompletionRequest {
   jsonSchema: Record<string, unknown>;
 }
 
+// Providers may return a bare string (tests, simple providers) or the string
+// plus token usage where the API reports it (CLK-NFR-04 cost-to-serve).
+export interface CompletionResult {
+  content: string;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+}
+
 export interface ClerkProvider {
   model: string;
-  complete(req: CompletionRequest): Promise<string>;
+  complete(req: CompletionRequest): Promise<string | CompletionResult>;
 }
 
 export type ClerkPurpose =
@@ -128,13 +136,22 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
       };
 
       let raw: string;
+      let promptTokens: number | null = null;
+      let completionTokens: number | null = null;
       try {
-        raw = await provider.complete({
+        const completed = await provider.complete({
           system: params.system,
           user: params.user,
           schemaName: params.schemaName,
           jsonSchema: params.jsonSchema,
         });
+        if (typeof completed === "string") {
+          raw = completed;
+        } else {
+          raw = completed.content;
+          promptTokens = completed.promptTokens ?? null;
+          completionTokens = completed.completionTokens ?? null;
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await getDb().insert(clerkInferenceCallsTable).values({
@@ -159,6 +176,8 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
           outcome: "invalid_discarded",
           errorText: "Output was not valid JSON",
           latencyMs: Date.now() - startedAt,
+          promptTokens,
+          completionTokens,
         });
         return {
           ok: false,
@@ -176,6 +195,8 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
           outcome: "invalid_discarded",
           errorText: validated.error.message.slice(0, 2000),
           latencyMs: Date.now() - startedAt,
+          promptTokens,
+          completionTokens,
         });
         return {
           ok: false,
@@ -190,6 +211,8 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
         schemaValid: true,
         outcome: "ok",
         latencyMs: Date.now() - startedAt,
+        promptTokens,
+        completionTokens,
       });
       return { ok: true, data: validated.data };
     },

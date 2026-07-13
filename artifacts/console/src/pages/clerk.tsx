@@ -6,6 +6,7 @@ import {
   useDecideClerkCase,
   useClaimClerkCase,
   useReleaseClerkCase,
+  useRetryClerkCase,
   useAskClerk,
   useGetClerkMetrics,
   useListFirms,
@@ -16,6 +17,7 @@ import {
 } from "@workspace/api-client-react";
 import type {
   ClerkCase,
+  ClerkCaseCreateInput,
   ClerkAnswer,
   ClerkCaseDecisionInputCategory,
   ClerkMetricsCases,
@@ -247,6 +249,24 @@ function fmtMs(ms: number | null | undefined): string {
   return `${Math.round(ms)} ms`;
 }
 
+// Token counts get grouping separators so 1234567 reads as 1,234,567.
+function fmtTokens(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "—";
+  return Math.round(n).toLocaleString();
+}
+
+// Estimated spend is usually cents per window, so allow up to 4 decimals.
+// null means the server has no per-token rates configured for the models used.
+function fmtUsd(usd: number | null | undefined): string {
+  if (usd === null || usd === undefined) return "—";
+  return usd.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
 // The Cases tile packs the flow timings into its detail line: decision
 // turnaround plus its claim-based split into queue-wait and active-review
 // (the split appears only once cases have claim timestamps).
@@ -410,6 +430,44 @@ function HealthPanel() {
               detail={`p50 ${fmtMs(metrics.inference.latencyP50Ms)}`}
               testId="stat-latency-p95"
             />
+          </div>
+
+          <div data-testid="section-cost">
+            <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+              Cost
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <StatTile
+                label="Prompt tokens"
+                value={fmtTokens(metrics.cost.promptTokens)}
+                testId="stat-cost-prompt-tokens"
+              />
+              <StatTile
+                label="Completion tokens"
+                value={fmtTokens(metrics.cost.completionTokens)}
+                testId="stat-cost-completion-tokens"
+              />
+              <StatTile
+                label="Calls with usage"
+                value={fmtTokens(metrics.cost.callsWithUsage)}
+                testId="stat-cost-calls-with-usage"
+              />
+              <StatTile
+                label="Tokens / decided case"
+                value={fmtTokens(metrics.cost.tokensPerDecidedCase)}
+                testId="stat-cost-tokens-per-case"
+              />
+              <StatTile
+                label="Estimated spend"
+                value={fmtUsd(metrics.cost.estimatedUsd)}
+                detail={
+                  metrics.cost.estimatedUsd == null
+                    ? "rates not configured"
+                    : undefined
+                }
+                testId="stat-cost-estimated-usd"
+              />
+            </div>
           </div>
 
           <Card>
@@ -592,6 +650,15 @@ export function ClerkWorkspace() {
   const [captureText, setCaptureText] = useState("");
   const [captureFile, setCaptureFile] = useState<File | null>(null);
   const [captureVoice, setCaptureVoice] = useState<File | null>(null);
+  // Duplicate guard: a 409 DUPLICATE_SOURCE on create means this exact
+  // document content already has a live case. We hold the rejected payload
+  // verbatim so "Create anyway" resubmits it byte-identical with
+  // allowDuplicate: true. Cleared on success, on cancel, and whenever the
+  // operator changes any source input (the held payload would be stale).
+  const [pendingDuplicate, setPendingDuplicate] = useState<{
+    payload: ClerkCaseCreateInput;
+    message: string;
+  } | null>(null);
 
   // Decision form
   const [form, setForm] = useState<ApproveForm | null>(null);
@@ -647,6 +714,7 @@ export function ClerkWorkspace() {
         setCaptureText("");
         setCaptureFile(null);
         setCaptureVoice(null);
+        setPendingDuplicate(null);
         setDisabledBanner(false);
         toast({
           title:
@@ -659,7 +727,21 @@ export function ClerkWorkspace() {
               : "Every value below still needs your eyes before anything happens.",
         });
       },
-      onError: (e) => handleGatewayError(e, "Could not read the document."),
+      onError: (e, variables) => {
+        // 409 DUPLICATE_SOURCE: the same content already has a live case.
+        // No toast — an inline panel lets the operator create anyway
+        // (allowDuplicate: true) or back out.
+        if (errorStatus(e) === 409) {
+          setPendingDuplicate({
+            payload: variables.data,
+            message:
+              serverErrorMessage(e) ??
+              "This exact document already has a live case.",
+          });
+          return;
+        }
+        handleGatewayError(e, "Could not read the document.");
+      },
     },
   });
 
@@ -715,6 +797,25 @@ export function ClerkWorkspace() {
         if (errorStatus(e) === 409) invalidateCases();
         handleGatewayError(e, "Could not release the case.");
       },
+    },
+  });
+
+  // Retry is only valid for failed extraction cases — the server 409s
+  // anything else, and handleGatewayError relays its words.
+  const retryCase = useRetryClerkCase({
+    mutation: {
+      onSuccess: (kase) => {
+        invalidateCases();
+        toast({
+          title:
+            kase.status === "failed" ? "Reading failed again" : "Document read",
+          description:
+            kase.status === "failed"
+              ? kase.failReason ?? "The Clerk still could not read this document."
+              : "Every value below still needs your eyes before anything happens.",
+        });
+      },
+      onError: (e) => handleGatewayError(e, "Could not retry the extraction."),
     },
   });
 
@@ -866,9 +967,10 @@ export function ClerkWorkspace() {
                       id="capture-file"
                       type="file"
                       accept=".pdf,image/png,image/jpeg,image/webp"
-                      onChange={(e) =>
-                        setCaptureFile(e.target.files?.[0] ?? null)
-                      }
+                      onChange={(e) => {
+                        setCaptureFile(e.target.files?.[0] ?? null);
+                        setPendingDuplicate(null);
+                      }}
                       disabled={captureVoice != null}
                       data-testid="input-capture-file"
                     />
@@ -881,6 +983,7 @@ export function ClerkWorkspace() {
                       accept="audio/*"
                       onChange={(e) => {
                         const f = e.target.files?.[0] ?? null;
+                        setPendingDuplicate(null);
                         if (f && f.size > MAX_VOICE_BYTES) {
                           toast({
                             title: "Voice note too large",
@@ -908,7 +1011,10 @@ export function ClerkWorkspace() {
                     </p>
                     <Textarea
                       value={captureText}
-                      onChange={(e) => setCaptureText(e.target.value)}
+                      onChange={(e) => {
+                        setCaptureText(e.target.value);
+                        setPendingDuplicate(null);
+                      }}
                       placeholder="INVOICE No: ..."
                       rows={5}
                       disabled={captureFile != null || captureVoice != null}
@@ -931,6 +1037,42 @@ export function ClerkWorkspace() {
                           : "Reading…"
                         : "Read with Clerk"}
                     </Button>
+                    {pendingDuplicate && (
+                      <Alert data-testid="banner-duplicate-source">
+                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                        <AlertTitle>Already read this one?</AlertTitle>
+                        <AlertDescription className="space-y-2">
+                          <p>{pendingDuplicate.message}</p>
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                createCase.mutate({
+                                  data: {
+                                    ...pendingDuplicate.payload,
+                                    allowDuplicate: true,
+                                  },
+                                })
+                              }
+                              disabled={createCase.isPending}
+                              data-testid="button-create-anyway"
+                            >
+                              {createCase.isPending
+                                ? "Reading…"
+                                : "Create anyway"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => setPendingDuplicate(null)}
+                              data-testid="button-cancel-duplicate"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
                 )}
                 {sortedCases.filter((c) => c.kind === "extraction").length ===
@@ -1017,9 +1159,27 @@ export function ClerkWorkspace() {
                       <Alert variant="destructive">
                         <AlertTriangle className="h-4 w-4" aria-hidden="true" />
                         <AlertTitle>Reading failed</AlertTitle>
-                        <AlertDescription>
-                          {selected.failReason ??
-                            "The Clerk could not read this document. Enter the invoice manually."}
+                        <AlertDescription className="space-y-2">
+                          <p>
+                            {selected.failReason ??
+                              "The Clerk could not read this document. Enter the invoice manually."}
+                          </p>
+                          {/* Retry re-runs extraction on the stored source —
+                              only failed extraction cases qualify (the server
+                              409s anything else). */}
+                          {selected.kind === "extraction" && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                retryCase.mutate({ id: selected.id })
+                              }
+                              disabled={retryCase.isPending}
+                              data-testid="button-retry-case"
+                            >
+                              {retryCase.isPending ? "Retrying…" : "Retry"}
+                            </Button>
+                          )}
                         </AlertDescription>
                       </Alert>
                     )}

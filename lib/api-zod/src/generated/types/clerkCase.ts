@@ -23,6 +23,8 @@ export interface ClerkCase {
   sourceText?: string | null;
   /** @nullable */
   sourceImageB64?: string | null;
+  /** @nullable */
+  sourceHash?: string | null;
   extraction?: ClerkExtraction | null;
   /** @nullable */
   question?: string | null;

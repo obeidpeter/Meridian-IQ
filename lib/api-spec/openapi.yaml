@@ -2340,6 +2340,24 @@ paths:
           $ref: "#/components/responses/NotFound"
 
 
+  /clerk/cases/{id}/retry:
+    post:
+      operationId: retryClerkCase
+      tags: [clerk]
+      summary: Re-run extraction on a failed case from its stored source
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The re-processed case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCase"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /clerk/cases/{id}/claim:
     post:
       operationId: claimClerkCase
@@ -5302,6 +5320,8 @@ components:
           type: string
         effectiveTo:
           type: ["string", "null"]
+        reviewDueAt:
+          type: ["string", "null"]
         createdBy:
           type: string
         submittedBy:
@@ -5344,6 +5364,8 @@ components:
           type: string
         effectiveTo:
           type: ["string", "null"]
+        reviewDueAt:
+          type: ["string", "null"]
     ClaimUpdateInput:
       type: object
       properties:
@@ -5365,6 +5387,8 @@ components:
         effectiveFrom:
           type: string
         effectiveTo:
+          type: ["string", "null"]
+        reviewDueAt:
           type: ["string", "null"]
     ClaimDecisionInput:
       type: object
@@ -5463,6 +5487,8 @@ components:
           type: ["string", "null"]
         sourceImageB64:
           type: ["string", "null"]
+        sourceHash:
+          type: ["string", "null"]
         extraction:
           anyOf:
             - $ref: "#/components/schemas/ClerkExtraction"
@@ -5521,6 +5547,8 @@ components:
           type: string
         audioBase64:
           type: string
+        allowDuplicate:
+          type: boolean
     ClerkCaseDecisionInput:
       type: object
       required: [action]
@@ -5574,7 +5602,7 @@ components:
           type: string
     ClerkMetrics:
       type: object
-      required: [windowDays, cases, inference, corrections, ask]
+      required: [windowDays, cases, inference, cost, corrections, ask]
       properties:
         windowDays:
           type: integer
@@ -5634,6 +5662,20 @@ components:
                     type: integer
                   latencyP95Ms:
                     type: ["integer", "null"]
+        cost:
+          type: object
+          required: [promptTokens, completionTokens, callsWithUsage]
+          properties:
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+            callsWithUsage:
+              type: integer
+            tokensPerDecidedCase:
+              type: ["number", "null"]
+            estimatedUsd:
+              type: ["number", "null"]
         corrections:
           type: array
           items:

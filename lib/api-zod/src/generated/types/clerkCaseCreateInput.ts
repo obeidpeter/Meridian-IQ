@@ -15,4 +15,5 @@ export interface ClerkCaseCreateInput {
   pdfBase64?: string;
   text?: string;
   audioBase64?: string;
+  allowDuplicate?: boolean;
 }

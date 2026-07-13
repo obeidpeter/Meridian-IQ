@@ -13,6 +13,8 @@ import {
   ClaimClerkCaseResponse,
   ReleaseClerkCaseParams,
   ReleaseClerkCaseResponse,
+  RetryClerkCaseParams,
+  RetryClerkCaseResponse,
   AskClerkBody,
   AskClerkResponse,
   GetClerkMetricsQueryParams,
@@ -26,6 +28,7 @@ import {
   getCase,
   decideCase,
   releaseCase,
+  retryExtraction,
 } from "../modules/clerk/cases";
 import { askClerk } from "../modules/clerk/ask";
 import { getClerkMetrics } from "../modules/clerk/metrics";
@@ -114,6 +117,22 @@ router.post("/clerk/cases/:id/release", async (req, res): Promise<void> => {
   }
   const row = await releaseCase(params.data.id, req.principal.userId);
   res.json(ReleaseClerkCaseResponse.parse(row));
+});
+
+router.post("/clerk/cases/:id/retry", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const params = RetryClerkCaseParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const gateway = await getClerkGateway();
+  const row = await retryExtraction(
+    params.data.id,
+    req.principal.userId,
+    gateway,
+  );
+  res.json(RetryClerkCaseResponse.parse(row));
 });
 
 router.get("/clerk/metrics", async (req, res): Promise<void> => {

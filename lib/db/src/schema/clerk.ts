@@ -76,6 +76,9 @@ export const claimRecordsTable = pgTable(
       .default({}),
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
+    // Governance freshness (CLK-KB-07): an active claim whose review date has
+    // passed is still visible in the register but can no longer answer.
+    reviewDueAt: date("review_due_at"),
     // Maker-checker lineage: the author (maker) of this version, who moved it
     // to review, and who approved/rejected it (checker; never the author).
     createdBy: uuid("created_by")
@@ -195,6 +198,9 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   sourceText: text("source_text"),
   // Base64 image payload (image sources). Excluded from list endpoints.
   sourceImageB64: text("source_image_b64"),
+  // sha256 of the exact source content (text/transcript/image bytes) —
+  // duplicate-intake detection without retaining a second copy.
+  sourceHash: text("source_hash"),
   extraction: jsonb("extraction").$type<ClerkExtraction>(),
   // --- question cases ---
   question: text("question"),
@@ -249,6 +255,9 @@ export const clerkInferenceCallsTable = pgTable("clerk_inference_calls", {
   outcome: clerkInferenceOutcomeEnum("outcome").notNull(),
   errorText: text("error_text"),
   latencyMs: integer("latency_ms"),
+  // Token usage where the provider reports it (CLK-NFR-04 cost-to-serve).
+  promptTokens: integer("prompt_tokens"),
+  completionTokens: integer("completion_tokens"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

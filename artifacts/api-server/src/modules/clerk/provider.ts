@@ -1,4 +1,9 @@
-import type { ClerkGateway, ClerkProvider, CompletionRequest } from "./gateway";
+import type {
+  ClerkGateway,
+  ClerkProvider,
+  CompletionRequest,
+  CompletionResult,
+} from "./gateway";
 import { createGateway } from "./gateway";
 
 // Production provider: OpenAI via the Replit AI integrations proxy. Kept in
@@ -15,7 +20,7 @@ async function buildProvider(): Promise<ClerkProvider> {
   );
   return {
     model: CLERK_MODEL,
-    async complete(req: CompletionRequest): Promise<string> {
+    async complete(req: CompletionRequest): Promise<CompletionResult> {
       const response = await openai.chat.completions.create({
         model: CLERK_MODEL,
         messages: [
@@ -34,7 +39,11 @@ async function buildProvider(): Promise<ClerkProvider> {
         },
         max_completion_tokens: 8192,
       });
-      return response.choices[0]?.message?.content ?? "";
+      return {
+        content: response.choices[0]?.message?.content ?? "",
+        promptTokens: response.usage?.prompt_tokens ?? null,
+        completionTokens: response.usage?.completion_tokens ?? null,
+      };
     },
   };
 }

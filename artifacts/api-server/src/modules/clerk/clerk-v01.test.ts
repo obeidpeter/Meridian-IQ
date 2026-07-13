@@ -53,6 +53,12 @@ const VALID_EXTRACTION = JSON.stringify({
 // never matters; only the ledger discipline around it does.
 const FAKE_AUDIO = Buffer.from("fake-audio-bytes").toString("base64");
 
+// Case rows persist across runs of the shared database, and the v0.3
+// duplicate-document guard hashes the retained source (for voice, the
+// transcript) — salt per run so a previous run's live case never collides.
+const RUN_SALT = `${Date.now()}-${process.pid}`;
+const TRANSCRIPT = `I sold goods to Chukwuma Stores, invoice INV-77, today. Ref ${RUN_SALT}.`;
+
 before(async () => {
   const db = getDb();
   const [flag] = await db
@@ -93,16 +99,13 @@ test("voice intake transcribes, extracts, and keeps only the transcript", async 
     },
     actorId,
     gateway,
-    async () => "I sold goods to Chukwuma Stores, invoice INV-77, today.",
+    async () => TRANSCRIPT,
   );
 
   assert.equal(kase.status, "extracted");
   assert.equal(kase.sourceType, "voice");
   // OPEN-8 minimisation: the transcript is the retained source; no audio.
-  assert.equal(
-    kase.sourceText,
-    "I sold goods to Chukwuma Stores, invoice INV-77, today.",
-  );
+  assert.equal(kase.sourceText, TRANSCRIPT);
   assert.equal(kase.sourceImageB64, null);
   assert.ok(kase.extraction);
   assert.equal(
@@ -184,7 +187,7 @@ test("metrics aggregate cases and the inference ledger", async () => {
   // Guarantee at least one extraction case and its ledger rows exist.
   const gateway = fakeGateway(() => VALID_EXTRACTION);
   await createExtractionCase(
-    { sourceType: "text", text: "Invoice INV-88 to someone, NGN 100" },
+    { sourceType: "text", text: `Invoice INV-88 to someone, NGN 100 ${RUN_SALT}` },
     actorId,
     gateway,
   );

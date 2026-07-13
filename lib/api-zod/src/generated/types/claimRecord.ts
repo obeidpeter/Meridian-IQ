@@ -22,6 +22,8 @@ export interface ClaimRecord {
   effectiveFrom: string;
   /** @nullable */
   effectiveTo?: string | null;
+  /** @nullable */
+  reviewDueAt?: string | null;
   createdBy: string;
   /** @nullable */
   submittedBy?: string | null;
