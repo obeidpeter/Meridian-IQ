@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.3.0
+  version: 0.4.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -510,6 +510,48 @@ paths:
                 $ref: "#/components/schemas/InvoiceDetail"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /invoices/export:
+    get:
+      operationId: exportInvoicesCsv
+      tags: [invoices]
+      summary: Download the tenant-scoped invoice list as CSV
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 120
+      responses:
+        "200":
+          description: CSV file (Content-Disposition attachment)
+          content:
+            text/csv:
+              schema:
+                type: string
+  /dashboard/receivables/export:
+    get:
+      operationId: exportReceivablesCsv
+      tags: [sme]
+      summary: Download the client's outstanding receivables with aging as CSV
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: CSV file (Content-Disposition attachment)
+          content:
+            text/csv:
+              schema:
+                type: string
   /invoices/bulk-submit:
     post:
       operationId: bulkSubmitInvoices
@@ -1757,6 +1799,28 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /reconciliation/statements/{id}/bulk-accept:
+    post:
+      operationId: bulkAcceptMatchProposals
+      tags: [reconciliation]
+      summary: Accept all of a statement's pending high-confidence proposals
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkAcceptInput"
+      responses:
+        "200":
+          description: Per-proposal outcomes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkAcceptResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /reconciliation/proposals/{id}/reject:
     post:
       operationId: rejectMatchProposal
@@ -4065,6 +4129,40 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InvoiceImportRow"
+    BulkAcceptInput:
+      type: object
+      properties:
+        threshold:
+          type: number
+          minimum: 0.5
+          maximum: 1
+    BulkAcceptResult:
+      type: object
+      required: [total, acceptedCount, failedCount, rows]
+      properties:
+        total:
+          type: integer
+        acceptedCount:
+          type: integer
+        failedCount:
+          type: integer
+        rows:
+          type: array
+          items:
+            type: object
+            required: [proposalId, invoiceId, confidence, outcome, error]
+            properties:
+              proposalId:
+                type: string
+              invoiceId:
+                type: string
+              confidence:
+                type: string
+              outcome:
+                type: string
+                enum: [accepted, failed]
+              error:
+                type: ["string", "null"]
     BulkSubmitInput:
       type: object
       required: [clientPartyId]

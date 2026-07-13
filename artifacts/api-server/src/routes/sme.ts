@@ -14,6 +14,7 @@ import {
   GetDashboardSummaryResponse,
   GetReceivablesSummaryQueryParams,
   GetReceivablesSummaryResponse,
+  ExportReceivablesCsvQueryParams,
   ImportInvoicesBody,
   ImportInvoicesResponse,
   GetComplianceCalendarQueryParams,
@@ -39,7 +40,11 @@ import {
   type Principal,
 } from "../modules/auth/rbac";
 import { createDraft, bulkCreateDrafts, getInvoiceWithLines } from "../modules/invoice/service";
-import { getReceivablesSummary } from "../modules/invoice/receivables";
+import {
+  getReceivablesSummary,
+  listOutstandingReceivables,
+} from "../modules/invoice/receivables";
+import { toCsv } from "../lib/csv";
 import { isFeatureEnabled } from "../modules/flags/flags";
 import { openBatchesFor } from "../modules/b2c/service";
 import { sendMessage } from "../modules/messaging/messaging";
@@ -326,6 +331,54 @@ router.get("/dashboard/receivables", async (req, res): Promise<void> => {
   const summary = await getReceivablesSummary(clientPartyId, tenant);
   res.json(GetReceivablesSummaryResponse.parse(summary));
 });
+
+// CSV download of the per-invoice rows behind the aging summary — the file a
+// collections call or external accountant works from. Same access posture.
+router.get(
+  "/dashboard/receivables/export",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.read");
+    const query = ExportReceivablesCsvQueryParams.safeParse(req.query);
+    if (!query.success) {
+      res.status(400).json({ error: query.error.message });
+      return;
+    }
+    const clientPartyId = query.data.clientPartyId;
+    await assertPartyAccess(req.principal, clientPartyId);
+    const tenant = tenantFirmId(req.principal);
+    const rows = await listOutstandingReceivables(clientPartyId, tenant);
+    const csv = toCsv(
+      [
+        "invoiceNumber",
+        "buyer",
+        "issueDate",
+        "dueDate",
+        "ageDays",
+        "bucket",
+        "currency",
+        "outstanding",
+        "status",
+      ],
+      rows.map((r) => [
+        r.invoiceNumber,
+        r.buyerName,
+        r.issueDate,
+        r.dueDate,
+        r.ageDays,
+        r.bucket,
+        r.currency,
+        r.grandTotal,
+        r.status,
+      ]),
+    );
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="receivables-${new Date().toISOString().slice(0, 10)}.csv"`,
+    );
+    res.send(csv);
+  },
+);
 
 router.get("/compliance/calendar", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");

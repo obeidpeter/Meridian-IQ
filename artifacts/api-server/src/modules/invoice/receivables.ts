@@ -157,3 +157,75 @@ export async function getReceivablesSummary(
     })),
   };
 }
+
+// Per-invoice detail behind the aging summary — the rows an accountant or
+// collections call actually works from. Same outstanding definition, one row
+// per invoice, oldest reference date first.
+export interface ReceivableRow {
+  invoiceNumber: string;
+  buyerName: string;
+  issueDate: string;
+  dueDate: string | null;
+  ageDays: number;
+  bucket: string;
+  currency: string;
+  grandTotal: string;
+  status: string;
+}
+
+export async function listOutstandingReceivables(
+  clientPartyId: string,
+  firmId: string | null,
+): Promise<ReceivableRow[]> {
+  const firmCond = firmId ? sql`AND i.firm_id = ${firmId}` : sql``;
+  const rows = (
+    await getDb().execute(sql`
+      SELECT
+        i.invoice_number,
+        p.legal_name,
+        i.issue_date::text AS issue_date,
+        i.due_date::text AS due_date,
+        (current_date - COALESCE(i.due_date, i.issue_date))::int AS age_days,
+        CASE
+          WHEN current_date - COALESCE(i.due_date, i.issue_date) <= 30
+            THEN 'current'
+          WHEN current_date - COALESCE(i.due_date, i.issue_date) <= 60
+            THEN '31-60'
+          WHEN current_date - COALESCE(i.due_date, i.issue_date) <= 90
+            THEN '61-90'
+          ELSE '90+'
+        END AS bucket,
+        i.currency,
+        i.grand_total::text AS grand_total,
+        i.status
+      FROM invoices i
+      JOIN parties p ON p.id = i.buyer_party_id
+      WHERE ${OUTSTANDING}
+        AND i.supplier_party_id = ${clientPartyId}
+        ${firmCond}
+      ORDER BY COALESCE(i.due_date, i.issue_date) ASC
+      LIMIT 50000
+    `)
+  ).rows as {
+    invoice_number: string;
+    legal_name: string;
+    issue_date: string;
+    due_date: string | null;
+    age_days: number;
+    bucket: string;
+    currency: string;
+    grand_total: string;
+    status: string;
+  }[];
+  return rows.map((r) => ({
+    invoiceNumber: r.invoice_number,
+    buyerName: r.legal_name,
+    issueDate: r.issue_date,
+    dueDate: r.due_date,
+    ageDays: r.age_days,
+    bucket: r.bucket,
+    currency: r.currency,
+    grandTotal: r.grand_total,
+    status: r.status,
+  }));
+}

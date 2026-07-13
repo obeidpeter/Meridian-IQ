@@ -7,6 +7,7 @@ import {
   useListBankStatementProposals,
   useAcceptMatchProposal,
   useRejectMatchProposal,
+  useBulkAcceptMatchProposals,
   getListBankStatementsQueryKey,
   getListBankStatementProposalsQueryKey,
   type StatementImportResult,
@@ -74,6 +75,7 @@ export function Reconciliation() {
   const importMut = useImportBankStatement();
   const accept = useAcceptMatchProposal();
   const reject = useRejectMatchProposal();
+  const bulkAccept = useBulkAcceptMatchProposals();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [csv, setCsv] = useState("");
@@ -81,6 +83,10 @@ export function Reconciliation() {
   const [report, setReport] = useState<StatementImportResult | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [decidingId, setDecidingId] = useState<string | null>(null);
+  // "Accept all" confirm step: the first click arms the button for exactly one
+  // statement, the second fires. Keyed by statement id so switching statements
+  // can never fire a stale confirm against the newly selected one.
+  const [bulkArmedId, setBulkArmedId] = useState<string | null>(null);
 
   const {
     data: statements,
@@ -124,6 +130,21 @@ export function Reconciliation() {
           : false,
     },
   });
+
+  const bulkArmed = !!selectedId && bulkArmedId === selectedId;
+
+  // Statement lines with a pending proposal at/above the server's default 0.85
+  // threshold. Bulk accept takes at most the best proposal per line, so the
+  // count is per line — not per proposal — to keep the button label honest.
+  const bulkEligibleCount = useMemo(() => {
+    const lines = new Set<string>();
+    (proposals ?? []).forEach((p) => {
+      if (p.status === "proposed" && Number(p.confidence) >= 0.85) {
+        lines.add(p.statementLineId);
+      }
+    });
+    return lines.size;
+  }, [proposals]);
 
   const csvLines = useMemo(
     () =>
@@ -220,6 +241,43 @@ export function Reconciliation() {
       });
     } finally {
       setDecidingId(null);
+    }
+  };
+
+  // Accepts the best pending proposal per statement line at/above the server's
+  // default threshold, through the same accept path as the per-row button. A
+  // failed row usually means the invoice was already settled (possible
+  // duplicate payment) — those stay pending for a human decision.
+  const runBulkAccept = async () => {
+    if (!selectedId) return;
+    if (!bulkArmed) {
+      setBulkArmedId(selectedId);
+      return;
+    }
+    setBulkArmedId(null);
+    try {
+      const res = await bulkAccept.mutateAsync({ id: selectedId });
+      // Not awaited: a background refetch rejection must not surface as a false
+      // "could not accept" error after the decisions already recorded.
+      queryClient.invalidateQueries({
+        queryKey: getListBankStatementsQueryKey({ clientPartyId }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getListBankStatementProposalsQueryKey(selectedId || ""),
+      });
+      toast({
+        title: `Accepted ${res.acceptedCount} of ${res.total} matches`,
+        description:
+          res.failedCount > 0
+            ? `${res.failedCount} could not be accepted — likely already-settled invoices; review them below.`
+            : undefined,
+      });
+    } catch (e) {
+      toast({
+        title: "Could not accept matches",
+        description: e instanceof Error ? e.message : "Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -464,6 +522,21 @@ export function Reconciliation() {
                   Accepting a match records a settlement against the invoice and marks it as
                   settled. Rejecting keeps the invoice outstanding.
                 </p>
+                {bulkEligibleCount > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={runBulkAccept}
+                    disabled={bulkAccept.isPending || decidingId !== null}
+                    data-testid="button-bulk-accept"
+                  >
+                    <Check className="w-4 h-4 mr-1" aria-hidden="true" />
+                    {bulkAccept.isPending
+                      ? "Accepting…"
+                      : bulkArmed
+                        ? "Click again to confirm"
+                        : `Accept all ≥ 85% (${bulkEligibleCount})`}
+                  </Button>
+                )}
                 {proposalsLoading ? (
                   <div className="space-y-3">
                     <Skeleton className="h-16" />

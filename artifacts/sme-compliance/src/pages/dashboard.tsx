@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
+  Download,
   FileText,
   Activity,
   Wallet,
@@ -109,20 +110,43 @@ function ReceivablesCard({
   summary,
   isLoading,
   isError,
+  clientPartyId,
   onRetry,
 }: {
   summary: ReceivablesSummary | undefined;
   isLoading: boolean;
   isError: boolean;
+  clientPartyId: string;
   onRetry: () => void;
 }) {
   const primary = summary?.groups[0];
+
+  // CSV of the per-invoice rows behind this aging summary, as a plain browser
+  // navigation (no query hook): the endpoint answers with a Content-Disposition
+  // attachment and auth rides the session cookie.
+  const exportCsv = () => {
+    window.location.assign(
+      `/api/dashboard/receivables/export?clientPartyId=${encodeURIComponent(clientPartyId)}`,
+    );
+  };
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="flex items-center gap-2">
           <Wallet className="w-5 h-5" aria-hidden="true" /> Receivables
         </CardTitle>
+        {!!clientPartyId && !!primary && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={exportCsv}
+            data-testid="button-export-receivables-csv"
+          >
+            <Download className="w-4 h-4 mr-1.5" aria-hidden="true" />
+            Export CSV
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -415,6 +439,7 @@ export function Dashboard() {
                 summary={receivables}
                 isLoading={receivablesLoading}
                 isError={receivablesError}
+                clientPartyId={me?.clientPartyId || ""}
                 onRetry={() => refetchReceivables()}
               />
             </div>

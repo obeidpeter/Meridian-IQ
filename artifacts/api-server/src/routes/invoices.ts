@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   getDb,
   invoicesTable,
@@ -17,6 +17,7 @@ import {
   CreateInvoiceResponse,
   BulkSubmitInvoicesBody,
   BulkSubmitInvoicesResponse,
+  ExportInvoicesCsvQueryParams,
   GetInvoiceParams,
   GetInvoiceResponse,
   UpdateInvoiceParams,
@@ -64,6 +65,7 @@ import {
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { bulkSubmit } from "../modules/invoice/bulk-submit";
+import { toCsv } from "../lib/csv";
 import {
   createDraft,
   getInvoiceWithLines,
@@ -164,6 +166,93 @@ router.post("/invoices", async (req, res): Promise<void> => {
     req.principal.userId,
   );
   res.status(201).json(CreateInvoiceResponse.parse(bundle));
+});
+
+// CSV export of the same tenant/SEC-03/status/q-scoped list the invoices page
+// shows — the rows the caller can already read, in a file their accountant
+// can open. Newest first, bounded far above any realistic book.
+router.get("/invoices/export", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = ExportInvoicesCsvQueryParams.safeParse(req.query);
+  const status = query.success ? query.data.status : undefined;
+  const q = query.success ? query.data.q?.trim() : undefined;
+  const tenant = tenantFirmId(req.principal);
+  const conditions = [];
+  if (tenant) conditions.push(eq(invoicesTable.firmId, tenant));
+  const scope = clientPartyScope(req.principal);
+  if (scope) conditions.push(eq(invoicesTable.supplierPartyId, scope));
+  if (status) conditions.push(eq(invoicesTable.status, status as never));
+  if (q) {
+    const pattern = likePattern(q);
+    conditions.push(sql`(
+      ${invoicesTable.invoiceNumber} ILIKE ${pattern}
+      OR EXISTS (
+        SELECT 1 FROM parties p
+        WHERE (p.id = ${invoicesTable.supplierPartyId}
+            OR p.id = ${invoicesTable.buyerPartyId})
+          AND p.legal_name ILIKE ${pattern}
+      )
+    )`);
+  }
+  const rows = await getDb()
+    .select()
+    .from(invoicesTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(invoicesTable.createdAt))
+    .limit(50_000);
+
+  const partyIds = [
+    ...new Set(rows.flatMap((r) => [r.supplierPartyId, r.buyerPartyId])),
+  ];
+  const names = new Map(
+    partyIds.length
+      ? (
+          await getDb()
+            .select({ id: partiesTable.id, legalName: partiesTable.legalName })
+            .from(partiesTable)
+            .where(inArray(partiesTable.id, partyIds))
+        ).map((p) => [p.id, p.legalName])
+      : [],
+  );
+
+  const csv = toCsv(
+    [
+      "invoiceNumber",
+      "kind",
+      "status",
+      "category",
+      "issueDate",
+      "dueDate",
+      "currency",
+      "subtotal",
+      "vatTotal",
+      "grandTotal",
+      "supplier",
+      "buyer",
+      "createdAt",
+    ],
+    rows.map((r) => [
+      r.invoiceNumber,
+      r.kind,
+      r.status,
+      r.category,
+      r.issueDate,
+      r.dueDate,
+      r.currency,
+      r.subtotal,
+      r.vatTotal,
+      r.grandTotal,
+      names.get(r.supplierPartyId) ?? r.supplierPartyId,
+      names.get(r.buyerPartyId) ?? r.buyerPartyId,
+      r.createdAt.toISOString(),
+    ]),
+  );
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="invoices-${new Date().toISOString().slice(0, 10)}.csv"`,
+  );
+  res.send(csv);
 });
 
 // Bulk validate & submit: same capability, party-access and consent gates as
