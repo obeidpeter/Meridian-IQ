@@ -12,10 +12,11 @@ import {
   auditEventsTable,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { DomainError } from "../errors.ts";
 import { recordConsent } from "../consent/consent.ts";
 import { createDraft, validateInvoice } from "./service.ts";
 import { bulkSubmit } from "./bulk-submit.ts";
+import { isDomainError } from "../../test-helpers/assertions.ts";
+import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Bulk validate & submit. The batch must behave exactly like N single
 // submits: consent gate up front, validation failures reported per row (and
@@ -23,7 +24,7 @@ import { bulkSubmit } from "./bulk-submit.ts";
 // batch bounded with an honest `remaining`. Fixtures are salted per run —
 // submitted invoices are immutable and persist in the shared database.
 
-const SALT = `${Date.now().toString(36)}${process.pid}`;
+const SALT = makeRunSalt();
 
 const firmId = randomUUID();
 const userId = randomUUID();
@@ -215,10 +216,7 @@ test("a supplier without layer-1 consent is refused up front", async () => {
   await draftFor(supplierNoConsent, buyer);
   await assert.rejects(
     bulkSubmit(supplierNoConsent, firmId, userId),
-    (e: unknown) =>
-      e instanceof DomainError &&
-      e.code === "CONSENT_REQUIRED" &&
-      e.status === 403,
+    isDomainError("CONSENT_REQUIRED", 403),
   );
   // The draft was never touched.
   const [row] = await getDb()

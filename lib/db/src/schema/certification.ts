@@ -12,13 +12,14 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { firmsTable, usersTable } from "./organizations.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // Certification portal with CPD content (CON-05). Deliberately minimal: courses
 // are platform content (seeded, operator-managed), enrollments are per firm
 // user, and a completion mints a certificate record with a verifiable serial.
 
 export const cpdCoursesTable = pgTable("cpd_courses", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   key: text("key").notNull().unique(),
   title: text("title").notNull(),
   summary: text("summary"),
@@ -28,13 +29,8 @@ export const cpdCoursesTable = pgTable("cpd_courses", {
   modules: jsonb("modules").$type<{ title: string; body: string }[]>(),
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 export const cpdEnrollmentStatusEnum = pgEnum("cpd_enrollment_status", [
@@ -45,7 +41,7 @@ export const cpdEnrollmentStatusEnum = pgEnum("cpd_enrollment_status", [
 export const cpdEnrollmentsTable = pgTable(
   "cpd_enrollments",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     courseId: uuid("course_id")
       .notNull()
       .references(() => cpdCoursesTable.id),
@@ -59,13 +55,8 @@ export const cpdEnrollmentsTable = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     // Verifiable certificate serial minted on completion.
     certificateSerial: text("certificate_serial"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow()
-      .$onUpdate(() => new Date()),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   // Firm-scoped uniqueness: enrollments (and their RLS) are per firm, and a
   // user holding memberships in two firms earns CPD in each independently. A

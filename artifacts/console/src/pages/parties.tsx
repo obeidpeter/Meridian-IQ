@@ -9,6 +9,7 @@ import type { ListPartiesParams, Party } from "@workspace/api-client-react";
 import { humanize } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatTile } from "@/components/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -297,22 +298,19 @@ export function Parties() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card data-testid="stat-parties">
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">Live parties</p>
-                <p className="text-2xl font-bold mt-1 tabular-nums">
-                  {live.length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card data-testid="stat-validated">
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">TIN validated</p>
-                <p className="text-2xl font-bold mt-1 tabular-nums text-emerald-700 dark:text-emerald-400">
-                  {live.length - unvalidated.length}
-                </p>
-              </CardContent>
-            </Card>
+            <StatTile
+              label="Live parties"
+              value={live.length}
+              testId="stat-parties"
+            />
+            <StatTile
+              label="TIN validated"
+              value={live.length - unvalidated.length}
+              tone="success"
+              testId="stat-validated"
+            />
+            {/* amber-600 is a deliberate shade choice here — not the shared
+                tone map's amber-700 — so this tile stays inline. */}
             <Card data-testid="stat-unvalidated">
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">Unvalidated TIN</p>
@@ -321,16 +319,11 @@ export function Parties() {
                 </p>
               </CardContent>
             </Card>
-            <Card data-testid="stat-dup-groups">
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">
-                  Duplicate groups
-                </p>
-                <p className="text-2xl font-bold mt-1 tabular-nums">
-                  {groups.length}
-                </p>
-              </CardContent>
-            </Card>
+            <StatTile
+              label="Duplicate groups"
+              value={groups.length}
+              testId="stat-dup-groups"
+            />
           </div>
           <Card data-testid="card-duplicates">
             <CardHeader>

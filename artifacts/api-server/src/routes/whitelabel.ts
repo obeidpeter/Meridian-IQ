@@ -15,7 +15,7 @@ import {
   assertSameTenant,
   tenantFirmId,
 } from "../modules/auth/rbac";
-import { isFeatureEnabled } from "../modules/flags/flags";
+import { requireFlag } from "../modules/flags/flags";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
 import { validateTin, validateCac } from "../modules/party/party";
@@ -27,13 +27,9 @@ import { validateTin, validateCac } from "../modules/party/party";
 const router: IRouter = Router();
 
 // Public branding resolution: the app shell needs the theme before any login,
-// so this endpoint is on the PUBLIC_PATHS allowlist and returns branding only —
-// never tenant data.
-router.get("/public/theme", async (req, res): Promise<void> => {
-  if (!(await isFeatureEnabled("white_label", null))) {
-    res.sendStatus(404);
-    return;
-  }
+// so this endpoint is on the PUBLIC_PATHS allowlist (no principal — the flag
+// is evaluated globally) and returns branding only — never tenant data.
+router.get("/public/theme", requireFlag("white_label", { global: true }), async (req, res): Promise<void> => {
   const query = GetPublicThemeQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
@@ -56,11 +52,7 @@ router.get("/public/theme", async (req, res): Promise<void> => {
   res.json(GetPublicThemeResponse.parse(firm));
 });
 
-router.put("/firms/:id/theme", async (req, res): Promise<void> => {
-  if (!(await isFeatureEnabled("white_label", req.principal.firmId))) {
-    res.sendStatus(404);
-    return;
-  }
+router.put("/firms/:id/theme", requireFlag("white_label"), async (req, res): Promise<void> => {
   assertCan(req.principal, "theme.write");
   const params = UpdateFirmThemeParams.safeParse(req.params);
   if (!params.success) {
@@ -122,11 +114,7 @@ router.put("/firms/:id/theme", async (req, res): Promise<void> => {
 // client parties plus engagements (the engagement is what places the client in
 // the firm's tenant boundary — see assertPartyAccess). Validate-then-commit
 // with per-row results, mirroring the invoice-import contract.
-router.post("/clients/import", async (req, res): Promise<void> => {
-  if (!(await isFeatureEnabled("white_label", req.principal.firmId))) {
-    res.sendStatus(404);
-    return;
-  }
+router.post("/clients/import", requireFlag("white_label"), async (req, res): Promise<void> => {
   assertCan(req.principal, "clients.import");
   const firmId = tenantFirmId(req.principal);
   if (!firmId) {

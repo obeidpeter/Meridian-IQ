@@ -491,13 +491,39 @@ export function Divider() {
 }
 
 /**
- * Web-only insets. Native safe areas are handled by SafeAreaView/insets;
- * on web we add a top status-bar allowance and a bottom allowance per the
- * expo skill guidance.
+ * Per-screen Stack.Screen header options — identical across screens except
+ * for the title. Takes the caller's already-subscribed theme colors so the
+ * header stays reactive to theme changes.
  */
-export const webInsets = {
-  top: Platform.OS === "web" ? 67 : 0,
-  bottom: Platform.OS === "web" ? 34 : 0,
+export function stackHeaderOptions(colors: ThemeColors, title: string) {
+  return {
+    title,
+    headerStyle: { backgroundColor: colors.background },
+    headerShadowVisible: false,
+    headerTitleStyle: {
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+    },
+    headerTintColor: colors.primary,
+  } as const;
+}
+
+/**
+ * Web-only content width cap so screens don't stretch edge-to-edge in a
+ * browser. Spread into a screen's content-container style. Platform.OS is
+ * fixed at module load, so hoisting the conditional here is behavior-identical
+ * to the per-file conditionals it replaces.
+ */
+export const webContentMax: ViewStyle =
+  Platform.OS === "web"
+    ? { maxWidth: 640, alignSelf: "center", width: "100%" }
+    : {};
+
+/** A row with its children pushed to opposite edges, vertically centered. */
+export const rowBetween: ViewStyle = {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
 };
 
 const styles = StyleSheet.create({

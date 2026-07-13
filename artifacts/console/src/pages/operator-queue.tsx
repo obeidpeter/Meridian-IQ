@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QueryError } from "@/components/query-error";
+import { StatTile } from "@/components/stat-tile";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { isForbidden } from "@/lib/errors";
@@ -170,31 +171,6 @@ function CaseCard({
   );
 }
 
-function StatTile({
-  label,
-  value,
-  loading,
-  "data-testid": testId,
-}: {
-  label: string;
-  value: string;
-  loading: boolean;
-  "data-testid": string;
-}) {
-  return (
-    <Card data-testid={testId}>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        {loading ? (
-          <Skeleton className="h-8 w-16 mt-1" />
-        ) : (
-          <p className="text-2xl font-bold mt-1 tabular-nums">{value}</p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 export function OperatorQueue() {
   usePageTitle("Operator queue");
   const [status, setStatus] = useState<ListOperatorCasesStatus>("open");
@@ -307,31 +283,31 @@ export function OperatorQueue() {
           label="Open"
           value={String(stats?.openCount ?? "—")}
           loading={statsLoading}
-          data-testid="stat-open"
+          testId="stat-open"
         />
         <StatTile
           label="In progress"
           value={String(stats?.inProgressCount ?? "—")}
           loading={statsLoading}
-          data-testid="stat-in-progress"
+          testId="stat-in-progress"
         />
         <StatTile
           label="Resolved"
           value={String(stats?.resolvedCount ?? "—")}
           loading={statsLoading}
-          data-testid="stat-resolved"
+          testId="stat-resolved"
         />
         <StatTile
           label="Clients served"
           value={String(stats?.clientsServed ?? "—")}
           loading={statsLoading}
-          data-testid="stat-clients-served"
+          testId="stat-clients-served"
         />
         <StatTile
           label="Avg handle time"
           value={formatDuration(stats?.avgHandleSeconds)}
           loading={statsLoading}
-          data-testid="stat-avg-handle"
+          testId="stat-avg-handle"
         />
       </div>
 

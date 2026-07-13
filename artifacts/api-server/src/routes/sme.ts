@@ -52,21 +52,20 @@ import { sendPushAlert } from "../modules/push/push";
 import { appendAudit } from "../modules/audit/audit";
 import { openInvoiceCase } from "../modules/desk/cases";
 import { DomainError } from "../modules/errors";
+import {
+  daysUntil,
+  isStamped,
+  isUnsubmitted,
+  penaltyRisk as computePenaltyRisk,
+  submissionDeadline,
+} from "../modules/invoice/compliance-window";
 
 const router: IRouter = Router();
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-// SMEs must submit an issued invoice for stamping within this window; past it the
-// invoice is on penalty watch (SME-05).
-const SUBMISSION_WINDOW_DAYS = 7;
 // Hard cap on a single import (NFR-03 budgets ~5,000 rows). Bounds the work a
 // single authenticated request can do inside one DB transaction (SEC-M3); the
 // 8mb body limit alone would otherwise admit tens of thousands of rows.
 const MAX_IMPORT_ROWS = 5000;
-
-function daysUntil(target: Date, from: Date): number {
-  return Math.floor((target.getTime() - from.getTime()) / DAY_MS);
-}
 
 type Deadline = {
   id: string;
@@ -153,9 +152,8 @@ function computeDeadlines(
   // Per-invoice submission deadlines: unsubmitted invoices approaching or past
   // their submission window.
   for (const inv of invoices) {
-    if (inv.status !== "draft" && inv.status !== "validated") continue;
-    const submitBy = new Date(new Date(inv.issueDate).getTime());
-    submitBy.setUTCDate(submitBy.getUTCDate() + SUBMISSION_WINDOW_DAYS);
+    if (!isUnsubmitted(inv.status)) continue;
+    const submitBy = submissionDeadline(inv.issueDate);
     const days = daysUntil(submitBy, now);
     const overdue = days < 0;
     deadlines.push({
@@ -203,11 +201,6 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
   const tenant = tenantFirmId(req.principal);
   const invoices = await loadClientInvoices(clientPartyId, tenant);
 
-  const isUnsubmitted = (s: Invoice["status"]) =>
-    s === "draft" || s === "validated";
-  const isStamped = (s: Invoice["status"]) =>
-    s === "stamped" || s === "confirmed" || s === "settled";
-
   let draftCount = 0;
   let pendingCount = 0;
   let stampedCount = 0;
@@ -239,12 +232,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
   const upcoming = deadlines.filter((d) => d.status !== "met");
   const nextDeadline = upcoming[0] ?? null;
   const atRiskCount = overdue.length + failedCount;
-  const penaltyRisk =
-    overdue.length > 0 || failedCount > 1
-      ? "high"
-      : failedCount > 0 || deadlines.some((d) => d.status === "due_soon")
-        ? "medium"
-        : "low";
+  const dueSoon = deadlines.some((d) => d.status === "due_soon");
+  const penaltyRisk = computePenaltyRisk(overdue.length, failedCount, dueSoon);
 
   const activityKind = (s: Invoice["status"]) =>
     isUnsubmitted(s)

@@ -2,13 +2,13 @@ import {
   pgTable,
   uuid,
   text,
-  timestamp,
   integer,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { partiesTable } from "./parties.ts";
+import { createdAt, id } from "./columns.ts";
 
 // Three-layer consent architecture (Plan 7.2, C6):
 //   layer 1 = compliance (required)
@@ -19,7 +19,7 @@ import { partiesTable } from "./parties.ts";
 export const consentActionEnum = pgEnum("consent_action", ["grant", "revoke"]);
 
 export const consentRecordsTable = pgTable("consent_records", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   partyId: uuid("party_id")
     .notNull()
     .references(() => partiesTable.id),
@@ -28,9 +28,7 @@ export const consentRecordsTable = pgTable("consent_records", {
   scope: text("scope").notNull(),
   basis: text("basis").notNull(),
   channel: text("channel").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export const insertConsentRecordSchema = createInsertSchema(

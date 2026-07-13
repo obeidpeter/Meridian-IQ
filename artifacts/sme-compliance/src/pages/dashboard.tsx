@@ -9,6 +9,7 @@ import type { ReceivablesBucket, ReceivablesSummary } from "@workspace/api-clien
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -304,19 +305,14 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-            Compliance overview
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Stay ahead of your filing deadlines.
-          </p>
-        </div>
+      <PageHeader
+        title="Compliance overview"
+        description="Stay ahead of your filing deadlines."
+      >
         <Button asChild>
           <Link href="/invoices/new">New invoice</Link>
         </Button>
-      </div>
+      </PageHeader>
 
       <RequireClientScope thing="compliance summary">
         {isLoading ? (

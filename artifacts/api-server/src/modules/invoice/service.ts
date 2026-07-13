@@ -28,6 +28,7 @@ import {
   money,
   type LineInput,
 } from "./lines";
+import { computeLinesWithTotals, type ComputedLine } from "./line-totals";
 
 export { computeLineFinancials, type LineInput };
 
@@ -51,19 +52,12 @@ export interface CreateInvoiceInput {
 // non-terminal) invoices (CORE-09).
 const ADJUSTABLE_STATUSES = ["stamped", "confirmed", "settled"];
 
-export async function createDraft(
+// Corrections, cancellations and credit notes are first-class lifecycle
+// events (CORE-09): an adjustment must name a real, same-tenant, stamped
+// original; a plain invoice must not carry a relatedInvoiceId.
+async function assertAdjustmentRulesSatisfied(
   input: CreateInvoiceInput,
-  actorId?: string,
-): Promise<{ invoice: Invoice; lines: InvoiceLine[] }> {
-  if (input.lines.length === 0) {
-    throw new DomainError("NO_LINES", "An invoice needs at least one line", 400);
-  }
-  // Reject percent-style VAT rates before any row is written: a "7.5" that
-  // should have been "0.075" would otherwise create a 100x-inflated draft.
-  assertPlausibleVatRates(input.lines);
-  // Corrections, cancellations and credit notes are first-class lifecycle
-  // events (CORE-09): an adjustment must name a real, same-tenant, stamped
-  // original; a plain invoice must not carry a relatedInvoiceId.
+): Promise<void> {
   const kind = input.kind ?? "invoice";
   if (kind === "credit_note" || kind === "correction") {
     if (!input.relatedInvoiceId) {
@@ -126,15 +120,40 @@ export async function createDraft(
       400,
     );
   }
-  let subtotal = 0;
-  let vatTotal = 0;
-  const computed = input.lines.map((l, idx) => {
-    const fin = computeLineFinancials(l);
-    subtotal += Number(fin.lineExtension);
-    vatTotal += Number(fin.vatAmount);
-    return { ...l, ...fin, lineNo: idx + 1 };
-  });
-  const grandTotal = subtotal + vatTotal;
+}
+
+// Map computed lines to invoice_lines insert rows. Shared by createDraft and
+// updateInvoiceContent; bulkCreateDrafts keeps its own single-line row shape.
+function toLineRows(
+  invoiceId: string,
+  computed: ComputedLine[],
+): (typeof invoiceLinesTable.$inferInsert)[] {
+  return computed.map((c) => ({
+    invoiceId,
+    lineNo: c.lineNo,
+    description: c.description,
+    quantity: c.quantity,
+    unitPrice: c.unitPrice,
+    vatRate: c.vatRate,
+    lineExtension: c.lineExtension,
+    vatAmount: c.vatAmount,
+  }));
+}
+
+export async function createDraft(
+  input: CreateInvoiceInput,
+  actorId?: string,
+): Promise<{ invoice: Invoice; lines: InvoiceLine[] }> {
+  if (input.lines.length === 0) {
+    throw new DomainError("NO_LINES", "An invoice needs at least one line", 400);
+  }
+  // Reject percent-style VAT rates before any row is written: a "7.5" that
+  // should have been "0.075" would otherwise create a 100x-inflated draft.
+  assertPlausibleVatRates(input.lines);
+  await assertAdjustmentRulesSatisfied(input);
+  const { computed, subtotal, vatTotal, grandTotal } = computeLinesWithTotals(
+    input.lines,
+  );
 
   const [invoice] = await getDb()
     .insert(invoicesTable)
@@ -157,18 +176,7 @@ export async function createDraft(
     .returning();
   const lines = await getDb()
     .insert(invoiceLinesTable)
-    .values(
-      computed.map((c) => ({
-        invoiceId: invoice.id,
-        lineNo: c.lineNo,
-        description: c.description,
-        quantity: c.quantity,
-        unitPrice: c.unitPrice,
-        vatRate: c.vatRate,
-        lineExtension: c.lineExtension,
-        vatAmount: c.vatAmount,
-      })),
-    )
+    .values(toLineRows(invoice.id, computed))
     .returning();
   await recordTransition({
     invoiceId: invoice.id,
@@ -325,34 +333,18 @@ export async function updateInvoiceContent(
 
   let newLines = bundle.lines;
   if (patch.lines) {
-    let subtotal = 0;
-    let vatTotal = 0;
-    const computed = patch.lines.map((l, idx) => {
-      const fin = computeLineFinancials(l);
-      subtotal += Number(fin.lineExtension);
-      vatTotal += Number(fin.vatAmount);
-      return { ...l, ...fin, lineNo: idx + 1 };
-    });
+    const { computed, subtotal, vatTotal, grandTotal } = computeLinesWithTotals(
+      patch.lines,
+    );
     invoicePatch.subtotal = money(subtotal);
     invoicePatch.vatTotal = money(vatTotal);
-    invoicePatch.grandTotal = money(subtotal + vatTotal);
+    invoicePatch.grandTotal = money(grandTotal);
     await getDb()
       .delete(invoiceLinesTable)
       .where(eq(invoiceLinesTable.invoiceId, invoiceId));
     newLines = await getDb()
       .insert(invoiceLinesTable)
-      .values(
-        computed.map((c) => ({
-          invoiceId,
-          lineNo: c.lineNo,
-          description: c.description,
-          quantity: c.quantity,
-          unitPrice: c.unitPrice,
-          vatRate: c.vatRate,
-          lineExtension: c.lineExtension,
-          vatAmount: c.vatAmount,
-        })),
-      )
+      .values(toLineRows(invoiceId, computed))
       .returning();
   }
 

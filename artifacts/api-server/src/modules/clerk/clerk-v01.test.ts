@@ -1,22 +1,17 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
-import {
-  getDb,
-  featureFlagsTable,
-  usersTable,
-  clerkInferenceCallsTable,
-} from "@workspace/db";
-import { DomainError } from "../errors.ts";
-import {
-  createGateway,
-  CLERK_FLAG_KEY,
-  sha256,
-  type ClerkGateway,
-  type ClerkProvider,
-} from "./gateway.ts";
+import { getDb, usersTable, clerkInferenceCallsTable } from "@workspace/db";
+import { sha256 } from "./gateway.ts";
 import { createExtractionCase } from "./cases.ts";
 import { getClerkMetrics } from "./metrics.ts";
+import { isDomainError } from "../../test-helpers/assertions.ts";
+import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import {
+  saveAndEnableClerkFlag,
+  restoreClerkFlag,
+  fakeGateway,
+} from "./test-support.ts";
 
 // Clerk v0.1 additions: voice-note intake (C1 "English voice transcription")
 // and the operational-metrics aggregation (CLK-OBS-04). Same conventions as
@@ -25,16 +20,6 @@ import { getClerkMetrics } from "./metrics.ts";
 
 const FAKE_MODEL = "fake-model-test";
 const actorId = "cccc0006-0000-4000-8000-00000000cc06";
-
-let flagWasEnabled: boolean | null = null;
-
-function fakeGateway(respond: () => string | Promise<string>): ClerkGateway {
-  const provider: ClerkProvider = {
-    model: FAKE_MODEL,
-    complete: async () => respond(),
-  };
-  return createGateway(provider);
-}
 
 // A minimal valid extraction the fake model returns.
 const VALID_EXTRACTION = JSON.stringify({
@@ -56,41 +41,23 @@ const FAKE_AUDIO = Buffer.from("fake-audio-bytes").toString("base64");
 // Case rows persist across runs of the shared database, and the v0.3
 // duplicate-document guard hashes the retained source (for voice, the
 // transcript) — salt per run so a previous run's live case never collides.
-const RUN_SALT = `${Date.now()}-${process.pid}`;
+const RUN_SALT = makeRunSalt();
 const TRANSCRIPT = `I sold goods to Chukwuma Stores, invoice INV-77, today. Ref ${RUN_SALT}.`;
 
 before(async () => {
-  const db = getDb();
-  const [flag] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY))
-    .limit(1);
-  flagWasEnabled = flag ? flag.enabled : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: CLERK_FLAG_KEY, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
-  await db
+  await saveAndEnableClerkFlag();
+  await getDb()
     .insert(usersTable)
     .values({ id: actorId, email: "clerk-v01-test@test.local" })
     .onConflictDoNothing();
 });
 
 after(async () => {
-  if (flagWasEnabled !== null) {
-    await getDb()
-      .update(featureFlagsTable)
-      .set({ enabled: flagWasEnabled })
-      .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY));
-  }
+  await restoreClerkFlag();
 });
 
 test("voice intake transcribes, extracts, and keeps only the transcript", async () => {
-  const gateway = fakeGateway(() => VALID_EXTRACTION);
+  const gateway = fakeGateway(() => VALID_EXTRACTION, FAKE_MODEL);
   const kase = await createExtractionCase(
     {
       sourceType: "voice",
@@ -128,7 +95,7 @@ test("voice intake transcribes, extracts, and keeps only the transcript", async 
 });
 
 test("voice intake fails closed when transcription fails, with a ledger row", async () => {
-  const gateway = fakeGateway(() => VALID_EXTRACTION);
+  const gateway = fakeGateway(() => VALID_EXTRACTION, FAKE_MODEL);
   const failingAudio = Buffer.from("failing-audio-1").toString("base64");
   await assert.rejects(
     createExtractionCase(
@@ -139,10 +106,7 @@ test("voice intake fails closed when transcription fails, with a ledger row", as
         throw new Error("provider down");
       },
     ),
-    (e: unknown) =>
-      e instanceof DomainError &&
-      e.code === "VOICE_UNREADABLE" &&
-      e.status === 422,
+    isDomainError("VOICE_UNREADABLE", 422),
   );
   const ledger = await getDb()
     .select()
@@ -159,7 +123,7 @@ test("voice intake fails closed when transcription fails, with a ledger row", as
 });
 
 test("empty transcripts are rejected, not extracted from", async () => {
-  const gateway = fakeGateway(() => VALID_EXTRACTION);
+  const gateway = fakeGateway(() => VALID_EXTRACTION, FAKE_MODEL);
   await assert.rejects(
     createExtractionCase(
       {
@@ -170,22 +134,21 @@ test("empty transcripts are rejected, not extracted from", async () => {
       gateway,
       async () => "   ",
     ),
-    (e: unknown) =>
-      e instanceof DomainError && e.code === "VOICE_NO_SPEECH",
+    isDomainError("VOICE_NO_SPEECH"),
   );
 });
 
 test("voice source requires audioBase64", async () => {
-  const gateway = fakeGateway(() => VALID_EXTRACTION);
+  const gateway = fakeGateway(() => VALID_EXTRACTION, FAKE_MODEL);
   await assert.rejects(
     createExtractionCase({ sourceType: "voice" }, actorId, gateway, async () => "x"),
-    (e: unknown) => e instanceof DomainError && e.code === "BAD_UPLOAD",
+    isDomainError("BAD_UPLOAD"),
   );
 });
 
 test("metrics aggregate cases and the inference ledger", async () => {
   // Guarantee at least one extraction case and its ledger rows exist.
-  const gateway = fakeGateway(() => VALID_EXTRACTION);
+  const gateway = fakeGateway(() => VALID_EXTRACTION, FAKE_MODEL);
   await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-88 to someone, NGN 100 ${RUN_SALT}` },
     actorId,

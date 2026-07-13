@@ -13,56 +13,38 @@ import {
 } from "@workspace/api-client-react";
 import type {
   FieldError,
-  InvoiceLineInput,
   Party,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import { LineItemCard, TotalsCard } from "@/components/invoice-line-editor";
+import { ScrollHost } from "@/components/KeyboardAwareScrollViewCompat";
+import type { Scrollable } from "@/components/KeyboardAwareScrollViewCompat";
 import {
   AppButton,
   AppText,
   Badge,
   Banner,
   Card,
-  Divider,
+  rowBetween,
   TextField,
+  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
-import { formatCurrency } from "@/lib/format";
+import {
+  computeTotals,
+  isValidISODate,
+  normalizeLines,
+  parseNumeric,
+} from "@/lib/invoice-form";
+import type { LineDraft, LineErrors } from "@/lib/invoice-form";
 import { useSession } from "@/lib/session";
 
 const DEFAULT_VAT_RATE = "7.5";
-
-interface LineDraft {
-  key: string;
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  vatRate: string;
-}
-
-// Per-line inline numeric errors, keyed by line.key.
-type LineErrors = Record<string, { quantity?: string; unitPrice?: string }>;
-
-// Minimal handle we need from the scroll view — just the imperative scrollTo.
-type Scrollable = {
-  scrollTo?: (opts?: { x?: number; y?: number; animated?: boolean }) => void;
-};
-
-// React 19 forwards `ref` to function components as a prop, and the compat
-// wrapper spreads its props onto the underlying ScrollView — so a ref set here
-// reaches the real scroll view. The cast just teaches TS that this host accepts
-// the ref (the wrapper's own prop types don't declare it).
-const ScrollHost = KeyboardAwareScrollViewCompat as unknown as React.ComponentType<
-  React.ComponentProps<typeof KeyboardAwareScrollViewCompat> & {
-    ref?: React.Ref<Scrollable>;
-  }
->;
 
 let lineCounter = 0;
 function newLine(): LineDraft {
@@ -78,29 +60,6 @@ function newLine(): LineDraft {
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-function num(value: string): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
-// Parse a user-entered numeric string: trims, coerces a decimal comma to a dot
-// (common on many locales/keyboards), and returns a finite number or null.
-function parseNumeric(value: string): number | null {
-  const normalized = value.trim().replace(",", ".");
-  if (normalized === "") return null;
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : null;
-}
-
-// Validate a YYYY-MM-DD calendar date locally (rejects e.g. 2024-02-31) so the
-// user gets immediate feedback instead of a server round-trip.
-function isValidISODate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const d = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return false;
-  return d.toISOString().slice(0, 10) === value;
 }
 
 // Turn a server field path (e.g. "lines.0.unitPrice") into a human label
@@ -172,16 +131,7 @@ export default function InvoiceScreen() {
     (p) => p.type === PartyType.buyer,
   );
 
-  const totals = useMemo(() => {
-    let subtotal = 0;
-    let vat = 0;
-    for (const line of lines) {
-      const ext = num(line.quantity) * num(line.unitPrice);
-      subtotal += ext;
-      vat += (ext * num(line.vatRate)) / 100;
-    }
-    return { subtotal, vat, grand: subtotal + vat };
-  }, [lines]);
+  const totals = useMemo(() => computeTotals(lines), [lines]);
 
   const busy =
     createInvoice.isPending ||
@@ -238,37 +188,6 @@ export default function InvoiceScreen() {
     return null;
   };
 
-  // Build the API line payload from normalized numerics and collect per-line
-  // inline errors for anything non-finite/empty.
-  const buildPayloadLines = (): {
-    payloadLines: InvoiceLineInput[];
-    lineErrs: LineErrors;
-  } => {
-    const lineErrs: LineErrors = {};
-    const payloadLines: InvoiceLineInput[] = [];
-    for (const l of lines) {
-      if (!l.description.trim()) continue;
-      const qty = parseNumeric(l.quantity);
-      const price = parseNumeric(l.unitPrice);
-      const rate = parseNumeric(l.vatRate) ?? 0;
-      const errs: { quantity?: string; unitPrice?: string } = {};
-      if (qty === null || qty <= 0) {
-        errs.quantity = "Enter a quantity greater than 0.";
-      }
-      if (price === null || price < 0) {
-        errs.unitPrice = "Enter a valid unit price.";
-      }
-      if (errs.quantity || errs.unitPrice) lineErrs[l.key] = errs;
-      payloadLines.push({
-        description: l.description.trim(),
-        quantity: String(qty ?? 0),
-        unitPrice: String(price ?? 0),
-        vatRate: String(rate / 100),
-      });
-    }
-    return { payloadLines, lineErrs };
-  };
-
   const invalidateInvoiceQueries = async () => {
     await Promise.all([
       clientPartyId
@@ -306,7 +225,7 @@ export default function InvoiceScreen() {
       }
 
       // Inline numeric + date validation before any network call.
-      const { payloadLines, lineErrs } = buildPayloadLines();
+      const { payloadLines, lineErrs } = normalizeLines(lines);
       let hasFieldError = false;
       if (Object.keys(lineErrs).length > 0) {
         setLineErrors(lineErrs);
@@ -510,73 +429,17 @@ export default function InvoiceScreen() {
             </Pressable>
           </View>
 
-          {lines.map((line, index) => {
-            const ext = num(line.quantity) * num(line.unitPrice);
-            const lineErr = lineErrors[line.key];
-            return (
-              <Card key={line.key} style={{ gap: 12 }}>
-                <View style={styles.rowBetween}>
-                  <AppText variant="label" color={colors.mutedForeground}>
-                    Item {index + 1}
-                  </AppText>
-                  {lines.length > 1 ? (
-                    <Pressable
-                      onPress={() => removeLine(line.key)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remove line ${index + 1}`}
-                      hitSlop={12}
-                      style={styles.trashBtn}
-                    >
-                      <Feather name="trash-2" size={18} color={colors.destructiveText} />
-                    </Pressable>
-                  ) : null}
-                </View>
-                <TextField
-                  label="Description"
-                  value={line.description}
-                  onChangeText={(t) => updateLine(line.key, { description: t })}
-                  placeholder="Consulting services"
-                />
-                <View style={{ flexDirection: "row", gap: 12 }}>
-                  <View style={{ flex: 1 }}>
-                    <TextField
-                      label="Qty"
-                      value={line.quantity}
-                      onChangeText={(t) => updateLine(line.key, { quantity: t })}
-                      keyboardType="decimal-pad"
-                      placeholder="1"
-                      error={lineErr?.quantity}
-                    />
-                  </View>
-                  <View style={{ flex: 1.4 }}>
-                    <TextField
-                      label="Unit price"
-                      value={line.unitPrice}
-                      onChangeText={(t) => updateLine(line.key, { unitPrice: t })}
-                      keyboardType="decimal-pad"
-                      placeholder="0.00"
-                      error={lineErr?.unitPrice}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <TextField
-                      label="VAT %"
-                      value={line.vatRate}
-                      onChangeText={(t) => updateLine(line.key, { vatRate: t })}
-                      keyboardType="decimal-pad"
-                      placeholder="7.5"
-                    />
-                  </View>
-                </View>
-                <View style={styles.rowBetween}>
-                  <AppText variant="caption" color={colors.mutedForeground}>
-                    Line total
-                  </AppText>
-                  <AppText variant="label">{formatCurrency(ext)}</AppText>
-                </View>
-              </Card>
-            );
-          })}
+          {lines.map((line, index) => (
+            <LineItemCard
+              key={line.key}
+              line={line}
+              index={index}
+              canRemove={lines.length > 1}
+              errors={lineErrors[line.key]}
+              onChange={(patch) => updateLine(line.key, patch)}
+              onRemove={() => removeLine(line.key)}
+            />
+          ))}
         </View>
 
         <TextField
@@ -588,27 +451,7 @@ export default function InvoiceScreen() {
           style={{ height: 80, paddingTop: 12, textAlignVertical: "top" }}
         />
 
-        <Card style={{ gap: 8, backgroundColor: colors.secondary }}>
-          <View style={styles.rowBetween}>
-            <AppText variant="body" color={colors.mutedForeground}>
-              Subtotal
-            </AppText>
-            <AppText variant="body">{formatCurrency(totals.subtotal)}</AppText>
-          </View>
-          <View style={styles.rowBetween}>
-            <AppText variant="body" color={colors.mutedForeground}>
-              VAT
-            </AppText>
-            <AppText variant="body">{formatCurrency(totals.vat)}</AppText>
-          </View>
-          <Divider />
-          <View style={styles.rowBetween}>
-            <AppText variant="heading">Total</AppText>
-            <AppText variant="heading" color={colors.primary}>
-              {formatCurrency(totals.grand)}
-            </AppText>
-          </View>
-        </Card>
+        <TotalsCard totals={totals} />
 
         {fieldErrors.length > 0 ? (
           <View style={{ gap: 4 }}>
@@ -650,24 +493,12 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    ...(Platform.OS === "web"
-      ? { maxWidth: 640, alignSelf: "center", width: "100%" }
-      : {}),
+    ...webContentMax,
   },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  rowBetween: { ...rowBetween },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-  },
-  trashBtn: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

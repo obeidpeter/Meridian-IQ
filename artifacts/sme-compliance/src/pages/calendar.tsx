@@ -6,6 +6,8 @@ import {
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -43,16 +45,10 @@ export function Calendar() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-            Compliance calendar
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Filing deadlines and penalty watch, computed from your invoice book.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Compliance calendar"
+        description="Filing deadlines and penalty watch, computed from your invoice book."
+      />
 
       <RequireClientScope thing="compliance calendar">
         {isLoading ? (
@@ -65,16 +61,11 @@ export function Calendar() {
           <QueryError thing="your compliance calendar" onRetry={() => refetch()} />
         ) : !deadlines || deadlines.length === 0 ? (
           <Card>
-            <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-              <CalendarClock className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
-              <p className="font-semibold" data-testid="text-empty">
-                Nothing due right now
-              </p>
-              <p className="text-sm text-muted-foreground">
-                You're all caught up on filings. New deadlines appear here as
-                invoices are stamped and reporting windows open.
-              </p>
-            </CardContent>
+            <EmptyState
+              icon={CalendarClock}
+              title="Nothing due right now"
+              description="You're all caught up on filings. New deadlines appear here as invoices are stamped and reporting windows open."
+            />
           </Card>
         ) : (
           <div className="space-y-3">

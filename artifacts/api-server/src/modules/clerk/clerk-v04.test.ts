@@ -3,22 +3,24 @@ import assert from "node:assert/strict";
 import { eq, sql } from "drizzle-orm";
 import {
   getDb,
-  featureFlagsTable,
   usersTable,
   partiesTable,
   auditEventsTable,
   clerkCasesTable,
   clerkInferenceCallsTable,
 } from "@workspace/db";
-import { DomainError } from "../errors.ts";
 import {
-  CLERK_FLAG_KEY,
   createGateway,
-  type ClerkGateway,
   type ClerkProvider,
   type CompletionRequest,
 } from "./gateway.ts";
-import { setFlag } from "../flags/flags.ts";
+import { isDomainError } from "../../test-helpers/assertions.ts";
+import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import {
+  saveAndEnableClerkFlag,
+  restoreClerkFlag,
+  fakeGateway,
+} from "./test-support.ts";
 import { createExtractionCase, decideCase, retryExtraction } from "./cases.ts";
 import {
   nameScore,
@@ -42,39 +44,18 @@ import { CANONICAL_FIELDS, type CanonicalField } from "./prompts.ts";
 // the sibling clerk test files — fixed fixture IDs, injected fake gateways,
 // flag restored after the run, per-run salt for persisted source content.
 
+const FAKE_MODEL = "fake-model-v04";
 const opA = "ffff0001-0000-4000-8000-00000000ff01";
 const partySupplier = "ffff0002-0000-4000-8000-00000000ff02";
 const partySupplierMerged = "ffff0003-0000-4000-8000-00000000ff03";
 const partyBuyer = "ffff0004-0000-4000-8000-00000000ff04";
 const partyOther = "ffff0005-0000-4000-8000-00000000ff05";
 
-const RUN_SALT = `${Date.now()}-${process.pid}`;
-
-let flagWasEnabled: boolean | null = null;
-
-function fakeGateway(respond: () => string): ClerkGateway {
-  const provider: ClerkProvider = {
-    model: "fake-model-v04",
-    complete: async () => respond(),
-  };
-  return createGateway(provider);
-}
+const RUN_SALT = makeRunSalt();
 
 before(async () => {
   const db = getDb();
-  const [flag] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY))
-    .limit(1);
-  flagWasEnabled = flag ? flag.enabled : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: CLERK_FLAG_KEY, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
+  await saveAndEnableClerkFlag();
   await db
     .insert(usersTable)
     .values({ id: opA, email: "clerk-v04@test.local" })
@@ -118,13 +99,7 @@ before(async () => {
 });
 
 after(async () => {
-  if (flagWasEnabled === null) {
-    await getDb()
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY));
-  } else {
-    await setFlag(CLERK_FLAG_KEY, flagWasEnabled);
-  }
+  await restoreClerkFlag();
 });
 
 // ---------------------------------------------------------------------------
@@ -189,7 +164,7 @@ const V04_EXTRACTION = JSON.stringify({
 });
 
 test("suggestPartiesForCase scores register parties and skips merged tombstones", async () => {
-  const gateway = fakeGateway(() => V04_EXTRACTION);
+  const gateway = fakeGateway(() => V04_EXTRACTION, FAKE_MODEL);
   const kase = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-V04 parties ${RUN_SALT}` },
     opA,
@@ -227,16 +202,18 @@ test("party suggestions reject question cases and go empty without identity fiel
     .returning();
   await assert.rejects(
     suggestPartiesForCase(question.id),
-    (e: unknown) => e instanceof DomainError && e.code === "CASE_BAD_KIND",
+    isDomainError("CASE_BAD_KIND"),
   );
 
-  const bare = fakeGateway(() =>
-    JSON.stringify({
-      fields: [
-        { field: "invoiceNumber", value: "INV-V04-BARE", confidence: 0.9, sourceSnippet: null },
-      ],
-      lines: [],
-    }),
+  const bare = fakeGateway(
+    () =>
+      JSON.stringify({
+        fields: [
+          { field: "invoiceNumber", value: "INV-V04-BARE", confidence: 0.9, sourceSnippet: null },
+        ],
+        lines: [],
+      }),
+    FAKE_MODEL,
   );
   const kase = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-V04 bare ${RUN_SALT}` },
@@ -261,7 +238,7 @@ async function backdateCase(id: string, days: number) {
 }
 
 test("the sweep purges raw content from old settled cases but keeps evidence", async () => {
-  const gateway = fakeGateway(() => V04_EXTRACTION);
+  const gateway = fakeGateway(() => V04_EXTRACTION, FAKE_MODEL);
   const settled = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-V04 retention settled ${RUN_SALT}` },
     opA,
@@ -271,7 +248,7 @@ test("the sweep purges raw content from old settled cases but keeps evidence", a
   await backdateCase(settled.id, 40);
 
   // A live escalated case of the same age must NOT be touched.
-  const invalidGateway = fakeGateway(() => "NOT JSON {{{");
+  const invalidGateway = fakeGateway(() => "NOT JSON {{{", FAKE_MODEL);
   const escalated = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-V04 retention escalated ${RUN_SALT}` },
     opA,
@@ -327,7 +304,7 @@ test("a purged failed case fails retry safely instead of re-extracting nothing",
     calls += 1;
     if (calls === 1) throw new Error("provider down");
     return V04_EXTRACTION;
-  });
+  }, FAKE_MODEL);
   const failed = await createExtractionCase(
     { sourceType: "text", text: `Invoice INV-V04 retention failed ${RUN_SALT}` },
     opA,
@@ -339,7 +316,7 @@ test("a purged failed case fails retry safely instead of re-extracting nothing",
 
   await assert.rejects(
     retryExtraction(failed.id, opA, flaky),
-    (e: unknown) => e instanceof DomainError && e.code === "CASE_NO_SOURCE",
+    isDomainError("CASE_NO_SOURCE"),
   );
 });
 

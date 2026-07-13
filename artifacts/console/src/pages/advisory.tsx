@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { QueryError } from "@/components/query-error";
+import { StatTile } from "@/components/stat-tile";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
@@ -340,20 +341,19 @@ function VatRiskTab() {
       {report && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card data-testid="stat-rows">
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">Rows checked</p>
-                <p className="text-2xl font-bold mt-1 tabular-nums">{report.rowCount}</p>
-              </CardContent>
-            </Card>
-            <Card data-testid="stat-verified">
-              <CardContent className="pt-6">
-                <p className="text-sm text-muted-foreground">Verified stamps</p>
-                <p className="text-2xl font-bold mt-1 tabular-nums text-emerald-700 dark:text-emerald-400">
-                  {report.verifiedCount}
-                </p>
-              </CardContent>
-            </Card>
+            <StatTile
+              label="Rows checked"
+              value={report.rowCount}
+              testId="stat-rows"
+            />
+            <StatTile
+              label="Verified stamps"
+              value={report.verifiedCount}
+              tone="success"
+              testId="stat-verified"
+            />
+            {/* red-600 is a deliberate shade choice on the two at-risk tiles —
+                not the shared tone map's red-700 — so they stay inline. */}
             <Card data-testid="stat-at-risk">
               <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">Rows at risk</p>

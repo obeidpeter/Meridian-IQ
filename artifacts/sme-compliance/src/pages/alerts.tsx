@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -141,16 +142,10 @@ export function Alerts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-            Alert settings
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Choose how and where you want to be reminded.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Alert settings"
+        description="Choose how and where you want to be reminded."
+      />
 
       <RequireClientScope thing="alert preferences">
         {isLoading ? (

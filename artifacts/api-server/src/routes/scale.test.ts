@@ -1,7 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { AddressInfo } from "node:net";
 import express from "express";
 import {
   getDb,
@@ -16,53 +15,26 @@ import { API_CONTRACT_VERSION } from "@workspace/api-zod";
 import invoicesRouter from "./invoices.ts";
 import partiesRouter from "./parties.ts";
 import healthRouter from "./health.ts";
-import { errorHandler } from "../middleware/error.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { listCases } from "../modules/clerk/cases.ts";
 import { getReceivablesSummary } from "../modules/invoice/receivables.ts";
+import {
+  appFor,
+  listen,
+  closeAllServers,
+} from "../test-helpers/route-harness.ts";
+import { makeRunSalt, daysAgo } from "../test-helpers/fixtures.ts";
 
 // Scale package: list pagination + search (invoices, parties, clerk cases),
-// the receivables aging summary, and the build-version handshake. Same
-// route-test harness as parties-access.test.ts; fixtures are salted per run
-// because invoice rows are immutable once past draft and stay in the shared
-// database forever.
+// the receivables aging summary, and the build-version handshake. Uses the
+// shared route-test harness (test-helpers/route-harness.ts); fixtures are
+// salted per run because invoice rows are immutable once past draft and stay
+// in the shared database forever.
 
-const SALT = `${Date.now().toString(36)}${process.pid}`;
-
-function appFor(principal: Principal, router: express.Router) {
-  const app = express();
-  app.use(express.json());
-  app.use((req, _res, next) => {
-    req.principal = principal;
-    req.log = {
-      warn: () => {},
-      error: () => {},
-      info: () => {},
-    } as unknown as typeof req.log;
-    next();
-  });
-  app.use(router);
-  app.use(errorHandler);
-  return app;
-}
-
-const closers: Array<() => Promise<void>> = [];
-
-async function listen(app: express.Express): Promise<string> {
-  const server = app.listen(0, "127.0.0.1");
-  await new Promise<void>((resolve) => server.once("listening", resolve));
-  const { port } = server.address() as AddressInfo;
-  closers.push(
-    () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
-      ),
-  );
-  return `http://127.0.0.1:${port}`;
-}
+const SALT = makeRunSalt();
 
 after(async () => {
-  for (const close of closers) await close();
+  await closeAllServers();
 });
 
 const firmId = randomUUID();
@@ -86,12 +58,6 @@ const clientUserA: Principal = {
   clientPartyId: supplierA,
   buyerPartyId: null,
 };
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-}
 
 // Six invoices for supplier A with staggered created_at (deterministic paging
 // order) plus one for sibling supplier B (SEC-03 must hide it from A's user).

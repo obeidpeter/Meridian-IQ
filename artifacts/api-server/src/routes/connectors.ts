@@ -18,7 +18,7 @@ import {
   assertSameTenant,
   tenantFirmId,
 } from "../modules/auth/rbac";
-import { isFeatureEnabled } from "../modules/flags/flags";
+import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
 import { CONNECTORS, findConnector } from "../modules/connectors/implementations";
@@ -30,15 +30,7 @@ import "../modules/connectors/engine";
 
 const router: IRouter = Router();
 
-async function gate(req: { principal: import("../modules/auth/rbac").Principal }): Promise<boolean> {
-  return isFeatureEnabled("erp_connectors", req.principal.firmId);
-}
-
-router.get("/connectors", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/connectors", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
   assertCan(req.principal, "connector.read");
   res.json(
     ListConnectorsResponse.parse(
@@ -51,11 +43,7 @@ router.get("/connectors", async (req, res): Promise<void> => {
   );
 });
 
-router.get("/connections", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/connections", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
   assertCan(req.principal, "connector.read");
   const query = ListErpConnectionsQueryParams.safeParse(req.query);
   const clientPartyId = query.success ? query.data.clientPartyId : undefined;
@@ -77,11 +65,7 @@ router.get("/connections", async (req, res): Promise<void> => {
   res.json(ListErpConnectionsResponse.parse(rows));
 });
 
-router.post("/connections", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.post("/connections", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
   assertCan(req.principal, "connector.write");
   const firmId = tenantFirmId(req.principal);
   if (!firmId) {
@@ -122,11 +106,7 @@ router.post("/connections", async (req, res): Promise<void> => {
   res.status(201).json(CreateErpConnectionResponse.parse(row));
 });
 
-router.post("/connections/:id/sync", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.post("/connections/:id/sync", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
   assertCan(req.principal, "connector.write");
   const params = SyncErpConnectionParams.safeParse(req.params);
   if (!params.success) {
@@ -172,11 +152,7 @@ router.post("/connections/:id/sync", async (req, res): Promise<void> => {
   res.status(202).json(SyncErpConnectionResponse.parse(run));
 });
 
-router.get("/connections/:id/runs", async (req, res): Promise<void> => {
-  if (!(await gate(req))) {
-    res.sendStatus(404);
-    return;
-  }
+router.get("/connections/:id/runs", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
   assertCan(req.principal, "connector.read");
   const params = ListErpSyncRunsParams.safeParse(req.params);
   if (!params.success) {

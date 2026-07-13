@@ -2,8 +2,9 @@ import { useGetUnearnedIncome } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
+import { StatTile } from "@/components/stat-tile";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { formatNaira, humanize } from "@/lib/format";
+import { formatNaira, formatPct, humanize } from "@/lib/format";
 
 export function UnearnedIncomePage() {
   usePageTitle("Unearned income");
@@ -54,7 +55,7 @@ export function UnearnedIncomePage() {
     );
   }
 
-  const pct = (Number(data.revenueSharePct) * 100).toFixed(1);
+  const pct = formatPct(data.revenueSharePct);
 
   return (
     <div className="space-y-6">
@@ -63,26 +64,20 @@ export function UnearnedIncomePage() {
           Unearned income & revenue share
         </h1>
         <p className="text-muted-foreground mt-1">
-          Pipeline value not yet billed, at your current {pct}% revenue share.
+          Pipeline value not yet billed, at your current {pct} revenue share.
           Reconciles to live billing to the naira.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card data-testid="stat-implied-billing">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              Implied monthly billing
-            </p>
-            <p className="text-2xl font-bold mt-1 tabular-nums">
-              {formatNaira(data.impliedMonthlyBilling)}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {data.eligibleCount} eligible prospect
-              {data.eligibleCount === 1 ? "" : "s"}
-            </p>
-          </CardContent>
-        </Card>
+        <StatTile
+          label="Implied monthly billing"
+          value={formatNaira(data.impliedMonthlyBilling)}
+          detail={`${data.eligibleCount} eligible prospect${data.eligibleCount === 1 ? "" : "s"}`}
+          testId="stat-implied-billing"
+        />
+        {/* text-primary on the value isn't in the shared tone map — this
+            emphasised tile stays inline. */}
         <Card data-testid="stat-monthly-share">
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">
@@ -91,22 +86,15 @@ export function UnearnedIncomePage() {
             <p className="text-2xl font-bold mt-1 text-primary tabular-nums">
               {formatNaira(data.impliedMonthlyRevenueShare)}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">at {pct}%</p>
+            <p className="text-xs text-muted-foreground mt-1">at {pct}</p>
           </CardContent>
         </Card>
-        <Card data-testid="stat-annual-share">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              Annualised revenue share
-            </p>
-            <p className="text-2xl font-bold mt-1 tabular-nums">
-              {formatNaira(data.impliedAnnualRevenueShare)}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {humanize(data.tierKey)} tier
-            </p>
-          </CardContent>
-        </Card>
+        <StatTile
+          label="Annualised revenue share"
+          value={formatNaira(data.impliedAnnualRevenueShare)}
+          detail={`${humanize(data.tierKey)} tier`}
+          testId="stat-annual-share"
+        />
       </div>
 
       <Card>

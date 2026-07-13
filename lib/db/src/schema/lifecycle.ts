@@ -15,6 +15,7 @@ import { z } from "zod/v4";
 import { invoicesTable, invoiceStatusEnum } from "./invoices.ts";
 import { partiesTable } from "./parties.ts";
 import { usersTable, firmsTable } from "./organizations.ts";
+import { createdAt, id } from "./columns.ts";
 
 // Two accredited APP rails behind one adapter (INT-01, C3).
 export const railEnum = pgEnum("rail", ["rail_primary", "rail_secondary"]);
@@ -28,7 +29,7 @@ export const submissionStatusEnum = pgEnum("submission_status", [
 
 // Append-only: one row per rail per try; request/response retained (CORE-02).
 export const submissionAttemptsTable = pgTable("submission_attempts", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoicesTable.id),
@@ -39,14 +40,12 @@ export const submissionAttemptsTable = pgTable("submission_attempts", {
   requestPayload: jsonb("request_payload").$type<Record<string, unknown>>(),
   responsePayload: jsonb("response_payload").$type<Record<string, unknown>>(),
   errorCode: text("error_code"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 // A validated invoice carries an IRN, CSID and QR code (C1). Append-only.
 export const stampRecordsTable = pgTable("stamp_records", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoicesTable.id),
@@ -55,9 +54,7 @@ export const stampRecordsTable = pgTable("stamp_records", {
   qrPayload: text("qr_payload").notNull(),
   signedArtifactRef: text("signed_artifact_ref").notNull(),
   rail: railEnum("rail").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
   // One canonical stamp per invoice: enforces idempotency so a crash/retry
   // between the stamp insert and the outbox row being marked done cannot write
   // a second stamp (INT-09), without ever deleting an append-only record.
@@ -75,7 +72,7 @@ export const confirmationStateEnum = pgEnum("confirmation_state", [
 // rejected), never an update. The confirming user and method are captured on
 // every buyer-side response.
 export const confirmationsTable = pgTable("confirmations", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoicesTable.id),
@@ -88,9 +85,7 @@ export const confirmationsTable = pgTable("confirmations", {
   confirmingUserId: uuid("confirming_user_id").references(() => usersTable.id),
   // Reason accompanying a queried/rejected response, returned to the supplier.
   note: text("note"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 // Mandatory-source hierarchy (CR-01). Uploaded evidence alone never qualifies.
@@ -109,7 +104,7 @@ export const settlementPaymentStatusEnum = pgEnum("settlement_payment_status", [
 ]);
 
 export const settlementEventsTable = pgTable("settlement_events", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoicesTable.id),
@@ -127,16 +122,14 @@ export const settlementEventsTable = pgTable("settlement_events", {
   // nullable, so system/worker writes record the same way the audit trail does.
   actorId: text("actor_id"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 // Append-only projection of every invoice status transition (CORE-02). Replaying
 // these rows reconstructs an invoice's status at any timestamp; combined with the
 // DB-level append-only triggers, post-submission lifecycle history is immutable.
 export const invoiceLifecycleEventsTable = pgTable("invoice_lifecycle_events", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoicesTable.id),
@@ -152,9 +145,7 @@ export const invoiceLifecycleEventsTable = pgTable("invoice_lifecycle_events", {
   actorId: text("actor_id"),
   actorRole: text("actor_role"),
   reason: text("reason"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export const insertSubmissionAttemptSchema = createInsertSchema(

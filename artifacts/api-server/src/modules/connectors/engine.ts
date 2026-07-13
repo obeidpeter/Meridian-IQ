@@ -5,7 +5,6 @@ import {
   erpSyncRunsTable,
   invoicesTable,
   partiesTable,
-  type ErpConnection,
   type OutboxEvent,
 } from "@workspace/db";
 import { DomainError } from "../errors.ts";

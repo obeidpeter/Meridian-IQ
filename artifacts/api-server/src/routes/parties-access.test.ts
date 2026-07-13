@@ -1,8 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { AddressInfo } from "node:net";
-import express from "express";
 import { eq } from "drizzle-orm";
 import {
   getDb,
@@ -12,8 +10,13 @@ import {
   invoicesTable,
 } from "@workspace/db";
 import partiesRouter from "./parties.ts";
-import { errorHandler } from "../middleware/error.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
+import {
+  appFor,
+  listen,
+  closeAllServers,
+  JSON_HEADERS,
+} from "../test-helpers/route-harness.ts";
 
 // Fix-and-retry party access (review finding): buyer parties are usually NOT
 // engagement subjects, so plain assertPartyAccess (engagement-only) would 403
@@ -22,42 +25,6 @@ import type { Principal } from "../modules/auth/rbac.ts";
 // fallback: firm-scoped staff may touch a party that appears as buyer or
 // supplier on one of the firm's invoices. client_users get NO fallback — they
 // stay confined to their own client party (SEC-03).
-
-function appFor(principal: Principal) {
-  const app = express();
-  app.use(express.json());
-  app.use((req, _res, next) => {
-    req.principal = principal;
-    req.log = {
-      warn: () => {},
-      error: () => {},
-      info: () => {},
-    } as unknown as typeof req.log;
-    next();
-  });
-  app.use(partiesRouter);
-  app.use(errorHandler);
-  return app;
-}
-
-async function listen(app: express.Express): Promise<{
-  base: string;
-  close: () => Promise<void>;
-}> {
-  const server = app.listen(0, "127.0.0.1");
-  await new Promise<void>((resolve) => server.once("listening", resolve));
-  const { port } = server.address() as AddressInfo;
-  return {
-    base: `http://127.0.0.1:${port}`,
-    close: () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
-      ),
-  };
-}
-
-const closers: Array<() => Promise<void>> = [];
-const JSON_HEADERS = { "content-type": "application/json" };
 
 // Throwaway fixtures: a firm engaging a supplier party, a buyer party with NO
 // engagement, and one draft invoice tying them together. The invoice row is
@@ -124,7 +91,7 @@ async function ensureFixtures(): Promise<void> {
 }
 
 after(async () => {
-  await Promise.all(closers.map((c) => c()));
+  await closeAllServers();
   if (fixturesCreated) {
     // The invoice row cannot be deleted (immutability/retention trigger) and
     // FK-pins the firm and both parties; only the engagement is removable.
@@ -157,8 +124,7 @@ function clientUser(): Principal {
 
 test("firm_staff can GET an unengaged buyer party referenced by a firm invoice", async () => {
   await ensureFixtures();
-  const { base, close } = await listen(appFor(staffOf(firmId)));
-  closers.push(close);
+  const base = await listen(appFor(staffOf(firmId), partiesRouter));
 
   const res = await fetch(`${base}/parties/${buyerPartyId}`);
   assert.equal(res.status, 200, "invoice-reference fallback must grant read");
@@ -168,8 +134,7 @@ test("firm_staff can GET an unengaged buyer party referenced by a firm invoice",
 
 test("firm_staff can PATCH an unengaged buyer party referenced by a firm invoice", async () => {
   await ensureFixtures();
-  const { base, close } = await listen(appFor(staffOf(firmId)));
-  closers.push(close);
+  const base = await listen(appFor(staffOf(firmId), partiesRouter));
 
   const res = await fetch(`${base}/parties/${buyerPartyId}`, {
     method: "PATCH",
@@ -184,8 +149,7 @@ test("firm_staff can PATCH an unengaged buyer party referenced by a firm invoice
 
 test("firm_staff of an unrelated firm is still CROSS_TENANT on that buyer", async () => {
   await ensureFixtures();
-  const { base, close } = await listen(appFor(staffOf(otherFirmId)));
-  closers.push(close);
+  const base = await listen(appFor(staffOf(otherFirmId), partiesRouter));
 
   const getRes = await fetch(`${base}/parties/${buyerPartyId}`);
   assert.equal(getRes.status, 403, "no invoice reference -> read denied");
@@ -199,8 +163,7 @@ test("firm_staff of an unrelated firm is still CROSS_TENANT on that buyer", asyn
 
 test("client_user gets no fallback on the buyer but keeps own-party self-service", async () => {
   await ensureFixtures();
-  const { base, close } = await listen(appFor(clientUser()));
-  closers.push(close);
+  const base = await listen(appFor(clientUser(), partiesRouter));
 
   const getRes = await fetch(`${base}/parties/${buyerPartyId}`);
   assert.equal(getRes.status, 403, "buyer read must stay confined (SEC-03)");

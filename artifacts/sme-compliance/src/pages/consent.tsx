@@ -10,6 +10,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -127,17 +129,10 @@ export function Consent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-            Consent
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Every permission on your data, recorded with lineage — grants and
-            revocations are ledger events, never edits.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Consent"
+        description="Every permission on your data, recorded with lineage — grants and revocations are ledger events, never edits."
+      />
 
       <RequireClientScope thing="consent ledger">
         <div className="space-y-6">
@@ -238,16 +233,12 @@ export function Consent() {
                 </CardHeader>
                 <CardContent>
                   {(records ?? []).length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
-                      <ShieldCheck className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
-                      <p className="font-semibold" data-testid="text-empty">
-                        No consent events yet
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Grants and revocations you make appear here as ledger
-                        events, each with its own timestamp and lineage.
-                      </p>
-                    </div>
+                    <EmptyState
+                      icon={ShieldCheck}
+                      title="No consent events yet"
+                      description="Grants and revocations you make appear here as ledger events, each with its own timestamp and lineage."
+                      className="px-0 py-8 justify-center"
+                    />
                   ) : (
                     <div className="divide-y">
                       {[...(records ?? [])]

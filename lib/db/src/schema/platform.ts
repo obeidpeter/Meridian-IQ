@@ -12,6 +12,7 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // Feature flags gate every release-tagged capability (PL-02). A dark feature is
 // unreachable. Per-firm overrides allow layer-three surfaces to activate per
@@ -21,16 +22,13 @@ export const featureFlagsTable = pgTable("feature_flags", {
   enabled: boolean("enabled").notNull().default(false),
   releaseTag: text("release_tag").notNull().default("R0"),
   description: text("description"),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  updatedAt: updatedAt(),
 });
 
 export const featureFlagOverridesTable = pgTable(
   "feature_flag_overrides",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     flagKey: text("flag_key")
       .notNull()
       .references(() => featureFlagsTable.key),
@@ -38,9 +36,7 @@ export const featureFlagOverridesTable = pgTable(
       .notNull()
       .references(() => firmsTable.id),
     enabled: boolean("enabled").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: createdAt(),
   },
   (t) => [unique().on(t.flagKey, t.firmId)],
 );
@@ -62,7 +58,7 @@ export const messageStatusEnum = pgEnum("message_status", [
 // Messaging carries pointers only — never amounts, names, TINs or documents
 // (SEC-12, PL-04). recipientRef and entity pointers are opaque references.
 export const messagesTable = pgTable("messages", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   channel: messageChannelEnum("channel").notNull(),
   recipientRef: text("recipient_ref").notNull(),
   templateKey: text("template_key").notNull(),
@@ -72,13 +68,8 @@ export const messagesTable = pgTable("messages", {
   providerMessageId: text("provider_message_id"),
   failoverFrom: messageChannelEnum("failover_from"),
   error: text("error"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 // Transactional outbox: written in the same transaction as the domain change,
@@ -91,7 +82,7 @@ export const outboxStatusEnum = pgEnum("outbox_status", [
 ]);
 
 export const outboxTable = pgTable("outbox_events", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   aggregateType: text("aggregate_type").notNull(),
   aggregateId: text("aggregate_id").notNull(),
   type: text("type").notNull(),
@@ -104,13 +95,8 @@ export const outboxTable = pgTable("outbox_events", {
     .defaultNow(),
   lockedAt: timestamp("locked_at", { withTimezone: true }),
   lastError: text("last_error"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 // Circuit-breaker state per rail, persisted so it survives restarts and can be
@@ -126,15 +112,12 @@ export const railStatesTable = pgTable("rail_states", {
   state: circuitStateEnum("state").notNull().default("closed"),
   failureCount: integer("failure_count").notNull().default(0),
   openedAt: timestamp("opened_at", { withTimezone: true }),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  updatedAt: updatedAt(),
 });
 
 // Stamp-verification cache with a configurable freshness window (CORE-04).
 export const stampVerificationsTable = pgTable("stamp_verifications", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   irn: text("irn").notNull(),
   csid: text("csid").notNull(),
   valid: boolean("valid").notNull(),
@@ -151,9 +134,7 @@ export const stampVerificationsTable = pgTable("stamp_verifications", {
 export const appSecretsTable = pgTable("app_secrets", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 // CORE-06: every migration/schema version recorded; records declare their

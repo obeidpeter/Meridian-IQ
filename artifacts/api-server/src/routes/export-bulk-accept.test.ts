@@ -1,7 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { AddressInfo } from "node:net";
 import express from "express";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -18,14 +17,20 @@ import {
 } from "@workspace/db";
 import invoicesRouter from "./invoices.ts";
 import smeRouter from "./sme.ts";
-import { errorHandler } from "../middleware/error.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { bulkAcceptProposals } from "../modules/statements/bulk-accept.ts";
+import {
+  appFor,
+  listen,
+  closeAllServers,
+} from "../test-helpers/route-harness.ts";
+import { makeRunSalt, daysAgo } from "../test-helpers/fixtures.ts";
 
 // CSV exports (invoice book, receivables aging) and reconciliation
-// bulk-accept. Same harness/salting conventions as scale.test.ts.
+// bulk-accept. Same harness/salting conventions as scale.test.ts (shared
+// route-test harness in test-helpers/route-harness.ts).
 
-const SALT = `${Date.now().toString(36)}${process.pid}`;
+const SALT = makeRunSalt();
 
 const firmId = randomUUID();
 const userId = randomUUID();
@@ -48,45 +53,9 @@ const clientUserA: Principal = {
   buyerPartyId: null,
 };
 
-function appFor(principal: Principal, router: express.Router) {
-  const app = express();
-  app.use(express.json());
-  app.use((req, _res, next) => {
-    req.principal = principal;
-    req.log = {
-      warn: () => {},
-      error: () => {},
-      info: () => {},
-    } as unknown as typeof req.log;
-    next();
-  });
-  app.use(router);
-  app.use(errorHandler);
-  return app;
-}
-
-const closers: Array<() => Promise<void>> = [];
-async function listen(app: express.Express): Promise<string> {
-  const server = app.listen(0, "127.0.0.1");
-  await new Promise<void>((resolve) => server.once("listening", resolve));
-  const { port } = server.address() as AddressInfo;
-  closers.push(
-    () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
-      ),
-  );
-  return `http://127.0.0.1:${port}`;
-}
 after(async () => {
-  for (const close of closers) await close();
+  await closeAllServers();
 });
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-}
 
 // Invoices: one outstanding (stamped, 45 days past due -> 31-60 bucket), one
 // settled (excluded from receivables), one draft (excluded), plus a sibling

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/page-header";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { AddCustomerDialog } from "@/components/add-customer-dialog";
 import { formatNaira } from "@/lib/format";
@@ -235,15 +236,10 @@ export function InvoiceNew() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-            New invoice
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            We check it against FIRS rules as you type.
-          </p>
-        </div>
+      <PageHeader
+        title="New invoice"
+        description="We check it against FIRS rules as you type."
+      >
         {savedAt && (
           <span className="text-xs text-muted-foreground flex items-center gap-2 shrink-0">
             <span className="flex items-center gap-1">
@@ -260,7 +256,7 @@ export function InvoiceNew() {
             </Button>
           </span>
         )}
-      </div>
+      </PageHeader>
 
       <RequireClientScope thing="invoice form">
       <AddCustomerDialog

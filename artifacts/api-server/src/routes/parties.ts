@@ -16,8 +16,9 @@ import {
   ValidateCacBody,
   ValidateCacResponse,
 } from "@workspace/api-zod";
-import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { getDb, partiesTable, engagementsTable } from "@workspace/db";
+import { and, sql, type SQL } from "drizzle-orm";
+import { getDb, partiesTable } from "@workspace/db";
+import { likePattern } from "../lib/sql";
 import {
   assertCan,
   assertPartyAccessOrInvoiceRef,
@@ -42,10 +43,12 @@ router.get("/parties", async (req, res): Promise<void> => {
   const query = ListPartiesQueryParams.safeParse(req.query);
   const q = query.success ? query.data.q?.trim() : undefined;
   // Search matches the legal name or TIN; wildcards in the query are literal.
-  const search: SQL | undefined = q
-    ? sql`(${partiesTable.legalName} ILIKE ${`%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`}
-        OR ${partiesTable.tin} ILIKE ${`%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`})`
-    : undefined;
+  let search: SQL | undefined;
+  if (q) {
+    const pattern = likePattern(q);
+    search = sql`(${partiesTable.legalName} ILIKE ${pattern}
+        OR ${partiesTable.tin} ILIKE ${pattern})`;
+  }
   const tenant = tenantFirmId(req.principal);
   let rows;
   if (tenant === null) {

@@ -15,7 +15,6 @@ import type {
 import { useRouter } from "expo-router";
 import React, { useCallback } from "react";
 import {
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -31,8 +30,10 @@ import {
   CardSkeleton,
   Divider,
   ErrorState,
+  rowBetween,
   Skeleton,
   StatTile,
+  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import {
@@ -551,15 +552,9 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 8,
-    ...(Platform.OS === "web"
-      ? { maxWidth: 640, alignSelf: "center", width: "100%" }
-      : {}),
+    ...webContentMax,
   },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  rowBetween: { ...rowBetween },
   riskLink: {
     flexDirection: "row",
     alignItems: "center",

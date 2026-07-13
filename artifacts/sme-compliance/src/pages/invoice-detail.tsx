@@ -24,7 +24,15 @@ import {
   getListSettlementsQueryKey,
   getGetInvoiceStatusLightQueryKey,
 } from "@workspace/api-client-react";
-import type { StatusLightLight } from "@workspace/api-client-react";
+import type {
+  Confirmation,
+  Escalation,
+  Invoice,
+  SettlementEvent,
+  StatusLight,
+  StatusLightLight,
+  SubmissionAttempt,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,6 +60,7 @@ import {
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled, errorStatus } from "@/lib/errors";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { DRAFT_KEY, type DraftState } from "@/pages/invoice-new";
 import {
@@ -121,6 +130,340 @@ const SETTLEMENT_SOURCE_LABELS: Record<string, string> = {
   collection_account: "Collection account",
   uploaded_evidence: "Uploaded evidence",
 };
+
+// Deterministic status-light card: skeleton while loading, the light with its
+// reasons and recommended action once it resolves, nothing on failure.
+function ComplianceStatusCard({
+  statusLight,
+  isLoading,
+}: {
+  statusLight: StatusLight | undefined;
+  isLoading: boolean;
+}) {
+  const lightMeta = statusLight ? LIGHT_META[statusLight.light] : null;
+  const LightIcon = lightMeta?.Icon;
+
+  if (isLoading) {
+    return (
+      <Card data-testid="card-compliance-status">
+        <CardHeader>
+          <CardTitle className="text-base">Compliance status</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-4 w-72 max-w-full" />
+          <Skeleton className="h-4 w-56 max-w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (statusLight && lightMeta && LightIcon) {
+    return (
+      <Card data-testid="card-compliance-status">
+        <CardHeader>
+          <CardTitle className="text-base">Compliance status</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2.5 h-2.5 rounded-full ${lightMeta.dot}`}
+              aria-hidden="true"
+            />
+            <LightIcon
+              className={`w-4 h-4 ${lightMeta.text}`}
+              aria-hidden="true"
+            />
+            <span
+              className={`font-semibold ${lightMeta.text}`}
+              data-testid="text-status-light"
+            >
+              {lightMeta.label}
+            </span>
+          </div>
+          {statusLight.reasons.length > 0 && (
+            <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
+              {statusLight.reasons.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          )}
+          <p data-testid="text-recommended-action">
+            <span className="font-medium">Recommended action:</span>{" "}
+            <span className="text-muted-foreground">
+              {statusLight.recommendedAction}
+            </span>
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return null;
+}
+
+// Reason-first cancel / credit-note dialog. Controlled by the parent, which
+// owns the kind/reason state, the mutations, and their toasts/invalidations.
+function AdjustDialog({
+  kind,
+  reason,
+  onReasonChange,
+  onClose,
+  onConfirm,
+  isPending,
+}: {
+  kind: "cancel" | "credit" | null;
+  reason: string;
+  onReasonChange: (reason: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <Dialog
+      open={kind !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {kind === "cancel" ? "Cancel this invoice" : "Issue a credit note"}
+          </DialogTitle>
+          <DialogDescription>
+            {kind === "cancel"
+              ? "Cancellation is a recorded lifecycle event. A cancelled invoice can never be presented as eligible again."
+              : "A credit note referencing this invoice is created and submitted for stamping. Once stamped, this invoice becomes Credited — a terminal, recorded state."}
+          </DialogDescription>
+        </DialogHeader>
+        <div>
+          <Label htmlFor="adjust-reason" className="sr-only">
+            Reason
+          </Label>
+          <Textarea
+            id="adjust-reason"
+            placeholder="Reason (required — it is recorded on the ledger)"
+            value={reason}
+            onChange={(e) => onReasonChange(e.target.value)}
+            data-testid="input-adjust-reason"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Keep invoice
+          </Button>
+          <Button
+            variant={kind === "cancel" ? "destructive" : "default"}
+            disabled={!reason.trim() || isPending}
+            onClick={onConfirm}
+            data-testid="button-confirm-adjust"
+          >
+            {isPending
+              ? "Working…"
+              : kind === "cancel"
+                ? "Cancel invoice"
+                : "Issue credit note"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Buyer-confirmation card: request button plus the confirmation timeline. The
+// parent keeps the mutation and the can-request lifecycle predicate.
+function ConfirmationCard({
+  invoice,
+  timeline,
+  featureDisabled,
+  canRequest,
+  onRequest,
+  isPending,
+}: {
+  invoice: Invoice;
+  timeline: Confirmation[];
+  featureDisabled: boolean;
+  canRequest: boolean;
+  onRequest: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <MailCheck className="w-4 h-4" aria-hidden="true" /> Buyer confirmation
+        </CardTitle>
+        {canRequest && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onRequest}
+            disabled={isPending}
+          >
+            <Send className="w-4 h-4 mr-2" aria-hidden="true" />
+            {isPending ? "Requesting…" : "Request confirmation"}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent>
+        {featureDisabled ? (
+          <p className="text-sm text-muted-foreground">
+            Buyer confirmations are not yet enabled for this organization. Ask your
+            operator to enable it.
+          </p>
+        ) : timeline.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No confirmation activity yet.
+            {invoice.status === "stamped"
+              ? " Request a confirmation so your buyer acknowledges this invoice."
+              : " Confirmations open up once the invoice is stamped."}
+          </p>
+        ) : (
+          <div>
+            {timeline.map((c, i) => (
+              <div key={c.id} className="relative pl-6 pb-4 last:pb-0">
+                {i < timeline.length - 1 && (
+                  <span className="absolute left-[5px] top-4 bottom-0 w-px bg-border" />
+                )}
+                <span
+                  className={`absolute left-0 top-1.5 w-3 h-3 rounded-full border-2 border-background ${
+                    c.state === "confirmed"
+                      ? "bg-emerald-500"
+                      : c.state === "rejected"
+                        ? "bg-red-500"
+                        : c.state === "queried"
+                          ? "bg-blue-500"
+                          : "bg-amber-500"
+                  }`}
+                />
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className={confirmationBadgeClasses(c.state)}>
+                    {confirmationLabel(c.state)}
+                  </span>
+                  {c.method && (
+                    <span className="text-xs text-muted-foreground">
+                      via {humanize(c.method)}
+                    </span>
+                  )}
+                  {c.noSetOff && (
+                    <span className={pillClasses("slate")}>No set-off</span>
+                  )}
+                </div>
+                {c.note && (
+                  <p className="text-sm text-muted-foreground mt-1">{c.note}</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formatDateTime(c.createdAt)}
+                  {c.confirmingUserId && (
+                    <>
+                      {" "}
+                      · by <span className="font-mono">{c.confirmingUserId}</span>
+                    </>
+                  )}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SettlementsCard({ settlements }: { settlements: SettlementEvent[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Banknote className="w-4 h-4" aria-hidden="true" /> Settlement events
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {settlements.map((s) => (
+          <div key={s.id} className="text-sm border rounded-md px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={pillClasses("slate")}>
+                  {SETTLEMENT_SOURCE_LABELS[s.source] || humanize(s.source)}
+                </span>
+                {s.paymentStatus && (
+                  <span
+                    className={pillClasses(
+                      s.paymentStatus === "paid" ? "emerald" : "amber",
+                    )}
+                  >
+                    {humanize(s.paymentStatus)}
+                  </span>
+                )}
+              </div>
+              <span className="font-semibold tabular-nums">{formatNaira(s.amount)}</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {formatDateTime(s.occurredAt)}
+            </p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SubmissionTimeline({ attempts }: { attempts: SubmissionAttempt[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Submission timeline</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {[...attempts]
+          .sort((a, b) => a.attemptNo - b.attemptNo)
+          .map((a) => (
+            <div key={a.id} className="flex items-start gap-3 text-sm">
+              {a.status === "rejected" || a.status === "error" ? (
+                <XCircle className="w-4 h-4 text-destructive mt-0.5" aria-hidden="true" />
+              ) : a.status === "accepted" ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5" aria-hidden="true" />
+              ) : (
+                <Clock className="w-4 h-4 text-muted-foreground mt-0.5" aria-hidden="true" />
+              )}
+              <div>
+                <p>
+                  Attempt {a.attemptNo} · {humanize(a.status)}{" "}
+                  <span className="text-muted-foreground uppercase text-xs">({a.rail})</span>
+                </p>
+                {a.errorCode && (
+                  <p className="text-xs text-destructive font-mono">{a.errorCode}</p>
+                )}
+                <p className="text-xs text-muted-foreground">{formatDate(a.createdAt)}</p>
+              </div>
+            </div>
+          ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EscalationsCard({ escalations }: { escalations: Escalation[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Escalations</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {escalations.map((e) => (
+          <div key={e.id} className="text-sm border rounded-md px-3 py-2">
+            <div className="flex justify-between">
+              <span className="font-medium">{humanize(e.status)}</span>
+              <span className="text-xs text-muted-foreground">{formatDate(e.createdAt)}</span>
+            </div>
+            <p className="text-muted-foreground">{e.reason}</p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
 
 export function InvoiceDetail() {
   const [, params] = useRoute("/invoices/:id");
@@ -203,6 +546,11 @@ export function InvoiceDetail() {
   // "New from this invoice" overwrite guard: only shown when the stored
   // invoice-form draft already holds real work.
   const [confirmNewFrom, setConfirmNewFrom] = useState(false);
+
+  const closeAdjust = () => {
+    setAdjustKind(null);
+    setAdjustReason("");
+  };
 
   const handleSubmit = async () => {
     if (!invoice) return;
@@ -441,18 +789,16 @@ export function InvoiceDetail() {
           <ArrowLeft className="w-4 h-4 mr-1" aria-hidden="true" /> Back to vault
         </Link>
         <Card data-testid="card-unknown-invoice">
-          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-            <FileQuestion className="w-10 h-10 text-muted-foreground" aria-hidden="true" />
-            <p className="font-semibold" data-testid="text-error">
-              We couldn't find this invoice
-            </p>
-            <p className="text-sm text-muted-foreground">
-              It may have been removed, or the link may be out of date.
-            </p>
+          <EmptyState
+            icon={FileQuestion}
+            title="We couldn't find this invoice"
+            testId="text-error"
+            description="It may have been removed, or the link may be out of date."
+          >
             <Button asChild className="mt-2">
               <Link href="/invoices">Back to vault</Link>
             </Button>
-          </CardContent>
+          </EmptyState>
         </Card>
       </div>
     );
@@ -479,8 +825,6 @@ export function InvoiceDetail() {
     (!latestConfirmation ||
       (latestConfirmation.state !== "requested" &&
         latestConfirmation.state !== "confirmed"));
-  const lightMeta = statusLight ? LIGHT_META[statusLight.light] : null;
-  const LightIcon = lightMeta?.Icon;
 
   return (
     <div className="space-y-6">
@@ -567,117 +911,16 @@ export function InvoiceDetail() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog
-        open={adjustKind !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setAdjustKind(null);
-            setAdjustReason("");
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {adjustKind === "cancel" ? "Cancel this invoice" : "Issue a credit note"}
-            </DialogTitle>
-            <DialogDescription>
-              {adjustKind === "cancel"
-                ? "Cancellation is a recorded lifecycle event. A cancelled invoice can never be presented as eligible again."
-                : "A credit note referencing this invoice is created and submitted for stamping. Once stamped, this invoice becomes Credited — a terminal, recorded state."}
-            </DialogDescription>
-          </DialogHeader>
-          <div>
-            <Label htmlFor="adjust-reason" className="sr-only">
-              Reason
-            </Label>
-            <Textarea
-              id="adjust-reason"
-              placeholder="Reason (required — it is recorded on the ledger)"
-              value={adjustReason}
-              onChange={(e) => setAdjustReason(e.target.value)}
-              data-testid="input-adjust-reason"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setAdjustKind(null);
-                setAdjustReason("");
-              }}
-            >
-              Keep invoice
-            </Button>
-            <Button
-              variant={adjustKind === "cancel" ? "destructive" : "default"}
-              disabled={
-                !adjustReason.trim() ||
-                cancelInvoice.isPending ||
-                creditNote.isPending
-              }
-              onClick={handleAdjust}
-              data-testid="button-confirm-adjust"
-            >
-              {cancelInvoice.isPending || creditNote.isPending
-                ? "Working…"
-                : adjustKind === "cancel"
-                  ? "Cancel invoice"
-                  : "Issue credit note"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AdjustDialog
+        kind={adjustKind}
+        reason={adjustReason}
+        onReasonChange={setAdjustReason}
+        onClose={closeAdjust}
+        onConfirm={handleAdjust}
+        isPending={cancelInvoice.isPending || creditNote.isPending}
+      />
 
-      {statusLightLoading ? (
-        <Card data-testid="card-compliance-status">
-          <CardHeader>
-            <CardTitle className="text-base">Compliance status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Skeleton className="h-5 w-32" />
-            <Skeleton className="h-4 w-72 max-w-full" />
-            <Skeleton className="h-4 w-56 max-w-full" />
-          </CardContent>
-        </Card>
-      ) : statusLight && lightMeta && LightIcon ? (
-        <Card data-testid="card-compliance-status">
-          <CardHeader>
-            <CardTitle className="text-base">Compliance status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${lightMeta.dot}`}
-                aria-hidden="true"
-              />
-              <LightIcon
-                className={`w-4 h-4 ${lightMeta.text}`}
-                aria-hidden="true"
-              />
-              <span
-                className={`font-semibold ${lightMeta.text}`}
-                data-testid="text-status-light"
-              >
-                {lightMeta.label}
-              </span>
-            </div>
-            {statusLight.reasons.length > 0 && (
-              <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
-                {statusLight.reasons.map((r, i) => (
-                  <li key={i}>{r}</li>
-                ))}
-              </ul>
-            )}
-            <p data-testid="text-recommended-action">
-              <span className="font-medium">Recommended action:</span>{" "}
-              <span className="text-muted-foreground">
-                {statusLight.recommendedAction}
-              </span>
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
+      <ComplianceStatusCard statusLight={statusLight} isLoading={statusLightLoading} />
 
       {stampedFamily && stamp && (
         <Card className="border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/40">
@@ -786,172 +1029,25 @@ export function InvoiceDetail() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <MailCheck className="w-4 h-4" aria-hidden="true" /> Buyer confirmation
-          </CardTitle>
-          {canRequestConfirmation && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleRequestConfirmation}
-              disabled={createConfirmation.isPending}
-            >
-              <Send className="w-4 h-4 mr-2" aria-hidden="true" />
-              {createConfirmation.isPending ? "Requesting…" : "Request confirmation"}
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          {confirmationsDark ? (
-            <p className="text-sm text-muted-foreground">
-              Buyer confirmations are not yet enabled for this organization. Ask your
-              operator to enable it.
-            </p>
-          ) : confirmationTimeline.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No confirmation activity yet.
-              {invoice.status === "stamped"
-                ? " Request a confirmation so your buyer acknowledges this invoice."
-                : " Confirmations open up once the invoice is stamped."}
-            </p>
-          ) : (
-            <div>
-              {confirmationTimeline.map((c, i) => (
-                <div key={c.id} className="relative pl-6 pb-4 last:pb-0">
-                  {i < confirmationTimeline.length - 1 && (
-                    <span className="absolute left-[5px] top-4 bottom-0 w-px bg-border" />
-                  )}
-                  <span
-                    className={`absolute left-0 top-1.5 w-3 h-3 rounded-full border-2 border-background ${
-                      c.state === "confirmed"
-                        ? "bg-emerald-500"
-                        : c.state === "rejected"
-                          ? "bg-red-500"
-                          : c.state === "queried"
-                            ? "bg-blue-500"
-                            : "bg-amber-500"
-                    }`}
-                  />
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className={confirmationBadgeClasses(c.state)}>
-                      {confirmationLabel(c.state)}
-                    </span>
-                    {c.method && (
-                      <span className="text-xs text-muted-foreground">
-                        via {humanize(c.method)}
-                      </span>
-                    )}
-                    {c.noSetOff && (
-                      <span className={pillClasses("slate")}>No set-off</span>
-                    )}
-                  </div>
-                  {c.note && (
-                    <p className="text-sm text-muted-foreground mt-1">{c.note}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatDateTime(c.createdAt)}
-                    {c.confirmingUserId && (
-                      <>
-                        {" "}
-                        · by <span className="font-mono">{c.confirmingUserId}</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ConfirmationCard
+        invoice={invoice}
+        timeline={confirmationTimeline}
+        featureDisabled={confirmationsDark}
+        canRequest={canRequestConfirmation}
+        onRequest={handleRequestConfirmation}
+        isPending={createConfirmation.isPending}
+      />
 
       {settlements && settlements.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Banknote className="w-4 h-4" aria-hidden="true" /> Settlement events
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {settlements.map((s) => (
-              <div key={s.id} className="text-sm border rounded-md px-3 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={pillClasses("slate")}>
-                      {SETTLEMENT_SOURCE_LABELS[s.source] || humanize(s.source)}
-                    </span>
-                    {s.paymentStatus && (
-                      <span
-                        className={pillClasses(
-                          s.paymentStatus === "paid" ? "emerald" : "amber",
-                        )}
-                      >
-                        {humanize(s.paymentStatus)}
-                      </span>
-                    )}
-                  </div>
-                  <span className="font-semibold tabular-nums">{formatNaira(s.amount)}</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {formatDateTime(s.occurredAt)}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <SettlementsCard settlements={settlements} />
       )}
 
       {attempts && attempts.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Submission timeline</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[...attempts]
-              .sort((a, b) => a.attemptNo - b.attemptNo)
-              .map((a) => (
-                <div key={a.id} className="flex items-start gap-3 text-sm">
-                  {a.status === "rejected" || a.status === "error" ? (
-                    <XCircle className="w-4 h-4 text-destructive mt-0.5" aria-hidden="true" />
-                  ) : a.status === "accepted" ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5" aria-hidden="true" />
-                  ) : (
-                    <Clock className="w-4 h-4 text-muted-foreground mt-0.5" aria-hidden="true" />
-                  )}
-                  <div>
-                    <p>
-                      Attempt {a.attemptNo} · {humanize(a.status)}{" "}
-                      <span className="text-muted-foreground uppercase text-xs">({a.rail})</span>
-                    </p>
-                    {a.errorCode && (
-                      <p className="text-xs text-destructive font-mono">{a.errorCode}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">{formatDate(a.createdAt)}</p>
-                  </div>
-                </div>
-              ))}
-          </CardContent>
-        </Card>
+        <SubmissionTimeline attempts={attempts} />
       )}
 
       {escalations && escalations.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Escalations</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {escalations.map((e) => (
-              <div key={e.id} className="text-sm border rounded-md px-3 py-2">
-                <div className="flex justify-between">
-                  <span className="font-medium">{humanize(e.status)}</span>
-                  <span className="text-xs text-muted-foreground">{formatDate(e.createdAt)}</span>
-                </div>
-                <p className="text-muted-foreground">{e.reason}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <EscalationsCard escalations={escalations} />
       )}
     </div>
   );

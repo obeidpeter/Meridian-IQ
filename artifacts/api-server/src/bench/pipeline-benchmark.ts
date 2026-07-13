@@ -15,7 +15,7 @@ import {
   partiesTable,
   firmsTable,
 } from "@workspace/db";
-import { eq, inArray, sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { drain } from "../modules/pipeline/pipeline";
 
 const N = Number(process.argv[2] ?? 2_000);

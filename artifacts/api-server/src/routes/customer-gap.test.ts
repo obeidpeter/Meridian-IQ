@@ -1,8 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { AddressInfo } from "node:net";
-import express from "express";
 import {
   getDb,
   firmsTable,
@@ -12,16 +10,21 @@ import {
   invoicesTable,
 } from "@workspace/db";
 import partiesRouter from "./parties.ts";
-import { errorHandler } from "../middleware/error.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { getFirmReceivables } from "../modules/invoice/receivables.ts";
+import {
+  appFor,
+  listen,
+  closeAllServers,
+} from "../test-helpers/route-harness.ts";
+import { makeRunSalt, daysAgo } from "../test-helpers/fixtures.ts";
 
 // The "new customer" gap: party visibility is the firm's SPHERE (engaged ∪
 // invoice-referenced ∪ captured-by-firm), with the strictly narrower SEC-03
 // version for client_users (own party ∪ own-invoice parties ∪ own-captured).
 // Plus the firm-level receivables rollup that rides the same fixtures.
 
-const SALT = `${Date.now().toString(36)}${process.pid}`;
+const SALT = makeRunSalt();
 
 const firmId = randomUUID();
 const firmBId = randomUUID();
@@ -48,45 +51,9 @@ const clientUserA: Principal = {
   buyerPartyId: null,
 };
 
-function appFor(principal: Principal) {
-  const app = express();
-  app.use(express.json());
-  app.use((req, _res, next) => {
-    req.principal = principal;
-    req.log = {
-      warn: () => {},
-      error: () => {},
-      info: () => {},
-    } as unknown as typeof req.log;
-    next();
-  });
-  app.use(partiesRouter);
-  app.use(errorHandler);
-  return app;
-}
-
-const closers: Array<() => Promise<void>> = [];
-async function listen(app: express.Express): Promise<string> {
-  const server = app.listen(0, "127.0.0.1");
-  await new Promise<void>((resolve) => server.once("listening", resolve));
-  const { port } = server.address() as AddressInfo;
-  closers.push(
-    () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
-      ),
-  );
-  return `http://127.0.0.1:${port}`;
-}
 after(async () => {
-  for (const close of closers) await close();
+  await closeAllServers();
 });
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-}
 
 before(async () => {
   const db = getDb();
@@ -164,7 +131,7 @@ before(async () => {
 });
 
 test("firm staff see their sphere: engaged, invoice-referenced, and firm-captured parties", async () => {
-  const base = await listen(appFor(staff));
+  const base = await listen(appFor(staff, partiesRouter));
 
   // Capture a brand-new customer as the firm (no invoices reference it yet).
   const created = await fetch(`${base}/parties`, {
@@ -191,7 +158,7 @@ test("firm staff see their sphere: engaged, invoice-referenced, and firm-capture
 });
 
 test("a client_user sees only its own sphere (SEC-03)", async () => {
-  const base = await listen(appFor(clientUserA));
+  const base = await listen(appFor(clientUserA, partiesRouter));
 
   // The client captures a customer of their own.
   const created = await fetch(`${base}/parties`, {

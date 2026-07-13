@@ -6,19 +6,31 @@
 
 const DEMO_PASSWORD = "meridian2027";
 
-export async function runJourneys(page, BASE, check) {
-  const signIn = async (demoTestId, waitUrl) => {
-    await page.goto(BASE + "/login", { waitUntil: "networkidle" });
-    await page.getByTestId(demoTestId).click();
-    await page.waitForURL(waitUrl, { timeout: 20000 });
-  };
-  const signOutFromApp = async () => {
-    await page.getByTestId("button-sign-out").first().click();
-    await page.waitForURL(BASE + "/login");
-    await page.waitForSelector('[data-testid="input-email"]', { timeout: 10000 });
-  };
+async function signIn(page, BASE, demoTestId, waitUrl) {
+  await page.goto(BASE + "/login", { waitUntil: "networkidle" });
+  await page.getByTestId(demoTestId).click();
+  await page.waitForURL(waitUrl, { timeout: 20000 });
+}
 
-  // ---------- public landing + portal ----------
+async function signOutFromApp(page, BASE) {
+  await page.getByTestId("button-sign-out").first().click();
+  await page.waitForURL(BASE + "/login");
+  await page.waitForSelector('[data-testid="input-email"]', { timeout: 10000 });
+}
+
+// Poll a probe until it reports true. The delay runs BEFORE each attempt —
+// the search probes rely on it for the debounced input to settle.
+async function pollUntil(fn, { tries = 10, delayMs = 700, page }) {
+  let ok = false;
+  for (let i = 0; i < tries && !ok; i++) {
+    await page.waitForTimeout(delayMs);
+    ok = await fn();
+  }
+  return ok;
+}
+
+// ---------- public landing + portal ----------
+async function journeyPortalAuth(page, BASE, check) {
   await page.goto(BASE + "/", { waitUntil: "networkidle" });
   check(
     "landing page links to the login portal",
@@ -50,9 +62,11 @@ export async function runJourneys(page, BASE, check) {
     }
   }
   check("login rate limit engages after repeated failures", throttled);
+}
 
-  // ---------- operator: Compliance Desk ----------
-  await signIn("button-demo-ops", "**/console/operator-queue");
+// ---------- operator: Compliance Desk ----------
+async function journeyOperatorDesk(page, BASE, check) {
+  await signIn(page, BASE, "button-demo-ops", "**/console/operator-queue");
   await page.waitForSelector('[data-testid="text-page-title"]');
   check(
     "operator lands on the work queue",
@@ -98,10 +112,12 @@ export async function runJourneys(page, BASE, check) {
   await page.waitForSelector('[data-testid="stat-parties"]', { timeout: 10000 });
   check("party workbench renders", true);
 
-  await signOutFromApp();
+  await signOutFromApp(page, BASE);
+}
 
-  // ---------- firm admin: advisory ----------
-  await signIn("button-demo-demo.admin", "**/console/");
+// ---------- firm admin: advisory ----------
+async function journeyFirmAdminAdvisory(page, BASE, check) {
+  await signIn(page, BASE, "button-demo-demo.admin", "**/console/");
   await page.waitForSelector('[data-testid="text-page-title"]');
   check(
     "admin lands on portfolio",
@@ -117,10 +133,12 @@ export async function runJourneys(page, BASE, check) {
   await page.getByTestId("button-analyze-vat").click();
   await page.waitForSelector('[data-testid="stat-vat-at-risk"]', { timeout: 15000 });
   check("VAT-risk analysis produces a report", true);
-  await signOutFromApp();
+  await signOutFromApp(page, BASE);
+}
 
-  // ---------- auditor: read-only boundary ----------
-  await signIn("button-demo-audit", "**/console/audit");
+// ---------- auditor: read-only boundary ----------
+async function journeyAuditorReadOnly(page, BASE, check) {
+  await signIn(page, BASE, "button-demo-audit", "**/console/audit");
   await page.waitForSelector('[data-testid="card-chain-valid"]', { timeout: 15000 });
   await page.getByTestId("nav-operator-queue").first().click();
   await page.waitForSelector('[data-testid^="card-case-"]', { timeout: 10000 });
@@ -128,10 +146,12 @@ export async function runJourneys(page, BASE, check) {
     "auditor queue is read-only",
     (await page.locator('[data-testid^="button-claim-"]').count()) === 0,
   );
-  await signOutFromApp();
+  await signOutFromApp(page, BASE);
+}
 
-  // ---------- SME owner: consent round trip ----------
-  await signIn("button-demo-owner", "**/app/**");
+// ---------- SME owner: consent round trip ----------
+async function journeyOwnerConsent(page, BASE, check) {
+  await signIn(page, BASE, "button-demo-owner", "**/app/**");
   await page.goto(BASE + "/app/consent", { waitUntil: "networkidle" });
   await page.waitForSelector('[data-testid="consent-layer-1"]', { timeout: 10000 });
   check(
@@ -145,10 +165,15 @@ export async function runJourneys(page, BASE, check) {
   await page.getByTestId("button-revoke-2").click();
   await page.waitForSelector('[data-testid="button-grant-2"]', { timeout: 10000 });
   check("consent layer 2 grant/revoke round-trips", true);
-  await signOutFromApp();
+  await signOutFromApp(page, BASE);
+}
 
+// ---------- SME staff: credit note + workflow smoke ----------
+// Signs in as demo.staff and deliberately leaves that session signed in —
+// journeyPasswordRoundTrip operates on it and must run immediately after.
+async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   // ---------- SME staff: credit note credits its original ----------
-  await signIn("button-demo-demo.staff", "**/app/**");
+  await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
   const invoicesResp = await page.request.get(BASE + "/api/invoices?status=stamped");
   const stamped = (await invoicesResp.json()).filter(
     (i) => i.supplierPartyId.startsWith("22222222") && i.kind === "invoice",
@@ -165,12 +190,13 @@ export async function runJourneys(page, BASE, check) {
       timeout: 15000,
     });
     // the pipeline credits the original once the credit note stamps
-    let credited = false;
-    for (let i = 0; i < 10 && !credited; i++) {
-      await page.waitForTimeout(1500);
-      const r = await page.request.get(BASE + `/api/invoices/${target.id}`);
-      credited = (await r.json()).invoice.status === "credited";
-    }
+    const credited = await pollUntil(
+      async () => {
+        const r = await page.request.get(BASE + `/api/invoices/${target.id}`);
+        return (await r.json()).invoice.status === "credited";
+      },
+      { delayMs: 1500, page },
+    );
     check("credit note credits its original (CORE-09)", credited);
   }
 
@@ -197,13 +223,12 @@ export async function runJourneys(page, BASE, check) {
   await page.waitForSelector("text=INV-1001", { timeout: 15000 });
   check("invoice list renders the seeded book", true);
   await page.locator("#invoice-search").fill("INV-1002");
-  let narrowed = false;
-  for (let i = 0; i < 10 && !narrowed; i++) {
-    await page.waitForTimeout(700);
-    narrowed =
+  const narrowed = await pollUntil(
+    async () =>
       (await page.locator("text=INV-1002").count()) > 0 &&
-      (await page.locator("text=INV-1001").count()) === 0;
-  }
+      (await page.locator("text=INV-1001").count()) === 0,
+    { page },
+  );
   check("server-side search narrows the invoice list", narrowed);
 
   // A draft can be created through the form — when the signed-in client can
@@ -252,11 +277,10 @@ export async function runJourneys(page, BASE, check) {
     check("draft created via the session API", created.status() === 201);
     await page.goto(BASE + "/app/invoices", { waitUntil: "networkidle" });
     await page.locator("#invoice-search").fill(draftNumber);
-    let found = false;
-    for (let i = 0; i < 10 && !found; i++) {
-      await page.waitForTimeout(700);
-      found = (await page.locator(`text=${draftNumber}`).count()) > 0;
-    }
+    const found = await pollUntil(
+      async () => (await page.locator(`text=${draftNumber}`).count()) > 0,
+      { page },
+    );
     check("fresh draft surfaces through list search", found);
   }
 
@@ -288,8 +312,13 @@ export async function runJourneys(page, BASE, check) {
   await page.waitForSelector("text=Submit all pending drafts?", { timeout: 10000 });
   await page.getByRole("button", { name: "Cancel" }).click();
   check("bulk-submit confirmation opens and cancels", true);
+}
 
-  // ---------- change password round trip (restores the demo password) ----------
+// ---------- change password round trip (restores the demo password) ----------
+// Requires the demo.staff session left signed in by the previous journey (the
+// change-password form acts on the current session), and must stay LAST: it
+// temporarily changes demo.staff's password before restoring it.
+async function journeyPasswordRoundTrip(page, BASE, check) {
   await page.goto(BASE + "/login", { waitUntil: "networkidle" });
   await page.waitForSelector('[data-testid="button-show-change-password"]', {
     timeout: 10000,
@@ -310,4 +339,14 @@ export async function runJourneys(page, BASE, check) {
   await page.getByTestId("button-change-password").click();
   await page.waitForSelector('[data-testid="text-password-changed"]', { timeout: 10000 });
   check("password change round-trips (restored)", true);
+}
+
+export async function runJourneys(page, BASE, check) {
+  await journeyPortalAuth(page, BASE, check);
+  await journeyOperatorDesk(page, BASE, check);
+  await journeyFirmAdminAdvisory(page, BASE, check);
+  await journeyAuditorReadOnly(page, BASE, check);
+  await journeyOwnerConsent(page, BASE, check);
+  await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
+  await journeyPasswordRoundTrip(page, BASE, check);
 }

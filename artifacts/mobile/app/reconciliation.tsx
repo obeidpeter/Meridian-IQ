@@ -44,9 +44,13 @@ import {
   Divider,
   EmptyState,
   ErrorState,
+  rowBetween,
+  stackHeaderOptions,
   TextField,
+  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { apiErrorMessage, hasStatus } from "@/lib/api-error";
 import { formatCurrency, formatDate, humanize } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
@@ -112,31 +116,7 @@ function confidenceTone(confidence: string): BadgeTone {
 }
 
 /** The reconciliation flag being dark surfaces as a 404 from the API. */
-function isFeatureUnavailable(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    (error as { status?: unknown }).status === 404
-  );
-}
-
-/** Pull the server's message out of a thrown API error, if present. */
-function apiErrorMessage(error: unknown, fallback: string): string {
-  const data =
-    error && typeof error === "object"
-      ? (error as { data?: unknown }).data
-      : null;
-  if (data && typeof data === "object" && "message" in data) {
-    const message = (data as { message?: unknown }).message;
-    if (typeof message === "string" && message) return message;
-  }
-  if (data && typeof data === "object" && "error" in data) {
-    const message = (data as { error?: unknown }).error;
-    if (typeof message === "string" && message) return message;
-  }
-  return fallback;
-}
+const isFeatureUnavailable = (error: unknown): boolean => hasStatus(error, 404);
 
 export default function ReconciliationScreen() {
   const colors = useColors();
@@ -394,18 +374,7 @@ export default function ReconciliationScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "Reconciliation",
-          headerStyle: { backgroundColor: colors.background },
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: "Inter_600SemiBold",
-            color: colors.foreground,
-          },
-          headerTintColor: colors.primary,
-        }}
-      />
+      <Stack.Screen options={stackHeaderOptions(colors, "Reconciliation")} />
       <KeyboardAwareScrollViewCompat
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={[
@@ -784,13 +753,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    ...(Platform.OS === "web"
-      ? { maxWidth: 640, alignSelf: "center", width: "100%" }
-      : {}),
+    ...webContentMax,
   },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  rowBetween: { ...rowBetween },
 });

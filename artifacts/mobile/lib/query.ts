@@ -7,6 +7,8 @@ import {
 import * as Network from "expo-network";
 import { Platform } from "react-native";
 
+import { hasStatus } from "./api-error";
+
 // Wire React Query's connectivity to the real device network state (SEC/reliability).
 // Without this, React Query in React Native never observes connectivity: queries
 // aren't paused offline and `refetchOnReconnect` never fires. On web the default
@@ -44,12 +46,7 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
  * duck-type it here: any thrown error carrying a numeric `status` of 401.
  */
 function isUnauthorized(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    (error as { status?: unknown }).status === 401
-  );
+  return hasStatus(error, 401);
 }
 
 function handleError(error: unknown): void {

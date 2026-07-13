@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/page-header";
 import { RequireClientScope } from "@/components/require-client-scope";
 import {
   Upload,
@@ -242,16 +243,10 @@ export function Import() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-            Bulk import
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Upload a spreadsheet of invoices — we validate every row before creating anything.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Bulk import"
+        description="Upload a spreadsheet of invoices — we validate every row before creating anything."
+      />
 
       <RequireClientScope thing="bulk import">
       <Card>

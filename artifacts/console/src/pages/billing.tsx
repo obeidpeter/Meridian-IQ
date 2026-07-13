@@ -38,11 +38,7 @@ import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { Check, History, Pencil } from "lucide-react";
-import { formatNaira, formatDate, humanize } from "@/lib/format";
-
-function pct(v: string) {
-  return `${(Number(v) * 100).toFixed(1)}%`;
-}
+import { formatNaira, formatDate, formatPct, humanize } from "@/lib/format";
 
 function PriceReviewHistory({ tierId }: { tierId: string }) {
   const { data, isLoading, isError, refetch } = useListPriceReviews(tierId);
@@ -261,7 +257,7 @@ export function Billing() {
               </p>
               <p className="text-xs text-muted-foreground">
                 {subscription.tier.includedInvoices} invoices included ·{" "}
-                {pct(subscription.tier.revenueSharePct)} revenue share ·{" "}
+                {formatPct(subscription.tier.revenueSharePct)} revenue share ·{" "}
                 {humanize(subscription.status)}
               </p>
             </div>
@@ -310,7 +306,7 @@ export function Billing() {
                     <ul className="text-sm space-y-1.5 text-muted-foreground">
                       <li>{t.includedInvoices} invoices / month</li>
                       <li>{formatNaira(t.overagePrice)} per extra invoice</li>
-                      <li>{pct(t.revenueSharePct)} revenue share</li>
+                      <li>{formatPct(t.revenueSharePct)} revenue share</li>
                       {t.operatorManaged && <li>Operator-managed support</li>}
                     </ul>
                     <div className="flex gap-2 pt-2">
@@ -380,7 +376,7 @@ export function Billing() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pendingPlan
-                ? `Billing changes to ${formatNaira(pendingPlan.monthlyPrice)}/mo with ${pendingPlan.includedInvoices} invoices included and ${pct(pendingPlan.revenueSharePct)} revenue share.`
+                ? `Billing changes to ${formatNaira(pendingPlan.monthlyPrice)}/mo with ${pendingPlan.includedInvoices} invoices included and ${formatPct(pendingPlan.revenueSharePct)} revenue share.`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>

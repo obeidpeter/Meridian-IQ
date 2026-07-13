@@ -15,7 +15,7 @@ import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { Download, FileText } from "lucide-react";
-import { formatNaira, formatDate, humanize } from "@/lib/format";
+import { formatNaira, formatDate, formatPct, humanize } from "@/lib/format";
 
 const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -25,10 +25,6 @@ function previousMonth(): string {
   d.setDate(1);
   d.setMonth(d.getMonth() - 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function pct(v: string) {
-  return `${(Number(v) * 100).toFixed(1)}%`;
 }
 
 function toCsv(rows: RevenueShareStatement[]): string {
@@ -255,7 +251,7 @@ export function Statements() {
                 </div>
                 <div className="mt-4 pt-4 border-t flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">
-                    Revenue share ({pct(s.revenueSharePct)})
+                    Revenue share ({formatPct(s.revenueSharePct)})
                   </span>
                   <span
                     className="text-lg font-bold text-primary tabular-nums"

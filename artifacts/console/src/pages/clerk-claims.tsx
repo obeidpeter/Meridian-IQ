@@ -39,7 +39,11 @@ import {
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { errorStatus } from "@/lib/errors";
+import {
+  errorStatus,
+  killSwitchTripped,
+  serverErrorMessage,
+} from "@/lib/errors";
 import { formatDate, pillClasses, type BadgeTone } from "@/lib/format";
 import {
   BookMarked,
@@ -81,10 +85,6 @@ const FACT_KINDS: ProtectedFactKind[] = [
 // maps to an empty applicability object on the wire.
 const CATEGORIES = ["none", "b2b", "b2g", "b2c"] as const;
 type CategoryOption = (typeof CATEGORIES)[number];
-
-function killSwitchTripped(err: unknown): boolean {
-  return errorStatus(err) === 503;
-}
 
 interface ClaimForm {
   claimKey: string;
@@ -493,12 +493,11 @@ export function ClerkClaims() {
       });
       return;
     }
-    const body = (err as { body?: { error?: string } } | null)?.body;
     if (errorStatus(err) === 403) {
       toast({
         title: "Maker-checker blocked this",
         description:
-          body?.error ??
+          serverErrorMessage(err) ??
           "The author of a claim version cannot approve it. A second operator must review and approve.",
         variant: "destructive",
       });
@@ -506,7 +505,7 @@ export function ClerkClaims() {
     }
     toast({
       title: "Something went wrong",
-      description: body?.error ?? fallback,
+      description: serverErrorMessage(err) ?? fallback,
       variant: "destructive",
     });
   };

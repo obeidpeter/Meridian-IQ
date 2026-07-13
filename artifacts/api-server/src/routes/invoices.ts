@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import {
   getDb,
   invoicesTable,
@@ -63,9 +63,11 @@ import {
   assertPartyAccess,
   clientPartyScope,
   tenantFirmId,
+  type Principal,
 } from "../modules/auth/rbac";
 import { bulkSubmit } from "../modules/invoice/bulk-submit";
 import { toCsv } from "../lib/csv";
+import { likePattern } from "../lib/sql";
 import {
   createDraft,
   getInvoiceWithLines,
@@ -83,7 +85,7 @@ import {
 import { serializeToUbl } from "../modules/invoice/canonical";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
-import { isFeatureEnabled } from "../modules/flags/flags";
+import { requireFlag } from "../modules/flags/flags";
 
 const router: IRouter = Router();
 
@@ -98,30 +100,25 @@ async function loadForTenant(req: { principal: import("../modules/auth/rbac").Pr
   return bundle;
 }
 
-// Escape LIKE wildcards so a user typing "50%" searches for the literal
-// characters instead of matching everything.
-function likePattern(q: string): string {
-  return `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
-}
-
-router.get("/invoices", async (req, res): Promise<void> => {
-  assertCan(req.principal, "invoice.read");
-  const query = ListInvoicesQueryParams.safeParse(req.query);
-  const status = query.success ? query.data.status : undefined;
-  const limit = query.success ? query.data.limit : undefined;
-  const offset = query.success ? query.data.offset : undefined;
-  const q = query.success ? query.data.q?.trim() : undefined;
-  const tenant = tenantFirmId(req.principal);
-  const conditions = [];
+// The tenant/SEC-03/status/q conditions shared by the invoices list and its
+// CSV export — one definition of "what the caller can read". `q` must already
+// be trimmed by the caller.
+function invoiceListConditions(
+  principal: Principal,
+  opts: { status?: string; q?: string },
+): SQL[] {
+  const tenant = tenantFirmId(principal);
+  const conditions: SQL[] = [];
   if (tenant) conditions.push(eq(invoicesTable.firmId, tenant));
   // A client_user only sees invoices where it is the supplier — not sibling
   // clients of the same firm (SEC-03).
-  const scope = clientPartyScope(req.principal);
+  const scope = clientPartyScope(principal);
   if (scope) conditions.push(eq(invoicesTable.supplierPartyId, scope));
-  if (status) conditions.push(eq(invoicesTable.status, status as never));
+  if (opts.status)
+    conditions.push(eq(invoicesTable.status, opts.status as never));
   // Search matches the invoice number or either party's legal name.
-  if (q) {
-    const pattern = likePattern(q);
+  if (opts.q) {
+    const pattern = likePattern(opts.q);
     conditions.push(sql`(
       ${invoicesTable.invoiceNumber} ILIKE ${pattern}
       OR EXISTS (
@@ -132,6 +129,17 @@ router.get("/invoices", async (req, res): Promise<void> => {
       )
     )`);
   }
+  return conditions;
+}
+
+router.get("/invoices", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = ListInvoicesQueryParams.safeParse(req.query);
+  const status = query.success ? query.data.status : undefined;
+  const limit = query.success ? query.data.limit : undefined;
+  const offset = query.success ? query.data.offset : undefined;
+  const q = query.success ? query.data.q?.trim() : undefined;
+  const conditions = invoiceListConditions(req.principal, { status, q });
 
   // Paged/search requests are newest-first and bounded; a bare request keeps
   // the legacy full-list oldest-first behaviour for existing clients (mobile).
@@ -176,24 +184,7 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
   const query = ExportInvoicesCsvQueryParams.safeParse(req.query);
   const status = query.success ? query.data.status : undefined;
   const q = query.success ? query.data.q?.trim() : undefined;
-  const tenant = tenantFirmId(req.principal);
-  const conditions = [];
-  if (tenant) conditions.push(eq(invoicesTable.firmId, tenant));
-  const scope = clientPartyScope(req.principal);
-  if (scope) conditions.push(eq(invoicesTable.supplierPartyId, scope));
-  if (status) conditions.push(eq(invoicesTable.status, status as never));
-  if (q) {
-    const pattern = likePattern(q);
-    conditions.push(sql`(
-      ${invoicesTable.invoiceNumber} ILIKE ${pattern}
-      OR EXISTS (
-        SELECT 1 FROM parties p
-        WHERE (p.id = ${invoicesTable.supplierPartyId}
-            OR p.id = ${invoicesTable.buyerPartyId})
-          AND p.legal_name ILIKE ${pattern}
-      )
-    )`);
-  }
+  const conditions = invoiceListConditions(req.principal, { status, q });
   const rows = await getDb()
     .select()
     .from(invoicesTable)
@@ -555,12 +546,8 @@ router.get("/invoices/:id/status-light", async (req, res): Promise<void> => {
   res.json(GetInvoiceStatusLightResponse.parse(light));
 });
 
-router.get("/invoices/:id/confirmations", async (req, res): Promise<void> => {
-  // Buyer confirmations are a release-tagged (R1) feature: unreachable when dark.
-  if (!(await isFeatureEnabled("buyer_confirmations", req.principal.firmId))) {
-    res.sendStatus(404);
-    return;
-  }
+// Buyer confirmations are a release-tagged (R1) feature: unreachable when dark.
+router.get("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), async (req, res): Promise<void> => {
   assertCan(req.principal, "confirmation.read");
   const params = ListConfirmationsParams.safeParse(req.params);
   if (!params.success) {
@@ -583,11 +570,7 @@ router.get("/invoices/:id/confirmations", async (req, res): Promise<void> => {
 //     buyer_user principal scoped to the invoice's buyer Party
 //     (confirmation.respond), with confirming user and method captured.
 // Lineage is append-only rows; a response requires an open `requested` row.
-router.post("/invoices/:id/confirmations", async (req, res): Promise<void> => {
-  if (!(await isFeatureEnabled("buyer_confirmations", req.principal.firmId))) {
-    res.sendStatus(404);
-    return;
-  }
+router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), async (req, res): Promise<void> => {
   const params = CreateConfirmationParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
