@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import * as XLSX from "xlsx";
+import { readSheet } from "read-excel-file/browser";
+import writeXlsxFile from "write-excel-file/browser";
 import {
   useGetMe,
   useImportInvoices,
@@ -62,25 +63,27 @@ function download(filename: string, text: string, mime = "text/csv") {
   URL.revokeObjectURL(url);
 }
 
-function downloadExcelTemplate() {
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([
-    [...COLUMNS],
-    [
-      "INV-2001",
-      "Lagos Retail Ltd",
-      "12345678-0001",
-      "2026-07-01",
-      "2026-07-31",
-      "Consulting services",
-      "1",
-      "150000",
-      "0.075",
-      "NGN",
-    ],
-  ]);
-  XLSX.utils.book_append_sheet(wb, ws, "Invoices");
-  XLSX.writeFile(wb, "meridianiq-template.xlsx");
+async function downloadExcelTemplate() {
+  const header = COLUMNS.map((value) => ({
+    value,
+    type: String,
+    fontWeight: "bold" as const,
+  }));
+  const example = [
+    "INV-2001",
+    "Lagos Retail Ltd",
+    "12345678-0001",
+    "2026-07-01",
+    "2026-07-31",
+    "Consulting services",
+    "1",
+    "150000",
+    "0.075",
+    "NGN",
+  ].map((value) => ({ value, type: String }));
+  await writeXlsxFile([header, example], { sheet: "Invoices" }).toFile(
+    "meridianiq-template.xlsx",
+  );
 }
 
 function mapRow(row: Record<string, unknown>, idx: number): InvoiceImportRow {
@@ -120,23 +123,27 @@ function parseCsv(text: string): InvoiceImportRow[] {
   });
 }
 
-// Parse the first sheet of an Excel workbook (.xlsx/.xls). Header row must use
+// Parse the first sheet of an uploaded .xlsx workbook. The header row must use
 // the same canonical column names as the CSV template so both formats map to the
 // identical import-row model and run through the same server-side validator.
-function parseWorkbook(data: ArrayBuffer): InvoiceImportRow[] {
-  const wb = XLSX.read(data, { type: "array" });
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) return [];
-  const sheet = wb.Sheets[sheetName];
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-    defval: "",
-    raw: false,
+// read-excel-file replaces the unmaintained SheetJS build (prototype-pollution
+// / ReDoS advisories) — it parses only the modern .xlsx (Office Open XML)
+// container, so a legacy binary .xls surfaces the read-error toast.
+async function parseWorkbook(file: Blob): Promise<InvoiceImportRow[]> {
+  const grid = await readSheet(file);
+  if (grid.length < 2) return [];
+  const header = grid[0].map((h) => String(h ?? "").trim());
+  return grid.slice(1).map((cells, idx) => {
+    const row: Record<string, unknown> = {};
+    header.forEach((h, i) => {
+      row[h] = cells[i];
+    });
+    return mapRow(row, idx);
   });
-  return json.map((row, idx) => mapRow(row, idx));
 }
 
 function isExcel(name: string): boolean {
-  return /\.xlsx?$/i.test(name);
+  return /\.xlsx$/i.test(name);
 }
 
 export function Import() {
@@ -162,8 +169,7 @@ export function Import() {
     setResult(null);
     try {
       if (isExcel(file.name)) {
-        const buf = await file.arrayBuffer();
-        const parsed = parseWorkbook(buf);
+        const parsed = await parseWorkbook(file);
         setFileRows(parsed);
         setFileName(file.name);
         setRaw("");
