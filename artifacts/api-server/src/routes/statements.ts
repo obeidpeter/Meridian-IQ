@@ -23,6 +23,9 @@ import {
   AcceptMatchProposalResponse,
   RejectMatchProposalParams,
   RejectMatchProposalResponse,
+  BulkAcceptMatchProposalsParams,
+  BulkAcceptMatchProposalsBody,
+  BulkAcceptMatchProposalsResponse,
 } from "@workspace/api-zod";
 import {
   assertCan,
@@ -39,6 +42,7 @@ import {
   acceptProposal,
   rejectProposal,
 } from "../modules/statements/service";
+import { bulkAcceptProposals } from "../modules/statements/bulk-accept";
 
 // Bank-statement ingestion and reconciliation v1 (INT-05, SME-07). All surfaces
 // are gated by the R2 `reconciliation` flag: unreachable while dark (PL-02).
@@ -278,6 +282,50 @@ router.post(
       role: req.principal.role,
     });
     res.json(AcceptMatchProposalResponse.parse(result));
+  },
+);
+
+// Bulk-accept: every pending proposal the matcher scored at/above the
+// threshold goes through the SAME acceptProposal path (per-proposal
+// settlement event, lifecycle transition and audit row).
+router.post(
+  "/reconciliation/statements/:id/bulk-accept",
+  async (req, res): Promise<void> => {
+    if (!(await gate(req))) {
+      res.sendStatus(404);
+      return;
+    }
+    assertCan(req.principal, "reconciliation.act");
+    const params = BulkAcceptMatchProposalsParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const body = BulkAcceptMatchProposalsBody.safeParse(req.body ?? {});
+    if (!body.success) {
+      res.status(400).json({ error: body.error.message });
+      return;
+    }
+    const [statement] = await getDb()
+      .select({
+        firmId: bankStatementsTable.firmId,
+        clientPartyId: bankStatementsTable.clientPartyId,
+      })
+      .from(bankStatementsTable)
+      .where(eq(bankStatementsTable.id, params.data.id))
+      .limit(1);
+    if (!statement) {
+      res.status(404).json({ error: "Statement not found" });
+      return;
+    }
+    assertSameTenant(req.principal, statement.firmId);
+    assertClientPartyScope(req.principal, statement.clientPartyId);
+    const result = await bulkAcceptProposals(
+      params.data.id,
+      { userId: req.principal.userId, role: req.principal.role },
+      body.data.threshold,
+    );
+    res.json(BulkAcceptMatchProposalsResponse.parse(result));
   },
 );
 

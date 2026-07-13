@@ -31,7 +31,15 @@ import {
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
-import { Search, FileText, ChevronRight, Send, SlidersHorizontal, X } from "lucide-react";
+import {
+  Search,
+  FileText,
+  ChevronRight,
+  Send,
+  SlidersHorizontal,
+  X,
+  Download,
+} from "lucide-react";
 import {
   formatNaira,
   formatDate,
@@ -190,6 +198,18 @@ export function Invoices() {
     setBulkOpen(true);
   };
 
+  // CSV of the current server-side search, as a plain browser navigation (no
+  // react-query): the endpoint answers with a Content-Disposition attachment
+  // and auth rides the session cookie, so the browser just downloads the file.
+  // The status tabs are client-side tone groupings, so no status param is sent.
+  const exportCsv = () => {
+    window.location.assign(
+      paging.q
+        ? `/api/invoices/export?q=${encodeURIComponent(paging.q)}`
+        : "/api/invoices/export",
+    );
+  };
+
   const closeBulk = () => {
     setBulkOpen(false);
     setBulkReport(null);
@@ -279,6 +299,15 @@ export function Invoices() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={exportCsv}
+            disabled={initialLoading}
+            data-testid="button-export-csv"
+          >
+            <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+            Export CSV
+          </Button>
           {me?.clientPartyId && (
             <Button
               variant="outline"

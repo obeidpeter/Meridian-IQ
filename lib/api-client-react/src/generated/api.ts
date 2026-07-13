@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.3.0
+ * OpenAPI spec version: 0.4.0
  */
 import {
   useMutation,
@@ -33,6 +33,8 @@ import type {
   BankStatement,
   BankStatementLine,
   BillingTier,
+  BulkAcceptInput,
+  BulkAcceptResult,
   BulkSubmitInput,
   BulkSubmitResult,
   BuyerExposure,
@@ -80,6 +82,8 @@ import type {
   ErrorCatalogueUpsertInput,
   Escalation,
   EscalationInput,
+  ExportInvoicesCsvParams,
+  ExportReceivablesCsvParams,
   FeatureFlag,
   FeatureFlagOverrideInput,
   FeatureFlagUpdate,
@@ -2060,6 +2064,174 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getCreateInvoiceMutationOptions(options));
     }
+
+export const getExportInvoicesCsvUrl = (params?: ExportInvoicesCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/invoices/export?${stringifiedParams}` : `/api/invoices/export`
+}
+
+/**
+ * @summary Download the tenant-scoped invoice list as CSV
+ */
+export const exportInvoicesCsv = async (params?: ExportInvoicesCsvParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportInvoicesCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportInvoicesCsvQueryKey = (params?: ExportInvoicesCsvParams,) => {
+    return [
+    `/api/invoices/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportInvoicesCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportInvoicesCsv>>, TError = ErrorType<unknown>>(params?: ExportInvoicesCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportInvoicesCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportInvoicesCsvQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportInvoicesCsv>>> = ({ signal }) => exportInvoicesCsv(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportInvoicesCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportInvoicesCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportInvoicesCsv>>>
+export type ExportInvoicesCsvQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Download the tenant-scoped invoice list as CSV
+ */
+
+export function useExportInvoicesCsv<TData = Awaited<ReturnType<typeof exportInvoicesCsv>>, TError = ErrorType<unknown>>(
+ params?: ExportInvoicesCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportInvoicesCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportInvoicesCsvQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportReceivablesCsvUrl = (params: ExportReceivablesCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/receivables/export?${stringifiedParams}` : `/api/dashboard/receivables/export`
+}
+
+/**
+ * @summary Download the client's outstanding receivables with aging as CSV
+ */
+export const exportReceivablesCsv = async (params: ExportReceivablesCsvParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportReceivablesCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportReceivablesCsvQueryKey = (params?: ExportReceivablesCsvParams,) => {
+    return [
+    `/api/dashboard/receivables/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportReceivablesCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportReceivablesCsv>>, TError = ErrorType<unknown>>(params: ExportReceivablesCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportReceivablesCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportReceivablesCsvQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportReceivablesCsv>>> = ({ signal }) => exportReceivablesCsv(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportReceivablesCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportReceivablesCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportReceivablesCsv>>>
+export type ExportReceivablesCsvQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Download the client's outstanding receivables with aging as CSV
+ */
+
+export function useExportReceivablesCsv<TData = Awaited<ReturnType<typeof exportReceivablesCsv>>, TError = ErrorType<unknown>>(
+ params: ExportReceivablesCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportReceivablesCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportReceivablesCsvQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getBulkSubmitInvoicesUrl = () => {
 
@@ -7329,6 +7501,77 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getAcceptMatchProposalMutationOptions(options));
+    }
+
+export const getBulkAcceptMatchProposalsUrl = (id: string,) => {
+
+
+
+
+  return `/api/reconciliation/statements/${id}/bulk-accept`
+}
+
+/**
+ * @summary Accept all of a statement's pending high-confidence proposals
+ */
+export const bulkAcceptMatchProposals = async (id: string,
+    bulkAcceptInput?: BulkAcceptInput, options?: RequestInit): Promise<BulkAcceptResult> => {
+
+  return customFetch<BulkAcceptResult>(getBulkAcceptMatchProposalsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkAcceptInput)
+  }
+);}
+
+
+
+
+export const getBulkAcceptMatchProposalsMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkAcceptMatchProposals>>, TError,{id: string;data?: BodyType<BulkAcceptInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkAcceptMatchProposals>>, TError,{id: string;data?: BodyType<BulkAcceptInput>}, TContext> => {
+
+const mutationKey = ['bulkAcceptMatchProposals'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkAcceptMatchProposals>>, {id: string;data?: BodyType<BulkAcceptInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  bulkAcceptMatchProposals(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkAcceptMatchProposalsMutationResult = NonNullable<Awaited<ReturnType<typeof bulkAcceptMatchProposals>>>
+    export type BulkAcceptMatchProposalsMutationBody = BodyType<BulkAcceptInput> | undefined
+    export type BulkAcceptMatchProposalsMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Accept all of a statement's pending high-confidence proposals
+ */
+export const useBulkAcceptMatchProposals = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkAcceptMatchProposals>>, TError,{id: string;data?: BodyType<BulkAcceptInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkAcceptMatchProposals>>,
+        TError,
+        {id: string;data?: BodyType<BulkAcceptInput>},
+        TContext
+      > => {
+      return useMutation(getBulkAcceptMatchProposalsMutationOptions(options));
     }
 
 export const getRejectMatchProposalUrl = (id: string,) => {

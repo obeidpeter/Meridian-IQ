@@ -40,3 +40,19 @@ export function parseCsv(text: string): string[][] {
   }
   return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
 }
+
+// The reverse direction, for export endpoints (invoice book, receivables
+// aging): RFC-4180 quoting — cells containing a comma, quote or newline are
+// quoted, quotes doubled. A leading BOM keeps Excel from mangling UTF-8.
+export type CsvCell = string | number | null | undefined;
+
+function serializeCell(value: CsvCell): string {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+export function toCsv(header: string[], rows: CsvCell[][]): string {
+  const lines = [header, ...rows].map((r) => r.map(serializeCell).join(","));
+  return `﻿${lines.join("\r\n")}\r\n`;
+}

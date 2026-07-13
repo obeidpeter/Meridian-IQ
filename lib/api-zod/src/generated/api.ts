@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.3.0
+ * OpenAPI spec version: 0.4.0
  */
 import * as zod from 'zod';
 
@@ -552,6 +552,31 @@ export const CreateInvoiceResponse = zod.object({
   "vatAmount": zod.string()
 }))
 })
+
+
+/**
+ * @summary Download the tenant-scoped invoice list as CSV
+ */
+export const exportInvoicesCsvQueryQMax = 120;
+
+
+
+export const ExportInvoicesCsvQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "q": zod.coerce.string().max(exportInvoicesCsvQueryQMax).optional()
+})
+
+export const ExportInvoicesCsvResponse = zod.unknown()
+
+
+/**
+ * @summary Download the client's outstanding receivables with aging as CSV
+ */
+export const ExportReceivablesCsvQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const ExportReceivablesCsvResponse = zod.unknown()
 
 
 /**
@@ -2347,6 +2372,36 @@ export const AcceptMatchProposalResponse = zod.object({
   "invoiceId": zod.string(),
   "invoiceStatus": zod.string(),
   "settlementEventId": zod.string().nullable()
+})
+
+
+/**
+ * @summary Accept all of a statement's pending high-confidence proposals
+ */
+export const BulkAcceptMatchProposalsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const bulkAcceptMatchProposalsBodyThresholdMin = 0.5;
+export const bulkAcceptMatchProposalsBodyThresholdMax = 1;
+
+
+
+export const BulkAcceptMatchProposalsBody = zod.object({
+  "threshold": zod.number().min(bulkAcceptMatchProposalsBodyThresholdMin).max(bulkAcceptMatchProposalsBodyThresholdMax).optional()
+})
+
+export const BulkAcceptMatchProposalsResponse = zod.object({
+  "total": zod.number(),
+  "acceptedCount": zod.number(),
+  "failedCount": zod.number(),
+  "rows": zod.array(zod.object({
+  "proposalId": zod.string(),
+  "invoiceId": zod.string(),
+  "confidence": zod.string(),
+  "outcome": zod.enum(['accepted', 'failed']),
+  "error": zod.string().nullable()
+}))
 })
 
 
