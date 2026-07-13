@@ -78,6 +78,11 @@ export function startStaticServer({ port, apiPort }) {
       const body = await readFile(filePath);
       res.writeHead(200, {
         "content-type": MIME[path.extname(filePath)] ?? "application/octet-stream",
+        // Mirror the clickjacking defence the production vite-preview layer
+        // sets (frame-ancestors allowlist), so the e2e harness can assert it.
+        "content-security-policy":
+          "frame-ancestors 'self' https://*.replit.dev https://*.replit.app https://*.replit.com https://replit.com;",
+        "x-content-type-options": "nosniff",
       });
       res.end(body);
     } catch {

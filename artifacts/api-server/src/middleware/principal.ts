@@ -3,7 +3,11 @@ import { getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
 import { getDb, usersTable, membershipsTable, type Role } from "@workspace/db";
 import type { Principal } from "../modules/auth/rbac";
-import { SESSION_COOKIE, verifySessionToken } from "../modules/auth/session";
+import {
+  SESSION_COOKIE,
+  verifySessionToken,
+  currentSessionEpoch,
+} from "../modules/auth/session";
 import { logger } from "../lib/logger";
 
 // Principal resolution.
@@ -191,8 +195,15 @@ async function principalFromSessionToken(
   req: Request,
   token: string,
 ): Promise<Principal | null> {
-  const userId = await verifySessionToken(token);
-  if (!userId) return null;
+  const verified = await verifySessionToken(token);
+  if (!verified) return null;
+  const { userId } = verified;
+  // Session revocation (SEC-02): a token issued before the user's current
+  // session epoch is stale — the epoch is bumped on password change, so tokens
+  // held by an attacker stop resolving the moment the victim rotates their
+  // password, instead of surviving until their 7-day expiry.
+  const epoch = await currentSessionEpoch(userId);
+  if (epoch === null || verified.epoch < epoch) return null;
   const memberships = await getDb()
     .select({
       firmId: membershipsTable.firmId,

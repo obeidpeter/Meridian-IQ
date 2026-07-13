@@ -26,6 +26,16 @@ if (!basePath) {
   );
 }
 
+// Clickjacking defence (SEC-02). The session cookie is SameSite=None so the
+// apps work inside the Replit preview iframe, which re-opens framing; a CSP
+// frame-ancestors allowlist blocks arbitrary attacker origins while keeping the
+// legitimate embedders. X-Frame-Options is intentionally NOT used — it cannot
+// express a cross-origin allowlist, so it would break the preview embedding.
+// Override the allowlist per deployment with the FRAME_ANCESTORS env var.
+const frameAncestors =
+  process.env.FRAME_ANCESTORS ??
+  "'self' https://*.replit.dev https://*.replit.app https://*.replit.com https://replit.com";
+
 export default defineConfig({
   base: basePath,
   plugins: [
@@ -71,5 +81,9 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    headers: {
+      "Content-Security-Policy": `frame-ancestors ${frameAncestors};`,
+      "X-Content-Type-Options": "nosniff",
+    },
   },
 });

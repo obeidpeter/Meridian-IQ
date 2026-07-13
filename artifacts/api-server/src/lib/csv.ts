@@ -42,13 +42,23 @@ export function parseCsv(text: string): string[][] {
 }
 
 // The reverse direction, for export endpoints (invoice book, receivables
-// aging): RFC-4180 quoting — cells containing a comma, quote or newline are
-// quoted, quotes doubled. A leading BOM keeps Excel from mangling UTF-8.
+// aging, audit ledger): RFC-4180 quoting — cells containing a comma, quote or
+// newline are quoted, quotes doubled. A leading BOM keeps Excel from mangling
+// UTF-8.
 export type CsvCell = string | number | null | undefined;
 
 function serializeCell(value: CsvCell): string {
   if (value === null || value === undefined) return "";
-  const s = String(value);
+  let s = String(value);
+  // CSV formula injection (CWE-1236): a cell whose first character is a formula
+  // trigger (= + - @, or a leading tab/CR the spreadsheet also treats as a
+  // lead-in) is executed as a live formula when the file is opened in Excel /
+  // LibreOffice / Sheets. These exports carry attacker-controllable free text
+  // (invoice numbers, party legal names) and are opened by higher-privileged
+  // firm staff and external auditors. Prefix such cells with an apostrophe so
+  // the spreadsheet renders them as literal text. RFC-4180 quoting does NOT
+  // prevent this — the quotes are stripped on import and "=..." still evaluates.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

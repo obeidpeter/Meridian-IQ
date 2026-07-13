@@ -31,6 +31,17 @@ async function pollUntil(fn, { tries = 10, delayMs = 700, page }) {
 
 // ---------- public landing + portal ----------
 async function journeyPortalAuth(page, BASE, check) {
+  // Clickjacking defence (SEC-02): the served frontend must carry a CSP
+  // frame-ancestors allowlist so an attacker origin cannot frame the
+  // authenticated app (the session cookie is SameSite=None for the preview
+  // iframe, which re-opens framing without this header).
+  const rootResp = await page.request.get(BASE + "/");
+  const csp = rootResp.headers()["content-security-policy"] ?? "";
+  check(
+    "frontend sets a CSP frame-ancestors allowlist",
+    csp.includes("frame-ancestors") && !csp.includes("frame-ancestors *"),
+  );
+
   await page.goto(BASE + "/", { waitUntil: "networkidle" });
   check(
     "landing page links to the login portal",
