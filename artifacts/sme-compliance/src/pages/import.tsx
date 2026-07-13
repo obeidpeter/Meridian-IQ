@@ -34,19 +34,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-
-const COLUMNS = [
-  "invoiceNumber",
-  "buyerName",
-  "buyerTin",
-  "issueDate",
-  "dueDate",
-  "description",
-  "quantity",
-  "unitPrice",
-  "vatRate",
-  "currency",
-] as const;
+import { COLUMNS, parseCsv, mapGridRows, isExcel } from "./import-parse";
 
 const TEMPLATE =
   COLUMNS.join(",") +
@@ -86,64 +74,16 @@ async function downloadExcelTemplate() {
   );
 }
 
-function mapRow(row: Record<string, unknown>, idx: number): InvoiceImportRow {
-  const cell = (k: string) => {
-    const v = row[k];
-    return v === undefined || v === null ? "" : String(v).trim();
-  };
-  return {
-    rowNumber: idx + 1,
-    invoiceNumber: cell("invoiceNumber"),
-    buyerName: cell("buyerName"),
-    buyerTin: cell("buyerTin"),
-    issueDate: cell("issueDate"),
-    dueDate: cell("dueDate"),
-    description: cell("description"),
-    quantity: cell("quantity"),
-    unitPrice: cell("unitPrice"),
-    vatRate: cell("vatRate"),
-    currency: cell("currency"),
-  } as InvoiceImportRow;
-}
-
-function parseCsv(text: string): InvoiceImportRow[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length < 2) return [];
-  const header = lines[0].split(",").map((h) => h.trim());
-  return lines.slice(1).map((line, idx) => {
-    const cells = line.split(",");
-    const row: Record<string, string> = {};
-    header.forEach((h, i) => {
-      row[h] = (cells[i] || "").trim();
-    });
-    return mapRow(row, idx);
-  });
-}
-
 // Parse the first sheet of an uploaded .xlsx workbook. The header row must use
 // the same canonical column names as the CSV template so both formats map to the
 // identical import-row model and run through the same server-side validator.
 // read-excel-file replaces the unmaintained SheetJS build (prototype-pollution
 // / ReDoS advisories) — it parses only the modern .xlsx (Office Open XML)
-// container, so a legacy binary .xls surfaces the read-error toast.
+// container, so a legacy binary .xls surfaces the read-error toast. The pure
+// grid-to-row mapping lives in ./import-parse (mapGridRows) so it can be tested.
 async function parseWorkbook(file: Blob): Promise<InvoiceImportRow[]> {
   const grid = await readSheet(file);
-  if (grid.length < 2) return [];
-  const header = grid[0].map((h) => String(h ?? "").trim());
-  return grid.slice(1).map((cells, idx) => {
-    const row: Record<string, unknown> = {};
-    header.forEach((h, i) => {
-      row[h] = cells[i];
-    });
-    return mapRow(row, idx);
-  });
-}
-
-function isExcel(name: string): boolean {
-  return /\.xlsx$/i.test(name);
+  return mapGridRows(grid);
 }
 
 export function Import() {
