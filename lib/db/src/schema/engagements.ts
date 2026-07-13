@@ -2,7 +2,6 @@ import {
   pgTable,
   uuid,
   text,
-  timestamp,
   jsonb,
   integer,
   pgEnum,
@@ -12,6 +11,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // An Engagement is an advisory unit of work so services data lands in the same
 // spine from R0 (ADV-01). Findings are queryable in the spine.
@@ -30,7 +30,7 @@ export const engagementStatusEnum = pgEnum("engagement_status", [
 ]);
 
 export const engagementsTable = pgTable("engagements", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   firmId: uuid("firm_id")
     .notNull()
     .references(() => firmsTable.id),
@@ -42,13 +42,8 @@ export const engagementsTable = pgTable("engagements", {
   title: text("title").notNull(),
   findings: jsonb("findings").$type<Record<string, unknown>>(),
   schemaVersion: integer("schema_version").notNull().default(1),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 },
 // Firm scoping and party-in-firm checks probe these on nearly every request.
 (t) => [

@@ -1,4 +1,5 @@
-import { pgTable, bigserial, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, bigserial, text, jsonb } from "drizzle-orm/pg-core";
+import { createdAt } from "./columns.ts";
 
 // Append-only, tamper-evident (hash-chained) audit log (CORE-05, C4).
 // Each row's hash = sha256(prevHash + canonical(payload)). Altering any row
@@ -15,9 +16,7 @@ export const auditEventsTable = pgTable("audit_events", {
   after: jsonb("after").$type<Record<string, unknown> | null>(),
   hash: text("hash").notNull(),
   prevHash: text("prev_hash").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export type AuditEvent = typeof auditEventsTable.$inferSelect;

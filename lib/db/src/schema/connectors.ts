@@ -11,6 +11,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // ERP connector contract (PL-03, INT-06). A connection is configuration plus
 // field mapping against one Connector interface — never a core fork. Incremental
@@ -23,7 +24,7 @@ export const erpConnectionStatusEnum = pgEnum("erp_connection_status", [
 ]);
 
 export const erpConnectionsTable = pgTable("erp_connections", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   firmId: uuid("firm_id")
     .notNull()
     .references(() => firmsTable.id),
@@ -42,13 +43,8 @@ export const erpConnectionsTable = pgTable("erp_connections", {
   status: erpConnectionStatusEnum("status").notNull().default("active"),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
   lastError: text("last_error"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 export const erpSyncRunStatusEnum = pgEnum("erp_sync_run_status", [
@@ -58,7 +54,7 @@ export const erpSyncRunStatusEnum = pgEnum("erp_sync_run_status", [
 ]);
 
 export const erpSyncRunsTable = pgTable("erp_sync_runs", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   connectionId: uuid("connection_id")
     .notNull()
     .references(() => erpConnectionsTable.id, { onDelete: "cascade" }),

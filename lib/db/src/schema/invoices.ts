@@ -2,7 +2,6 @@ import {
   pgTable,
   uuid,
   text,
-  timestamp,
   date,
   numeric,
   integer,
@@ -15,6 +14,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // Invoice lifecycle states (Appendix B). Drafts are mutable working state;
 // everything from `submitted` onward is append-only (CORE-02).
@@ -44,7 +44,7 @@ export const invoiceCategoryEnum = pgEnum("invoice_category", [
 ]);
 
 export const invoicesTable = pgTable("invoices", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   firmId: uuid("firm_id")
     .notNull()
     .references(() => firmsTable.id),
@@ -81,13 +81,8 @@ export const invoicesTable = pgTable("invoices", {
   legalHold: boolean("legal_hold").notNull().default(false),
   retentionUntil: date("retention_until", { mode: "string" }),
   schemaVersion: integer("schema_version").notNull().default(1),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 },
 // Hot-path indexes: every tenant query filters firm_id (+status), list pages
 // order by created_at, client scoping filters supplier_party_id, receivables
@@ -101,7 +96,7 @@ export const invoicesTable = pgTable("invoices", {
 ]);
 
 export const invoiceLinesTable = pgTable("invoice_lines", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoicesTable.id, { onDelete: "cascade" }),

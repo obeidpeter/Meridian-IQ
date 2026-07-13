@@ -15,6 +15,7 @@ import { z } from "zod/v4";
 import { firmsTable, usersTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { invoicesTable } from "./invoices.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // --- Billing & tiering (PL-01) ----------------------------------------------
 // The four commercial tiers. Every commercial parameter (price, included
@@ -28,7 +29,7 @@ export const tierKeyEnum = pgEnum("tier_key", [
 ]);
 
 export const billingTiersTable = pgTable("billing_tiers", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   key: tierKeyEnum("key").notNull().unique(),
   name: text("name").notNull(),
   description: text("description"),
@@ -45,13 +46,8 @@ export const billingTiersTable = pgTable("billing_tiers", {
   operatorManaged: boolean("operator_managed").notNull().default(false),
   active: boolean("active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 // A firm's active subscription to a tier. One row per firm.
@@ -62,7 +58,7 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
 ]);
 
 export const firmSubscriptionsTable = pgTable("firm_subscriptions", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   firmId: uuid("firm_id")
     .notNull()
     .unique()
@@ -74,17 +70,14 @@ export const firmSubscriptionsTable = pgTable("firm_subscriptions", {
   startedAt: timestamp("started_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  updatedAt: updatedAt(),
 });
 
 // History of tier config changes. A semi-annual price review appends one row
 // per changed field alongside an audit event, giving a human-readable trail of
 // how commercial parameters moved over time (PL-01).
 export const priceReviewsTable = pgTable("price_reviews", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   tierId: uuid("tier_id")
     .notNull()
     .references(() => billingTiersTable.id),
@@ -94,9 +87,7 @@ export const priceReviewsTable = pgTable("price_reviews", {
   note: text("note"),
   effectiveDate: text("effective_date").notNull(),
   actorId: uuid("actor_id"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 // --- Onboarding pipeline (CON-02) -------------------------------------------
@@ -113,7 +104,7 @@ export const pipelineStageEnum = pgEnum("pipeline_stage", [
 ]);
 
 export const onboardingProspectsTable = pgTable("onboarding_prospects", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   firmId: uuid("firm_id")
     .notNull()
     .references(() => firmsTable.id),
@@ -127,13 +118,8 @@ export const onboardingProspectsTable = pgTable("onboarding_prospects", {
   // Set once the prospect converts into a live client business.
   clientPartyId: uuid("client_party_id").references(() => partiesTable.id),
   note: text("note"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 // --- Operator work queue (CON-04) -------------------------------------------
@@ -154,7 +140,7 @@ export const casePriorityEnum = pgEnum("operator_case_priority", [
 ]);
 
 export const operatorCasesTable = pgTable("operator_cases", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   firmId: uuid("firm_id")
     .notNull()
     .references(() => firmsTable.id),
@@ -176,13 +162,8 @@ export const operatorCasesTable = pgTable("operator_cases", {
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   // Total operator handling time in seconds, stamped on resolution.
   handleSeconds: integer("handle_seconds"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 // --- Revenue-share statements (CON-06) --------------------------------------
@@ -192,7 +173,7 @@ export const operatorCasesTable = pgTable("operator_cases", {
 export const revenueShareStatementsTable = pgTable(
   "revenue_share_statements",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     firmId: uuid("firm_id")
       .notNull()
       .references(() => firmsTable.id),

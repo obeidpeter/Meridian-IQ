@@ -2,13 +2,13 @@ import {
   pgTable,
   uuid,
   text,
-  timestamp,
   boolean,
   integer,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // A Party is any legal person in the spine: client business, buyer, firm or bank.
 // Keyed by TIN where one exists (CORE-08).
@@ -20,7 +20,7 @@ export const partyTypeEnum = pgEnum("party_type", [
 ]);
 
 export const partiesTable = pgTable("parties", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   type: partyTypeEnum("type").notNull(),
   legalName: text("legal_name").notNull(),
   // Nigerian Tax Identification Number. Nullable until captured.
@@ -42,13 +42,8 @@ export const partiesTable = pgTable("parties", {
   createdByFirmId: uuid("created_by_firm_id"),
   createdByUserId: text("created_by_user_id"),
   schemaVersion: integer("schema_version").notNull().default(1),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 export const insertPartySchema = createInsertSchema(partiesTable).omit({

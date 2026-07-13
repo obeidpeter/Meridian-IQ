@@ -2,7 +2,6 @@ import {
   pgTable,
   uuid,
   text,
-  timestamp,
   boolean,
   jsonb,
   pgEnum,
@@ -12,6 +11,7 @@ import { z } from "zod/v4";
 import { firmsTable, usersTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { invoicesTable } from "./invoices.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // Per-client alert channel + alert-type preferences (SME-05). One row per client
 // business Party. Channel toggles drive WhatsApp/SMS/email fan-out with failover;
@@ -30,10 +30,7 @@ export const alertPreferencesTable = pgTable("alert_preferences", {
   deadlineAlerts: boolean("deadline_alerts").notNull().default(true),
   failureAlerts: boolean("failure_alerts").notNull().default(true),
   penaltyAlerts: boolean("penalty_alerts").notNull().default(true),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  updatedAt: updatedAt(),
 });
 
 // Guided failure resolution can hand off to a human operator (SME-06). An
@@ -45,7 +42,7 @@ export const escalationStatusEnum = pgEnum("escalation_status", [
 ]);
 
 export const escalationsTable = pgTable("escalations", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoicesTable.id),
@@ -59,9 +56,7 @@ export const escalationsTable = pgTable("escalations", {
   errorCode: text("error_code"),
   status: escalationStatusEnum("status").notNull().default("open"),
   context: jsonb("context").$type<Record<string, unknown>>(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 // Expo push-notification device registrations (mobile companion app). One row
@@ -70,7 +65,7 @@ export const escalationsTable = pgTable("escalations", {
 // scoping mirrors memberships: firmId/clientPartyId snapshot the principal that
 // registered the device so alert fan-out can resolve devices per client Party.
 export const pushDevicesTable = pgTable("push_devices", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   userId: uuid("user_id")
     .notNull()
     .references(() => usersTable.id),
@@ -78,13 +73,8 @@ export const pushDevicesTable = pgTable("push_devices", {
   clientPartyId: uuid("client_party_id").references(() => partiesTable.id),
   expoPushToken: text("expo_push_token").notNull().unique(),
   platform: text("platform").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 // Pending Expo push-receipt checks (SME-05/08 hygiene). Expo materialises push
@@ -97,12 +87,10 @@ export const pushDevicesTable = pgTable("push_devices", {
 // ops table: only written by the push module and read by the bypass-context
 // sweep — never exposed to tenant request paths.
 export const pushTicketsTable = pgTable("push_tickets", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   ticketId: text("ticket_id").notNull().unique(),
   expoPushToken: text("expo_push_token").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export const insertAlertPreferencesSchema = createInsertSchema(

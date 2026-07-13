@@ -2,17 +2,17 @@ import {
   pgTable,
   uuid,
   text,
-  timestamp,
   jsonb,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { partiesTable } from "./parties.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // The accounting firm is the tenant root (CON-01). White-label theming (CON-05).
 export const firmsTable = pgTable("firms", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   name: text("name").notNull(),
   subdomain: text("subdomain").unique(),
   // Clerk organization id, wired by the frontend auth layer.
@@ -20,30 +20,20 @@ export const firmsTable = pgTable("firms", {
   // The firm's own Party record (professional firms are inside the compliance net).
   partyId: uuid("party_id").references(() => partiesTable.id),
   theme: jsonb("theme").$type<Record<string, unknown>>(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 export const usersTable = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   clerkUserId: text("clerk_user_id").unique(),
   email: text("email").notNull().unique(),
   fullName: text("full_name"),
   // scrypt hash (salt:hash, hex) for cookie-session login. Null for users who
   // authenticate through Clerk only.
   passwordHash: text("password_hash"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 // Role-permission matrix (Appendix C). bank_user is dormant until R4.
@@ -71,7 +61,7 @@ export const roleEnum = pgEnum("role", [
 // boot migration (see lib/db/src/migrations/0002_r2_guardrails.ts), out of
 // push's purview. See .agents/memory/db-migrations-drizzle-push.md.
 export const membershipsTable = pgTable("memberships", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   userId: uuid("user_id")
     .notNull()
     .references(() => usersTable.id),
@@ -79,9 +69,7 @@ export const membershipsTable = pgTable("memberships", {
   role: roleEnum("role").notNull(),
   clientPartyId: uuid("client_party_id").references(() => partiesTable.id),
   buyerPartyId: uuid("buyer_party_id").references(() => partiesTable.id),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export const insertFirmSchema = createInsertSchema(firmsTable).omit({

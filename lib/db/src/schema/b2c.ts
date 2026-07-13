@@ -12,6 +12,7 @@ import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { invoicesTable } from "./invoices.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // B2C reporting module (SME-08, C5): B2C transactions above NGN 50,000 must be
 // reported within 24 hours, with daily penalties for late reporting. Qualifying
@@ -26,7 +27,7 @@ export const b2cBatchStatusEnum = pgEnum("b2c_batch_status", [
 ]);
 
 export const b2cReportBatchesTable = pgTable("b2c_report_batches", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   firmId: uuid("firm_id")
     .notNull()
     .references(() => firmsTable.id),
@@ -46,19 +47,14 @@ export const b2cReportBatchesTable = pgTable("b2c_report_batches", {
   reportedByUserId: uuid("reported_by_user_id"),
   preBreachAlertAt: timestamp("pre_breach_alert_at", { withTimezone: true }),
   breachedAt: timestamp("breached_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 export const b2cReportItemsTable = pgTable(
   "b2c_report_items",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     batchId: uuid("batch_id")
       .notNull()
       .references(() => b2cReportBatchesTable.id, { onDelete: "cascade" }),
@@ -66,9 +62,7 @@ export const b2cReportItemsTable = pgTable(
       .notNull()
       .references(() => invoicesTable.id),
     amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: createdAt(),
   },
   // A qualifying invoice belongs to exactly one batch (sweep idempotency).
   (t) => [unique().on(t.invoiceId)],

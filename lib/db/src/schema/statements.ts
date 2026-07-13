@@ -16,6 +16,7 @@ import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { invoicesTable } from "./invoices.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // Bank-statement ingestion (INT-05) and reconciliation v1 (SME-07).
 //
@@ -31,7 +32,7 @@ export const statementStatusEnum = pgEnum("bank_statement_status", [
 ]);
 
 export const bankStatementsTable = pgTable("bank_statements", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   firmId: uuid("firm_id")
     .notNull()
     .references(() => firmsTable.id),
@@ -47,13 +48,8 @@ export const bankStatementsTable = pgTable("bank_statements", {
   status: statementStatusEnum("status").notNull().default("committed"),
   lineCount: integer("line_count").notNull().default(0),
   parsedCount: integer("parsed_count").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 export const statementLineParseStatusEnum = pgEnum(
@@ -67,7 +63,7 @@ export const statementDirectionEnum = pgEnum("statement_direction", [
 ]);
 
 export const bankStatementLinesTable = pgTable("bank_statement_lines", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   statementId: uuid("statement_id")
     .notNull()
     .references(() => bankStatementsTable.id, { onDelete: "cascade" }),
@@ -81,9 +77,7 @@ export const bankStatementLinesTable = pgTable("bank_statement_lines", {
   parseError: text("parse_error"),
   // The raw source line is retained so a parse failure is always diagnosable.
   rawLine: text("raw_line").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 },
 // Every reconciliation view loads a statement's lines by this FK.
 (t) => [index("bank_statement_lines_statement_idx").on(t.statementId)]);
@@ -103,7 +97,7 @@ export const matchProposalStatusEnum = pgEnum("match_proposal_status", [
 export const matchProposalsTable = pgTable(
   "match_proposals",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     firmId: uuid("firm_id")
       .notNull()
       .references(() => firmsTable.id),
@@ -119,13 +113,8 @@ export const matchProposalsTable = pgTable(
     status: matchProposalStatusEnum("status").notNull().default("proposed"),
     decidedByUserId: text("decided_by_user_id"),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow()
-      .$onUpdate(() => new Date()),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   // The reconcile job is idempotent: one proposal per (line, invoice) pair.
   (t) => [unique().on(t.statementLineId, t.invoiceId)],
@@ -134,7 +123,7 @@ export const matchProposalsTable = pgTable(
 // Daily buyer input-VAT exposure snapshots (BR-01). Reads serve the latest
 // snapshot; the pipeline worker refreshes at least daily.
 export const buyerExposureSnapshotsTable = pgTable("buyer_exposure_snapshots", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   buyerPartyId: uuid("buyer_party_id")
     .notNull()
     .references(() => partiesTable.id),

@@ -10,13 +10,14 @@ import {
 } from "drizzle-orm/pg-core";
 import { invoicesTable } from "./invoices.ts";
 import { partiesTable } from "./parties.ts";
+import { createdAt, id } from "./columns.ts";
 
 // DORMANT until R3/R4. Defined now so the spine is complete and append-only
 // financing events have a home, but no code path writes to these before their
 // gate passes (Business Plan Section 15). Ships dark (PL-02).
 
 export const eligibilityAssessmentsTable = pgTable("eligibility_assessments", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoicesTable.id),
@@ -24,9 +25,7 @@ export const eligibilityAssessmentsTable = pgTable("eligibility_assessments", {
   scorecardVersion: text("scorecard_version"),
   features: jsonb("features").$type<Record<string, unknown>>(),
   reasons: jsonb("reasons").$type<string[]>(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export const financingStatusEnum = pgEnum("financing_status", [
@@ -39,7 +38,7 @@ export const financingStatusEnum = pgEnum("financing_status", [
 ]);
 
 export const financingRequestsTable = pgTable("financing_requests", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoicesTable.id),
@@ -48,13 +47,11 @@ export const financingRequestsTable = pgTable("financing_requests", {
     .references(() => partiesTable.id),
   status: financingStatusEnum("status").notNull().default("requested"),
   amount: numeric("amount", { precision: 18, scale: 2 }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export const facilityPositionsTable = pgTable("facility_positions", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   bankPartyId: uuid("bank_party_id")
     .notNull()
     .references(() => partiesTable.id),
@@ -63,22 +60,18 @@ export const facilityPositionsTable = pgTable("facility_positions", {
     .references(() => partiesTable.id),
   exposure: numeric("exposure", { precision: 18, scale: 2 }).notNull().default("0"),
   limitAmount: numeric("limit_amount", { precision: 18, scale: 2 }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export const repaymentEventsTable = pgTable("repayment_events", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   financingRequestId: uuid("financing_request_id")
     .notNull()
     .references(() => financingRequestsTable.id),
   amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
   installmentNo: integer("installment_no"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export type EligibilityAssessment =

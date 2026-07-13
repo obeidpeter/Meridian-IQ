@@ -16,6 +16,7 @@ import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { usersTable, firmsTable } from "./organizations.ts";
 import { invoicesTable } from "./invoices.ts";
+import { createdAt, id, updatedAt } from "./columns.ts";
 
 // ============ Clerk v0 — claims register (C0) ============
 // A ClaimRecord is the ONLY source of binding compliance facts the Clerk may
@@ -55,7 +56,7 @@ export interface ClaimApplicability {
 export const claimRecordsTable = pgTable(
   "claim_records",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     // Stable logical identifier, e.g. "vat.standard_rate". Versions share it.
     claimKey: text("claim_key").notNull(),
     version: integer("version").notNull(),
@@ -90,13 +91,8 @@ export const claimRecordsTable = pgTable(
     decisionNote: text("decision_note"),
     // Set on the OLD version when a newer version becomes active.
     supersededById: uuid("superseded_by_id"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow()
-      .$onUpdate(() => new Date()),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   (t) => [
     unique().on(t.claimKey, t.version),
@@ -189,7 +185,7 @@ export interface ClerkAnswer {
 }
 
 export const clerkCasesTable = pgTable("clerk_cases", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   kind: clerkCaseKindEnum("kind").notNull(),
   status: clerkCaseStatusEnum("status").notNull().default("pending"),
   // --- extraction cases ---
@@ -223,13 +219,8 @@ export const clerkCasesTable = pgTable("clerk_cases", {
     () => invoicesTable.id,
   ),
   failReason: text("fail_reason"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 },
 // The duplicate-intake guard probes source_hash on every case creation; the
 // queue lists filter by status.
@@ -249,7 +240,7 @@ export const clerkInferenceOutcomeEnum = pgEnum("clerk_inference_outcome", [
 ]);
 
 export const clerkInferenceCallsTable = pgTable("clerk_inference_calls", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   caseId: uuid("case_id").references(() => clerkCasesTable.id),
   purpose: text("purpose").notNull(),
   model: text("model").notNull(),
@@ -265,9 +256,7 @@ export const clerkInferenceCallsTable = pgTable("clerk_inference_calls", {
   // Token usage where the provider reports it (CLK-NFR-04 cost-to-serve).
   promptTokens: integer("prompt_tokens"),
   completionTokens: integer("completion_tokens"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 },
 // The watchdog and metrics scan recent windows; case joins walk case_id.
 (t) => [
@@ -296,7 +285,7 @@ export interface ClerkEvalFixtureResult {
 // warning when a prompt or model change degrades extraction before operators
 // feel it. Append-only evidence (trigger in migration 0006).
 export const clerkEvalRunsTable = pgTable("clerk_eval_runs", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   startedBy: uuid("started_by")
     .notNull()
     .references(() => usersTable.id),
@@ -309,9 +298,7 @@ export const clerkEvalRunsTable = pgTable("clerk_eval_runs", {
   injectionResisted: integer("injection_resisted").notNull(),
   results: jsonb("results").$type<ClerkEvalFixtureResult[]>().notNull(),
   durationMs: integer("duration_ms").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAt(),
 });
 
 export const insertClaimRecordSchema = createInsertSchema(

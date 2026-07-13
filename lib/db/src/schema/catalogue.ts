@@ -2,11 +2,11 @@ import {
   pgTable,
   text,
   boolean,
-  timestamp,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { createdAt, updatedAt } from "./columns.ts";
 
 // Persisted, operator-editable validation-error catalogue (ADV-03, INT-02).
 // Global reference data (not tenant-scoped): every rail rejection or domain
@@ -27,13 +27,8 @@ export const errorCatalogueTable = pgTable("error_catalogue", {
   retriable: boolean("retriable").notNull().default(false),
   source: catalogueSourceEnum("source").notNull().default("operator"),
   updatedBy: text("updated_by"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 export const insertErrorCatalogueSchema = createInsertSchema(
