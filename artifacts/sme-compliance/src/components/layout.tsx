@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { StaleBuildBanner } from "@/components/stale-build-banner";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import type { Me } from "@workspace/api-client-react";
 
@@ -165,7 +166,7 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+    <div className="min-h-screen bg-background flex flex-col">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -173,51 +174,55 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <div className="md:hidden flex items-center justify-between p-4 border-b bg-card">
-        <BrandMark />
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Open menu"
-              data-testid="button-menu"
-            >
-              <Menu />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-64 p-0">
-            <SheetTitle className="sr-only">Navigation</SheetTitle>
-            <NavLinks
-              links={LINKS}
-              location={location}
-              me={me}
-              onNavigate={() => setSheetOpen(false)}
-              onSignOut={signOut}
-              signingOut={logout.isPending}
-            />
-          </SheetContent>
-        </Sheet>
-      </div>
+      <StaleBuildBanner />
 
-      <div className="hidden md:flex w-64 border-r bg-card min-h-screen sticky top-0 max-h-screen flex-col">
-        <NavLinks
-          links={LINKS}
-          location={location}
-          me={me}
-          onSignOut={signOut}
-          signingOut={logout.isPending}
-        />
-      </div>
+      <div className="flex-1 flex flex-col md:flex-row">
+        <div className="md:hidden flex items-center justify-between p-4 border-b bg-card">
+          <BrandMark />
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open menu"
+                data-testid="button-menu"
+              >
+                <Menu />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0">
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <NavLinks
+                links={LINKS}
+                location={location}
+                me={me}
+                onNavigate={() => setSheetOpen(false)}
+                onSignOut={signOut}
+                signingOut={logout.isPending}
+              />
+            </SheetContent>
+          </Sheet>
+        </div>
 
-      <main
-        id="main-content"
-        ref={mainRef}
-        tabIndex={-1}
-        className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full focus-visible:outline-none"
-      >
-        {children}
-      </main>
+        <div className="hidden md:flex w-64 border-r bg-card min-h-screen sticky top-0 max-h-screen flex-col">
+          <NavLinks
+            links={LINKS}
+            location={location}
+            me={me}
+            onSignOut={signOut}
+            signingOut={logout.isPending}
+          />
+        </div>
+
+        <main
+          id="main-content"
+          ref={mainRef}
+          tabIndex={-1}
+          className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full focus-visible:outline-none"
+        >
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

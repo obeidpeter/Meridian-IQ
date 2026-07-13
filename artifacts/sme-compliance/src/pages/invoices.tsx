@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   useGetMe,
   useListInvoices,
+  getListInvoicesQueryKey,
   useListParties,
 } from "@workspace/api-client-react";
+import type { Invoice, ListInvoicesParams } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { Search, FileText, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { Search, FileText, ChevronRight, SlidersHorizontal, X } from "lucide-react";
 import { formatNaira, formatDate, statusLabel, badgeClasses, statusTone } from "@/lib/format";
 
 const FILTERS = [
@@ -23,18 +25,88 @@ const FILTERS = [
   { key: "failed", label: "Failed" },
 ] as const;
 
+// Server page size. Passing limit/offset switches GET /invoices into its
+// newest-first bounded mode, so we never pull the unbounded legacy list.
+const PAGE_SIZE = 50;
+
 export function Invoices() {
   usePageTitle("Invoices");
   const { data: me } = useGetMe();
-  const { data: invoices, isLoading, isError, refetch } = useListInvoices();
   const { data: parties } = useListParties();
   const [search, setSearch] = useState("");
+  // Debounced server-side search plus paging cursor, kept in one state object
+  // so a new search term resets to the first page in the same update.
+  const [paging, setPaging] = useState<{ q: string; offset: number }>({
+    q: "",
+    offset: 0,
+  });
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const q = search.trim();
+      setPaging((prev) => (prev.q === q ? prev : { q, offset: 0 }));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const params: ListInvoicesParams = paging.q
+    ? { limit: PAGE_SIZE, offset: paging.offset, q: paging.q }
+    : { limit: PAGE_SIZE, offset: paging.offset };
+  const {
+    data: page,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useListInvoices(params, {
+    query: { queryKey: getListInvoicesQueryKey(params) },
+  });
+
+  // Earlier pages accumulated per search term, keyed by offset so a
+  // background refetch of a page replaces it instead of appending a
+  // duplicate. The current offset's page always comes live from the query
+  // and is merged in below; the effect just persists it for later offsets.
+  const [pages, setPages] = useState<{
+    q: string;
+    byOffset: Record<number, Invoice[]>;
+  }>({ q: "", byOffset: {} });
+
+  useEffect(() => {
+    if (!page) return;
+    setPages((prev) =>
+      prev.q === paging.q
+        ? { q: prev.q, byOffset: { ...prev.byOffset, [paging.offset]: page } }
+        : { q: paging.q, byOffset: { [paging.offset]: page } },
+    );
+  }, [page, paging]);
+
+  const byOffset = useMemo(() => {
+    const merged: Record<number, Invoice[]> =
+      pages.q === paging.q ? { ...pages.byOffset } : {};
+    if (page) merged[paging.offset] = page;
+    return merged;
+  }, [pages, paging, page]);
+
+  const loaded = useMemo(
+    () =>
+      Object.keys(byOffset)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .flatMap((offset) => byOffset[offset] ?? []),
+    [byOffset],
+  );
+
+  const hasLoaded = Object.keys(byOffset).length > 0;
+  const lastPage = byOffset[paging.offset];
+  const hasMore = !!lastPage && lastPage.length === PAGE_SIZE;
+  const loadingMore = isFetching && hasLoaded && !lastPage;
+  const initialLoading = isLoading && !hasLoaded;
 
   const partyName = useMemo(() => {
     const map = new Map<string, string>();
@@ -59,13 +131,17 @@ export function Invoices() {
     setFilter("all");
   };
 
-  // The client's own invoice book — the base every filter applies to.
+  // The client's own invoice book — the base every filter applies to. The
+  // search is server-side (q matches the invoice number or either party's
+  // legal name); the tab and advanced filters apply to the loaded rows. The
+  // status tabs group raw statuses by tone (e.g. draft + validated), so they
+  // can't map onto the server's exact-match `status` param.
   const scoped = useMemo(
     () =>
-      (invoices || []).filter(
+      loaded.filter(
         (inv) => !me?.clientPartyId || inv.supplierPartyId === me.clientPartyId,
       ),
-    [invoices, me?.clientPartyId],
+    [loaded, me?.clientPartyId],
   );
 
   const countFor = (key: (typeof FILTERS)[number]["key"]) =>
@@ -74,35 +150,17 @@ export function Invoices() {
       : scoped.filter((inv) => statusTone(inv.status) === key).length;
 
   const rows = useMemo(() => {
-    const q = search.trim().toLowerCase();
     const minParsed = Number(minAmount);
     const maxParsed = Number(maxAmount);
     const min = minAmount && Number.isFinite(minParsed) ? minParsed : null;
     const max = maxAmount && Number.isFinite(maxParsed) ? maxParsed : null;
     return scoped
       .filter((inv) => (filter === "all" ? true : statusTone(inv.status) === filter))
-      .filter((inv) => {
-        if (!q) return true;
-        const counterparty = (partyName.get(inv.buyerPartyId) || "").toLowerCase();
-        return (
-          inv.invoiceNumber.toLowerCase().includes(q) ||
-          counterparty.includes(q)
-        );
-      })
       .filter((inv) => (fromDate ? inv.issueDate >= fromDate : true))
       .filter((inv) => (toDate ? inv.issueDate <= toDate : true))
       .filter((inv) => (min !== null ? Number(inv.grandTotal) >= min : true))
       .filter((inv) => (max !== null ? Number(inv.grandTotal) <= max : true));
-  }, [
-    scoped,
-    filter,
-    search,
-    partyName,
-    fromDate,
-    toDate,
-    minAmount,
-    maxAmount,
-  ]);
+  }, [scoped, filter, fromDate, toDate, minAmount, maxAmount]);
 
   return (
     <div className="space-y-6">
@@ -132,9 +190,21 @@ export function Invoices() {
           id="invoice-search"
           placeholder="Search by invoice number or customer"
           value={search}
+          maxLength={120}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
+          className="pl-9 pr-9"
         />
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="button-clear-search"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -152,7 +222,7 @@ export function Invoices() {
               }`}
             >
               {f.label}
-              {!isLoading && !isError ? ` · ${countFor(f.key)}` : ""}
+              {hasLoaded ? ` · ${countFor(f.key)}` : ""}
             </button>
           );
         })}
@@ -232,13 +302,13 @@ export function Invoices() {
         </Card>
       )}
 
-      {isLoading ? (
+      {initialLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-20" />
           ))}
         </div>
-      ) : isError ? (
+      ) : isError && !hasLoaded ? (
         <QueryError thing="your invoices" onRetry={() => refetch()} />
       ) : rows.length === 0 ? (
         scoped.length === 0 && !hasAnyFilter ? (
@@ -307,6 +377,39 @@ export function Invoices() {
               </Card>
             </Link>
           ))}
+        </div>
+      )}
+
+      {hasLoaded && loaded.length > 0 && (
+        <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
+          <span data-testid="text-showing-count">
+            Showing {rows.length} invoice{rows.length === 1 ? "" : "s"}
+          </span>
+          {isError ? (
+            <>
+              <span className="text-destructive">
+                Unable to load more invoices.
+              </span>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                Try again
+              </Button>
+            </>
+          ) : hasMore || loadingMore ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setPaging((prev) => ({
+                  ...prev,
+                  offset: prev.offset + PAGE_SIZE,
+                }))
+              }
+              disabled={loadingMore}
+              data-testid="button-load-more"
+            >
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          ) : null}
         </div>
       )}
     </div>

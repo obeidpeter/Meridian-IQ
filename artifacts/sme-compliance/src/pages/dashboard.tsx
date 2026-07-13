@@ -2,7 +2,10 @@ import {
   useGetMe,
   useGetDashboardSummary,
   getGetDashboardSummaryQueryKey,
+  useGetReceivablesSummary,
+  getGetReceivablesSummaryQueryKey,
 } from "@workspace/api-client-react";
+import type { ReceivablesBucket, ReceivablesSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,6 +18,7 @@ import {
   Clock,
   FileText,
   Activity,
+  Wallet,
 } from "lucide-react";
 import { Link } from "wouter";
 import {
@@ -69,6 +73,143 @@ function StatCard({
   );
 }
 
+function AgingBucketRow({
+  label,
+  bucket,
+  tone,
+}: {
+  label: string;
+  bucket: ReceivablesBucket;
+  tone?: "warning" | "danger";
+}) {
+  // The late buckets only take their warning/danger tone once something is
+  // actually sitting in them.
+  const nonZero = bucket.count > 0 || Number(bucket.amount) > 0;
+  const toneClass =
+    nonZero && tone === "danger"
+      ? "text-destructive"
+      : nonZero && tone === "warning"
+        ? "text-amber-700 dark:text-amber-400"
+        : "";
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-medium tabular-nums ${toneClass}`}>
+        {formatNaira(bucket.amount)}
+        <span className="text-xs text-muted-foreground font-normal">
+          {" "}
+          · {bucket.count}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function ReceivablesCard({
+  summary,
+  isLoading,
+  isError,
+  onRetry,
+}: {
+  summary: ReceivablesSummary | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
+}) {
+  const primary = summary?.groups[0];
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wallet className="w-5 h-5" aria-hidden="true" /> Receivables
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-40" />
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+          </div>
+        ) : isError ? (
+          <QueryError thing="your receivables" onRetry={onRetry} />
+        ) : !summary || !primary ? (
+          <div
+            className="text-sm text-muted-foreground text-center py-4"
+            data-testid="text-receivables-empty"
+          >
+            No outstanding receivables.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <p
+                className="text-2xl font-bold tabular-nums"
+                data-testid="text-receivables-total"
+              >
+                {formatNaira(primary.outstandingTotal)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Outstanding across {primary.invoiceCount} invoice
+                {primary.invoiceCount === 1 ? "" : "s"}
+                {summary.groups.length > 1
+                  ? ` · +${summary.groups.length - 1} more ${
+                      summary.groups.length === 2 ? "currency" : "currencies"
+                    }`
+                  : ""}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <AgingBucketRow
+                label="Current (≤30d)"
+                bucket={primary.buckets.current}
+              />
+              <AgingBucketRow
+                label="31–60 days"
+                bucket={primary.buckets.days31to60}
+              />
+              <AgingBucketRow
+                label="61–90 days"
+                bucket={primary.buckets.days61to90}
+                tone="warning"
+              />
+              <AgingBucketRow
+                label="90+ days"
+                bucket={primary.buckets.days90plus}
+                tone="danger"
+              />
+            </div>
+            {summary.topDebtors.length > 0 && (
+              <div className="pt-3 border-t">
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Top debtors
+                </p>
+                <div className="space-y-2">
+                  {summary.topDebtors.map((debtor) => (
+                    <div
+                      key={debtor.buyerPartyId}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span className="min-w-0 truncate">{debtor.buyerName}</span>
+                      <span className="shrink-0 font-medium tabular-nums">
+                        {formatNaira(debtor.outstanding)}
+                        <span className="text-xs text-muted-foreground font-normal">
+                          {" "}
+                          · {debtor.invoiceCount} inv
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
@@ -84,7 +225,7 @@ function DashboardSkeleton() {
         ))}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {Array.from({ length: 2 }).map((_, i) => (
+        {Array.from({ length: 3 }).map((_, i) => (
           <Card key={i}>
             <CardHeader>
               <Skeleton className="h-5 w-40" />
@@ -115,6 +256,22 @@ export function Dashboard() {
       query: {
         enabled: !!me?.clientPartyId,
         queryKey: getGetDashboardSummaryQueryKey({
+          clientPartyId: me?.clientPartyId || "",
+        }),
+      },
+    },
+  );
+  const {
+    data: receivables,
+    isLoading: receivablesLoading,
+    isError: receivablesError,
+    refetch: refetchReceivables,
+  } = useGetReceivablesSummary(
+    { clientPartyId: me?.clientPartyId || "" },
+    {
+      query: {
+        enabled: !!me?.clientPartyId,
+        queryKey: getGetReceivablesSummaryQueryKey({
           clientPartyId: me?.clientPartyId || "",
         }),
       },
@@ -253,6 +410,13 @@ export function Dashboard() {
                   )}
                 </CardContent>
               </Card>
+
+              <ReceivablesCard
+                summary={receivables}
+                isLoading={receivablesLoading}
+                isError={receivablesError}
+                onRetry={() => refetchReceivables()}
+              />
             </div>
           </>
         )}
