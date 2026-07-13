@@ -56,28 +56,44 @@ router.get("/parties", async (req, res): Promise<void> => {
       .where(search)
       .orderBy(partiesTable.createdAt);
   } else {
-    // Firm-scoped principals only see parties they have an engagement with.
-    const engagements = await getDb()
-      .select({ pid: engagementsTable.clientPartyId })
-      .from(engagementsTable)
-      .where(eq(engagementsTable.firmId, tenant));
-    // A client_user is confined to its own client party (SEC-03): drop any
-    // sibling clients the firm engages.
     const scope = clientPartyScope(req.principal);
-    const ids = engagements
-      .map((e) => e.pid)
-      .filter((id) => scope === null || id === scope);
-    rows = ids.length
-      ? await getDb()
-          .select()
-          .from(partiesTable)
-          .where(
-            search
-              ? and(inArray(partiesTable.id, ids), search)
-              : inArray(partiesTable.id, ids),
-          )
-          .orderBy(partiesTable.createdAt)
-      : [];
+    // Visibility is the firm's SPHERE, not just its engagement subjects —
+    // buyers are rarely engagement clients, yet the invoice form must list
+    // them. Three ways into the sphere: an engagement, appearing on one of
+    // the firm's invoices, or having been captured by the firm (provenance
+    // column). A client_user (SEC-03) gets the strictly narrower version:
+    // its OWN party, parties on its OWN invoices, and parties it captured
+    // itself — never a sibling client's customer list.
+    const sphere =
+      scope === null
+        ? sql`(
+            ${partiesTable.id} IN (
+              SELECT client_party_id FROM engagements WHERE firm_id = ${tenant}
+            )
+            OR ${partiesTable.createdByFirmId} = ${tenant}
+            OR EXISTS (
+              SELECT 1 FROM invoices i
+              WHERE i.firm_id = ${tenant}
+                AND (i.supplier_party_id = ${partiesTable.id}
+                  OR i.buyer_party_id = ${partiesTable.id})
+            )
+          )`
+        : sql`(
+            ${partiesTable.id} = ${scope}
+            OR ${partiesTable.createdByUserId} = ${req.principal.userId}
+            OR EXISTS (
+              SELECT 1 FROM invoices i
+              WHERE i.firm_id = ${tenant}
+                AND i.supplier_party_id = ${scope}
+                AND (i.supplier_party_id = ${partiesTable.id}
+                  OR i.buyer_party_id = ${partiesTable.id})
+            )
+          )`;
+    rows = await getDb()
+      .select()
+      .from(partiesTable)
+      .where(search ? and(sphere, search) : sphere)
+      .orderBy(partiesTable.createdAt);
   }
   res.json(ListPartiesResponse.parse(rows));
 });
@@ -89,7 +105,11 @@ router.post("/parties", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const party = await createParty(parsed.data, req.principal.userId);
+  const party = await createParty(
+    parsed.data,
+    req.principal.userId,
+    tenantFirmId(req.principal),
+  );
   res.status(201).json(CreatePartyResponse.parse(party));
 });
 

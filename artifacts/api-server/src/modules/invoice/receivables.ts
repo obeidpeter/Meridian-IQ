@@ -158,6 +158,113 @@ export async function getReceivablesSummary(
   };
 }
 
+// Firm-level rollup for the console: the advisor chases on behalf of the
+// whole book, so aggregate the same outstanding definition per CLIENT (who
+// is owed) and per BUYER (who owes), worst first. One row per client/buyer
+// per currency.
+export interface FirmReceivablesClientRow {
+  clientPartyId: string;
+  clientName: string;
+  currency: string;
+  outstandingTotal: string;
+  invoiceCount: number;
+  overdue90Amount: string;
+  oldestDueDate: string | null;
+}
+
+export interface FirmReceivables {
+  asOf: string;
+  clients: FirmReceivablesClientRow[];
+  topDebtors: {
+    buyerPartyId: string;
+    buyerName: string;
+    currency: string;
+    outstanding: string;
+    invoiceCount: number;
+    oldestDueDate: string | null;
+  }[];
+}
+
+export async function getFirmReceivables(
+  firmId: string,
+): Promise<FirmReceivables> {
+  const db = getDb();
+  const clientRows = (
+    await db.execute(sql`
+      SELECT
+        i.supplier_party_id,
+        p.legal_name,
+        i.currency,
+        SUM(i.grand_total)::numeric(18,2)::text AS outstanding,
+        COUNT(*)::int AS invoice_count,
+        COALESCE(SUM(i.grand_total) FILTER (
+          WHERE current_date - COALESCE(i.due_date, i.issue_date) > 90
+        ), 0)::numeric(18,2)::text AS overdue_90,
+        MIN(COALESCE(i.due_date, i.issue_date))::text AS oldest_due
+      FROM invoices i
+      JOIN parties p ON p.id = i.supplier_party_id
+      WHERE ${OUTSTANDING} AND i.firm_id = ${firmId}
+      GROUP BY i.supplier_party_id, p.legal_name, i.currency
+      ORDER BY SUM(i.grand_total) DESC
+      LIMIT 200
+    `)
+  ).rows as {
+    supplier_party_id: string;
+    legal_name: string;
+    currency: string;
+    outstanding: string;
+    invoice_count: number;
+    overdue_90: string;
+    oldest_due: string | null;
+  }[];
+
+  const debtorRows = (
+    await db.execute(sql`
+      SELECT
+        i.buyer_party_id,
+        p.legal_name,
+        i.currency,
+        SUM(i.grand_total)::numeric(18,2)::text AS outstanding,
+        COUNT(*)::int AS invoice_count,
+        MIN(COALESCE(i.due_date, i.issue_date))::text AS oldest_due
+      FROM invoices i
+      JOIN parties p ON p.id = i.buyer_party_id
+      WHERE ${OUTSTANDING} AND i.firm_id = ${firmId}
+      GROUP BY i.buyer_party_id, p.legal_name, i.currency
+      ORDER BY SUM(i.grand_total) DESC
+      LIMIT 10
+    `)
+  ).rows as {
+    buyer_party_id: string;
+    legal_name: string;
+    currency: string;
+    outstanding: string;
+    invoice_count: number;
+    oldest_due: string | null;
+  }[];
+
+  return {
+    asOf: new Date().toISOString().slice(0, 10),
+    clients: clientRows.map((r) => ({
+      clientPartyId: r.supplier_party_id,
+      clientName: r.legal_name,
+      currency: r.currency,
+      outstandingTotal: r.outstanding,
+      invoiceCount: r.invoice_count,
+      overdue90Amount: r.overdue_90,
+      oldestDueDate: r.oldest_due,
+    })),
+    topDebtors: debtorRows.map((r) => ({
+      buyerPartyId: r.buyer_party_id,
+      buyerName: r.legal_name,
+      currency: r.currency,
+      outstanding: r.outstanding,
+      invoiceCount: r.invoice_count,
+      oldestDueDate: r.oldest_due,
+    })),
+  };
+}
+
 // Per-invoice detail behind the aging summary — the rows an accountant or
 // collections call actually works from. Same outstanding definition, one row
 // per invoice, oldest reference date first.

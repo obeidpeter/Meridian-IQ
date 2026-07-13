@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 import * as zod from 'zod';
 
@@ -1707,6 +1707,31 @@ export const EscalateInvoiceResponse = zod.object({
   "status": zod.enum(['open', 'acknowledged', 'resolved']),
   "context": zod.record(zod.string(), zod.unknown()).nullish(),
   "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Outstanding receivables across the firm's book, worst first
+ */
+export const GetFirmReceivablesResponse = zod.object({
+  "asOf": zod.string(),
+  "clients": zod.array(zod.object({
+  "clientPartyId": zod.string(),
+  "clientName": zod.string(),
+  "currency": zod.string(),
+  "outstandingTotal": zod.string(),
+  "invoiceCount": zod.number(),
+  "overdue90Amount": zod.string(),
+  "oldestDueDate": zod.string().nullable()
+})),
+  "topDebtors": zod.array(zod.object({
+  "buyerPartyId": zod.string(),
+  "buyerName": zod.string(),
+  "currency": zod.string(),
+  "outstanding": zod.string(),
+  "invoiceCount": zod.number(),
+  "oldestDueDate": zod.string().nullable()
+}))
 })
 
 

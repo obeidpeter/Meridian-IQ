@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.4.0
+  version: 0.5.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1361,6 +1361,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/Escalation"
 
+  /console/receivables:
+    get:
+      operationId: getFirmReceivables
+      tags: [console]
+      summary: Outstanding receivables across the firm's book, worst first
+      responses:
+        "200":
+          description: Per-client outstanding totals and top debtors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirmReceivables"
   /console/portfolio:
     get:
       operationId: getPortfolio
@@ -3971,6 +3983,67 @@ components:
         at:
           type: string
           format: date-time
+    FirmReceivables:
+      type: object
+      required: [asOf, clients, topDebtors]
+      properties:
+        asOf:
+          type: string
+        clients:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                clientPartyId,
+                clientName,
+                currency,
+                outstandingTotal,
+                invoiceCount,
+                overdue90Amount,
+                oldestDueDate,
+              ]
+            properties:
+              clientPartyId:
+                type: string
+              clientName:
+                type: string
+              currency:
+                type: string
+              outstandingTotal:
+                type: string
+              invoiceCount:
+                type: integer
+              overdue90Amount:
+                type: string
+              oldestDueDate:
+                type: ["string", "null"]
+        topDebtors:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                buyerPartyId,
+                buyerName,
+                currency,
+                outstanding,
+                invoiceCount,
+                oldestDueDate,
+              ]
+            properties:
+              buyerPartyId:
+                type: string
+              buyerName:
+                type: string
+              currency:
+                type: string
+              outstanding:
+                type: string
+              invoiceCount:
+                type: integer
+              oldestDueDate:
+                type: ["string", "null"]
     ReceivablesBucket:
       type: object
       required: [amount, count]

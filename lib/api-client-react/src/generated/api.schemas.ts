@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 export interface HealthStatus {
   status: string;
@@ -1047,6 +1047,33 @@ export interface ActivityItem {
   /** @nullable */
   status?: string | null;
   at: string;
+}
+
+export type FirmReceivablesClientsItem = {
+  clientPartyId: string;
+  clientName: string;
+  currency: string;
+  outstandingTotal: string;
+  invoiceCount: number;
+  overdue90Amount: string;
+  /** @nullable */
+  oldestDueDate: string | null;
+};
+
+export type FirmReceivablesTopDebtorsItem = {
+  buyerPartyId: string;
+  buyerName: string;
+  currency: string;
+  outstanding: string;
+  invoiceCount: number;
+  /** @nullable */
+  oldestDueDate: string | null;
+};
+
+export interface FirmReceivables {
+  asOf: string;
+  clients: FirmReceivablesClientsItem[];
+  topDebtors: FirmReceivablesTopDebtorsItem[];
 }
 
 export interface ReceivablesBucket {
