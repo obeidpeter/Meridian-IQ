@@ -8,6 +8,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { resolvePrincipal, requireCsrfHeader } from "./middleware/principal";
 import { errorHandler } from "./middleware/error";
+import { metricsMiddleware } from "./lib/metrics";
 
 // Cross-tenant staff (operator/auditor/bank_user), buyer-organization users
 // (buyer_user — scoped to a buyer Party at the route level, not to a firm) and
@@ -19,7 +20,12 @@ const BYPASS_ROLES = new Set(["operator", "auditor", "bank_user", "buyer_user"])
 // transaction entirely. The external sweep trigger also skips it: each
 // pipeline pass opens its own bypass transactions, which must not nest inside
 // the per-request tenant transaction (nor inherit its 30-second cap).
-const NO_CONTEXT_PATHS = new Set(["/api/healthz", "/api/internal/sweep"]);
+const NO_CONTEXT_PATHS = new Set([
+  "/api/healthz",
+  "/api/readyz",
+  "/api/metrics",
+  "/api/internal/sweep",
+]);
 
 // Hard cap on how long a request may hold its transaction open. A handler that
 // never responds (and whose socket never closes) would otherwise pin a pooled
@@ -220,6 +226,10 @@ app.use((_req, res, next) => {
   res.setHeader("Strict-Transport-Security", "max-age=15552000");
   next();
 });
+
+// Request timing (OBS-01). Placed early so the histogram captures total
+// in-server latency including auth, RLS setup and the handler.
+app.use(metricsMiddleware);
 
 app.use(
   pinoHttp({
