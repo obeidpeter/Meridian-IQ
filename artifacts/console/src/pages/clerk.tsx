@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useListClerkCases,
   useGetClerkCase,
@@ -9,11 +9,16 @@ import {
   useRetryClerkCase,
   useAskClerk,
   useGetClerkMetrics,
+  useGetClerkPartySuggestions,
+  useRunClerkEval,
+  useListClerkEvalRuns,
   useListFirms,
   useListParties,
   getListClerkCasesQueryKey,
   getGetClerkCaseQueryKey,
   getGetClerkMetricsQueryKey,
+  getGetClerkPartySuggestionsQueryKey,
+  getListClerkEvalRunsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   ClerkCase,
@@ -21,6 +26,7 @@ import type {
   ClerkAnswer,
   ClerkCaseDecisionInputCategory,
   ClerkMetricsCases,
+  ClerkPartySuggestion,
   InvoiceLineInput,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -50,6 +56,7 @@ import {
   Bot,
   FileUp,
   MessageCircleQuestion,
+  Mic,
   Plus,
   PowerOff,
   ShieldCheck,
@@ -107,6 +114,10 @@ async function fileToBase64(file: File): Promise<string> {
 // The server caps voice uploads at 5 MB; reject oversized files before
 // wasting time base64-encoding them.
 const MAX_VOICE_BYTES = 5 * 1024 * 1024;
+
+// In-browser recordings auto-stop at 120 s — comfortably covers the
+// ~90-second voice-note demo and keeps the blob far under the 5 MB cap.
+const MAX_RECORD_SECONDS = 120;
 
 // Coarse "n min ago" for claim ages — precision doesn't matter here.
 function relativeTime(iso: string | null | undefined): string {
@@ -239,6 +250,29 @@ const OUTCOME_TONE: Record<string, BadgeTone> = {
   error: "red",
 };
 
+// Evaluation fixtures: riskLabel is the fixture's NATURE (what it tests),
+// outcome is what the model did with it. Injection fixtures are violet — an
+// adversarial fixture is not a failure; a followed injection is (red pill in
+// the detail row).
+const EVAL_RISK_TONE: Record<string, BadgeTone> = {
+  clean: "slate",
+  skewed: "amber",
+  injection: "violet",
+};
+
+const EVAL_OUTCOME_TONE: Record<string, BadgeTone> = {
+  ok: "emerald",
+  invalid: "amber",
+  error: "red",
+};
+
+// Eval runs take seconds to minutes (each fixture is a live model call), so
+// switch to seconds above 1 s instead of reusing the ms-latency formatter.
+function fmtEvalDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
 function fmtRatePct(rate: number | null | undefined): string {
   if (rate === null || rate === undefined) return "—";
   return `${(rate * 100).toFixed(1)}%`;
@@ -348,6 +382,8 @@ function BreakdownRow({
 }
 
 function HealthPanel() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [windowDays, setWindowDays] = useState(30);
   const params = { windowDays };
   const {
@@ -358,6 +394,46 @@ function HealthPanel() {
   } = useGetClerkMetrics(params, {
     query: { queryKey: getGetClerkMetricsQueryKey(params) },
   });
+
+  // Evaluation runs: the synthetic fixture corpus scored against the live
+  // model. Running one is a deliberate act (it spends real model calls), so
+  // it sits behind a button rather than loading eagerly like the metrics.
+  const evalParams = { limit: 20 };
+  const {
+    data: evalRuns,
+    isLoading: evalRunsLoading,
+    error: evalRunsError,
+    refetch: refetchEvalRuns,
+  } = useListClerkEvalRuns(evalParams, {
+    query: { queryKey: getListClerkEvalRunsQueryKey(evalParams) },
+  });
+
+  const runEval = useRunClerkEval({
+    mutation: {
+      onSuccess: (run) => {
+        queryClient.invalidateQueries({
+          queryKey: getListClerkEvalRunsQueryKey(evalParams),
+        });
+        toast({
+          title: "Evaluation complete",
+          description: `Field accuracy ${fmtRatePct(run.accuracy)} · injection resisted ${run.injectionResisted}/${run.injectionFixtures} across ${run.fixtureCount} fixtures.`,
+        });
+      },
+      onError: (e) => {
+        toast({
+          title: "Evaluation failed",
+          description:
+            serverErrorMessage(e) ?? "Could not run the evaluation.",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  // Fixture-level detail for the most recent run, behind a toggle like the
+  // capture form's open/close.
+  const [showEvalDetail, setShowEvalDetail] = useState(false);
+  const latestRun = evalRuns?.[0];
 
   return (
     <div className="space-y-4">
@@ -610,6 +686,172 @@ function HealthPanel() {
           </Card>
         </>
       )}
+
+      <Card data-testid="section-evaluation">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-base">Evaluation</CardTitle>
+          <Button
+            size="sm"
+            onClick={() => runEval.mutate()}
+            disabled={runEval.isPending}
+            data-testid="button-run-eval"
+          >
+            {runEval.isPending ? "Running…" : "Run evaluation"}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Runs the synthetic fixture corpus through the live model (about 6
+            model calls, one per fixture — it can take tens of seconds) and
+            scores field accuracy and prompt-injection resistance.
+          </p>
+          {evalRunsLoading ? (
+            <Skeleton className="h-24" />
+          ) : evalRunsError ? (
+            <QueryError
+              thing="evaluation runs"
+              onRetry={() => refetchEvalRuns()}
+              detail={serverErrorMessage(evalRunsError)}
+            />
+          ) : !evalRuns || evalRuns.length === 0 ? (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="text-eval-empty"
+            >
+              No evaluation runs yet — run one to baseline the current model
+              and prompt.
+            </p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="table-eval-runs">
+                  <thead>
+                    <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">When</th>
+                      <th className="py-2 pr-3 font-medium">Model</th>
+                      <th className="py-2 pr-3 font-medium">Prompt</th>
+                      <th className="py-2 pr-3 font-medium text-right">
+                        Field accuracy
+                      </th>
+                      <th className="py-2 pr-3 font-medium text-right">
+                        Injection
+                      </th>
+                      <th className="py-2 pr-3 font-medium text-right">
+                        Fixtures
+                      </th>
+                      <th className="py-2 font-medium text-right">Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {evalRuns.map((r) => (
+                      <tr key={r.id} data-testid={`row-eval-run-${r.id}`}>
+                        <td className="py-2 pr-3 whitespace-nowrap">
+                          {formatDateTime(r.createdAt)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <code className="text-xs">{r.model}</code>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <code className="text-xs">{r.promptVersion}</code>
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {fmtRatePct(r.accuracy)}
+                        </td>
+                        <td
+                          className={`py-2 pr-3 text-right tabular-nums ${
+                            r.injectionResisted < r.injectionFixtures
+                              ? "text-red-600 dark:text-red-400 font-medium"
+                              : ""
+                          }`}
+                        >
+                          {r.injectionResisted}/{r.injectionFixtures}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {r.fixtureCount}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          {fmtEvalDuration(r.durationMs)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {latestRun && (
+                <div className="space-y-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setShowEvalDetail((o) => !o)}
+                    data-testid="button-toggle-eval-detail"
+                  >
+                    {showEvalDetail
+                      ? "Hide fixture detail"
+                      : "Show fixture detail"}
+                  </Button>
+                  {showEvalDetail && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase">
+                        Fixtures — most recent run
+                      </p>
+                      <div
+                        className="border rounded-md divide-y text-sm"
+                        data-testid="detail-eval-fixtures"
+                      >
+                        {latestRun.results.map((fx) => (
+                          <div
+                            key={fx.key}
+                            className="px-3 py-2 space-y-1"
+                            data-testid={`row-eval-fixture-${fx.key}`}
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="flex-1 min-w-0 truncate font-medium">
+                                {fx.label}
+                              </span>
+                              <span
+                                className={pillClasses(
+                                  EVAL_RISK_TONE[fx.riskLabel] ?? "slate",
+                                )}
+                              >
+                                {fx.riskLabel}
+                              </span>
+                              <span
+                                className={pillClasses(
+                                  EVAL_OUTCOME_TONE[fx.outcome] ?? "slate",
+                                )}
+                              >
+                                {fx.outcome}
+                              </span>
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {fx.fieldsCorrect}/{fx.fieldsCompared} fields
+                              </span>
+                              {fx.injectionResisted === false && (
+                                <span className={pillClasses("red")}>
+                                  injection followed
+                                </span>
+                              )}
+                            </div>
+                            {fx.mismatches.length > 0 && (
+                              <ul className="text-xs text-muted-foreground space-y-0.5">
+                                {fx.mismatches.map((m) => (
+                                  <li key={m.field}>
+                                    <code>{m.field}</code>: {m.expected ?? "—"}{" "}
+                                    → {m.actual ?? "—"}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -619,6 +861,43 @@ function ConfidenceBadge({ confidence }: { confidence: number }) {
   const tone =
     confidence >= 0.9 ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400 font-medium";
   return <span className={`text-xs tabular-nums ${tone}`}>{pct}%</span>;
+}
+
+// Clickable party-match chips under the supplier/buyer selects. Suggestions
+// are only ever suggestions: clicking one sets the select, and the dropdown
+// stays fully usable for anything else.
+function PartySuggestionChips({
+  suggestions,
+  value,
+  onPick,
+  testId,
+}: {
+  suggestions: ClerkPartySuggestion[];
+  value: string;
+  onPick: (partyId: string) => void;
+  testId: string;
+}) {
+  if (suggestions.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1 pt-1" data-testid={testId}>
+      {suggestions.map((s) => (
+        <button
+          key={s.partyId}
+          type="button"
+          onClick={() => onPick(s.partyId)}
+          className={`${pillClasses(value === s.partyId ? "blue" : "slate")} hover:opacity-80 transition-opacity`}
+          data-testid={`${testId}-${s.partyId}`}
+        >
+          {s.legalName} · {Math.round(s.confidence * 100)}%
+          {s.tinScore === 1 && (
+            <span className="text-[10px] uppercase font-semibold">
+              TIN match
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function ClerkWorkspace() {
@@ -675,6 +954,42 @@ export function ClerkWorkspace() {
   const { data: firms } = useListFirms();
   const { data: parties } = useListParties();
 
+  // Party-matching suggestions for the open approval form, fetched only
+  // while the form is open for an extraction case. A failed fetch is silent:
+  // suggestions are a convenience, the plain dropdowns keep working.
+  const suggestionsCaseId =
+    form != null && selected?.kind === "extraction" ? selected.id : null;
+  const { data: partySuggestions } = useGetClerkPartySuggestions(
+    suggestionsCaseId ?? "",
+    {
+      query: {
+        queryKey: getGetClerkPartySuggestionsQueryKey(suggestionsCaseId ?? ""),
+        enabled: suggestionsCaseId != null,
+      },
+    },
+  );
+
+  // Pre-select the top suggestion for any party slot the operator has not
+  // picked yet. Only empty slots are ever filled — an operator's choice is
+  // never overwritten, and the selects stay fully open to any other party.
+  useEffect(() => {
+    if (!partySuggestions) return;
+    setForm((f) => {
+      if (!f) return f;
+      const supplierPartyId =
+        f.supplierPartyId || (partySuggestions.supplier[0]?.partyId ?? "");
+      const buyerPartyId =
+        f.buyerPartyId || (partySuggestions.buyer[0]?.partyId ?? "");
+      if (
+        supplierPartyId === f.supplierPartyId &&
+        buyerPartyId === f.buyerPartyId
+      ) {
+        return f;
+      }
+      return { ...f, supplierPartyId, buyerPartyId };
+    });
+  }, [partySuggestions, form]);
+
   const handleGatewayError = (err: unknown, fallback: string) => {
     if (killSwitchTripped(err)) {
       setDisabledBanner(true);
@@ -714,6 +1029,7 @@ export function ClerkWorkspace() {
         setCaptureText("");
         setCaptureFile(null);
         setCaptureVoice(null);
+        setVoiceFromRecorder(false);
         setPendingDuplicate(null);
         setDisabledBanner(false);
         toast({
@@ -829,6 +1145,107 @@ export function ClerkWorkspace() {
     },
   });
   const [question, setQuestion] = useState("");
+
+  // In-browser voice recording (MediaRecorder). The recorded blob becomes a
+  // File fed through the SAME captureVoice path as an attached audio file, so
+  // submit, duplicate guard and post-success reset all behave identically.
+  // Refs hold the live recorder and timer so unmount cleanup can reach them.
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [voiceFromRecorder, setVoiceFromRecorder] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Hide the button entirely where the APIs are missing (old browsers,
+  // insecure origins) — a button that can only fail is worse than none.
+  const recordingSupported =
+    typeof navigator !== "undefined" &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    typeof window !== "undefined" &&
+    "MediaRecorder" in window;
+
+  const stopRecording = () => {
+    // onstop assembles the blob, stops the mic tracks and clears the timer.
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+  };
+
+  const startRecording = async () => {
+    if (isRecording || recorderRef.current) return;
+    setPendingDuplicate(null);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      toast({
+        title: "Microphone unavailable",
+        description:
+          "Microphone access was denied or no microphone was found — allow access in the browser, or attach an audio file instead.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Default mimeType (typically audio/webm) — the backend transcriber
+    // handles webm natively.
+    const recorder = new MediaRecorder(stream);
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      if (recordTimerRef.current != null) {
+        clearInterval(recordTimerRef.current);
+        recordTimerRef.current = null;
+      }
+      recorderRef.current = null;
+      setIsRecording(false);
+      const blob = new Blob(chunks, {
+        type: recorder.mimeType || "audio/webm",
+      });
+      if (blob.size === 0) return;
+      if (blob.size > MAX_VOICE_BYTES) {
+        toast({
+          title: "Recording too large",
+          description:
+            "Voice notes are capped at 5 MB — record a shorter note.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setCaptureVoice(new File([blob], "recording.webm", { type: blob.type }));
+      setVoiceFromRecorder(true);
+    };
+    recorderRef.current = recorder;
+    setIsRecording(true);
+    setRecordSeconds(0);
+    recorder.start();
+    const startedAt = Date.now();
+    recordTimerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      setRecordSeconds(elapsed);
+      // Hard cap — matches the ~90-second voice-note demo with headroom.
+      if (
+        elapsed >= MAX_RECORD_SECONDS &&
+        recorderRef.current?.state === "recording"
+      ) {
+        recorderRef.current.stop();
+      }
+    }, 1000);
+  };
+
+  // Never leave the mic held after unmount (no dangling recording indicator).
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current != null) {
+        clearInterval(recordTimerRef.current);
+      }
+      const rec = recorderRef.current;
+      if (rec) {
+        rec.stream.getTracks().forEach((t) => t.stop());
+        if (rec.state !== "inactive") rec.stop();
+        recorderRef.current = null;
+      }
+    };
+  }, []);
 
   const submitCapture = async () => {
     if (captureVoice) {
@@ -984,6 +1401,7 @@ export function ClerkWorkspace() {
                       onChange={(e) => {
                         const f = e.target.files?.[0] ?? null;
                         setPendingDuplicate(null);
+                        setVoiceFromRecorder(false);
                         if (f && f.size > MAX_VOICE_BYTES) {
                           toast({
                             title: "Voice note too large",
@@ -999,9 +1417,38 @@ export function ClerkWorkspace() {
                         }
                         setCaptureVoice(f);
                       }}
-                      disabled={captureFile != null}
+                      disabled={captureFile != null || isRecording}
                       data-testid="input-voice-file"
                     />
+                    {recordingSupported && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={isRecording ? "destructive" : "secondary"}
+                          onClick={isRecording ? stopRecording : startRecording}
+                          disabled={
+                            createCase.isPending ||
+                            (!isRecording && captureFile != null)
+                          }
+                          data-testid="button-record-voice"
+                        >
+                          <Mic className="w-4 h-4 mr-1" aria-hidden="true" />
+                          {isRecording ? "Stop recording" : "Record voice note"}
+                        </Button>
+                        <span
+                          className="text-xs text-muted-foreground tabular-nums"
+                          aria-live="polite"
+                          data-testid="text-record-elapsed"
+                        >
+                          {isRecording
+                            ? `Recording… ${recordSeconds}s (stops at ${MAX_RECORD_SECONDS}s)`
+                            : voiceFromRecorder && captureVoice != null
+                              ? "Recorded note ready — recording.webm"
+                              : ""}
+                        </span>
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       English voice notes; the audio is transcribed and only
                       the transcript is kept.
@@ -1341,6 +1788,14 @@ export function ClerkWorkspace() {
                                 ))}
                               </SelectContent>
                             </Select>
+                            <PartySuggestionChips
+                              suggestions={partySuggestions?.supplier ?? []}
+                              value={form.supplierPartyId}
+                              onPick={(partyId) =>
+                                setForm({ ...form, supplierPartyId: partyId })
+                              }
+                              testId="suggestions-supplier"
+                            />
                           </div>
                           <div className="space-y-1">
                             <Label>Buyer party</Label>
@@ -1361,6 +1816,14 @@ export function ClerkWorkspace() {
                                 ))}
                               </SelectContent>
                             </Select>
+                            <PartySuggestionChips
+                              suggestions={partySuggestions?.buyer ?? []}
+                              value={form.buyerPartyId}
+                              onPick={(partyId) =>
+                                setForm({ ...form, buyerPartyId: partyId })
+                              }
+                              testId="suggestions-buyer"
+                            />
                           </div>
                         </div>
                         <div className="grid sm:grid-cols-4 gap-3">
