@@ -3,19 +3,43 @@ import { Link } from "wouter";
 import {
   useGetMe,
   useListInvoices,
+  useBulkSubmitInvoices,
   getListInvoicesQueryKey,
+  getGetDashboardSummaryQueryKey,
+  getGetReceivablesSummaryQueryKey,
   useListParties,
 } from "@workspace/api-client-react";
-import type { Invoice, ListInvoicesParams } from "@workspace/api-client-react";
+import type {
+  BulkSubmitRowResult,
+  Invoice,
+  ListInvoicesParams,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { Search, FileText, ChevronRight, SlidersHorizontal, X } from "lucide-react";
-import { formatNaira, formatDate, statusLabel, badgeClasses, statusTone } from "@/lib/format";
+import { useToast } from "@/hooks/use-toast";
+import { Search, FileText, ChevronRight, Send, SlidersHorizontal, X } from "lucide-react";
+import {
+  formatNaira,
+  formatDate,
+  statusLabel,
+  badgeClasses,
+  statusTone,
+  pillClasses,
+} from "@/lib/format";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -29,11 +53,41 @@ const FILTERS = [
 // newest-first bounded mode, so we never pull the unbounded legacy list.
 const PAGE_SIZE = 50;
 
+// The generated client throws an ApiError whose `data` carries the server's
+// `{ error }` body (e.g. the 403 "consent required" refusal). The package does
+// not export the class itself, so duck-type the field — mirrors lib/errors.ts.
+function serverErrorMessage(error: unknown): string {
+  if (error && typeof error === "object" && "data" in error) {
+    const data = (error as { data: unknown }).data;
+    if (
+      data &&
+      typeof data === "object" &&
+      "error" in data &&
+      typeof (data as { error: unknown }).error === "string"
+    ) {
+      return (data as { error: string }).error;
+    }
+  }
+  return error instanceof Error ? error.message : "Please try again.";
+}
+
 export function Invoices() {
   usePageTitle("Invoices");
   const { data: me } = useGetMe();
   const { data: parties } = useListParties();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const bulkSubmit = useBulkSubmitInvoices();
   const [search, setSearch] = useState("");
+  // Bulk submit dialog: `bulkReport === null` is the confirmation step; a
+  // report switches it to the results view. Rows accumulate across batches,
+  // deduped by invoiceId (an invalid draft stays pending by design, so it
+  // reappears in every batch until fixed).
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkReport, setBulkReport] = useState<{
+    rows: BulkSubmitRowResult[];
+    remaining: number;
+  } | null>(null);
   // Debounced server-side search plus paging cursor, kept in one state object
   // so a new search term resets to the first page in the same update.
   const [paging, setPaging] = useState<{ q: string; offset: number }>({
@@ -131,6 +185,57 @@ export function Invoices() {
     setFilter("all");
   };
 
+  const openBulk = () => {
+    setBulkReport(null);
+    setBulkOpen(true);
+  };
+
+  const closeBulk = () => {
+    setBulkOpen(false);
+    setBulkReport(null);
+  };
+
+  // One server-side batch per call: validate→submit up to 200 of this
+  // client's oldest pending drafts. "Submit next batch" calls it again and
+  // merges the new rows into the running report.
+  const runBulkSubmit = async () => {
+    if (!me?.clientPartyId) return;
+    try {
+      const res = await bulkSubmit.mutateAsync({
+        data: { clientPartyId: me.clientPartyId },
+      });
+      setBulkReport((prev) => {
+        const byId = new Map((prev?.rows ?? []).map((r) => [r.invoiceId, r]));
+        res.rows.forEach((r) => byId.set(r.invoiceId, r));
+        return { rows: [...byId.values()], remaining: res.remaining };
+      });
+      // Not awaited: a background refetch rejection must not surface as a
+      // false "bulk submit failed" error after the batch already ran. The
+      // no-args keys prefix-match every param variant of these queries.
+      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+      queryClient.invalidateQueries({
+        queryKey: getGetDashboardSummaryQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetReceivablesSummaryQueryKey(),
+      });
+      // Drop the accumulated pages and jump back to the first page so the
+      // refreshed statuses show instead of stale later pages.
+      setPaging((prev) => (prev.offset === 0 ? prev : { ...prev, offset: 0 }));
+      setPages((prev) => ({ q: prev.q, byOffset: {} }));
+    } catch (e) {
+      toast({
+        title: "Bulk submit failed",
+        description: serverErrorMessage(e),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const bulkRows = bulkReport?.rows ?? [];
+  const bulkSubmitted = bulkRows.filter((r) => r.outcome === "submitted").length;
+  const bulkNeedsAttention = bulkRows.filter((r) => r.outcome !== "submitted");
+
   // The client's own invoice book — the base every filter applies to. The
   // search is server-side (q matches the invoice number or either party's
   // legal name); the tab and advanced filters apply to the loaded rows. The
@@ -173,10 +278,138 @@ export function Invoices() {
             Every invoice, write-once and searchable.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/invoices/new">New invoice</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {me?.clientPartyId && (
+            <Button
+              variant="outline"
+              onClick={openBulk}
+              disabled={initialLoading || bulkSubmit.isPending}
+              data-testid="button-bulk-submit"
+            >
+              <Send className="w-4 h-4 mr-2" aria-hidden="true" />
+              {bulkSubmit.isPending ? "Submitting…" : "Submit all drafts"}
+            </Button>
+          )}
+          <Button asChild>
+            <Link href="/invoices/new">New invoice</Link>
+          </Button>
+        </div>
       </div>
+
+      <Dialog
+        open={bulkOpen}
+        onOpenChange={(open) => {
+          if (!open) closeBulk();
+        }}
+      >
+        <DialogContent>
+          {bulkReport === null ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Submit all pending drafts?</DialogTitle>
+                <DialogDescription>
+                  This validates every pending draft (draft or validated,
+                  oldest first) and submits the valid ones to the FIRS stamping
+                  rail, in batches of up to 200. Submission cannot be undone.
+                  Drafts that fail validation stay pending, with their issues
+                  listed so you can fix them.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="ghost"
+                  onClick={closeBulk}
+                  disabled={bulkSubmit.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={runBulkSubmit}
+                  disabled={bulkSubmit.isPending}
+                  data-testid="button-confirm-bulk-submit"
+                >
+                  {bulkSubmit.isPending ? "Submitting…" : "Validate & submit"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle data-testid="text-bulk-headline">
+                  {bulkRows.length === 0
+                    ? "No pending drafts"
+                    : `Submitted ${bulkSubmitted} of ${bulkRows.length}`}
+                </DialogTitle>
+                <DialogDescription>
+                  {bulkRows.length === 0
+                    ? "There was nothing to validate — every invoice is already past the draft stage."
+                    : bulkNeedsAttention.length === 0
+                      ? "Every pending draft in this run is now on the stamping rail."
+                      : `${bulkNeedsAttention.length} draft(s) need a fix before they can be submitted.`}
+                </DialogDescription>
+              </DialogHeader>
+              {bulkNeedsAttention.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Needs attention</p>
+                  <ul className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {bulkNeedsAttention.map((r) => (
+                      <li
+                        key={r.invoiceId}
+                        className="text-sm border border-destructive/40 bg-destructive/5 rounded-md px-3 py-2"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Link
+                            href={`/invoices/${r.invoiceId}`}
+                            onClick={closeBulk}
+                            className="font-semibold truncate hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                            data-testid={`link-bulk-row-${r.invoiceId}`}
+                          >
+                            {r.invoiceNumber}
+                          </Link>
+                          <span
+                            className={pillClasses(
+                              r.outcome === "invalid" ? "amber" : "red",
+                            )}
+                          >
+                            {r.outcome === "invalid" ? "Invalid" : "Failed"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-destructive mt-1">
+                          {r.errors[0]
+                            ? `${r.errors[0].field}: ${r.errors[0].message}`
+                            : r.error ||
+                              "Submission failed — open the invoice for details."}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {bulkReport.remaining > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {bulkReport.remaining} more pending draft
+                  {bulkReport.remaining === 1 ? "" : "s"} — invalid drafts stay
+                  pending until fixed, so they count toward this total.
+                </p>
+              )}
+              <DialogFooter>
+                <Button variant="ghost" onClick={closeBulk}>
+                  Close
+                </Button>
+                {bulkReport.remaining > 0 && (
+                  <Button
+                    onClick={runBulkSubmit}
+                    disabled={bulkSubmit.isPending}
+                    data-testid="button-bulk-next-batch"
+                  >
+                    {bulkSubmit.isPending ? "Submitting…" : "Submit next batch"}
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="relative">
         <Search
