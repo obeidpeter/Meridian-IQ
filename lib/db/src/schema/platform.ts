@@ -13,6 +13,21 @@ import { createInsertSchema } from "drizzle-zod";
 import { firmsTable } from "./organizations.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
 
+// Login throttle counters (SEC-02, SEC-M4). Fixed-window failure counts keyed
+// by "email|ip" (per-source) and "email" (per-account, IP-independent — caps
+// distributed credential stuffing). Persisted rather than in-memory so the
+// cap holds across a multi-instance deployment. Written on the raw pool
+// connection, NOT the RLS-scoped request transaction, so a failed login's 4xx
+// rollback does not discard the recorded attempt; the login role bypasses RLS,
+// and expired rows are pruned by a registered cleanup sweep.
+export const loginAttemptsTable = pgTable("login_attempts", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  windowStart: timestamp("window_start", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Feature flags gate every release-tagged capability (PL-02). A dark feature is
 // unreachable. Per-firm overrides allow layer-three surfaces to activate per
 // client on recorded consent.

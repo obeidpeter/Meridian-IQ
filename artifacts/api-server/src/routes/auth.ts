@@ -1,4 +1,4 @@
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { getDb, membershipsTable, usersTable } from "@workspace/db";
 import {
@@ -14,6 +14,11 @@ import {
   hashPassword,
   verifyPassword,
 } from "../modules/auth/session";
+import {
+  isLoginThrottled,
+  recordLoginFailure,
+  clearLoginFailures,
+} from "../modules/auth/throttle";
 import { appendAudit } from "../modules/audit/audit";
 
 // First-party session sign-in (SEC-02). Sets an HttpOnly, SameSite=Lax cookie;
@@ -22,102 +27,6 @@ import { appendAudit } from "../modules/audit/audit";
 // must work even with an expired session); change-password is authenticated.
 
 const router: IRouter = Router();
-
-// ---- login throttling (SEC-02) ----------------------------------------------
-// In-memory fixed-window backoff. Two independent counters, both of which must
-// pass, suit the single-process modular monolith (a multi-instance deployment
-// would move them to shared storage):
-//   1. per email+IP — a tight 5/15-min cap that stops probing from one source.
-//   2. per email — a looser account-scoped cap (50/hour) that a distributed
-//      credential-stuffing run (many source IPs) cannot evade, since it does
-//      not include the IP in the key. Deliberately looser so a bystander
-//      attacker cannot cheaply lock a victim out (availability), while still
-//      capping aggregate online guesses against one account.
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_FAILURES = 5;
-const ACCOUNT_WINDOW_MS = 60 * 60 * 1000;
-const ACCOUNT_MAX_FAILURES = 50;
-// Hard cap on distinct throttle keys held in memory. With req.ip now trustworthy
-// (app.set("trust proxy") in app.ts), an attacker can no longer mint unbounded
-// keys by spoofing X-Forwarded-For, so this is a backstop rather than the
-// primary defence (SEC-M4).
-const LOGIN_MAX_KEYS = 10_000;
-const failures = new Map<string, { count: number; windowStart: number }>();
-const accountFailures = new Map<string, { count: number; windowStart: number }>();
-
-function throttleKey(req: Request, email: string): string {
-  // req.ip is derived from the trusted-proxy hop count (app.set("trust proxy")),
-  // so it reflects the real client address and cannot be spoofed by a
-  // client-supplied X-Forwarded-For header (SEC-M4).
-  const ip = req.ip || req.socket.remoteAddress || "unknown";
-  return `${email.trim().toLowerCase()}|${ip}`;
-}
-
-function accountKey(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-// Seconds to wait if `key` in `map` is over `max` within `windowMs`, else null.
-function windowRetryAfter(
-  map: Map<string, { count: number; windowStart: number }>,
-  key: string,
-  windowMs: number,
-  max: number,
-): number | null {
-  const entry = map.get(key);
-  if (!entry) return null;
-  const elapsed = Date.now() - entry.windowStart;
-  if (elapsed > windowMs) {
-    map.delete(key);
-    return null;
-  }
-  if (entry.count >= max) return Math.ceil((windowMs - elapsed) / 1000);
-  return null;
-}
-
-function isThrottled(req: Request, email: string): number | null {
-  return (
-    windowRetryAfter(failures, throttleKey(req, email), LOGIN_WINDOW_MS, LOGIN_MAX_FAILURES) ??
-    windowRetryAfter(accountFailures, accountKey(email), ACCOUNT_WINDOW_MS, ACCOUNT_MAX_FAILURES)
-  );
-}
-
-function bump(
-  map: Map<string, { count: number; windowStart: number }>,
-  key: string,
-  windowMs: number,
-): void {
-  const now = Date.now();
-  const entry = map.get(key);
-  if (!entry || now - entry.windowStart > windowMs) {
-    map.set(key, { count: 1, windowStart: now });
-  } else {
-    entry.count += 1;
-  }
-  // Opportunistic pruning keeps the map bounded without a timer: evict expired
-  // windows first, then — if still over the cap — the oldest-inserted entries
-  // (Map preserves insertion order), so memory stays bounded under churn.
-  if (map.size > LOGIN_MAX_KEYS) {
-    for (const [k, v] of map) {
-      if (now - v.windowStart > windowMs) map.delete(k);
-    }
-    while (map.size > LOGIN_MAX_KEYS) {
-      const oldest = map.keys().next().value;
-      if (oldest === undefined) break;
-      map.delete(oldest);
-    }
-  }
-}
-
-function recordFailure(req: Request, email: string): void {
-  bump(failures, throttleKey(req, email), LOGIN_WINDOW_MS);
-  bump(accountFailures, accountKey(email), ACCOUNT_WINDOW_MS);
-}
-
-function clearFailures(req: Request, email: string): void {
-  failures.delete(throttleKey(req, email));
-  accountFailures.delete(accountKey(email));
-}
 
 function cookieOptions(req: { secure?: boolean; headers: Record<string, unknown> }) {
   const forwardedProto = String(req.headers["x-forwarded-proto"] ?? "");
@@ -142,7 +51,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const retryAfter = isThrottled(req, parsed.data.email);
+  const retryAfter = await isLoginThrottled(req, parsed.data.email);
   if (retryAfter !== null) {
     res.setHeader("Retry-After", String(retryAfter));
     res.status(429).json({
@@ -152,12 +61,12 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
   const result = await authenticate(parsed.data.email, parsed.data.password);
   if (!result) {
-    recordFailure(req, parsed.data.email);
+    await recordLoginFailure(req, parsed.data.email);
     // Uniform message: never reveal whether the email exists.
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
-  clearFailures(req, parsed.data.email);
+  await clearLoginFailures(req, parsed.data.email);
   const memberships = await getDb()
     .select({
       firmId: membershipsTable.firmId,
