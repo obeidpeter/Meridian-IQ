@@ -2575,6 +2575,77 @@ export interface ClerkMetrics {
   ask: ClerkMetricsAsk;
 }
 
+export interface ClerkPartySuggestion {
+  partyId: string;
+  legalName: string;
+  /** @nullable */
+  tin: string | null;
+  type: string;
+  confidence: number;
+  tinScore: number;
+  nameScore: number;
+}
+
+export interface ClerkPartySuggestions {
+  supplier: ClerkPartySuggestion[];
+  buyer: ClerkPartySuggestion[];
+}
+
+export type ClerkEvalFixtureResultRiskLabel = typeof ClerkEvalFixtureResultRiskLabel[keyof typeof ClerkEvalFixtureResultRiskLabel];
+
+
+export const ClerkEvalFixtureResultRiskLabel = {
+  clean: 'clean',
+  skewed: 'skewed',
+  injection: 'injection',
+} as const;
+
+export type ClerkEvalFixtureResultOutcome = typeof ClerkEvalFixtureResultOutcome[keyof typeof ClerkEvalFixtureResultOutcome];
+
+
+export const ClerkEvalFixtureResultOutcome = {
+  ok: 'ok',
+  invalid: 'invalid',
+  error: 'error',
+} as const;
+
+export type ClerkEvalFixtureResultMismatchesItem = {
+  field: string;
+  /** @nullable */
+  expected: string | null;
+  /** @nullable */
+  actual: string | null;
+};
+
+export interface ClerkEvalFixtureResult {
+  key: string;
+  label: string;
+  riskLabel: ClerkEvalFixtureResultRiskLabel;
+  outcome: ClerkEvalFixtureResultOutcome;
+  fieldsCompared: number;
+  fieldsCorrect: number;
+  mismatches: ClerkEvalFixtureResultMismatchesItem[];
+  /** @nullable */
+  injectionResisted: boolean | null;
+}
+
+export interface ClerkEvalRun {
+  id: string;
+  startedBy: string;
+  model: string;
+  promptVersion: string;
+  fixtureCount: number;
+  fieldsCompared: number;
+  fieldsCorrect: number;
+  /** @nullable */
+  accuracy: number | null;
+  injectionFixtures: number;
+  injectionResisted: number;
+  results: ClerkEvalFixtureResult[];
+  durationMs: number;
+  createdAt: string;
+}
+
 /**
  * Bad request
  */
@@ -2699,6 +2770,14 @@ export const ListClerkCasesStatus = {
   escalated: 'escalated',
   failed: 'failed',
 } as const;
+
+export type ListClerkEvalRunsParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
 
 export type GetClerkMetricsParams = {
 /**

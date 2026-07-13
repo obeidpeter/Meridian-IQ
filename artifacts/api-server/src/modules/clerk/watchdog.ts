@@ -6,6 +6,7 @@ import { isFeatureEnabled, setFlag } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
 import { CLERK_FLAG_KEY } from "./gateway";
 import { sweepExpiredClaims } from "./claims";
+import { sweepExpiredCaseContent } from "./retention";
 
 // Clerk watchdog (CLK-OBS-03 / the severity-zero reflex): when the model
 // starts producing schema-invalid output or erroring at a high rate, disable
@@ -98,3 +99,4 @@ export async function runClerkWatchdog(
 
 registerSweep(runClerkWatchdog);
 registerSweep(sweepExpiredClaims);
+registerSweep(sweepExpiredCaseContent);

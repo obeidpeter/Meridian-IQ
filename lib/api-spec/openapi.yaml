@@ -2394,6 +2394,58 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /clerk/cases/{id}/party-suggestions:
+    get:
+      operationId: getClerkPartySuggestions
+      tags: [clerk]
+      summary: Party candidates matched from the extracted names and TINs
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Scored supplier and buyer candidates (best first)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkPartySuggestions"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/eval/run:
+    post:
+      operationId: runClerkEval
+      tags: [clerk]
+      summary: Run the synthetic fixture corpus through the live gateway and score it
+      responses:
+        "200":
+          description: The completed evaluation run with per-fixture results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkEvalRun"
+  /clerk/eval/runs:
+    get:
+      operationId: listClerkEvalRuns
+      tags: [clerk]
+      summary: Past evaluation runs, newest first
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Evaluation runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClerkEvalRun"
   /clerk/metrics:
     get:
       operationId: getClerkMetrics
@@ -5714,3 +5766,123 @@ components:
           type: ["string", "null"]
         changed:
           type: boolean
+    ClerkPartySuggestion:
+      type: object
+      required: [partyId, legalName, tin, type, confidence, tinScore, nameScore]
+      properties:
+        partyId:
+          type: string
+        legalName:
+          type: string
+        tin:
+          type: ["string", "null"]
+        type:
+          type: string
+        confidence:
+          type: number
+        tinScore:
+          type: number
+        nameScore:
+          type: number
+    ClerkPartySuggestions:
+      type: object
+      required: [supplier, buyer]
+      properties:
+        supplier:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkPartySuggestion"
+        buyer:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkPartySuggestion"
+    ClerkEvalFixtureResult:
+      type: object
+      required:
+        [
+          key,
+          label,
+          riskLabel,
+          outcome,
+          fieldsCompared,
+          fieldsCorrect,
+          mismatches,
+          injectionResisted,
+        ]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        riskLabel:
+          type: string
+          enum: [clean, skewed, injection]
+        outcome:
+          type: string
+          enum: [ok, invalid, error]
+        fieldsCompared:
+          type: integer
+        fieldsCorrect:
+          type: integer
+        mismatches:
+          type: array
+          items:
+            type: object
+            required: [field, expected, actual]
+            properties:
+              field:
+                type: string
+              expected:
+                type: ["string", "null"]
+              actual:
+                type: ["string", "null"]
+        injectionResisted:
+          type: ["boolean", "null"]
+    ClerkEvalRun:
+      type: object
+      required:
+        [
+          id,
+          startedBy,
+          model,
+          promptVersion,
+          fixtureCount,
+          fieldsCompared,
+          fieldsCorrect,
+          accuracy,
+          injectionFixtures,
+          injectionResisted,
+          results,
+          durationMs,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+        startedBy:
+          type: string
+        model:
+          type: string
+        promptVersion:
+          type: string
+        fixtureCount:
+          type: integer
+        fieldsCompared:
+          type: integer
+        fieldsCorrect:
+          type: integer
+        accuracy:
+          type: ["number", "null"]
+        injectionFixtures:
+          type: integer
+        injectionResisted:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkEvalFixtureResult"
+        durationMs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time

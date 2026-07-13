@@ -47,7 +47,9 @@ import type {
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseDecisionInput,
+  ClerkEvalRun,
   ClerkMetrics,
+  ClerkPartySuggestions,
   ClientImportInput,
   ClientImportResult,
   ClientPortfolioDetail,
@@ -104,6 +106,7 @@ import type {
   ListBuyerInvoicesParams,
   ListClaimsParams,
   ListClerkCasesParams,
+  ListClerkEvalRunsParams,
   ListErpConnectionsParams,
   ListInvoicesParams,
   ListOperatorCasesParams,
@@ -9831,6 +9834,237 @@ export const useReleaseClerkCase = <TError = ErrorType<NotFoundResponse | Confli
       > => {
       return useMutation(getReleaseClerkCaseMutationOptions(options));
     }
+
+export const getGetClerkPartySuggestionsUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/cases/${id}/party-suggestions`
+}
+
+/**
+ * @summary Party candidates matched from the extracted names and TINs
+ */
+export const getClerkPartySuggestions = async (id: string, options?: RequestInit): Promise<ClerkPartySuggestions> => {
+
+  return customFetch<ClerkPartySuggestions>(getGetClerkPartySuggestionsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkPartySuggestionsQueryKey = (id: string,) => {
+    return [
+    `/api/clerk/cases/${id}/party-suggestions`
+    ] as const;
+    }
+
+
+export const getGetClerkPartySuggestionsQueryOptions = <TData = Awaited<ReturnType<typeof getClerkPartySuggestions>>, TError = ErrorType<NotFoundResponse | ConflictResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkPartySuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkPartySuggestionsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkPartySuggestions>>> = ({ signal }) => getClerkPartySuggestions(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkPartySuggestions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkPartySuggestionsQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkPartySuggestions>>>
+export type GetClerkPartySuggestionsQueryError = ErrorType<NotFoundResponse | ConflictResponse>
+
+
+/**
+ * @summary Party candidates matched from the extracted names and TINs
+ */
+
+export function useGetClerkPartySuggestions<TData = Awaited<ReturnType<typeof getClerkPartySuggestions>>, TError = ErrorType<NotFoundResponse | ConflictResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkPartySuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkPartySuggestionsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRunClerkEvalUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/run`
+}
+
+/**
+ * @summary Run the synthetic fixture corpus through the live gateway and score it
+ */
+export const runClerkEval = async ( options?: RequestInit): Promise<ClerkEvalRun> => {
+
+  return customFetch<ClerkEvalRun>(getRunClerkEvalUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRunClerkEvalMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runClerkEval>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runClerkEval>>, TError,void, TContext> => {
+
+const mutationKey = ['runClerkEval'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runClerkEval>>, void> = () => {
+
+
+          return  runClerkEval(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunClerkEvalMutationResult = NonNullable<Awaited<ReturnType<typeof runClerkEval>>>
+
+    export type RunClerkEvalMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Run the synthetic fixture corpus through the live gateway and score it
+ */
+export const useRunClerkEval = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runClerkEval>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runClerkEval>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRunClerkEvalMutationOptions(options));
+    }
+
+export const getListClerkEvalRunsUrl = (params?: ListClerkEvalRunsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/eval/runs?${stringifiedParams}` : `/api/clerk/eval/runs`
+}
+
+/**
+ * @summary Past evaluation runs, newest first
+ */
+export const listClerkEvalRuns = async (params?: ListClerkEvalRunsParams, options?: RequestInit): Promise<ClerkEvalRun[]> => {
+
+  return customFetch<ClerkEvalRun[]>(getListClerkEvalRunsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClerkEvalRunsQueryKey = (params?: ListClerkEvalRunsParams,) => {
+    return [
+    `/api/clerk/eval/runs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListClerkEvalRunsQueryOptions = <TData = Awaited<ReturnType<typeof listClerkEvalRuns>>, TError = ErrorType<unknown>>(params?: ListClerkEvalRunsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClerkEvalRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClerkEvalRunsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClerkEvalRuns>>> = ({ signal }) => listClerkEvalRuns(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClerkEvalRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClerkEvalRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listClerkEvalRuns>>>
+export type ListClerkEvalRunsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Past evaluation runs, newest first
+ */
+
+export function useListClerkEvalRuns<TData = Awaited<ReturnType<typeof listClerkEvalRuns>>, TError = ErrorType<unknown>>(
+ params?: ListClerkEvalRunsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClerkEvalRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClerkEvalRunsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetClerkMetricsUrl = (params?: GetClerkMetricsParams,) => {
   const normalizedParams = new URLSearchParams();

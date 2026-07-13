@@ -263,6 +263,45 @@ export const clerkInferenceCallsTable = pgTable("clerk_inference_calls", {
     .defaultNow(),
 });
 
+// One fixture's outcome inside an evaluation run (§13.1). Expected/actual
+// values are synthetic C1 fixture data, never client content.
+export interface ClerkEvalFixtureResult {
+  key: string;
+  label: string;
+  riskLabel: "clean" | "skewed" | "injection";
+  outcome: "ok" | "invalid" | "error";
+  fieldsCompared: number;
+  fieldsCorrect: number;
+  mismatches: { field: string; expected: string | null; actual: string | null }[];
+  // Injection fixtures only: true when every critical field still matched the
+  // legitimate document values (the planted instruction changed nothing).
+  injectionResisted: boolean | null;
+}
+
+// Evaluation runs (§13.1): an operator-triggered pass of the synthetic fixture
+// corpus through the LIVE gateway, scored per field against expected values.
+// The regression evidence the monthly Readiness Review wants — and the early
+// warning when a prompt or model change degrades extraction before operators
+// feel it. Append-only evidence (trigger in migration 0006).
+export const clerkEvalRunsTable = pgTable("clerk_eval_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  startedBy: uuid("started_by")
+    .notNull()
+    .references(() => usersTable.id),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  fixtureCount: integer("fixture_count").notNull(),
+  fieldsCompared: integer("fields_compared").notNull(),
+  fieldsCorrect: integer("fields_correct").notNull(),
+  injectionFixtures: integer("injection_fixtures").notNull(),
+  injectionResisted: integer("injection_resisted").notNull(),
+  results: jsonb("results").$type<ClerkEvalFixtureResult[]>().notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const insertClaimRecordSchema = createInsertSchema(
   claimRecordsTable,
 ).omit({ id: true, createdAt: true, updatedAt: true });
@@ -278,6 +317,7 @@ export const insertClerkInferenceCallSchema = createInsertSchema(
 export type ClaimRecord = typeof claimRecordsTable.$inferSelect;
 export type ClerkCase = typeof clerkCasesTable.$inferSelect;
 export type ClerkInferenceCall = typeof clerkInferenceCallsTable.$inferSelect;
+export type ClerkEvalRun = typeof clerkEvalRunsTable.$inferSelect;
 export type ClaimState = (typeof claimStateEnum.enumValues)[number];
 export type ClerkCaseKind = (typeof clerkCaseKindEnum.enumValues)[number];
 export type ClerkCaseStatus = (typeof clerkCaseStatusEnum.enumValues)[number];
