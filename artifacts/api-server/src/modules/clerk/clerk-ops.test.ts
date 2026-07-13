@@ -36,6 +36,10 @@ import { runClerkWatchdog } from "./watchdog.ts";
 // injected fake gateway, flag restored after the run.
 
 const FAKE_MODEL = "fake-model-test";
+// Case rows persist across runs of the shared database, and the v0.3
+// duplicate-document guard hashes the source text — salt it per run so a
+// previous run's live case is never a false duplicate.
+const RUN_SALT = `${Date.now()}-${process.pid}`;
 const opA = "dddd0001-0000-4000-8000-00000000dd01";
 const opB = "dddd0002-0000-4000-8000-00000000dd02";
 const firmId = "dddd0003-0000-4000-8000-00000000dd03";
@@ -170,7 +174,7 @@ test("computeCorrections marks kept vs overridden fields", () => {
 test("approval stores the correction exhaust on the case", async () => {
   const gateway = fakeGateway(() => EXTRACTION_JSON);
   const kase = await createExtractionCase(
-    { sourceType: "text", text: "Invoice INV-500 ..." },
+    { sourceType: "text", text: `Invoice INV-500 ${RUN_SALT}` },
     opA,
     gateway,
   );
@@ -209,7 +213,7 @@ test("approval stores the correction exhaust on the case", async () => {
 test("claiming is first-wins; the holder decides; release hands over", async () => {
   const gateway = fakeGateway(() => EXTRACTION_JSON);
   const kase = await createExtractionCase(
-    { sourceType: "text", text: "Invoice INV-501 ..." },
+    { sourceType: "text", text: `Invoice INV-501 ${RUN_SALT}` },
     opA,
     gateway,
   );
@@ -246,7 +250,7 @@ test("claiming is first-wins; the holder decides; release hands over", async () 
 test("only extracted cases can be claimed", async () => {
   const gateway = fakeGateway(() => EXTRACTION_JSON);
   const kase = await createExtractionCase(
-    { sourceType: "text", text: "Invoice INV-502 ..." },
+    { sourceType: "text", text: `Invoice INV-502 ${RUN_SALT}` },
     opA,
     gateway,
   );

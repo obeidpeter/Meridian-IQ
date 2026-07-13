@@ -33,6 +33,13 @@ export interface ClerkMetrics {
       latencyP95Ms: number | null;
     }[];
   };
+  cost: {
+    promptTokens: number;
+    completionTokens: number;
+    callsWithUsage: number;
+    tokensPerDecidedCase: number | null;
+    estimatedUsd: number | null;
+  };
   corrections: {
     field: string;
     total: number;
@@ -180,6 +187,69 @@ export async function getClerkMetrics(
     p95: string | null;
   }[];
 
+  // Cost-to-serve (CLK-NFR-04): token totals from the ledger's usage columns.
+  // Older rows predate usage capture, so callsWithUsage says how much of the
+  // window the totals actually cover. Sums come back as bigint strings.
+  const costRows = (
+    await db.execute(sql`
+      SELECT
+        COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
+        COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+        COUNT(*) FILTER (
+          WHERE prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL
+        )::int AS calls_with_usage
+      FROM clerk_inference_calls
+      WHERE created_at >= ${since}
+    `)
+  ).rows as {
+    prompt_tokens: string;
+    completion_tokens: string;
+    calls_with_usage: number;
+  }[];
+  const promptTokens = Number(costRows[0]?.prompt_tokens ?? 0);
+  const completionTokens = Number(costRows[0]?.completion_tokens ?? 0);
+  const callsWithUsage = costRows[0]?.calls_with_usage ?? 0;
+
+  // Tokens per decided extraction case: only cases whose ledger calls carry
+  // usage data enter the denominator, so partial capture doesn't skew the
+  // per-case number downward.
+  const perCaseRows = (
+    await db.execute(sql`
+      SELECT
+        COUNT(DISTINCT c.id)::int AS decided_cases,
+        (COALESCE(SUM(i.prompt_tokens), 0)
+          + COALESCE(SUM(i.completion_tokens), 0))::bigint AS tokens
+      FROM clerk_cases c
+      JOIN clerk_inference_calls i ON i.case_id = c.id
+      WHERE c.created_at >= ${since}
+        AND c.kind = 'extraction'
+        AND c.decided_by IS NOT NULL
+        AND (i.prompt_tokens IS NOT NULL OR i.completion_tokens IS NOT NULL)
+    `)
+  ).rows as { decided_cases: number; tokens: string }[];
+  const decidedWithUsage = perCaseRows[0]?.decided_cases ?? 0;
+  const tokensPerDecidedCase =
+    decidedWithUsage > 0
+      ? Number(
+          (Number(perCaseRows[0]!.tokens) / decidedWithUsage).toFixed(1),
+        )
+      : null;
+
+  // USD estimate only when the operator has configured both per-million-token
+  // rates; a half-configured or unconfigured environment reports null rather
+  // than a misleading partial figure.
+  const inputRate = Number(process.env.CLERK_COST_PER_1M_INPUT_USD);
+  const outputRate = Number(process.env.CLERK_COST_PER_1M_OUTPUT_USD);
+  const estimatedUsd =
+    Number.isFinite(inputRate) && Number.isFinite(outputRate)
+      ? Number(
+          (
+            (promptTokens / 1_000_000) * inputRate +
+            (completionTokens / 1_000_000) * outputRate
+          ).toFixed(4),
+        )
+      : null;
+
   // Ask outcomes come from the answer payload: answered=true means a claim
   // rendered; everything else was a refusal-and-escalate.
   const askRows = (
@@ -226,6 +296,13 @@ export async function getClerkMetrics(
         okCount: c.ok_count,
         latencyP95Ms: c.p95 != null ? Math.round(Number(c.p95)) : null,
       })),
+    },
+    cost: {
+      promptTokens,
+      completionTokens,
+      callsWithUsage,
+      tokensPerDecidedCase,
+      estimatedUsd,
     },
     corrections: correctionRows.map((c) => ({
       field: c.field,

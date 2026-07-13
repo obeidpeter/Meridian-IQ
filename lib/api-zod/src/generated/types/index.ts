@@ -70,6 +70,7 @@ export * from './clerkMetricsCases';
 export * from './clerkMetricsCasesByKind';
 export * from './clerkMetricsCasesByStatus';
 export * from './clerkMetricsCorrectionsItem';
+export * from './clerkMetricsCost';
 export * from './clerkMetricsInference';
 export * from './clerkMetricsInferenceByOutcome';
 export * from './clerkMetricsInferenceCohortsItem';

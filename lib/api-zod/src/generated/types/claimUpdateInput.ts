@@ -20,4 +20,6 @@ export interface ClaimUpdateInput {
   effectiveFrom?: string;
   /** @nullable */
   effectiveTo?: string | null;
+  /** @nullable */
+  reviewDueAt?: string | null;
 }

@@ -6,6 +6,7 @@ import {
   type ProtectedFact,
   type ClaimApplicability,
 } from "@workspace/db";
+import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 
 // Claims register lifecycle (Task #40, C0). A claim's protected facts are the
@@ -25,6 +26,7 @@ export interface ClaimDraftInput {
   applicability?: ClaimApplicability;
   effectiveFrom: string;
   effectiveTo?: string | null;
+  reviewDueAt?: string | null;
 }
 
 export async function listClaims(claimKey?: string): Promise<ClaimRecord[]> {
@@ -50,6 +52,9 @@ export async function getClaim(id: string): Promise<ClaimRecord> {
 }
 
 // Active register slice used by Ask Clerk: approved AND in-date today.
+// The ANSWERABLE set (CLK-KB-07): active, inside the effective window, and
+// not overdue for review — a stale record is register-visible but cannot
+// answer until Tax/Counsel re-confirm it.
 export async function getActiveClaims(): Promise<ClaimRecord[]> {
   const today = new Date().toISOString().slice(0, 10);
   return getDb()
@@ -63,9 +68,41 @@ export async function getActiveClaims(): Promise<ClaimRecord[]> {
           isNull(claimRecordsTable.effectiveTo),
           gte(claimRecordsTable.effectiveTo, today),
         ),
+        or(
+          isNull(claimRecordsTable.reviewDueAt),
+          gte(claimRecordsTable.reviewDueAt, today),
+        ),
       ),
     )
     .orderBy(claimRecordsTable.claimKey);
+}
+
+// Expiry sweep: an active claim whose effective-to has passed flips to
+// expired (audited), so the register reflects reality without waiting for a
+// human to notice. Runs from the shared sweep registry.
+export async function sweepExpiredClaims(): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = await getDb()
+    .update(claimRecordsTable)
+    .set({ state: "expired" })
+    .where(
+      and(
+        eq(claimRecordsTable.state, "active"),
+        sql`${claimRecordsTable.effectiveTo} IS NOT NULL AND ${claimRecordsTable.effectiveTo} < ${today}`,
+      ),
+    )
+    .returning({ id: claimRecordsTable.id, claimKey: claimRecordsTable.claimKey });
+  for (const row of rows) {
+    await appendAudit({
+      actorId: "clerk-sweep",
+      actorRole: "system",
+      action: "clerk.claim.expired",
+      entityType: "claim_record",
+      entityId: row.id,
+      after: { claimKey: row.claimKey },
+    });
+  }
+  return rows.length;
 }
 
 export async function createClaimDraft(
@@ -91,6 +128,7 @@ export async function createClaimDraft(
       applicability: input.applicability ?? {},
       effectiveFrom: input.effectiveFrom,
       effectiveTo: input.effectiveTo ?? null,
+      reviewDueAt: input.reviewDueAt ?? null,
       createdBy: actorId,
     })
     .returning();
@@ -126,6 +164,9 @@ export async function updateClaimDraft(
         : {}),
       ...(patch.effectiveFrom !== undefined
         ? { effectiveFrom: patch.effectiveFrom }
+        : {}),
+      ...(patch.reviewDueAt !== undefined
+        ? { reviewDueAt: patch.reviewDueAt ?? null }
         : {}),
       ...(patch.effectiveTo !== undefined
         ? { effectiveTo: patch.effectiveTo ?? null }

@@ -2726,6 +2726,7 @@ export const ListClaimsResponseItem = zod.object({
   "applicability": zod.record(zod.string(), zod.string()),
   "effectiveFrom": zod.string(),
   "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string().nullish(),
   "createdBy": zod.string(),
   "submittedBy": zod.string().nullish(),
   "decidedBy": zod.string().nullish(),
@@ -2764,7 +2765,8 @@ export const CreateClaimBody = zod.object({
   "citation": zod.string().min(createClaimBodyCitationMin),
   "applicability": zod.record(zod.string(), zod.string()).optional(),
   "effectiveFrom": zod.string(),
-  "effectiveTo": zod.string().nullish()
+  "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string().nullish()
 })
 
 export const CreateClaimResponse = zod.object({
@@ -2785,6 +2787,7 @@ export const CreateClaimResponse = zod.object({
   "applicability": zod.record(zod.string(), zod.string()),
   "effectiveFrom": zod.string(),
   "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string().nullish(),
   "createdBy": zod.string(),
   "submittedBy": zod.string().nullish(),
   "decidedBy": zod.string().nullish(),
@@ -2817,6 +2820,7 @@ export const GetClaimResponse = zod.object({
   "applicability": zod.record(zod.string(), zod.string()),
   "effectiveFrom": zod.string(),
   "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string().nullish(),
   "createdBy": zod.string(),
   "submittedBy": zod.string().nullish(),
   "decidedBy": zod.string().nullish(),
@@ -2855,7 +2859,8 @@ export const UpdateClaimBody = zod.object({
   "citation": zod.string().min(updateClaimBodyCitationMin).optional(),
   "applicability": zod.record(zod.string(), zod.string()).optional(),
   "effectiveFrom": zod.string().optional(),
-  "effectiveTo": zod.string().nullish()
+  "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string().nullish()
 })
 
 export const UpdateClaimResponse = zod.object({
@@ -2876,6 +2881,7 @@ export const UpdateClaimResponse = zod.object({
   "applicability": zod.record(zod.string(), zod.string()),
   "effectiveFrom": zod.string(),
   "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string().nullish(),
   "createdBy": zod.string(),
   "submittedBy": zod.string().nullish(),
   "decidedBy": zod.string().nullish(),
@@ -2911,6 +2917,7 @@ export const SubmitClaimResponse = zod.object({
   "applicability": zod.record(zod.string(), zod.string()),
   "effectiveFrom": zod.string(),
   "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string().nullish(),
   "createdBy": zod.string(),
   "submittedBy": zod.string().nullish(),
   "decidedBy": zod.string().nullish(),
@@ -2951,6 +2958,7 @@ export const DecideClaimResponse = zod.object({
   "applicability": zod.record(zod.string(), zod.string()),
   "effectiveFrom": zod.string(),
   "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string().nullish(),
   "createdBy": zod.string(),
   "submittedBy": zod.string().nullish(),
   "decidedBy": zod.string().nullish(),
@@ -2977,6 +2985,7 @@ export const ListClerkCasesResponseItem = zod.object({
   "sourceName": zod.string().nullish(),
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3044,7 +3053,8 @@ export const CreateClerkCaseBody = zod.object({
   "imageBase64": zod.string().optional(),
   "pdfBase64": zod.string().optional(),
   "text": zod.string().optional(),
-  "audioBase64": zod.string().optional()
+  "audioBase64": zod.string().optional(),
+  "allowDuplicate": zod.boolean().optional()
 })
 
 export const CreateClerkCaseResponse = zod.object({
@@ -3055,6 +3065,7 @@ export const CreateClerkCaseResponse = zod.object({
   "sourceName": zod.string().nullish(),
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3123,6 +3134,7 @@ export const GetClerkCaseResponse = zod.object({
   "sourceName": zod.string().nullish(),
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3216,6 +3228,7 @@ export const DecideClerkCaseResponse = zod.object({
   "sourceName": zod.string().nullish(),
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3292,6 +3305,7 @@ export const AskClerkResponse = zod.object({
   "sourceName": zod.string().nullish(),
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3363,6 +3377,78 @@ export const GetInvoiceStatusLightResponse = zod.object({
 
 
 /**
+ * @summary Re-run extraction on a failed case from its stored source
+ */
+export const RetryClerkCaseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RetryClerkCaseResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.enum(['extraction', 'question']),
+  "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
+  "sourceType": zod.string().nullish(),
+  "sourceName": zod.string().nullish(),
+  "sourceText": zod.string().nullish(),
+  "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
+  "extraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "lines": zod.array(zod.object({
+  "description": zod.string().nullable(),
+  "quantity": zod.string().nullable(),
+  "unitPrice": zod.string().nullable(),
+  "vatRate": zod.string().nullable(),
+  "confidence": zod.number()
+})),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "question": zod.string().nullish(),
+  "answer": zod.union([zod.object({
+  "answered": zod.boolean(),
+  "claimId": zod.string().optional(),
+  "claimKey": zod.string().optional(),
+  "claimVersion": zod.number().optional(),
+  "proposition": zod.string().optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})).optional(),
+  "citation": zod.string().optional(),
+  "refusalReason": zod.string().optional()
+}),zod.null()]).optional(),
+  "firmId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
+  "createdBy": zod.string(),
+  "decidedBy": zod.string().nullish(),
+  "decisionAction": zod.string().nullish(),
+  "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
+  "createdInvoiceId": zod.string().nullish(),
+  "failReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Claim a case for active review (one operator at a time)
  */
 export const ClaimClerkCaseParams = zod.object({
@@ -3377,6 +3463,7 @@ export const ClaimClerkCaseResponse = zod.object({
   "sourceName": zod.string().nullish(),
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3448,6 +3535,7 @@ export const ReleaseClerkCaseResponse = zod.object({
   "sourceName": zod.string().nullish(),
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3540,6 +3628,13 @@ export const GetClerkMetricsResponse = zod.object({
   "okCount": zod.number(),
   "latencyP95Ms": zod.number().nullish()
 }))
+}),
+  "cost": zod.object({
+  "promptTokens": zod.number(),
+  "completionTokens": zod.number(),
+  "callsWithUsage": zod.number(),
+  "tokensPerDecidedCase": zod.number().nullish(),
+  "estimatedUsd": zod.number().nullish()
 }),
   "corrections": zod.array(zod.object({
   "field": zod.string(),

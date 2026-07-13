@@ -2247,6 +2247,8 @@ export interface ClaimRecord {
   effectiveFrom: string;
   /** @nullable */
   effectiveTo?: string | null;
+  /** @nullable */
+  reviewDueAt?: string | null;
   createdBy: string;
   /** @nullable */
   submittedBy?: string | null;
@@ -2274,6 +2276,8 @@ export interface ClaimDraftInput {
   effectiveFrom: string;
   /** @nullable */
   effectiveTo?: string | null;
+  /** @nullable */
+  reviewDueAt?: string | null;
 }
 
 export interface ClaimUpdateInput {
@@ -2288,6 +2292,8 @@ export interface ClaimUpdateInput {
   effectiveFrom?: string;
   /** @nullable */
   effectiveTo?: string | null;
+  /** @nullable */
+  reviewDueAt?: string | null;
 }
 
 export type ClaimDecisionInputAction = typeof ClaimDecisionInputAction[keyof typeof ClaimDecisionInputAction];
@@ -2389,6 +2395,8 @@ export interface ClerkCase {
   sourceText?: string | null;
   /** @nullable */
   sourceImageB64?: string | null;
+  /** @nullable */
+  sourceHash?: string | null;
   extraction?: ClerkExtraction | null;
   /** @nullable */
   question?: string | null;
@@ -2434,6 +2442,7 @@ export interface ClerkCaseCreateInput {
   pdfBase64?: string;
   text?: string;
   audioBase64?: string;
+  allowDuplicate?: boolean;
 }
 
 export type ClerkCaseDecisionInputAction = typeof ClerkCaseDecisionInputAction[keyof typeof ClerkCaseDecisionInputAction];
@@ -2533,6 +2542,16 @@ export type ClerkMetricsInference = {
   cohorts: ClerkMetricsInferenceCohortsItem[];
 };
 
+export type ClerkMetricsCost = {
+  promptTokens: number;
+  completionTokens: number;
+  callsWithUsage: number;
+  /** @nullable */
+  tokensPerDecidedCase?: number | null;
+  /** @nullable */
+  estimatedUsd?: number | null;
+};
+
 export type ClerkMetricsCorrectionsItem = {
   field: string;
   total: number;
@@ -2551,6 +2570,7 @@ export interface ClerkMetrics {
   windowDays: number;
   cases: ClerkMetricsCases;
   inference: ClerkMetricsInference;
+  cost: ClerkMetricsCost;
   corrections: ClerkMetricsCorrectionsItem[];
   ask: ClerkMetricsAsk;
 }

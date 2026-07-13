@@ -93,6 +93,7 @@ interface ClaimForm {
   citation: string;
   effectiveFrom: string;
   effectiveTo: string;
+  reviewDueAt: string;
   category: CategoryOption;
   facts: ProtectedFact[];
 }
@@ -104,6 +105,7 @@ const EMPTY_FORM: ClaimForm = {
   citation: "",
   effectiveFrom: new Date().toISOString().slice(0, 10),
   effectiveTo: "",
+  reviewDueAt: "",
   category: "none",
   facts: [{ key: "", label: "", kind: "rate", value: "", unit: "" }],
 };
@@ -117,6 +119,7 @@ function formFromClaim(claim: ClaimRecord): ClaimForm {
     citation: claim.citation,
     effectiveFrom: claim.effectiveFrom.slice(0, 10),
     effectiveTo: claim.effectiveTo ? claim.effectiveTo.slice(0, 10) : "",
+    reviewDueAt: claim.reviewDueAt ? claim.reviewDueAt.slice(0, 10) : "",
     category:
       category === "b2b" || category === "b2g" || category === "b2c"
         ? category
@@ -343,6 +346,18 @@ function ClaimFormFields({
             value={form.effectiveTo}
             onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })}
             data-testid="input-claim-to"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="claim-review-due">Review due (optional)</Label>
+          <Input
+            id="claim-review-due"
+            type="date"
+            value={form.reviewDueAt}
+            onChange={(e) =>
+              setForm({ ...form, reviewDueAt: e.target.value })
+            }
+            data-testid="input-claim-review-due"
           />
         </div>
         <div className="space-y-1">
@@ -579,6 +594,7 @@ export function ClerkClaims() {
         citation: createForm.citation.trim(),
         effectiveFrom: createForm.effectiveFrom,
         effectiveTo: createForm.effectiveTo || null,
+        reviewDueAt: createForm.reviewDueAt || null,
         applicability:
           createForm.category === "none"
             ? {}
@@ -598,6 +614,7 @@ export function ClerkClaims() {
         citation: editForm.citation.trim(),
         effectiveFrom: editForm.effectiveFrom,
         effectiveTo: editForm.effectiveTo || null,
+        reviewDueAt: editForm.reviewDueAt || null,
         applicability:
           editForm.category === "none" ? {} : { category: editForm.category },
         protectedFacts: factsPayload(editForm.facts),
@@ -609,6 +626,11 @@ export function ClerkClaims() {
   const rowBusy = (claim: ClaimRecord) =>
     (submitClaim.isPending && submitClaim.variables?.id === claim.id) ||
     (decideClaim.isPending && decideClaim.variables?.id === claim.id);
+
+  // Review-due dates are YYYY-MM-DD, so plain string comparison works. An
+  // ACTIVE claim past its review date stays visible in the register, but the
+  // Clerk refuses to answer from it until it is re-confirmed — flag it loudly.
+  const today = new Date().toISOString().slice(0, 10);
 
   if (isLoading) {
     return (
@@ -709,6 +731,7 @@ export function ClerkClaims() {
                     <th className="py-2 pr-3 font-medium">State</th>
                     <th className="py-2 pr-3 font-medium">Citation</th>
                     <th className="py-2 pr-3 font-medium">Effective</th>
+                    <th className="py-2 pr-3 font-medium">Review due</th>
                     <th className="py-2 pr-3 font-medium text-right">Facts</th>
                     <th className="py-2 font-medium text-right">Actions</th>
                   </tr>
@@ -766,6 +789,23 @@ export function ClerkClaims() {
                             {claim.effectiveTo
                               ? formatDate(claim.effectiveTo)
                               : "open"}
+                          </td>
+                          <td className="py-2.5 pr-3 align-top whitespace-nowrap">
+                            {!claim.reviewDueAt ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : claim.state === "active" &&
+                              claim.reviewDueAt.slice(0, 10) < today ? (
+                              <span
+                                className={pillClasses("red")}
+                                data-testid={`badge-review-overdue-${claim.id}`}
+                              >
+                                {formatDate(claim.reviewDueAt)} · overdue
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                {formatDate(claim.reviewDueAt)}
+                              </span>
+                            )}
                           </td>
                           <td className="py-2.5 pr-3 align-top text-right tabular-nums">
                             {claim.protectedFacts.length}
@@ -869,7 +909,7 @@ export function ClerkClaims() {
                         </tr>
                         {expanded && (
                           <tr className="bg-muted/30">
-                            <td colSpan={7} className="px-4 py-3">
+                            <td colSpan={8} className="px-4 py-3">
                               <ClaimDetail claim={claim} />
                             </td>
                           </tr>
