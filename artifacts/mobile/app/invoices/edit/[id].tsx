@@ -21,57 +21,32 @@ import {
   useRouter,
 } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import { LineItemCard, TotalsCard } from "@/components/invoice-line-editor";
+import { ScrollHost } from "@/components/KeyboardAwareScrollViewCompat";
+import type { Scrollable } from "@/components/KeyboardAwareScrollViewCompat";
 import {
   AppButton,
   AppText,
   Banner,
   Card,
   CardSkeleton,
-  Divider,
   ErrorState,
+  rowBetween,
+  stackHeaderOptions,
   TextField,
+  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
-import { formatCurrency } from "@/lib/format";
-
-// Minimal handle we need from the scroll view — just the imperative scrollTo.
-type Scrollable = {
-  scrollTo?: (opts?: { x?: number; y?: number; animated?: boolean }) => void;
-};
-
-// React 19 forwards `ref` to function components as a prop, and the compat
-// wrapper spreads its props onto the underlying ScrollView — so a ref set here
-// reaches the real scroll view. The cast just teaches TS that this host accepts
-// the ref (the wrapper's own prop types don't declare it).
-const ScrollHost = KeyboardAwareScrollViewCompat as unknown as React.ComponentType<
-  React.ComponentProps<typeof KeyboardAwareScrollViewCompat> & {
-    ref?: React.Ref<Scrollable>;
-  }
->;
-
-// Per-line inline numeric errors, keyed by line.key.
-type LineErrors = Record<string, { quantity?: string; unitPrice?: string }>;
-
-// Parse a user-entered numeric string: trims, coerces a decimal comma to a dot,
-// and returns a finite number or null.
-function parseNumeric(value: string): number | null {
-  const normalized = value.trim().replace(",", ".");
-  if (normalized === "") return null;
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : null;
-}
-
-// Validate a YYYY-MM-DD calendar date locally (rejects e.g. 2024-02-31).
-function isValidISODate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const d = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return false;
-  return d.toISOString().slice(0, 10) === value;
-}
+import { errorStatus } from "@/lib/api-error";
+import {
+  computeTotals,
+  isValidISODate,
+  normalizeLines,
+} from "@/lib/invoice-form";
+import type { LineDraft, LineErrors } from "@/lib/invoice-form";
 
 // Which sections a rail error implicates, so the fix flow can point the user
 // at the right fields instead of leaving them to guess.
@@ -88,19 +63,6 @@ interface PartyDraft {
   cacNumber: string;
   street: string;
   city: string;
-}
-
-interface LineDraft {
-  key: string;
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  vatRate: string; // percent, e.g. "7.5"
-}
-
-function num(value: string): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
 }
 
 function partyToDraft(p: Party): PartyDraft {
@@ -343,7 +305,7 @@ export default function FixInvoiceScreen() {
   // "managed by your firm" — any other load failure is transient, so show a
   // retryable error instead of the misleading lock message.
   const buyerErrorStatus = buyerQuery.isError
-    ? (buyerQuery.error as { status?: number } | null)?.status
+    ? errorStatus(buyerQuery.error)
     : undefined;
   const buyerLocked = buyerErrorStatus === 403;
   const buyerLoadFailed = buyerQuery.isError && !buyerLocked;
@@ -352,7 +314,7 @@ export default function FixInvoiceScreen() {
   // your firm"; any other error is transient. Either way, don't leave the
   // supplier section stuck on an eternal skeleton — surface it.
   const supplierErrorStatus = supplierQuery.isError
-    ? (supplierQuery.error as { status?: number } | null)?.status
+    ? errorStatus(supplierQuery.error)
     : undefined;
   const supplierLocked = supplierErrorStatus === 403;
   const supplierLoadFailed = supplierQuery.isError && !supplierLocked;
@@ -366,16 +328,7 @@ export default function FixInvoiceScreen() {
     scrollRef.current?.scrollTo?.({ y: 0, animated: true });
   };
 
-  const totals = useMemo(() => {
-    let subtotal = 0;
-    let vat = 0;
-    for (const l of lines) {
-      const ext = num(l.quantity) * num(l.unitPrice);
-      subtotal += ext;
-      vat += (ext * num(l.vatRate)) / 100;
-    }
-    return { subtotal, vat, grand: subtotal + vat };
-  }, [lines]);
+  const totals = useMemo(() => computeTotals(lines), [lines]);
 
   const updateLine = (key: string, patch: Partial<LineDraft>) => {
     setLinesDirty(true);
@@ -441,35 +394,10 @@ export default function FixInvoiceScreen() {
   const navigation = useNavigation();
   const allowLeaveRef = useRef(false);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("beforeRemove", (e) => {
-      if (allowLeaveRef.current || !isDirty) return;
-      e.preventDefault();
-      Alert.alert(
-        "Discard changes?",
-        "You have unsaved fixes on this invoice. If you leave now, they'll be lost.",
-        [
-          { text: "Keep editing", style: "cancel" },
-          {
-            text: "Discard",
-            style: "destructive",
-            onPress: () => {
-              allowLeaveRef.current = true;
-              navigation.dispatch(e.data.action);
-            },
-          },
-        ],
-      );
-    });
-    return unsubscribe;
-  }, [navigation, isDirty]);
-
-  // Cancel button — confirm before discarding when there are unsaved changes.
-  const confirmLeave = () => {
-    if (!isDirty) {
-      router.back();
-      return;
-    }
+  // The shared "Discard changes?" confirm for both leave paths (header/gesture
+  // back and the Cancel button). Confirming clears the guard so the discard
+  // navigation isn't re-prompted.
+  const confirmDiscard = (onDiscard: () => void) => {
     Alert.alert(
       "Discard changes?",
       "You have unsaved fixes on this invoice. If you leave now, they'll be lost.",
@@ -480,11 +408,29 @@ export default function FixInvoiceScreen() {
           style: "destructive",
           onPress: () => {
             allowLeaveRef.current = true;
-            router.back();
+            onDiscard();
           },
         },
       ],
     );
+  };
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("beforeRemove", (e) => {
+      if (allowLeaveRef.current || !isDirty) return;
+      e.preventDefault();
+      confirmDiscard(() => navigation.dispatch(e.data.action));
+    });
+    return unsubscribe;
+  }, [navigation, isDirty]);
+
+  // Cancel button — confirm before discarding when there are unsaved changes.
+  const confirmLeave = () => {
+    if (!isDirty) {
+      router.back();
+      return;
+    }
+    confirmDiscard(() => router.back());
   };
 
   const handleSave = async () => {
@@ -504,8 +450,12 @@ export default function FixInvoiceScreen() {
       scrollToTop();
       return;
     }
-    const validLines = lines.filter((l) => l.description.trim());
-    if (linesDirty && validLines.length === 0) {
+    // Normalize the submitted lines' numerics (comma→dot), flagging anything
+    // non-finite/empty as an inline error. normalizeLines is pure and emits
+    // exactly one payload line per description-bearing draft line, so its
+    // payload length doubles as the "any lines left?" check.
+    const { payloadLines, lineErrs } = normalizeLines(lines);
+    if (linesDirty && payloadLines.length === 0) {
       setBanner("Keep at least one line item with a description.");
       scrollToTop();
       return;
@@ -521,29 +471,6 @@ export default function FixInvoiceScreen() {
       setDueDateError("Enter the due date as YYYY-MM-DD.");
       hasFieldError = true;
     }
-
-    // Normalize each submitted line's numerics (comma→dot) and flag anything
-    // non-finite/empty as an inline error.
-    const lineErrs: LineErrors = {};
-    const normalizedLines: InvoiceLineInput[] = validLines.map((l) => {
-      const qty = parseNumeric(l.quantity);
-      const price = parseNumeric(l.unitPrice);
-      const rate = parseNumeric(l.vatRate) ?? 0;
-      const errs: { quantity?: string; unitPrice?: string } = {};
-      if (qty === null || qty <= 0) {
-        errs.quantity = "Enter a quantity greater than 0.";
-      }
-      if (price === null || price < 0) {
-        errs.unitPrice = "Enter a valid unit price.";
-      }
-      if (errs.quantity || errs.unitPrice) lineErrs[l.key] = errs;
-      return {
-        description: l.description.trim(),
-        quantity: String(qty ?? 0),
-        unitPrice: String(price ?? 0),
-        vatRate: String(rate / 100),
-      };
-    });
     if (linesDirty && Object.keys(lineErrs).length > 0) {
       setLineErrors(lineErrs);
       hasFieldError = true;
@@ -597,7 +524,7 @@ export default function FixInvoiceScreen() {
         invPatch.notes = notes.trim() === "" ? null : notes.trim();
       }
       if (linesDirty) {
-        invPatch.lines = normalizedLines;
+        invPatch.lines = payloadLines;
       }
       if (Object.keys(invPatch).length > 0) {
         await updateInvoice.mutateAsync({ id, data: invPatch });
@@ -638,18 +565,7 @@ export default function FixInvoiceScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "Fix invoice details",
-          headerStyle: { backgroundColor: colors.background },
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: "Inter_600SemiBold",
-            color: colors.foreground,
-          },
-          headerTintColor: colors.primary,
-        }}
-      />
+      <Stack.Screen options={stackHeaderOptions(colors, "Fix invoice details")} />
       <ScrollHost
         ref={scrollRef}
         style={{ backgroundColor: colors.background }}
@@ -820,121 +736,21 @@ export default function FixInvoiceScreen() {
                 </Pressable>
               </View>
 
-              {lines.map((line, index) => {
-                const ext = num(line.quantity) * num(line.unitPrice);
-                const lineErr = lineErrors[line.key];
-                return (
-                  <Card
-                    key={line.key}
-                    style={{
-                      gap: 12,
-                      borderColor: focus.includes("lines")
-                        ? colors.destructive
-                        : colors.border,
-                      borderWidth: focus.includes("lines")
-                        ? 1
-                        : StyleSheet.hairlineWidth,
-                    }}
-                  >
-                    <View style={styles.rowBetween}>
-                      <AppText variant="label" color={colors.mutedForeground}>
-                        Item {index + 1}
-                      </AppText>
-                      {lines.length > 1 ? (
-                        <Pressable
-                          onPress={() => removeLine(line.key)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Remove line ${index + 1}`}
-                          hitSlop={12}
-                          style={styles.trashBtn}
-                        >
-                          <Feather
-                            name="trash-2"
-                            size={18}
-                            color={colors.destructiveText}
-                          />
-                        </Pressable>
-                      ) : null}
-                    </View>
-                    <TextField
-                      label="Description"
-                      value={line.description}
-                      onChangeText={(t) =>
-                        updateLine(line.key, { description: t })
-                      }
-                      placeholder="Consulting services"
-                    />
-                    <View style={{ flexDirection: "row", gap: 12 }}>
-                      <View style={{ flex: 1 }}>
-                        <TextField
-                          label="Qty"
-                          value={line.quantity}
-                          onChangeText={(t) =>
-                            updateLine(line.key, { quantity: t })
-                          }
-                          keyboardType="decimal-pad"
-                          placeholder="1"
-                          error={lineErr?.quantity}
-                        />
-                      </View>
-                      <View style={{ flex: 1.4 }}>
-                        <TextField
-                          label="Unit price"
-                          value={line.unitPrice}
-                          onChangeText={(t) =>
-                            updateLine(line.key, { unitPrice: t })
-                          }
-                          keyboardType="decimal-pad"
-                          placeholder="0.00"
-                          error={lineErr?.unitPrice}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <TextField
-                          label="VAT %"
-                          value={line.vatRate}
-                          onChangeText={(t) =>
-                            updateLine(line.key, { vatRate: t })
-                          }
-                          keyboardType="decimal-pad"
-                          placeholder="7.5"
-                        />
-                      </View>
-                    </View>
-                    <View style={styles.rowBetween}>
-                      <AppText variant="caption" color={colors.mutedForeground}>
-                        Line total
-                      </AppText>
-                      <AppText variant="label">{formatCurrency(ext)}</AppText>
-                    </View>
-                  </Card>
-                );
-              })}
+              {lines.map((line, index) => (
+                <LineItemCard
+                  key={line.key}
+                  line={line}
+                  index={index}
+                  canRemove={lines.length > 1}
+                  errors={lineErrors[line.key]}
+                  onChange={(patch) => updateLine(line.key, patch)}
+                  onRemove={() => removeLine(line.key)}
+                  highlighted={focus.includes("lines")}
+                />
+              ))}
             </View>
 
-            <Card style={{ gap: 8, backgroundColor: colors.secondary }}>
-              <View style={styles.rowBetween}>
-                <AppText variant="body" color={colors.mutedForeground}>
-                  Subtotal
-                </AppText>
-                <AppText variant="body">
-                  {formatCurrency(totals.subtotal)}
-                </AppText>
-              </View>
-              <View style={styles.rowBetween}>
-                <AppText variant="body" color={colors.mutedForeground}>
-                  VAT
-                </AppText>
-                <AppText variant="body">{formatCurrency(totals.vat)}</AppText>
-              </View>
-              <Divider />
-              <View style={styles.rowBetween}>
-                <AppText variant="heading">Total</AppText>
-                <AppText variant="heading" color={colors.primary}>
-                  {formatCurrency(totals.grand)}
-                </AppText>
-              </View>
-            </Card>
+            <TotalsCard totals={totals} />
 
             <AppButton
               label={saving ? "Saving…" : "Save changes"}
@@ -961,24 +777,12 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    ...(Platform.OS === "web"
-      ? { maxWidth: 640, alignSelf: "center", width: "100%" }
-      : {}),
+    ...webContentMax,
   },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  rowBetween: { ...rowBetween },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-  },
-  trashBtn: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

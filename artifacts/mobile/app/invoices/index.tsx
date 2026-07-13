@@ -11,7 +11,6 @@ import {
 import type {
   BulkSubmitRowResult,
   Invoice,
-  InvoiceStatus,
   ListInvoicesParams,
 } from "@workspace/api-client-react";
 import { Stack, useRouter } from "expo-router";
@@ -32,17 +31,21 @@ import {
   AppButton,
   AppText,
   Badge,
-  BadgeTone,
   Banner,
   Card,
   CardSkeleton,
   Divider,
   EmptyState,
   ErrorState,
+  rowBetween,
+  stackHeaderOptions,
   TextField,
+  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { apiErrorMessage } from "@/lib/api-error";
 import { formatCurrency, formatDate, humanize } from "@/lib/format";
+import { INVOICE_STATUS_TONE } from "@/lib/invoice-status";
 import { useSession } from "@/lib/session";
 
 // Server page size. Passing limit/offset switches GET /invoices into its
@@ -52,40 +55,6 @@ const PAGE_SIZE = 50;
 // How many needs-attention rows to render in the bulk report — a batch can
 // flag up to 200 drafts and the report is a decision aid, not a ledger.
 const MAX_BULK_ROWS = 20;
-
-// Mirrors the invoice detail screen's status tones so both tell the same story.
-const STATUS_TONE: Record<InvoiceStatus, BadgeTone> = {
-  draft: "neutral",
-  validated: "info",
-  submitted: "warning",
-  stamped: "success",
-  confirmed: "success",
-  settled: "success",
-  failed: "critical",
-  cancelled: "neutral",
-  credited: "neutral",
-};
-
-/**
- * Pull the server's message out of a thrown API error, if present. The 403
- * consent refusal from bulk submit arrives as `{ error }`; validation-style
- * failures use `{ message }`.
- */
-function apiErrorMessage(error: unknown, fallback: string): string {
-  const data =
-    error && typeof error === "object"
-      ? (error as { data?: unknown }).data
-      : null;
-  if (data && typeof data === "object" && "message" in data) {
-    const message = (data as { message?: unknown }).message;
-    if (typeof message === "string" && message) return message;
-  }
-  if (data && typeof data === "object" && "error" in data) {
-    const message = (data as { error?: unknown }).error;
-    if (typeof message === "string" && message) return message;
-  }
-  return fallback;
-}
 
 /** The first issue on a bulk row, for the one-line summary under the number. */
 function bulkRowIssue(row: BulkSubmitRowResult): string {
@@ -473,18 +442,7 @@ export default function InvoiceListScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "Invoices",
-          headerStyle: { backgroundColor: colors.background },
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: "Inter_600SemiBold",
-            color: colors.foreground,
-          },
-          headerTintColor: colors.primary,
-        }}
-      />
+      <Stack.Screen options={stackHeaderOptions(colors, "Invoices")} />
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         {/* The search field lives outside the list so it never remounts (and
             never drops the keyboard) while pages stream in. */}
@@ -581,7 +539,7 @@ function InvoiceRow({
               </AppText>
               <Badge
                 label={humanize(invoice.status)}
-                tone={STATUS_TONE[invoice.status] ?? "neutral"}
+                tone={INVOICE_STATUS_TONE[invoice.status] ?? "neutral"}
               />
             </View>
             <AppText
@@ -614,23 +572,15 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 4,
-    ...(Platform.OS === "web"
-      ? { maxWidth: 640, alignSelf: "center", width: "100%" }
-      : {}),
+    ...webContentMax,
   },
   searchWrap: {
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 12,
-    ...(Platform.OS === "web"
-      ? { maxWidth: 640, alignSelf: "center", width: "100%" }
-      : {}),
+    ...webContentMax,
   },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  rowBetween: { ...rowBetween },
   inlineRow: {
     flexDirection: "row",
     alignItems: "center",

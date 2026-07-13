@@ -8,7 +8,6 @@ import {
 import type { ComplianceDeadline } from "@workspace/api-client-react";
 import React, { useCallback, useMemo } from "react";
 import {
-  Platform,
   RefreshControl,
   ScrollView,
   SectionList,
@@ -26,6 +25,7 @@ import {
   Divider,
   EmptyState,
   ErrorState,
+  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import {
@@ -316,9 +316,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 12,
-    ...(Platform.OS === "web"
-      ? { maxWidth: 640, alignSelf: "center", width: "100%" }
-      : {}),
+    ...webContentMax,
   },
   row: {
     flexDirection: "row",

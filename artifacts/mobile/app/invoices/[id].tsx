@@ -12,7 +12,6 @@ import {
   useValidateInvoice,
 } from "@workspace/api-client-react";
 import type {
-  InvoiceStatus,
   StatusLightLight,
   SubmissionAttempt,
 } from "@workspace/api-client-react";
@@ -20,7 +19,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -32,35 +30,26 @@ import {
   AppButton,
   AppText,
   Badge,
-  BadgeTone,
   Banner,
   Card,
   CardSkeleton,
   Divider,
   EmptyState,
   ErrorState,
+  rowBetween,
   Skeleton,
+  stackHeaderOptions,
+  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { errorStatus } from "@/lib/api-error";
 import {
   formatCurrency,
   formatDate,
   humanize,
   timeAgo,
 } from "@/lib/format";
-
-// Mirrors the web vault's status tones so both clients tell the same story.
-const STATUS_TONE: Record<InvoiceStatus, BadgeTone> = {
-  draft: "neutral",
-  validated: "info",
-  submitted: "warning",
-  stamped: "success",
-  confirmed: "success",
-  settled: "success",
-  failed: "critical",
-  cancelled: "neutral",
-  credited: "neutral",
-};
+import { INVOICE_STATUS_TONE } from "@/lib/invoice-status";
 
 const ATTEMPT_ICON: Record<
   string,
@@ -231,16 +220,10 @@ export default function InvoiceDetailScreen() {
   return (
     <>
       <Stack.Screen
-        options={{
-          title: invoice ? invoice.invoiceNumber : "Invoice",
-          headerStyle: { backgroundColor: colors.background },
-          headerShadowVisible: false,
-          headerTitleStyle: {
-            fontFamily: "Inter_600SemiBold",
-            color: colors.foreground,
-          },
-          headerTintColor: colors.primary,
-        }}
+        options={stackHeaderOptions(
+          colors,
+          invoice ? invoice.invoiceNumber : "Invoice",
+        )}
       />
       <ScrollView
         style={{ backgroundColor: colors.background }}
@@ -264,7 +247,7 @@ export default function InvoiceDetailScreen() {
             <CardSkeleton lines={3} />
           </View>
         ) : detailQuery.isError ? (
-          (detailQuery.error as { status?: number } | null)?.status === 404 ? (
+          errorStatus(detailQuery.error) === 404 ? (
             <EmptyState
               icon="file"
               title="We couldn't find this invoice"
@@ -299,7 +282,7 @@ export default function InvoiceDetailScreen() {
                 </View>
                 <Badge
                   label={humanize(invoice.status)}
-                  tone={STATUS_TONE[invoice.status]}
+                  tone={INVOICE_STATUS_TONE[invoice.status]}
                 />
               </View>
               <Divider />
@@ -608,15 +591,9 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    ...(Platform.OS === "web"
-      ? { maxWidth: 640, alignSelf: "center", width: "100%" }
-      : {}),
+    ...webContentMax,
   },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  rowBetween: { ...rowBetween },
   bannerRow: {
     flexDirection: "row",
     gap: 10,

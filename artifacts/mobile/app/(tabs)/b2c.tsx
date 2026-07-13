@@ -12,7 +12,6 @@ import type { B2cReportBatch, B2cReportBatchStatus } from "@workspace/api-client
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -32,8 +31,10 @@ import {
   EmptyState,
   ErrorState,
   Skeleton,
+  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { hasStatus } from "@/lib/api-error";
 import { formatCurrency, formatDateTime, humanize } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
@@ -62,14 +63,7 @@ function useNow(intervalMs = 30_000): number {
 }
 
 /** The b2c_reporting flag being dark surfaces as a 404 from the API. */
-function isFeatureUnavailable(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    (error as { status?: unknown }).status === 404
-  );
-}
+const isFeatureUnavailable = (error: unknown): boolean => hasStatus(error, 404);
 
 function countdown(deadlineAt: Date | string, now: number): {
   label: string;
@@ -489,9 +483,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 12,
-    ...(Platform.OS === "web"
-      ? { maxWidth: 640, alignSelf: "center", width: "100%" }
-      : {}),
+    ...webContentMax,
   },
   cardHeader: {
     flexDirection: "row",
