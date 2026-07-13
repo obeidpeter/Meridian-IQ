@@ -16,7 +16,6 @@ import type {
   Party,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -93,7 +92,6 @@ function humanizeFieldPath(path: string): string {
 
 export default function InvoiceScreen() {
   const colors = useColors();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { clientPartyId } = useSession();

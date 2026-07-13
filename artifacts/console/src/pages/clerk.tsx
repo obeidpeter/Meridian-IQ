@@ -273,6 +273,10 @@ export function ClerkWorkspace() {
       setForm(null);
     }
     setReason("");
+    // Reset only when the case identity or status changes: a react-query
+    // refetch delivers a fresh `selected` reference with the same id/status
+    // mid-edit, and depending on the object would clobber operator input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, selected?.status]);
 
   const { data: firms } = useListFirms();

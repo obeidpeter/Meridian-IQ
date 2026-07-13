@@ -159,7 +159,7 @@ export default function ReconciliationScreen() {
     },
   );
 
-  const statements = statementsQuery.data ?? [];
+  const statements = useMemo(() => statementsQuery.data ?? [], [statementsQuery.data]);
   const selectedStatement = statements.find((s) => s.id === selectedId);
 
   // Auto-select the most recent statement so the matches section isn't dead on

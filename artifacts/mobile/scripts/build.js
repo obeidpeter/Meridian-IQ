@@ -219,7 +219,7 @@ async function downloadFile(url, outputPath) {
     }
 
     if (error.name === "AbortError") {
-      throw new Error(`Download timeout after 5m: ${url}`);
+      throw new Error(`Download timeout after 5m: ${url}`, { cause: error });
     }
     throw error;
   } finally {
@@ -274,6 +274,7 @@ async function downloadManifest(platform) {
     if (error.name === "AbortError") {
       throw new Error(
         `Manifest download timeout after 5m for platform: ${platform}`,
+        { cause: error },
       );
     }
     throw error;

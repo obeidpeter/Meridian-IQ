@@ -89,7 +89,7 @@ api.stderr.on("data", (d) => (apiLog += d));
 
 let staticServer;
 let browser;
-let exitCode = 1;
+let exitCode;
 try {
   await waitForApi();
   staticServer = await startStaticServer({ port: WEB_PORT, apiPort: API_PORT });

@@ -61,6 +61,11 @@ jobs:
       - name: Typecheck (all packages)
         run: pnpm run typecheck
 
+      # Drift tsc tolerates: unused imports/vars, hook-dependency mistakes.
+      # Warnings surface in the log but only errors fail the gate.
+      - name: Lint
+        run: pnpm run lint
+
       # The api-server suite now includes DB-backed route tests (party access,
       # alert prefs, push registration) that run inside the RLS contexts, so both
       # the schema AND the guardrail migrations (meridian_app role grants, RLS
@@ -74,6 +79,10 @@ jobs:
       # the error catalogue doubling as the regression suite.
       - name: api-server unit tests
         run: pnpm --filter @workspace/api-server run test
+
+      # Pure form math behind the mobile invoice screens (no DB, no Expo).
+      - name: mobile unit tests
+        run: pnpm --filter @workspace/mobile run test
 
       # CORE-06: tables come from drizzle push; the versioned guardrail
       # migrations (triggers, RLS, retention) must apply AND roll back cleanly.
