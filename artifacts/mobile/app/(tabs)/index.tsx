@@ -2,9 +2,16 @@ import { Feather } from "@expo/vector-icons";
 import {
   DashboardSummaryPenaltyRisk,
   getGetDashboardSummaryQueryKey,
+  getGetReceivablesSummaryQueryKey,
   useGetDashboardSummary,
+  useGetReceivablesSummary,
 } from "@workspace/api-client-react";
-import type { ActivityItem, ComplianceDeadline } from "@workspace/api-client-react";
+import type {
+  ActivityItem,
+  ComplianceDeadline,
+  ReceivablesBucket,
+  ReceivablesSummary,
+} from "@workspace/api-client-react";
 import { useRouter } from "expo-router";
 import React, { useCallback } from "react";
 import {
@@ -24,6 +31,7 @@ import {
   CardSkeleton,
   Divider,
   ErrorState,
+  Skeleton,
   StatTile,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
@@ -72,9 +80,24 @@ export default function HomeScreen() {
     },
   );
 
+  // Receivables aging is a separate endpoint so its card degrades on its own —
+  // a failure here never blanks the rest of the dashboard.
+  const receivablesQuery = useGetReceivablesSummary(
+    { clientPartyId: clientPartyId ?? "" },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetReceivablesSummaryQueryKey({
+          clientPartyId: clientPartyId ?? "",
+        }),
+      },
+    },
+  );
+
   const onRefresh = useCallback(() => {
     void query.refetch();
-  }, [query]);
+    void receivablesQuery.refetch();
+  }, [query, receivablesQuery]);
 
   const summary = query.data;
   const firstName = me?.fullName?.split(" ")[0];
@@ -145,6 +168,13 @@ export default function HomeScreen() {
             />
           </View>
 
+          <ReceivablesCard
+            summary={receivablesQuery.data}
+            isLoading={receivablesQuery.isLoading}
+            isError={receivablesQuery.isError}
+            onRetry={() => void receivablesQuery.refetch()}
+          />
+
           {summary.nextDeadline ? (
             <NextDeadlineCard
               deadline={summary.nextDeadline}
@@ -158,6 +188,12 @@ export default function HomeScreen() {
               label="Create an invoice"
               icon="file-plus"
               onPress={() => router.push("/invoice")}
+            />
+            <AppButton
+              label="Browse invoices"
+              icon="file-text"
+              variant="secondary"
+              onPress={() => router.push("/invoices")}
             />
             <AppButton
               label="Reconcile bank payments"
@@ -262,6 +298,142 @@ function PenaltyRiskCard({
         </AppText>
         <Feather name="arrow-right" size={16} color={fg} />
       </Pressable>
+    </Card>
+  );
+}
+
+function AgingBucketTile({
+  label,
+  bucket,
+  tone,
+}: {
+  label: string;
+  bucket: ReceivablesBucket;
+  tone?: "warning" | "danger";
+}) {
+  const colors = useColors();
+  // The late buckets only take their warning/danger tint once something is
+  // actually sitting in them. destructiveText is the red tuned for text on
+  // cards in both schemes; warning carries enough contrast as-is.
+  const nonZero = bucket.count > 0 || Number(bucket.amount) > 0;
+  const valueColor =
+    nonZero && tone === "danger"
+      ? colors.destructiveText
+      : nonZero && tone === "warning"
+        ? colors.warning
+        : colors.foreground;
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${label}: ${formatCurrency(bucket.amount)} across ${
+        bucket.count
+      } invoice${bucket.count === 1 ? "" : "s"}`}
+      style={[
+        styles.bucketTile,
+        { backgroundColor: colors.secondary, borderRadius: colors.radius },
+      ]}
+    >
+      <AppText variant="caption" color={colors.mutedForeground}>
+        {label}
+      </AppText>
+      <AppText variant="label" color={valueColor} style={{ marginTop: 2 }}>
+        {formatCurrency(bucket.amount)}
+      </AppText>
+      <AppText variant="caption" color={colors.mutedForeground}>
+        {bucket.count} invoice{bucket.count === 1 ? "" : "s"}
+      </AppText>
+    </View>
+  );
+}
+
+function ReceivablesCard({
+  summary,
+  isLoading,
+  isError,
+  onRetry,
+}: {
+  summary: ReceivablesSummary | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
+}) {
+  const colors = useColors();
+  const primary =
+    summary && summary.groups.length > 0 ? summary.groups[0] : undefined;
+  const extraGroups = summary ? summary.groups.length - 1 : 0;
+
+  return (
+    <Card>
+      <AppText variant="caption" color={colors.mutedForeground}>
+        RECEIVABLES
+      </AppText>
+      {isLoading ? (
+        <View style={{ gap: 8, marginTop: 10 }}>
+          <Skeleton height={24} width="45%" />
+          <Skeleton height={12} width="70%" />
+          <Skeleton height={48} />
+        </View>
+      ) : isError ? (
+        <View style={{ marginTop: 10, gap: 10 }}>
+          <AppText variant="body" color={colors.mutedForeground}>
+            We couldn&apos;t load your receivables.
+          </AppText>
+          <AppButton
+            label="Try again"
+            icon="refresh-cw"
+            variant="secondary"
+            fullWidth={false}
+            onPress={onRetry}
+          />
+        </View>
+      ) : !primary ? (
+        <AppText
+          variant="body"
+          color={colors.mutedForeground}
+          style={{ marginTop: 10 }}
+        >
+          No outstanding receivables.
+        </AppText>
+      ) : (
+        <>
+          <AppText variant="title" style={{ marginTop: 8 }}>
+            {formatCurrency(primary.outstandingTotal)}
+          </AppText>
+          <AppText
+            variant="caption"
+            color={colors.mutedForeground}
+            style={{ marginTop: 2 }}
+          >
+            Outstanding across {primary.invoiceCount} invoice
+            {primary.invoiceCount === 1 ? "" : "s"}
+            {extraGroups > 0
+              ? ` · +${extraGroups} more ${
+                  extraGroups === 1 ? "currency" : "currencies"
+                }`
+              : ""}
+          </AppText>
+          <View style={styles.bucketGrid}>
+            <AgingBucketTile
+              label="Current (≤30d)"
+              bucket={primary.buckets.current}
+            />
+            <AgingBucketTile
+              label="31–60 days"
+              bucket={primary.buckets.days31to60}
+            />
+            <AgingBucketTile
+              label="61–90 days"
+              bucket={primary.buckets.days61to90}
+              tone="warning"
+            />
+            <AgingBucketTile
+              label="90+ days"
+              bucket={primary.buckets.days90plus}
+              tone="danger"
+            />
+          </View>
+        </>
+      )}
     </Card>
   );
 }
@@ -399,6 +571,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     alignSelf: "flex-start",
+  },
+  bucketGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+  bucketTile: {
+    flexGrow: 1,
+    flexBasis: "45%",
+    padding: 10,
   },
   activityRow: {
     flexDirection: "row",
