@@ -6,5 +6,8 @@ set -e
 pnpm install --frozen-lockfile || pnpm install
 # Schema push AND guardrail migrations (role grants / RLS) — both are required
 # before the API and its DB-backed tests can run.
-pnpm --filter db push
+# push-force: stdin is closed during post-merge, so a plain push that prompts
+# (e.g. for a potentially destructive change) gets EOF and fails, leaving new
+# columns unapplied AND skipping the workflow restarts that rebuild api-server.
+pnpm --filter db push-force
 pnpm --filter db migrate
