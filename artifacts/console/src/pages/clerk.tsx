@@ -3,6 +3,7 @@ import {
   useListClerkCases,
   useGetClerkCase,
   useCreateClerkCase,
+  useCreateClerkCaseBatch,
   useDecideClerkCase,
   useClaimClerkCase,
   useReleaseClerkCase,
@@ -17,6 +18,7 @@ import {
   getGetClerkPartySuggestionsQueryKey,
 } from "@workspace/api-client-react";
 import type {
+  BatchClerkCasesResult,
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseDecisionInputCategory,
@@ -26,6 +28,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,7 +52,7 @@ import {
 } from "@/lib/errors";
 import { formatDateTime, pillClasses } from "@/lib/format";
 import { PartySuggestionChips } from "@/pages/clerk-party-suggestions";
-import { STATUS_TONE } from "@/pages/clerk-shared";
+import { isReadyToApprove, STATUS_TONE } from "@/pages/clerk-shared";
 import {
   MAX_RECORD_SECONDS,
   MAX_VOICE_BYTES,
@@ -63,6 +66,7 @@ import {
   Mic,
   Plus,
   PowerOff,
+  Quote,
   ScanLine,
   ShieldCheck,
 } from "lucide-react";
@@ -97,6 +101,19 @@ async function fileToBase64(file: File): Promise<string> {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(binary);
+}
+
+function fileIsPdf(file: File): boolean {
+  return (
+    file.type === "application/pdf" ||
+    file.name.toLowerCase().endsWith(".pdf")
+  );
+}
+
+// Source snippets can quote a whole paragraph; ~300 chars is plenty to verify
+// where a value came from.
+function truncateSnippet(s: string): string {
+  return s.length > 300 ? `${s.slice(0, 300)}…` : s;
 }
 
 // Coarse "n min ago" for claim ages — precision doesn't matter here.
@@ -319,6 +336,13 @@ export function ClerkWorkspace() {
   const [captureText, setCaptureText] = useState("");
   const [captureFile, setCaptureFile] = useState<File | null>(null);
   const [captureVoice, setCaptureVoice] = useState<File | null>(null);
+  // Batch intake: PDF and pasted text can carry several invoices — when the
+  // operator says so, the batch endpoint splits the document and opens one
+  // case per invoice. The last batch's summary stays visible under the form.
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchResult, setBatchResult] = useState<BatchClerkCasesResult | null>(
+    null,
+  );
   // Duplicate guard: a 409 DUPLICATE_SOURCE on create means this exact
   // document content already has a live case. We hold the rejected payload
   // verbatim so "Create anyway" resubmits it byte-identical with
@@ -332,6 +356,16 @@ export function ClerkWorkspace() {
   // Decision form
   const [form, setForm] = useState<ApproveForm | null>(null);
   const [reason, setReason] = useState("");
+  // Which field rows have their source snippet expanded — per-case, collapsed
+  // by default.
+  const [openSnippets, setOpenSnippets] = useState<Set<string>>(new Set());
+  const toggleSnippet = (field: string) =>
+    setOpenSnippets((prev) => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
+      return next;
+    });
   useEffect(() => {
     if (selected && (selected.status === "extracted" || selected.status === "in_review")) {
       setForm(approveFormFromCase(selected));
@@ -339,6 +373,7 @@ export function ClerkWorkspace() {
       setForm(null);
     }
     setReason("");
+    setOpenSnippets(new Set());
     // Reset only when the case identity or status changes: a react-query
     // refetch delivers a fresh `selected` reference with the same id/status
     // mid-edit, and depending on the object would clobber operator input.
@@ -432,6 +467,7 @@ export function ClerkWorkspace() {
         setCaptureVoice(null);
         setVoiceFromRecorder(false);
         setPendingDuplicate(null);
+        setBatchResult(null);
         setDisabledBanner(false);
         toast({
           title:
@@ -459,6 +495,32 @@ export function ClerkWorkspace() {
         }
         handleGatewayError(e, "Could not read the document.");
       },
+    },
+  });
+
+  // Batch path: same intake, but the server segments the document and opens
+  // one case per invoice (exact-duplicate segments are skipped, not 409'd).
+  // 502 SEGMENTATION_FAILED / 429 budget flow through handleGatewayError,
+  // which relays the server's own words.
+  const createCaseBatch = useCreateClerkCaseBatch({
+    mutation: {
+      onSuccess: (result) => {
+        invalidateCases();
+        if (result.cases[0]) setSelectedId(result.cases[0].id);
+        setCaptureOpen(false);
+        setCaptureText("");
+        setCaptureFile(null);
+        setBatchMode(false);
+        setPendingDuplicate(null);
+        setBatchResult(result);
+        setDisabledBanner(false);
+        toast({
+          title: "Batch read",
+          description:
+            "One case per invoice — every case still needs your review.",
+        });
+      },
+      onError: (e) => handleGatewayError(e, "Could not split the document."),
     },
   });
 
@@ -574,10 +636,14 @@ export function ClerkWorkspace() {
         },
       });
     } else if (captureFile) {
-      const isPdf =
-        captureFile.type === "application/pdf" ||
-        captureFile.name.toLowerCase().endsWith(".pdf");
+      const isPdf = fileIsPdf(captureFile);
       const b64 = await fileToBase64(captureFile);
+      if (batchMode && isPdf) {
+        createCaseBatch.mutate({
+          data: { sourceType: "pdf", name: captureFile.name, pdfBase64: b64 },
+        });
+        return;
+      }
       createCase.mutate({
         data: {
           sourceType: isPdf ? "pdf" : "image",
@@ -587,6 +653,12 @@ export function ClerkWorkspace() {
         },
       });
     } else if (captureText.trim()) {
+      if (batchMode) {
+        createCaseBatch.mutate({
+          data: { sourceType: "text", name: "pasted-text.txt", text: captureText },
+        });
+        return;
+      }
       createCase.mutate({
         data: {
           sourceType: "text",
@@ -597,10 +669,20 @@ export function ClerkWorkspace() {
     }
   };
 
-  const sortedCases = useMemo(
-    () =>
-      [...cases].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [cases],
+  // Newest first, but ready-to-approve cases jump the queue (fast lane). The
+  // partition keeps each group's newest-first order intact.
+  const sortedCases = useMemo(() => {
+    const byNewest = [...cases].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+    return [
+      ...byNewest.filter(isReadyToApprove),
+      ...byNewest.filter((c) => !isReadyToApprove(c)),
+    ];
+  }, [cases]);
+  const readyCount = useMemo(
+    () => sortedCases.filter(isReadyToApprove).length,
+    [sortedCases],
   );
 
   const approveDisabled =
@@ -638,6 +720,20 @@ export function ClerkWorkspace() {
       lines: form.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)),
     });
   };
+
+  // Pre-flight issues only steer the review while the case is still
+  // decidable; decided cases keep their history without the amber paint.
+  const activePreflight =
+    selected != null &&
+    (selected.status === "extracted" || selected.status === "in_review")
+      ? (selected.preflight ?? [])
+      : [];
+  const preflightFields = new Set(activePreflight.map((i) => i.field));
+  // "lines" / "lines.0.quantity" style issues point at the lines table as a
+  // whole — per-cell targeting isn't worth the noise.
+  const linesPreflightHit = activePreflight.some(
+    (i) => i.field === "lines" || i.field.startsWith("lines."),
+  );
 
   return (
     <div className="space-y-6">
@@ -694,6 +790,14 @@ export function ClerkWorkspace() {
                     {sortedCases.filter((c) => OPEN_STATUSES.has(c.status)).length}{" "}
                     open
                   </span>
+                  {readyCount > 0 && (
+                    <span
+                      className="text-sm font-normal text-emerald-700 dark:text-emerald-400"
+                      data-testid="text-ready-count"
+                    >
+                      {readyCount} ready
+                    </span>
+                  )}
                 </CardTitle>
                 <Button
                   size="sm"
@@ -796,22 +900,45 @@ export function ClerkWorkspace() {
                       disabled={captureFile != null || captureVoice != null}
                       data-testid="input-capture-text"
                     />
+                    {/* Batch splitting works on PDFs and pasted text only —
+                        the checkbox greys out for images and voice notes. */}
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="batch-toggle"
+                        checked={batchMode}
+                        onCheckedChange={(v) => setBatchMode(v === true)}
+                        disabled={
+                          captureVoice != null ||
+                          (captureFile != null && !fileIsPdf(captureFile))
+                        }
+                        data-testid="batch-toggle"
+                      />
+                      <Label
+                        htmlFor="batch-toggle"
+                        className="text-sm font-normal"
+                      >
+                        This upload contains multiple invoices
+                      </Label>
+                    </div>
                     <Button
                       className="w-full"
                       onClick={submitCapture}
                       disabled={
                         createCase.isPending ||
+                        createCaseBatch.isPending ||
                         (!captureFile &&
                           !captureVoice &&
                           captureText.trim().length < 10)
                       }
                       data-testid="button-run-capture"
                     >
-                      {createCase.isPending
-                        ? captureVoice
-                          ? "Transcribing…"
-                          : "Reading…"
-                        : "Read with Clerk"}
+                      {createCaseBatch.isPending
+                        ? "Splitting…"
+                        : createCase.isPending
+                          ? captureVoice
+                            ? "Transcribing…"
+                            : "Reading…"
+                          : "Read with Clerk"}
                     </Button>
                     {pendingDuplicate && (
                       <Alert data-testid="banner-duplicate-source">
@@ -851,6 +978,24 @@ export function ClerkWorkspace() {
                     )}
                   </div>
                 )}
+                {batchResult && (
+                  <p
+                    className="text-sm text-muted-foreground"
+                    data-testid="batch-result"
+                  >
+                    Opened {batchResult.cases.length}{" "}
+                    {batchResult.cases.length === 1 ? "case" : "cases"} from{" "}
+                    {batchResult.segments}{" "}
+                    {batchResult.segments === 1 ? "invoice" : "invoices"} found
+                    {batchResult.skippedDuplicates > 0
+                      ? ` · ${batchResult.skippedDuplicates} ${
+                          batchResult.skippedDuplicates === 1
+                            ? "duplicate"
+                            : "duplicates"
+                        } skipped`
+                      : ""}
+                  </p>
+                )}
                 {/* The query is already extraction-only (kind param), so no
                     client-side kind filter is needed here anymore. */}
                 {sortedCases.length === 0 ? (
@@ -863,6 +1008,7 @@ export function ClerkWorkspace() {
                       const kind = intakeKind(c.sourceType);
                       const Icon = kind.icon;
                       const status = QUEUE_STATUS[c.status];
+                      const ready = isReadyToApprove(c);
                       return (
                         <button
                           key={c.id}
@@ -893,6 +1039,14 @@ export function ClerkWorkspace() {
                               className={`block text-sm font-medium mt-1 ${status.cls}`}
                             >
                               {status.label}
+                              {ready && (
+                                <span
+                                  className="ml-1.5 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-100 px-1.5 py-px text-[10px] font-medium text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+                                  data-testid="ready-pill"
+                                >
+                                  Ready
+                                </span>
+                              )}
                               {c.status === "in_review" ? (
                                 <span
                                   className="ml-1.5 text-[10px] uppercase text-muted-foreground font-normal"
@@ -1031,40 +1185,113 @@ export function ClerkWorkspace() {
                       </Alert>
                     )}
 
+                    {/* Deterministic pre-approval checks, computed by the
+                        server on every successful extraction. null means the
+                        extraction never succeeded (or predates pre-flight) —
+                        render nothing rather than a false all-clear. */}
+                    {(selected.status === "extracted" ||
+                      selected.status === "in_review") &&
+                      selected.preflight != null &&
+                      (selected.preflight.length === 0 ? (
+                        <p
+                          className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400"
+                          data-testid="preflight-clear"
+                        >
+                          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                          Pre-flight clear — nothing blocking approval
+                        </p>
+                      ) : (
+                        <div
+                          className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40"
+                          data-testid="preflight-issues"
+                        >
+                          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                            Pre-flight —{" "}
+                            {selected.preflight.length === 1
+                              ? "1 issue"
+                              : `${selected.preflight.length} issues`}{" "}
+                            to resolve before approval
+                          </p>
+                          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-300">
+                            {selected.preflight.map((issue, i) => (
+                              <li key={`${issue.field}-${i}`}>
+                                {issue.message}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+
                     {selected.extraction && (
                       <div>
                         <p className="text-xs font-medium text-muted-foreground uppercase mb-1.5">
                           Extracted fields — amber rows need checking
                         </p>
                         <div className="divide-y text-sm">
-                          {selected.extraction.fields.map((f) => (
-                            <div
-                              key={f.field}
-                              className={`flex items-center gap-3 px-1 py-2.5 ${
-                                f.flagged
-                                  ? "bg-amber-50 dark:bg-amber-950/40 rounded-md px-2"
-                                  : ""
-                              }`}
-                              data-testid={`row-field-${f.field}`}
-                            >
-                              <span className="w-36 shrink-0 text-muted-foreground">
-                                {fieldLabel(f.field)}
-                              </span>
-                              <span className="flex-1 truncate text-right font-semibold">
-                                {f.value ?? (
-                                  <em className="text-muted-foreground font-normal">
-                                    missing
-                                  </em>
+                          {selected.extraction.fields.map((f) => {
+                            const preflightHit = preflightFields.has(f.field);
+                            const snippetOpen = openSnippets.has(f.field);
+                            return (
+                              <div key={f.field}>
+                                <div
+                                  className={`flex items-center gap-3 px-1 py-2.5 ${
+                                    f.flagged || preflightHit
+                                      ? "bg-amber-50 dark:bg-amber-950/40 rounded-md px-2"
+                                      : ""
+                                  }${
+                                    preflightHit
+                                      ? " border-l-2 border-amber-400 dark:border-amber-600"
+                                      : ""
+                                  }`}
+                                  data-testid={`row-field-${f.field}`}
+                                >
+                                  <span className="w-36 shrink-0 text-muted-foreground">
+                                    {fieldLabel(f.field)}
+                                  </span>
+                                  <span className="flex-1 truncate text-right font-semibold">
+                                    {f.value ?? (
+                                      <em className="text-muted-foreground font-normal">
+                                        missing
+                                      </em>
+                                    )}
+                                  </span>
+                                  {f.critical && (
+                                    <span className="text-[10px] uppercase text-muted-foreground">
+                                      critical
+                                    </span>
+                                  )}
+                                  <ConfidenceBadge confidence={f.confidence} />
+                                  {f.sourceSnippet != null && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSnippet(f.field)}
+                                      aria-label="Show source text"
+                                      aria-expanded={snippetOpen}
+                                      className={`shrink-0 rounded p-0.5 transition-colors hover:text-foreground ${
+                                        snippetOpen
+                                          ? "text-foreground"
+                                          : "text-muted-foreground"
+                                      }`}
+                                      data-testid={`snippet-toggle-${f.field}`}
+                                    >
+                                      <Quote
+                                        className="h-3.5 w-3.5"
+                                        aria-hidden="true"
+                                      />
+                                    </button>
+                                  )}
+                                </div>
+                                {snippetOpen && f.sourceSnippet != null && (
+                                  <blockquote
+                                    className="mx-1 mb-2 border-l-2 border-teal-300 pl-3 text-xs italic text-muted-foreground dark:border-teal-800"
+                                    data-testid={`snippet-${f.field}`}
+                                  >
+                                    “{truncateSnippet(f.sourceSnippet)}”
+                                  </blockquote>
                                 )}
-                              </span>
-                              {f.critical && (
-                                <span className="text-[10px] uppercase text-muted-foreground">
-                                  critical
-                                </span>
-                              )}
-                              <ConfidenceBadge confidence={f.confidence} />
-                            </div>
-                          ))}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1280,7 +1507,13 @@ export function ClerkWorkspace() {
                             </Select>
                           </div>
                         </div>
-                        <div className="space-y-2">
+                        <div
+                          className={`space-y-2${
+                            linesPreflightHit
+                              ? " rounded-md border border-amber-300 bg-amber-50/50 p-2 dark:border-amber-800 dark:bg-amber-950/20"
+                              : ""
+                          }`}
+                        >
                           <Label>Lines</Label>
                           {form.lines.map((line, i) => (
                             <div

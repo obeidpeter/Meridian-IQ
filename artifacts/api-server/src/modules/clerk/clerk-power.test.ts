@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import {
   getDb,
   firmsTable,
-  usersTable,
   type ClerkExtraction,
   type ExtractionLine,
 } from "@workspace/db";

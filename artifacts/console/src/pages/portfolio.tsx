@@ -8,6 +8,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
 import {
@@ -369,6 +370,8 @@ export function Portfolio() {
           </div>
         </CardContent>
       </Card>
+
+      <ClerkWeeklyDigestCard />
 
       <ReceivablesCard />
     </div>

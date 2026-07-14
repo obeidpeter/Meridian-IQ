@@ -5,6 +5,7 @@ import {
   useUpdateClaim,
   useSubmitClaim,
   useDecideClaim,
+  useDraftClaimWithClerk,
   getListClaimsQueryKey,
 } from "@workspace/api-client-react";
 import type {
@@ -52,6 +53,7 @@ import {
   Plus,
   PowerOff,
   Send,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 
@@ -468,6 +470,12 @@ export function ClerkClaims() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<ClaimForm>(EMPTY_FORM);
+  // Draft-with-Clerk panel: Clerk structures pasted source text into a draft
+  // claim. Errors and the success note render inline, in the panel itself.
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftText, setDraftText] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [draftSuccess, setDraftSuccess] = useState<ClaimRecord | null>(null);
   const [editing, setEditing] = useState<ClaimRecord | null>(null);
   const [editForm, setEditForm] = useState<ClaimForm>(EMPTY_FORM);
   const [decision, setDecision] = useState<{
@@ -523,6 +531,36 @@ export function ClerkClaims() {
         });
       },
       onError: (e) => handleServerError(e, "Could not create the draft."),
+    },
+  });
+  // The drafted record is a plain draft — maker-checker is untouched: it
+  // still needs submit + a second operator's approval like any other version.
+  // 502 CLERK_DRAFT_FAILED / 503 CLERK_DISABLED render inline in the panel.
+  const draftClaim = useDraftClaimWithClerk({
+    mutation: {
+      onSuccess: (claim) => {
+        invalidate();
+        setDisabledBanner(false);
+        setDraftText("");
+        setDraftError(null);
+        setDraftSuccess(claim);
+        setExpandedId(claim.id);
+        toast({
+          title: `Draft ${claim.claimKey} v${claim.version} created`,
+          description:
+            "Clerk drafted it from your source text — review, edit and submit it like any draft.",
+        });
+      },
+      onError: (e) => {
+        setDraftSuccess(null);
+        if (killSwitchTripped(e)) setDisabledBanner(true);
+        setDraftError(
+          serverErrorMessage(e) ??
+            (killSwitchTripped(e)
+              ? "Clerk is switched off (clerk_ai kill switch), so it cannot draft claims right now."
+              : "Clerk could not draft a claim from this text. Trim it to the relevant passage and try again."),
+        );
+      },
     },
   });
   const updateClaim = useUpdateClaim({
@@ -664,13 +702,23 @@ export function ClerkClaims() {
             Maker-checker: the author of a version can never approve it.
           </p>
         </div>
-        <Button
-          onClick={() => setCreateOpen((o) => !o)}
-          data-testid="button-new-claim"
-        >
-          <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New claim
-          version
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="secondary"
+            onClick={() => setDraftOpen((o) => !o)}
+            data-testid="button-toggle-draft-with-clerk"
+          >
+            <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" /> Draft with
+            Clerk
+          </Button>
+          <Button
+            onClick={() => setCreateOpen((o) => !o)}
+            data-testid="button-new-claim"
+          >
+            <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New claim
+            version
+          </Button>
+        </div>
       </div>
 
       {disabledBanner && (
@@ -682,6 +730,61 @@ export function ClerkClaims() {
             read-only while it is off — re-enable it under Feature flags.
           </AlertDescription>
         </Alert>
+      )}
+
+      {draftOpen && (
+        <Card data-testid="card-draft-with-clerk">
+          <CardHeader>
+            <CardTitle className="text-base">Draft with Clerk</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Clerk structures the text into a draft claim — key, proposition,
+              protected facts, citation. It enters the normal maker-checker
+              flow: nothing goes live until a second operator approves it.
+            </p>
+            <Textarea
+              value={draftText}
+              onChange={(e) => setDraftText(e.target.value)}
+              placeholder="Paste the statutory text, circular or guidance…"
+              rows={6}
+              maxLength={20000}
+              data-testid="input-draft-source"
+            />
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                {draftText.trim().length < 40
+                  ? "Paste at least 40 characters of source text."
+                  : `${draftText.trim().length.toLocaleString()} characters`}
+              </p>
+              <Button
+                onClick={() =>
+                  draftClaim.mutate({ data: { sourceText: draftText.trim() } })
+                }
+                disabled={draftText.trim().length < 40 || draftClaim.isPending}
+                data-testid="draft-with-clerk"
+              >
+                <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" />
+                {draftClaim.isPending ? "Drafting…" : "Draft with Clerk"}
+              </Button>
+            </div>
+            {draftError && (
+              <Alert variant="destructive" data-testid="draft-with-clerk-error">
+                <AlertTitle>Could not draft the claim</AlertTitle>
+                <AlertDescription>{draftError}</AlertDescription>
+              </Alert>
+            )}
+            {draftSuccess && (
+              <p
+                className="text-sm text-emerald-700 dark:text-emerald-400"
+                data-testid="draft-with-clerk-result"
+              >
+                Draft {draftSuccess.claimKey} v{draftSuccess.version} created —
+                it is in the register below as a normal draft.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {createOpen && (
