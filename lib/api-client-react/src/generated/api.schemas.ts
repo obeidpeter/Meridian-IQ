@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.8.0
+ * OpenAPI spec version: 0.9.0
  */
 export interface HealthStatus {
   status: string;
@@ -2621,6 +2621,11 @@ export const ClerkCaseStatus = {
   failed: 'failed',
 } as const;
 
+export type ClerkCasePreflightItem = {
+  field: string;
+  message: string;
+};
+
 export interface ClerkCorrection {
   field: string;
   /** @nullable */
@@ -2646,6 +2651,8 @@ export interface ClerkCase {
   sourceHash?: string | null;
   /** @nullable */
   sourceDurationSec?: number | null;
+  /** @nullable */
+  preflight?: ClerkCasePreflightItem[] | null;
   extraction?: ClerkExtraction | null;
   /** @nullable */
   question?: string | null;
@@ -2879,6 +2886,50 @@ export interface ClerkEvalFixtureResult {
   mismatches: ClerkEvalFixtureResultMismatchesItem[];
   /** @nullable */
   injectionResisted: boolean | null;
+}
+
+export type BatchClerkCasesInputSourceType = typeof BatchClerkCasesInputSourceType[keyof typeof BatchClerkCasesInputSourceType];
+
+
+export const BatchClerkCasesInputSourceType = {
+  pdf: 'pdf',
+  text: 'text',
+} as const;
+
+export interface BatchClerkCasesInput {
+  sourceType: BatchClerkCasesInputSourceType;
+  name?: string;
+  text?: string;
+  pdfBase64?: string;
+}
+
+export interface BatchClerkCasesResult {
+  cases: ClerkCase[];
+  segments: number;
+  skippedDuplicates: number;
+}
+
+export type ClerkDigestSource = typeof ClerkDigestSource[keyof typeof ClerkDigestSource];
+
+
+export const ClerkDigestSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface ClerkDigest {
+  weekStart: string;
+  headline: string;
+  bullets: string[];
+  source: ClerkDigestSource;
+}
+
+export interface DraftClaimWithClerkInput {
+  /**
+     * @minLength 40
+     * @maxLength 20000
+     */
+  sourceText: string;
 }
 
 export interface ExplainFailureInput {

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.8.0`).
+contract change (it is currently `0.9.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -61,7 +61,16 @@ turns corrected approvals into eval fixtures on the sweep loop; the nightly
 auto-eval is opt-in behind `clerk_auto_eval` (spends tokens). The failure
 explainer (`modules/clerk/explain.ts`) is catalogue-grounded — the model only
 rephrases; kill switch/budget failures fall back to the catalogue text, never
-to an error.
+to an error. The power pack keeps the same grounding split: **pre-flight**
+(`modules/clerk/preflight.ts`) is pure model-free validation stored on the
+case at extraction time (empty list = review fast lane); **batch intake**
+(`modules/clerk/batch.ts`) only proposes segment boundaries — every segment
+then walks the normal capture path; the **weekly digest**
+(`modules/clerk/digest.ts`, opt-in `clerk_digest` flag, sweep-generated,
+firm-keyed RLS via migration 0011) computes every fact in SQL and lets the
+model phrase them, falling back to deterministic template text; **claims
+drafting** (`modules/clerk/draft-claim.ts`, operator `claims.write`) creates a
+DRAFT register entry that still walks the full maker-checker flow.
 
 ## Data layer & multi-tenant isolation (the part to get right)
 

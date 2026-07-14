@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.8.0
+ * OpenAPI spec version: 0.9.0
  */
 import {
   useMutation,
@@ -33,6 +33,8 @@ import type {
   BadRequestResponse,
   BankStatement,
   BankStatementLine,
+  BatchClerkCasesInput,
+  BatchClerkCasesResult,
   BillingTier,
   BulkAcceptInput,
   BulkAcceptResult,
@@ -52,6 +54,7 @@ import type {
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseDecisionInput,
+  ClerkDigest,
   ClerkEvalRun,
   ClerkMetrics,
   ClerkPartySuggestions,
@@ -73,6 +76,7 @@ import type {
   CreateInvitationInput,
   CreditNoteInput,
   DashboardSummary,
+  DraftClaimWithClerkInput,
   Engagement,
   EngagementInput,
   EngagementUpdate,
@@ -11147,6 +11151,223 @@ export function useListClerkEvalRuns<TData = Awaited<ReturnType<typeof listClerk
 
 
 
+
+export const getCreateClerkCaseBatchUrl = () => {
+
+
+
+
+  return `/api/clerk/cases/batch`
+}
+
+/**
+ * @summary Split a multi-invoice document into segments and open one case per invoice
+ */
+export const createClerkCaseBatch = async (batchClerkCasesInput: BatchClerkCasesInput, options?: RequestInit): Promise<BatchClerkCasesResult> => {
+
+  return customFetch<BatchClerkCasesResult>(getCreateClerkCaseBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(batchClerkCasesInput)
+  }
+);}
+
+
+
+
+export const getCreateClerkCaseBatchMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClerkCaseBatch>>, TError,{data: BodyType<BatchClerkCasesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClerkCaseBatch>>, TError,{data: BodyType<BatchClerkCasesInput>}, TContext> => {
+
+const mutationKey = ['createClerkCaseBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClerkCaseBatch>>, {data: BodyType<BatchClerkCasesInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createClerkCaseBatch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateClerkCaseBatchMutationResult = NonNullable<Awaited<ReturnType<typeof createClerkCaseBatch>>>
+    export type CreateClerkCaseBatchMutationBody = BodyType<BatchClerkCasesInput>
+    export type CreateClerkCaseBatchMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Split a multi-invoice document into segments and open one case per invoice
+ */
+export const useCreateClerkCaseBatch = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClerkCaseBatch>>, TError,{data: BodyType<BatchClerkCasesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createClerkCaseBatch>>,
+        TError,
+        {data: BodyType<BatchClerkCasesInput>},
+        TContext
+      > => {
+      return useMutation(getCreateClerkCaseBatchMutationOptions(options));
+    }
+
+export const getGetClerkDigestUrl = () => {
+
+
+
+
+  return `/api/clerk/digest`
+}
+
+/**
+ * @summary The firm's latest weekly Clerk digest (facts computed by SQL; narrative only phrased)
+ */
+export const getClerkDigest = async ( options?: RequestInit): Promise<ClerkDigest> => {
+
+  return customFetch<ClerkDigest>(getGetClerkDigestUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkDigestQueryKey = () => {
+    return [
+    `/api/clerk/digest`
+    ] as const;
+    }
+
+
+export const getGetClerkDigestQueryOptions = <TData = Awaited<ReturnType<typeof getClerkDigest>>, TError = ErrorType<NotFoundResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkDigest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkDigestQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkDigest>>> = ({ signal }) => getClerkDigest({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkDigest>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkDigestQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkDigest>>>
+export type GetClerkDigestQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary The firm's latest weekly Clerk digest (facts computed by SQL; narrative only phrased)
+ */
+
+export function useGetClerkDigest<TData = Awaited<ReturnType<typeof getClerkDigest>>, TError = ErrorType<NotFoundResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkDigest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkDigestQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDraftClaimWithClerkUrl = () => {
+
+
+
+
+  return `/api/clerk/claims/draft`
+}
+
+/**
+ * @summary Draft a structured claim record from pasted source text (enters the normal maker-checker flow)
+ */
+export const draftClaimWithClerk = async (draftClaimWithClerkInput: DraftClaimWithClerkInput, options?: RequestInit): Promise<ClaimRecord> => {
+
+  return customFetch<ClaimRecord>(getDraftClaimWithClerkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftClaimWithClerkInput)
+  }
+);}
+
+
+
+
+export const getDraftClaimWithClerkMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftClaimWithClerk>>, TError,{data: BodyType<DraftClaimWithClerkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftClaimWithClerk>>, TError,{data: BodyType<DraftClaimWithClerkInput>}, TContext> => {
+
+const mutationKey = ['draftClaimWithClerk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftClaimWithClerk>>, {data: BodyType<DraftClaimWithClerkInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftClaimWithClerk(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftClaimWithClerkMutationResult = NonNullable<Awaited<ReturnType<typeof draftClaimWithClerk>>>
+    export type DraftClaimWithClerkMutationBody = BodyType<DraftClaimWithClerkInput>
+    export type DraftClaimWithClerkMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Draft a structured claim record from pasted source text (enters the normal maker-checker flow)
+ */
+export const useDraftClaimWithClerk = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftClaimWithClerk>>, TError,{data: BodyType<DraftClaimWithClerkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftClaimWithClerk>>,
+        TError,
+        {data: BodyType<DraftClaimWithClerkInput>},
+        TContext
+      > => {
+      return useMutation(getDraftClaimWithClerkMutationOptions(options));
+    }
 
 export const getExplainInvoiceFailureUrl = () => {
 

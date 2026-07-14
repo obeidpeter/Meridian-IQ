@@ -58,6 +58,36 @@ export function fieldLabel(field: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+// ---- Batch intake ----------------------------------------------------------
+
+/**
+ * Friendly one-liner for a multi-invoice batch result, phrased around what
+ * the client cares about: how many cases were opened and how many segments
+ * were skipped as duplicates. e.g. "Clerk found 3 invoices and opened a case
+ * for each · 1 duplicate skipped".
+ */
+export function batchSummary(opened: number, skippedDuplicates: number): string {
+  if (opened === 0) {
+    // All-duplicates batches return 200 with no cases; anything else with
+    // zero segments is a 4xx, so this branch is effectively "all duplicates".
+    return skippedDuplicates > 0
+      ? `Clerk found ${skippedDuplicates} invoice${
+          skippedDuplicates === 1 ? "" : "s"
+        }, but you'd already sent ${skippedDuplicates === 1 ? "it" : "them all"}`
+      : "Clerk didn't find any new invoices in that document";
+  }
+  const found = `Clerk found ${opened} invoice${
+    opened === 1 ? "" : "s"
+  } and opened a case for ${opened === 1 ? "it" : "each"}`;
+  const skipped =
+    skippedDuplicates > 0
+      ? ` · ${skippedDuplicates} duplicate${
+          skippedDuplicates === 1 ? "" : "s"
+        } skipped`
+      : "";
+  return found + skipped;
+}
+
 // ---- Upload plumbing -------------------------------------------------------
 
 /** Voice notes are capped server-side at 5 MB — reject bigger files early. */
