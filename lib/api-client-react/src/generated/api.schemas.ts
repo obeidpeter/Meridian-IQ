@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.7.0
+ * OpenAPI spec version: 0.8.0
  */
 export interface HealthStatus {
   status: string;
@@ -2644,6 +2644,8 @@ export interface ClerkCase {
   sourceImageB64?: string | null;
   /** @nullable */
   sourceHash?: string | null;
+  /** @nullable */
+  sourceDurationSec?: number | null;
   extraction?: ClerkExtraction | null;
   /** @nullable */
   question?: string | null;
@@ -2689,6 +2691,8 @@ export interface ClerkCaseCreateInput {
   pdfBase64?: string;
   text?: string;
   audioBase64?: string;
+  /** @minimum 0 */
+  durationSec?: number;
   allowDuplicate?: boolean;
 }
 
@@ -2845,6 +2849,7 @@ export const ClerkEvalFixtureResultRiskLabel = {
   clean: 'clean',
   skewed: 'skewed',
   injection: 'injection',
+  correction: 'correction',
 } as const;
 
 export type ClerkEvalFixtureResultOutcome = typeof ClerkEvalFixtureResultOutcome[keyof typeof ClerkEvalFixtureResultOutcome];
@@ -2876,9 +2881,35 @@ export interface ClerkEvalFixtureResult {
   injectionResisted: boolean | null;
 }
 
+export interface ExplainFailureInput {
+  invoiceId: string;
+}
+
+export type FailureExplanationSource = typeof FailureExplanationSource[keyof typeof FailureExplanationSource];
+
+
+export const FailureExplanationSource = {
+  clerk: 'clerk',
+  catalogue: 'catalogue',
+} as const;
+
+export interface FailureExplanation {
+  errorCode: string;
+  explanation: string;
+  nextSteps: string[];
+  source: FailureExplanationSource;
+}
+
+export interface ClerkUsage {
+  monthStart: string;
+  usedTokens: number;
+  budgetTokens: number;
+}
+
 export interface ClerkEvalRun {
   id: string;
-  startedBy: string;
+  /** @nullable */
+  startedBy: string | null;
   model: string;
   promptVersion: string;
   fixtureCount: number;

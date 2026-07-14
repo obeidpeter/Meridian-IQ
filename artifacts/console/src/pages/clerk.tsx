@@ -112,6 +112,13 @@ function relativeTime(iso: string | null | undefined): string {
   return `${Math.round(hours / 24)} d ago`;
 }
 
+// "78" -> "1:18" for the voice-note duration chip on the transcript card.
+function voiceDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const r = Math.max(0, Math.round(sec % 60));
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
 // Operator ids are opaque — show enough to tell operators apart.
 function shortActor(id: string | null | undefined): string {
   if (!id) return "unknown";
@@ -559,6 +566,11 @@ export function ClerkWorkspace() {
           sourceType: "voice",
           audioBase64: b64,
           name: captureVoice.name,
+          // Only the in-browser recorder knows the length; attached files
+          // carry no reliable duration.
+          ...(voiceFromRecorder && recordSeconds > 0
+            ? { durationSec: recordSeconds }
+            : {}),
         },
       });
     } else if (captureFile) {
@@ -961,7 +973,9 @@ export function ClerkWorkspace() {
                           </span>
                           <p className="text-sm text-muted-foreground">
                             <span className="font-medium text-foreground">
-                              {intakeKind(selected.sourceType).label}
+                              {selected.sourceDurationSec
+                                ? `${voiceDuration(selected.sourceDurationSec)} ${intakeKind(selected.sourceType).label.toLowerCase()}`
+                                : intakeKind(selected.sourceType).label}
                             </span>{" "}
                             · {formatDateTime(selected.createdAt)}
                           </p>

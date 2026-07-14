@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.7.0
+ * OpenAPI spec version: 0.8.0
  */
 import type { ClerkAnswer } from './clerkAnswer';
 import type { ClerkCaseKind } from './clerkCaseKind';
@@ -25,6 +25,8 @@ export interface ClerkCase {
   sourceImageB64?: string | null;
   /** @nullable */
   sourceHash?: string | null;
+  /** @nullable */
+  sourceDurationSec?: number | null;
   extraction?: ClerkExtraction | null;
   /** @nullable */
   question?: string | null;

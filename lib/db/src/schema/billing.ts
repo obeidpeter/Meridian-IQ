@@ -40,6 +40,10 @@ export const billingTiersTable = pgTable("billing_tiers", {
   // Fraction (0..1) of the firm's billed amount returned to the accountant
   // partner as revenue share.
   revenueSharePct: numeric("revenue_share_pct").notNull(),
+  // Monthly Clerk AI token allowance for firms on this tier (client capture +
+  // firm Ask Clerk). Null falls back to the platform default
+  // (CLERK_FIRM_MONTHLY_TOKENS env). Operator traffic is never capped.
+  clerkMonthlyTokens: integer("clerk_monthly_tokens"),
   // Managed Compliance Desk tier is operator-serviced (CON-04).
   operatorManaged: boolean("operator_managed").notNull().default(false),
   active: boolean("active").notNull().default(true),

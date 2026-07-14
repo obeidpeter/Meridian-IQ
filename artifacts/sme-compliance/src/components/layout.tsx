@@ -5,8 +5,10 @@ import {
   FileText,
   Calendar as CalendarIcon,
   Bell,
+  Bot,
   Upload,
   Landmark,
+  Sparkles,
   Store,
   Menu,
   LogOut,
@@ -31,13 +33,26 @@ function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
 }
 
-type NavLink = { href: string; label: string; icon: typeof LayoutDashboard };
+type NavLink = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  /** RBAC capability required to see this entry; omit for always-on links. */
+  capability?: string;
+};
 
 const LINKS: NavLink[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/recurring", label: "Recurring", icon: Repeat },
   { href: "/import", label: "Import", icon: Upload },
+  {
+    href: "/clerk",
+    label: "Send to Clerk",
+    icon: Sparkles,
+    capability: "clerk.capture",
+  },
+  { href: "/clerk/ask", label: "Ask Clerk", icon: Bot, capability: "clerk.ask" },
   { href: "/reconciliation", label: "Reconciliation", icon: Landmark },
   { href: "/b2c", label: "B2C reports", icon: Store },
   { href: "/calendar", label: "Calendar", icon: CalendarIcon },
@@ -84,9 +99,13 @@ function NavLinks({
       </div>
       {links.map((link) => {
         const Icon = link.icon;
+        // Ask Clerk (/clerk/ask) is its own entry — don't also light up the
+        // Send to Clerk entry when we're on it.
         const isActive =
           location === link.href ||
-          (link.href !== "/" && location.startsWith(link.href));
+          (link.href !== "/" &&
+            location.startsWith(link.href) &&
+            !(link.href === "/clerk" && location.startsWith("/clerk/ask")));
         return (
           <Link
             key={link.href}
@@ -143,6 +162,12 @@ export function Layout({ children }: { children: ReactNode }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const { data: me } = useGetMe();
   const logout = useLogout();
+  // The nav only offers pages the principal can use (e.g. Ask Clerk is
+  // firm-only); the pages themselves also gate, covering direct URL hits.
+  const capabilities = new Set(me?.capabilities ?? []);
+  const links = LINKS.filter(
+    (l) => !l.capability || capabilities.has(l.capability),
+  );
   const mainRef = useRef<HTMLElement>(null);
   const didMount = useRef(false);
 
@@ -195,7 +220,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <SheetContent side="left" className="w-64 p-0">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <NavLinks
-                links={LINKS}
+                links={links}
                 location={location}
                 me={me}
                 onNavigate={() => setSheetOpen(false)}
@@ -208,7 +233,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
         <div className="hidden md:flex w-64 border-r bg-card min-h-screen sticky top-0 max-h-screen flex-col">
           <NavLinks
-            links={LINKS}
+            links={links}
             location={location}
             me={me}
             onSignOut={signOut}

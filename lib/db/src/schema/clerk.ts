@@ -197,6 +197,8 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   // sha256 of the exact source content (text/transcript/image bytes) —
   // duplicate-intake detection without retaining a second copy.
   sourceHash: text("source_hash"),
+  // Recorder-reported length of a voice note, in seconds (voice sources only).
+  sourceDurationSec: integer("source_duration_sec"),
   extraction: jsonb("extraction").$type<ClerkExtraction>(),
   // --- question cases ---
   question: text("question"),
@@ -241,6 +243,10 @@ export const clerkInferenceOutcomeEnum = pgEnum("clerk_inference_outcome", [
 export const clerkInferenceCallsTable = pgTable("clerk_inference_calls", {
   id: id(),
   caseId: uuid("case_id").references(() => clerkCasesTable.id),
+  // The firm the call was made on behalf of (client capture, firm Ask Clerk).
+  // Null for operator/platform traffic. Drives the per-firm monthly token
+  // budget and lets usage be read under the firm-keyed RLS policy (0009).
+  firmId: uuid("firm_id").references(() => firmsTable.id),
   purpose: text("purpose").notNull(),
   model: text("model").notNull(),
   promptVersion: text("prompt_version").notNull(),
@@ -257,10 +263,12 @@ export const clerkInferenceCallsTable = pgTable("clerk_inference_calls", {
   completionTokens: integer("completion_tokens"),
   createdAt: createdAt(),
 },
-// The watchdog and metrics scan recent windows; case joins walk case_id.
+// The watchdog and metrics scan recent windows; case joins walk case_id; the
+// per-firm budget sums a firm's month-to-date tokens on every capture/ask.
 (t) => [
   index("clerk_inference_calls_created_idx").on(t.createdAt),
   index("clerk_inference_calls_case_idx").on(t.caseId),
+  index("clerk_inference_calls_firm_idx").on(t.firmId, t.createdAt),
 ]);
 
 // One fixture's outcome inside an evaluation run (§13.1). Expected/actual
@@ -268,7 +276,7 @@ export const clerkInferenceCallsTable = pgTable("clerk_inference_calls", {
 export interface ClerkEvalFixtureResult {
   key: string;
   label: string;
-  riskLabel: "clean" | "skewed" | "injection";
+  riskLabel: "clean" | "skewed" | "injection" | "correction";
   outcome: "ok" | "invalid" | "error";
   fieldsCompared: number;
   fieldsCorrect: number;
@@ -285,9 +293,8 @@ export interface ClerkEvalFixtureResult {
 // feel it. Append-only evidence (trigger in migration 0006).
 export const clerkEvalRunsTable = pgTable("clerk_eval_runs", {
   id: id(),
-  startedBy: uuid("started_by")
-    .notNull()
-    .references(() => usersTable.id),
+  // Null for runs started by the nightly learning-loop sweep (no human actor).
+  startedBy: uuid("started_by").references(() => usersTable.id),
   model: text("model").notNull(),
   promptVersion: text("prompt_version").notNull(),
   fixtureCount: integer("fixture_count").notNull(),
@@ -299,6 +306,24 @@ export const clerkEvalRunsTable = pgTable("clerk_eval_runs", {
   durationMs: integer("duration_ms").notNull(),
   createdAt: createdAt(),
 });
+
+// Learning loop (Clerk expansion B): every human-corrected approval becomes a
+// ground-truth eval fixture — the sweep grows this corpus from the correction
+// exhaust, and every eval run (manual or nightly) scores against the static
+// corpus PLUS these. One fixture per case; content is the case's fenced
+// sourceText and the operator-approved field values.
+export const clerkEvalFixturesTable = pgTable("clerk_eval_fixtures", {
+  id: id(),
+  caseId: uuid("case_id")
+    .notNull()
+    .unique()
+    .references(() => clerkCasesTable.id),
+  label: text("label").notNull(),
+  sourceText: text("source_text").notNull(),
+  expected: jsonb("expected").$type<Record<string, string | null>>().notNull(),
+  createdAt: createdAt(),
+});
+export type ClerkEvalFixtureRow = typeof clerkEvalFixturesTable.$inferSelect;
 
 export type ClaimRecord = typeof claimRecordsTable.$inferSelect;
 export type ClerkCase = typeof clerkCasesTable.$inferSelect;

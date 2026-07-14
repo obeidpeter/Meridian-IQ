@@ -47,6 +47,9 @@ export async function askClerk(
   question: string,
   actorId: string,
   gateway: ClerkGateway,
+  // Firm attribution for firm-facing Ask Clerk (expansion A): scopes the
+  // question case to the asker's firm and charges the call to its budget.
+  ctx: { firmId?: string | null } = {},
 ): Promise<ClerkCase> {
   await assertClerkEnabled();
 
@@ -56,6 +59,7 @@ export async function askClerk(
       kind: "question",
       status: "pending",
       question,
+      firmId: ctx.firmId ?? null,
       createdBy: actorId,
     })
     .returning();
@@ -113,6 +117,7 @@ export async function askClerk(
   const result = await gateway.infer<IntentOutput>({
     purpose: "classify_intent",
     caseId: created.id,
+    firmId: ctx.firmId ?? null,
     promptVersion: INTENT_PROMPT_VERSION,
     system: INTENT_SYSTEM,
     user,

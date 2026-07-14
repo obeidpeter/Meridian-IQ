@@ -103,6 +103,7 @@ export default function HomeScreen() {
 
   const summary = query.data;
   const firstName = me?.fullName?.split(" ")[0];
+  const canClerkCapture = !!me?.capabilities?.includes("clerk.capture");
 
   return (
     <ScrollView
@@ -222,6 +223,14 @@ export default function HomeScreen() {
                 onPress={() => router.push("/estimator")}
                 testID="action-estimator"
               />
+              {canClerkCapture ? (
+                <ActionTile
+                  label="Send to Clerk"
+                  icon="camera"
+                  onPress={() => router.push("/clerk-capture")}
+                  testID="action-clerk-capture"
+                />
+              ) : null}
             </View>
           </View>
 

@@ -42,7 +42,26 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.7.0`).
+contract change (it is currently `0.8.0`).
+
+## Clerk AI (the part with guardrails)
+
+Clerk never files anything: extraction proposes, a human disposes, approval
+creates a DRAFT invoice. Every model call flows through
+`modules/clerk/gateway.ts` (kill switch `clerk_ai`, append-only inference
+ledger, schema-validated output, fail closed). Client-facing surfaces
+(`clerk.capture` on all firm roles, `clerk.ask` on firm_admin/staff) are pinned
+to their firm by route filters plus migration 0009's firm-keyed RLS, and are
+capped by a per-firm monthly TOKEN budget (`modules/clerk/budget.ts`; tier
+override `billing_tiers.clerk_monthly_tokens`, default
+`CLERK_FIRM_MONTHLY_TOKENS` env, ledger is the spend counter — check the
+budget BEFORE touching the provider so 429s are clean). Review/decide stays
+operator-only (`clerk.use`). The learning loop (`modules/clerk/eval-growth.ts`)
+turns corrected approvals into eval fixtures on the sweep loop; the nightly
+auto-eval is opt-in behind `clerk_auto_eval` (spends tokens). The failure
+explainer (`modules/clerk/explain.ts`) is catalogue-grounded — the model only
+rephrases; kill switch/budget failures fall back to the catalogue text, never
+to an error.
 
 ## Data layer & multi-tenant isolation (the part to get right)
 

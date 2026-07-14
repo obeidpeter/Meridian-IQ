@@ -42,6 +42,18 @@ async function bypassPolicyExists(
   return res.rowCount! > 0;
 }
 
+// 0009 widens the Clerk tables to firm-keyed-or-bypass for client capture.
+async function clerkTenantPolicyExists(
+  pool: pg.Pool,
+  table: string,
+): Promise<boolean> {
+  const res = await pool.query(
+    "SELECT 1 FROM pg_policies WHERE tablename = $1 AND policyname = 'meridian_clerk_tenant' LIMIT 1",
+    [table],
+  );
+  return res.rowCount! > 0;
+}
+
 // 0004 widens the mutable-status window of the immutability triggers from
 // draft-only to draft/validated/failed; detect which variant is installed by
 // inspecting the function body.
@@ -85,13 +97,20 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
       await lineTriggerAllowsFailed(pool),
       "line immutability trigger should allow failed-status edits after apply",
     );
+    // 0009 supersedes 0005's bypass-only policy on the two client-facing
+    // Clerk tables; the eval tables stay bypass-only.
     assert.ok(
-      await bypassPolicyExists(pool, "clerk_cases"),
-      "Clerk bypass-only policy on clerk_cases should exist after apply",
+      await clerkTenantPolicyExists(pool, "clerk_cases"),
+      "Clerk tenant policy on clerk_cases should exist after apply",
     );
     assert.ok(
-      await bypassPolicyExists(pool, "clerk_inference_calls"),
-      "Clerk bypass-only policy on clerk_inference_calls should exist after apply",
+      await clerkTenantPolicyExists(pool, "clerk_inference_calls"),
+      "Clerk tenant policy on clerk_inference_calls should exist after apply",
+    );
+    assert.equal(
+      await bypassPolicyExists(pool, "clerk_cases"),
+      false,
+      "bypass-only policy on clerk_cases is replaced by 0009",
     );
     assert.ok(
       await bypassPolicyExists(pool, "clerk_eval_runs"),
@@ -109,19 +128,48 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
       await policyExists(pool, "invitations"),
       "RLS policy on invitations should exist after apply",
     );
+    assert.ok(
+      await bypassPolicyExists(pool, "clerk_eval_fixtures"),
+      "bypass-only policy on clerk_eval_fixtures should exist after apply",
+    );
     const versions = await appliedVersions(pool);
-    assert.ok(versions.includes(1), "version 1 should be tracked after apply");
-    assert.ok(versions.includes(2), "version 2 should be tracked after apply");
-    assert.ok(versions.includes(3), "version 3 should be tracked after apply");
-    assert.ok(versions.includes(4), "version 4 should be tracked after apply");
-    assert.ok(versions.includes(5), "version 5 should be tracked after apply");
-    assert.ok(versions.includes(6), "version 6 should be tracked after apply");
-    assert.ok(versions.includes(7), "version 7 should be tracked after apply");
-    assert.ok(versions.includes(8), "version 8 should be tracked after apply");
+    for (let v = 1; v <= 10; v++) {
+      assert.ok(versions.includes(v), `version ${v} should be tracked after apply`);
+    }
 
-    // Roll back newest first: 0008 (invitation guardrails)...
+    // Roll back newest first: 0010 (eval fixture guardrails)...
+    const rolled10 = await rollbackLast(pool);
+    assert.equal(rolled10, 10, "first rollback should be version 10");
+    assert.equal(
+      await bypassPolicyExists(pool, "clerk_eval_fixtures"),
+      false,
+      "eval-fixture policy should be gone after rolling back 0010",
+    );
+    assert.ok(
+      await clerkTenantPolicyExists(pool, "clerk_cases"),
+      "0009 policy must survive the 0010 rollback",
+    );
+
+    // ...then 0009 (clerk tenant read)...
+    const rolled9 = await rollbackLast(pool);
+    assert.equal(rolled9, 9, "second rollback should be version 9");
+    assert.equal(
+      await clerkTenantPolicyExists(pool, "clerk_cases"),
+      false,
+      "clerk tenant policy should be gone after rolling back 0009",
+    );
+    assert.ok(
+      await bypassPolicyExists(pool, "clerk_cases"),
+      "0005's bypass-only policy is restored by the 0009 rollback",
+    );
+    assert.ok(
+      await policyExists(pool, "invitations"),
+      "0008 policy must survive the 0009 rollback",
+    );
+
+    // ...then 0008 (invitation guardrails)...
     const rolled8 = await rollbackLast(pool);
-    assert.equal(rolled8, 8, "first rollback should be version 8");
+    assert.equal(rolled8, 8, "third rollback should be version 8");
     assert.equal(
       await policyExists(pool, "invitations"),
       false,
@@ -134,7 +182,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0007 (recurring/reminder guardrails)...
     const rolled7 = await rollbackLast(pool);
-    assert.equal(rolled7, 7, "second rollback should be version 7");
+    assert.equal(rolled7, 7, "fourth rollback should be version 7");
     assert.equal(
       await policyExists(pool, "recurring_invoice_templates"),
       false,
@@ -152,7 +200,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0006 (Clerk eval guardrails)...
     const rolled6 = await rollbackLast(pool);
-    assert.equal(rolled6, 6, "second rollback should be version 6");
+    assert.equal(rolled6, 6, "fifth rollback should be version 6");
     assert.equal(
       await bypassPolicyExists(pool, "clerk_eval_runs"),
       false,
@@ -165,7 +213,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0005 (Clerk guardrails)...
     const rolled5 = await rollbackLast(pool);
-    assert.equal(rolled5, 5, "third rollback should be version 5");
+    assert.equal(rolled5, 5, "sixth rollback should be version 5");
     assert.equal(
       await bypassPolicyExists(pool, "clerk_cases"),
       false,
@@ -178,7 +226,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0004 (fix-retry mutability)...
     const rolled4 = await rollbackLast(pool);
-    assert.equal(rolled4, 4, "fourth rollback should be version 4");
+    assert.equal(rolled4, 4, "seventh rollback should be version 4");
     assert.equal(
       await lineTriggerAllowsFailed(pool),
       false,
@@ -191,7 +239,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0003 (push guardrails)...
     const rolled3 = await rollbackLast(pool);
-    assert.equal(rolled3, 3, "fifth rollback should be version 3");
+    assert.equal(rolled3, 3, "eighth rollback should be version 3");
     assert.equal(
       await policyExists(pool, "push_devices"),
       false,
@@ -204,7 +252,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0002 (R2 guardrails)...
     const rolled2 = await rollbackLast(pool);
-    assert.equal(rolled2, 2, "sixth rollback should be version 2");
+    assert.equal(rolled2, 2, "ninth rollback should be version 2");
     assert.equal(
       await policyExists(pool, "bank_statements"),
       false,
@@ -217,7 +265,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
 
     // ...then 0001 (base guardrails).
     const rolled1 = await rollbackLast(pool);
-    assert.equal(rolled1, 1, "seventh rollback should be version 1");
+    assert.equal(rolled1, 1, "tenth rollback should be version 1");
     assert.equal(
       await functionExists(pool, "meridian_block_mutations"),
       false,
@@ -239,8 +287,9 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
     assert.ok(await policyExists(pool, "invoices"));
     assert.ok(await policyExists(pool, "bank_statements"));
     assert.ok(await policyExists(pool, "push_devices"));
-    assert.ok(await bypassPolicyExists(pool, "clerk_cases"));
+    assert.ok(await clerkTenantPolicyExists(pool, "clerk_cases"));
     assert.ok(await bypassPolicyExists(pool, "clerk_eval_runs"));
+    assert.ok(await bypassPolicyExists(pool, "clerk_eval_fixtures"));
     assert.ok(await policyExists(pool, "recurring_invoice_templates"));
     assert.ok(await policyExists(pool, "invitations"));
   } finally {

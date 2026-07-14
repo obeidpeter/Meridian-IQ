@@ -24,8 +24,15 @@ import {
   AskClerkResponse,
   GetClerkMetricsQueryParams,
   GetClerkMetricsResponse,
+  GetClerkUsageResponse,
+  ExplainInvoiceFailureBody,
+  ExplainInvoiceFailureResponse,
 } from "@workspace/api-zod";
-import { assertCan } from "../modules/auth/rbac";
+import { assertCan, tenantFirmId } from "../modules/auth/rbac";
+import {
+  assertFirmClerkBudget,
+  firmClerkUsage,
+} from "../modules/clerk/budget";
 import {
   claimCase,
   createExtractionCase,
@@ -36,6 +43,7 @@ import {
   retryExtraction,
 } from "../modules/clerk/cases";
 import { askClerk } from "../modules/clerk/ask";
+import { explainInvoiceFailure } from "../modules/clerk/explain";
 import { getClerkMetrics } from "../modules/clerk/metrics";
 import { getClerkGateway } from "../modules/clerk/provider";
 import { suggestPartiesForCase } from "../modules/clerk/party-match";
@@ -47,47 +55,75 @@ import {
 
 const router: IRouter = Router();
 
-// Clerk copilot surface (Task #40). Everything here is operator-only
-// (clerk.use) and shadow-mode: extraction proposes, the operator disposes, and
-// approval can only create a DRAFT invoice. The kill switch (clerk_ai flag) is
-// enforced inside the gateway and module code, so a disabled Clerk fails
-// closed with 503 CLERK_DISABLED before any model call or case insert.
-// Audit entries are appended by the modules themselves (they know outcomes).
+// Clerk copilot surface (Task #40 + expansion A). Shadow-mode throughout:
+// extraction proposes, a human disposes, and approval can only create a DRAFT
+// invoice. Capture (clerk.capture) and Ask (clerk.ask) are open to firm
+// principals — pinned to their firm (route filters + the 0009 RLS policy),
+// with a client_user further narrowed to cases it submitted itself — and are
+// budget-capped per firm BEFORE any provider work. Review/decide/claim/retry,
+// evals, metrics and party suggestions stay operator-only (clerk.use). The
+// kill switch (clerk_ai flag) is enforced inside the gateway and module code,
+// so a disabled Clerk fails closed with 503 CLERK_DISABLED before any model
+// call or case insert. Audit entries are appended by the modules themselves.
 
 router.get("/clerk/cases", async (req, res): Promise<void> => {
-  assertCan(req.principal, "clerk.use");
+  assertCan(req.principal, "clerk.capture");
   const query = ListClerkCasesQueryParams.safeParse(req.query);
   if (!query.success) {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  const rows = await listCases(query.data);
+  const tenant = tenantFirmId(req.principal);
+  const rows = await listCases({
+    ...query.data,
+    ...(tenant ? { firmId: tenant } : {}),
+    ...(req.principal.role === "client_user"
+      ? { createdBy: req.principal.userId }
+      : {}),
+  });
   res.json(ListClerkCasesResponse.parse(rows));
 });
 
 router.get("/clerk/cases/:id", async (req, res): Promise<void> => {
-  assertCan(req.principal, "clerk.use");
+  assertCan(req.principal, "clerk.capture");
   const params = GetClerkCaseParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
   const row = await getCase(params.data.id);
+  // Firm principals only see their firm's cases; a client_user only its own
+  // submissions. Same 404 as not-found so existence is not disclosed.
+  const tenant = tenantFirmId(req.principal);
+  if (
+    (tenant && row.firmId !== tenant) ||
+    (req.principal.role === "client_user" &&
+      row.createdBy !== req.principal.userId)
+  ) {
+    res.status(404).json({ error: "Case not found" });
+    return;
+  }
   res.json(GetClerkCaseResponse.parse(row));
 });
 
 router.post("/clerk/cases", async (req, res): Promise<void> => {
-  assertCan(req.principal, "clerk.use");
+  assertCan(req.principal, "clerk.capture");
   const parsed = CreateClerkCaseBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  // Budget gate BEFORE the provider is touched: an exhausted firm gets a clean
+  // 429 without any model call. Operators (no tenant) are uncapped.
+  const tenant = tenantFirmId(req.principal);
+  if (tenant) await assertFirmClerkBudget(tenant);
   const gateway = await getClerkGateway();
   const row = await createExtractionCase(
     parsed.data,
     req.principal.userId,
     gateway,
+    undefined,
+    { firmId: tenant },
   );
   res.status(201).json(CreateClerkCaseResponse.parse(row));
 });
@@ -184,15 +220,51 @@ router.get("/clerk/metrics", async (req, res): Promise<void> => {
 });
 
 router.post("/clerk/ask", async (req, res): Promise<void> => {
-  assertCan(req.principal, "clerk.use");
+  assertCan(req.principal, "clerk.ask");
   const parsed = AskClerkBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const tenant = tenantFirmId(req.principal);
+  if (tenant) await assertFirmClerkBudget(tenant);
   const gateway = await getClerkGateway();
-  const row = await askClerk(parsed.data.question, req.principal.userId, gateway);
+  const row = await askClerk(parsed.data.question, req.principal.userId, gateway, {
+    firmId: tenant,
+  });
   res.json(AskClerkResponse.parse(row));
+});
+
+// Grounded failure explainer (expansion C): catalogue cause/fix for the
+// invoice's latest failed attempt, Clerk-phrased when available. Falls back to
+// the catalogue text itself when the kill switch or budget says no, so this
+// never errors for AI-availability reasons.
+router.post("/clerk/explain-failure", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.ask");
+  const parsed = ExplainInvoiceFailureBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const gateway = await getClerkGateway();
+  const explanation = await explainInvoiceFailure(
+    parsed.data.invoiceId,
+    req.principal,
+    gateway,
+  );
+  res.json(ExplainInvoiceFailureResponse.parse(explanation));
+});
+
+// The firm's month-to-date Clerk consumption against its allowance, for the
+// usage meter on the client-facing surfaces. Firm-scoped by construction.
+router.get("/clerk/usage", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.capture");
+  const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
+  if (!tenant) {
+    res.status(400).json({ error: "A firm scope is required for Clerk usage" });
+    return;
+  }
+  res.json(GetClerkUsageResponse.parse(await firmClerkUsage(tenant)));
 });
 
 export default router;

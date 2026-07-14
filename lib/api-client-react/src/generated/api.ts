@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.7.0
+ * OpenAPI spec version: 0.8.0
  */
 import {
   useMutation,
@@ -55,6 +55,7 @@ import type {
   ClerkEvalRun,
   ClerkMetrics,
   ClerkPartySuggestions,
+  ClerkUsage,
   ClientImportInput,
   ClientImportResult,
   ClientPortfolioDetail,
@@ -84,8 +85,10 @@ import type {
   ErrorCatalogueUpsertInput,
   Escalation,
   EscalationInput,
+  ExplainFailureInput,
   ExportInvoicesCsvParams,
   ExportReceivablesCsvParams,
+  FailureExplanation,
   FeatureFlag,
   FeatureFlagOverrideInput,
   FeatureFlagUpdate,
@@ -11133,6 +11136,153 @@ export function useListClerkEvalRuns<TData = Awaited<ReturnType<typeof listClerk
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListClerkEvalRunsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExplainInvoiceFailureUrl = () => {
+
+
+
+
+  return `/api/clerk/explain-failure`
+}
+
+/**
+ * @summary Plain-language, catalogue-grounded explanation of an invoice's latest failure
+ */
+export const explainInvoiceFailure = async (explainFailureInput: ExplainFailureInput, options?: RequestInit): Promise<FailureExplanation> => {
+
+  return customFetch<FailureExplanation>(getExplainInvoiceFailureUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(explainFailureInput)
+  }
+);}
+
+
+
+
+export const getExplainInvoiceFailureMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof explainInvoiceFailure>>, TError,{data: BodyType<ExplainFailureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof explainInvoiceFailure>>, TError,{data: BodyType<ExplainFailureInput>}, TContext> => {
+
+const mutationKey = ['explainInvoiceFailure'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof explainInvoiceFailure>>, {data: BodyType<ExplainFailureInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  explainInvoiceFailure(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExplainInvoiceFailureMutationResult = NonNullable<Awaited<ReturnType<typeof explainInvoiceFailure>>>
+    export type ExplainInvoiceFailureMutationBody = BodyType<ExplainFailureInput>
+    export type ExplainInvoiceFailureMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Plain-language, catalogue-grounded explanation of an invoice's latest failure
+ */
+export const useExplainInvoiceFailure = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof explainInvoiceFailure>>, TError,{data: BodyType<ExplainFailureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof explainInvoiceFailure>>,
+        TError,
+        {data: BodyType<ExplainFailureInput>},
+        TContext
+      > => {
+      return useMutation(getExplainInvoiceFailureMutationOptions(options));
+    }
+
+export const getGetClerkUsageUrl = () => {
+
+
+
+
+  return `/api/clerk/usage`
+}
+
+/**
+ * @summary The firm's month-to-date Clerk token consumption against its allowance
+ */
+export const getClerkUsage = async ( options?: RequestInit): Promise<ClerkUsage> => {
+
+  return customFetch<ClerkUsage>(getGetClerkUsageUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkUsageQueryKey = () => {
+    return [
+    `/api/clerk/usage`
+    ] as const;
+    }
+
+
+export const getGetClerkUsageQueryOptions = <TData = Awaited<ReturnType<typeof getClerkUsage>>, TError = ErrorType<BadRequestResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkUsageQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkUsage>>> = ({ signal }) => getClerkUsage({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkUsage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkUsageQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkUsage>>>
+export type GetClerkUsageQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary The firm's month-to-date Clerk token consumption against its allowance
+ */
+
+export function useGetClerkUsage<TData = Awaited<ReturnType<typeof getClerkUsage>>, TError = ErrorType<BadRequestResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkUsage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkUsageQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
