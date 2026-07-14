@@ -5,6 +5,7 @@ import {
   LoginBody,
   LoginResponse,
   ChangePasswordBody,
+  AcceptInviteBody,
 } from "@workspace/api-zod";
 import { ROLE_CAPABILITIES } from "../modules/auth/rbac";
 import {
@@ -19,6 +20,7 @@ import {
   recordLoginFailure,
   clearLoginFailures,
 } from "../modules/auth/throttle";
+import { acceptInvitation } from "../modules/auth/invitations";
 import { appendAudit } from "../modules/audit/audit";
 
 // First-party session sign-in (SEC-02). Sets an HttpOnly, SameSite=Lax cookie;
@@ -172,6 +174,28 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
   // re-authenticates — the contract response stays 204.
   const token = await issueSessionToken(user.id, nextEpoch);
   res.cookie(SESSION_COOKIE, token, cookieOptions(req));
+  res.sendStatus(204);
+});
+
+// Redeem an invitation (IDN-01). Public: the unguessable token IS the
+// credential, so this is on the PUBLIC_PATHS allowlist and runs unauthenticated
+// (in the RLS-bypass context the invitations policy grants). It creates the
+// user + firm membership and consumes the invite; the invitee then signs in
+// with the password they just set. The module throws a DomainError (400 invalid
+// /expired, 409 email-in-use) which the error boundary maps — and, per the
+// 4xx-rollback rule, any error rolls the account creation back with the invite
+// left intact.
+router.post("/auth/accept-invite", async (req, res): Promise<void> => {
+  const parsed = AcceptInviteBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  await acceptInvitation({
+    token: parsed.data.token,
+    password: parsed.data.password,
+    fullName: parsed.data.fullName ?? null,
+  });
   res.sendStatus(204);
 });
 

@@ -6,7 +6,6 @@ import {
   firmsTable,
   partiesTable,
   usersTable,
-  invoicesTable,
   operatorCasesTable,
   escalationsTable,
   errorCatalogueTable,

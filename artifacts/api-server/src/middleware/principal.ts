@@ -49,6 +49,9 @@ const PUBLIC_PATHS = new Set([
   "/api/public/theme",
   "/api/auth/login",
   "/api/auth/logout",
+  // Invitation redeem: the single-use token is the credential, so the invitee
+  // has no session yet (IDN-01). Firm scoping is enforced by the token lookup.
+  "/api/auth/accept-invite",
 ]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";

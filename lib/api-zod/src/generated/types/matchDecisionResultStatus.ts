@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.6.0
+ * OpenAPI spec version: 0.7.0
  */
 
 export type MatchDecisionResultStatus = typeof MatchDecisionResultStatus[keyof typeof MatchDecisionResultStatus];

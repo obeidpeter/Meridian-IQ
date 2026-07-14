@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.6.0`).
+contract change (it is currently `0.7.0`).
 
 ## Data layer & multi-tenant isolation (the part to get right)
 
@@ -78,6 +78,16 @@ contract change (it is currently `0.6.0`).
   (`middleware/principal.ts`); the session cookie is `SameSite=None` for the
   preview iframe, so the frontends set a CSP `frame-ancestors` allowlist
   (vite preview / e2e serve layer) rather than `X-Frame-Options`.
+- **Self-serve invites (IDN-01).** A firm_admin onboards teammates/clients into
+  its own firm without operator provisioning (`modules/auth/invitations.ts`,
+  `routes/invitations.ts`). The invite carries a single-use secret — 32 random
+  bytes, shown once, only its sha256 stored — redeemed at the **public**
+  `POST /auth/accept-invite` (on `PUBLIC_PATHS`; the token IS the credential, so
+  it runs in the RLS-bypass context that migration 0008's firm-keyed policy
+  grants). Accepting creates the user + membership and consumes the invite via a
+  compare-and-set on status, so a token can't be redeemed twice. firmId is forced
+  to the inviter's firm; a `client_user` invite must name a client party the firm
+  engages.
 
 ## Background work (the pipeline worker)
 

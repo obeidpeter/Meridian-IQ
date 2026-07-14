@@ -4,6 +4,8 @@ import {
   text,
   jsonb,
   integer,
+  timestamp,
+  index,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -77,6 +79,40 @@ export const membershipsTable = pgTable("memberships", {
   buyerPartyId: uuid("buyer_party_id").references(() => partiesTable.id),
   createdAt: createdAt(),
 });
+
+// Self-serve onboarding (IDN-01). A firm_admin invites a new teammate or
+// client into their OWN firm without operator provisioning. The raw token is
+// shown once at creation and shared out-of-band; only its sha256 is stored, so
+// the DB never holds a usable credential. Accepting creates the user +
+// membership and consumes the invite (compare-and-set on status).
+export const invitationStatusEnum = pgEnum("invitation_status", [
+  "pending",
+  "accepted",
+  "revoked",
+]);
+
+export const invitationsTable = pgTable(
+  "invitations",
+  {
+    id: id(),
+    email: text("email").notNull(),
+    role: roleEnum("role").notNull(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    // Set only for client_user invitations (the client Party the invitee scopes to).
+    clientPartyId: uuid("client_party_id").references(() => partiesTable.id),
+    tokenHash: text("token_hash").notNull().unique(),
+    status: invitationStatusEnum("status").notNull().default("pending"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    invitedByUserId: text("invited_by_user_id").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("invitations_firm_idx").on(t.firmId)],
+);
+
+export type Invitation = typeof invitationsTable.$inferSelect;
 
 export const insertFirmSchema = createInsertSchema(firmsTable).omit({
   id: true,
