@@ -19,6 +19,7 @@ import {
   type ExtractionOutput,
 } from "./prompts";
 import { EVAL_FIXTURES, type EvalFixture } from "./eval-fixtures";
+import { loadGrownFixtures } from "./eval-growth";
 
 // Evaluation-run harness (§13.1). An operator presses "run evaluation"; the
 // synthetic corpus goes through the LIVE gateway — same prompt version, same
@@ -98,14 +99,25 @@ export function scoreFixture(
 }
 
 export async function runEvalCorpus(
-  actorId: string,
+  // Null when the nightly learning-loop sweep starts the run (no human actor).
+  actorId: string | null,
   gateway: ClerkGateway,
+  // includeGrown=false pins a run to the hand-written static corpus (used by
+  // tests that assert exact corpus-shape expectations).
+  opts: { includeGrown?: boolean } = {},
 ): Promise<ClerkEvalRun> {
   await assertClerkEnabled();
   const startedAt = Date.now();
   const results: ClerkEvalFixtureResult[] = [];
 
-  for (const fixture of EVAL_FIXTURES) {
+  // Static corpus plus every fixture grown from the human-corrected exhaust
+  // (expansion B) — corrections feed straight back into what gets measured.
+  const fixtures =
+    opts.includeGrown === false
+      ? [...EVAL_FIXTURES]
+      : [...EVAL_FIXTURES, ...(await loadGrownFixtures())];
+
+  for (const fixture of fixtures) {
     const inferred = await gateway.infer<ExtractionOutput>({
       purpose: "eval_extract",
       caseId: null,

@@ -20,7 +20,9 @@ import type { CanonicalField } from "./prompts";
 export interface EvalFixture {
   key: string;
   label: string;
-  riskLabel: "clean" | "skewed" | "injection";
+  // "correction" marks fixtures grown from the human-corrected exhaust
+  // (Clerk expansion B); they score exactly like clean documents.
+  riskLabel: "clean" | "skewed" | "injection" | "correction";
   sourceText: string;
   expected: Record<CanonicalField, string | null>;
 }

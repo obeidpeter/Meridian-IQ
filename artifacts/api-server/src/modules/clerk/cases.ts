@@ -61,6 +61,8 @@ export interface CreateCaseInput {
   pdfBase64?: string;
   text?: string;
   audioBase64?: string;
+  // Recorder-reported voice-note length in seconds (voice sources only).
+  durationSec?: number | null;
   // Bypass the duplicate-document guard after the operator has seen the
   // warning and decided the second case is intentional.
   allowDuplicate?: boolean;
@@ -136,10 +138,12 @@ async function runExtraction(
   user: UserContent,
   inputForHash: string,
   gateway: ClerkGateway,
+  firmId: string | null = null,
 ): Promise<ClerkCase> {
   const result = await gateway.infer<ExtractionOutput>({
     purpose: "extract_invoice",
     caseId,
+    firmId,
     promptVersion: EXTRACT_PROMPT_VERSION,
     system: EXTRACT_SYSTEM,
     user,
@@ -184,6 +188,14 @@ async function runExtraction(
 // extraction on the stored source. Only failed cases qualify — escalated
 // cases had a *successful* call whose output was rejected, which a human
 // should look at rather than re-roll.
+// Firm attribution for client-facing capture (Clerk expansion A): the case
+// row and every ledgered model call carry the firm the work was done for, so
+// RLS scoping and the per-firm budget both hold. Operator captures pass no
+// firm (cross-tenant, uncapped) — the pre-expansion behaviour.
+export interface CaseContext {
+  firmId?: string | null;
+}
+
 export async function retryExtraction(
   id: string,
   actorId: string,
@@ -216,7 +228,13 @@ export async function retryExtraction(
       409,
     );
   }
-  const updated = await runExtraction(id, user, inputForHash, gateway);
+  const updated = await runExtraction(
+    id,
+    user,
+    inputForHash,
+    gateway,
+    existing.firmId,
+  );
   await appendAudit({
     actorId,
     action: "clerk.case.retry",
@@ -233,6 +251,7 @@ export async function createExtractionCase(
   actorId: string,
   gateway: ClerkGateway,
   transcriber: VoiceTranscriber = transcribeVoiceProd,
+  ctx: CaseContext = {},
 ): Promise<ClerkCase> {
   await assertClerkEnabled();
 
@@ -262,6 +281,7 @@ export async function createExtractionCase(
       transcript = (await transcriber(buf)).trim();
     } catch (err) {
       await recordExternalCall({
+        firmId: ctx.firmId ?? null,
         purpose: "transcribe_voice",
         model: TRANSCRIBE_MODEL,
         promptVersion: "transcribe-v1",
@@ -277,6 +297,7 @@ export async function createExtractionCase(
       );
     }
     await recordExternalCall({
+      firmId: ctx.firmId ?? null,
       purpose: "transcribe_voice",
       model: TRANSCRIBE_MODEL,
       promptVersion: "transcribe-v1",
@@ -372,11 +393,20 @@ export async function createExtractionCase(
       sourceText,
       sourceImageB64,
       sourceHash,
+      sourceDurationSec:
+        input.sourceType === "voice" ? (input.durationSec ?? null) : null,
+      firmId: ctx.firmId ?? null,
       createdBy: actorId,
     })
     .returning();
 
-  const updated = await runExtraction(created.id, user, inputForHash, gateway);
+  const updated = await runExtraction(
+    created.id,
+    user,
+    inputForHash,
+    gateway,
+    ctx.firmId ?? null,
+  );
 
   await appendAudit({
     actorId,
@@ -420,10 +450,18 @@ export async function listCases(filter: {
   status?: ClerkCase["status"];
   limit?: number;
   offset?: number;
+  // Route-layer tenancy (Clerk expansion A): firm principals are pinned to
+  // their firm (RLS also enforces this at the data layer); a client_user is
+  // further narrowed to cases it submitted itself (SEC-03 posture).
+  firmId?: string;
+  createdBy?: string;
 }): Promise<Omit<ClerkCase, "sourceImageB64" | "sourceText">[]> {
   const conditions = [];
   if (filter.kind) conditions.push(eq(clerkCasesTable.kind, filter.kind));
   if (filter.status) conditions.push(eq(clerkCasesTable.status, filter.status));
+  if (filter.firmId) conditions.push(eq(clerkCasesTable.firmId, filter.firmId));
+  if (filter.createdBy)
+    conditions.push(eq(clerkCasesTable.createdBy, filter.createdBy));
   let builder = getDb()
     .select({
       id: clerkCasesTable.id,
@@ -432,6 +470,7 @@ export async function listCases(filter: {
       sourceType: clerkCasesTable.sourceType,
       sourceName: clerkCasesTable.sourceName,
       sourceHash: clerkCasesTable.sourceHash,
+      sourceDurationSec: clerkCasesTable.sourceDurationSec,
       extraction: clerkCasesTable.extraction,
       question: clerkCasesTable.question,
       answer: clerkCasesTable.answer,

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.7.0
+ * OpenAPI spec version: 0.8.0
  */
 import * as zod from 'zod';
 
@@ -3374,6 +3374,7 @@ export const ListClerkCasesResponseItem = zod.object({
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3434,6 +3435,10 @@ export const ListClerkCasesResponse = zod.array(ListClerkCasesResponseItem)
 /**
  * @summary Upload an invoice document for extraction
  */
+export const createClerkCaseBodyDurationSecMin = 0;
+
+
+
 export const CreateClerkCaseBody = zod.object({
   "sourceType": zod.enum(['image', 'pdf', 'text', 'voice']),
   "name": zod.string().optional(),
@@ -3442,6 +3447,7 @@ export const CreateClerkCaseBody = zod.object({
   "pdfBase64": zod.string().optional(),
   "text": zod.string().optional(),
   "audioBase64": zod.string().optional(),
+  "durationSec": zod.number().min(createClerkCaseBodyDurationSecMin).optional(),
   "allowDuplicate": zod.boolean().optional()
 })
 
@@ -3454,6 +3460,7 @@ export const CreateClerkCaseResponse = zod.object({
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3523,6 +3530,7 @@ export const GetClerkCaseResponse = zod.object({
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3617,6 +3625,7 @@ export const DecideClerkCaseResponse = zod.object({
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3694,6 +3703,7 @@ export const AskClerkResponse = zod.object({
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3780,6 +3790,7 @@ export const RetryClerkCaseResponse = zod.object({
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3852,6 +3863,7 @@ export const ClaimClerkCaseResponse = zod.object({
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3924,6 +3936,7 @@ export const ReleaseClerkCaseResponse = zod.object({
   "sourceText": zod.string().nullish(),
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -4014,7 +4027,7 @@ export const GetClerkPartySuggestionsResponse = zod.object({
  */
 export const RunClerkEvalResponse = zod.object({
   "id": zod.string(),
-  "startedBy": zod.string(),
+  "startedBy": zod.string().nullable(),
   "model": zod.string(),
   "promptVersion": zod.string(),
   "fixtureCount": zod.number(),
@@ -4026,7 +4039,7 @@ export const RunClerkEvalResponse = zod.object({
   "results": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
-  "riskLabel": zod.enum(['clean', 'skewed', 'injection']),
+  "riskLabel": zod.enum(['clean', 'skewed', 'injection', 'correction']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
   "fieldsCompared": zod.number(),
   "fieldsCorrect": zod.number(),
@@ -4055,7 +4068,7 @@ export const ListClerkEvalRunsQueryParams = zod.object({
 
 export const ListClerkEvalRunsResponseItem = zod.object({
   "id": zod.string(),
-  "startedBy": zod.string(),
+  "startedBy": zod.string().nullable(),
   "model": zod.string(),
   "promptVersion": zod.string(),
   "fixtureCount": zod.number(),
@@ -4067,7 +4080,7 @@ export const ListClerkEvalRunsResponseItem = zod.object({
   "results": zod.array(zod.object({
   "key": zod.string(),
   "label": zod.string(),
-  "riskLabel": zod.enum(['clean', 'skewed', 'injection']),
+  "riskLabel": zod.enum(['clean', 'skewed', 'injection', 'correction']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
   "fieldsCompared": zod.number(),
   "fieldsCorrect": zod.number(),
@@ -4082,6 +4095,31 @@ export const ListClerkEvalRunsResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const ListClerkEvalRunsResponse = zod.array(ListClerkEvalRunsResponseItem)
+
+
+/**
+ * @summary Plain-language, catalogue-grounded explanation of an invoice's latest failure
+ */
+export const ExplainInvoiceFailureBody = zod.object({
+  "invoiceId": zod.string().uuid()
+})
+
+export const ExplainInvoiceFailureResponse = zod.object({
+  "errorCode": zod.string(),
+  "explanation": zod.string(),
+  "nextSteps": zod.array(zod.string()),
+  "source": zod.enum(['clerk', 'catalogue'])
+})
+
+
+/**
+ * @summary The firm's month-to-date Clerk token consumption against its allowance
+ */
+export const GetClerkUsageResponse = zod.object({
+  "monthStart": zod.coerce.date(),
+  "usedTokens": zod.number(),
+  "budgetTokens": zod.number()
+})
 
 
 /**

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.7.0
+ * OpenAPI spec version: 0.8.0
  */
 
 export type ClerkEvalFixtureResultRiskLabel = typeof ClerkEvalFixtureResultRiskLabel[keyof typeof ClerkEvalFixtureResultRiskLabel];
@@ -13,4 +13,5 @@ export const ClerkEvalFixtureResultRiskLabel = {
   clean: 'clean',
   skewed: 'skewed',
   injection: 'injection',
+  correction: 'correction',
 } as const;

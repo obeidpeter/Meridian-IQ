@@ -50,11 +50,18 @@ export type ClerkPurpose =
   | "transcribe_voice"
   // §13.1 evaluation traffic: same prompt and schema as extract_invoice, but
   // its own purpose so metrics cohorts separate eval runs from production.
-  | "eval_extract";
+  | "eval_extract"
+  // Catalogue-grounded failure explainer (expansion C): rephrases an error
+  // catalogue entry in plain language; never invents remediation steps.
+  | "explain_failure";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;
   caseId?: string | null;
+  // The firm the call is made on behalf of (client capture / firm Ask Clerk).
+  // Stamped into the ledger so the per-firm monthly budget can be summed and
+  // so a firm principal can read its own usage under the 0009 RLS policy.
+  firmId?: string | null;
   promptVersion: string;
   system: string;
   user: UserContent;
@@ -87,6 +94,7 @@ export function sha256(input: string): string {
 // drift in transcript size is observable without retaining content twice.
 export async function recordExternalCall(input: {
   caseId?: string | null;
+  firmId?: string | null;
   purpose: ClerkPurpose;
   model: string;
   promptVersion: string;
@@ -98,6 +106,7 @@ export async function recordExternalCall(input: {
 }): Promise<void> {
   await getDb().insert(clerkInferenceCallsTable).values({
     caseId: input.caseId ?? null,
+    firmId: input.firmId ?? null,
     purpose: input.purpose,
     model: input.model,
     promptVersion: input.promptVersion,
@@ -132,6 +141,7 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
       const startedAt = Date.now();
       const base = {
         caseId: params.caseId ?? null,
+        firmId: params.firmId ?? null,
         purpose: params.purpose,
         model: provider.model,
         promptVersion: params.promptVersion,

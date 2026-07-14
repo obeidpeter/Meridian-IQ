@@ -3,13 +3,14 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.7.0
+ * OpenAPI spec version: 0.8.0
  */
 import type { ClerkEvalFixtureResult } from './clerkEvalFixtureResult';
 
 export interface ClerkEvalRun {
   id: string;
-  startedBy: string;
+  /** @nullable */
+  startedBy: string | null;
   model: string;
   promptVersion: string;
   fixtureCount: number;

@@ -78,7 +78,12 @@ export type Capability =
   | "claims.read"
   | "claims.write"
   | "claims.approve"
-  | "clerk.use";
+  | "clerk.use"
+  // Clerk expansion A: client-facing surfaces. capture = submit documents /
+  // voice notes as intake cases (review stays operator-only via clerk.use);
+  // ask = the register-grounded Q&A. Both are budget-capped per firm.
+  | "clerk.capture"
+  | "clerk.ask";
 
 const ALL: Capability[] = [
   "invoice.read",
@@ -131,6 +136,8 @@ const ALL: Capability[] = [
   "claims.write",
   "claims.approve",
   "clerk.use",
+  "clerk.capture",
+  "clerk.ask",
 ];
 
 const READ_ONLY: Capability[] = ALL.filter(
@@ -177,6 +184,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "connector.read",
     "connector.write",
     "claims.read",
+    "clerk.capture",
+    "clerk.ask",
   ],
   firm_staff: [
     "invoice.read",
@@ -203,6 +212,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "certification.read",
     "certification.write",
     "claims.read",
+    "clerk.capture",
+    "clerk.ask",
   ],
   client_user: [
     "invoice.read",
@@ -221,6 +232,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "statement.read",
     "reconciliation.read",
     "b2c.read",
+    "clerk.capture",
   ],
   operator: [
     "invoice.read",
@@ -244,6 +256,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "claims.write",
     "claims.approve",
     "clerk.use",
+    "clerk.capture",
+    "clerk.ask",
   ],
   bank_user: ["buyer.verify", "audit.read"],
   // Buyer Rails role (Appendix C "Y (buyer org)"): verification, confirmation

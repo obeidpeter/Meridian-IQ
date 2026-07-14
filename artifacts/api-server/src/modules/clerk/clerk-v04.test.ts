@@ -400,7 +400,9 @@ test("runEvalCorpus scores the corpus, ledgers every call, and persists the run"
   };
   const gateway = createGateway(provider);
 
-  const run = await runEvalCorpus(opA, gateway);
+  // Pinned to the static corpus: grown correction-fixtures accumulate in the
+  // shared test DB and would shift the exact counts asserted below.
+  const run = await runEvalCorpus(opA, gateway, { includeGrown: false });
   const okFixtures = EVAL_FIXTURES.length - 1; // skewed.ocr came back invalid
 
   assert.equal(run.fixtureCount, EVAL_FIXTURES.length);

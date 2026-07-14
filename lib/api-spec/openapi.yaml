@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.7.0
+  version: 0.8.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2756,6 +2756,42 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ClerkEvalRun"
+  /clerk/explain-failure:
+    post:
+      operationId: explainInvoiceFailure
+      tags: [clerk]
+      summary: Plain-language, catalogue-grounded explanation of an invoice's latest failure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExplainFailureInput"
+      responses:
+        "200":
+          description: Grounded explanation (Clerk-phrased when available, catalogue text otherwise)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureExplanation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /clerk/usage:
+    get:
+      operationId: getClerkUsage
+      tags: [clerk]
+      summary: The firm's month-to-date Clerk token consumption against its allowance
+      responses:
+        "200":
+          description: Usage for the caller's firm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkUsage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
   /clerk/metrics:
     get:
       operationId: getClerkMetrics
@@ -6194,6 +6230,8 @@ components:
           type: ["string", "null"]
         sourceHash:
           type: ["string", "null"]
+        sourceDurationSec:
+          type: ["integer", "null"]
         extraction:
           anyOf:
             - $ref: "#/components/schemas/ClerkExtraction"
@@ -6252,6 +6290,9 @@ components:
           type: string
         audioBase64:
           type: string
+        durationSec:
+          type: integer
+          minimum: 0
         allowDuplicate:
           type: boolean
     ClerkCaseDecisionInput:
@@ -6469,7 +6510,7 @@ components:
           type: string
         riskLabel:
           type: string
-          enum: [clean, skewed, injection]
+          enum: [clean, skewed, injection, correction]
         outcome:
           type: string
           enum: [ok, invalid, error]
@@ -6491,6 +6532,44 @@ components:
                 type: ["string", "null"]
         injectionResisted:
           type: ["boolean", "null"]
+    ExplainFailureInput:
+      type: object
+      required: [invoiceId]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+    FailureExplanation:
+      type: object
+      required: [errorCode, explanation, nextSteps, source]
+      properties:
+        errorCode:
+          type: string
+        explanation:
+          type: string
+        nextSteps:
+          type: array
+          items:
+            type: string
+        # 'clerk' when the phrasing came from the model; 'catalogue' when the
+        # deterministic cause/fix text was returned (kill switch, budget, or a
+        # discarded model output — the answer is still fully grounded).
+        source:
+          type: string
+          enum: [clerk, catalogue]
+
+    ClerkUsage:
+      type: object
+      required: [monthStart, usedTokens, budgetTokens]
+      properties:
+        monthStart:
+          type: string
+          format: date-time
+        usedTokens:
+          type: integer
+        budgetTokens:
+          type: integer
+
     ClerkEvalRun:
       type: object
       required:
@@ -6513,7 +6592,7 @@ components:
         id:
           type: string
         startedBy:
-          type: string
+          type: ["string", "null"]
         model:
           type: string
         promptVersion:

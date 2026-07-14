@@ -18,6 +18,8 @@ import { B2cReports } from "@/pages/b2c";
 import { Calendar } from "@/pages/calendar";
 import { Alerts } from "@/pages/alerts";
 import { Consent } from "@/pages/consent";
+import { ClerkCapture } from "@/pages/clerk-capture";
+import { ClerkAsk } from "@/pages/clerk-ask";
 
 // A 401 must not retry-spin — the session guard redirects to the portal instead.
 const queryClient = new QueryClient({
@@ -42,6 +44,11 @@ function Router() {
         <Route path="/invoices/:id" component={InvoiceDetail} />
         <Route path="/recurring" component={Recurring} />
         <Route path="/import" component={Import} />
+        {/* Both pages self-gate on their capability (clerk.capture /
+            clerk.ask), so a direct URL hit by the wrong role gets an
+            explanation instead of 403s. */}
+        <Route path="/clerk" component={ClerkCapture} />
+        <Route path="/clerk/ask" component={ClerkAsk} />
         <Route path="/reconciliation" component={Reconciliation} />
         <Route path="/b2c" component={B2cReports} />
         <Route path="/calendar" component={Calendar} />
