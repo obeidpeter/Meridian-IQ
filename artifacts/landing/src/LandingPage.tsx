@@ -874,12 +874,6 @@ export default function LandingPage() {
       </a>
 
       <section className="landing-hero text-white">
-        <img
-          src="/compliance-dashboard.jpg"
-          alt=""
-          aria-hidden="true"
-          className="landing-hero-media"
-        />
         <LandingNav />
         <div className="relative z-10 mx-auto flex min-h-[calc(100svh-10rem)] max-w-7xl items-end px-5 pb-12 pt-14 sm:px-8 sm:pb-16 sm:pt-20 lg:px-10 lg:pb-20">
           <div className="max-w-4xl">
