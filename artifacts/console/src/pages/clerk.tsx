@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import {
   useListClerkCases,
   useGetClerkCase,
@@ -32,6 +33,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -59,14 +70,26 @@ import {
 import {
   Activity,
   AlertTriangle,
+  ArrowUpRight,
   Bot,
+  BookOpenCheck,
+  CheckCircle2,
+  ChevronRight,
+  CircleX,
+  Clock3,
+  FileImage,
+  FileText,
   FileUp,
+  Keyboard,
   MessageCircleQuestion,
   Mic,
   Plus,
   PowerOff,
+  ScanLine,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 // Clerk v0 is a shadow copilot for operators only. It reads documents and
 // answers register questions, but it NEVER submits anything: an approval here
@@ -80,6 +103,46 @@ const CATEGORIES: ClerkCaseDecisionInputCategory[] = ["b2b", "b2g", "b2c"];
 // returns a bounded, newest-first slice instead of the full legacy list. A
 // full page means there may be more — "Load more" appends the next one.
 const PAGE_SIZE = 50;
+
+const SOURCE_META: Record<
+  string,
+  { label: string; Icon: LucideIcon; tone: string }
+> = {
+  pdf: {
+    label: "PDF",
+    Icon: FileText,
+    tone: "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
+  },
+  image: {
+    label: "Image",
+    Icon: FileImage,
+    tone: "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
+  },
+  voice: {
+    label: "Voice",
+    Icon: Mic,
+    tone: "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+  },
+  text: {
+    label: "Text",
+    Icon: Keyboard,
+    tone: "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+  },
+};
+
+const DEFAULT_SOURCE_META = {
+  label: "Source",
+  Icon: FileUp,
+  tone: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+};
+
+function sourceMeta(sourceType: string | null | undefined) {
+  return (sourceType && SOURCE_META[sourceType]) || DEFAULT_SOURCE_META;
+}
+
+function statusLabel(status: ClerkCase["status"]): string {
+  return status.replace(/_/g, " ");
+}
 
 function fieldValue(kase: ClerkCase, field: string): string {
   return (
@@ -185,12 +248,22 @@ function approveFormFromCase(kase: ClerkCase): ApproveForm {
 function ConfidenceBadge({ confidence }: { confidence: number }) {
   const pct = Math.round(confidence * 100);
   const tone =
-    confidence >= 0.9 ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400 font-medium";
-  return <span className={`text-xs tabular-nums ${tone}`}>{pct}%</span>;
+    confidence >= 0.9
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+      : confidence >= 0.75
+        ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+        : "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300";
+  return (
+    <span
+      className={`inline-flex min-w-12 items-center justify-center rounded-full border px-2 py-1 text-[11px] font-semibold tabular-nums ${tone}`}
+    >
+      {pct}%
+    </span>
+  );
 }
 
 export function ClerkWorkspace() {
-  usePageTitle("Clerk");
+  usePageTitle("Clerk AI");
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [disabledBanner, setDisabledBanner] = useState(false);
@@ -543,6 +616,26 @@ export function ClerkWorkspace() {
     [cases],
   );
 
+  const readyCount = sortedCases.filter((c) => c.status === "extracted").length;
+  const inReviewCount = sortedCases.filter(
+    (c) => c.status === "in_review",
+  ).length;
+  const failedCount = sortedCases.filter((c) => c.status === "failed").length;
+  const selectedFields = selected?.extraction?.fields ?? [];
+  const flaggedFieldCount = selectedFields.filter(
+    (field) => field.flagged,
+  ).length;
+  const averageConfidence =
+    selectedFields.length > 0
+      ? Math.round(
+          (selectedFields.reduce((sum, field) => sum + field.confidence, 0) /
+            selectedFields.length) *
+            100,
+        )
+      : null;
+  const selectedSource = sourceMeta(selected?.sourceType);
+  const SelectedSourceIcon = selectedSource.Icon;
+
   const approveDisabled =
     !form ||
     !form.firmId ||
@@ -563,9 +656,13 @@ export function ClerkWorkspace() {
   // page keeps the rows already on screen and spins the Load more button.
   if (isLoading && offset === 0) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-56" />
-        <Skeleton className="h-64 w-full" />
+      <div className="space-y-5">
+        <Skeleton className="h-36 w-full rounded-lg" />
+        <Skeleton className="h-11 w-full rounded-lg sm:w-96" />
+        <div className="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
+          <Skeleton className="h-[34rem] rounded-lg" />
+          <Skeleton className="h-[34rem] rounded-lg" />
+        </div>
       </div>
     );
   }
@@ -580,16 +677,74 @@ export function ClerkWorkspace() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Bot className="w-6 h-6" aria-hidden="true" /> Clerk
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          A shadow copilot for operators. It reads documents and quotes the
-          claims register — it never files anything with the tax authority.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <section className="relative overflow-hidden rounded-lg border border-[#16494a] bg-[#082728] text-white shadow-sm">
+        <div
+          className="absolute inset-y-0 right-0 hidden w-[28%] border-l border-white/10 bg-[#103839] lg:block"
+          aria-hidden="true"
+        />
+        <div className="relative flex flex-col gap-6 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className="grid size-12 shrink-0 place-items-center rounded-lg border border-lime-200/30 bg-lime-300 text-[#082728] shadow-sm">
+              <Bot className="size-6" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase text-lime-300">
+                Operations copilot
+              </p>
+              <h1 className="mt-1 text-2xl font-semibold">Clerk AI</h1>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-white/75">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-2.5 py-1">
+                  <ShieldCheck
+                    className="size-3.5 text-lime-300"
+                    aria-hidden="true"
+                  />
+                  Human decision required
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-2.5 py-1">
+                  <BookOpenCheck
+                    className="size-3.5 text-sky-300"
+                    aria-hidden="true"
+                  />
+                  Claims-register grounded
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div
+              className="grid min-w-48 grid-cols-2 divide-x divide-white/10 rounded-lg border border-white/15 bg-white/5"
+              aria-label="Counts for currently loaded cases"
+              title={`${sortedCases.length} loaded cases`}
+            >
+              <div className="px-4 py-3">
+                <p className="text-[11px] font-medium uppercase text-white/50">
+                  Ready
+                </p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">
+                  {readyCount}
+                </p>
+              </div>
+              <div className="px-4 py-3">
+                <p className="text-[11px] font-medium uppercase text-white/50">
+                  In review
+                </p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">
+                  {inReviewCount}
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/clerk/claims"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
+            >
+              Claims register
+              <ArrowUpRight className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {disabledBanner && (
         <Alert variant="destructive" data-testid="banner-clerk-disabled">
@@ -602,670 +757,1069 @@ export function ClerkWorkspace() {
         </Alert>
       )}
 
-      <Tabs defaultValue="capture">
-        <TabsList>
-          <TabsTrigger value="capture" data-testid="tab-capture">
-            <FileUp className="w-4 h-4 mr-1" aria-hidden="true" /> Document
-            capture
+      <Tabs defaultValue="capture" className="space-y-4">
+        <TabsList className="grid h-auto w-full grid-cols-3 rounded-lg border bg-card p-1 text-muted-foreground shadow-sm sm:w-fit">
+          <TabsTrigger
+            value="capture"
+            className="h-10 gap-2 rounded-md px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none sm:px-4"
+            data-testid="tab-capture"
+          >
+            <FileUp className="size-4" aria-hidden="true" /> Capture
           </TabsTrigger>
-          <TabsTrigger value="ask" data-testid="tab-ask">
-            <MessageCircleQuestion className="w-4 h-4 mr-1" aria-hidden="true" />{" "}
+          <TabsTrigger
+            value="ask"
+            className="h-10 gap-2 rounded-md px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none sm:px-4"
+            data-testid="tab-ask"
+          >
+            <MessageCircleQuestion className="size-4" aria-hidden="true" />
             Ask Clerk
           </TabsTrigger>
-          <TabsTrigger value="health" data-testid="tab-health">
-            <Activity className="w-4 h-4 mr-1" aria-hidden="true" /> Health
+          <TabsTrigger
+            value="health"
+            className="h-10 gap-2 rounded-md px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none sm:px-4"
+            data-testid="tab-health"
+          >
+            <Activity className="size-4" aria-hidden="true" /> Health
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="capture" className="mt-4">
-          <div className="grid gap-6 lg:grid-cols-3">
-            <Card className="lg:col-span-1">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-base">Cases</CardTitle>
-                <Button
-                  size="sm"
-                  onClick={() => setCaptureOpen((o) => !o)}
-                  data-testid="button-new-capture"
-                >
-                  <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {captureOpen && (
-                  <div className="border rounded-md p-3 space-y-2">
-                    <Label htmlFor="capture-file">
-                      Invoice document (PDF or photo)
-                    </Label>
-                    <Input
-                      id="capture-file"
-                      type="file"
-                      accept=".pdf,image/png,image/jpeg,image/webp"
-                      onChange={(e) => {
-                        setCaptureFile(e.target.files?.[0] ?? null);
-                        setPendingDuplicate(null);
-                      }}
-                      disabled={captureVoice != null}
-                      data-testid="input-capture-file"
-                    />
-                    <Label htmlFor="capture-voice">
-                      or a voice note (max 5 MB)
-                    </Label>
-                    <Input
-                      id="capture-voice"
-                      type="file"
-                      accept="audio/*"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0] ?? null;
-                        setPendingDuplicate(null);
-                        setVoiceFromRecorder(false);
-                        if (f && f.size > MAX_VOICE_BYTES) {
-                          toast({
-                            title: "Voice note too large",
-                            description: `Voice notes are capped at 5 MB; this file is ${(
-                              f.size /
-                              (1024 * 1024)
-                            ).toFixed(1)} MB. Record a shorter note.`,
-                            variant: "destructive",
-                          });
-                          e.target.value = "";
-                          setCaptureVoice(null);
-                          return;
-                        }
-                        setCaptureVoice(f);
-                      }}
-                      disabled={captureFile != null || isRecording}
-                      data-testid="input-voice-file"
-                    />
-                    {recordingSupported && (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={isRecording ? "destructive" : "secondary"}
-                          onClick={isRecording ? stopRecording : startRecording}
-                          disabled={
-                            createCase.isPending ||
-                            (!isRecording && captureFile != null)
-                          }
-                          data-testid="button-record-voice"
-                        >
-                          <Mic className="w-4 h-4 mr-1" aria-hidden="true" />
-                          {isRecording ? "Stop recording" : "Record voice note"}
-                        </Button>
-                        <span
-                          className="text-xs text-muted-foreground tabular-nums"
-                          aria-live="polite"
-                          data-testid="text-record-elapsed"
-                        >
-                          {isRecording
-                            ? `Recording… ${recordSeconds}s (stops at ${MAX_RECORD_SECONDS}s)`
-                            : voiceFromRecorder && captureVoice != null
-                              ? "Recorded note ready — recording.webm"
-                              : ""}
-                        </span>
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      English voice notes; the audio is transcribed and only
-                      the transcript is kept.
+        <TabsContent value="capture" className="mt-0">
+          <div className="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)] xl:grid-cols-[21rem_minmax(0,1fr)]">
+            <Card className="min-w-0 overflow-hidden rounded-lg shadow-sm">
+              <Dialog
+                open={captureOpen}
+                onOpenChange={(open) => {
+                  setCaptureOpen(open);
+                  if (!open) setPendingDuplicate(null);
+                }}
+              >
+                <CardHeader className="flex min-h-[4.5rem] flex-row items-center justify-between space-y-0 border-b p-4">
+                  <div>
+                    <CardTitle className="text-base">Intake queue</CardTitle>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {sortedCases.length} loaded
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      or paste the invoice text:
-                    </p>
-                    <Textarea
-                      value={captureText}
-                      onChange={(e) => {
-                        setCaptureText(e.target.value);
-                        setPendingDuplicate(null);
-                      }}
-                      placeholder="INVOICE No: ..."
-                      rows={5}
-                      disabled={captureFile != null || captureVoice != null}
-                      data-testid="input-capture-text"
-                    />
+                  </div>
+                  <DialogTrigger asChild>
                     <Button
-                      className="w-full"
-                      onClick={submitCapture}
-                      disabled={
-                        createCase.isPending ||
-                        (!captureFile &&
-                          !captureVoice &&
-                          captureText.trim().length < 10)
-                      }
-                      data-testid="button-run-capture"
+                      size="icon"
+                      aria-label="New capture"
+                      title="New capture"
+                      data-testid="button-new-capture"
                     >
-                      {createCase.isPending
-                        ? captureVoice
-                          ? "Transcribing…"
-                          : "Reading…"
-                        : "Read with Clerk"}
+                      <Plus className="size-4" aria-hidden="true" />
                     </Button>
-                    {pendingDuplicate && (
-                      <Alert data-testid="banner-duplicate-source">
-                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                        <AlertTitle>Already read this one?</AlertTitle>
-                        <AlertDescription className="space-y-2">
-                          <p>{pendingDuplicate.message}</p>
-                          <div className="flex gap-2 flex-wrap">
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                createCase.mutate({
-                                  data: {
-                                    ...pendingDuplicate.payload,
-                                    allowDuplicate: true,
-                                  },
-                                })
-                              }
-                              disabled={createCase.isPending}
-                              data-testid="button-create-anyway"
-                            >
-                              {createCase.isPending
-                                ? "Reading…"
-                                : "Create anyway"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => setPendingDuplicate(null)}
-                              data-testid="button-cancel-duplicate"
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                )}
-                {/* The query is already extraction-only (kind param), so no
-                    client-side kind filter is needed here anymore. */}
-                {sortedCases.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No documents read yet.
-                  </p>
-                ) : (
-                  <div className="divide-y">
-                    {sortedCases.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setSelectedId(c.id)}
-                        className={`w-full text-left flex items-center gap-2 py-2 -mx-2 px-2 rounded-md hover:bg-muted/50 ${
-                          selectedId === c.id ? "bg-muted/60" : ""
-                        }`}
-                        data-testid={`row-case-${c.id}`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {c.sourceName ?? "Untitled"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatDateTime(c.createdAt)}
-                          </p>
+                  </DialogTrigger>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto p-0">
+                    <DialogHeader className="border-b bg-teal-50/70 p-6 pr-12 text-left dark:bg-teal-950/20">
+                      <div className="flex items-start gap-3">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+                          <Sparkles className="size-5" aria-hidden="true" />
+                        </span>
+                        <div>
+                          <DialogTitle>New Clerk capture</DialogTitle>
+                          <DialogDescription className="mt-1.5">
+                            Add one source for extraction. A human review is
+                            still required before a draft invoice is created.
+                          </DialogDescription>
                         </div>
-                        {c.status === "in_review" && (
-                          <span
-                            className="text-[10px] uppercase text-muted-foreground"
-                            data-testid={`indicator-claimed-${c.id}`}
-                          >
-                            claimed
+                      </div>
+                    </DialogHeader>
+                    <div className="space-y-5 p-6">
+                      <section className="space-y-3 border-b pb-5">
+                        <div className="flex items-start gap-3">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                            <FileUp className="size-4" aria-hidden="true" />
                           </span>
-                        )}
-                        <span
-                          className={pillClasses(
-                            STATUS_TONE[c.status] ?? "slate",
-                          )}
-                        >
-                          {c.status.replace("_", " ")}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {(hasMoreCases || loadingMoreCases) && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    onClick={loadMoreCases}
-                    disabled={loadingMoreCases}
-                    data-testid="button-load-more-cases"
-                  >
-                    {loadingMoreCases ? "Loading…" : "Load more"}
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
+                          <div>
+                            <Label htmlFor="capture-file">Document</Label>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              PDF, PNG, JPEG or WebP
+                            </p>
+                          </div>
+                        </div>
+                        <Label htmlFor="capture-file">
+                          <span className="sr-only">Invoice document</span>
+                        </Label>
+                        <Input
+                          id="capture-file"
+                          type="file"
+                          accept=".pdf,image/png,image/jpeg,image/webp"
+                          onChange={(e) => {
+                            setCaptureFile(e.target.files?.[0] ?? null);
+                            setPendingDuplicate(null);
+                          }}
+                          disabled={captureVoice != null}
+                          data-testid="input-capture-file"
+                        />
+                      </section>
 
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {selected
-                    ? (selected.sourceName ?? "Case detail")
-                    : "Case detail"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!selected ? (
-                  <p className="text-sm text-muted-foreground">
-                    Pick a case on the left, or read a new document.
-                  </p>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 flex-wrap text-sm">
-                      <span
-                        className={pillClasses(
-                          STATUS_TONE[selected.status] ?? "slate",
+                      <section className="space-y-3 border-b pb-5">
+                        <div className="flex items-start gap-3">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                            <Mic className="size-4" aria-hidden="true" />
+                          </span>
+                          <div>
+                            <Label htmlFor="capture-voice">Voice note</Label>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              English audio, up to 5 MB
+                            </p>
+                          </div>
+                        </div>
+                        <Input
+                          id="capture-voice"
+                          type="file"
+                          accept="audio/*"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] ?? null;
+                            setPendingDuplicate(null);
+                            setVoiceFromRecorder(false);
+                            if (f && f.size > MAX_VOICE_BYTES) {
+                              toast({
+                                title: "Voice note too large",
+                                description: `Voice notes are capped at 5 MB; this file is ${(
+                                  f.size /
+                                  (1024 * 1024)
+                                ).toFixed(1)} MB. Record a shorter note.`,
+                                variant: "destructive",
+                              });
+                              e.target.value = "";
+                              setCaptureVoice(null);
+                              return;
+                            }
+                            setCaptureVoice(f);
+                          }}
+                          disabled={captureFile != null || isRecording}
+                          data-testid="input-voice-file"
+                        />
+                        {recordingSupported && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={
+                                isRecording ? "destructive" : "secondary"
+                              }
+                              onClick={
+                                isRecording ? stopRecording : startRecording
+                              }
+                              disabled={
+                                createCase.isPending ||
+                                (!isRecording && captureFile != null)
+                              }
+                              data-testid="button-record-voice"
+                            >
+                              <Mic className="size-4" aria-hidden="true" />
+                              {isRecording
+                                ? "Stop recording"
+                                : "Record voice note"}
+                            </Button>
+                            <span
+                              className="text-xs text-muted-foreground tabular-nums"
+                              aria-live="polite"
+                              data-testid="text-record-elapsed"
+                            >
+                              {isRecording
+                                ? `Recording… ${recordSeconds}s (stops at ${MAX_RECORD_SECONDS}s)`
+                                : voiceFromRecorder && captureVoice != null
+                                  ? "Recorded note ready — recording.webm"
+                                  : ""}
+                            </span>
+                          </div>
                         )}
-                      >
-                        {selected.status.replace("_", " ")}
-                      </span>
-                      {selected.extraction && (
-                        <span className="text-xs text-muted-foreground">
-                          read by {selected.extraction.model} (
-                          {selected.extraction.promptVersion})
-                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          English voice notes; the audio is transcribed and only
+                          the transcript is kept.
+                        </p>
+                      </section>
+
+                      <section className="space-y-3">
+                        <div className="flex items-start gap-3">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                            <Keyboard className="size-4" aria-hidden="true" />
+                          </span>
+                          <div>
+                            <Label htmlFor="capture-text">Pasted text</Label>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Invoice content copied from another source
+                            </p>
+                          </div>
+                        </div>
+                        <Textarea
+                          id="capture-text"
+                          value={captureText}
+                          onChange={(e) => {
+                            setCaptureText(e.target.value);
+                            setPendingDuplicate(null);
+                          }}
+                          placeholder="INVOICE No: ..."
+                          rows={5}
+                          disabled={captureFile != null || captureVoice != null}
+                          data-testid="input-capture-text"
+                        />
+                      </section>
+                      {pendingDuplicate && (
+                        <Alert data-testid="banner-duplicate-source">
+                          <AlertTriangle
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
+                          <AlertTitle>Already read this one?</AlertTitle>
+                          <AlertDescription className="space-y-2">
+                            <p>{pendingDuplicate.message}</p>
+                            <div className="flex gap-2 flex-wrap">
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  createCase.mutate({
+                                    data: {
+                                      ...pendingDuplicate.payload,
+                                      allowDuplicate: true,
+                                    },
+                                  })
+                                }
+                                disabled={createCase.isPending}
+                                data-testid="button-create-anyway"
+                              >
+                                {createCase.isPending
+                                  ? "Reading…"
+                                  : "Create anyway"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => setPendingDuplicate(null)}
+                                data-testid="button-cancel-duplicate"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </AlertDescription>
+                        </Alert>
                       )}
                     </div>
+                    <DialogFooter className="border-t bg-muted/30 px-6 py-4 sm:space-x-2">
+                      <DialogClose asChild>
+                        <Button variant="secondary">Cancel</Button>
+                      </DialogClose>
+                      <Button
+                        onClick={submitCapture}
+                        disabled={
+                          createCase.isPending ||
+                          (!captureFile &&
+                            !captureVoice &&
+                            captureText.trim().length < 10)
+                        }
+                        data-testid="button-run-capture"
+                      >
+                        <ScanLine className="size-4" aria-hidden="true" />
+                        {createCase.isPending
+                          ? captureVoice
+                            ? "Transcribing…"
+                            : "Reading…"
+                          : "Read with Clerk"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                  <div className="grid grid-cols-3 border-b bg-muted/25">
+                    {[
+                      {
+                        label: "Ready",
+                        value: readyCount,
+                        tone: "text-emerald-700 dark:text-emerald-400",
+                      },
+                      {
+                        label: "Review",
+                        value: inReviewCount,
+                        tone: "text-amber-700 dark:text-amber-400",
+                      },
+                      {
+                        label: "Failed",
+                        value: failedCount,
+                        tone: "text-red-700 dark:text-red-400",
+                      },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        className="border-r px-3 py-3 text-center last:border-r-0"
+                      >
+                        <p
+                          className={`text-sm font-semibold tabular-nums ${item.tone}`}
+                        >
+                          {item.value}
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+                          {item.label}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* The query is already extraction-only (kind param), so no
+                    client-side kind filter is needed here anymore. */}
+                  {sortedCases.length === 0 ? (
+                    <div className="px-5 py-12 text-center">
+                      <span className="mx-auto grid size-11 place-items-center rounded-lg bg-muted text-muted-foreground">
+                        <FileUp className="size-5" aria-hidden="true" />
+                      </span>
+                      <p className="mt-3 text-sm font-medium">
+                        No captures yet
+                      </p>
+                      <button
+                        type="button"
+                        className="mt-1 text-xs font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => setCaptureOpen(true)}
+                      >
+                        Start a capture
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="max-h-[42rem] divide-y overflow-y-auto">
+                      {sortedCases.map((c) => {
+                        const meta = sourceMeta(c.sourceType);
+                        const SourceIcon = meta.Icon;
+                        return (
+                          <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setSelectedId(c.id)}
+                          aria-pressed={selectedId === c.id}
+                            className={`group grid min-h-[4.75rem] w-full grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 border-l-2 px-3 py-2.5 text-left transition-colors hover:bg-muted/40 ${
+                              selectedId === c.id
+                                ? "border-l-primary bg-primary/5"
+                                : "border-l-transparent"
+                            }`}
+                            data-testid={`row-case-${c.id}`}
+                          >
+                            <span
+                              className={`grid size-9 place-items-center rounded-md ${meta.tone}`}
+                            >
+                              <SourceIcon
+                                className="size-4"
+                                aria-hidden="true"
+                              />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-medium">
+                                {c.sourceName ?? "Untitled"}
+                              </span>
+                              <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+                                {meta.label} · {formatDateTime(c.createdAt)}
+                              </span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                              {c.status === "in_review" && (
+                                <span
+                                  className="sr-only"
+                                  data-testid={`indicator-claimed-${c.id}`}
+                                >
+                                  claimed
+                                </span>
+                              )}
+                              <span
+                                className={pillClasses(
+                                  STATUS_TONE[c.status] ?? "slate",
+                                )}
+                              >
+                                {statusLabel(c.status)}
+                              </span>
+                              <ChevronRight
+                                className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                                aria-hidden="true"
+                              />
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {(hasMoreCases || loadingMoreCases) && (
+                    <div className="border-t p-3">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full"
+                        onClick={loadMoreCases}
+                        disabled={loadingMoreCases}
+                        data-testid="button-load-more-cases"
+                      >
+                        {loadingMoreCases ? "Loading…" : "Load more"}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Dialog>
+            </Card>
+
+            <Card className="min-w-0 overflow-hidden rounded-lg shadow-sm">
+              <CardHeader className="min-h-[4.5rem] border-b bg-muted/15 p-4">
+                {selected ? (
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      className={`grid size-10 shrink-0 place-items-center rounded-md ${selectedSource.tone}`}
+                    >
+                      <SelectedSourceIcon
+                        className="size-4"
+                        aria-hidden="true"
+                      />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+                        {selectedSource.label} case
+                      </p>
+                      <CardTitle className="mt-1 truncate text-base">
+                        {selected.sourceName ?? "Case detail"}
+                      </CardTitle>
+                    </div>
+                    <span
+                      className={pillClasses(
+                        STATUS_TONE[selected.status] ?? "slate",
+                      )}
+                    >
+                      {statusLabel(selected.status)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-9 place-items-center rounded-md bg-muted text-muted-foreground">
+                      <ScanLine className="size-4" aria-hidden="true" />
+                    </span>
+                    <CardTitle className="text-base">Case review</CardTitle>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="p-0">
+                {!selected ? (
+                  <div className="grid min-h-[29rem] place-items-center px-6 py-12 text-center">
+                    <div>
+                      <span className="mx-auto grid size-14 place-items-center rounded-lg border bg-muted/40 text-muted-foreground">
+                        <Bot className="size-6" aria-hidden="true" />
+                      </span>
+                      <p className="mt-4 text-sm font-semibold">
+                        Select a case to begin review
+                      </p>
+                      <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">
+                        The source, extraction confidence and human decision
+                        controls will appear here.
+                      </p>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="mt-4"
+                        onClick={() => setCaptureOpen(true)}
+                      >
+                        <Plus className="size-4" aria-hidden="true" />
+                        New capture
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {selected.extraction && (
+                      <div className="grid border-b bg-slate-50/80 sm:grid-cols-3 dark:bg-slate-900/30">
+                        <div className="flex items-center gap-3 border-b px-4 py-3 sm:border-b-0 sm:border-r">
+                          <CheckCircle2
+                            className="size-4 text-emerald-600"
+                            aria-hidden="true"
+                          />
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+                              Avg. confidence
+                            </p>
+                            <p className="mt-0.5 text-sm font-semibold tabular-nums">
+                              {averageConfidence == null
+                                ? "n/a"
+                                : `${averageConfidence}%`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 border-b px-4 py-3 sm:border-b-0 sm:border-r">
+                          <AlertTriangle
+                            className="size-4 text-amber-600"
+                            aria-hidden="true"
+                          />
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+                              Fields to check
+                            </p>
+                            <p className="mt-0.5 text-sm font-semibold tabular-nums">
+                              {flaggedFieldCount}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex min-w-0 items-center gap-3 px-4 py-3">
+                          <Sparkles
+                            className="size-4 shrink-0 text-violet-600"
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+                              Inference
+                            </p>
+                            <p className="mt-0.5 truncate text-xs font-medium">
+                              {selected.extraction.model} ·{" "}
+                              {selected.extraction.promptVersion}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {selected.status === "failed" && (
-                      <Alert variant="destructive">
-                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                        <AlertTitle>Reading failed</AlertTitle>
-                        <AlertDescription className="space-y-2">
-                          <p>
-                            {selected.failReason ??
-                              "The Clerk could not read this document. Enter the invoice manually."}
-                          </p>
-                          {/* Retry re-runs extraction on the stored source —
-                              only failed extraction cases qualify (the server
-                              409s anything else). */}
-                          {selected.kind === "extraction" && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() =>
-                                retryCase.mutate({ id: selected.id })
-                              }
-                              disabled={retryCase.isPending}
-                              data-testid="button-retry-case"
-                            >
-                              {retryCase.isPending ? "Retrying…" : "Retry"}
-                            </Button>
-                          )}
-                        </AlertDescription>
-                      </Alert>
+                      <div className="border-b p-4 sm:p-5">
+                        <Alert variant="destructive">
+                          <AlertTriangle
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
+                          <AlertTitle>Reading failed</AlertTitle>
+                          <AlertDescription className="space-y-2">
+                            <p>
+                              {selected.failReason ??
+                                "The Clerk could not read this document. Enter the invoice manually."}
+                            </p>
+                            {/* Retry re-runs extraction on the stored source —
+                                only failed extraction cases qualify (the server
+                                409s anything else). */}
+                            {selected.kind === "extraction" && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  retryCase.mutate({ id: selected.id })
+                                }
+                                disabled={retryCase.isPending}
+                                data-testid="button-retry-case"
+                              >
+                                {retryCase.isPending ? "Retrying…" : "Retry"}
+                              </Button>
+                            )}
+                          </AlertDescription>
+                        </Alert>
+                      </div>
                     )}
                     {selected.status === "escalated" && (
-                      <Alert>
-                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                        <AlertTitle>Escalated</AlertTitle>
-                        <AlertDescription>
-                          {selected.decisionReason ??
-                            "This case needs a human decision outside the Clerk."}
-                        </AlertDescription>
-                      </Alert>
+                      <div className="border-b p-4 sm:p-5">
+                        <Alert>
+                          <AlertTriangle
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
+                          <AlertTitle>Escalated</AlertTitle>
+                          <AlertDescription>
+                            {selected.decisionReason ??
+                              "This case needs a human decision outside the Clerk."}
+                          </AlertDescription>
+                        </Alert>
+                      </div>
                     )}
 
                     {selected.extraction && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase mb-1">
-                          Extracted fields — amber rows need checking
-                        </p>
-                        <div className="border rounded-md divide-y text-sm">
+                      <section className="border-b p-4 sm:p-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-sm font-semibold">
+                              Extraction review
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Amber rows require operator attention.
+                            </p>
+                          </div>
+                          <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                            {selected.extraction.fields.length} fields
+                          </span>
+                        </div>
+                        <div className="mt-4 divide-y overflow-hidden rounded-lg border text-sm">
                           {selected.extraction.fields.map((f) => (
                             <div
                               key={f.field}
-                              className={`flex items-center gap-2 px-3 py-1.5 ${
+                              className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-3 sm:grid-cols-[9rem_minmax(0,1fr)_auto] ${
                                 f.flagged
                                   ? "bg-amber-50 dark:bg-amber-950/40"
                                   : ""
                               }`}
                               data-testid={`row-field-${f.field}`}
                             >
-                              <code className="text-xs w-32 shrink-0">
-                                {f.field}
-                              </code>
-                              <span className="flex-1 truncate">
+                              <span className="flex min-w-0 items-center gap-2">
+                                <code className="truncate text-xs font-medium">
+                                  {f.field}
+                                </code>
+                                {f.critical && (
+                                  <span className="rounded-sm bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                    Critical
+                                  </span>
+                                )}
+                              </span>
+                              <span className="order-3 col-span-2 min-w-0 break-words text-sm sm:order-2 sm:col-span-1">
                                 {f.value ?? (
                                   <em className="text-muted-foreground">
                                     missing
                                   </em>
                                 )}
                               </span>
-                              {f.critical && (
-                                <span className="text-[10px] uppercase text-muted-foreground">
-                                  critical
-                                </span>
-                              )}
-                              <ConfidenceBadge confidence={f.confidence} />
+                              <span className="order-2 sm:order-3">
+                                <ConfidenceBadge confidence={f.confidence} />
+                              </span>
                             </div>
                           ))}
                         </div>
-                      </div>
+                      </section>
                     )}
 
                     {selected.status === "approved" &&
                       selected.createdInvoiceId && (
-                        <Alert data-testid="banner-draft-created">
-                          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                          <AlertTitle>Draft invoice created</AlertTitle>
-                          <AlertDescription>
-                            The invoice was created as a DRAFT. It has not been
-                            submitted — it follows the normal human submission
-                            flow.
-                          </AlertDescription>
-                        </Alert>
+                        <div className="border-b p-4 sm:p-5">
+                          <Alert data-testid="banner-draft-created">
+                            <ShieldCheck
+                              className="h-4 w-4"
+                              aria-hidden="true"
+                            />
+                            <AlertTitle>Draft invoice created</AlertTitle>
+                            <AlertDescription>
+                              The invoice was created as a DRAFT. It has not
+                              been submitted — it follows the normal human
+                              submission flow.
+                            </AlertDescription>
+                          </Alert>
+                        </div>
                       )}
 
                     {form && (
-                      <div className="border-t pt-4 space-y-3">
-                        <p className="text-sm font-medium">
-                          Review and approve — creates a draft invoice only
-                        </p>
-                        {/* Claiming is optional: deciding straight from
+                      <div className="border-t">
+                        <div className="flex items-start gap-3 border-b bg-teal-50/70 p-4 dark:bg-teal-950/20 sm:p-5">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
+                            <ShieldCheck
+                              className="size-4"
+                              aria-hidden="true"
+                            />
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold">
+                              Human decision
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Approval creates a draft invoice only. Submission
+                              remains a separate workflow.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="space-y-7 p-4 sm:p-5">
+                          {/* Claiming is optional: deciding straight from
                             "extracted" stays possible (solo-operator fast
                             path). A claim only marks the case as actively
                             being reviewed so a second operator doesn't start
                             the same work. */}
-                        {selected.status === "extracted" &&
-                          !selected.claimedBy && (
-                            <div className="flex items-center gap-2 flex-wrap">
+                          {selected.status === "extracted" &&
+                            !selected.claimedBy && (
+                              <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/25 p-3">
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() =>
+                                    claimCase.mutate({ id: selected.id })
+                                  }
+                                  disabled={claimCase.isPending}
+                                  data-testid="button-claim-case"
+                                >
+                                  <Clock3
+                                    className="size-4"
+                                    aria-hidden="true"
+                                  />
+                                  {claimCase.isPending
+                                    ? "Claiming…"
+                                    : "Claim for review"}
+                                </Button>
+                                <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                                  Optional — deciding below works without
+                                  claiming.
+                                </p>
+                              </div>
+                            )}
+                          {selected.status === "in_review" && (
+                            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+                              <span
+                                className={pillClasses("amber")}
+                                data-testid="badge-claimed"
+                              >
+                                Claimed by {shortActor(selected.claimedBy)} ·{" "}
+                                {relativeTime(selected.claimedAt)}
+                              </span>
                               <Button
                                 size="sm"
                                 variant="secondary"
                                 onClick={() =>
-                                  claimCase.mutate({ id: selected.id })
+                                  releaseCase.mutate({ id: selected.id })
                                 }
-                                disabled={claimCase.isPending}
-                                data-testid="button-claim-case"
+                                disabled={releaseCase.isPending}
+                                data-testid="button-release-case"
                               >
-                                {claimCase.isPending
-                                  ? "Claiming…"
-                                  : "Claim for review"}
+                                {releaseCase.isPending
+                                  ? "Releasing…"
+                                  : "Release"}
                               </Button>
-                              <p className="text-xs text-muted-foreground">
-                                Optional — deciding below works without
-                                claiming.
-                              </p>
                             </div>
                           )}
-                        {selected.status === "in_review" && (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span
-                              className={pillClasses("amber")}
-                              data-testid="badge-claimed"
-                            >
-                              Claimed by {shortActor(selected.claimedBy)} ·{" "}
-                              {relativeTime(selected.claimedAt)}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() =>
-                                releaseCase.mutate({ id: selected.id })
-                              }
-                              disabled={releaseCase.isPending}
-                              data-testid="button-release-case"
-                            >
-                              {releaseCase.isPending
-                                ? "Releasing…"
-                                : "Release"}
-                            </Button>
-                          </div>
-                        )}
-                        <div className="grid sm:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <Label>Firm</Label>
-                            <Select
-                              value={form.firmId}
-                              onValueChange={(v) =>
-                                setForm({ ...form, firmId: v })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-firm">
-                                <SelectValue placeholder="Choose firm" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(firms ?? []).map((f) => (
-                                  <SelectItem key={f.id} value={f.id}>
-                                    {f.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Supplier party</Label>
-                            <Select
-                              value={form.supplierPartyId}
-                              onValueChange={(v) =>
-                                setForm({ ...form, supplierPartyId: v })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-supplier">
-                                <SelectValue placeholder="Choose supplier" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(parties ?? []).map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.legalName}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <PartySuggestionChips
-                              suggestions={partySuggestions?.supplier ?? []}
-                              value={form.supplierPartyId}
-                              onPick={(partyId) =>
-                                setForm({ ...form, supplierPartyId: partyId })
-                              }
-                              testId="suggestions-supplier"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Buyer party</Label>
-                            <Select
-                              value={form.buyerPartyId}
-                              onValueChange={(v) =>
-                                setForm({ ...form, buyerPartyId: v })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-buyer">
-                                <SelectValue placeholder="Choose buyer" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(parties ?? []).map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.legalName}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <PartySuggestionChips
-                              suggestions={partySuggestions?.buyer ?? []}
-                              value={form.buyerPartyId}
-                              onPick={(partyId) =>
-                                setForm({ ...form, buyerPartyId: partyId })
-                              }
-                              testId="suggestions-buyer"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid sm:grid-cols-4 gap-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="apr-number">Invoice number</Label>
-                            <Input
-                              id="apr-number"
-                              value={form.invoiceNumber}
-                              onChange={(e) =>
-                                setForm({
-                                  ...form,
-                                  invoiceNumber: e.target.value,
-                                })
-                              }
-                              data-testid="input-approve-number"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="apr-issue">Issue date</Label>
-                            <Input
-                              id="apr-issue"
-                              type="date"
-                              value={form.issueDate}
-                              onChange={(e) =>
-                                setForm({ ...form, issueDate: e.target.value })
-                              }
-                              data-testid="input-approve-issue-date"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="apr-due">Due date</Label>
-                            <Input
-                              id="apr-due"
-                              type="date"
-                              value={form.dueDate}
-                              onChange={(e) =>
-                                setForm({ ...form, dueDate: e.target.value })
-                              }
-                              data-testid="input-approve-due-date"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Category</Label>
-                            <Select
-                              value={form.category}
-                              onValueChange={(v) =>
-                                setForm({
-                                  ...form,
-                                  category:
-                                    v as ClerkCaseDecisionInputCategory,
-                                })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-category">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {CATEGORIES.map((c) => (
-                                  <SelectItem key={c} value={c}>
-                                    {c.toUpperCase()}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Lines</Label>
-                          {form.lines.map((line, i) => (
-                            <div
-                              key={i}
-                              className="grid grid-cols-12 gap-2"
-                              data-testid={`row-line-${i}`}
-                            >
-                              <Input
-                                className="col-span-6"
-                                placeholder="Description"
-                                value={line.description}
-                                onChange={(e) =>
-                                  setLine(i, { description: e.target.value })
-                                }
-                              />
-                              <Input
-                                className="col-span-2"
-                                placeholder="Qty"
-                                value={line.quantity}
-                                onChange={(e) =>
-                                  setLine(i, { quantity: e.target.value })
-                                }
-                              />
-                              <Input
-                                className="col-span-2"
-                                placeholder="Unit price"
-                                value={line.unitPrice}
-                                onChange={(e) =>
-                                  setLine(i, { unitPrice: e.target.value })
-                                }
-                              />
-                              <Input
-                                className="col-span-2"
-                                placeholder="VAT %"
-                                value={line.vatRate}
-                                onChange={(e) =>
-                                  setLine(i, { vatRate: e.target.value })
-                                }
+                          <section className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <span className="grid size-6 place-items-center rounded-full bg-slate-900 text-[11px] font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+                                1
+                              </span>
+                              <p className="text-sm font-semibold">
+                                Match parties
+                              </p>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              <div className="space-y-1">
+                                <Label>Firm</Label>
+                                <Select
+                                  value={form.firmId}
+                                  onValueChange={(v) =>
+                                    setForm({ ...form, firmId: v })
+                                  }
+                                >
+                                  <SelectTrigger data-testid="select-firm">
+                                    <SelectValue placeholder="Choose firm" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(firms ?? []).map((f) => (
+                                      <SelectItem key={f.id} value={f.id}>
+                                        {f.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label>Supplier party</Label>
+                                <Select
+                                  value={form.supplierPartyId}
+                                  onValueChange={(v) =>
+                                    setForm({ ...form, supplierPartyId: v })
+                                  }
+                                >
+                                  <SelectTrigger data-testid="select-supplier">
+                                    <SelectValue placeholder="Choose supplier" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(parties ?? []).map((p) => (
+                                      <SelectItem key={p.id} value={p.id}>
+                                        {p.legalName}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <PartySuggestionChips
+                                  suggestions={partySuggestions?.supplier ?? []}
+                                  value={form.supplierPartyId}
+                                  onPick={(partyId) =>
+                                    setForm({
+                                      ...form,
+                                      supplierPartyId: partyId,
+                                    })
+                                  }
+                                  testId="suggestions-supplier"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label>Buyer party</Label>
+                                <Select
+                                  value={form.buyerPartyId}
+                                  onValueChange={(v) =>
+                                    setForm({ ...form, buyerPartyId: v })
+                                  }
+                                >
+                                  <SelectTrigger data-testid="select-buyer">
+                                    <SelectValue placeholder="Choose buyer" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(parties ?? []).map((p) => (
+                                      <SelectItem key={p.id} value={p.id}>
+                                        {p.legalName}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <PartySuggestionChips
+                                  suggestions={partySuggestions?.buyer ?? []}
+                                  value={form.buyerPartyId}
+                                  onPick={(partyId) =>
+                                    setForm({ ...form, buyerPartyId: partyId })
+                                  }
+                                  testId="suggestions-buyer"
+                                />
+                              </div>
+                            </div>
+                          </section>
+                          <section className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <span className="grid size-6 place-items-center rounded-full bg-slate-900 text-[11px] font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+                                2
+                              </span>
+                              <p className="text-sm font-semibold">
+                                Confirm invoice details
+                              </p>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                              <div className="space-y-1">
+                                <Label htmlFor="apr-number">
+                                  Invoice number
+                                </Label>
+                                <Input
+                                  id="apr-number"
+                                  value={form.invoiceNumber}
+                                  onChange={(e) =>
+                                    setForm({
+                                      ...form,
+                                      invoiceNumber: e.target.value,
+                                    })
+                                  }
+                                  data-testid="input-approve-number"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="apr-issue">Issue date</Label>
+                                <Input
+                                  id="apr-issue"
+                                  type="date"
+                                  value={form.issueDate}
+                                  onChange={(e) =>
+                                    setForm({
+                                      ...form,
+                                      issueDate: e.target.value,
+                                    })
+                                  }
+                                  data-testid="input-approve-issue-date"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor="apr-due">Due date</Label>
+                                <Input
+                                  id="apr-due"
+                                  type="date"
+                                  value={form.dueDate}
+                                  onChange={(e) =>
+                                    setForm({
+                                      ...form,
+                                      dueDate: e.target.value,
+                                    })
+                                  }
+                                  data-testid="input-approve-due-date"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label>Category</Label>
+                                <Select
+                                  value={form.category}
+                                  onValueChange={(v) =>
+                                    setForm({
+                                      ...form,
+                                      category:
+                                        v as ClerkCaseDecisionInputCategory,
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger data-testid="select-category">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {CATEGORIES.map((c) => (
+                                      <SelectItem key={c} value={c}>
+                                        {c.toUpperCase()}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          </section>
+                          <section className="space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2">
+                                <span className="grid size-6 place-items-center rounded-full bg-slate-900 text-[11px] font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+                                  3
+                                </span>
+                                <p className="text-sm font-semibold">
+                                  Review line items
+                                </p>
+                              </div>
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {form.lines.length} lines
+                              </span>
+                            </div>
+                            <div className="overflow-hidden rounded-lg border">
+                              <div className="hidden grid-cols-[minmax(0,1fr)_5.5rem_8rem_5.5rem] gap-3 bg-muted/30 px-3 py-2 text-[10px] font-semibold uppercase text-muted-foreground sm:grid">
+                                <span>Description</span>
+                                <span>Quantity</span>
+                                <span>Unit price</span>
+                                <span>VAT %</span>
+                              </div>
+                              {form.lines.map((line, i) => (
+                                <div
+                                  key={i}
+                                  className="grid grid-cols-2 gap-3 border-t p-3 sm:grid-cols-[minmax(0,1fr)_5.5rem_8rem_5.5rem] sm:items-end"
+                                  data-testid={`row-line-${i}`}
+                                >
+                                  <div className="col-span-2 space-y-1 sm:col-span-1">
+                                    <Label className="text-xs sm:sr-only">
+                                      Description
+                                    </Label>
+                                    <Input
+                                      aria-label={`Line ${i + 1} description`}
+                                      placeholder="Description"
+                                      value={line.description}
+                                      onChange={(e) =>
+                                        setLine(i, {
+                                          description: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs sm:sr-only">
+                                      Quantity
+                                    </Label>
+                                    <Input
+                                      aria-label={`Line ${i + 1} quantity`}
+                                      placeholder="Qty"
+                                      value={line.quantity}
+                                      onChange={(e) =>
+                                        setLine(i, { quantity: e.target.value })
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs sm:sr-only">
+                                      Unit price
+                                    </Label>
+                                    <Input
+                                      aria-label={`Line ${i + 1} unit price`}
+                                      placeholder="Unit price"
+                                      value={line.unitPrice}
+                                      onChange={(e) =>
+                                        setLine(i, {
+                                          unitPrice: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                  <div className="col-span-2 space-y-1 sm:col-span-1">
+                                    <Label className="text-xs sm:sr-only">
+                                      VAT %
+                                    </Label>
+                                    <Input
+                                      aria-label={`Line ${i + 1} VAT percentage`}
+                                      placeholder="VAT %"
+                                      value={line.vatRate}
+                                      onChange={(e) =>
+                                        setLine(i, { vatRate: e.target.value })
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </section>
+                          <section className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <span className="grid size-6 place-items-center rounded-full bg-slate-900 text-[11px] font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+                                4
+                              </span>
+                              <p className="text-sm font-semibold">
+                                Record decision
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor="apr-reason">
+                                Reason (required to reject or escalate)
+                              </Label>
+                              <Textarea
+                                id="apr-reason"
+                                value={reason}
+                                onChange={(e) => setReason(e.target.value)}
+                                rows={2}
+                                data-testid="input-decision-reason"
                               />
                             </div>
-                          ))}
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="apr-reason">
-                            Reason (required to reject or escalate)
-                          </Label>
-                          <Textarea
-                            id="apr-reason"
-                            value={reason}
-                            onChange={(e) => setReason(e.target.value)}
-                            rows={2}
-                            data-testid="input-decision-reason"
-                          />
-                        </div>
-                        <div className="flex gap-2 flex-wrap">
-                          <Button
-                            onClick={() =>
-                              decideCase.mutate({
-                                id: selected.id,
-                                data: {
-                                  action: "approve",
-                                  firmId: form.firmId,
-                                  supplierPartyId: form.supplierPartyId,
-                                  buyerPartyId: form.buyerPartyId,
-                                  invoiceNumber: form.invoiceNumber.trim(),
-                                  issueDate: form.issueDate,
-                                  dueDate: form.dueDate || null,
-                                  currency: form.currency,
-                                  category: form.category,
-                                  lines: form.lines.map((l) => ({
-                                    ...l,
-                                    vatRate: vatFractionFromPercent(l.vatRate),
-                                  })),
-                                  reason: reason || null,
-                                },
-                              })
-                            }
-                            disabled={approveDisabled || decideCase.isPending}
-                            data-testid="button-approve-case"
-                          >
-                            Approve as draft invoice
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() =>
-                              decideCase.mutate({
-                                id: selected.id,
-                                data: { action: "reject", reason },
-                              })
-                            }
-                            disabled={!reason.trim() || decideCase.isPending}
-                            data-testid="button-reject-case"
-                          >
-                            Reject
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            onClick={() =>
-                              decideCase.mutate({
-                                id: selected.id,
-                                data: { action: "escalate", reason },
-                              })
-                            }
-                            disabled={!reason.trim() || decideCase.isPending}
-                            data-testid="button-escalate-case"
-                          >
-                            Escalate
-                          </Button>
+                            <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:flex-wrap">
+                              <Button
+                                className="w-full sm:w-auto"
+                                onClick={() =>
+                                  decideCase.mutate({
+                                    id: selected.id,
+                                    data: {
+                                      action: "approve",
+                                      firmId: form.firmId,
+                                      supplierPartyId: form.supplierPartyId,
+                                      buyerPartyId: form.buyerPartyId,
+                                      invoiceNumber: form.invoiceNumber.trim(),
+                                      issueDate: form.issueDate,
+                                      dueDate: form.dueDate || null,
+                                      currency: form.currency,
+                                      category: form.category,
+                                      lines: form.lines.map((l) => ({
+                                        ...l,
+                                        vatRate: vatFractionFromPercent(
+                                          l.vatRate,
+                                        ),
+                                      })),
+                                      reason: reason || null,
+                                    },
+                                  })
+                                }
+                                disabled={
+                                  approveDisabled || decideCase.isPending
+                                }
+                                data-testid="button-approve-case"
+                              >
+                                <CheckCircle2
+                                  className="size-4"
+                                  aria-hidden="true"
+                                />
+                                Approve draft
+                              </Button>
+                              <Button
+                                className="w-full sm:w-auto"
+                                variant="destructive"
+                                onClick={() =>
+                                  decideCase.mutate({
+                                    id: selected.id,
+                                    data: { action: "reject", reason },
+                                  })
+                                }
+                                disabled={
+                                  !reason.trim() || decideCase.isPending
+                                }
+                                data-testid="button-reject-case"
+                              >
+                                <CircleX
+                                  className="size-4"
+                                  aria-hidden="true"
+                                />
+                                Reject
+                              </Button>
+                              <Button
+                                className="w-full sm:w-auto"
+                                variant="secondary"
+                                onClick={() =>
+                                  decideCase.mutate({
+                                    id: selected.id,
+                                    data: { action: "escalate", reason },
+                                  })
+                                }
+                                disabled={
+                                  !reason.trim() || decideCase.isPending
+                                }
+                                data-testid="button-escalate-case"
+                              >
+                                <ArrowUpRight
+                                  className="size-4"
+                                  aria-hidden="true"
+                                />
+                                Escalate
+                              </Button>
+                            </div>
+                          </section>
                         </div>
                       </div>
                     )}
@@ -1276,7 +1830,7 @@ export function ClerkWorkspace() {
           </div>
         </TabsContent>
 
-        <TabsContent value="ask" className="mt-4">
+        <TabsContent value="ask" className="mt-0">
           <AskPanel
             question={question}
             onQuestionChange={setQuestion}
@@ -1286,7 +1840,7 @@ export function ClerkWorkspace() {
           />
         </TabsContent>
 
-        <TabsContent value="health" className="mt-4">
+        <TabsContent value="health" className="mt-0">
           <HealthPanel />
         </TabsContent>
       </Tabs>

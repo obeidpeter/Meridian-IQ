@@ -29,6 +29,7 @@ import {
   type BadgeTone,
 } from "@/lib/format";
 import { STATUS_TONE } from "@/pages/clerk-shared";
+import { Activity, FlaskConical } from "lucide-react";
 
 // ---- Health tab -----------------------------------------------------------
 // Read-only operational metrics for the Clerk: case flow, ask refusals and
@@ -188,8 +189,7 @@ export function HealthPanel() {
       onError: (e) => {
         toast({
           title: "Evaluation failed",
-          description:
-            serverErrorMessage(e) ?? "Could not run the evaluation.",
+          description: serverErrorMessage(e) ?? "Could not run the evaluation.",
           variant: "destructive",
         });
       },
@@ -202,12 +202,19 @@ export function HealthPanel() {
   const latestRun = evalRuns?.[0];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-sm text-muted-foreground">
-          How the Clerk is behaving — case flow, refusals and inference
-          quality.
-        </p>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-card p-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
+            <Activity className="size-5" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold">Clerk health</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Case flow, refusals and inference quality
+            </p>
+          </div>
+        </div>
         <div className="w-36">
           <Select
             value={String(windowDays)}
@@ -312,7 +319,7 @@ export function HealthPanel() {
             </div>
           </div>
 
-          <Card>
+          <Card className="rounded-lg shadow-sm">
             <CardContent className="pt-6 space-y-4">
               <BreakdownRow
                 title="Cases by status"
@@ -329,7 +336,7 @@ export function HealthPanel() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="rounded-lg shadow-sm">
             <CardHeader>
               <CardTitle className="text-base">
                 Inference cohorts (model × prompt)
@@ -386,7 +393,7 @@ export function HealthPanel() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="rounded-lg shadow-sm">
             <CardHeader>
               <CardTitle className="text-base">Field corrections</CardTitle>
             </CardHeader>
@@ -453,9 +460,12 @@ export function HealthPanel() {
         </>
       )}
 
-      <Card data-testid="section-evaluation">
+      <Card className="rounded-lg shadow-sm" data-testid="section-evaluation">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">Evaluation</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FlaskConical className="size-4 text-primary" aria-hidden="true" />
+            Evaluation
+          </CardTitle>
           <Button
             size="sm"
             onClick={() => runEval.mutate()}
@@ -484,8 +494,8 @@ export function HealthPanel() {
               className="text-sm text-muted-foreground"
               data-testid="text-eval-empty"
             >
-              No evaluation runs yet — run one to baseline the current model
-              and prompt.
+              No evaluation runs yet — run one to baseline the current model and
+              prompt.
             </p>
           ) : (
             <>
