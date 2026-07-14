@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -25,6 +31,15 @@ import {
   AlertCircle,
   KeyRound,
   CheckCircle2,
+  Eye,
+  EyeOff,
+  Headphones,
+  Landmark,
+  LockKeyhole,
+  ReceiptText,
+  ScanLine,
+  UserRound,
+  UsersRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -122,36 +137,61 @@ const DEFAULT_WORKSPACE: Partial<
   auditor: { href: "/console/audit", label: "Audit & evidence" },
 };
 
-const DEMO_ACCOUNTS: { label: string; email: string; opens: string }[] = [
+const DEMO_ACCOUNTS: {
+  label: string;
+  shortLabel: string;
+  email: string;
+  opens: string;
+  icon: typeof FileCheck2;
+  tone: string;
+}[] = [
   {
     label: "SME owner (Adaeze Foods)",
+    shortLabel: "SME owner",
     email: "owner@adaezefoods.example",
-    opens: "Compliance App — owns the consent decisions",
+    opens: "Compliance App and consent decisions",
+    icon: Store,
+    tone: "bg-teal-100 text-teal-800",
   },
   {
     label: "SME firm staff (Adaeze Foods)",
+    shortLabel: "SME staff",
     email: "demo.staff@meridianiq.example",
-    opens: "Compliance App (with live data)",
+    opens: "Daily compliance workflow",
+    icon: UserRound,
+    tone: "bg-blue-100 text-blue-800",
   },
   {
     label: "Accountant (firm admin)",
+    shortLabel: "Firm admin",
     email: "demo.admin@meridianiq.example",
-    opens: "Console + Compliance App",
+    opens: "Portfolio and firm controls",
+    icon: Building2,
+    tone: "bg-indigo-100 text-indigo-800",
   },
   {
     label: "Compliance Desk operator",
+    shortLabel: "Operator",
     email: "ops@meridianiq.example",
-    opens: "Console operator queue",
+    opens: "Exceptions and Clerk review",
+    icon: Headphones,
+    tone: "bg-amber-100 text-amber-900",
   },
   {
     label: "Buyer finance (Zenith Retail)",
+    shortLabel: "Buyer finance",
     email: "finance@zenithretail.example",
-    opens: "Buyer Rails",
+    opens: "Confirmations and exposure",
+    icon: Landmark,
+    tone: "bg-cyan-100 text-cyan-900",
   },
   {
     label: "Read-only auditor",
+    shortLabel: "Auditor",
     email: "audit@meridianiq.example",
-    opens: "Audit & evidence (read-only console)",
+    opens: "Read-only audit evidence",
+    icon: ShieldCheck,
+    tone: "bg-slate-200 text-slate-800",
   },
 ];
 const DEMO_PASSWORD = "meridian2027";
@@ -212,7 +252,8 @@ function AppCard({
 }) {
   const Icon = app.icon;
   const isPublic = app.allowedRoles === null;
-  const canOpen = isPublic || (role !== null && app.allowedRoles!.includes(role));
+  const canOpen =
+    isPublic || (role !== null && app.allowedRoles!.includes(role));
   const needsOtherRole =
     !isPublic && role !== null && !app.allowedRoles!.includes(role);
 
@@ -327,6 +368,7 @@ function SignInPanel() {
   const login = useLogin();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Which sign-in is running: "form" or a demo account's email. Drives the
   // per-button spinners without disabling the whole panel.
@@ -336,7 +378,10 @@ function SignInPanel() {
     href: string;
   } | null>(null);
 
-  const signIn = async (source: string, creds: { email: string; password: string }) => {
+  const signIn = async (
+    source: string,
+    creds: { email: string; password: string },
+  ) => {
     setError(null);
     setPending(source);
     try {
@@ -369,14 +414,27 @@ function SignInPanel() {
   }
 
   return (
-    <Card className="p-6 shadow-sm">
-      <h2 className="text-lg font-semibold">Sign in</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        One sign-in opens every workspace you have access to.
+    <div className="w-full" data-testid="panel-sign-in">
+      <div className="flex items-center gap-2 text-xs font-bold uppercase text-teal-800">
+        <span className="grid size-8 place-items-center rounded-md bg-teal-100">
+          <LockKeyhole className="size-4" aria-hidden="true" />
+        </span>
+        Secure workspace access
+      </div>
+
+      <h1 className="landing-display mt-6 text-4xl font-bold text-slate-950 sm:text-5xl">
+        Welcome back
+      </h1>
+      <p className="mt-3 max-w-md text-base leading-7 text-slate-600">
+        Sign in once. MeridianIQ will take you directly to the workspace for
+        your role.
       </p>
-      <form onSubmit={onSubmit} className="mt-4 space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="email">Email</Label>
+
+      <form onSubmit={onSubmit} className="mt-8 space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="email" className="text-sm font-bold text-slate-800">
+            Work email
+          </Label>
           <Input
             id="email"
             type="email"
@@ -384,59 +442,100 @@ function SignInPanel() {
             autoFocus
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@firm.example"
+            placeholder="name@company.com"
             required
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? "login-error" : undefined}
+            className="h-12 border-slate-300 bg-white px-4 text-base shadow-sm"
             data-testid="input-email"
           />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? "login-error" : undefined}
-            data-testid="input-password"
-          />
+        <div className="space-y-2">
+          <Label
+            htmlFor="password"
+            className="text-sm font-bold text-slate-800"
+          >
+            Password
+          </Label>
+          <div className="relative">
+            <Input
+              id="password"
+              type={passwordVisible ? "text" : "password"}
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              required
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "login-error" : undefined}
+              className="h-12 border-slate-300 bg-white px-4 pr-12 text-base shadow-sm"
+              data-testid="input-password"
+            />
+            <button
+              type="button"
+              onClick={() => setPasswordVisible((visible) => !visible)}
+              aria-label={passwordVisible ? "Hide password" : "Show password"}
+              className="absolute inset-y-0 right-0 grid w-12 place-items-center rounded-r-md text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-700"
+              data-testid="button-toggle-password"
+            >
+              {passwordVisible ? (
+                <EyeOff className="size-4" aria-hidden="true" />
+              ) : (
+                <Eye className="size-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
         </div>
         {error && (
-          <p
+          <div
             role="alert"
             id="login-error"
-            className="flex items-start gap-1.5 text-sm text-destructive"
+            className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
             data-testid="text-login-error"
           >
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{" "}
-            {error}
-          </p>
+            <AlertCircle
+              className="mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
+            <span>{error}</span>
+          </div>
         )}
         <Button
           type="submit"
-          className="w-full"
-          disabled={pending !== null}
+          className="min-h-12 w-full bg-[#0b6463] text-base font-bold text-white shadow-sm hover:bg-[#084d4d]"
+          disabled={pending !== null || !email.trim() || !password}
           data-testid="button-sign-in"
         >
           {pending === "form" && (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           )}
-          Sign in
+          Sign in securely
+          {pending !== "form" && (
+            <ArrowRight className="size-4" aria-hidden="true" />
+          )}
         </Button>
       </form>
 
-      <div className="mt-5 rounded-lg bg-muted/60 p-3">
-        <p className="text-xs font-medium text-muted-foreground">
-          Demo accounts — one click signs you in (password{" "}
-          <code className="rounded bg-background px-1 py-0.5">{DEMO_PASSWORD}</code>
-          )
-        </p>
-        <ul className="mt-2 space-y-2">
+      <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+        <ShieldCheck className="size-3.5 text-teal-700" aria-hidden="true" />
+        Role-scoped access and encrypted session cookies
+      </div>
+
+      <div className="mt-8 border-t border-slate-200 pt-6">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold text-slate-900">
+              Explore a demo role
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              One click opens the selected workspace.
+            </p>
+          </div>
+          <code className="rounded bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
+            {DEMO_PASSWORD}
+          </code>
+        </div>
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
           {DEMO_ACCOUNTS.map((a) => (
             <li key={a.email}>
               <button
@@ -450,27 +549,40 @@ function SignInPanel() {
                     password: DEMO_PASSWORD,
                   });
                 }}
-                className="flex min-h-11 w-full flex-col items-start justify-center gap-0.5 rounded-md border bg-card px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+                aria-label={`Sign in as ${a.label}`}
+                className="group grid min-h-[4.5rem] w-full grid-cols-[2.25rem_minmax(0,1fr)_1rem] items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition-colors hover:border-teal-300 hover:bg-teal-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
                 data-testid={`button-demo-${a.email.split("@")[0]}`}
               >
-                <span className="flex items-center gap-1.5 text-sm font-medium">
-                  {pending === a.email && (
+                <span
+                  className={`grid size-9 place-items-center rounded-md ${a.tone}`}
+                >
+                  {pending === a.email ? (
                     <Loader2
-                      className="h-3.5 w-3.5 animate-spin text-primary"
+                      className="size-4 animate-spin"
                       aria-hidden="true"
                     />
+                  ) : (
+                    <a.icon className="size-4" aria-hidden="true" />
                   )}
-                  {a.label}
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  Opens {a.opens}
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-slate-900">
+                    {a.shortLabel}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-slate-500">
+                    {a.opens}
+                  </span>
                 </span>
+                <ArrowRight
+                  className="size-4 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-teal-700"
+                  aria-hidden="true"
+                />
               </button>
             </li>
           ))}
         </ul>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -514,7 +626,10 @@ function ChangePasswordForm() {
       const status = (err as { status?: number })?.status;
       const serverError = serverErrorFrom(err);
       if (status === 401) {
-        setError({ message: "Current password is incorrect.", field: "current" });
+        setError({
+          message: "Current password is incorrect.",
+          field: "current",
+        });
         document.getElementById("cp-current")?.focus();
       } else if (status === 400) {
         setError({
@@ -599,7 +714,10 @@ function ChangePasswordForm() {
           id="cp-error"
           className="flex items-start gap-1.5 text-xs text-destructive"
         >
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{" "}
+          <AlertCircle
+            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+            aria-hidden="true"
+          />{" "}
           {error.message}
         </p>
       )}
@@ -674,7 +792,10 @@ function SignedInPanel({ me }: { me: Me }) {
         <p className="text-sm font-medium" data-testid="text-account-name">
           {me.fullName ?? me.email ?? "Your account"}
         </p>
-        <p className="text-xs text-muted-foreground" data-testid="text-account-detail">
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="text-account-detail"
+        >
           {me.email ? `${me.email} · ` : ""}
           {roleLabel(me.role)}
         </p>
@@ -742,6 +863,207 @@ function focusEmailField() {
   el.focus({ preventScroll: true });
 }
 
+const ACCESS_PATHS = [
+  {
+    title: "SME teams",
+    detail: "Capture, submit and reconcile",
+    icon: ReceiptText,
+    tone: "bg-lime-300 text-[#071a1c]",
+  },
+  {
+    title: "Accounting firms",
+    detail: "Portfolio risk and client delivery",
+    icon: UsersRound,
+    tone: "bg-cyan-200 text-[#071a1c]",
+  },
+  {
+    title: "Platform operations",
+    detail: "Exceptions, evidence and Clerk review",
+    icon: Headphones,
+    tone: "bg-amber-200 text-[#071a1c]",
+  },
+];
+
+function AccessStory() {
+  return (
+    <section className="relative hidden min-h-screen overflow-hidden bg-[#071a1c] text-white lg:flex lg:flex-col">
+      <div
+        className="absolute inset-y-0 right-0 w-px bg-lime-300/50"
+        aria-hidden="true"
+      />
+      <div className="flex items-center justify-between px-10 py-8 xl:px-14">
+        <a
+          href="/"
+          className="inline-flex items-center gap-3 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-4 focus-visible:ring-offset-[#071a1c]"
+          aria-label="MeridianIQ home"
+        >
+          <span className="grid size-10 place-items-center rounded-md bg-lime-300 text-[#071a1c]">
+            <FileCheck2 className="size-5" aria-hidden="true" />
+          </span>
+          <span>
+            <span className="block text-lg font-extrabold leading-none">
+              MeridianIQ
+            </span>
+            <span className="mt-1 block text-[11px] font-semibold text-white/50">
+              Compliance intelligence
+            </span>
+          </span>
+        </a>
+        <a
+          href="/"
+          className="text-xs font-bold text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
+        >
+          Back to website
+        </a>
+      </div>
+
+      <div className="flex flex-1 flex-col justify-center px-10 py-10 xl:px-14">
+        <div className="max-w-xl">
+          <p className="text-xs font-extrabold uppercase text-lime-300">
+            Connected compliance workspace
+          </p>
+          <h2 className="landing-display mt-5 text-5xl font-bold leading-[1.05] xl:text-6xl">
+            One account. The right operational view.
+          </h2>
+          <p className="mt-6 max-w-lg text-base leading-7 text-white/65">
+            Every MeridianIQ role works from the same governed invoice record,
+            with access narrowed to the decisions that role owns.
+          </p>
+        </div>
+
+        <div className="mt-12 max-w-xl border-y border-white/10">
+          {ACCESS_PATHS.map(({ title, detail, icon: Icon, tone }, index) => (
+            <div
+              key={title}
+              className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-4 py-4 ${
+                index > 0 ? "border-t border-white/10" : ""
+              }`}
+            >
+              <span
+                className={`grid size-10 place-items-center rounded-md ${tone}`}
+              >
+                <Icon className="size-4" aria-hidden="true" />
+              </span>
+              <span>
+                <span className="block text-sm font-extrabold">{title}</span>
+                <span className="mt-0.5 block text-xs text-white/50">
+                  {detail}
+                </span>
+              </span>
+              <ArrowRight className="size-4 text-white/25" aria-hidden="true" />
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-xs font-semibold text-white/55">
+          <span className="inline-flex items-center gap-2">
+            <ShieldCheck className="size-4 text-lime-300" aria-hidden="true" />
+            Role-scoped access
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <ScanLine className="size-4 text-cyan-200" aria-hidden="true" />
+            Human-reviewed AI
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <CheckCircle2
+              className="size-4 text-amber-200"
+              aria-hidden="true"
+            />
+            Verifiable evidence
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between border-t border-white/10 px-10 py-5 text-[11px] text-white/35 xl:px-14">
+        <span>Lagos, Nigeria</span>
+        <span>Built for the Nigerian invoice lifecycle</span>
+      </div>
+    </section>
+  );
+}
+
+function AccessPortal({
+  children,
+  outage,
+  onRetry,
+}: {
+  children: ReactNode;
+  outage: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="min-h-screen bg-[#f4f8f7] lg:grid lg:grid-cols-[minmax(25rem,0.85fr)_minmax(39rem,1.15fr)]">
+      <a
+        href="#login-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-lime-300 focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-[#071a1c]"
+      >
+        Skip to sign in
+      </a>
+      <AccessStory />
+
+      <section className="flex min-h-screen flex-col">
+        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 lg:hidden">
+          <a
+            href="/"
+            className="inline-flex items-center gap-2.5"
+            aria-label="MeridianIQ home"
+          >
+            <span className="grid size-9 place-items-center rounded-md bg-[#0b6463] text-white">
+              <FileCheck2 className="size-4" aria-hidden="true" />
+            </span>
+            <span className="text-base font-extrabold text-slate-950">
+              MeridianIQ
+            </span>
+          </a>
+          <a
+            href="/"
+            className="text-xs font-bold text-slate-500 hover:text-slate-950"
+          >
+            Website
+          </a>
+        </header>
+
+        <main
+          id="login-content"
+          tabIndex={-1}
+          className="flex flex-1 items-center justify-center px-5 py-10 focus:outline-none sm:px-10 sm:py-14 xl:px-16"
+        >
+          <div className="w-full max-w-2xl">
+            {outage && (
+              <div
+                role="alert"
+                className="mb-6 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5"
+              >
+                <span className="flex items-start gap-2 text-sm font-medium text-amber-900">
+                  <AlertCircle
+                    className="mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  MeridianIQ is temporarily unreachable.
+                </span>
+                <Button size="sm" variant="outline" onClick={onRetry}>
+                  Retry
+                </Button>
+              </div>
+            )}
+            {children}
+          </div>
+        </main>
+
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-[11px] text-slate-500 sm:px-10 xl:px-16">
+          <span>Protected by role-based access controls</span>
+          <a
+            className="font-bold hover:text-slate-900"
+            href="/penalty-calculator/"
+          >
+            Penalty calculator
+          </a>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function Portal() {
   const {
     data: me,
@@ -757,6 +1079,14 @@ function Portal() {
   const meStatus = (error as { status?: number } | null)?.status;
   const isOutage = isError && meStatus !== 401;
 
+  if (!me) {
+    return (
+      <AccessPortal outage={isOutage} onRetry={() => void refetch()}>
+        {isLoading ? <SessionSkeleton /> : <SignInPanel />}
+      </AccessPortal>
+    );
+  }
+
   // Signed in: float the tiles this account can open to the front.
   const tiles =
     role === null
@@ -768,7 +1098,7 @@ function Portal() {
         });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-muted/40 to-background">
+    <div className="min-h-screen bg-[#f4f8f7]">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -777,40 +1107,31 @@ function Portal() {
       </a>
       <PortalHeader
         right={
-          me ? (
-            <span
-              className="max-w-[50%] truncate rounded-full border bg-background px-3 py-1 text-xs font-medium text-muted-foreground"
-              data-testid="badge-session"
-            >
-              {me.fullName ?? me.email ?? roleLabel(me.role)} ·{" "}
-              {roleLabel(me.role)}
-            </span>
-          ) : (
-            <a
-              href="/"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
-              data-testid="link-back-to-website"
-            >
-              Back to website
-            </a>
-          )
+          <span
+            className="max-w-[55%] truncate rounded-md border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-900"
+            data-testid="badge-session"
+          >
+            {me.fullName ?? me.email ?? roleLabel(me.role)} ·{" "}
+            {roleLabel(me.role)}
+          </span>
         }
       />
 
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto max-w-6xl px-4 py-10 focus:outline-none sm:px-6 sm:py-14"
+        className="mx-auto max-w-7xl px-5 py-10 focus:outline-none sm:px-8 sm:py-14"
       >
         <section className="max-w-3xl">
-          <h1 className="text-3xl font-extrabold sm:text-4xl">
-            Nigerian e-invoicing, handled.
+          <p className="text-xs font-extrabold uppercase text-teal-700">
+            Signed in as {roleLabel(me.role)}
+          </p>
+          <h1 className="landing-display mt-3 text-4xl font-bold text-slate-950 sm:text-5xl">
+            Choose your workspace
           </h1>
-          <p className="mt-3 text-base text-muted-foreground sm:text-lg">
-            MeridianIQ keeps your invoices stamped, filed and audit-ready — and
-            quietly turns that compliance into verified receivables you can
-            finance. Sign in to open your workspace, or check your penalty
-            exposure for free.
+          <p className="mt-3 text-base leading-7 text-slate-600 sm:text-lg">
+            Your default workspace is ready. The options below reflect the
+            access attached to this account.
           </p>
         </section>
 
@@ -818,30 +1139,13 @@ function Portal() {
           {/* Sign-in first in DOM: on a phone it sits right under the hero,
               and the h2 "Sign in" precedes the tile h3s. */}
           <aside className="mx-auto w-full max-w-md space-y-5 lg:order-last lg:max-w-none">
-            {isOutage && (
-              <div
-                role="alert"
-                className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/40"
-              >
-                <span className="flex items-start gap-1.5 text-sm text-amber-900 dark:text-amber-200">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                  Can't reach MeridianIQ.
-                </span>
-                <Button size="sm" variant="outline" onClick={() => void refetch()}>
-                  Retry
-                </Button>
-              </div>
-            )}
-            {isLoading ? (
-              <SessionSkeleton />
-            ) : me ? (
-              <SignedInPanel me={me} />
-            ) : (
-              <SignInPanel />
-            )}
+            <SignedInPanel me={me} />
           </aside>
 
-          <section aria-labelledby="workspaces-heading" className="lg:order-first">
+          <section
+            aria-labelledby="workspaces-heading"
+            className="lg:order-first"
+          >
             <h2 id="workspaces-heading" className="sr-only">
               Workspaces
             </h2>
@@ -861,8 +1165,8 @@ function Portal() {
 
         <footer className="mt-14 flex flex-wrap items-center justify-between gap-4 border-t pt-6 text-xs text-muted-foreground">
           <p>
-            MeridianIQ — Lagos, Nigeria. The Penalty Calculator is public;
-            every other workspace is protected by sign-in and role.
+            MeridianIQ — Lagos, Nigeria. The Penalty Calculator is public; every
+            other workspace is protected by sign-in and role.
           </p>
           <nav className="flex items-center gap-4" aria-label="Footer">
             <a

@@ -17,6 +17,7 @@ import {
   Clock,
   ChevronRight,
   Upload,
+  GitBranch,
 } from "lucide-react";
 import {
   formatNaira,
@@ -48,9 +49,12 @@ function ReceivablesCard() {
   });
 
   return (
-    <Card data-testid="card-receivables">
+    <Card
+      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid="card-receivables"
+    >
       <CardHeader>
-        <CardTitle>Receivables</CardTitle>
+        <CardTitle className="text-base">Receivables</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -189,6 +193,49 @@ export function PortfolioSkeleton() {
   );
 }
 
+function PortfolioHeader({
+  description,
+  canImport,
+}: {
+  description: string;
+  canImport: boolean;
+}) {
+  return (
+    <div className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-6 sm:flex-row sm:items-end">
+      <div className="min-w-0">
+        <p className="text-[11px] font-extrabold uppercase text-teal-700">
+          Firm overview
+        </p>
+        <h1
+          className="mt-2 text-2xl font-extrabold text-slate-950 md:text-3xl dark:text-foreground"
+          data-testid="text-page-title"
+        >
+          Client portfolio
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          {description}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        <Button variant="outline" asChild>
+          <Link href="/pipeline">
+            <GitBranch className="size-4" aria-hidden="true" />
+            Onboarding
+          </Link>
+        </Button>
+        {canImport && (
+          <Button asChild>
+            <Link href="/clients/import">
+              <Upload className="size-4" aria-hidden="true" />
+              Import clients
+            </Link>
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Portfolio() {
   usePageTitle("Client portfolio");
   const { data: me } = useGetMe();
@@ -202,17 +249,10 @@ export function Portfolio() {
   if (error || !data) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1
-            className="text-2xl md:text-3xl font-bold"
-            data-testid="text-page-title"
-          >
-            Client portfolio
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Penalty risk across your client book.
-          </p>
-        </div>
+        <PortfolioHeader
+          description="Penalty exposure, filing deadlines and receivables across your client book."
+          canImport={canImport}
+        />
         <QueryError thing="your portfolio" onRetry={() => refetch()} />
       </div>
     );
@@ -228,18 +268,11 @@ export function Portfolio() {
   if (clients.length === 0) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1
-            className="text-2xl md:text-3xl font-bold"
-            data-testid="text-page-title"
-          >
-            Client portfolio
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Penalty risk across your client book.
-          </p>
-        </div>
-        <Card>
+        <PortfolioHeader
+          description="Set up the client book to start tracking risk, deadlines and receivables."
+          canImport={canImport}
+        />
+        <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
           <CardContent className="py-12 flex flex-col items-center text-center gap-2">
             <Users
               className="w-10 h-10 text-muted-foreground"
@@ -262,7 +295,11 @@ export function Portfolio() {
                   </Link>
                 </Button>
               )}
-              <Button variant="outline" asChild data-testid="button-empty-pipeline">
+              <Button
+                variant="outline"
+                asChild
+                data-testid="button-empty-pipeline"
+              >
                 <Link href="/pipeline">Open the onboarding pipeline</Link>
               </Button>
             </div>
@@ -274,18 +311,14 @@ export function Portfolio() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-page-title">
-          Client portfolio
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Penalty risk across {data.clientCount} client
-          {data.clientCount === 1 ? "" : "s"}. Click a client to reach any
-          failing invoice.
-        </p>
-      </div>
+      <PortfolioHeader
+        description={`Penalty risk, deadlines and receivables across ${data.clientCount} client${
+          data.clientCount === 1 ? "" : "s"
+        }.`}
+        canImport={canImport}
+      />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           label="Clients"
           value={String(data.clientCount)}
@@ -301,7 +334,8 @@ export function Portfolio() {
         />
         <StatTile
           label="Unsubmitted invoices"
-          value={`${data.totalUnsubmittedCount} · ${formatNaira(data.totalUnsubmittedValue)}`}
+          value={String(data.totalUnsubmittedCount)}
+          detail={`${formatNaira(data.totalUnsubmittedValue)} awaiting submission`}
           icon={FileWarning}
           iconTone="warning"
           testId="stat-unsubmitted"
@@ -315,22 +349,29 @@ export function Portfolio() {
         />
       </div>
 
-      <Card>
+      <Card className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card">
         <CardHeader>
-          <CardTitle>Clients by penalty risk</CardTitle>
+          <CardTitle className="flex items-center justify-between gap-4 text-base">
+            <span>Clients by penalty risk</span>
+            <span className="text-xs font-semibold text-muted-foreground tabular-nums">
+              {data.clientCount} total
+            </span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           <div className="divide-y">
             {clients.map((c) => (
               <Link
                 key={c.clientPartyId}
                 href={`/clients/${c.clientPartyId}`}
                 data-testid={`row-client-${c.clientPartyId}`}
-                className="flex items-center gap-4 py-3 hover:bg-muted/50 -mx-2 px-2 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="-mx-1 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_1rem] sm:gap-4"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{c.legalName}</p>
-                  <p className="text-xs text-muted-foreground">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-slate-900 dark:text-foreground">
+                    {c.legalName}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
                     {c.totalInvoices} invoices · {c.failedCount} failed ·{" "}
                     {c.pendingCount} pending
                     {c.nextDeadline
@@ -361,7 +402,7 @@ export function Portfolio() {
                   {riskLabel(c.penaltyRisk)}
                 </span>
                 <ChevronRight
-                  className="w-4 h-4 text-muted-foreground shrink-0"
+                  className="hidden size-4 shrink-0 text-muted-foreground sm:block"
                   aria-hidden="true"
                 />
               </Link>

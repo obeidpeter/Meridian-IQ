@@ -38,40 +38,49 @@ export function StatTile({
 }) {
   const valueTone = (tone && VALUE_TONE[tone]) || "";
   const valueEl = loading ? (
-    <Skeleton className="h-8 w-16 mt-1" />
+    <Skeleton className="mt-2 h-8 w-20" />
   ) : (
-    <p className={`text-2xl font-bold mt-1 tabular-nums ${valueTone}`}>
+    <p
+      className={`mt-2 break-words text-xl font-extrabold leading-tight tabular-nums sm:text-2xl ${valueTone}`}
+    >
       {value}
     </p>
   );
+  const iconClasses =
+    iconTone === "danger"
+      ? "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400"
+      : iconTone === "warning"
+        ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+        : "bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300";
+
   return (
-    <Card data-testid={testId}>
-      <CardContent className="pt-6">
+    <Card
+      className="overflow-hidden rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid={testId}
+    >
+      <CardContent className="min-h-28 p-4 sm:p-5">
         {Icon ? (
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">{label}</p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-muted-foreground">{label}</p>
               {valueEl}
             </div>
-            <Icon
-              aria-hidden="true"
-              className={`w-8 h-8 ${
-                iconTone === "danger"
-                  ? "text-red-500 dark:text-red-400"
-                  : iconTone === "warning"
-                    ? "text-amber-500 dark:text-amber-400"
-                    : "text-primary"
-              }`}
-            />
+            <span
+              className={`grid size-10 shrink-0 place-items-center rounded-md ${iconClasses}`}
+            >
+              <Icon aria-hidden="true" className="size-5" />
+            </span>
           </div>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-xs font-bold text-muted-foreground">{label}</p>
             {valueEl}
           </>
         )}
         {detail && (
-          <p className="text-xs text-muted-foreground mt-1">{detail}</p>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            {detail}
+          </p>
         )}
       </CardContent>
     </Card>
