@@ -38,6 +38,13 @@ check for and remove stale locks.
 - Pre-flight merge conflicts read-only: diff both sides against
   `git merge-base` and intersect changed file lists (`git merge-tree
   --write-tree` writes objects and is blocked).
+- When the remote head is NOT in local history (fetch blocked, so no local
+  copy): get the remote sha with `git ls-remote origin main`, then use the
+  GitHub compare API (`/repos/<owner>/<repo>/compare/<local-base>...main`,
+  auth `Bearer $GH_PUSH_TOKEN`) to list remote-side commits + changed files;
+  intersect with `git diff --name-only <base>..HEAD`. Disjoint sets = clean
+  sync. Note: `listConnections('github')` can return empty even with the
+  integration installed — the PAT secret works for API reads regardless.
 - **Push to GitHub IS possible** with the `GH_PUSH_TOKEN` secret (classic PAT
   with repo+workflow scopes, provided July 2026):
   `git -c credential.helper='!f() { echo username=x-access-token; echo password=$GH_PUSH_TOKEN; }; f' push origin main`.
