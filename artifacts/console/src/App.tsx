@@ -49,16 +49,18 @@ const queryClient = new QueryClient({
 });
 
 // The console front door is role-aware: firm principals land on the client
-// portfolio; the Compliance Desk operator (cross-tenant, no portfolio access)
-// lands on the work queue it signed in for.
+// portfolio, operators on the live exception queue, and auditors on the
+// evidence surface they signed in to inspect.
 function Home() {
   const { data: me } = useGetMe();
   // While /me resolves, mirror the most likely destination (the portfolio)
   // instead of a blank pane.
   if (!me) return <PortfolioSkeleton />;
-  const caps = new Set(me.capabilities);
-  if (!caps.has("console.portfolio.read") && caps.has("operator.queue.read")) {
+  if (me.role === "operator") {
     return <Redirect to="/operator-queue" replace />;
+  }
+  if (me.role === "auditor") {
+    return <Redirect to="/audit" replace />;
   }
   return (
     <CapabilityGate capability="console.portfolio.read">
