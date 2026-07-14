@@ -1,5 +1,7 @@
 import {
   useGetMe,
+  useGetClerkDigest,
+  getGetClerkDigestQueryKey,
   useGetDashboardSummary,
   getGetDashboardSummaryQueryKey,
   useGetReceivablesSummary,
@@ -20,6 +22,7 @@ import {
   Download,
   FileText,
   Activity,
+  Sparkles,
   Wallet,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -235,6 +238,41 @@ function ReceivablesCard({
   );
 }
 
+// "Your week" — the firm's latest weekly Clerk digest. Firm-only surface
+// (clerk.ask, like the Ask Clerk page): the parent checks the capability
+// before mounting this, so a client_user never fires the request. Read-only
+// and pre-generated server-side, so it spends no tokens; renders only on
+// success — no digest yet (404) or any error means no card at all.
+function ClerkDigestCard() {
+  const { data: digest, isSuccess } = useGetClerkDigest({
+    query: { queryKey: getGetClerkDigestQueryKey(), retry: false },
+  });
+  if (!isSuccess || !digest) return null;
+  return (
+    <Card data-testid="clerk-digest">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5" aria-hidden="true" /> Your week
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="font-semibold">{digest.headline}</p>
+        {digest.bullets.length > 0 && (
+          <ul className="space-y-1.5 text-sm text-muted-foreground list-disc pl-4">
+            {digest.bullets.map((bullet, i) => (
+              <li key={i}>{bullet}</li>
+            ))}
+          </ul>
+        )}
+        <p className="text-xs text-muted-foreground pt-3 border-t">
+          Week of {formatDate(digest.weekStart)}
+          {digest.source === "clerk" && " · Written by Clerk"}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
@@ -270,6 +308,9 @@ function DashboardSkeleton() {
 export function Dashboard() {
   usePageTitle("Dashboard");
   const { data: me } = useGetMe();
+  // Same capability check CapabilityGate applies, minus its denial card: a
+  // dashboard tile should simply be absent for roles that can't use it.
+  const canAskClerk = !!me?.capabilities.includes("clerk.ask");
   const {
     data: summary,
     isLoading,
@@ -438,6 +479,8 @@ export function Dashboard() {
                 clientPartyId={me?.clientPartyId || ""}
                 onRetry={() => refetchReceivables()}
               />
+
+              {canAskClerk && <ClerkDigestCard />}
             </div>
           </>
         )}

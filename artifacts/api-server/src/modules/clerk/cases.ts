@@ -37,6 +37,7 @@ import {
   extractionOutputSchema,
   type ExtractionOutput,
 } from "./prompts";
+import { preflightChecks } from "./preflight";
 
 // Clerk capture cases (Task #40, C1). The Clerk PROPOSES, the operator
 // DISPOSES: extraction output is candidate values only; nothing reaches the
@@ -68,7 +69,7 @@ export interface CreateCaseInput {
   allowDuplicate?: boolean;
 }
 
-function decodeBase64Checked(b64: string, label: string): Buffer {
+export function decodeBase64Checked(b64: string, label: string): Buffer {
   const cleaned = b64.replace(/^data:[^;]+;base64,/, "");
   let buf: Buffer;
   try {
@@ -89,7 +90,7 @@ function decodeBase64Checked(b64: string, label: string): Buffer {
   return buf;
 }
 
-async function extractPdfText(buf: Buffer): Promise<string> {
+export async function extractPdfText(buf: Buffer): Promise<string> {
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buf });
   try {
@@ -155,17 +156,22 @@ async function runExtraction(
 
   if (result.ok) {
     const normalized = normalizeExtraction(result.data);
+    const extraction = {
+      fields: normalized.fields,
+      lines: normalized.lines,
+      promptVersion: EXTRACT_PROMPT_VERSION,
+      model: gateway.model,
+    };
     const [updated] = await getDb()
       .update(clerkCasesTable)
       .set({
         status: "extracted",
         failReason: null,
-        extraction: {
-          fields: normalized.fields,
-          lines: normalized.lines,
-          promptVersion: EXTRACT_PROMPT_VERSION,
-          model: gateway.model,
-        },
+        extraction,
+        // Deterministic pre-approval checks, recomputed on every successful
+        // (re-)extraction. An empty list marks the case ready for the review
+        // fast lane.
+        preflight: preflightChecks(extraction),
       })
       .where(eq(clerkCasesTable.id, caseId))
       .returning();
@@ -472,6 +478,7 @@ export async function listCases(filter: {
       sourceHash: clerkCasesTable.sourceHash,
       sourceDurationSec: clerkCasesTable.sourceDurationSec,
       extraction: clerkCasesTable.extraction,
+      preflight: clerkCasesTable.preflight,
       question: clerkCasesTable.question,
       answer: clerkCasesTable.answer,
       firmId: clerkCasesTable.firmId,

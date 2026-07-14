@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   useCreateClerkCase,
+  useCreateClerkCaseBatch,
   useGetClerkCase,
   useGetClerkUsage,
   useListClerkCases,
@@ -10,6 +11,7 @@ import {
   getListClerkCasesQueryKey,
 } from "@workspace/api-client-react";
 import type {
+  BatchClerkCasesResult,
   ClerkCase,
   ClerkCaseCreateInput,
   ListClerkCasesParams,
@@ -31,6 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { errorStatus, serverErrorMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import {
+  batchSummary,
   captureBadgeClasses,
   captureStatusLabel,
   fieldLabel,
@@ -200,6 +203,14 @@ function CaptureContent() {
     payload: ClerkCaseCreateInput;
     message: string;
   } | null>(null);
+  // Batch intake: "This contains multiple invoices" routes the same text/PDF
+  // through the batch endpoint, which segments the document and opens one
+  // case per invoice. The result summary sticks inline (unlike the toasts)
+  // until any source input changes.
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchResult, setBatchResult] = useState<BatchClerkCasesResult | null>(
+    null,
+  );
 
   // The server scopes this list to the caller (a client_user sees only their
   // own submissions), so no client-side ownership filter is needed.
@@ -284,7 +295,63 @@ function CaptureContent() {
     },
   });
 
+  const createBatch = useCreateClerkCaseBatch({
+    mutation: {
+      onSuccess: (result: BatchClerkCasesResult) => {
+        queryClient.invalidateQueries({
+          queryKey: getListClerkCasesQueryKey(),
+        });
+        queryClient.invalidateQueries({ queryKey: getGetClerkUsageQueryKey() });
+        setBatchResult(result);
+        setCaptureText("");
+        setCaptureFile(null);
+        setPendingDuplicate(null);
+        setDisabledBanner(false);
+      },
+      onError: (e) => {
+        // 502 BATCH_SEGMENTATION_FAILED: Clerk couldn't split the bundle —
+        // point at the single-invoice path instead of relaying the raw error.
+        if (errorStatus(e) === 502) {
+          toast({
+            title: "Clerk couldn't split that document",
+            description:
+              "Try uploading the invoices one at a time — each becomes its own submission.",
+            variant: "destructive",
+          });
+          return;
+        }
+        handleClerkError(e);
+      },
+    },
+  });
+
+  const isPdfFile =
+    captureFile != null &&
+    (captureFile.type === "application/pdf" ||
+      captureFile.name.toLowerCase().endsWith(".pdf"));
+  // The batch splitter only takes text it can segment (pasted text or a
+  // PDF's text layer), so the toggle hides for photo and voice sources.
+  const batchEligible = captureVoice == null && (captureFile == null || isPdfFile);
+
   const submitCapture = async () => {
+    setBatchResult(null);
+    if (batchMode && batchEligible && (captureFile || captureText.trim())) {
+      if (captureFile) {
+        const b64 = await fileToBase64(captureFile);
+        createBatch.mutate({
+          data: { sourceType: "pdf", name: captureFile.name, pdfBase64: b64 },
+        });
+      } else {
+        createBatch.mutate({
+          data: {
+            sourceType: "text",
+            name: "pasted-text.txt",
+            text: captureText,
+          },
+        });
+      }
+      return;
+    }
     if (captureVoice) {
       const b64 = await fileToBase64(captureVoice);
       createCase.mutate({
@@ -295,16 +362,13 @@ function CaptureContent() {
         },
       });
     } else if (captureFile) {
-      const isPdf =
-        captureFile.type === "application/pdf" ||
-        captureFile.name.toLowerCase().endsWith(".pdf");
       const b64 = await fileToBase64(captureFile);
       createCase.mutate({
         data: {
-          sourceType: isPdf ? "pdf" : "image",
+          sourceType: isPdfFile ? "pdf" : "image",
           name: captureFile.name,
           contentType: captureFile.type || undefined,
-          ...(isPdf ? { pdfBase64: b64 } : { imageBase64: b64 }),
+          ...(isPdfFile ? { pdfBase64: b64 } : { imageBase64: b64 }),
         },
       });
     } else if (captureText.trim()) {
@@ -358,6 +422,7 @@ function CaptureContent() {
               onChange={(e) => {
                 setCaptureFile(e.target.files?.[0] ?? null);
                 setPendingDuplicate(null);
+                setBatchResult(null);
               }}
               disabled={captureVoice != null}
               data-testid="input-capture-file"
@@ -372,6 +437,7 @@ function CaptureContent() {
               onChange={(e) => {
                 const f = e.target.files?.[0] ?? null;
                 setPendingDuplicate(null);
+                setBatchResult(null);
                 if (f && f.size > MAX_VOICE_BYTES) {
                   toast({
                     title: "Voice note too large",
@@ -403,6 +469,7 @@ function CaptureContent() {
               onChange={(e) => {
                 setCaptureText(e.target.value);
                 setPendingDuplicate(null);
+                setBatchResult(null);
               }}
               placeholder="INVOICE No: ..."
               rows={5}
@@ -410,21 +477,54 @@ function CaptureContent() {
               data-testid="input-capture-text"
             />
           </div>
+          {batchEligible && (
+            <div className="flex items-center gap-2">
+              <input
+                id="batch-toggle"
+                type="checkbox"
+                className="h-4 w-4 rounded border-input accent-primary"
+                checked={batchMode}
+                onChange={(e) => {
+                  setBatchMode(e.target.checked);
+                  setBatchResult(null);
+                }}
+                data-testid="batch-toggle"
+              />
+              <Label htmlFor="batch-toggle" className="font-normal">
+                This contains multiple invoices
+              </Label>
+            </div>
+          )}
           <Button
             className="w-full sm:w-auto"
             onClick={submitCapture}
             disabled={
               createCase.isPending ||
+              createBatch.isPending ||
               (!captureFile && !captureVoice && captureText.trim().length < 10)
             }
             data-testid="button-send-to-clerk"
           >
-            {createCase.isPending
+            {createCase.isPending || createBatch.isPending
               ? captureVoice
                 ? "Transcribing…"
                 : "Reading…"
               : "Send to Clerk"}
           </Button>
+          {batchResult && (
+            <Alert data-testid="batch-result">
+              <FileCheck2 className="h-4 w-4" aria-hidden="true" />
+              <AlertTitle>Sent to Clerk</AlertTitle>
+              <AlertDescription>
+                {batchSummary(
+                  batchResult.cases.length,
+                  batchResult.skippedDuplicates,
+                )}
+                {batchResult.cases.length > 0 &&
+                  " — your accountant will review each one before anything is created."}
+              </AlertDescription>
+            </Alert>
+          )}
           {pendingDuplicate && (
             <Alert data-testid="banner-duplicate-source">
               <AlertTriangle className="h-4 w-4" aria-hidden="true" />

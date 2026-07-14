@@ -31,6 +31,7 @@ import clerkRouter from "./clerk";
 import "../modules/desk/sweeps";
 import "../modules/clerk/watchdog";
 import "../modules/clerk/eval-growth";
+import "../modules/clerk/digest";
 import "../modules/push/register";
 import "../modules/invoice/register";
 

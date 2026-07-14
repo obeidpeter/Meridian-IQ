@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.8.0
+ * OpenAPI spec version: 0.9.0
  */
 
 export * from './acceptInvitationInput';
@@ -30,6 +30,9 @@ export * from './bankStatementLine';
 export * from './bankStatementLineDirection';
 export * from './bankStatementLineParseStatus';
 export * from './bankStatementStatus';
+export * from './batchClerkCasesInput';
+export * from './batchClerkCasesInputSourceType';
+export * from './batchClerkCasesResult';
 export * from './billingTier';
 export * from './billingTierKey';
 export * from './bulkAcceptInput';
@@ -68,8 +71,11 @@ export * from './clerkCaseDecisionInput';
 export * from './clerkCaseDecisionInputAction';
 export * from './clerkCaseDecisionInputCategory';
 export * from './clerkCaseKind';
+export * from './clerkCasePreflightItem';
 export * from './clerkCaseStatus';
 export * from './clerkCorrection';
+export * from './clerkDigest';
+export * from './clerkDigestSource';
 export * from './clerkEvalFixtureResult';
 export * from './clerkEvalFixtureResultMismatchesItem';
 export * from './clerkEvalFixtureResultOutcome';
@@ -126,6 +132,7 @@ export * from './createInvitationInputRole';
 export * from './creditNoteInput';
 export * from './dashboardSummary';
 export * from './dashboardSummaryPenaltyRisk';
+export * from './draftClaimWithClerkInput';
 export * from './engagement';
 export * from './engagementFindings';
 export * from './engagementInput';

@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.8.0
+  version: 0.9.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2756,6 +2756,63 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ClerkEvalRun"
+  /clerk/cases/batch:
+    post:
+      operationId: createClerkCaseBatch
+      tags: [clerk]
+      summary: Split a multi-invoice document into segments and open one case per invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchClerkCasesInput"
+      responses:
+        "201":
+          description: One case per detected invoice (duplicates skipped)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchClerkCasesResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /clerk/digest:
+    get:
+      operationId: getClerkDigest
+      tags: [clerk]
+      summary: The firm's latest weekly Clerk digest (facts computed by SQL; narrative only phrased)
+      responses:
+        "200":
+          description: Latest digest for the caller's firm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkDigest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /clerk/claims/draft:
+    post:
+      operationId: draftClaimWithClerk
+      tags: [clerk]
+      summary: Draft a structured claim record from pasted source text (enters the normal maker-checker flow)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftClaimWithClerkInput"
+      responses:
+        "201":
+          description: Draft claim version created for the caller as maker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
   /clerk/explain-failure:
     post:
       operationId: explainInvoiceFailure
@@ -6232,6 +6289,18 @@ components:
           type: ["string", "null"]
         sourceDurationSec:
           type: ["integer", "null"]
+        # Deterministic pre-flight issues computed at extraction time (empty =
+        # clean; null = computed before this feature existed).
+        preflight:
+          type: ["array", "null"]
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string
         extraction:
           anyOf:
             - $ref: "#/components/schemas/ClerkExtraction"
@@ -6532,6 +6601,58 @@ components:
                 type: ["string", "null"]
         injectionResisted:
           type: ["boolean", "null"]
+    BatchClerkCasesInput:
+      type: object
+      required: [sourceType]
+      properties:
+        sourceType:
+          type: string
+          enum: [pdf, text]
+        name:
+          type: string
+        text:
+          type: string
+        pdfBase64:
+          type: string
+    BatchClerkCasesResult:
+      type: object
+      required: [cases, segments, skippedDuplicates]
+      properties:
+        cases:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkCase"
+        # How many invoices the segmentation found (>= cases + skipped).
+        segments:
+          type: integer
+        skippedDuplicates:
+          type: integer
+    ClerkDigest:
+      type: object
+      required: [weekStart, headline, bullets, source]
+      properties:
+        weekStart:
+          type: string
+          format: date-time
+        headline:
+          type: string
+        bullets:
+          type: array
+          items:
+            type: string
+        # 'clerk' = model-phrased narrative; 'template' = deterministic text.
+        source:
+          type: string
+          enum: [clerk, template]
+    DraftClaimWithClerkInput:
+      type: object
+      required: [sourceText]
+      properties:
+        sourceText:
+          type: string
+          minLength: 40
+          maxLength: 20000
+
     ExplainFailureInput:
       type: object
       required: [invoiceId]

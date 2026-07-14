@@ -27,6 +27,11 @@ import {
   GetClerkUsageResponse,
   ExplainInvoiceFailureBody,
   ExplainInvoiceFailureResponse,
+  CreateClerkCaseBatchBody,
+  CreateClerkCaseBatchResponse,
+  GetClerkDigestResponse,
+  DraftClaimWithClerkBody,
+  DraftClaimWithClerkResponse,
 } from "@workspace/api-zod";
 import { assertCan, tenantFirmId } from "../modules/auth/rbac";
 import {
@@ -43,6 +48,9 @@ import {
   retryExtraction,
 } from "../modules/clerk/cases";
 import { askClerk } from "../modules/clerk/ask";
+import { createBatchCases } from "../modules/clerk/batch";
+import { latestDigestForFirm } from "../modules/clerk/digest";
+import { draftClaimWithClerk } from "../modules/clerk/draft-claim";
 import { explainInvoiceFailure } from "../modules/clerk/explain";
 import { getClerkMetrics } from "../modules/clerk/metrics";
 import { getClerkGateway } from "../modules/clerk/provider";
@@ -126,6 +134,27 @@ router.post("/clerk/cases", async (req, res): Promise<void> => {
     { firmId: tenant },
   );
   res.status(201).json(CreateClerkCaseResponse.parse(row));
+});
+
+// Batch intake (power S): one upload with several invoices → one case per
+// invoice, via the same createExtractionCase path as single capture (same
+// duplicate guard, extraction, pre-flight and human review).
+router.post("/clerk/cases/batch", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.capture");
+  const parsed = CreateClerkCaseBatchBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  // Budget gate up front like single capture; batch.ts re-checks between
+  // segments so a firm can't blow far past its allowance in one upload.
+  const tenant = tenantFirmId(req.principal);
+  if (tenant) await assertFirmClerkBudget(tenant);
+  const gateway = await getClerkGateway();
+  const result = await createBatchCases(parsed.data, req.principal.userId, gateway, {
+    firmId: tenant,
+  });
+  res.status(201).json(CreateClerkCaseBatchResponse.parse(result));
 });
 
 router.post("/clerk/cases/:id/decision", async (req, res): Promise<void> => {
@@ -253,6 +282,44 @@ router.post("/clerk/explain-failure", async (req, res): Promise<void> => {
     gateway,
   );
   res.json(ExplainInvoiceFailureResponse.parse(explanation));
+});
+
+// The firm's latest weekly digest (power D). Facts are SQL-computed; the
+// narrative is Clerk-phrased or template text (see modules/clerk/digest).
+// Generation happens on the sweep (opt-in clerk_digest flag) — this endpoint
+// only reads, so it never spends tokens.
+router.get("/clerk/digest", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.ask");
+  const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
+  if (!tenant) {
+    res.status(400).json({ error: "A firm scope is required for the digest" });
+    return;
+  }
+  const digest = await latestDigestForFirm(tenant);
+  if (!digest) {
+    res.status(404).json({ error: "No digest has been generated yet" });
+    return;
+  }
+  res.json(GetClerkDigestResponse.parse(digest));
+});
+
+// Claims drafting assistant (power C5): operator pastes a statutory excerpt,
+// Clerk structures a DRAFT register entry. Maker-checker is untouched — the
+// caller is the maker and can never approve the version it drafted.
+router.post("/clerk/claims/draft", async (req, res): Promise<void> => {
+  assertCan(req.principal, "claims.write");
+  const parsed = DraftClaimWithClerkBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const gateway = await getClerkGateway();
+  const row = await draftClaimWithClerk(
+    parsed.data.sourceText,
+    req.principal.userId,
+    gateway,
+  );
+  res.status(201).json(DraftClaimWithClerkResponse.parse(row));
 });
 
 // The firm's month-to-date Clerk consumption against its allowance, for the

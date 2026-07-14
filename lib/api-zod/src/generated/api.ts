@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.8.0
+ * OpenAPI spec version: 0.9.0
  */
 import * as zod from 'zod';
 
@@ -3375,6 +3375,10 @@ export const ListClerkCasesResponseItem = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3461,6 +3465,10 @@ export const CreateClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3531,6 +3539,10 @@ export const GetClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3626,6 +3638,10 @@ export const DecideClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3704,6 +3720,10 @@ export const AskClerkResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3791,6 +3811,10 @@ export const RetryClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3864,6 +3888,10 @@ export const ClaimClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -3937,6 +3965,10 @@ export const ReleaseClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
   "field": zod.string(),
@@ -4095,6 +4127,142 @@ export const ListClerkEvalRunsResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const ListClerkEvalRunsResponse = zod.array(ListClerkEvalRunsResponseItem)
+
+
+/**
+ * @summary Split a multi-invoice document into segments and open one case per invoice
+ */
+export const CreateClerkCaseBatchBody = zod.object({
+  "sourceType": zod.enum(['pdf', 'text']),
+  "name": zod.string().optional(),
+  "text": zod.string().optional(),
+  "pdfBase64": zod.string().optional()
+})
+
+export const CreateClerkCaseBatchResponse = zod.object({
+  "cases": zod.array(zod.object({
+  "id": zod.string(),
+  "kind": zod.enum(['extraction', 'question']),
+  "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
+  "sourceType": zod.string().nullish(),
+  "sourceName": zod.string().nullish(),
+  "sourceText": zod.string().nullish(),
+  "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string()
+})).nullish(),
+  "extraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "lines": zod.array(zod.object({
+  "description": zod.string().nullable(),
+  "quantity": zod.string().nullable(),
+  "unitPrice": zod.string().nullable(),
+  "vatRate": zod.string().nullable(),
+  "confidence": zod.number()
+})),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "question": zod.string().nullish(),
+  "answer": zod.union([zod.object({
+  "answered": zod.boolean(),
+  "claimId": zod.string().optional(),
+  "claimKey": zod.string().optional(),
+  "claimVersion": zod.number().optional(),
+  "proposition": zod.string().optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})).optional(),
+  "citation": zod.string().optional(),
+  "refusalReason": zod.string().optional()
+}),zod.null()]).optional(),
+  "firmId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
+  "createdBy": zod.string(),
+  "decidedBy": zod.string().nullish(),
+  "decisionAction": zod.string().nullish(),
+  "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
+  "createdInvoiceId": zod.string().nullish(),
+  "failReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "segments": zod.number(),
+  "skippedDuplicates": zod.number()
+})
+
+
+/**
+ * @summary The firm's latest weekly Clerk digest (facts computed by SQL; narrative only phrased)
+ */
+export const GetClerkDigestResponse = zod.object({
+  "weekStart": zod.coerce.date(),
+  "headline": zod.string(),
+  "bullets": zod.array(zod.string()),
+  "source": zod.enum(['clerk', 'template'])
+})
+
+
+/**
+ * @summary Draft a structured claim record from pasted source text (enters the normal maker-checker flow)
+ */
+export const draftClaimWithClerkBodySourceTextMin = 40;
+export const draftClaimWithClerkBodySourceTextMax = 20000;
+
+
+
+export const DraftClaimWithClerkBody = zod.object({
+  "sourceText": zod.string().min(draftClaimWithClerkBodySourceTextMin).max(draftClaimWithClerkBodySourceTextMax)
+})
+
+export const DraftClaimWithClerkResponse = zod.object({
+  "id": zod.string(),
+  "claimKey": zod.string(),
+  "version": zod.number(),
+  "state": zod.enum(['draft', 'review', 'active', 'suspended', 'superseded', 'expired', 'rejected']),
+  "title": zod.string(),
+  "proposition": zod.string(),
+  "protectedFacts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "citation": zod.string(),
+  "applicability": zod.record(zod.string(), zod.string()),
+  "effectiveFrom": zod.string(),
+  "effectiveTo": zod.string().nullish(),
+  "reviewDueAt": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "submittedBy": zod.string().nullish(),
+  "decidedBy": zod.string().nullish(),
+  "decisionNote": zod.string().nullish(),
+  "supersededById": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
 
 
 /**

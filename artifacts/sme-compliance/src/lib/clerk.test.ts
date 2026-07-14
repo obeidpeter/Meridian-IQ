@@ -1,5 +1,6 @@
 import { test, expect, describe } from "vitest";
 import {
+  batchSummary,
   captureStatusLabel,
   captureBadgeClasses,
   usagePct,
@@ -57,6 +58,44 @@ describe("usagePct", () => {
     expect(usagePct(500, Number.NaN)).toBe(0);
     expect(usagePct(500, Number.POSITIVE_INFINITY)).toBe(0);
     expect(usagePct(Number.NaN, 1_000)).toBe(0);
+  });
+});
+
+describe("batchSummary", () => {
+  test("reads naturally for a clean multi-invoice batch", () => {
+    expect(batchSummary(3, 0)).toBe(
+      "Clerk found 3 invoices and opened a case for each",
+    );
+  });
+
+  test("appends the duplicate count when some segments were skipped", () => {
+    expect(batchSummary(3, 1)).toBe(
+      "Clerk found 3 invoices and opened a case for each · 1 duplicate skipped",
+    );
+    expect(batchSummary(2, 2)).toBe(
+      "Clerk found 2 invoices and opened a case for each · 2 duplicates skipped",
+    );
+  });
+
+  test("singularizes a one-invoice batch", () => {
+    expect(batchSummary(1, 0)).toBe(
+      "Clerk found 1 invoice and opened a case for it",
+    );
+  });
+
+  test("explains an all-duplicates batch instead of claiming new cases", () => {
+    expect(batchSummary(0, 2)).toBe(
+      "Clerk found 2 invoices, but you'd already sent them all",
+    );
+    expect(batchSummary(0, 1)).toBe(
+      "Clerk found 1 invoice, but you'd already sent it",
+    );
+  });
+
+  test("falls back sanely when nothing was opened or skipped", () => {
+    expect(batchSummary(0, 0)).toBe(
+      "Clerk didn't find any new invoices in that document",
+    );
   });
 });
 

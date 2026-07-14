@@ -159,6 +159,14 @@ export interface ClerkExtraction {
   model: string;
 }
 
+// Deterministic pre-approval checks run over the extraction (never the model):
+// missing critical values, malformed dates/rates, totals that don't add up.
+// Empty array = nothing blocking; null = extraction never succeeded.
+export interface PreflightIssue {
+  field: string;
+  message: string;
+}
+
 // Per-field record of what the operator changed between the model's proposal
 // and the approved values — the labeled-outcome exhaust the two-layer thesis
 // runs on (every extraction a human corrects is training signal for later
@@ -200,6 +208,8 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   // Recorder-reported length of a voice note, in seconds (voice sources only).
   sourceDurationSec: integer("source_duration_sec"),
   extraction: jsonb("extraction").$type<ClerkExtraction>(),
+  // Recomputed on every successful (re-)extraction; see modules/clerk/preflight.
+  preflight: jsonb("preflight").$type<PreflightIssue[]>(),
   // --- question cases ---
   question: text("question"),
   answer: jsonb("answer").$type<ClerkAnswer>(),
@@ -324,6 +334,37 @@ export const clerkEvalFixturesTable = pgTable("clerk_eval_fixtures", {
   createdAt: createdAt(),
 });
 export type ClerkEvalFixtureRow = typeof clerkEvalFixturesTable.$inferSelect;
+
+// ============ Clerk power D — weekly firm digest ============
+// One row per firm per ISO week. The FACTS in a digest are computed by SQL
+// (deadlines, failures, receivables); the model only phrases them — and when
+// it can't (kill switch, budget, invalid output), the deterministic template
+// text is stored instead, recorded via `source`. Firm-keyed RLS (migration
+// 0011) so a firm reads only its own digests.
+
+export const clerkDigestSourceEnum = pgEnum("clerk_digest_source", [
+  "clerk",
+  "template",
+]);
+
+export const clerkDigestsTable = pgTable(
+  "clerk_digests",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    // Monday 00:00 UTC of the week the digest covers.
+    weekStart: timestamp("week_start", { withTimezone: true }).notNull(),
+    headline: text("headline").notNull(),
+    bullets: jsonb("bullets").$type<string[]>().notNull().default([]),
+    source: clerkDigestSourceEnum("source").notNull(),
+    createdAt: createdAt(),
+  },
+  // The sweep's idempotency anchor: at most one digest per firm per week.
+  (t) => [unique().on(t.firmId, t.weekStart)],
+);
+export type ClerkDigestRow = typeof clerkDigestsTable.$inferSelect;
 
 export type ClaimRecord = typeof claimRecordsTable.$inferSelect;
 export type ClerkCase = typeof clerkCasesTable.$inferSelect;

@@ -117,14 +117,18 @@ export type FakeResponse =
 
 // A ClerkProvider stub wrapped in the real gateway: the fail-closed pipeline
 // (kill switch, ledger, schema validation) runs for real; only the model call
-// is faked. The stub ignores the completion request.
+// is faked. The responder receives the completion request so multi-call flows
+// (batch segmentation → per-segment extraction) can branch on schemaName;
+// single-purpose tests just ignore the argument.
 export function fakeGateway(
-  respond: () => FakeResponse | Promise<FakeResponse>,
+  respond: (
+    req: import("./gateway.ts").CompletionRequest,
+  ) => FakeResponse | Promise<FakeResponse>,
   model = "fake-model-test",
 ): ClerkGateway {
   const provider: ClerkProvider = {
     model,
-    complete: async () => respond(),
+    complete: async (req) => respond(req),
   };
   return createGateway(provider);
 }

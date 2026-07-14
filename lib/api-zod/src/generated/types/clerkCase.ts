@@ -3,10 +3,11 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.8.0
+ * OpenAPI spec version: 0.9.0
  */
 import type { ClerkAnswer } from './clerkAnswer';
 import type { ClerkCaseKind } from './clerkCaseKind';
+import type { ClerkCasePreflightItem } from './clerkCasePreflightItem';
 import type { ClerkCaseStatus } from './clerkCaseStatus';
 import type { ClerkCorrection } from './clerkCorrection';
 import type { ClerkExtraction } from './clerkExtraction';
@@ -27,6 +28,8 @@ export interface ClerkCase {
   sourceHash?: string | null;
   /** @nullable */
   sourceDurationSec?: number | null;
+  /** @nullable */
+  preflight?: ClerkCasePreflightItem[] | null;
   extraction?: ClerkExtraction | null;
   /** @nullable */
   question?: string | null;

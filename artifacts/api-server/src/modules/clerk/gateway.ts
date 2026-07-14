@@ -53,7 +53,16 @@ export type ClerkPurpose =
   | "eval_extract"
   // Catalogue-grounded failure explainer (expansion C): rephrases an error
   // catalogue entry in plain language; never invents remediation steps.
-  | "explain_failure";
+  | "explain_failure"
+  // Batch intake (power S): splits one uploaded document into per-invoice
+  // text segments; each segment then goes through normal extraction.
+  | "segment_batch"
+  // Weekly firm digest (power D): phrases platform-computed compliance facts;
+  // the numbers themselves are never model output.
+  | "digest"
+  // Claims drafting assistant (power C5): turns a statutory excerpt into a
+  // DRAFT claim-register entry — maker-checker review still applies in full.
+  | "draft_claim";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;
