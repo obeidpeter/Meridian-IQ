@@ -30,6 +30,9 @@ import { Parties } from "@/pages/parties";
 import { Invitations } from "@/pages/invitations";
 import { ClerkClaims } from "@/pages/clerk-claims";
 import { ClerkWorkspace } from "@/pages/clerk";
+import { ClerkAskPage } from "@/pages/clerk-ask";
+import { ClerkHealthPage } from "@/pages/clerk-health";
+import { ClerkShell } from "@/components/clerk-shell";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
 // up, so fail fast to the "not yet enabled" card instead of spinning.
@@ -65,6 +68,49 @@ function Home() {
 }
 
 function Router() {
+  return (
+    <Switch>
+      {/* The Clerk AI workspace is its own product surface: these routes
+          render full-bleed inside the ClerkShell (dark rail) instead of the
+          standard console Layout. Static sub-routes register before the bare
+          /clerk route. Claims reads are gated on claims.read; everything else
+          on clerk.use — the server enforces the write capabilities. */}
+      <Route path="/clerk/claims">
+        <ClerkShell>
+          <CapabilityGate capability="claims.read">
+            <ClerkClaims />
+          </CapabilityGate>
+        </ClerkShell>
+      </Route>
+      <Route path="/clerk/ask">
+        <ClerkShell>
+          <CapabilityGate capability="clerk.use">
+            <ClerkAskPage />
+          </CapabilityGate>
+        </ClerkShell>
+      </Route>
+      <Route path="/clerk/health">
+        <ClerkShell>
+          <CapabilityGate capability="clerk.use">
+            <ClerkHealthPage />
+          </CapabilityGate>
+        </ClerkShell>
+      </Route>
+      <Route path="/clerk">
+        <ClerkShell>
+          <CapabilityGate capability="clerk.use">
+            <ClerkWorkspace />
+          </CapabilityGate>
+        </ClerkShell>
+      </Route>
+      <Route>
+        <ConsoleRoutes />
+      </Route>
+    </Switch>
+  );
+}
+
+function ConsoleRoutes() {
   return (
     <Layout>
       <Switch>
@@ -155,20 +201,8 @@ function Router() {
             <FeatureFlags />
           </CapabilityGate>
         </Route>
-        {/* Static /clerk/claims registers before the bare /clerk route. Reads
-            are gated on claims.read; mutations render regardless — the server
-            enforces claims.write / claims.approve. */}
-        <Route path="/clerk/claims">
-          <CapabilityGate capability="claims.read">
-            <ClerkClaims />
-          </CapabilityGate>
-        </Route>
-        <Route path="/clerk">
-          <CapabilityGate capability="clerk.use">
-            <ClerkWorkspace />
-          </CapabilityGate>
-        </Route>
-        {/* The register used to live at /claims — keep old links working. */}
+        {/* The register used to live at /claims — keep old links working.
+            (/clerk/* itself is routed above, outside this Layout.) */}
         <Route path="/claims">
           <Redirect to="/clerk/claims" replace />
         </Route>

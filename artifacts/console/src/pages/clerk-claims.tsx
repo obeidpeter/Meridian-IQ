@@ -46,7 +46,6 @@ import {
 } from "@/lib/errors";
 import { formatDate, pillClasses, type BadgeTone } from "@/lib/format";
 import {
-  BookMarked,
   ChevronDown,
   ChevronRight,
   Pencil,
@@ -651,14 +650,16 @@ export function ClerkClaims() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+            Claims register
+          </p>
           <h1
-            className="text-2xl font-semibold flex items-center gap-2"
+            className="mt-1 text-3xl font-bold tracking-tight"
             data-testid="text-page-title"
           >
-            <BookMarked className="w-6 h-6" aria-hidden="true" /> Claims
-            register
+            Approved facts
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1.5 max-w-xl">
             Every binding fact Clerk states comes from an active record here.
             Maker-checker: the author of a version can never approve it.
           </p>
