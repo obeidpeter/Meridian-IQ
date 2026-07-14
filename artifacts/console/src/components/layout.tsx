@@ -24,6 +24,7 @@ import {
   FileCheck2,
   BookMarked,
   Bot,
+  UserPlus,
 } from "lucide-react";
 import {
   Sheet,
@@ -56,6 +57,7 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
       { href: "/pipeline", label: "Onboarding", icon: GitBranch, capability: "console.portfolio.read" },
       { href: "/clients/import", label: "Client import", icon: Upload, capability: "clients.import" },
       { href: "/advisory", label: "Advisory", icon: ClipboardCheck, capability: "engagement.write" },
+      { href: "/invitations", label: "Team invitations", icon: UserPlus, capability: "invitation.write" },
       { href: "/integrations", label: "Integrations", icon: Plug, capability: "connector.read" },
     ],
   },
