@@ -1,4 +1,4 @@
-const CACHE = "meridianiq-v2";
+const CACHE = "meridianiq-v3";
 
 // This app is served at the origin root ("/"), so its service worker scope
 // covers the ENTIRE origin — including sibling artifacts served under their own
@@ -32,6 +32,10 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Network-first for EVERYTHING (shell, assets and API): fresh content is
+// always served when online, and the cache is only a fallback for offline
+// use. Cache-first shell serving previously hid newly deployed features
+// (e.g. the Clerk nav) until users hard-refreshed — never reintroduce it.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -41,32 +45,26 @@ self.addEventListener("fetch", (event) => {
   // straight to the network so each app serves its own content.
   if (url.origin === self.location.origin && isForeign(url.pathname)) return;
 
-  // API: network-first so data is fresh online, cached copy served offline.
-  if (url.pathname.includes("/api/")) {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
-          return res;
-        })
-        .catch(() => caches.match(req)),
-    );
-    return;
-  }
-
-  // App shell / assets: cache-first, fall back to network, then the shell.
   event.respondWith(
-    caches.match(req).then(
-      (cached) =>
-        cached ||
-        fetch(req)
-          .then((res) => {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
-            return res;
-          })
-          .catch(() => caches.match(self.registration.scope)),
-    ),
+    fetch(req)
+      .then((res) => {
+        // Only keep responses worth serving offline; never cache error pages.
+        if (res.ok || res.type === "opaque") {
+          const copy = res.clone();
+          event.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)));
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(req).then((cached) => {
+          if (cached) return cached;
+          // Fall back to the cached shell only for page navigations, so a
+          // failed asset/API fetch offline doesn't get HTML instead.
+          if (req.mode === "navigate") {
+            return caches.match(self.registration.scope);
+          }
+          return Response.error();
+        }),
+      ),
   );
 });
