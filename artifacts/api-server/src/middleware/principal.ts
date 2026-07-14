@@ -42,6 +42,8 @@ const VALID_ROLES: Role[] = [
 // needs its theme before any login — and the session endpoints themselves).
 const PUBLIC_PATHS = new Set([
   "/api/healthz",
+  "/api/readyz",
+  "/api/metrics",
   "/api/internal/sweep",
   "/api/verify-stamp",
   "/api/public/theme",

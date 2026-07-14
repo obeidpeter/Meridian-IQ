@@ -17,6 +17,11 @@ import { submitWithFailover } from "../rails/adapter";
 import { openInvoiceCase } from "../desk/cases";
 import { isRetriable } from "../errors";
 import { logger } from "../../lib/logger";
+import {
+  sweepRunsTotal,
+  sweepErrorsTotal,
+  sweepLastSuccess,
+} from "../../lib/metrics";
 
 // Async submission pipeline (INT-09, SME-03 backend). A transactional outbox row
 // is written when an invoice is submitted; this worker drains it, calls the rail
@@ -640,9 +645,15 @@ async function runSweepPass(): Promise<void> {
     try {
       await sweep();
     } catch (err) {
+      sweepErrorsTotal.inc();
       logger.error({ err }, "compliance sweep failed");
     }
   }
+  // Record pass health for scraping: the run counter advances every pass and
+  // the gauge marks the last completion, so an alert can fire when the minute
+  // loop stalls (e.g. an Autoscale instance frozen overnight — OBS-01).
+  sweepRunsTotal.inc();
+  sweepLastSuccess.setToCurrentTime();
 }
 
 // In-process polling worker (modular monolith). Guarded against double-start.

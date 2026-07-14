@@ -50,6 +50,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Supply-chain gate: fail the build on a HIGH/CRITICAL advisory in a
+      # production dependency so a new CVE cannot land silently. Scoped to
+      # --prod (build/dev tooling is not shipped) and --audit-level=high so
+      # transitive moderates in the dev toolchain do not block merges.
+      - name: Dependency audit (prod, high+)
+        run: pnpm audit --prod --audit-level=high
+
       # Codegen drift: the OpenAPI spec is the contract; committed generated
       # clients must match it exactly or route validation silently diverges.
       - name: Codegen drift check
@@ -83,6 +90,10 @@ jobs:
       # Pure form math behind the mobile invoice screens (no DB, no Expo).
       - name: mobile unit tests
         run: pnpm --filter @workspace/mobile run test
+
+      # Pure CSV/xlsx import parsing + formatters/error helpers for the SME app.
+      - name: SME app unit tests
+        run: pnpm --filter @workspace/sme-compliance run test
 
       # CORE-06: tables come from drizzle push; the versioned guardrail
       # migrations (triggers, RLS, retention) must apply AND roll back cleanly.

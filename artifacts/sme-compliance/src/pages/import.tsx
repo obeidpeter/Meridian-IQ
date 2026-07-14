@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import * as XLSX from "xlsx";
+import { readSheet } from "read-excel-file/browser";
+import writeXlsxFile from "write-excel-file/browser";
 import {
   useGetMe,
   useImportInvoices,
@@ -33,19 +34,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-
-const COLUMNS = [
-  "invoiceNumber",
-  "buyerName",
-  "buyerTin",
-  "issueDate",
-  "dueDate",
-  "description",
-  "quantity",
-  "unitPrice",
-  "vatRate",
-  "currency",
-] as const;
+import { COLUMNS, parseCsv, mapGridRows, isExcel } from "./import-parse";
 
 const TEMPLATE =
   COLUMNS.join(",") +
@@ -62,81 +51,39 @@ function download(filename: string, text: string, mime = "text/csv") {
   URL.revokeObjectURL(url);
 }
 
-function downloadExcelTemplate() {
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([
-    [...COLUMNS],
-    [
-      "INV-2001",
-      "Lagos Retail Ltd",
-      "12345678-0001",
-      "2026-07-01",
-      "2026-07-31",
-      "Consulting services",
-      "1",
-      "150000",
-      "0.075",
-      "NGN",
-    ],
-  ]);
-  XLSX.utils.book_append_sheet(wb, ws, "Invoices");
-  XLSX.writeFile(wb, "meridianiq-template.xlsx");
+async function downloadExcelTemplate() {
+  const header = COLUMNS.map((value) => ({
+    value,
+    type: String,
+    fontWeight: "bold" as const,
+  }));
+  const example = [
+    "INV-2001",
+    "Lagos Retail Ltd",
+    "12345678-0001",
+    "2026-07-01",
+    "2026-07-31",
+    "Consulting services",
+    "1",
+    "150000",
+    "0.075",
+    "NGN",
+  ].map((value) => ({ value, type: String }));
+  await writeXlsxFile([header, example], { sheet: "Invoices" }).toFile(
+    "meridianiq-template.xlsx",
+  );
 }
 
-function mapRow(row: Record<string, unknown>, idx: number): InvoiceImportRow {
-  const cell = (k: string) => {
-    const v = row[k];
-    return v === undefined || v === null ? "" : String(v).trim();
-  };
-  return {
-    rowNumber: idx + 1,
-    invoiceNumber: cell("invoiceNumber"),
-    buyerName: cell("buyerName"),
-    buyerTin: cell("buyerTin"),
-    issueDate: cell("issueDate"),
-    dueDate: cell("dueDate"),
-    description: cell("description"),
-    quantity: cell("quantity"),
-    unitPrice: cell("unitPrice"),
-    vatRate: cell("vatRate"),
-    currency: cell("currency"),
-  } as InvoiceImportRow;
-}
-
-function parseCsv(text: string): InvoiceImportRow[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length < 2) return [];
-  const header = lines[0].split(",").map((h) => h.trim());
-  return lines.slice(1).map((line, idx) => {
-    const cells = line.split(",");
-    const row: Record<string, string> = {};
-    header.forEach((h, i) => {
-      row[h] = (cells[i] || "").trim();
-    });
-    return mapRow(row, idx);
-  });
-}
-
-// Parse the first sheet of an Excel workbook (.xlsx/.xls). Header row must use
+// Parse the first sheet of an uploaded .xlsx workbook. The header row must use
 // the same canonical column names as the CSV template so both formats map to the
 // identical import-row model and run through the same server-side validator.
-function parseWorkbook(data: ArrayBuffer): InvoiceImportRow[] {
-  const wb = XLSX.read(data, { type: "array" });
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) return [];
-  const sheet = wb.Sheets[sheetName];
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-    defval: "",
-    raw: false,
-  });
-  return json.map((row, idx) => mapRow(row, idx));
-}
-
-function isExcel(name: string): boolean {
-  return /\.xlsx?$/i.test(name);
+// read-excel-file replaces the unmaintained SheetJS build (prototype-pollution
+// / ReDoS advisories) — it parses only the modern .xlsx (Office Open XML)
+// container, so a legacy binary .xls surfaces the read-error toast. The pure
+// grid-to-row mapping lives in ./import-parse (mapGridRows) so it can be tested.
+async function parseWorkbook(file: Blob): Promise<InvoiceImportRow[]> {
+  const grid = await readSheet(file);
+  return mapGridRows(grid);
 }
 
 export function Import() {
@@ -162,8 +109,7 @@ export function Import() {
     setResult(null);
     try {
       if (isExcel(file.name)) {
-        const buf = await file.arrayBuffer();
-        const parsed = parseWorkbook(buf);
+        const parsed = await parseWorkbook(file);
         setFileRows(parsed);
         setFileName(file.name);
         setRaw("");
