@@ -11,8 +11,6 @@ import {
   unique,
   index,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { invoicesTable } from "./invoices.ts";
@@ -140,25 +138,11 @@ export const buyerExposureSnapshotsTable = pgTable("buyer_exposure_snapshots", {
     .defaultNow(),
 });
 
-export const insertBankStatementSchema = createInsertSchema(
-  bankStatementsTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertBankStatementLineSchema = createInsertSchema(
-  bankStatementLinesTable,
-).omit({ id: true, createdAt: true });
-export const insertMatchProposalSchema = createInsertSchema(
-  matchProposalsTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-
 export type BankStatement = typeof bankStatementsTable.$inferSelect;
 export type BankStatementLine = typeof bankStatementLinesTable.$inferSelect;
 export type MatchProposal = typeof matchProposalsTable.$inferSelect;
 export type BuyerExposureSnapshot =
   typeof buyerExposureSnapshotsTable.$inferSelect;
-export type InsertBankStatement = z.infer<typeof insertBankStatementSchema>;
-export type InsertBankStatementLine = z.infer<
-  typeof insertBankStatementLineSchema
->;
 export type MatchProposalStatus =
   (typeof matchProposalStatusEnum.enumValues)[number];
 export type StatementLineParseStatus =

@@ -63,7 +63,12 @@ export default function EstimatorScreen() {
         fully offline — nothing you enter here is sent anywhere.
       </AppText>
 
-      <AppText variant="caption" color={colors.mutedForeground} style={styles.sectionLabel}>
+      {/* Caption eyebrow: keeps the tracking sectionLabel no longer carries. */}
+      <AppText
+        variant="caption"
+        color={colors.mutedForeground}
+        style={[styles.sectionLabel, { letterSpacing: 0.6 }]}
+      >
         WHAT HAPPENED?
       </AppText>
       <Card padded={false}>
@@ -245,7 +250,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 8,
     marginLeft: 4,
-    letterSpacing: 0.6,
   },
   optionRow: {
     flexDirection: "row",

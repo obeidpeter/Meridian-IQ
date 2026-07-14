@@ -4,8 +4,6 @@ import {
   boolean,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { createdAt, updatedAt } from "./columns.ts";
 
 // Persisted, operator-editable validation-error catalogue (ADV-03, INT-02).
@@ -31,13 +29,4 @@ export const errorCatalogueTable = pgTable("error_catalogue", {
   updatedAt: updatedAt(),
 });
 
-export const insertErrorCatalogueSchema = createInsertSchema(
-  errorCatalogueTable,
-).omit({
-  createdAt: true,
-  updatedAt: true,
-});
-export type InsertErrorCatalogueEntry = z.infer<
-  typeof insertErrorCatalogueSchema
->;
 export type ErrorCatalogueEntryRow = typeof errorCatalogueTable.$inferSelect;

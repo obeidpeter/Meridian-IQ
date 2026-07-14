@@ -10,8 +10,6 @@ import {
   pgEnum,
   unique,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { firmsTable, usersTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { invoicesTable } from "./invoices.ts";
@@ -196,24 +194,7 @@ export const revenueShareStatementsTable = pgTable(
   (t) => [unique().on(t.firmId, t.period)],
 );
 
-export const insertBillingTierSchema = createInsertSchema(billingTiersTable).omit(
-  { id: true, createdAt: true, updatedAt: true },
-);
-export const insertFirmSubscriptionSchema = createInsertSchema(
-  firmSubscriptionsTable,
-).omit({ id: true, startedAt: true, updatedAt: true });
-export const insertOnboardingProspectSchema = createInsertSchema(
-  onboardingProspectsTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertOperatorCaseSchema = createInsertSchema(
-  operatorCasesTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertRevenueShareStatementSchema = createInsertSchema(
-  revenueShareStatementsTable,
-).omit({ id: true, generatedAt: true });
-
 export type BillingTier = typeof billingTiersTable.$inferSelect;
-export type InsertBillingTier = z.infer<typeof insertBillingTierSchema>;
 export type FirmSubscription = typeof firmSubscriptionsTable.$inferSelect;
 export type PriceReview = typeof priceReviewsTable.$inferSelect;
 export type OnboardingProspect = typeof onboardingProspectsTable.$inferSelect;

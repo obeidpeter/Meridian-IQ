@@ -34,7 +34,9 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { apiErrorMessage } from "@/lib/api-error";
 import {
+  blankLine,
   computeTotals,
   isValidISODate,
   normalizeLines,
@@ -43,18 +45,10 @@ import {
 import type { LineDraft, LineErrors } from "@/lib/invoice-form";
 import { useSession } from "@/lib/session";
 
-const DEFAULT_VAT_RATE = "7.5";
-
 let lineCounter = 0;
 function newLine(): LineDraft {
   lineCounter += 1;
-  return {
-    key: `line-${lineCounter}`,
-    description: "",
-    quantity: "1",
-    unitPrice: "",
-    vatRate: DEFAULT_VAT_RATE,
-  };
+  return blankLine(`line-${lineCounter}`);
 }
 
 function todayISO(): string {
@@ -298,10 +292,14 @@ export default function InvoiceScreen() {
           const errs = (data as { errors?: unknown }).errors;
           if (Array.isArray(errs)) setFieldErrors(errs as FieldError[]);
         }
+        // Unlike the detail/fix screens, this banner only ever surfaces a
+        // server-sent `message` — anything else (an `{ error }` payload, a
+        // transport failure) keeps the friendly fallback.
+        const fallback = "We couldn't submit this invoice. Please try again.";
         const message =
           data && typeof data === "object" && "message" in data
-            ? String((data as { message?: unknown }).message)
-            : "We couldn't submit this invoice. Please try again.";
+            ? apiErrorMessage(error, fallback)
+            : fallback;
         setBanner({ tone: "error", message });
         scrollToTop();
         // If a draft was created before the failure, keep its id (so the next
@@ -368,7 +366,7 @@ export default function InvoiceScreen() {
                         borderWidth: selected ? 2 : StyleSheet.hairlineWidth,
                       }}
                     >
-                      <View style={styles.rowBetween}>
+                      <View style={rowBetween}>
                         <View style={{ flex: 1 }}>
                           <AppText variant="label">{buyer.legalName}</AppText>
                           {buyer.tin ? (
@@ -417,7 +415,7 @@ export default function InvoiceScreen() {
         />
 
         <View style={{ gap: 12 }}>
-          <View style={styles.rowBetween}>
+          <View style={rowBetween}>
             <AppText variant="heading">Line items</AppText>
             <Pressable onPress={addLine} style={styles.addBtn}>
               <Feather name="plus" size={16} color={colors.primary} />
@@ -493,7 +491,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     ...webContentMax,
   },
-  rowBetween: { ...rowBetween },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",

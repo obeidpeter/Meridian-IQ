@@ -6,8 +6,6 @@ import {
   integer,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { createdAt, id, updatedAt } from "./columns.ts";
 
 // A Party is any legal person in the spine: client business, buyer, firm or bank.
@@ -46,16 +44,5 @@ export const partiesTable = pgTable("parties", {
   updatedAt: updatedAt(),
 });
 
-export const insertPartySchema = createInsertSchema(partiesTable).omit({
-  id: true,
-  mergedIntoId: true,
-  schemaVersion: true,
-  createdAt: true,
-  updatedAt: true,
-  // Provenance is stamped from the authenticated principal, never from input.
-  createdByFirmId: true,
-  createdByUserId: true,
-});
-export type InsertParty = z.infer<typeof insertPartySchema>;
 export type Party = typeof partiesTable.$inferSelect;
 export type PartyType = (typeof partyTypeEnum.enumValues)[number];

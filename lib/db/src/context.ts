@@ -49,30 +49,9 @@ async function setGucs(
   }
 }
 
-// Run `fn` inside a transaction bound to a tenant (firm-scoped) RLS context.
-export async function runInTenantContext<T>(
-  firmId: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    const scoped = tx as unknown as Database;
-    await setGucs(scoped, { bypass: false, firmId });
-    return storage.run({ db: scoped }, fn);
-  });
-}
-
-// Run `fn` inside a transaction that bypasses tenant RLS (cross-tenant staff and
-// trusted internal work: seeding, the async submission worker, reconciliation).
-export async function runInBypassContext<T>(fn: () => Promise<T>): Promise<T> {
-  return db.transaction(async (tx) => {
-    const scoped = tx as unknown as Database;
-    await setGucs(scoped, { bypass: true, firmId: null });
-    return storage.run({ db: scoped }, fn);
-  });
-}
-
-// Low-level entry used by the request middleware: choose bypass vs tenant based
-// on the resolved principal and run the rest of the request inside it.
+// Core entry: open a transaction, bind the RLS GUCs, and run `fn` with the
+// scoped transaction as the ambient getDb(). The request middleware calls this
+// directly with the principal-derived options.
 export async function runRequestContext<T>(
   opts: { bypass: boolean; firmId: string | null },
   fn: () => Promise<T>,
@@ -82,4 +61,10 @@ export async function runRequestContext<T>(
     await setGucs(scoped, opts);
     return storage.run({ db: scoped }, fn);
   });
+}
+
+// Run `fn` inside a transaction that bypasses tenant RLS (cross-tenant staff and
+// trusted internal work: seeding, the async submission worker, reconciliation).
+export async function runInBypassContext<T>(fn: () => Promise<T>): Promise<T> {
+  return runRequestContext({ bypass: true, firmId: null }, fn);
 }

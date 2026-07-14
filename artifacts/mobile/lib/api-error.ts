@@ -21,7 +21,8 @@ export function hasStatus(error: unknown, code: number): boolean {
 /**
  * Pull the server's message out of a thrown API error, if present. The 403
  * consent refusal from bulk submit arrives as `{ error }`; validation-style
- * failures use `{ message }`.
+ * failures use `{ message }`. When the payload carries neither, a thrown
+ * Error's own message (e.g. a transport failure) is used before the fallback.
  */
 export function apiErrorMessage(error: unknown, fallback: string): string {
   const data =
@@ -36,5 +37,5 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
     const message = (data as { error?: unknown }).error;
     if (typeof message === "string" && message) return message;
   }
-  return fallback;
+  return error instanceof Error && error.message ? error.message : fallback;
 }

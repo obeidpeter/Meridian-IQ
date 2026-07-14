@@ -76,6 +76,10 @@ const router: IRouter = Router();
 // Invoice statuses that count as processed volume for billing/overages.
 const BILLED_STATUSES = ["submitted", "stamped", "confirmed", "settled"] as const;
 
+// Highest-first sort rank shared by the portfolio risk list and the operator
+// queue.
+const PRIORITY_RANK = { high: 0, medium: 1, low: 2 } as const;
+
 // The firm a console request is scoped to. Firm roles use their bound firm;
 // cross-tenant staff (operator/auditor) fall back to their bound firm if any.
 function firmScope(principal: Principal): string {
@@ -233,8 +237,7 @@ router.get("/console/portfolio", async (req, res): Promise<void> => {
   }
 
   // Riskiest clients first so the partner triages top-down.
-  const order = { high: 0, medium: 1, low: 2 } as const;
-  risks.sort((a, b) => order[a.penaltyRisk] - order[b.penaltyRisk]);
+  risks.sort((a, b) => PRIORITY_RANK[a.penaltyRisk] - PRIORITY_RANK[b.penaltyRisk]);
 
   const summary = {
     firmId,
@@ -896,9 +899,10 @@ function escalationView(
   };
 }
 
-// Pure view assembly shared by the single-case path (caseView, which fetches
-// each lookup) and the batched list path (which resolves the same lookups in
-// bulk). Keeping the shape in one place means the two cannot drift.
+// Pure view assembly for the batched lookup path below. One shape, one
+// lookup implementation — the single-case handlers (claim/resolve) go through
+// caseViews with a one-element array rather than keeping a parallel
+// per-row-fetch variant that could drift.
 function shapeCaseView(
   row: OperatorCase,
   deps: {
@@ -933,54 +937,10 @@ function shapeCaseView(
   };
 }
 
-// Single case (claim/resolve responses): one case, a handful of lookups.
+// Single case (claim/resolve responses): the batched path with one row.
 async function caseView(row: OperatorCase) {
-  const [firm] = row.firmId
-    ? await getDb()
-        .select({ name: firmsTable.name })
-        .from(firmsTable)
-        .where(eq(firmsTable.id, row.firmId))
-        .limit(1)
-    : [];
-  const [client] = row.clientPartyId
-    ? await getDb()
-        .select({ legalName: partiesTable.legalName })
-        .from(partiesTable)
-        .where(eq(partiesTable.id, row.clientPartyId))
-        .limit(1)
-    : [];
-  const [invoice] = row.invoiceId
-    ? await getDb()
-        .select({ invoiceNumber: invoicesTable.invoiceNumber })
-        .from(invoicesTable)
-        .where(eq(invoicesTable.id, row.invoiceId))
-        .limit(1)
-    : [];
-  const [entry] = row.errorCode
-    ? await getDb()
-        .select()
-        .from(errorCatalogueTable)
-        .where(eq(errorCatalogueTable.code, row.errorCode))
-        .limit(1)
-    : [];
-  // SME-06: the operator sees what the client already reported and tried —
-  // escalations ride along with the case, no re-entry.
-  const escalations = row.invoiceId
-    ? (
-        await getDb()
-          .select()
-          .from(escalationsTable)
-          .where(eq(escalationsTable.invoiceId, row.invoiceId))
-          .orderBy(desc(escalationsTable.createdAt))
-      ).map(escalationView)
-    : [];
-  return shapeCaseView(row, {
-    firmName: firm?.name ?? null,
-    clientName: client?.legalName ?? null,
-    invoiceNumber: invoice?.invoiceNumber ?? null,
-    playbook: playbookFrom(entry),
-    escalations,
-  });
+  const [view] = await caseViews([row]);
+  return view;
 }
 
 // The list: resolve every lookup for the whole page in a fixed number of
@@ -1023,6 +983,8 @@ async function caseViews(rows: OperatorCase[]) {
           .from(errorCatalogueTable)
           .where(inArray(errorCatalogueTable.code, codes))
       : [],
+    // SME-06: the operator sees what the client already reported and tried —
+    // escalations ride along with the case, no re-entry.
     invoiceIds.length
       ? getDb()
           .select()
@@ -1068,7 +1030,6 @@ router.get("/operator/cases", async (req, res): Promise<void> => {
     res.status(400).json({ error: query.error.message });
     return;
   }
-  const priorityRank = { high: 0, medium: 1, low: 2 } as const;
   const rows = await getDb()
     .select()
     .from(operatorCasesTable)
@@ -1079,7 +1040,7 @@ router.get("/operator/cases", async (req, res): Promise<void> => {
     )
     .orderBy(desc(operatorCasesTable.openedAt));
   rows.sort(
-    (a, b) => priorityRank[a.priority] - priorityRank[b.priority],
+    (a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority],
   );
   res.json(ListOperatorCasesResponse.parse(await caseViews(rows)));
 });

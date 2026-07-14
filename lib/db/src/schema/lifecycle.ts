@@ -10,7 +10,6 @@ import {
   pgEnum,
   unique,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { invoicesTable, invoiceStatusEnum } from "./invoices.ts";
 import { partiesTable } from "./parties.ts";
 import { usersTable, firmsTable } from "./organizations.ts";
@@ -146,23 +145,6 @@ export const invoiceLifecycleEventsTable = pgTable("invoice_lifecycle_events", {
   reason: text("reason"),
   createdAt: createdAt(),
 });
-
-export const insertSubmissionAttemptSchema = createInsertSchema(
-  submissionAttemptsTable,
-).omit({ id: true, createdAt: true });
-export const insertStampRecordSchema = createInsertSchema(stampRecordsTable).omit(
-  { id: true, createdAt: true },
-);
-export const insertConfirmationSchema = createInsertSchema(
-  confirmationsTable,
-).omit({ id: true, createdAt: true });
-export const insertSettlementEventSchema = createInsertSchema(
-  settlementEventsTable,
-).omit({ id: true, createdAt: true });
-
-export const insertInvoiceLifecycleEventSchema = createInsertSchema(
-  invoiceLifecycleEventsTable,
-).omit({ id: true, createdAt: true });
 
 export type SubmissionAttempt = typeof submissionAttemptsTable.$inferSelect;
 export type InvoiceLifecycleEvent =

@@ -13,6 +13,7 @@ import {
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { sendMessage } from "../messaging/messaging";
+import { recipientRefFor } from "../messaging/recipient-ref";
 import { sendPushAlert } from "../push/push";
 import {
   SUBMISSION_WINDOW_DAYS,
@@ -37,11 +38,6 @@ export const STALE_OVERDUE_DAYS = 60;
 const BATCH_LIMIT = 100;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-function recipientRefFor(clientPartyId: string): string {
-  const letters = clientPartyId.replace(/[^a-z]/gi, "").slice(0, 16);
-  return `ref-${letters || "client"}`;
-}
 
 // Pointer-only entity reference (SEC-12): letters from the uuid, no digits.
 function pointerFor(invoiceId: string): string {
