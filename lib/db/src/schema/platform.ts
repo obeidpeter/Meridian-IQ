@@ -9,7 +9,6 @@ import {
   pgEnum,
   unique,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { firmsTable } from "./organizations.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
 
@@ -159,18 +158,6 @@ export const schemaVersionsTable = pgTable("schema_versions", {
   appliedAt: timestamp("applied_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
-
-export const insertFeatureFlagSchema = createInsertSchema(featureFlagsTable);
-export const insertMessageSchema = createInsertSchema(messagesTable).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export const insertOutboxSchema = createInsertSchema(outboxTable).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
 });
 
 export type FeatureFlag = typeof featureFlagsTable.$inferSelect;

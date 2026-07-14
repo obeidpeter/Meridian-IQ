@@ -42,7 +42,7 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
-import { errorStatus } from "@/lib/api-error";
+import { apiErrorMessage, errorStatus } from "@/lib/api-error";
 import {
   formatCurrency,
   formatDate,
@@ -172,15 +172,13 @@ export default function InvoiceDetailScreen() {
             : "Submitted for stamping. We'll notify you once it clears the rail.",
       });
     } catch (e) {
-      const data =
-        e && typeof e === "object" ? (e as { data?: unknown }).data : null;
-      const message =
-        data && typeof data === "object" && "message" in data
-          ? String((data as { message?: unknown }).message)
-          : e instanceof Error && e.message
-            ? e.message
-            : "We couldn't submit this invoice. Please try again.";
-      setBanner({ tone: "error", message });
+      setBanner({
+        tone: "error",
+        message: apiErrorMessage(
+          e,
+          "We couldn't submit this invoice. Please try again.",
+        ),
+      });
     }
   }, [invoice, id, validate, submit, refreshInvoice]);
 
@@ -266,7 +264,7 @@ export default function InvoiceDetailScreen() {
             ) : null}
 
             <Card>
-              <View style={styles.rowBetween}>
+              <View style={rowBetween}>
                 <View style={{ flex: 1, paddingRight: 12 }}>
                   <AppText variant="title">{invoice.invoiceNumber}</AppText>
                   <AppText
@@ -286,7 +284,7 @@ export default function InvoiceDetailScreen() {
                 />
               </View>
               <Divider />
-              <View style={[styles.rowBetween, { marginTop: 4 }]}>
+              <View style={[rowBetween, { marginTop: 4 }]}>
                 <AppText variant="body" color={colors.mutedForeground}>
                   Total
                 </AppText>
@@ -482,7 +480,7 @@ export default function InvoiceDetailScreen() {
                 {lines.map((l, i) => (
                   <View key={l.id}>
                     {i > 0 ? <Divider /> : null}
-                    <View style={styles.rowBetween}>
+                    <View style={rowBetween}>
                       <View style={{ flex: 1, paddingRight: 12 }}>
                         <AppText variant="label">{l.description}</AppText>
                         <AppText
@@ -502,7 +500,7 @@ export default function InvoiceDetailScreen() {
                   </View>
                 ))}
                 <Divider />
-                <View style={styles.rowBetween}>
+                <View style={rowBetween}>
                   <AppText variant="heading">Total</AppText>
                   <AppText variant="heading">
                     {formatCurrency(invoice.grandTotal)}
@@ -593,7 +591,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     ...webContentMax,
   },
-  rowBetween: { ...rowBetween },
   bannerRow: {
     flexDirection: "row",
     gap: 10,

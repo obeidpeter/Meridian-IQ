@@ -7,8 +7,6 @@ import {
   pgEnum,
   index,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
@@ -51,11 +49,4 @@ export const engagementsTable = pgTable("engagements", {
   index("engagements_client_party_idx").on(t.clientPartyId),
 ]);
 
-export const insertEngagementSchema = createInsertSchema(engagementsTable).omit({
-  id: true,
-  schemaVersion: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export type InsertEngagement = z.infer<typeof insertEngagementSchema>;
 export type Engagement = typeof engagementsTable.$inferSelect;

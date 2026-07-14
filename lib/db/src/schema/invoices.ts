@@ -10,8 +10,6 @@ import {
   index,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
@@ -113,22 +111,7 @@ export const invoiceLinesTable = pgTable("invoice_lines", {
 // Every invoice detail load and cascade delete walks this FK.
 (t) => [index("invoice_lines_invoice_idx").on(t.invoiceId)]);
 
-export const insertInvoiceSchema = createInsertSchema(invoicesTable).omit({
-  id: true,
-  status: true,
-  schemaVersion: true,
-  retentionUntil: true,
-  legalHold: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export const insertInvoiceLineSchema = createInsertSchema(invoiceLinesTable).omit(
-  { id: true },
-);
-
-export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Invoice = typeof invoicesTable.$inferSelect;
-export type InsertInvoiceLine = z.infer<typeof insertInvoiceLineSchema>;
 export type InvoiceLine = typeof invoiceLinesTable.$inferSelect;
 export type InvoiceStatus = (typeof invoiceStatusEnum.enumValues)[number];
 export type InvoiceKind = (typeof invoiceKindEnum.enumValues)[number];

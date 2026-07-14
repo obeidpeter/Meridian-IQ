@@ -264,7 +264,7 @@ export default function InvoiceListScreen() {
 
       {bulkReport ? (
         <Card style={{ gap: 10 }}>
-          <View style={styles.rowBetween}>
+          <View style={rowBetween}>
             <AppText variant="heading" style={{ flex: 1, paddingRight: 8 }}>
               {bulkRows.length === 0
                 ? "No pending drafts"
@@ -527,7 +527,7 @@ function InvoiceRow({
       testID={`invoice-item-${invoice.id}`}
     >
       <Card>
-        <View style={styles.rowBetween}>
+        <View style={rowBetween}>
           <View style={{ flex: 1, paddingRight: 12 }}>
             <View style={styles.inlineRow}>
               <AppText
@@ -580,7 +580,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     ...webContentMax,
   },
-  rowBetween: { ...rowBetween },
   inlineRow: {
     flexDirection: "row",
     alignItems: "center",

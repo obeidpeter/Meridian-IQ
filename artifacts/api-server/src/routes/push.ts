@@ -9,6 +9,7 @@ import {
 } from "@workspace/api-zod";
 import { assertCan } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
+import { isUuid } from "../lib/uuid";
 
 // Expo push-token registry for the mobile companion app. Devices belong to
 // the signed-in platform user; the tenant firm and client Party of the
@@ -28,12 +29,10 @@ const router: IRouter = Router();
 
 // The dev x-mock header shim can carry a non-UUID userId ("dev-user"); those
 // principals cannot own device rows (user_id is a UUID foreign key).
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 router.get("/sme/push/devices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  if (!UUID_RE.test(req.principal.userId)) {
+  if (!isUuid(req.principal.userId)) {
     res.json(ListPushDevicesResponse.parse([]));
     return;
   }
@@ -52,7 +51,7 @@ router.post("/sme/push/devices", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  if (!UUID_RE.test(req.principal.userId)) {
+  if (!isUuid(req.principal.userId)) {
     res.status(400).json({
       error: "Push registration requires a real user session",
     });
@@ -98,7 +97,7 @@ router.post("/sme/push/devices/unregister", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  if (!UUID_RE.test(req.principal.userId)) {
+  if (!isUuid(req.principal.userId)) {
     res.sendStatus(204);
     return;
   }

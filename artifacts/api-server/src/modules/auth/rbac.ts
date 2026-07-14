@@ -360,6 +360,26 @@ export function assertBuyerPartyAccess(
   }
 }
 
+// True when the firm has an engagement with the party — the single definition
+// of "this client belongs to this firm", shared by the tenancy guard below and
+// the invitation flow (which enforces it for every role, operators included).
+export async function firmEngagesParty(
+  firmId: string,
+  partyId: string,
+): Promise<boolean> {
+  const [engagement] = await getDb()
+    .select({ id: engagementsTable.id })
+    .from(engagementsTable)
+    .where(
+      and(
+        eq(engagementsTable.firmId, firmId),
+        eq(engagementsTable.clientPartyId, partyId),
+      ),
+    )
+    .limit(1);
+  return Boolean(engagement);
+}
+
 // Party-scoped tenant guard. Parties are shared reference data; a firm-scoped
 // principal may only touch a party it has an engagement with. Cross-tenant
 // staff (operator, auditor) are unrestricted. Prevents cross-tenant IDOR on
@@ -373,17 +393,7 @@ export async function assertPartyAccess(
   assertClientPartyScope(principal, partyId);
   const tenant = tenantFirmId(principal);
   if (tenant === null) return;
-  const [engagement] = await getDb()
-    .select({ id: engagementsTable.id })
-    .from(engagementsTable)
-    .where(
-      and(
-        eq(engagementsTable.firmId, tenant),
-        eq(engagementsTable.clientPartyId, partyId),
-      ),
-    )
-    .limit(1);
-  if (!engagement) {
+  if (!(await firmEngagesParty(tenant, partyId))) {
     throw new DomainError("CROSS_TENANT", "Party is not in your tenant", 403);
   }
 }

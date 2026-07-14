@@ -13,7 +13,6 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { createInsertSchema } from "drizzle-zod";
 import { usersTable, firmsTable } from "./organizations.ts";
 import { invoicesTable } from "./invoices.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
@@ -300,18 +299,6 @@ export const clerkEvalRunsTable = pgTable("clerk_eval_runs", {
   durationMs: integer("duration_ms").notNull(),
   createdAt: createdAt(),
 });
-
-export const insertClaimRecordSchema = createInsertSchema(
-  claimRecordsTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertClerkCaseSchema = createInsertSchema(clerkCasesTable).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export const insertClerkInferenceCallSchema = createInsertSchema(
-  clerkInferenceCallsTable,
-).omit({ id: true, createdAt: true });
 
 export type ClaimRecord = typeof claimRecordsTable.$inferSelect;
 export type ClerkCase = typeof clerkCasesTable.$inferSelect;

@@ -1,5 +1,6 @@
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import type { Request, Response, NextFunction } from "express";
+import { isUuid } from "./uuid";
 
 // Prometheus metrics (OBS-01), hand-rolled and dependency-free. A metrics
 // library (prom-client) would pull in @opentelemetry/api, which forks
@@ -195,11 +196,10 @@ export const registry = {
 
 // Collapse id-like path segments so a route label cannot explode cardinality
 // (one series per invoice/party uuid would be unbounded).
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function normalizeRoute(path: string): string {
   const norm = path
     .split("/")
-    .map((seg) => (UUID_RE.test(seg) ? ":id" : /^\d+$/.test(seg) ? ":n" : seg))
+    .map((seg) => (isUuid(seg) ? ":id" : /^\d+$/.test(seg) ? ":n" : seg))
     .join("/");
   return norm || "/";
 }

@@ -19,6 +19,18 @@ export type LineErrors = Record<
   { quantity?: string; unitPrice?: string }
 >;
 
+// A fresh, empty draft line at the default Nigerian VAT rate. Key generation
+// stays with the caller — each screen has its own uniqueness scheme.
+export function blankLine(key: string): LineDraft {
+  return {
+    key,
+    description: "",
+    quantity: "1",
+    unitPrice: "",
+    vatRate: "7.5",
+  };
+}
+
 export function num(value: string): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;

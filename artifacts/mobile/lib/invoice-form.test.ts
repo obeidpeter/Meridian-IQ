@@ -6,6 +6,7 @@ import {
   isValidISODate,
   computeTotals,
   normalizeLines,
+  blankLine,
   type LineDraft,
 } from "./invoice-form.ts";
 
@@ -20,6 +21,16 @@ const line = (overrides: Partial<LineDraft>): LineDraft => ({
   unitPrice: "100",
   vatRate: "7.5",
   ...overrides,
+});
+
+test("blankLine builds an empty draft at the default VAT rate with the caller's key", () => {
+  assert.deepEqual(blankLine("line-7"), {
+    key: "line-7",
+    description: "",
+    quantity: "1",
+    unitPrice: "",
+    vatRate: "7.5",
+  });
 });
 
 test("num coerces display strings, mapping anything non-finite to 0", () => {

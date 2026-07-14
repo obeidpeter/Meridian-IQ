@@ -305,7 +305,7 @@ function PenaltyRiskCard({
           style={styles.riskWatermark}
         />
       </View>
-      <View style={styles.rowBetween}>
+      <View style={rowBetween}>
         <AppText variant="overline" color={fg}>
           Penalty risk
         </AppText>
@@ -492,7 +492,7 @@ function NextDeadlineCard({
       )}, ${countdownLabel(deadline.dueDate)}`}
     >
       <Card>
-        <View style={styles.rowBetween}>
+        <View style={rowBetween}>
           <AppText variant="overline" color={colors.mutedForeground}>
             Next deadline
           </AppText>
@@ -501,7 +501,7 @@ function NextDeadlineCard({
         <AppText variant="heading" style={{ marginTop: 8 }}>
           {deadline.title}
         </AppText>
-        <View style={[styles.rowBetween, { marginTop: 8 }]}>
+        <View style={[rowBetween, { marginTop: 8 }]}>
           <AppText variant="body" color={colors.mutedForeground}>
             {formatDate(deadline.dueDate)}
           </AppText>
@@ -590,7 +590,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     ...webContentMax,
   },
-  rowBetween: { ...rowBetween },
   riskLink: {
     flexDirection: "row",
     alignItems: "center",

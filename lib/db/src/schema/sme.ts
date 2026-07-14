@@ -8,7 +8,6 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { firmsTable, usersTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { invoicesTable } from "./invoices.ts";
@@ -131,14 +130,6 @@ export const pushTicketsTable = pgTable("push_tickets", {
   ticketId: text("ticket_id").notNull().unique(),
   expoPushToken: text("expo_push_token").notNull(),
   createdAt: createdAt(),
-});
-
-export const insertAlertPreferencesSchema = createInsertSchema(
-  alertPreferencesTable,
-).omit({ updatedAt: true });
-export const insertEscalationSchema = createInsertSchema(escalationsTable).omit({
-  id: true,
-  createdAt: true,
 });
 
 export type AlertPreferences = typeof alertPreferencesTable.$inferSelect;

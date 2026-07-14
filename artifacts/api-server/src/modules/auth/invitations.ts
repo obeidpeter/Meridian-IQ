@@ -5,14 +5,13 @@ import {
   invitationsTable,
   usersTable,
   membershipsTable,
-  engagementsTable,
   type Invitation,
   type Role,
 } from "@workspace/db";
 import { DomainError } from "../errors";
-import { hashPassword } from "./session";
+import { hashPassword, normalizeEmail } from "./session";
 import { appendAudit } from "../audit/audit";
-import type { Principal } from "./rbac";
+import { firmEngagesParty, type Principal } from "./rbac";
 
 // Self-serve onboarding (IDN-01).
 //
@@ -95,11 +94,13 @@ export async function createInvitation(
       400,
     );
   }
-  const email = input.email.trim().toLowerCase();
+  const email = normalizeEmail(input.email);
 
   // A client_user is scoped to one client Party, which must be a client the
-  // firm actually engages (mirrors assertPartyAccess). Non-client roles carry
-  // no party — reject a stray clientPartyId rather than silently dropping it.
+  // firm actually engages (the same firmEngagesParty check behind
+  // assertPartyAccess, enforced here for every role, operators included).
+  // Non-client roles carry no party — reject a stray clientPartyId rather
+  // than silently dropping it.
   let clientPartyId: string | null = null;
   if (role === "client_user") {
     if (!input.clientPartyId) {
@@ -109,17 +110,7 @@ export async function createInvitation(
         400,
       );
     }
-    const [engagement] = await getDb()
-      .select({ id: engagementsTable.id })
-      .from(engagementsTable)
-      .where(
-        and(
-          eq(engagementsTable.firmId, firmId),
-          eq(engagementsTable.clientPartyId, input.clientPartyId),
-        ),
-      )
-      .limit(1);
-    if (!engagement) {
+    if (!(await firmEngagesParty(firmId, input.clientPartyId))) {
       throw new DomainError(
         "CLIENT_PARTY_NOT_ENGAGED",
         "That client party is not engaged by your firm",
@@ -242,7 +233,7 @@ export async function acceptInvitation(
   if (!invite || invite.status !== "pending") throw invalid();
   if (invite.expiresAt.getTime() <= Date.now()) throw invalid();
 
-  const email = invite.email.trim().toLowerCase();
+  const email = normalizeEmail(invite.email);
   const [existing] = await getDb()
     .select({ id: usersTable.id })
     .from(usersTable)

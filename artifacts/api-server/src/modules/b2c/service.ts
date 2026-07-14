@@ -11,6 +11,7 @@ import {
 import { DomainError } from "../errors.ts";
 import { appendAudit } from "../audit/audit";
 import { sendMessage } from "../messaging/messaging";
+import { recipientRefFor } from "../messaging/recipient-ref";
 import { sendPushAlert } from "../push/push";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
@@ -35,11 +36,6 @@ export const ALERT_MARGIN_MS = 4 * 60 * 60 * 1000;
 // A transaction qualifies once affirmed beyond draft; cancelled/credited
 // records are corrections, not reportable sales.
 const NON_QUALIFYING_STATUSES = ["draft", "cancelled", "credited"] as const;
-
-function recipientRefFor(clientPartyId: string): string {
-  const letters = clientPartyId.replace(/[^a-z]/gi, "").slice(0, 16);
-  return `ref-${letters || "client"}`;
-}
 
 // Collect qualifying B2C invoices that are not yet in any batch.
 async function collectIntoBatches(): Promise<number> {
@@ -148,6 +144,8 @@ async function firePreBreachAlerts(now: Date): Promise<number> {
       if (!prefs || prefs.whatsappEnabled) channels.push("whatsapp");
       if (!prefs || prefs.smsEnabled) channels.push("sms");
       if (!prefs || prefs.emailEnabled) channels.push("email");
+      // Same PII-free entity ref on every channel so sends correlate.
+      const entityId = `batch-${batch.id.replace(/[^a-z]/gi, "").slice(0, 6)}`;
       for (const channel of channels) {
         try {
           await sendMessage({
@@ -155,7 +153,7 @@ async function firePreBreachAlerts(now: Date): Promise<number> {
             recipientRef: recipientRefFor(batch.clientPartyId),
             templateKey: "b2c_window_alert",
             entityType: "b2c_report_batch",
-            entityId: `batch-${batch.id.replace(/[^a-z]/gi, "").slice(0, 6)}`,
+            entityId,
           });
         } catch {
           // Channel failures are recorded by the messaging module itself.
@@ -168,7 +166,7 @@ async function firePreBreachAlerts(now: Date): Promise<number> {
             firmId: batch.firmId,
             templateKey: "b2c_window_alert",
             entityType: "b2c_report_batch",
-            entityId: `batch-${batch.id.replace(/[^a-z]/gi, "").slice(0, 6)}`,
+            entityId,
           });
         } catch {
           // Push failures are recorded in the messages ledger by the module.

@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { pool } from "@workspace/db";
 import { registerSweep } from "../pipeline/pipeline";
-import { logger } from "../../lib/logger";
+import { normalizeEmail } from "./session";
 
 // Persistent login throttle (SEC-02, SEC-M4). Two independent fixed-window
 // counters, both of which must pass:
@@ -27,11 +27,11 @@ function ipKey(req: Request, email: string): string {
   // req.ip is derived from the trusted-proxy hop count (app.set("trust proxy")),
   // so it reflects the real client and cannot be spoofed via X-Forwarded-For.
   const ip = req.ip || req.socket.remoteAddress || "unknown";
-  return `${email.trim().toLowerCase()}|${ip}`;
+  return `${normalizeEmail(email)}|${ip}`;
 }
 
 function accountKey(email: string): string {
-  return `acct:${email.trim().toLowerCase()}`;
+  return `acct:${normalizeEmail(email)}`;
 }
 
 function retryAfter(
@@ -111,16 +111,14 @@ export async function clearLoginFailures(
 // Prune rows whose window has fully elapsed (past the longer account window),
 // so the table cannot grow unboundedly with one row per distinct email+IP that
 // ever failed. Registered on the shared minute sweep loop; a small indexed
-// delete is a cheap no-op when nothing is stale.
+// delete is a cheap no-op when nothing is stale. Errors deliberately propagate
+// to the sweep runner, which logs them and increments the OBS-01 error metric —
+// an inner catch here would hide failures from monitoring.
 async function sweepExpiredLoginAttempts(): Promise<void> {
-  try {
-    await pool.query(
-      "DELETE FROM login_attempts WHERE window_start < now() - make_interval(secs => $1)",
-      [ACCOUNT_WINDOW_MS / 1000],
-    );
-  } catch (err) {
-    logger.error({ err }, "login-attempt cleanup sweep failed");
-  }
+  await pool.query(
+    "DELETE FROM login_attempts WHERE window_start < now() - make_interval(secs => $1)",
+    [ACCOUNT_WINDOW_MS / 1000],
+  );
 }
 
 registerSweep(sweepExpiredLoginAttempts);

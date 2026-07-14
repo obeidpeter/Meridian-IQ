@@ -7,8 +7,6 @@ import {
   pgEnum,
   unique,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { invoicesTable } from "./invoices.ts";
@@ -68,14 +66,6 @@ export const b2cReportItemsTable = pgTable(
   (t) => [unique().on(t.invoiceId)],
 );
 
-export const insertB2cReportBatchSchema = createInsertSchema(
-  b2cReportBatchesTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertB2cReportItemSchema = createInsertSchema(
-  b2cReportItemsTable,
-).omit({ id: true, createdAt: true });
-
 export type B2cReportBatch = typeof b2cReportBatchesTable.$inferSelect;
 export type B2cReportItem = typeof b2cReportItemsTable.$inferSelect;
 export type B2cBatchStatus = (typeof b2cBatchStatusEnum.enumValues)[number];
-export type InsertB2cReportBatch = z.infer<typeof insertB2cReportBatchSchema>;

@@ -40,8 +40,9 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
-import { errorStatus } from "@/lib/api-error";
+import { apiErrorMessage, errorStatus } from "@/lib/api-error";
 import {
+  blankLine,
   computeTotals,
   isValidISODate,
   normalizeLines,
@@ -346,13 +347,7 @@ export default function FixInvoiceScreen() {
     setLinesDirty(true);
     setLines((prev) => [
       ...prev,
-      {
-        key: `new-${Date.now()}-${prev.length}`,
-        description: "",
-        quantity: "1",
-        unitPrice: "",
-        vatRate: "7.5",
-      },
+      blankLine(`new-${Date.now()}-${prev.length}`),
     ]);
   };
   const removeLine = (key: string) => {
@@ -550,15 +545,12 @@ export default function FixInvoiceScreen() {
       allowLeaveRef.current = true;
       router.back();
     } catch (e) {
-      const data =
-        e && typeof e === "object" ? (e as { data?: unknown }).data : null;
-      const message =
-        data && typeof data === "object" && "message" in data
-          ? String((data as { message?: unknown }).message)
-          : e instanceof Error && e.message
-            ? e.message
-            : "We couldn't save these changes. Please try again.";
-      setBanner(message);
+      setBanner(
+        apiErrorMessage(
+          e,
+          "We couldn't save these changes. Please try again.",
+        ),
+      );
       scrollToTop();
     }
   };
@@ -715,7 +707,7 @@ export default function FixInvoiceScreen() {
             </View>
 
             <View style={{ gap: 12 }}>
-              <View style={styles.rowBetween}>
+              <View style={rowBetween}>
                 <View
                   style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
                 >
@@ -779,7 +771,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     ...webContentMax,
   },
-  rowBetween: { ...rowBetween },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",

@@ -7,8 +7,6 @@ import {
   jsonb,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { firmsTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
@@ -74,10 +72,5 @@ export const erpSyncRunsTable = pgTable("erp_sync_runs", {
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
 
-export const insertErpConnectionSchema = createInsertSchema(
-  erpConnectionsTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-
 export type ErpConnection = typeof erpConnectionsTable.$inferSelect;
 export type ErpSyncRun = typeof erpSyncRunsTable.$inferSelect;
-export type InsertErpConnection = z.infer<typeof insertErpConnectionSchema>;

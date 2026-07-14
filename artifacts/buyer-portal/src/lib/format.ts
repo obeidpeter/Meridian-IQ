@@ -105,7 +105,7 @@ type StatusTone =
   | "cancelled"
   | "unknown";
 
-export function statusTone(status: string): StatusTone {
+function statusTone(status: string): StatusTone {
   if (status === "draft" || status === "validated") return "draft";
   if (status === "submitted") return "pending";
   if (status === "stamped" || status === "confirmed") return "stamped";
@@ -146,21 +146,6 @@ export function badgeClasses(status: string): string {
       return pillClasses("slate");
     default:
       return pillClasses("blue");
-  }
-}
-
-// ---- Alert severity --------------------------------------------------------
-
-export function severityBadgeClasses(severity: string): string {
-  switch (severity) {
-    case "critical":
-      return pillClasses("red");
-    case "warning":
-      return pillClasses("amber");
-    case "info":
-      return pillClasses("blue");
-    default:
-      return pillClasses("slate");
   }
 }
 

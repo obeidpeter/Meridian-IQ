@@ -30,6 +30,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PortalHeader } from "@/components/portal-header";
+import { serverErrorFrom } from "@/lib/errors";
 import LandingPage from "@/LandingPage";
 import { AcceptInvite } from "@/AcceptInvite";
 
@@ -181,15 +183,6 @@ const PILL_TEAL =
   "bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-900";
 const PILL_SLATE =
   "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800";
-
-// The generated client throws ApiError carrying the parsed body; the server
-// answers { error: string }.
-function serverErrorFrom(err: unknown): string | null {
-  const data = (err as { data?: unknown })?.data;
-  return data && typeof data === "object" && "error" in data
-    ? String((data as { error: unknown }).error)
-    : null;
-}
 
 // Fall back to a friendly generic per failure kind.
 function loginErrorMessage(err: unknown): string {
@@ -782,24 +775,9 @@ function Portal() {
       >
         Skip to content
       </a>
-      <header className="border-b bg-card/70 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-          <a
-            href="/"
-            className="flex items-center gap-2.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-label="MeridianIQ home"
-          >
-            <div className="rounded-lg bg-primary p-1.5 text-primary-foreground">
-              <FileCheck2 className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-base font-bold leading-none">MeridianIQ</p>
-              <p className="text-xs text-muted-foreground">
-                Compliance & verified receivables
-              </p>
-            </div>
-          </a>
-          {me ? (
+      <PortalHeader
+        right={
+          me ? (
             <span
               className="max-w-[50%] truncate rounded-full border bg-background px-3 py-1 text-xs font-medium text-muted-foreground"
               data-testid="badge-session"
@@ -815,9 +793,9 @@ function Portal() {
             >
               Back to website
             </a>
-          )}
-        </div>
-      </header>
+          )
+        }
+      />
 
       <main
         id="main-content"

@@ -433,7 +433,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 8,
     marginLeft: 4,
-    letterSpacing: 0.6,
   },
   row: {
     flexDirection: "row",

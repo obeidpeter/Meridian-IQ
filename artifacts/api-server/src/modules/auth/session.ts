@@ -19,6 +19,14 @@ export const SESSION_COOKIE = "miq_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const SECRET_KEY = "session_hmac_secret";
 
+// The canonical form emails are stored and compared in. Every auth surface
+// (login lookup, throttle keying, invitation matching) must key off this one
+// helper — if two sites normalized differently, throttle counters and account
+// lookups would silently disagree on which account an attempt belongs to.
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 // ---- password hashing (scrypt, salt:hash hex) ----
 
 export function hashPassword(password: string): string {
@@ -151,7 +159,7 @@ export async function authenticate(
       sessionEpoch: usersTable.sessionEpoch,
     })
     .from(usersTable)
-    .where(eq(usersTable.email, email.trim().toLowerCase()))
+    .where(eq(usersTable.email, normalizeEmail(email)))
     .limit(1);
   if (!user?.passwordHash) {
     // Equalise latency with the verify path (account-enumeration timing).

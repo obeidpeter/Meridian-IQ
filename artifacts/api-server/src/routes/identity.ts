@@ -13,6 +13,7 @@ import {
   CreateMembershipBody,
   CreateMembershipResponse,
 } from "@workspace/api-zod";
+import { isUuid } from "../lib/uuid";
 import {
   ROLE_CAPABILITIES,
   assertCan,
@@ -22,15 +23,12 @@ import {
 
 const router: IRouter = Router();
 
-// users.id is a uuid column; querying it with a non-UUID (e.g. the dev-header
-// principal's "dev-user") would error and abort the request transaction.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 router.get("/me", async (req, res): Promise<void> => {
   const p = req.principal;
   // Display identity for the signed-in UI. Dev-header principals may carry a
   // userId with no users row — identity stays null rather than failing.
-  const [user] = UUID_RE.test(p.userId)
+  const [user] = isUuid(p.userId)
     ? await getDb()
         .select({ email: usersTable.email, fullName: usersTable.fullName })
         .from(usersTable)

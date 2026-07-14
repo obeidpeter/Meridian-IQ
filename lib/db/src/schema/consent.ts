@@ -5,8 +5,6 @@ import {
   integer,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { partiesTable } from "./parties.ts";
 import { createdAt, id } from "./columns.ts";
 
@@ -31,10 +29,5 @@ export const consentRecordsTable = pgTable("consent_records", {
   createdAt: createdAt(),
 });
 
-export const insertConsentRecordSchema = createInsertSchema(
-  consentRecordsTable,
-).omit({ id: true, createdAt: true });
-
-export type InsertConsentRecord = z.infer<typeof insertConsentRecordSchema>;
 export type ConsentRecord = typeof consentRecordsTable.$inferSelect;
 export type ConsentAction = (typeof consentActionEnum.enumValues)[number];

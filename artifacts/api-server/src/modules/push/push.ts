@@ -7,6 +7,7 @@ import {
   pushDevicesTable,
   pushTicketsTable,
 } from "@workspace/db";
+import { recipientRefFor } from "../messaging/recipient-ref";
 
 // Expo push-notification delivery for the mobile companion app (SME-05/08).
 // Same strict data boundary as the messaging gateway (PL-04, SEC-12): push
@@ -149,12 +150,6 @@ export function resetPushReceiptTransport(): void {
   receiptTransport = expoReceiptTransport;
 }
 
-// Opaque, PII-free recipient reference derived from the party id (letters
-// only, matching the messaging gateway's data-boundary convention).
-function recipientRefFor(clientPartyId: string): string {
-  const letters = clientPartyId.replace(/[^a-z]/gi, "").slice(0, 16);
-  return `ref-${letters || "client"}`;
-}
 
 // Devices that should receive alerts for a client Party: devices registered by
 // a principal scoped to that client, plus devices of firm staff (no client

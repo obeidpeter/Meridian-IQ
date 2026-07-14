@@ -9,8 +9,6 @@ import {
   pgEnum,
   unique,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { firmsTable, usersTable } from "./organizations.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
 
@@ -65,15 +63,5 @@ export const cpdEnrollmentsTable = pgTable(
   (t) => [unique().on(t.courseId, t.firmId, t.userId)],
 );
 
-export const insertCpdCourseSchema = createInsertSchema(cpdCoursesTable).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export const insertCpdEnrollmentSchema = createInsertSchema(
-  cpdEnrollmentsTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
-
 export type CpdCourse = typeof cpdCoursesTable.$inferSelect;
 export type CpdEnrollment = typeof cpdEnrollmentsTable.$inferSelect;
-export type InsertCpdCourse = z.infer<typeof insertCpdCourseSchema>;

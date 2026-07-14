@@ -49,6 +49,7 @@ import { toCsv } from "../lib/csv";
 import { isFeatureEnabled } from "../modules/flags/flags";
 import { openBatchesFor } from "../modules/b2c/service";
 import { sendMessage } from "../modules/messaging/messaging";
+import { recipientRefFor } from "../modules/messaging/recipient-ref";
 import { sendPushAlert } from "../modules/push/push";
 import { appendAudit } from "../modules/audit/audit";
 import { openInvoiceCase } from "../modules/desk/cases";
@@ -757,12 +758,6 @@ router.put("/clients/:id/alert-preferences", async (req, res): Promise<void> => 
   res.json(UpdateAlertPreferencesResponse.parse(row));
 });
 
-// Opaque, PII-free recipient reference derived from the party id (letters only,
-// so it never trips the messaging data-boundary check).
-function recipientRefFor(clientPartyId: string): string {
-  const letters = clientPartyId.replace(/[^a-z]/gi, "").slice(0, 16);
-  return `ref-${letters || "client"}`;
-}
 
 router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
   assertCanManageAlerts(req.principal);

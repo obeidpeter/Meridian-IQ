@@ -8,8 +8,6 @@ import {
   index,
   pgEnum,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
 import { partiesTable } from "./parties.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
 
@@ -114,25 +112,7 @@ export const invitationsTable = pgTable(
 
 export type Invitation = typeof invitationsTable.$inferSelect;
 
-export const insertFirmSchema = createInsertSchema(firmsTable).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export const insertUserSchema = createInsertSchema(usersTable).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export const insertMembershipSchema = createInsertSchema(membershipsTable).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertFirm = z.infer<typeof insertFirmSchema>;
 export type Firm = typeof firmsTable.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof usersTable.$inferSelect;
-export type InsertMembership = z.infer<typeof insertMembershipSchema>;
 export type Membership = typeof membershipsTable.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];

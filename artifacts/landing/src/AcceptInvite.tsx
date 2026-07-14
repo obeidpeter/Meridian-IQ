@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useAcceptInvite } from "@workspace/api-client-react";
 import {
-  FileCheck2,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -11,15 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-// The generated client throws ApiError carrying the parsed body; the server
-// answers { error: string }. (Copied from App.tsx — kept local on purpose.)
-function serverErrorFrom(err: unknown): string | null {
-  const data = (err as { data?: unknown })?.data;
-  return data && typeof data === "object" && "error" in data
-    ? String((data as { error: unknown }).error)
-    : null;
-}
+import { PortalHeader } from "@/components/portal-header";
+import { serverErrorFrom } from "@/lib/errors";
 
 // Map the accept-invite failure to a friendly line. `showSignIn` decides
 // whether we surface a "go to sign in" link (the account already exists).
@@ -51,42 +43,21 @@ function acceptError(err: unknown): { message: string; showSignIn: boolean } {
   };
 }
 
-// The MeridianIQ brand mark + a sign-in shortcut, mirroring the Portal header.
-function InviteHeader() {
-  return (
-    <header className="border-b bg-card/70 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-        <a
-          href="/"
-          className="flex items-center gap-2.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label="MeridianIQ home"
-        >
-          <div className="rounded-lg bg-primary p-1.5 text-primary-foreground">
-            <FileCheck2 className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-base font-bold leading-none">MeridianIQ</p>
-            <p className="text-xs text-muted-foreground">
-              Compliance & verified receivables
-            </p>
-          </div>
-        </a>
-        <a
-          href="/login"
-          className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          data-testid="link-header-sign-in"
-        >
-          Sign in
-        </a>
-      </div>
-    </header>
-  );
-}
-
 function InviteShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-muted/40 to-background">
-      <InviteHeader />
+      {/* The brand mark + a sign-in shortcut, mirroring the Portal header. */}
+      <PortalHeader
+        right={
+          <a
+            href="/login"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+            data-testid="link-header-sign-in"
+          >
+            Sign in
+          </a>
+        }
+      />
       <main
         id="main-content"
         tabIndex={-1}

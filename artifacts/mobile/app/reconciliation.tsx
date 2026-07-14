@@ -472,7 +472,7 @@ export default function ReconciliationScreen() {
 
                 {report && !report.committed ? (
                   <Card style={{ gap: 10 }}>
-                    <View style={styles.rowBetween}>
+                    <View style={rowBetween}>
                       <AppText variant="label">Parse report</AppText>
                       <Badge
                         label={formatLabel(report.formatKey)}
@@ -582,7 +582,7 @@ export default function ReconciliationScreen() {
                           borderColor: selected ? colors.primary : "transparent",
                         }}
                       >
-                        <View style={styles.rowBetween}>
+                        <View style={rowBetween}>
                           <AppText
                             variant="label"
                             numberOfLines={1}
@@ -645,7 +645,7 @@ export default function ReconciliationScreen() {
                     const deciding = decidingId === p.id;
                     return (
                       <Card key={p.id} style={{ gap: 8 }}>
-                        <View style={styles.rowBetween}>
+                        <View style={rowBetween}>
                           <Pressable
                             onPress={() => router.push(`/invoices/${p.invoiceId}`)}
                             accessibilityRole="link"
@@ -684,7 +684,7 @@ export default function ReconciliationScreen() {
                           </AppText>
                         ) : null}
                         <Divider />
-                        <View style={styles.rowBetween}>
+                        <View style={rowBetween}>
                           <View>
                             <AppText variant="caption" color={colors.mutedForeground}>
                               Bank credit
@@ -755,5 +755,4 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     ...webContentMax,
   },
-  rowBetween: { ...rowBetween },
 });
