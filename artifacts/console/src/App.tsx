@@ -27,6 +27,7 @@ import { Catalogue } from "@/pages/catalogue";
 import { AuditEvidence } from "@/pages/audit-evidence";
 import { GateMetrics } from "@/pages/gate-metrics";
 import { Parties } from "@/pages/parties";
+import { Invitations } from "@/pages/invitations";
 import { ClerkClaims } from "@/pages/clerk-claims";
 import { ClerkWorkspace } from "@/pages/clerk";
 
@@ -107,6 +108,11 @@ function Router() {
         <Route path="/advisory">
           <CapabilityGate capability="engagement.write">
             <Advisory />
+          </CapabilityGate>
+        </Route>
+        <Route path="/invitations">
+          <CapabilityGate capability="invitation.write">
+            <Invitations />
           </CapabilityGate>
         </Route>
         <Route path="/integrations">

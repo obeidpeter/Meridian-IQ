@@ -853,6 +853,87 @@ router.post("/billing/statements/generate", async (req, res): Promise<void> => {
 });
 
 // --- Operator work queue (CON-04) -------------------------------------------
+type Playbook = {
+  code: string;
+  category: string;
+  cause: string;
+  fix: string;
+  retriable: boolean;
+} | null;
+type EscalationView = {
+  id: string;
+  reason: string;
+  errorCode: string | null;
+  status: (typeof escalationsTable.$inferSelect)["status"];
+  context: Record<string, unknown> | null;
+  createdAt: Date;
+};
+
+function playbookFrom(
+  entry: typeof errorCatalogueTable.$inferSelect | undefined,
+): Playbook {
+  return entry
+    ? {
+        code: entry.code,
+        category: entry.category,
+        cause: entry.cause,
+        fix: entry.fix,
+        retriable: entry.retriable,
+      }
+    : null;
+}
+
+function escalationView(
+  e: typeof escalationsTable.$inferSelect,
+): EscalationView {
+  return {
+    id: e.id,
+    reason: e.reason,
+    errorCode: e.errorCode,
+    status: e.status,
+    context: e.context,
+    createdAt: e.createdAt,
+  };
+}
+
+// Pure view assembly shared by the single-case path (caseView, which fetches
+// each lookup) and the batched list path (which resolves the same lookups in
+// bulk). Keeping the shape in one place means the two cannot drift.
+function shapeCaseView(
+  row: OperatorCase,
+  deps: {
+    firmName: string | null;
+    clientName: string | null;
+    invoiceNumber: string | null;
+    playbook: Playbook;
+    escalations: EscalationView[];
+  },
+) {
+  return {
+    id: row.id,
+    firmId: row.firmId,
+    firmName: deps.firmName,
+    clientPartyId: row.clientPartyId,
+    clientName: deps.clientName,
+    invoiceId: row.invoiceId,
+    invoiceNumber: deps.invoiceNumber,
+    title: row.title,
+    errorCode: row.errorCode,
+    priority: row.priority,
+    status: row.status,
+    assignedOperatorId: row.assignedOperatorId,
+    resolutionCode: row.resolutionCode,
+    resolutionNote: row.resolutionNote,
+    openedAt: row.openedAt,
+    firstActionAt: row.firstActionAt,
+    resolvedAt: row.resolvedAt,
+    handleSeconds: row.handleSeconds,
+    playbook: deps.playbook,
+    escalations: deps.escalations,
+  };
+}
+
+// Single case (claim/resolve responses): one case, a handful of lookups.
 async function caseView(row: OperatorCase) {
   const [firm] = row.firmId
     ? await getDb()
@@ -875,23 +956,13 @@ async function caseView(row: OperatorCase) {
         .where(eq(invoicesTable.id, row.invoiceId))
         .limit(1)
     : [];
-  let playbook = null;
-  if (row.errorCode) {
-    const [entry] = await getDb()
-      .select()
-      .from(errorCatalogueTable)
-      .where(eq(errorCatalogueTable.code, row.errorCode))
-      .limit(1);
-    if (entry) {
-      playbook = {
-        code: entry.code,
-        category: entry.category,
-        cause: entry.cause,
-        fix: entry.fix,
-        retriable: entry.retriable,
-      };
-    }
-  }
+  const [entry] = row.errorCode
+    ? await getDb()
+        .select()
+        .from(errorCatalogueTable)
+        .where(eq(errorCatalogueTable.code, row.errorCode))
+        .limit(1)
+    : [];
   // SME-06: the operator sees what the client already reported and tried —
   // escalations ride along with the case, no re-entry.
   const escalations = row.invoiceId
@@ -901,37 +972,93 @@ async function caseView(row: OperatorCase) {
           .from(escalationsTable)
           .where(eq(escalationsTable.invoiceId, row.invoiceId))
           .orderBy(desc(escalationsTable.createdAt))
-      ).map((e) => ({
-        id: e.id,
-        reason: e.reason,
-        errorCode: e.errorCode,
-        status: e.status,
-        context: e.context,
-        createdAt: e.createdAt,
-      }))
+      ).map(escalationView)
     : [];
-  return {
-    id: row.id,
-    firmId: row.firmId,
+  return shapeCaseView(row, {
     firmName: firm?.name ?? null,
-    clientPartyId: row.clientPartyId,
     clientName: client?.legalName ?? null,
-    invoiceId: row.invoiceId,
     invoiceNumber: invoice?.invoiceNumber ?? null,
-    title: row.title,
-    errorCode: row.errorCode,
-    priority: row.priority,
-    status: row.status,
-    assignedOperatorId: row.assignedOperatorId,
-    resolutionCode: row.resolutionCode,
-    resolutionNote: row.resolutionNote,
-    openedAt: row.openedAt,
-    firstActionAt: row.firstActionAt,
-    resolvedAt: row.resolvedAt,
-    handleSeconds: row.handleSeconds,
-    playbook,
+    playbook: playbookFrom(entry),
     escalations,
-  };
+  });
+}
+
+// The list: resolve every lookup for the whole page in a fixed number of
+// batched queries (not 5×N sequential ones — the operator queue is the
+// hottest operator screen and grows with open cases).
+async function caseViews(rows: OperatorCase[]) {
+  if (rows.length === 0) return [];
+  const uniq = (xs: (string | null)[]) =>
+    [...new Set(xs.filter((x): x is string => x !== null))];
+  const firmIds = uniq(rows.map((r) => r.firmId));
+  const partyIds = uniq(rows.map((r) => r.clientPartyId));
+  const invoiceIds = uniq(rows.map((r) => r.invoiceId));
+  const codes = uniq(rows.map((r) => r.errorCode));
+
+  const [firms, parties, invoices, entries, escalations] = await Promise.all([
+    firmIds.length
+      ? getDb()
+          .select({ id: firmsTable.id, name: firmsTable.name })
+          .from(firmsTable)
+          .where(inArray(firmsTable.id, firmIds))
+      : [],
+    partyIds.length
+      ? getDb()
+          .select({ id: partiesTable.id, legalName: partiesTable.legalName })
+          .from(partiesTable)
+          .where(inArray(partiesTable.id, partyIds))
+      : [],
+    invoiceIds.length
+      ? getDb()
+          .select({
+            id: invoicesTable.id,
+            invoiceNumber: invoicesTable.invoiceNumber,
+          })
+          .from(invoicesTable)
+          .where(inArray(invoicesTable.id, invoiceIds))
+      : [],
+    codes.length
+      ? getDb()
+          .select()
+          .from(errorCatalogueTable)
+          .where(inArray(errorCatalogueTable.code, codes))
+      : [],
+    invoiceIds.length
+      ? getDb()
+          .select()
+          .from(escalationsTable)
+          .where(inArray(escalationsTable.invoiceId, invoiceIds))
+          .orderBy(desc(escalationsTable.createdAt))
+      : [],
+  ]);
+
+  const firmName = new Map(firms.map((f) => [f.id, f.name]));
+  const clientName = new Map(parties.map((p) => [p.id, p.legalName]));
+  const invoiceNumber = new Map(invoices.map((i) => [i.id, i.invoiceNumber]));
+  const playbookByCode = new Map(entries.map((e) => [e.code, playbookFrom(e)]));
+  // Grouped by invoice, preserving the createdAt-desc order from the query.
+  const escByInvoice = new Map<string, EscalationView[]>();
+  for (const e of escalations) {
+    const list = escByInvoice.get(e.invoiceId) ?? [];
+    list.push(escalationView(e));
+    escByInvoice.set(e.invoiceId, list);
+  }
+
+  return rows.map((row) =>
+    shapeCaseView(row, {
+      firmName: row.firmId ? (firmName.get(row.firmId) ?? null) : null,
+      clientName: row.clientPartyId
+        ? (clientName.get(row.clientPartyId) ?? null)
+        : null,
+      invoiceNumber: row.invoiceId
+        ? (invoiceNumber.get(row.invoiceId) ?? null)
+        : null,
+      playbook: row.errorCode
+        ? (playbookByCode.get(row.errorCode) ?? null)
+        : null,
+      escalations: row.invoiceId ? (escByInvoice.get(row.invoiceId) ?? []) : [],
+    }),
+  );
 }
 
 router.get("/operator/cases", async (req, res): Promise<void> => {
@@ -954,9 +1081,7 @@ router.get("/operator/cases", async (req, res): Promise<void> => {
   rows.sort(
     (a, b) => priorityRank[a.priority] - priorityRank[b.priority],
   );
-  const views = [];
-  for (const row of rows) views.push(await caseView(row));
-  res.json(ListOperatorCasesResponse.parse(views));
+  res.json(ListOperatorCasesResponse.parse(await caseViews(rows)));
 });
 
 router.get("/operator/cases/stats", async (req, res): Promise<void> => {

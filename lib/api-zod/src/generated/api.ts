@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.6.0
+ * OpenAPI spec version: 0.7.0
  */
 import * as zod from 'zod';
 
@@ -80,6 +80,85 @@ export const ChangePasswordBody = zod.object({
 })
 
 export const ChangePasswordResponse = zod.void()
+
+
+/**
+ * @summary Redeem an invitation token, setting a password and creating the account (public)
+ */
+
+export const acceptInviteBodyPasswordMin = 8;
+
+
+
+export const AcceptInviteBody = zod.object({
+  "token": zod.string().min(1),
+  "password": zod.string().min(acceptInviteBodyPasswordMin),
+  "fullName": zod.string().optional()
+})
+
+export const AcceptInviteResponse = zod.void()
+
+
+/**
+ * @summary List the firm's invitations
+ */
+export const ListInvitationsResponseItem = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['firm_admin', 'firm_staff', 'client_user']),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string().nullish(),
+  "status": zod.enum(['pending', 'accepted', 'revoked']),
+  "expiresAt": zod.coerce.date(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListInvitationsResponse = zod.array(ListInvitationsResponseItem)
+
+
+/**
+ * @summary Invite a teammate or client into the caller's firm; returns the one-time token
+ */
+export const CreateInvitationBody = zod.object({
+  "email": zod.string().email(),
+  "role": zod.enum(['firm_admin', 'firm_staff', 'client_user']),
+  "clientPartyId": zod.string().optional()
+})
+
+export const CreateInvitationResponse = zod.object({
+  "invitation": zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['firm_admin', 'firm_staff', 'client_user']),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string().nullish(),
+  "status": zod.enum(['pending', 'accepted', 'revoked']),
+  "expiresAt": zod.coerce.date(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+}),
+  "token": zod.string()
+})
+
+
+/**
+ * @summary Revoke a pending invitation
+ */
+export const RevokeInvitationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RevokeInvitationResponse = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['firm_admin', 'firm_staff', 'client_user']),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string().nullish(),
+  "status": zod.enum(['pending', 'accepted', 'revoked']),
+  "expiresAt": zod.coerce.date(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+})
 
 
 export const ListFirmsResponseItem = zod.object({

@@ -53,6 +53,8 @@ export type Capability =
   | "audit.export"
   | "identity.read"
   | "identity.write"
+  | "invitation.read"
+  | "invitation.write"
   | "messaging.send"
   | "statement.read"
   | "statement.write"
@@ -107,6 +109,8 @@ const ALL: Capability[] = [
   "audit.export",
   "identity.read",
   "identity.write",
+  "invitation.read",
+  "invitation.write",
   "messaging.send",
   "statement.read",
   "statement.write",
@@ -154,6 +158,11 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "consent.write",
     "flags.read",
     "identity.read",
+    // Firm admins onboard their own staff/clients via the invite flow (IDN-01).
+    // They still lack identity.write (direct user creation stays operator-only);
+    // an invitation is the self-serve, RLS-scoped path to add a firm member.
+    "invitation.read",
+    "invitation.write",
     "messaging.send",
     "statement.read",
     "statement.write",
@@ -228,6 +237,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "consent.read",
     "identity.read",
     "identity.write",
+    "invitation.read",
+    "invitation.write",
     "messaging.send",
     "claims.read",
     "claims.write",

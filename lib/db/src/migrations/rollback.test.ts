@@ -105,6 +105,10 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
       await policyExists(pool, "deadline_reminder_sends"),
       "RLS policy on deadline_reminder_sends should exist after apply",
     );
+    assert.ok(
+      await policyExists(pool, "invitations"),
+      "RLS policy on invitations should exist after apply",
+    );
     const versions = await appliedVersions(pool);
     assert.ok(versions.includes(1), "version 1 should be tracked after apply");
     assert.ok(versions.includes(2), "version 2 should be tracked after apply");
@@ -113,10 +117,24 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
     assert.ok(versions.includes(5), "version 5 should be tracked after apply");
     assert.ok(versions.includes(6), "version 6 should be tracked after apply");
     assert.ok(versions.includes(7), "version 7 should be tracked after apply");
+    assert.ok(versions.includes(8), "version 8 should be tracked after apply");
 
-    // Roll back newest first: 0007 (recurring/reminder guardrails)...
+    // Roll back newest first: 0008 (invitation guardrails)...
+    const rolled8 = await rollbackLast(pool);
+    assert.equal(rolled8, 8, "first rollback should be version 8");
+    assert.equal(
+      await policyExists(pool, "invitations"),
+      false,
+      "invitations RLS policy should be gone after rolling back 0008",
+    );
+    assert.ok(
+      await policyExists(pool, "recurring_invoice_templates"),
+      "0007 policy must survive the 0008 rollback",
+    );
+
+    // ...then 0007 (recurring/reminder guardrails)...
     const rolled7 = await rollbackLast(pool);
-    assert.equal(rolled7, 7, "first rollback should be version 7");
+    assert.equal(rolled7, 7, "second rollback should be version 7");
     assert.equal(
       await policyExists(pool, "recurring_invoice_templates"),
       false,
@@ -224,6 +242,7 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
     assert.ok(await bypassPolicyExists(pool, "clerk_cases"));
     assert.ok(await bypassPolicyExists(pool, "clerk_eval_runs"));
     assert.ok(await policyExists(pool, "recurring_invoice_templates"));
+    assert.ok(await policyExists(pool, "invitations"));
   } finally {
     await pool.end();
   }

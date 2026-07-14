@@ -5,6 +5,7 @@ import {
   boolean,
   jsonb,
   pgEnum,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -91,7 +92,12 @@ export const escalationsTable = pgTable("escalations", {
   status: escalationStatusEnum("status").notNull().default("open"),
   context: jsonb("context").$type<Record<string, unknown>>(),
   createdAt: createdAt(),
-});
+}, (t) => [
+  // The operator case view and the SME escalation list both look up by
+  // invoice; the firm index backs tenant-scoped scans.
+  index("escalations_invoice_idx").on(t.invoiceId),
+  index("escalations_firm_idx").on(t.firmId),
+]);
 
 // Expo push-notification device registrations (mobile companion app). One row
 // per device token; a token is globally unique and re-registering it moves it

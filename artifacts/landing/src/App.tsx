@@ -31,6 +31,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import LandingPage from "@/LandingPage";
+import { AcceptInvite } from "@/AcceptInvite";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -910,6 +911,14 @@ function Portal() {
 
 export default function App() {
   const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
+
+  if (pathname === "/accept-invite") {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <AcceptInvite />
+      </QueryClientProvider>
+    );
+  }
 
   if (pathname !== "/login") {
     return <LandingPage />;

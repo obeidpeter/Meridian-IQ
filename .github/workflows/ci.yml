@@ -95,6 +95,10 @@ jobs:
       - name: SME app unit tests
         run: pnpm --filter @workspace/sme-compliance run test
 
+      # Pure formatters, error helpers and Clerk health metrics for the console.
+      - name: Console app unit tests
+        run: pnpm --filter @workspace/console run test
+
       # CORE-06: tables come from drizzle push; the versioned guardrail
       # migrations (triggers, RLS, retention) must apply AND roll back cleanly.
       - name: Migration rollback test (real Postgres)

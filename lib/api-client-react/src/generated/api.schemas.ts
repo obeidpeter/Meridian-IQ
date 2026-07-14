@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.6.0
+ * OpenAPI spec version: 0.7.0
  */
 export interface HealthStatus {
   status: string;
@@ -44,6 +44,66 @@ export interface ChangePasswordInput {
   currentPassword: string;
   /** @minLength 8 */
   newPassword: string;
+}
+
+export type InvitationRole = typeof InvitationRole[keyof typeof InvitationRole];
+
+
+export const InvitationRole = {
+  firm_admin: 'firm_admin',
+  firm_staff: 'firm_staff',
+  client_user: 'client_user',
+} as const;
+
+export type InvitationStatus = typeof InvitationStatus[keyof typeof InvitationStatus];
+
+
+export const InvitationStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  revoked: 'revoked',
+} as const;
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: InvitationRole;
+  firmId: string;
+  /** @nullable */
+  clientPartyId?: string | null;
+  status: InvitationStatus;
+  expiresAt: string;
+  /** @nullable */
+  acceptedAt?: string | null;
+  createdAt: string;
+}
+
+export type CreateInvitationInputRole = typeof CreateInvitationInputRole[keyof typeof CreateInvitationInputRole];
+
+
+export const CreateInvitationInputRole = {
+  firm_admin: 'firm_admin',
+  firm_staff: 'firm_staff',
+  client_user: 'client_user',
+} as const;
+
+export interface CreateInvitationInput {
+  email: string;
+  role: CreateInvitationInputRole;
+  clientPartyId?: string;
+}
+
+export interface InvitationWithToken {
+  invitation: Invitation;
+  token: string;
+}
+
+export interface AcceptInvitationInput {
+  /** @minLength 1 */
+  token: string;
+  /** @minLength 8 */
+  password: string;
+  fullName?: string;
 }
 
 /**

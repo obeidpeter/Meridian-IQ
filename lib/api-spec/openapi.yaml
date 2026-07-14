@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.6.0
+  version: 0.7.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -37,6 +37,7 @@ tags:
   - name: claims
   - name: clerk
   - name: recurring
+  - name: invitation
 paths:
   /healthz:
     get:
@@ -112,6 +113,79 @@ paths:
           description: Password changed
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /auth/accept-invite:
+    post:
+      operationId: acceptInvite
+      tags: [invitation]
+      summary: Redeem an invitation token, setting a password and creating the account (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptInvitationInput"
+      responses:
+        "204":
+          description: Account created; sign in with the new password
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: An account with this email already exists
+
+  /invitations:
+    get:
+      operationId: listInvitations
+      tags: [invitation]
+      summary: List the firm's invitations
+      responses:
+        "200":
+          description: Invitations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invitation"
+    post:
+      operationId: createInvitation
+      tags: [invitation]
+      summary: Invite a teammate or client into the caller's firm; returns the one-time token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvitationInput"
+      responses:
+        "201":
+          description: Invitation created (token shown once)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationWithToken"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /invitations/{id}/revoke:
+    post:
+      operationId: revokeInvitation
+      tags: [invitation]
+      summary: Revoke a pending invitation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "404":
+          description: Invitation not found
 
   /firms:
     get:
@@ -2822,6 +2896,69 @@ components:
         newPassword:
           type: string
           minLength: 8
+
+    Invitation:
+      type: object
+      required: [id, email, role, firmId, status, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [firm_admin, firm_staff, client_user]
+        firmId:
+          type: string
+        clientPartyId:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, accepted, revoked]
+        expiresAt:
+          type: string
+          format: date-time
+        acceptedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    CreateInvitationInput:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [firm_admin, firm_staff, client_user]
+        # Required when role is client_user (the client Party the invitee scopes to).
+        clientPartyId:
+          type: string
+    InvitationWithToken:
+      type: object
+      required: [invitation, token]
+      properties:
+        invitation:
+          $ref: "#/components/schemas/Invitation"
+        # The raw redemption token — shown ONCE. Share the accept link
+        # /accept-invite?token=<token> with the invitee; only its hash is stored.
+        token:
+          type: string
+    AcceptInvitationInput:
+      type: object
+      required: [token, password]
+      properties:
+        token:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 8
+        fullName:
+          type: string
 
     Firm:
       type: object

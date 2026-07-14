@@ -61,25 +61,25 @@ const EVAL_OUTCOME_TONE: Record<string, BadgeTone> = {
 
 // Eval runs take seconds to minutes (each fixture is a live model call), so
 // switch to seconds above 1 s instead of reusing the ms-latency formatter.
-function fmtEvalDuration(ms: number): string {
+export function fmtEvalDuration(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(1)} s`;
 }
 
-function fmtMs(ms: number | null | undefined): string {
+export function fmtMs(ms: number | null | undefined): string {
   if (ms === null || ms === undefined) return "—";
   return `${Math.round(ms)} ms`;
 }
 
 // Token counts get grouping separators so 1234567 reads as 1,234,567.
-function fmtTokens(n: number | null | undefined): string {
+export function fmtTokens(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
   return Math.round(n).toLocaleString();
 }
 
 // Estimated spend is usually cents per window, so allow up to 4 decimals.
 // null means the server has no per-token rates configured for the models used.
-function fmtUsd(usd: number | null | undefined): string {
+export function fmtUsd(usd: number | null | undefined): string {
   if (usd === null || usd === undefined) return "—";
   return usd.toLocaleString("en-US", {
     style: "currency",
@@ -92,7 +92,7 @@ function fmtUsd(usd: number | null | undefined): string {
 // The Cases tile packs the flow timings into its detail line: decision
 // turnaround plus its claim-based split into queue-wait and active-review
 // (the split appears only once cases have claim timestamps).
-function casesTileDetail(cases: ClerkMetricsCases): string | undefined {
+export function casesTileDetail(cases: ClerkMetricsCases): string | undefined {
   const parts: string[] = [];
   if (cases.avgDecisionMinutes != null) {
     parts.push(`avg decision ${Math.round(cases.avgDecisionMinutes)} min`);
@@ -108,7 +108,7 @@ function casesTileDetail(cases: ClerkMetricsCases): string | undefined {
 
 // Override-rate cells go red above 25% (extraction quality needs prompt
 // attention) and amber above 10% (worth a watchful eye).
-function overrideRateClass(rate: number): string {
+export function overrideRateClass(rate: number): string {
   if (rate > 0.25) return "text-red-600 dark:text-red-400 font-medium";
   if (rate > 0.1) return "text-amber-700 dark:text-amber-400 font-medium";
   return "";
