@@ -291,8 +291,8 @@ export default function SettingsScreen() {
       ]}
       showsVerticalScrollIndicator={false}
     >
-      <AppText variant="caption" color={colors.mutedForeground} style={styles.sectionLabel}>
-        ALERT CHANNELS
+      <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+        Alert channels
       </AppText>
       {prefsQuery.isLoading ? (
         <CardSkeleton lines={4} />
@@ -340,8 +340,8 @@ export default function SettingsScreen() {
             />
           </Card>
 
-          <AppText variant="caption" color={colors.mutedForeground} style={styles.sectionLabel}>
-            ALERT TYPES
+          <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+            Alert types
           </AppText>
           <Card padded={false} style={{ paddingHorizontal: 16 }}>
             <SettingRow
@@ -378,8 +378,8 @@ export default function SettingsScreen() {
         </>
       )}
 
-      <AppText variant="caption" color={colors.mutedForeground} style={styles.sectionLabel}>
-        ACCOUNT
+      <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+        Account
       </AppText>
       <Card>
         <AppText variant="label">{me?.fullName ?? "Signed in"}</AppText>

@@ -106,8 +106,8 @@ export default function EstimatorScreen() {
 
       {showInvoice ? (
         <>
-          <AppText variant="caption" color={colors.mutedForeground} style={styles.sectionLabel}>
-            TURNOVER BAND
+          <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+            Turnover band
           </AppText>
           <Card padded={false}>
             {TURNOVER_BAND_OPTIONS.map((option, index) => {
@@ -154,8 +154,8 @@ export default function EstimatorScreen() {
         </>
       ) : null}
 
-      <AppText variant="caption" color={colors.mutedForeground} style={styles.sectionLabel}>
-        DETAILS
+      <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+        Details
       </AppText>
       <Card style={{ gap: 16 }}>
         {showAccess ? (
@@ -184,8 +184,8 @@ export default function EstimatorScreen() {
         ) : null}
       </Card>
 
-      <AppText variant="caption" color={colors.mutedForeground} style={styles.sectionLabel}>
-        ESTIMATED EXPOSURE
+      <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
+        Estimated exposure
       </AppText>
       <Card>
         {showAccess ? (

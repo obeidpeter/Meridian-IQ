@@ -83,7 +83,9 @@ function ClassicTabLayout() {
         tabBarStyle: {
           position: "absolute",
           backgroundColor: isIOS ? "transparent" : colors.background,
-          borderTopWidth: isWeb ? 1 : 0,
+          // iOS separates via the blur layer; Android/web need a hairline or
+          // the bar melts into the content scrolling behind it.
+          borderTopWidth: isIOS ? 0 : isWeb ? 1 : StyleSheet.hairlineWidth,
           borderTopColor: colors.border,
           elevation: 0,
           ...(isWeb ? { height: 84 } : {}),

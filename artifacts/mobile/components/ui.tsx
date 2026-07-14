@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import React from "react";
 import {
   ActivityIndicator,
+  Animated,
   Platform,
   Pressable,
   StyleSheet,
@@ -27,18 +28,51 @@ type TypographyVariant =
   | "heading"
   | "body"
   | "label"
-  | "caption";
+  | "caption"
+  | "overline";
 
 const VARIANT_STYLE: Record<
   TypographyVariant,
-  { fontFamily: string; fontSize: number; lineHeight: number }
+  {
+    fontFamily: string;
+    fontSize: number;
+    lineHeight: number;
+    letterSpacing?: number;
+    textTransform?: "uppercase";
+  }
 > = {
-  display: { fontFamily: "Inter_700Bold", fontSize: 34, lineHeight: 40 },
-  title: { fontFamily: "Inter_700Bold", fontSize: 24, lineHeight: 30 },
-  heading: { fontFamily: "Inter_600SemiBold", fontSize: 18, lineHeight: 24 },
+  // Negative tracking on the large sizes: Inter is spaced for body text, so
+  // headlines read airy without a slight tightening.
+  display: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 34,
+    lineHeight: 40,
+    letterSpacing: -0.5,
+  },
+  title: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: -0.4,
+  },
+  heading: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 18,
+    lineHeight: 24,
+    letterSpacing: -0.2,
+  },
   body: { fontFamily: "Inter_400Regular", fontSize: 15, lineHeight: 22 },
   label: { fontFamily: "Inter_500Medium", fontSize: 14, lineHeight: 20 },
   caption: { fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 16 },
+  // Section eyebrows ("PENALTY RISK", "RECEIVABLES"): wide-tracked and
+  // auto-uppercased, so call sites pass natural-case text and stay consistent.
+  overline: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+  },
 };
 
 export function AppText({
@@ -89,6 +123,12 @@ export function Card({
           borderColor: colors.border,
           padding: padded ? 16 : 0,
         },
+        // A whisper of elevation so cards lift off the near-white background
+        // (they were border-only and read flat). Light scheme only: on the
+        // dark palette a black shadow is invisible and Android's elevation
+        // would instead tint the surface, so dark keeps the hairline border
+        // as its separation.
+        colors.scheme === "light" ? styles.cardShadow : null,
         style,
       ]}
     >
@@ -212,11 +252,15 @@ export type BadgeTone = "neutral" | "success" | "warning" | "critical" | "info";
 
 export function Badge({ label, tone = "neutral" }: { label: string; tone?: BadgeTone }) {
   const colors = useColors();
+  // Soft-tint pill recipe (web design language §8): tinted surface + deep
+  // same-hue text + a faint tone-matched border. Warning/critical previously
+  // used heavy solid fills that shouted next to the soft neutral/success
+  // pills; every tone now carries the same visual weight.
   const tones: Record<BadgeTone, { bg: string; fg: string }> = {
     neutral: { bg: colors.secondary, fg: colors.secondaryForeground },
     success: { bg: colors.accent, fg: colors.accentForeground },
-    warning: { bg: colors.warning, fg: colors.warningForeground },
-    critical: { bg: colors.destructive, fg: colors.destructiveForeground },
+    warning: { bg: colors.warningSoft, fg: colors.warning },
+    critical: { bg: colors.destructiveSoft, fg: colors.destructiveText },
     info: { bg: colors.accent, fg: colors.accentForeground },
   };
   const t = tones[tone];
@@ -227,6 +271,9 @@ export function Badge({ label, tone = "neutral" }: { label: string; tone?: Badge
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 999,
+        borderWidth: StyleSheet.hairlineWidth,
+        // 8-digit hex: the tone's text color at ~20% alpha.
+        borderColor: `${t.fg}33`,
         alignSelf: "flex-start",
       }}
     >
@@ -320,11 +367,14 @@ export function Banner({
   message: string;
 }) {
   const colors = useColors();
+  // Soft tinted surfaces all round (error/warning previously sat on a plain
+  // card and relied on their border alone, which looked unfinished next to
+  // the tinted success/info variants).
   const map: Record<BannerTone, { bg: string; fg: string; icon: keyof typeof Feather.glyphMap }> = {
     success: { bg: colors.accent, fg: colors.accentForeground, icon: "check-circle" },
-    error: { bg: colors.card, fg: colors.destructiveText, icon: "alert-triangle" },
+    error: { bg: colors.destructiveSoft, fg: colors.destructiveText, icon: "alert-triangle" },
     info: { bg: colors.secondary, fg: colors.secondaryForeground, icon: "info" },
-    warning: { bg: colors.card, fg: colors.warning, icon: "alert-circle" },
+    warning: { bg: colors.warningSoft, fg: colors.warning, icon: "alert-circle" },
   };
   const t = map[tone];
   return (
@@ -337,8 +387,8 @@ export function Banner({
         gap: 10,
         alignItems: "flex-start",
         backgroundColor: t.bg,
-        borderWidth: tone === "error" || tone === "warning" ? StyleSheet.hairlineWidth : 0,
-        borderColor: t.fg,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: `${t.fg}33`,
         borderRadius: colors.radius,
         padding: 14,
       }}
@@ -367,15 +417,37 @@ export function Skeleton({
   style?: ViewStyle;
 }) {
   const colors = useColors();
+  // Gentle opacity pulse so loading reads as "in progress" rather than a
+  // stack of gray bars. Opacity-only (no movement) keeps it calm for
+  // motion-sensitive users; the loop is stopped on unmount.
+  const pulse = React.useRef(new Animated.Value(0.55)).current;
+  React.useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 0.95,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.55,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
   return (
-    <View
+    <Animated.View
       style={[
         {
           height,
           width,
           borderRadius: radius ?? 8,
           backgroundColor: colors.secondary,
-          opacity: 0.6,
+          opacity: pulse,
         },
         style,
       ]}
@@ -396,6 +468,32 @@ export function CardSkeleton({ lines = 3 }: { lines?: number }) {
   );
 }
 
+/** The icon-in-a-soft-circle well shared by the empty and error states. */
+function IconWell({
+  icon,
+  bg,
+  fg,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  bg: string;
+  fg: string;
+}) {
+  return (
+    <View
+      style={{
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: bg,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Feather name={icon} size={28} color={fg} />
+    </View>
+  );
+}
+
 export function EmptyState({
   icon = "inbox",
   title,
@@ -408,8 +506,8 @@ export function EmptyState({
   const colors = useColors();
   return (
     <View style={styles.centered}>
-      <Feather name={icon} size={40} color={colors.mutedForeground} />
-      <AppText variant="heading" style={{ marginTop: 12, textAlign: "center" }}>
+      <IconWell icon={icon} bg={colors.secondary} fg={colors.mutedForeground} />
+      <AppText variant="heading" style={{ marginTop: 14, textAlign: "center" }}>
         {title}
       </AppText>
       {message ? (
@@ -435,8 +533,12 @@ export function ErrorState({
   const colors = useColors();
   return (
     <View style={styles.centered}>
-      <Feather name="alert-triangle" size={40} color={colors.destructive} />
-      <AppText variant="heading" style={{ marginTop: 12, textAlign: "center" }}>
+      <IconWell
+        icon="alert-triangle"
+        bg={colors.destructiveSoft}
+        fg={colors.destructiveText}
+      />
+      <AppText variant="heading" style={{ marginTop: 14, textAlign: "center" }}>
         Something went wrong
       </AppText>
       <AppText
@@ -459,17 +561,29 @@ export function StatTile({
   label,
   value,
   tone,
+  icon,
 }: {
   label: string;
   value: string;
   tone?: string;
+  /** Optional trailing glyph, tinted with `tone` when one is set. */
+  icon?: keyof typeof Feather.glyphMap;
 }) {
   const colors = useColors();
   return (
     <Card style={{ flex: 1 }}>
-      <AppText variant="caption" color={colors.mutedForeground}>
-        {label.toUpperCase()}
-      </AppText>
+      <View style={rowBetween}>
+        <AppText variant="overline" color={colors.mutedForeground}>
+          {label}
+        </AppText>
+        {icon ? (
+          <Feather
+            name={icon}
+            size={15}
+            color={tone ?? colors.mutedForeground}
+          />
+        ) : null}
+      </View>
       <AppText variant="title" color={tone ?? colors.foreground} style={{ marginTop: 6 }}>
         {value}
       </AppText>
@@ -477,7 +591,66 @@ export function StatTile({
   );
 }
 
-export function Divider() {
+/**
+ * A tappable icon-tile for launcher grids ("Quick actions"). A tinted icon
+ * chip over a Card, so a wall of stacked buttons can become a scannable grid.
+ */
+export function ActionTile({
+  icon,
+  label,
+  onPress,
+  primary = false,
+  testID,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  onPress: () => void;
+  /** Fills the icon chip with the primary color for the headline action. */
+  primary?: boolean;
+  testID?: string;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={() => {
+        if (Platform.OS !== "web") {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.actionTile,
+        {
+          opacity: pressed ? 0.85 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+        },
+      ]}
+    >
+      <Card style={{ gap: 12 }}>
+        <View
+          style={[
+            styles.actionChip,
+            { backgroundColor: primary ? colors.primary : colors.accent },
+          ]}
+        >
+          <Feather
+            name={icon}
+            size={18}
+            color={primary ? colors.primaryForeground : colors.accentForeground}
+          />
+        </View>
+        <AppText variant="label" numberOfLines={2}>
+          {label}
+        </AppText>
+      </Card>
+    </Pressable>
+  );
+}
+
+export function Divider({ inset = 0 }: { inset?: number }) {
   const colors = useColors();
   return (
     <View
@@ -485,6 +658,9 @@ export function Divider() {
         height: StyleSheet.hairlineWidth,
         backgroundColor: colors.border,
         marginVertical: 4,
+        // Indent past a leading icon/avatar so list rules align with the text
+        // column, the way native list separators do.
+        marginLeft: inset,
       }}
     />
   );
@@ -533,5 +709,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 32,
     paddingVertical: 48,
+  },
+  // iOS/web soft drop shadow + the Android elevation equivalent. Kept faint:
+  // separation, not floating panels.
+  cardShadow: {
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  actionTile: {
+    flexGrow: 1,
+    flexBasis: "45%",
+  },
+  actionChip: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

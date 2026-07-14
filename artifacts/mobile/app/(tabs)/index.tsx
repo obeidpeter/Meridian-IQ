@@ -24,6 +24,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
+  ActionTile,
   AppButton,
   AppText,
   Card,
@@ -120,8 +121,8 @@ export default function HomeScreen() {
       }
     >
       <View style={{ marginBottom: 20 }}>
-        <AppText variant="caption" color={colors.mutedForeground}>
-          {greeting().toUpperCase()}
+        <AppText variant="overline" color={colors.mutedForeground}>
+          {greeting()}
         </AppText>
         <AppText variant="title" style={{ marginTop: 4 }}>
           {firstName ? firstName : "Welcome back"}
@@ -153,19 +154,27 @@ export default function HomeScreen() {
             <StatTile
               label="Unsubmitted"
               value={String(summary.unsubmittedCount)}
+              icon="file-minus"
               tone={summary.unsubmittedCount > 0 ? colors.warning : undefined}
             />
             <StatTile
               label="At risk"
               value={String(summary.atRiskCount)}
+              icon="alert-triangle"
               tone={summary.atRiskCount > 0 ? colors.destructiveText : undefined}
             />
           </View>
           <View style={{ flexDirection: "row", gap: 12 }}>
-            <StatTile label="Stamped" value={String(summary.stampedCount)} />
+            <StatTile
+              label="Stamped"
+              value={String(summary.stampedCount)}
+              icon="check-circle"
+              tone={summary.stampedCount > 0 ? colors.success : undefined}
+            />
             <StatTile
               label="Unsubmitted value"
               value={formatCurrency(summary.unsubmittedValue)}
+              icon="trending-up"
             />
           </View>
 
@@ -185,29 +194,35 @@ export default function HomeScreen() {
 
           <View style={{ gap: 12 }}>
             <AppText variant="heading">Quick actions</AppText>
-            <AppButton
-              label="Create an invoice"
-              icon="file-plus"
-              onPress={() => router.push("/invoice")}
-            />
-            <AppButton
-              label="Browse invoices"
-              icon="file-text"
-              variant="secondary"
-              onPress={() => router.push("/invoices")}
-            />
-            <AppButton
-              label="Reconcile bank payments"
-              icon="credit-card"
-              variant="secondary"
-              onPress={() => router.push("/reconciliation")}
-            />
-            <AppButton
-              label="Penalty estimator"
-              icon="trending-up"
-              variant="secondary"
-              onPress={() => router.push("/estimator")}
-            />
+            {/* A 2×2 launcher grid: four stacked full-width buttons read as a
+                wall of chrome; icon tiles are scannable at a glance. */}
+            <View style={styles.actionGrid}>
+              <ActionTile
+                label="Create an invoice"
+                icon="file-plus"
+                primary
+                onPress={() => router.push("/invoice")}
+                testID="action-create-invoice"
+              />
+              <ActionTile
+                label="Browse invoices"
+                icon="file-text"
+                onPress={() => router.push("/invoices")}
+                testID="action-browse-invoices"
+              />
+              <ActionTile
+                label="Reconcile payments"
+                icon="credit-card"
+                onPress={() => router.push("/reconciliation")}
+                testID="action-reconcile"
+              />
+              <ActionTile
+                label="Penalty estimator"
+                icon="trending-up"
+                onPress={() => router.push("/estimator")}
+                testID="action-estimator"
+              />
+            </View>
           </View>
 
           <View style={{ gap: 8 }}>
@@ -222,7 +237,9 @@ export default function HomeScreen() {
               <Card padded={false}>
                 {summary.recentActivity.slice(0, 6).map((item, index) => (
                   <View key={item.id}>
-                    {index > 0 ? <Divider /> : null}
+                    {/* Inset past the 32px icon dot so the rule aligns with
+                        the text column (14 padding + 32 dot + 12 gap). */}
+                    {index > 0 ? <Divider inset={58} /> : null}
                     <ActivityRow
                       item={item}
                       onPress={
@@ -265,13 +282,32 @@ function PenaltyRiskCard({
       : risk === "medium"
         ? colors.warningForeground
         : colors.primaryForeground;
+  const watermark: React.ComponentProps<typeof Feather>["name"] =
+    risk === "high" ? "alert-triangle" : risk === "medium" ? "alert-circle" : "shield";
   const copy = RISK_COPY[risk] ?? RISK_COPY_FALLBACK;
 
   return (
     <Card style={{ backgroundColor: bg }}>
+      {/* Decorative watermark, clipped by an inner overlay (clipping the Card
+          itself would also clip its drop shadow). Pointer-transparent so the
+          estimate link stays tappable. */}
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { borderRadius: colors.radius, overflow: "hidden" },
+        ]}
+      >
+        <Feather
+          name={watermark}
+          size={104}
+          color={fg}
+          style={styles.riskWatermark}
+        />
+      </View>
       <View style={styles.rowBetween}>
-        <AppText variant="caption" color={fg}>
-          PENALTY RISK
+        <AppText variant="overline" color={fg}>
+          Penalty risk
         </AppText>
         {/* Inverted chip: fill = foreground token, text = card fill. That pair
             is AA by construction, so the pill stays visible on all three
@@ -365,8 +401,8 @@ function ReceivablesCard({
 
   return (
     <Card>
-      <AppText variant="caption" color={colors.mutedForeground}>
-        RECEIVABLES
+      <AppText variant="overline" color={colors.mutedForeground}>
+        Receivables
       </AppText>
       {isLoading ? (
         <View style={{ gap: 8, marginTop: 10 }}>
@@ -457,8 +493,8 @@ function NextDeadlineCard({
     >
       <Card>
         <View style={styles.rowBetween}>
-          <AppText variant="caption" color={colors.mutedForeground}>
-            NEXT DEADLINE
+          <AppText variant="overline" color={colors.mutedForeground}>
+            Next deadline
           </AppText>
           <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
         </View>
@@ -566,6 +602,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     alignSelf: "flex-start",
+  },
+  riskWatermark: {
+    position: "absolute",
+    right: -16,
+    bottom: -22,
+    opacity: 0.14,
+  },
+  actionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
   },
   bucketGrid: {
     flexDirection: "row",

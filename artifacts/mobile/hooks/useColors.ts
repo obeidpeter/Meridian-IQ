@@ -17,5 +17,13 @@ import colors from "@/constants/colors";
 export function useColors() {
   const scheme = useColorScheme();
   const palette = scheme === "dark" ? colors.dark : colors.light;
-  return { ...palette, radius: colors.radius };
+  return {
+    ...palette,
+    radius: colors.radius,
+    // The resolved scheme, for the few visual effects that cannot be expressed
+    // as a token swap (card shadows read only on light ground; gradients pick
+    // different stops). Null/undefined appearance falls back to light, matching
+    // the palette fallback above.
+    scheme: (scheme === "dark" ? "dark" : "light") as "light" | "dark",
+  };
 }

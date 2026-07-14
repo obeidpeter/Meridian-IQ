@@ -46,6 +46,9 @@ const colors = {
     // the same rich red (5.6:1 on white); the dark palette lightens it so error
     // copy stays legible on dark cards (WCAG AA).
     destructiveText: "#c62828",
+    // Soft destructive SURFACE (badges, error-state icon wells). Pair with
+    // destructiveText for AA copy (5.2:1 here).
+    destructiveSoft: "#fdeaea",
 
     // Borders and input outlines
     border: "#dde5ee",
@@ -54,6 +57,9 @@ const colors = {
     // Supplementary status colors (derived for badges)
     warning: "#b45309",
     warningForeground: "#ffffff",
+    // Soft warning SURFACE (badges, banners). Pair with `warning` as the text
+    // color (5.5:1 here). The success-soft equivalent is `accent`.
+    warningSoft: "#fdf1e3",
     success: "#0d7c64",
   },
 
@@ -84,12 +90,16 @@ const colors = {
     // Lighter red for destructive TEXT/ICON on dark cards (8.2:1 on #152439);
     // the fill `destructive` stays dark for use with white foreground.
     destructiveText: "#fca5a5",
+    // Deep-tinted destructive surface; destructiveText on it clears AA easily.
+    destructiveSoft: "#3a1d1d",
 
     border: "#243247",
     input: "#243247",
 
     warning: "#d98324",
     warningForeground: "#111d2e",
+    // Deep-tinted warning surface; `warning` text on it reads ~5:1.
+    warningSoft: "#31240f",
     success: "#17b899",
   },
 

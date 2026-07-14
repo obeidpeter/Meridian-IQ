@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLogin } from "@workspace/api-client-react";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -69,11 +70,24 @@ export function SignIn() {
         bottomOffset={24}
       >
         <View style={styles.hero}>
-          <View
-            style={[styles.logo, { backgroundColor: colors.accent }]}
+          {/* Brand tile: teal gradient reads as the product mark rather than a
+              flat tinted square. Decorative — the wordmark below carries the
+              name for assistive tech. */}
+          <LinearGradient
+            colors={
+              colors.scheme === "dark"
+                ? ["#17b899", "#0b6653"]
+                : ["#12a284", "#0b6653"]
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[
+              styles.logo,
+              colors.scheme === "light" ? styles.logoShadow : null,
+            ]}
           >
-            <Feather name="shield" size={30} color={colors.primary} />
-          </View>
+            <Feather name="shield" size={30} color="#ffffff" />
+          </LinearGradient>
           <AppText variant="display" style={{ marginTop: 20 }}>
             MeridianIQ
           </AppText>
@@ -152,5 +166,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+  },
+  logoShadow: {
+    shadowColor: "#0b6653",
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
 });
