@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { and, desc, eq, isNull, notInArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
 import {
   getDb,
   clerkCasesTable,
@@ -38,6 +38,7 @@ import {
   type ExtractionOutput,
 } from "./prompts";
 import { preflightChecks } from "./preflight";
+import { inClerkScope } from "./scope";
 
 // Clerk capture cases (Task #40, C1). The Clerk PROPOSES, the operator
 // DISPOSES: extraction output is candidate values only; nothing reaches the
@@ -192,31 +193,35 @@ async function runExtraction(
       promptVersion: EXTRACT_PROMPT_VERSION,
       model: gateway.model,
     };
-    const [updated] = await getDb()
-      .update(clerkCasesTable)
-      .set({
-        status: "extracted",
-        failReason: null,
-        extraction,
-        // Deterministic pre-approval checks, recomputed on every successful
-        // (re-)extraction. An empty list marks the case ready for the review
-        // fast lane.
-        preflight: preflightChecks(extraction),
-      })
-      .where(eq(clerkCasesTable.id, caseId))
-      .returning();
+    const [updated] = await inClerkScope(firmId, () =>
+      getDb()
+        .update(clerkCasesTable)
+        .set({
+          status: "extracted",
+          failReason: null,
+          extraction,
+          // Deterministic pre-approval checks, recomputed on every successful
+          // (re-)extraction. An empty list marks the case ready for the review
+          // fast lane.
+          preflight: preflightChecks(extraction),
+        })
+        .where(eq(clerkCasesTable.id, caseId))
+        .returning(),
+    );
     return updated;
   }
   // Fail closed: invalid model output is DISCARDED (never shown) and the
   // case is escalated to a human; provider errors mark the case failed.
-  const [updated] = await getDb()
-    .update(clerkCasesTable)
-    .set({
-      status: result.outcome === "invalid_discarded" ? "escalated" : "failed",
-      failReason: result.message,
-    })
-    .where(eq(clerkCasesTable.id, caseId))
-    .returning();
+  const [updated] = await inClerkScope(firmId, () =>
+    getDb()
+      .update(clerkCasesTable)
+      .set({
+        status: result.outcome === "invalid_discarded" ? "escalated" : "failed",
+        failReason: result.message,
+      })
+      .where(eq(clerkCasesTable.id, caseId))
+      .returning(),
+  );
   return updated;
 }
 
@@ -385,42 +390,49 @@ export async function createExtractionCase(
   // fine (that's what re-uploading after a fix looks like), and the operator
   // can override deliberately.
   const sourceHash = sha256(inputForHash);
-  if (!input.allowDuplicate) {
-    const [dupe] = await getDb()
-      .select({ id: clerkCasesTable.id, status: clerkCasesTable.status })
-      .from(clerkCasesTable)
-      .where(
-        and(
-          eq(clerkCasesTable.sourceHash, sourceHash),
-          notInArray(clerkCasesTable.status, ["failed", "rejected"]),
-        ),
-      )
-      .limit(1);
-    if (dupe) {
-      throw new DomainError(
-        "DUPLICATE_SOURCE",
-        `This exact document already has a case (${dupe.id.slice(0, 8)}…, status '${dupe.status}'). Open that case, or resubmit with "create anyway" if this is deliberate.`,
-        409,
-      );
+  // Guard + insert in ONE short firm-scoped transaction, committed before the
+  // extraction model call: the firm-keyed RLS keeps the duplicate probe
+  // tenant-scoped exactly as it was under tenantContext, and committing here
+  // means the gateway's ledger rows (raw pool) can reference the case and the
+  // stored source survives even if extraction fails mid-flight.
+  const created = await inClerkScope(ctx.firmId, async () => {
+    if (!input.allowDuplicate) {
+      const [dupe] = await getDb()
+        .select({ id: clerkCasesTable.id, status: clerkCasesTable.status })
+        .from(clerkCasesTable)
+        .where(
+          and(
+            eq(clerkCasesTable.sourceHash, sourceHash),
+            notInArray(clerkCasesTable.status, ["failed", "rejected"]),
+          ),
+        )
+        .limit(1);
+      if (dupe) {
+        throw new DomainError(
+          "DUPLICATE_SOURCE",
+          `This exact document already has a case (${dupe.id.slice(0, 8)}…, status '${dupe.status}'). Open that case, or resubmit with "create anyway" if this is deliberate.`,
+          409,
+        );
+      }
     }
-  }
-
-  const [created] = await getDb()
-    .insert(clerkCasesTable)
-    .values({
-      kind: "extraction",
-      status: "pending",
-      sourceType: input.sourceType,
-      sourceName: input.name ?? null,
-      sourceText,
-      sourceImageB64,
-      sourceHash,
-      sourceDurationSec:
-        input.sourceType === "voice" ? (input.durationSec ?? null) : null,
-      firmId: ctx.firmId ?? null,
-      createdBy: actorId,
-    })
-    .returning();
+    const [row] = await getDb()
+      .insert(clerkCasesTable)
+      .values({
+        kind: "extraction",
+        status: "pending",
+        sourceType: input.sourceType,
+        sourceName: input.name ?? null,
+        sourceText,
+        sourceImageB64,
+        sourceHash,
+        sourceDurationSec:
+          input.sourceType === "voice" ? (input.durationSec ?? null) : null,
+        firmId: ctx.firmId ?? null,
+        createdBy: actorId,
+      })
+      .returning();
+    return row;
+  });
 
   const updated = await runExtraction(
     created.id,
@@ -640,7 +652,12 @@ export interface CaseDecisionInput {
   lines?: LineInput[];
 }
 
-const DECIDABLE_STATUSES = new Set(["extracted", "in_review", "escalated", "failed"]);
+const DECIDABLE_STATUSES = new Set<ClerkCase["status"]>([
+  "extracted",
+  "in_review",
+  "escalated",
+  "failed",
+]);
 
 export async function decideCase(
   id: string,
@@ -677,6 +694,10 @@ export async function decideCase(
   }
 
   if (input.action === "reject" || input.action === "escalate") {
+    // Compare-and-set on status: the pre-checks above read without a lock, so
+    // two concurrent decisions could both pass them — the UPDATE's status
+    // condition makes the second one find zero rows instead of silently
+    // overwriting the first (row-lock + READ COMMITTED re-evaluation).
     const [row] = await getDb()
       .update(clerkCasesTable)
       .set({
@@ -685,8 +706,20 @@ export async function decideCase(
         decisionAction: input.action,
         decisionReason: input.reason ?? null,
       })
-      .where(eq(clerkCasesTable.id, id))
+      .where(
+        and(
+          eq(clerkCasesTable.id, id),
+          inArray(clerkCasesTable.status, [...DECIDABLE_STATUSES]),
+        ),
+      )
       .returning();
+    if (!row) {
+      throw new DomainError(
+        "CASE_DECIDED_CONFLICT",
+        "Another operator decided this case first",
+        409,
+      );
+    }
     await appendAudit({
       actorId,
       action: `clerk.case.${input.action}`,
@@ -768,6 +801,11 @@ export async function decideCase(
     ),
   ];
 
+  // Same compare-and-set as reject/escalate. Approval creates the draft
+  // BEFORE this update, so the losing side of a concurrent double-approve
+  // must not keep its draft: the 409 rolls back the request transaction and
+  // the draft with it (the 4xx rollback rule), leaving exactly one approved
+  // decision and one invoice.
   const [row] = await getDb()
     .update(clerkCasesTable)
     .set({
@@ -779,8 +817,20 @@ export async function decideCase(
       corrections,
       createdInvoiceId: invoice.id,
     })
-    .where(eq(clerkCasesTable.id, id))
+    .where(
+      and(
+        eq(clerkCasesTable.id, id),
+        inArray(clerkCasesTable.status, ["extracted", "in_review"]),
+      ),
+    )
     .returning();
+  if (!row) {
+    throw new DomainError(
+      "CASE_DECIDED_CONFLICT",
+      "Another operator decided this case first",
+      409,
+    );
+  }
   await appendAudit({
     actorId,
     action: "clerk.case.approve",

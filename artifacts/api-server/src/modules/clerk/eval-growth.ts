@@ -60,12 +60,23 @@ export function fixtureFromCase(
   };
 }
 
-// Fixture rows → the EvalFixture shape the runner scores.
-export async function loadGrownFixtures(): Promise<EvalFixture[]> {
+// Fixture rows → the EvalFixture shape the runner scores. The corpus is
+// CAPPED at the most recent fixtures: growth is unbounded (one per corrected
+// approval, forever), and every fixture is one model call per eval run — an
+// uncapped corpus makes the nightly run's cost and duration grow without
+// limit. Recent corrections are also the ones most representative of the
+// current document mix.
+const GROWN_CORPUS_CAP = 200;
+
+export async function loadGrownFixtures(
+  limit = GROWN_CORPUS_CAP,
+): Promise<EvalFixture[]> {
   const rows = await getDb()
     .select()
     .from(clerkEvalFixturesTable)
-    .orderBy(clerkEvalFixturesTable.createdAt);
+    .orderBy(desc(clerkEvalFixturesTable.createdAt))
+    .limit(limit);
+  rows.reverse(); // oldest-first, matching the previous stable run order
   return rows.map((r) => ({
     key: `correction.${r.caseId.slice(0, 8)}`,
     label: r.label,
@@ -132,15 +143,22 @@ async function autoEvalDueToday(): Promise<boolean> {
 }
 
 registerSweep(async function sweepEvalGrowth(): Promise<void> {
-  await runInBypassContext(async () => {
-    // One instance per pass: the lock is transaction-scoped via the bypass
-    // context's transaction, so it releases automatically on commit/rollback.
+  // Fixture growth (free, DB-only) runs in a SHORT bypass transaction; the
+  // nightly auto-eval — one model call per fixture, potentially minutes of
+  // provider time — runs OUTSIDE it. Holding the transaction (and its
+  // advisory lock, and a pooled connection) across the whole eval run made a
+  // slow provider stall the shared sweep loop and every time-sensitive sweep
+  // behind it. The lock still de-duplicates growth within a pass; the eval's
+  // once-per-day guard is re-checked here and race losers merely record a
+  // second run row (startedBy null), which the due-today check then ignores
+  // for the rest of the day.
+  const runEval = await runInBypassContext(async () => {
     const [{ locked }] = (
       await getDb().execute<{ locked: boolean }>(
         sql`SELECT pg_try_advisory_xact_lock(${EVAL_GROWTH_LOCK_ID}) AS locked`,
       )
     ).rows;
-    if (!locked) return;
+    if (!locked) return false;
 
     const grown = await growEvalFixtures();
     if (grown > 0) {
@@ -148,17 +166,19 @@ registerSweep(async function sweepEvalGrowth(): Promise<void> {
     }
 
     // Auto-eval spends tokens: opt-in flag, at most once per UTC day.
-    if (!(await isFeatureEnabled(AUTO_EVAL_FLAG_KEY))) return;
-    if (!(await autoEvalDueToday())) return;
-    const gateway = await getClerkGateway();
-    const run = await runEvalCorpus(null, gateway);
-    logger.info(
-      {
-        fixtureCount: run.fixtureCount,
-        fieldsCorrect: run.fieldsCorrect,
-        fieldsCompared: run.fieldsCompared,
-      },
-      "clerk learning loop: nightly eval run complete",
-    );
+    if (!(await isFeatureEnabled(AUTO_EVAL_FLAG_KEY))) return false;
+    return autoEvalDueToday();
   });
+  if (!runEval) return;
+
+  const gateway = await getClerkGateway();
+  const run = await runEvalCorpus(null, gateway);
+  logger.info(
+    {
+      fixtureCount: run.fixtureCount,
+      fieldsCorrect: run.fieldsCorrect,
+      fieldsCompared: run.fieldsCompared,
+    },
+    "clerk learning loop: nightly eval run complete",
+  );
 });

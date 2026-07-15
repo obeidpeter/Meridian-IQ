@@ -9,6 +9,7 @@ import {
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";
+import { inClerkScope } from "./scope";
 import { getActiveClaims } from "./claims";
 import {
   INTENT_PROMPT_VERSION,
@@ -54,26 +55,35 @@ export async function askClerk(
 ): Promise<ClerkCase> {
   await assertClerkEnabled();
 
-  const [created] = await getDb()
-    .insert(clerkCasesTable)
-    .values({
-      kind: "question",
-      status: "pending",
-      question,
-      firmId: ctx.firmId ?? null,
-      createdBy: actorId,
-    })
-    .returning();
+  // The route runs outside the request transaction (app.ts NO_CONTEXT_ROUTES)
+  // so the classification model call never pins a pooled connection; each DB
+  // stage commits in its own short firm scope (see scope.ts). Committing the
+  // question case before inferring also lets the gateway's raw-pool ledger
+  // row reference it.
+  const [created] = await inClerkScope(ctx.firmId, () =>
+    getDb()
+      .insert(clerkCasesTable)
+      .values({
+        kind: "question",
+        status: "pending",
+        question,
+        firmId: ctx.firmId ?? null,
+        createdBy: actorId,
+      })
+      .returning(),
+  );
 
   const finish = async (
     answer: ClerkAnswer,
     status: "approved" | "escalated",
   ): Promise<ClerkCase> => {
-    const [row] = await getDb()
-      .update(clerkCasesTable)
-      .set({ status, answer })
-      .where(eq(clerkCasesTable.id, created.id))
-      .returning();
+    const [row] = await inClerkScope(ctx.firmId, () =>
+      getDb()
+        .update(clerkCasesTable)
+        .set({ status, answer })
+        .where(eq(clerkCasesTable.id, created.id))
+        .returning(),
+    );
     await appendAudit({
       actorId,
       action: "clerk.ask",
