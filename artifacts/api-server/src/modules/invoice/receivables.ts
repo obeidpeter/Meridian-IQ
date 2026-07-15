@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { getDb } from "@workspace/db";
+import { lagosDateString } from "../../lib/lagos-time";
 
 // Receivables aging for the SME dashboard: who owes this client what, and how
 // old is it. An invoice is an outstanding receivable once it has been issued
@@ -43,6 +44,11 @@ const OUTSTANDING = sql`i.kind = 'invoice'
 // The single definition of a receivable's reference date: age is measured
 // against the due date where one exists, otherwise the issue date.
 const REF_DATE = sql`COALESCE(i.due_date, i.issue_date)`;
+
+// Aging is a Lagos-calendar question: current_date would use the session
+// (UTC) day, which lags local statutory time by an hour around midnight
+// (see lib/lagos-time.ts).
+const LAGOS_TODAY = sql`(now() AT TIME ZONE 'Africa/Lagos')::date`;
 
 const ZERO: ReceivablesBucket = { amount: "0.00", count: 0 };
 
@@ -110,11 +116,11 @@ export async function getReceivablesSummary(
           i.currency,
           i.grand_total,
           CASE
-            WHEN current_date - ${REF_DATE} <= 30
+            WHEN ${LAGOS_TODAY} - ${REF_DATE} <= 30
               THEN 'current'
-            WHEN current_date - ${REF_DATE} <= 60
+            WHEN ${LAGOS_TODAY} - ${REF_DATE} <= 60
               THEN 'days31to60'
-            WHEN current_date - ${REF_DATE} <= 90
+            WHEN ${LAGOS_TODAY} - ${REF_DATE} <= 90
               THEN 'days61to90'
             ELSE 'days90plus'
           END AS bucket
@@ -173,7 +179,7 @@ export async function getReceivablesSummary(
   );
 
   return {
-    asOf: new Date().toISOString().slice(0, 10),
+    asOf: lagosDateString(),
     groups,
     topDebtors,
   };
@@ -219,7 +225,7 @@ export async function getFirmReceivables(
         SUM(i.grand_total)::numeric(18,2)::text AS outstanding,
         COUNT(*)::int AS invoice_count,
         COALESCE(SUM(i.grand_total) FILTER (
-          WHERE current_date - ${REF_DATE} > 90
+          WHERE ${LAGOS_TODAY} - ${REF_DATE} > 90
         ), 0)::numeric(18,2)::text AS overdue_90,
         MIN(${REF_DATE})::text AS oldest_due
       FROM invoices i
@@ -242,7 +248,7 @@ export async function getFirmReceivables(
   const topDebtors = await queryTopDebtors(sql`AND i.firm_id = ${firmId}`, 10);
 
   return {
-    asOf: new Date().toISOString().slice(0, 10),
+    asOf: lagosDateString(),
     clients: clientRows.map((r) => ({
       clientPartyId: r.supplier_party_id,
       clientName: r.legal_name,
@@ -283,13 +289,13 @@ export async function listOutstandingReceivables(
         p.legal_name,
         i.issue_date::text AS issue_date,
         i.due_date::text AS due_date,
-        (current_date - ${REF_DATE})::int AS age_days,
+        (${LAGOS_TODAY} - ${REF_DATE})::int AS age_days,
         CASE
-          WHEN current_date - ${REF_DATE} <= 30
+          WHEN ${LAGOS_TODAY} - ${REF_DATE} <= 30
             THEN 'current'
-          WHEN current_date - ${REF_DATE} <= 60
+          WHEN ${LAGOS_TODAY} - ${REF_DATE} <= 60
             THEN '31-60'
-          WHEN current_date - ${REF_DATE} <= 90
+          WHEN ${LAGOS_TODAY} - ${REF_DATE} <= 90
             THEN '61-90'
           ELSE '90+'
         END AS bucket,

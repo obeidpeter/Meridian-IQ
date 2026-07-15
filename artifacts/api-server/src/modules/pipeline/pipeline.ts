@@ -1,4 +1,4 @@
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, lt, ne, sql } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -21,6 +21,7 @@ import {
   sweepRunsTotal,
   sweepErrorsTotal,
   sweepLastSuccess,
+  outboxClaimFailuresTotal,
 } from "../../lib/metrics";
 
 // Async submission pipeline (INT-09, SME-03 backend). A transactional outbox row
@@ -439,10 +440,16 @@ async function openCaseForDeadEvent(
   }
 }
 
+// A claim failure must never kill the drain loop, but it must not be silent
+// either: a persistent one (permissions regression, schema drift) would
+// otherwise make the pipeline process nothing while every dashboard stays
+// green. Log it and count it so the condition is scrapeable.
 async function claimnextSafe(): Promise<OutboxEvent | null> {
   try {
     return await claimnext();
-  } catch {
+  } catch (err) {
+    outboxClaimFailuresTotal.inc();
+    logger.error({ err }, "outbox claim failed");
     return null;
   }
 }
@@ -576,6 +583,37 @@ export function registerSweep(sweep: () => Promise<unknown>): void {
   SWEEPS.push(sweep);
 }
 
+// Retention for the pipeline's own tables (this module already owns both).
+//
+// Outbox: a `done` row is pure history once processed — the audit ledger and
+// submission_attempts carry the durable trail — but the drain poll's partial
+// index only excludes them from the QUEUE scan; the table itself would still
+// grow one row per submitted invoice forever. Keep 30 days for debugging,
+// then delete. `dead` rows are deliberately kept: they ARE the dead-letter
+// queue the operator replays.
+//
+// Stamp verifications: the public /verify-stamp endpoint inserts a cache row
+// per (irn, csid) miss — including garbage pairs from unauthenticated
+// traffic — and a fresh row per TTL expiry. Rows stale for 30 days can never
+// serve a cache hit again; delete them.
+const PIPELINE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+export async function sweepPipelineRetention(): Promise<void> {
+  await runInBypassContext(async () => {
+    const cutoff = new Date(Date.now() - PIPELINE_RETENTION_MS);
+    await getDb()
+      .delete(outboxTable)
+      .where(
+        and(eq(outboxTable.status, "done"), lt(outboxTable.updatedAt, cutoff)),
+      );
+    await getDb()
+      .delete(stampVerificationsTable)
+      .where(lt(stampVerificationsTable.freshUntil, cutoff));
+  });
+}
+
+registerSweep(sweepPipelineRetention);
+
 // Module-level reentrancy guards shared by the interval loops AND the external
 // wake-up trigger (see runScheduledWorkOnce): a run that exceeds its period —
 // or an external trigger landing mid-pass — must skip, not overlap, or the
@@ -655,19 +693,23 @@ export async function runScheduledWorkOnce(): Promise<{
 // contend for pool connections; a failing sweep is logged, not silently
 // dropped, and does not abort its siblings.
 async function runSweepPass(): Promise<void> {
+  let failures = 0;
   for (const sweep of SWEEPS) {
     try {
       await sweep();
     } catch (err) {
+      failures += 1;
       sweepErrorsTotal.inc();
       logger.error({ err }, "compliance sweep failed");
     }
   }
-  // Record pass health for scraping: the run counter advances every pass and
-  // the gauge marks the last completion, so an alert can fire when the minute
-  // loop stalls (e.g. an Autoscale instance frozen overnight — OBS-01).
+  // Record pass health for scraping: the run counter advances every pass (the
+  // loop-liveness signal — a stalled minute loop, e.g. an Autoscale instance
+  // frozen overnight, stops it — OBS-01), while last_success only advances
+  // when every sweep in the pass succeeded, so a pass that runs but fails is
+  // an alertable condition rather than a green gauge.
   sweepRunsTotal.inc();
-  sweepLastSuccess.setToCurrentTime();
+  if (failures === 0) sweepLastSuccess.setToCurrentTime();
 }
 
 // In-process polling worker (modular monolith). Guarded against double-start.

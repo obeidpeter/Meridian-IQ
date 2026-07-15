@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.11.0
+ * OpenAPI spec version: 0.12.0
  */
 export interface HealthStatus {
   status: string;
@@ -35,14 +35,23 @@ export interface Me {
 export interface LoginInput {
   /** @minLength 3 */
   email: string;
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
   password: string;
 }
 
 export interface ChangePasswordInput {
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
   currentPassword: string;
-  /** @minLength 8 */
+  /**
+     * @minLength 8
+     * @maxLength 256
+     */
   newPassword: string;
 }
 
@@ -102,7 +111,10 @@ export interface InvitationWithToken {
 export interface AcceptInvitationInput {
   /** @minLength 1 */
   token: string;
-  /** @minLength 8 */
+  /**
+     * @minLength 8
+     * @maxLength 256
+     */
   password: string;
   fullName?: string;
 }
@@ -136,7 +148,10 @@ export interface CreatePasswordResetInput {
 export interface ResetPasswordInput {
   /** @minLength 1 */
   token: string;
-  /** @minLength 8 */
+  /**
+     * @minLength 8
+     * @maxLength 256
+     */
   password: string;
 }
 

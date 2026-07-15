@@ -34,6 +34,11 @@ import {
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
+  lagosDateString,
+  lagosMidnightFor,
+  lagosParts,
+} from "../lib/lagos-time";
+import {
   assertCan,
   assertPartyAccess,
   requireFirmScope,
@@ -95,12 +100,13 @@ function computeDeadlines(
   const deadlines: Deadline[] = [];
 
   // Monthly VAT return + remittance: due the 21st of the following month.
-  const vatDue = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 21),
-  );
+  // Statutory dates live on the LAGOS calendar (lib/lagos-time.ts): both the
+  // "which month is it" question and the due instant use local wall time.
+  const { year, monthIndex } = lagosParts(now);
+  const vatDue = lagosMidnightFor(year, monthIndex + 1, 21);
   const vatDays = daysUntil(vatDue, now);
   deadlines.push({
-    id: `vat-${vatDue.toISOString().slice(0, 10)}`,
+    id: `vat-${lagosDateString(vatDue)}`,
     clientPartyId,
     kind: "vat_return",
     title: "VAT return filing",
@@ -113,12 +119,10 @@ function computeDeadlines(
 
   if (b2cBatches === null) {
     // Legacy placeholder: consolidated B2C report due the 10th of next month.
-    const b2cDue = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 10),
-    );
+    const b2cDue = lagosMidnightFor(year, monthIndex + 1, 10);
     const b2cDays = daysUntil(b2cDue, now);
     deadlines.push({
-      id: `b2c-${b2cDue.toISOString().slice(0, 10)}`,
+      id: `b2c-${lagosDateString(b2cDue)}`,
       clientPartyId,
       kind: "b2c_report",
       title: "Consolidated B2C sales report",
@@ -353,7 +357,7 @@ router.get(
     );
     sendCsvAttachment(
       res,
-      `receivables-${new Date().toISOString().slice(0, 10)}.csv`,
+      `receivables-${lagosDateString()}.csv`,
       csv,
     );
   },
@@ -763,11 +767,14 @@ router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
             : null,
       });
     } catch (err) {
+      // Generic detail only: raw provider/internal error text is a log
+      // concern, not a client payload (same posture as the error boundary).
+      req.log.warn({ err, channel }, "test alert send failed");
       results.push({
         channel,
         messageId: null,
         status: "failed",
-        detail: err instanceof Error ? err.message : "Send failed",
+        detail: "Send failed",
       });
     }
   }

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   uuid,
@@ -91,6 +92,11 @@ export const invoicesTable = pgTable("invoices", {
   index("invoices_firm_created_idx").on(t.firmId, t.createdAt),
   index("invoices_supplier_idx").on(t.supplierPartyId),
   index("invoices_buyer_idx").on(t.buyerPartyId),
+  // The adjustment guard scans for live credit notes pointing at an original;
+  // partial because the column is null on every ordinary invoice.
+  index("invoices_related_invoice_idx")
+    .on(t.relatedInvoiceId)
+    .where(sql`related_invoice_id IS NOT NULL`),
 ]);
 
 export const invoiceLinesTable = pgTable("invoice_lines", {

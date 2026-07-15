@@ -1,9 +1,11 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   uuid,
   text,
   timestamp,
   boolean,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -110,7 +112,16 @@ export const outboxTable = pgTable("outbox_events", {
   lastError: text("last_error"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-});
+}, (t) => [
+  // Exactly the drain poll's shape (status='pending' AND next_attempt_at <=
+  // now() ORDER BY created_at): partial so the index holds only the live
+  // queue, not the ever-growing done/dead tail.
+  index("outbox_events_pending_idx")
+    .on(t.nextAttemptAt, t.createdAt)
+    .where(sql`status = 'pending'`),
+  // The stuck-submission reconcile sweep probes by aggregate.
+  index("outbox_events_aggregate_idx").on(t.aggregateId),
+]);
 
 // Circuit-breaker state per rail, persisted so it survives restarts and can be
 // reconciled by the scheduled rail-state job (INT-09).
@@ -140,7 +151,8 @@ export const stampVerificationsTable = pgTable("stamp_verifications", {
     .notNull()
     .defaultNow(),
   freshUntil: timestamp("fresh_until", { withTimezone: true }).notNull(),
-});
+// The public verify endpoint looks up by (irn, csid) on every call.
+}, (t) => [index("stamp_verifications_irn_csid_idx").on(t.irn, t.csid)]);
 
 // Server-generated secrets that must survive restarts (e.g. the session-cookie
 // signing key). Generated once at boot when absent; never exposed via any API.

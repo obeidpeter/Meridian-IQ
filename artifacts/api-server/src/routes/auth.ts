@@ -21,6 +21,9 @@ import {
   isLoginThrottled,
   recordLoginFailure,
   clearLoginFailures,
+  isActionThrottled,
+  recordActionFailure,
+  clearActionFailures,
 } from "../modules/auth/throttle";
 import { acceptInvitation } from "../modules/auth/invitations";
 import { resetPassword } from "../modules/auth/password-reset";
@@ -130,6 +133,19 @@ router.post("/auth/logout", (req, res): void => {
 // re-issuing its token with the new epoch. The audit event records the rotation.
 router.post("/auth/change-password", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(ChangePasswordBody, req.body);
+  // The current-password check is a credential check, so it gets the same
+  // online-guessing cap as login (raw-pool counters that survive the 401's
+  // transaction rollback) — a stolen session cookie must not be upgradeable
+  // to the password by unbounded guessing.
+  const throttleKey = `chpw:${req.principal.userId}`;
+  const retryAfter = await isActionThrottled(throttleKey);
+  if (retryAfter !== null) {
+    res.setHeader("Retry-After", String(retryAfter));
+    res.status(429).json({
+      error: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+    });
+    return;
+  }
   const [user] = await getDb()
     .select({
       id: usersTable.id,
@@ -141,16 +157,18 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     .limit(1);
   if (
     !user?.passwordHash ||
-    !verifyPassword(parsed.currentPassword, user.passwordHash)
+    !(await verifyPassword(parsed.currentPassword, user.passwordHash))
   ) {
+    await recordActionFailure(throttleKey);
     res.status(401).json({ error: "Current password is incorrect" });
     return;
   }
+  await clearActionFailures(throttleKey);
   const nextEpoch = user.sessionEpoch + 1;
   await getDb()
     .update(usersTable)
     .set({
-      passwordHash: hashPassword(parsed.newPassword),
+      passwordHash: await hashPassword(parsed.newPassword),
       sessionEpoch: nextEpoch,
     })
     .where(eq(usersTable.id, user.id));

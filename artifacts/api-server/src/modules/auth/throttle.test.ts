@@ -5,6 +5,9 @@ import {
   isLoginThrottled,
   recordLoginFailure,
   clearLoginFailures,
+  isActionThrottled,
+  recordActionFailure,
+  clearActionFailures,
 } from "./throttle.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
@@ -75,4 +78,20 @@ test("failures persist independently of a rolled-back request (raw pool write)",
   );
   assert.equal(rows.length, 1);
   assert.equal(Number(rows[0].count), 1);
+});
+
+test("action throttle: caps a namespaced key after 5 failures; clearing resets", async () => {
+  // The generic single-key variant used by the change-password credential
+  // check (key chpw:<userId>): same table, same raw-pool survival property.
+  const key = `chpw:test-${SALT}`;
+  for (let i = 0; i < 4; i++) {
+    await recordActionFailure(key);
+    assert.equal(await isActionThrottled(key), null, `attempt ${i + 1} still allowed`);
+  }
+  await recordActionFailure(key);
+  const wait = await isActionThrottled(key);
+  assert.ok(wait !== null && wait > 0, "fifth failure trips the cap");
+
+  await clearActionFailures(key);
+  assert.equal(await isActionThrottled(key), null, "success clears the counter");
 });

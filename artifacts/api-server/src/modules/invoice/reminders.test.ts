@@ -10,6 +10,7 @@ import {
   invoicesTable,
   messagesTable,
   alertPreferencesTable,
+  consentRecordsTable,
   deadlineReminderSendsTable,
   featureFlagsTable,
 } from "@workspace/db";
@@ -38,6 +39,7 @@ const supplierOverdue = randomUUID();
 const supplierOptedOut = randomUUID();
 const supplierDark = randomUUID();
 const supplierStale = randomUUID();
+const supplierRevoked = randomUUID();
 
 // Matches the module's internal recipient derivation (letters of the uuid):
 // the assertion key tying message rows back to a fixture party.
@@ -132,6 +134,7 @@ before(async () => {
       supplierOptedOut,
       supplierDark,
       supplierStale,
+      supplierRevoked,
     ].map(
       (id, i) => ({
         id,
@@ -142,6 +145,25 @@ before(async () => {
         city: "Lagos",
       }),
     ),
+  );
+  // Alert fan-out is gated on layer-1 consent (CORE-03): grant it for every
+  // fixture party; the revocation test layers a revoke on top for its party.
+  await db.insert(consentRecordsTable).values(
+    [
+      supplierDueSoon,
+      supplierOverdue,
+      supplierOptedOut,
+      supplierDark,
+      supplierStale,
+      supplierRevoked,
+    ].map((partyId) => ({
+      partyId,
+      layer: 1,
+      action: "grant" as const,
+      scope: "compliance",
+      basis: "contract",
+      channel: "test",
+    })),
   );
 });
 
@@ -219,6 +241,26 @@ test("flag dark: slot claimed, nothing sent — enabling later does not backfill
   } finally {
     await setFlag(FLAG, true);
   }
+});
+
+test("revoked layer-1 consent suppresses sends but still claims the slot", async () => {
+  // The latest consent action wins: a revoke recorded after the grant takes
+  // the party out of the deadline_alerts purpose entirely (CORE-03), so no
+  // channel — messaging or push — may fire, while the idempotency slot is
+  // still claimed so a later re-grant does not backfill the alert.
+  await getDb().insert(consentRecordsTable).values({
+    partyId: supplierRevoked,
+    layer: 1,
+    action: "revoke",
+    scope: "compliance",
+    basis: "contract",
+    channel: "test",
+  });
+  const invoice = await draftFor(supplierRevoked, DUE_SOON_ISSUE);
+  await drainReminders();
+
+  assert.equal((await remindersFor(invoice.id)).length, 1);
+  assert.equal((await messagesFor(supplierRevoked)).length, 0);
 });
 
 test("submitted invoices never remind", async () => {

@@ -1,8 +1,10 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   uuid,
   text,
   boolean,
+  index,
   integer,
   pgEnum,
 } from "drizzle-orm/pg-core";
@@ -42,7 +44,10 @@ export const partiesTable = pgTable("parties", {
   schemaVersion: integer("schema_version").notNull().default(1),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-});
+// TIN is the documented entity key (CORE-08): imports, onboarding and the
+// duplicate workbench all resolve parties by it, so give those lookups an
+// index instead of a growing seq scan. Partial: tin is null until captured.
+}, (t) => [index("parties_tin_idx").on(t.tin).where(sql`tin IS NOT NULL`)]);
 
 export type Party = typeof partiesTable.$inferSelect;
 export type PartyType = (typeof partyTypeEnum.enumValues)[number];

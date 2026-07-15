@@ -3,12 +3,15 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.11.0
+ * OpenAPI spec version: 0.12.0
  */
 
 export interface LoginInput {
   /** @minLength 3 */
   email: string;
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @maxLength 256
+     */
   password: string;
 }

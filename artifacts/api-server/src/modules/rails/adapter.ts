@@ -279,16 +279,23 @@ export async function verifyStamp(
     .limit(1);
   const valid = Boolean(record);
   const matchedRail: Rail = record?.rail ?? RAILS[0];
-  await getDb().insert(stampVerificationsTable).values({
-    id: randomUUID(),
-    irn,
-    csid,
-    valid,
-    rail: matchedRail,
-    checkedAt: now,
-    freshUntil: new Date(now.getTime() + CACHE_TTL_MS),
-    raw: {},
-  });
+  // Cache HITS only. This endpoint is public and unauthenticated, so caching
+  // misses would let anyone grow the table without bound by spraying garbage
+  // (irn, csid) pairs — and a negative row only ever saves the indexed
+  // stamp_records probe above, which is as cheap as the cache lookup itself.
+  // Stale rows are pruned by the pipeline retention sweep.
+  if (valid) {
+    await getDb().insert(stampVerificationsTable).values({
+      id: randomUUID(),
+      irn,
+      csid,
+      valid,
+      rail: matchedRail,
+      checkedAt: now,
+      freshUntil: new Date(now.getTime() + CACHE_TTL_MS),
+      raw: {},
+    });
+  }
   const lifecycle = valid
     ? await lookupLifecycle(irn, csid)
     : { eligible: false, invoiceStatus: null };

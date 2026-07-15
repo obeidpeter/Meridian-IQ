@@ -1,4 +1,5 @@
 import type { Invoice } from "@workspace/db";
+import { lagosMidnight } from "../../lib/lagos-time";
 
 // The statutory submission-window / penalty-risk cluster shared by the partner
 // console (CON-02) and the SME dashboard (SME-05), so the two surfaces cannot
@@ -22,9 +23,13 @@ export function isStamped(s: Invoice["status"]): boolean {
   return s === "stamped" || s === "confirmed" || s === "settled";
 }
 
-// The statutory submit-by date for an invoice issued on `issueDate`.
+// The statutory submit-by instant for an invoice issued on `issueDate`: Lagos
+// midnight after the window elapses, so "overdue" flips at the local calendar
+// boundary rather than an hour later at UTC midnight. SQL predicates that
+// prefilter on this deadline must use the matching
+// `(issue_date + N)::timestamp AT TIME ZONE 'Africa/Lagos'` expression.
 export function submissionDeadline(issueDate: string): Date {
-  const d = new Date(issueDate);
+  const d = lagosMidnight(issueDate);
   d.setUTCDate(d.getUTCDate() + SUBMISSION_WINDOW_DAYS);
   return d;
 }

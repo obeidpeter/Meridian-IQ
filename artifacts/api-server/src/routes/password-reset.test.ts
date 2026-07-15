@@ -61,7 +61,7 @@ before(async () => {
   await db.insert(usersTable).values({
     id: subjectUserId,
     email: subjectEmail,
-    passwordHash: hashPassword("original-pw-123"),
+    passwordHash: await hashPassword("original-pw-123"),
   });
 });
 
@@ -147,11 +147,11 @@ test("redeeming sets the password, revokes sessions, and is single-use", async (
     .where(eq(usersTable.id, subjectUserId))
     .limit(1);
   assert.ok(
-    user.passwordHash && verifyPassword("brand-new-pw-456", user.passwordHash),
+    user.passwordHash && (await verifyPassword("brand-new-pw-456", user.passwordHash)),
     "new password is set and verifiable",
   );
   assert.ok(
-    !verifyPassword("original-pw-123", user.passwordHash!),
+    !(await verifyPassword("original-pw-123", user.passwordHash!)),
     "old password no longer verifies",
   );
   assert.equal(

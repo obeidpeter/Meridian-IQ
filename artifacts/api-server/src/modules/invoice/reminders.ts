@@ -13,6 +13,7 @@ import {
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { fanOutAlert } from "../messaging/fan-out";
+import { lagosDateString } from "../../lib/lagos-time";
 import {
   SUBMISSION_WINDOW_DAYS,
   daysUntil,
@@ -57,21 +58,21 @@ async function sweepInner(now: Date): Promise<number> {
   // admit a boundary row; the exact JS classification below settles it.
   // Oldest first: the most overdue invoices are processed ahead of the merely
   // due-soon when a backlog exceeds one pass.
-  const cutoff = new Date(
-    now.getTime() - (SUBMISSION_WINDOW_DAYS - DUE_SOON_DAYS) * DAY_MS,
-  )
-    .toISOString()
-    .slice(0, 10);
+  const cutoff = lagosDateString(
+    new Date(now.getTime() - (SUBMISSION_WINDOW_DAYS - DUE_SOON_DAYS) * DAY_MS),
+  );
   // Exclude invoices already claimed at their CURRENT threshold — without
   // this, a backlog wider than the limit keeps returning the same processed
   // rows and newer due invoices never enter the window. The CASE mirrors the
-  // JS classification: past the deadline timestamp means overdue.
+  // JS classification: past the deadline instant (Lagos midnight after the
+  // window, matching submissionDeadline) means overdue.
   const unclaimedAtThreshold = sql`NOT EXISTS (
     SELECT 1 FROM deadline_reminder_sends s
     WHERE s.invoice_id = ${invoicesTable.id}
       AND s.kind::text = CASE
-        WHEN (${invoicesTable.issueDate}::date
-              + ${SUBMISSION_WINDOW_DAYS} * interval '1 day') < ${now}
+        WHEN ((${invoicesTable.issueDate}::date
+              + ${SUBMISSION_WINDOW_DAYS} * interval '1 day')::timestamp
+              AT TIME ZONE 'Africa/Lagos') < ${now}
         THEN 'overdue' ELSE 'due_soon' END
   )`;
   const candidates = await getDb()

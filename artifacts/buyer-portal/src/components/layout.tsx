@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
+import { StaleBuildBanner } from "@/components/stale-build-banner";
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -143,8 +144,10 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
-      <a
+    <div className="min-h-screen bg-background flex flex-col">
+      <StaleBuildBanner />
+      <div className="flex-1 flex flex-col md:flex-row">
+        <a
         href="#main-content"
         className={`sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:bg-primary focus:text-primary-foreground focus:px-3 focus:py-2 focus:rounded-md ${FOCUS_RING}`}
       >
@@ -182,6 +185,7 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         {children}
       </main>
+      </div>
     </div>
   );
 }
