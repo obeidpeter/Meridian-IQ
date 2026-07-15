@@ -135,6 +135,10 @@ jobs:
         run: pnpm --filter @workspace/buyer-portal run build
         env: { BASE_PATH: /buyer/, PORT: "3000" }
 
+      - name: Build penalty calculator
+        run: pnpm --filter @workspace/penalty-calculator run build
+        env: { BASE_PATH: /penalty-calculator/, PORT: "3000" }
+
   # End-to-end user journeys against real builds and a real database: portal
   # auth (incl. throttling + password change), operator Desk, admin advisory,
   # auditor read-only boundary, consent round-trip, credit-note lifecycle.

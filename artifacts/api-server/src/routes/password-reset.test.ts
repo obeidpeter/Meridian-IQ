@@ -9,6 +9,7 @@ import {
 } from "@workspace/db";
 import identityRouter from "./identity.ts";
 import authRouter from "./auth.ts";
+import { sweepExpiredPasswordResets } from "../modules/auth/password-reset.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { verifyPassword, hashPassword } from "../modules/auth/session.ts";
 import {
@@ -204,4 +205,57 @@ test("expired and unknown tokens are a uniform 400", async () => {
     body: JSON.stringify({ token: "f".repeat(64), password: "irrelevant-pw-2" }),
   });
   assert.equal(unknown.status, 400);
+});
+
+test("the retention sweep prunes only dead resets past the 30-day window", async () => {
+  const db = getDb();
+  const monthAgo = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+  const hashOf = (label: string) =>
+    createHash("sha256").update(`retention-${label}-${SALT}`).digest("hex");
+
+  const inserted = await db
+    .insert(passwordResetsTable)
+    .values([
+      {
+        // Consumed a month ago: past retention, prunable.
+        userId: subjectUserId,
+        tokenHash: hashOf("used"),
+        status: "used",
+        expiresAt: new Date(monthAgo.getTime() + 60_000),
+        usedAt: monthAgo,
+        createdAt: monthAgo,
+        issuedByUserId: operatorUserId,
+      },
+      {
+        // Never redeemed, expired a month ago: prunable.
+        userId: subjectUserId,
+        tokenHash: hashOf("expired"),
+        expiresAt: new Date(monthAgo.getTime() + 60_000),
+        createdAt: monthAgo,
+        issuedByUserId: operatorUserId,
+      },
+      {
+        // Freshly issued and still live: must survive.
+        userId: subjectUserId,
+        tokenHash: hashOf("fresh"),
+        expiresAt: new Date(Date.now() + 60_000),
+        issuedByUserId: operatorUserId,
+      },
+    ])
+    .returning({ id: passwordResetsTable.id, tokenHash: passwordResetsTable.tokenHash });
+  assert.equal(inserted.length, 3);
+
+  await sweepExpiredPasswordResets();
+
+  const survivors = new Set(
+    (
+      await db
+        .select({ tokenHash: passwordResetsTable.tokenHash })
+        .from(passwordResetsTable)
+        .where(eq(passwordResetsTable.userId, subjectUserId))
+    ).map((r) => r.tokenHash),
+  );
+  assert.ok(!survivors.has(hashOf("used")), "old used reset is pruned");
+  assert.ok(!survivors.has(hashOf("expired")), "old expired reset is pruned");
+  assert.ok(survivors.has(hashOf("fresh")), "live pending reset survives");
 });

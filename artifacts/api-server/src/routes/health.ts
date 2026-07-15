@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { HealthCheckResponse, API_CONTRACT_VERSION } from "@workspace/api-zod";
 import { pool } from "@workspace/db";
 import { registry } from "../lib/metrics";
+import { requireOpToken } from "../lib/op-token";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -39,9 +40,9 @@ router.get("/readyz", async (_req, res): Promise<void> => {
 
 // Prometheus scrape endpoint (OBS-01). Aggregate process + request + sweep
 // metrics only — no per-tenant labels or PII — so it is safe to serve on the
-// public path like /healthz; restrict it at the ingress if scrape access must
-// be limited.
-router.get("/metrics", async (_req, res): Promise<void> => {
+// public path like /healthz. Deployments that want scrape access closed set
+// METRICS_TOKEN (opt-in; unset keeps it open) — see lib/op-token.ts.
+router.get("/metrics", requireOpToken("METRICS_TOKEN"), async (_req, res): Promise<void> => {
   res.set("Content-Type", registry.contentType);
   res.end(await registry.metrics());
 });

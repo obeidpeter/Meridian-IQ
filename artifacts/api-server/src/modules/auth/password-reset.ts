@@ -1,14 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt, ne, or } from "drizzle-orm";
 import {
   getDb,
   passwordResetsTable,
+  runInBypassContext,
   usersTable,
 } from "@workspace/db";
 import { DomainError } from "../errors";
 import { hashPassword, normalizeEmail } from "./session";
 import { hashInviteToken } from "./invitations";
 import { appendAudit } from "../audit/audit";
+import { registerSweep } from "../pipeline/pipeline";
 import type { Principal } from "./rbac";
 
 // Password recovery (IDN-02), on the invitation rail's posture.
@@ -147,3 +149,32 @@ export async function resetPassword(
     entityId: reset.id,
   });
 }
+
+// Retention: reset rows are dead weight once they can never be redeemed —
+// used, revoked, or expired — but they stay 30 days as a short forensic
+// window (who was issued a link, when it was consumed; the durable trail is
+// the audit ledger). Only a still-live pending link survives past the cutoff,
+// which cannot actually happen given the 24h TTL — the expiry check is belt
+// and braces should the TTL ever grow. The table is bypass-only (migration
+// 0012), so the sweep binds its own bypass context like the other sweeps;
+// errors propagate to the sweep runner for the OBS-01 error metric.
+const RESET_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+export async function sweepExpiredPasswordResets(): Promise<void> {
+  await runInBypassContext(async () => {
+    const cutoff = new Date(Date.now() - RESET_RETENTION_MS);
+    await getDb()
+      .delete(passwordResetsTable)
+      .where(
+        and(
+          lt(passwordResetsTable.createdAt, cutoff),
+          or(
+            ne(passwordResetsTable.status, "pending"),
+            lt(passwordResetsTable.expiresAt, new Date()),
+          ),
+        ),
+      );
+  });
+}
+
+registerSweep(sweepExpiredPasswordResets);
