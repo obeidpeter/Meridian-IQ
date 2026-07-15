@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.11.0
+  version: 0.12.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -3017,6 +3017,7 @@ components:
         password:
           type: string
           minLength: 1
+          maxLength: 256
     ChangePasswordInput:
       type: object
       required: [currentPassword, newPassword]
@@ -3024,9 +3025,11 @@ components:
         currentPassword:
           type: string
           minLength: 1
+          maxLength: 256
         newPassword:
           type: string
           minLength: 8
+          maxLength: 256
 
     Invitation:
       type: object
@@ -3093,6 +3096,7 @@ components:
         password:
           type: string
           minLength: 8
+          maxLength: 256
         fullName:
           type: string
 
@@ -3140,6 +3144,7 @@ components:
         password:
           type: string
           minLength: 8
+          maxLength: 256
 
     Firm:
       type: object

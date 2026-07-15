@@ -249,7 +249,7 @@ test("redeeming a token provisions the user + membership and is single-use", asy
   assert.ok(user, "user was created");
   assert.equal(user.fullName, "Ada Lovelace", "full name trimmed");
   assert.ok(
-    user.passwordHash && verifyPassword("sup3r-secret-pw", user.passwordHash),
+    user.passwordHash && (await verifyPassword("sup3r-secret-pw", user.passwordHash)),
     "password is set and verifiable",
   );
 

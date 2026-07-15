@@ -3,12 +3,15 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.11.0
+ * OpenAPI spec version: 0.12.0
  */
 
 export interface ResetPasswordInput {
   /** @minLength 1 */
   token: string;
-  /** @minLength 8 */
+  /**
+     * @minLength 8
+     * @maxLength 256
+     */
   password: string;
 }

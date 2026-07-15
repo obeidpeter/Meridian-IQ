@@ -26,7 +26,7 @@ before(async () => {
     .values({
       id: userId,
       email,
-      passwordHash: hashPassword(PASSWORD),
+      passwordHash: await hashPassword(PASSWORD),
       sessionEpoch: 0,
     })
     .onConflictDoNothing();

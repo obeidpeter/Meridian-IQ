@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.11.0
+ * OpenAPI spec version: 0.12.0
  */
 import * as zod from 'zod';
 
@@ -39,12 +39,13 @@ export const GetMeResponse = zod.object({
  */
 export const loginBodyEmailMin = 3;
 
+export const loginBodyPasswordMax = 256;
 
 
 
 export const LoginBody = zod.object({
   "email": zod.string().min(loginBodyEmailMin),
-  "password": zod.string().min(1)
+  "password": zod.string().min(1).max(loginBodyPasswordMax)
 })
 
 export const LoginResponse = zod.object({
@@ -69,14 +70,16 @@ export const LogoutResponse = zod.void()
 /**
  * @summary Change the signed-in account's password (SEC-02)
  */
+export const changePasswordBodyCurrentPasswordMax = 256;
 
 export const changePasswordBodyNewPasswordMin = 8;
+export const changePasswordBodyNewPasswordMax = 256;
 
 
 
 export const ChangePasswordBody = zod.object({
-  "currentPassword": zod.string().min(1),
-  "newPassword": zod.string().min(changePasswordBodyNewPasswordMin)
+  "currentPassword": zod.string().min(1).max(changePasswordBodyCurrentPasswordMax),
+  "newPassword": zod.string().min(changePasswordBodyNewPasswordMin).max(changePasswordBodyNewPasswordMax)
 })
 
 export const ChangePasswordResponse = zod.void()
@@ -87,12 +90,13 @@ export const ChangePasswordResponse = zod.void()
  */
 
 export const acceptInviteBodyPasswordMin = 8;
+export const acceptInviteBodyPasswordMax = 256;
 
 
 
 export const AcceptInviteBody = zod.object({
   "token": zod.string().min(1),
-  "password": zod.string().min(acceptInviteBodyPasswordMin),
+  "password": zod.string().min(acceptInviteBodyPasswordMin).max(acceptInviteBodyPasswordMax),
   "fullName": zod.string().optional()
 })
 
@@ -104,12 +108,13 @@ export const AcceptInviteResponse = zod.void()
  */
 
 export const resetPasswordBodyPasswordMin = 8;
+export const resetPasswordBodyPasswordMax = 256;
 
 
 
 export const ResetPasswordBody = zod.object({
   "token": zod.string().min(1),
-  "password": zod.string().min(resetPasswordBodyPasswordMin)
+  "password": zod.string().min(resetPasswordBodyPasswordMin).max(resetPasswordBodyPasswordMax)
 })
 
 export const ResetPasswordResponse = zod.void()

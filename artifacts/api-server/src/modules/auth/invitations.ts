@@ -295,7 +295,7 @@ export async function acceptInvitation(
     .values({
       email,
       fullName: input.fullName?.trim() || null,
-      passwordHash: hashPassword(input.password),
+      passwordHash: await hashPassword(input.password),
     })
     .returning({ id: usersTable.id });
   await getDb()

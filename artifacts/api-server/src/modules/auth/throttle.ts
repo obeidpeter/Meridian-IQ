@@ -108,6 +108,33 @@ export async function clearLoginFailures(
   ]);
 }
 
+// Generic single-key action throttle on the same login_attempts table and the
+// same raw-pool posture (counters must survive the 4xx rollback). Used for
+// authenticated credential checks that would otherwise allow unlimited online
+// guessing — today the change-password current-password check, where a stolen
+// session cookie must not be brute-forceable into a full account takeover.
+// Callers namespace their keys (e.g. "chpw:<userId>").
+const ACTION_WINDOW_MS = 15 * 60 * 1000;
+const ACTION_MAX_FAILURES = 5;
+
+// The wait, in seconds, before this action is allowed — or null if not
+// throttled.
+export async function isActionThrottled(key: string): Promise<number | null> {
+  const { rows } = await pool.query<{ count: number; window_start: Date }>(
+    "SELECT count, window_start FROM login_attempts WHERE key = $1",
+    [key],
+  );
+  return retryAfter(rows[0], ACTION_WINDOW_MS, ACTION_MAX_FAILURES);
+}
+
+export async function recordActionFailure(key: string): Promise<void> {
+  await bump(key, ACTION_WINDOW_MS);
+}
+
+export async function clearActionFailures(key: string): Promise<void> {
+  await pool.query("DELETE FROM login_attempts WHERE key = $1", [key]);
+}
+
 // Prune rows whose window has fully elapsed (past the longer account window),
 // so the table cannot grow unboundedly with one row per distinct email+IP that
 // ever failed. Registered on the shared minute sweep loop; a small indexed

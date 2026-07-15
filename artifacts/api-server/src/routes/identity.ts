@@ -24,6 +24,7 @@ import {
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { createPasswordReset } from "../modules/auth/password-reset";
+import { normalizeEmail } from "../modules/auth/session";
 
 const router: IRouter = Router();
 
@@ -101,7 +102,10 @@ router.post("/users", async (req, res): Promise<void> => {
   const [row] = await getDb()
     .insert(usersTable)
     .values({
-      email: parsed.email,
+      // The single-normalizer invariant (modules/auth/session.ts): every auth
+      // surface keys off the same canonical email form, or login lookups and
+      // throttle counters silently disagree with the stored account.
+      email: normalizeEmail(parsed.email),
       fullName: parsed.fullName ?? null,
       clerkUserId: parsed.clerkUserId ?? null,
     })

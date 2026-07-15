@@ -479,7 +479,7 @@ async function seedBuyerDemo(): Promise<void> {
 export const DEMO_PASSWORD = "meridian2027";
 
 async function seedDemoPasswords(): Promise<void> {
-  const hash = hashPassword(DEMO_PASSWORD);
+  const hash = await hashPassword(DEMO_PASSWORD);
   await getDb()
     .update(usersTable)
     .set({ passwordHash: hash })

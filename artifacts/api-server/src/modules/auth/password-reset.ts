@@ -137,7 +137,7 @@ export async function resetPassword(
   await getDb()
     .update(usersTable)
     .set({
-      passwordHash: hashPassword(password),
+      passwordHash: await hashPassword(password),
       sessionEpoch: user.sessionEpoch + 1,
     })
     .where(eq(usersTable.id, reset.userId));

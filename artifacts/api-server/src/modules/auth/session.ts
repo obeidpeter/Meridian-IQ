@@ -1,9 +1,10 @@
 import {
   createHmac,
   randomBytes,
-  scryptSync,
+  scrypt as scryptCallback,
   timingSafeEqual,
 } from "node:crypto";
+import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import { getDb, appSecretsTable, usersTable } from "@workspace/db";
 
@@ -29,18 +30,32 @@ export function normalizeEmail(email: string): string {
 
 // ---- password hashing (scrypt, salt:hash hex) ----
 
-export function hashPassword(password: string): string {
+// Async scrypt: the KDF runs on libuv's threadpool, not the event loop. The
+// sync variant blocked the single-threaded server for the full KDF on every
+// login — including the decoy burn for unknown emails, which an attacker can
+// trigger unthrottled by rotating fabricated addresses — making password
+// checks an availability lever against every tenant at once.
+const scrypt = promisify(scryptCallback) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+) => Promise<Buffer>;
+
+export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
-  const hash = scryptSync(password, salt, 32);
+  const hash = await scrypt(password, salt, 32);
   return `${salt.toString("hex")}:${hash.toString("hex")}`;
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
+export async function verifyPassword(
+  password: string,
+  stored: string,
+): Promise<boolean> {
   const [saltHex, hashHex] = stored.split(":");
   if (!saltHex || !hashHex) return false;
   const salt = Buffer.from(saltHex, "hex");
   const expected = Buffer.from(hashHex, "hex");
-  const actual = scryptSync(password, salt, expected.length);
+  const actual = await scrypt(password, salt, expected.length);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
@@ -51,9 +66,11 @@ export function verifyPassword(password: string, stored: string): boolean {
 // emails have first-party accounts. Lazily initialised so importing this module
 // (e.g. from unrelated tests) costs nothing.
 let decoyHash: string | null = null;
-function burnDecoyScrypt(password: string): void {
-  if (decoyHash === null) decoyHash = hashPassword(randomBytes(16).toString("hex"));
-  verifyPassword(password, decoyHash);
+async function burnDecoyScrypt(password: string): Promise<void> {
+  if (decoyHash === null) {
+    decoyHash = await hashPassword(randomBytes(16).toString("hex"));
+  }
+  await verifyPassword(password, decoyHash);
 }
 
 // ---- signing secret (generated once, persisted) ----
@@ -163,10 +180,10 @@ export async function authenticate(
     .limit(1);
   if (!user?.passwordHash) {
     // Equalise latency with the verify path (account-enumeration timing).
-    burnDecoyScrypt(password);
+    await burnDecoyScrypt(password);
     return null;
   }
-  if (!verifyPassword(password, user.passwordHash)) return null;
+  if (!(await verifyPassword(password, user.passwordHash))) return null;
   return {
     userId: user.id,
     email: user.email,
