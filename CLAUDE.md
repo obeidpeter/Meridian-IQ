@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.9.0`).
+contract change (it is currently `0.10.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -115,7 +115,12 @@ DRAFT register entry that still walks the full maker-checker flow.
   grants). Accepting creates the user + membership and consumes the invite via a
   compare-and-set on status, so a token can't be redeemed twice. firmId is forced
   to the inviter's firm; a `client_user` invite must name a client party the firm
-  engages.
+  engages. Operators bootstrap a NEW firm through the same rail: provision the
+  firm (`POST /firms`), then send its first `firm_admin` invite naming that
+  `firmId` (console → Team invitations shows operators a target-firm picker +
+  inline provisioning); the admin self-serves the rest. Platform roles
+  (operator, auditor, bank/buyer) deliberately stay on `identity.write`, never
+  the invite flow.
 
 ## Background work (the pipeline worker)
 

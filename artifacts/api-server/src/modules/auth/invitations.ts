@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import {
   getDb,
+  firmsTable,
   invitationsTable,
   usersTable,
   membershipsTable,
@@ -23,10 +24,11 @@ import { firmEngagesParty, type Principal } from "./rbac";
 // the invite via a compare-and-set on status, so a token cannot be redeemed
 // twice even under a race.
 
-// Roles a firm_admin may hand out. Cross-tenant/platform roles (operator,
-// auditor, bank_user) and the buyer-rails role are never issued through the
-// firm-scoped invite flow; the contract enum already narrows the input, and
-// this is the defense-in-depth backstop.
+// Roles an invitation may hand out — for firm principals AND operators alike.
+// Cross-tenant/platform roles (operator, auditor, bank_user) and the
+// buyer-rails role are never issued through the invite flow; they stay on the
+// deliberate identity.write provisioning path. The contract enum already
+// narrows the input, and this is the defense-in-depth backstop.
 const INVITABLE_ROLES = new Set<Role>(["firm_admin", "firm_staff", "client_user"]);
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -34,6 +36,7 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export interface CreateInvitationInput {
   email: string;
   role: Role;
+  firmId?: string | null;
   clientPartyId?: string | null;
 }
 
@@ -67,25 +70,48 @@ function invitationView(row: Invitation) {
 
 export type InvitationView = ReturnType<typeof invitationView>;
 
-// The firm a firm-scoped principal invites into. Cross-tenant staff (operator,
-// auditor) carry no firm, so they cannot originate an invite through this
-// self-serve path — they provision directly via identity.write instead.
-function requireFirm(principal: Principal): string {
-  if (!principal.firmId) {
+// The firm an invitation targets. A firm-scoped principal always invites into
+// its OWN firm (a foreign firmId is rejected, never silently rewritten). An
+// operator names the target firm explicitly — the new-firm bootstrap path:
+// create the firm, then invite its first firm_admin, who self-serves the rest.
+// The named firm must exist; platform roles stay on identity.write.
+async function resolveTargetFirm(
+  principal: Principal,
+  requested: string | null | undefined,
+): Promise<string> {
+  if (principal.firmId) {
+    if (requested && requested !== principal.firmId) {
+      throw new DomainError(
+        "FIRM_NOT_ALLOWED",
+        "A firm invitation always targets your own firm",
+        403,
+      );
+    }
+    return principal.firmId;
+  }
+  if (!requested) {
     throw new DomainError(
-      "NO_TENANT",
-      "An invitation must be created within a firm",
-      403,
+      "FIRM_REQUIRED",
+      "An operator invitation must name the firm it targets",
+      400,
     );
   }
-  return principal.firmId;
+  const [firm] = await getDb()
+    .select({ id: firmsTable.id })
+    .from(firmsTable)
+    .where(eq(firmsTable.id, requested))
+    .limit(1);
+  if (!firm) {
+    throw new DomainError("FIRM_NOT_FOUND", "That firm does not exist", 404);
+  }
+  return firm.id;
 }
 
 export async function createInvitation(
   principal: Principal,
   input: CreateInvitationInput,
 ): Promise<{ invitation: InvitationView; token: string }> {
-  const firmId = requireFirm(principal);
+  const firmId = await resolveTargetFirm(principal, input.firmId);
   const role = input.role;
   if (!INVITABLE_ROLES.has(role)) {
     throw new DomainError(

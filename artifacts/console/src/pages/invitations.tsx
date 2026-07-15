@@ -3,9 +3,12 @@ import {
   useListInvitations,
   useCreateInvitation,
   useRevokeInvitation,
+  useCreateFirm,
+  useListFirms,
   useGetPortfolio,
   useGetMe,
   getListInvitationsQueryKey,
+  getListFirmsQueryKey,
   getGetPortfolioQueryKey,
 } from "@workspace/api-client-react";
 import type {
@@ -39,6 +42,7 @@ import {
 } from "@/lib/invitations";
 import {
   UserPlus,
+  Building2,
   Copy,
   Check,
   Mail,
@@ -68,6 +72,9 @@ export function Invitations() {
   const canReadPortfolio = (me?.capabilities ?? []).includes(
     "console.portfolio.read",
   );
+  // identity.write marks the operator: invitations then target a chosen firm
+  // (the new-firm bootstrap path) instead of the caller's own.
+  const isOperator = (me?.capabilities ?? []).includes("identity.write");
 
   const {
     data: invitations,
@@ -82,14 +89,21 @@ export function Invitations() {
   const { data: portfolio } = useGetPortfolio({
     query: { enabled: canReadPortfolio, queryKey: getGetPortfolioQueryKey() },
   });
+  // Operators pick (or provision) the firm an invitation targets.
+  const { data: firms } = useListFirms({
+    query: { enabled: isOperator, queryKey: getListFirmsQueryKey() },
+  });
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const create = useCreateInvitation();
   const revoke = useRevokeInvitation();
+  const createFirm = useCreateFirm();
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<CreateInvitationInputRole>("firm_staff");
   const [clientPartyId, setClientPartyId] = useState("");
+  const [firmId, setFirmId] = useState("");
+  const [newFirmName, setNewFirmName] = useState("");
   const [created, setCreated] = useState<InvitationWithToken | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -98,6 +112,12 @@ export function Invitations() {
   const clients = portfolio?.clients ?? [];
   const hasClientList = clients.length > 0;
   const isClientRole = role === "client_user";
+  // Operators bootstrap firm logins (first admin, then staff); client
+  // invitations stay with the firm admin, whose engaged-client picker is
+  // firm-scoped.
+  const roleOptions = isOperator
+    ? ROLE_OPTIONS.filter((r) => r !== "client_user")
+    : ROLE_OPTIONS;
 
   // getListInvitationsQueryKey() has no params, so this invalidates the one
   // list query after any create/revoke.
@@ -122,9 +142,15 @@ export function Invitations() {
       setFormError("Choose the client this login is scoped to.");
       return;
     }
+    if (isOperator && !firmId) {
+      setFormError("Choose the firm this invitation targets.");
+      return;
+    }
     const data: CreateInvitationInput = {
       email: email.trim(),
       role,
+      // Operators name the target firm; firm principals invite into their own.
+      ...(isOperator ? { firmId } : {}),
       // Only a client invitation may name a client party (server-enforced).
       ...(isClientRole ? { clientPartyId: clientPartyId.trim() } : {}),
     };
@@ -177,6 +203,35 @@ export function Invitations() {
     ? acceptInviteLink(window.location.origin, created.token)
     : "";
 
+  // Provision a new firm inline (operator identity.write), then pre-select it
+  // so the next step is simply inviting its first firm_admin.
+  const provisionFirm = async () => {
+    const name = newFirmName.trim();
+    if (!name) {
+      setFormError("Enter a name for the new firm.");
+      return;
+    }
+    setFormError(null);
+    try {
+      const firm = await createFirm.mutateAsync({ data: { name } });
+      queryClient.invalidateQueries({ queryKey: getListFirmsQueryKey() });
+      setFirmId(firm.id);
+      setNewFirmName("");
+      toast({
+        title: `Firm "${firm.name}" provisioned`,
+        description: "Now invite its first firm admin below.",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Please try again.";
+      setFormError(message);
+      toast({
+        title: "Could not provision the firm",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(acceptLink);
@@ -202,9 +257,9 @@ export function Invitations() {
           Team invitations
         </h1>
         <p className="text-muted-foreground mt-1">
-          Invite a teammate or client into your firm. Each invite issues a
-          one-time link to set a password and join — pending invites can be
-          revoked before they are accepted.
+          {isOperator
+            ? "Onboard a firm: provision it, then invite its first firm admin — every invite issues a one-time link to set a password and join. The admin self-serves teammates and clients from there."
+            : "Invite a teammate or client into your firm. Each invite issues a one-time link to set a password and join — pending invites can be revoked before they are accepted."}
         </p>
       </div>
 
@@ -217,6 +272,72 @@ export function Invitations() {
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-4" noValidate>
+            {isOperator && (
+              <div className="space-y-3 rounded-lg border p-3" data-testid="section-target-firm">
+                <p className="text-sm font-medium flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-primary" aria-hidden="true" />
+                  Target firm
+                </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="invite-firm">Firm</Label>
+                  <Select
+                    value={firmId || undefined}
+                    onValueChange={(v) => {
+                      setFirmId(v);
+                      setFormError(null);
+                    }}
+                  >
+                    <SelectTrigger
+                      id="invite-firm"
+                      aria-label="Firm this invitation targets"
+                      data-testid="select-firm"
+                    >
+                      <SelectValue placeholder="Pick the firm this invitation targets" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(firms ?? []).map((f) => (
+                        <SelectItem
+                          key={f.id}
+                          value={f.id}
+                          data-testid={`firm-option-${f.id}`}
+                        >
+                          {f.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-firm-name">…or provision a new firm</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="new-firm-name"
+                      value={newFirmName}
+                      onChange={(e) => {
+                        setNewFirmName(e.target.value);
+                        setFormError(null);
+                      }}
+                      placeholder="Firm name"
+                      data-testid="input-new-firm-name"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={provisionFirm}
+                      disabled={createFirm.isPending}
+                      data-testid="button-provision-firm"
+                    >
+                      {createFirm.isPending ? "Provisioning…" : "Provision firm"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Creates the firm and selects it, ready for its first
+                    firm-admin invite.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="invite-email">Email</Label>
@@ -245,7 +366,7 @@ export function Invitations() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ROLE_OPTIONS.map((r) => (
+                    {roleOptions.map((r) => (
                       <SelectItem
                         key={r}
                         value={r}

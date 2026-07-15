@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.9.0
+  version: 0.10.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -150,7 +150,7 @@ paths:
     post:
       operationId: createInvitation
       tags: [invitation]
-      summary: Invite a teammate or client into the caller's firm; returns the one-time token
+      summary: Invite a teammate or client into the caller's firm (operators name a target firm); returns the one-time token
       requestBody:
         required: true
         content:
@@ -3027,6 +3027,11 @@ components:
         role:
           type: string
           enum: [firm_admin, firm_staff, client_user]
+        # Operators name the firm the invite targets (new-firm bootstrap: create
+        # the firm, then invite its first firm_admin). Firm principals always
+        # invite into their own firm and must omit or match this field.
+        firmId:
+          type: string
         # Required when role is client_user (the client Party the invitee scopes to).
         clientPartyId:
           type: string

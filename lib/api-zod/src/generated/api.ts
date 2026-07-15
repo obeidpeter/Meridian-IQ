@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.9.0
+ * OpenAPI spec version: 0.10.0
  */
 import * as zod from 'zod';
 
@@ -117,11 +117,12 @@ export const ListInvitationsResponse = zod.array(ListInvitationsResponseItem)
 
 
 /**
- * @summary Invite a teammate or client into the caller's firm; returns the one-time token
+ * @summary Invite a teammate or client into the caller's firm (operators name a target firm); returns the one-time token
  */
 export const CreateInvitationBody = zod.object({
   "email": zod.string().email(),
   "role": zod.enum(['firm_admin', 'firm_staff', 'client_user']),
+  "firmId": zod.string().optional(),
   "clientPartyId": zod.string().optional()
 })
 
