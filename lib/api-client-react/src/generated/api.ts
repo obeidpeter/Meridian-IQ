@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.12.0
+ * OpenAPI spec version: 0.13.0
  */
 import {
   useMutation,
@@ -46,6 +46,7 @@ import type {
   CacCheckInput,
   CancelInvoiceInput,
   CanonicalInvoice,
+  CatalogueEntryDraft,
   ChangePasswordInput,
   ClaimDecisionInput,
   ClaimDraftInput,
@@ -77,6 +78,7 @@ import type {
   CreatePasswordResetInput,
   CreditNoteInput,
   DashboardSummary,
+  DraftCatalogueEntryInput,
   DraftClaimWithClerkInput,
   Engagement,
   EngagementInput,
@@ -11510,6 +11512,76 @@ export const useDraftClaimWithClerk = <TError = ErrorType<BadRequestResponse>,
         TContext
       > => {
       return useMutation(getDraftClaimWithClerkMutationOptions(options));
+    }
+
+export const getDraftCatalogueEntryWithClerkUrl = () => {
+
+
+
+
+  return `/api/clerk/catalogue-draft`
+}
+
+/**
+ * @summary Draft an error-catalogue entry from observed rail rejections (returned for operator review, never saved directly)
+ */
+export const draftCatalogueEntryWithClerk = async (draftCatalogueEntryInput: DraftCatalogueEntryInput, options?: RequestInit): Promise<CatalogueEntryDraft> => {
+
+  return customFetch<CatalogueEntryDraft>(getDraftCatalogueEntryWithClerkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftCatalogueEntryInput)
+  }
+);}
+
+
+
+
+export const getDraftCatalogueEntryWithClerkMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftCatalogueEntryWithClerk>>, TError,{data: BodyType<DraftCatalogueEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftCatalogueEntryWithClerk>>, TError,{data: BodyType<DraftCatalogueEntryInput>}, TContext> => {
+
+const mutationKey = ['draftCatalogueEntryWithClerk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftCatalogueEntryWithClerk>>, {data: BodyType<DraftCatalogueEntryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftCatalogueEntryWithClerk(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftCatalogueEntryWithClerkMutationResult = NonNullable<Awaited<ReturnType<typeof draftCatalogueEntryWithClerk>>>
+    export type DraftCatalogueEntryWithClerkMutationBody = BodyType<DraftCatalogueEntryInput>
+    export type DraftCatalogueEntryWithClerkMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Draft an error-catalogue entry from observed rail rejections (returned for operator review, never saved directly)
+ */
+export const useDraftCatalogueEntryWithClerk = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftCatalogueEntryWithClerk>>, TError,{data: BodyType<DraftCatalogueEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftCatalogueEntryWithClerk>>,
+        TError,
+        {data: BodyType<DraftCatalogueEntryInput>},
+        TContext
+      > => {
+      return useMutation(getDraftCatalogueEntryWithClerkMutationOptions(options));
     }
 
 export const getExplainInvoiceFailureUrl = () => {

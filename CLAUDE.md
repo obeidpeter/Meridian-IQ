@@ -79,7 +79,14 @@ then walks the normal capture path; the **weekly digest**
 firm-keyed RLS via migration 0011) computes every fact in SQL and lets the
 model phrase them, falling back to deterministic template text; **claims
 drafting** (`modules/clerk/draft-claim.ts`, operator `claims.write`) creates a
-DRAFT register entry that still walks the full maker-checker flow.
+DRAFT register entry that still walks the full maker-checker flow; **catalogue
+drafting** (`modules/clerk/draft-catalogue.ts`, operator `catalogue.write`)
+proposes an error-catalogue entry grounded in observed rail rejections — the
+draft is returned for the operator to edit and save through the ordinary
+catalogue routes, never stored directly. Clerk health (console) includes a
+confidence-calibration table (`computeCalibration` in
+`modules/clerk/metrics.ts`): kept-rate vs model confidence per band, from the
+corrections exhaust.
 
 ## Data layer & multi-tenant isolation (the part to get right)
 

@@ -32,6 +32,8 @@ import {
   GetClerkDigestResponse,
   DraftClaimWithClerkBody,
   DraftClaimWithClerkResponse,
+  DraftCatalogueEntryWithClerkBody,
+  DraftCatalogueEntryWithClerkResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { assertCan, tenantFirmId } from "../modules/auth/rbac";
@@ -51,6 +53,7 @@ import {
 import { askClerk } from "../modules/clerk/ask";
 import { createBatchCases } from "../modules/clerk/batch";
 import { latestDigestForFirm } from "../modules/clerk/digest";
+import { draftCatalogueEntryWithClerk } from "../modules/clerk/draft-catalogue";
 import { draftClaimWithClerk } from "../modules/clerk/draft-claim";
 import { explainInvoiceFailure } from "../modules/clerk/explain";
 import { getClerkMetrics } from "../modules/clerk/metrics";
@@ -269,6 +272,20 @@ router.post("/clerk/claims/draft", async (req, res): Promise<void> => {
     gateway,
   );
   res.status(201).json(DraftClaimWithClerkResponse.parse(row));
+});
+
+// Catalogue drafting assistant (idea #3): Clerk proposes an error-catalogue
+// entry grounded in the raw rail rejections observed for the code. The draft
+// is RETURNED for the operator to edit — saving still goes through the
+// ordinary catalogue.write routes, so the human disposes and the audit trail
+// is theirs. Runs outside the request transaction (NO_CONTEXT_ROUTES) like
+// every model-calling Clerk path.
+router.post("/clerk/catalogue-draft", async (req, res): Promise<void> => {
+  assertCan(req.principal, "catalogue.write");
+  const parsed = parseOrThrow(DraftCatalogueEntryWithClerkBody, req.body);
+  const gateway = await getClerkGateway();
+  const draft = await draftCatalogueEntryWithClerk(parsed.code, gateway);
+  res.json(DraftCatalogueEntryWithClerkResponse.parse(draft));
 });
 
 // The firm's month-to-date Clerk consumption against its allowance, for the

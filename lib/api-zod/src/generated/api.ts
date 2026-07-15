@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.12.0
+ * OpenAPI spec version: 0.13.0
  */
 import * as zod from 'zod';
 
@@ -4307,6 +4307,26 @@ export const DraftClaimWithClerkResponse = zod.object({
 
 
 /**
+ * @summary Draft an error-catalogue entry from observed rail rejections (returned for operator review, never saved directly)
+ */
+export const draftCatalogueEntryWithClerkBodyCodeMax = 120;
+
+
+
+export const DraftCatalogueEntryWithClerkBody = zod.object({
+  "code": zod.string().min(1).max(draftCatalogueEntryWithClerkBodyCodeMax)
+})
+
+export const DraftCatalogueEntryWithClerkResponse = zod.object({
+  "code": zod.string(),
+  "cause": zod.string(),
+  "fix": zod.string(),
+  "retriable": zod.boolean(),
+  "sampleCount": zod.number()
+})
+
+
+/**
  * @summary Plain-language, catalogue-grounded explanation of an invoice's latest failure
  */
 export const ExplainInvoiceFailureBody = zod.object({
@@ -4344,6 +4364,15 @@ export const GetClerkMetricsQueryParams = zod.object({
 
 export const GetClerkMetricsResponse = zod.object({
   "windowDays": zod.number(),
+  "calibration": zod.object({
+  "sampleFields": zod.number(),
+  "buckets": zod.array(zod.object({
+  "range": zod.string(),
+  "fields": zod.number(),
+  "meanConfidence": zod.number(),
+  "keptRate": zod.number()
+}))
+}).optional(),
   "cases": zod.object({
   "total": zod.number(),
   "byStatus": zod.record(zod.string(), zod.number()),

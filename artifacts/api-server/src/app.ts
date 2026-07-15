@@ -42,6 +42,7 @@ const NO_CONTEXT_ROUTES = new Set([
   "POST /api/clerk/cases/batch",
   "POST /api/clerk/ask",
   "POST /api/clerk/eval/run",
+  "POST /api/clerk/catalogue-draft",
 ]);
 
 // Hard cap on how long a request may hold its transaction open. A handler that

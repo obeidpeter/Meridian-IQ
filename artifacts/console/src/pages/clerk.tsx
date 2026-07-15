@@ -62,6 +62,7 @@ import {
   intakeKind,
   isReadyToApprove,
   relativeTime,
+  reviewEffort,
   serverErrorToast,
   shortActor,
   STATUS_TONE,
@@ -528,15 +529,19 @@ export function ClerkWorkspace() {
     }
   };
 
-  // Newest first, but ready-to-approve cases jump the queue (fast lane). The
-  // partition keeps each group's newest-first order intact.
+  // Ready-to-approve cases jump the queue (fast lane); the rest order by
+  // expected review effort (fewest flagged fields + pre-flight findings
+  // first), newest breaking ties — the queue drains by operator throughput
+  // rather than strict arrival order.
   const sortedCases = useMemo(() => {
     const byNewest = [...cases].sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt),
     );
     return [
       ...byNewest.filter(isReadyToApprove),
-      ...byNewest.filter((c) => !isReadyToApprove(c)),
+      ...byNewest
+        .filter((c) => !isReadyToApprove(c))
+        .sort((a, b) => reviewEffort(a) - reviewEffort(b)),
     ];
   }, [cases]);
   const readyCount = useMemo(

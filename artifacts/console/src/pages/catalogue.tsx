@@ -4,6 +4,7 @@ import {
   useListErrorCatalogue,
   useListUnmappedErrorCodes,
   useUpsertErrorCatalogueEntry,
+  useDraftCatalogueEntryWithClerk,
   getListErrorCatalogueQueryKey,
   getListUnmappedErrorCodesQueryKey,
 } from "@workspace/api-client-react";
@@ -27,7 +28,7 @@ import {
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { AlertTriangle, BookOpen, Pencil, Plus, Search } from "lucide-react";
+import { AlertTriangle, BookOpen, Pencil, Plus, Search, Sparkles } from "lucide-react";
 import { formatDateTime, pillClasses } from "@/lib/format";
 
 // ADV-03: the living error catalogue, updatable by operators within one
@@ -64,6 +65,7 @@ export function Catalogue() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const upsert = useUpsertErrorCatalogueEntry();
+  const clerkDraft = useDraftCatalogueEntryWithClerk();
 
   const [search, setSearch] = useState("");
   const [form, setForm] = useState<EntryForm | null>(null);
@@ -95,6 +97,40 @@ export function Catalogue() {
       fix: entry.fix,
       retriable: entry.retriable,
     });
+  };
+
+  // Clerk proposes {cause, fix, retriable} from the raw rail rejections
+  // observed for the code; the operator reviews the prose in this same form
+  // and saves through the ordinary route — nothing is stored until then.
+  const draftWithClerk = () => {
+    if (!form?.code.trim()) return;
+    clerkDraft.mutate(
+      { data: { code: form.code.trim() } },
+      {
+        onSuccess: (draft) => {
+          setForm((f) =>
+            f
+              ? {
+                  ...f,
+                  cause: draft.cause,
+                  fix: draft.fix,
+                  retriable: draft.retriable,
+                }
+              : f,
+          );
+          toast({
+            title: "Draft ready",
+            description: `Grounded in ${draft.sampleCount} observed rejection${draft.sampleCount === 1 ? "" : "s"} — review before saving.`,
+          });
+        },
+        onError: () =>
+          toast({
+            title: "Clerk could not draft this entry",
+            description: "Write it manually — the observed rejections may be unusable.",
+            variant: "destructive",
+          }),
+      },
+    );
   };
 
   const save = () => {
@@ -365,6 +401,17 @@ export function Catalogue() {
             </div>
           )}
           <DialogFooter>
+            {!editingExisting && (
+              <Button
+                variant="outline"
+                onClick={draftWithClerk}
+                disabled={clerkDraft.isPending || !form?.code.trim()}
+                data-testid="button-clerk-draft-entry"
+              >
+                <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" />
+                {clerkDraft.isPending ? "Drafting…" : "Draft with Clerk"}
+              </Button>
+            )}
             <Button variant="ghost" onClick={() => setForm(null)}>
               Discard
             </Button>

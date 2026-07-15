@@ -74,7 +74,10 @@ export type ClerkPurpose =
   | "digest"
   // Claims drafting assistant (power C5): turns a statutory excerpt into a
   // DRAFT claim-register entry — maker-checker review still applies in full.
-  | "draft_claim";
+  | "draft_claim"
+  // Catalogue drafting assistant: proposes an error-catalogue entry from
+  // observed rail rejections; the operator reviews and saves it manually.
+  | "draft_catalogue";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;

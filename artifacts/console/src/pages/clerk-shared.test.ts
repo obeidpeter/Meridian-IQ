@@ -10,6 +10,7 @@ import {
   vatFractionFromPercent,
   vatPercentFromRaw,
   vatPercentInvalid,
+  reviewEffort,
 } from "./clerk-shared";
 
 function field(patch: Partial<ClerkExtractionField>): ClerkExtractionField {
@@ -294,5 +295,50 @@ describe("approveFormFromCase", () => {
       unitPrice: "0",
       vatRate: "",
     });
+  });
+});
+
+describe("reviewEffort", () => {
+  const kase = (flagged: number, preflight: number) =>
+    ({
+      status: "extracted",
+      preflight: Array.from({ length: preflight }, (_, i) => ({
+        check: `c${i}`,
+        detail: "x",
+      })),
+      extraction: {
+        fields: [
+          ...Array.from({ length: flagged }, (_, i) => ({
+            field: `f${i}`,
+            value: null,
+            confidence: 0.2,
+            sourceSnippet: null,
+            critical: false,
+            flagged: true,
+          })),
+          {
+            field: "clean",
+            value: "ok",
+            confidence: 0.99,
+            sourceSnippet: null,
+            critical: false,
+            flagged: false,
+          },
+        ],
+        lines: [],
+      },
+    }) as never;
+
+  test("counts flagged fields plus pre-flight findings", () => {
+    expect(reviewEffort(kase(3, 2))).toBe(5);
+    expect(reviewEffort(kase(0, 0))).toBe(0);
+  });
+
+  test("lighter cases sort ahead of heavier ones", () => {
+    const light = kase(1, 0);
+    const heavy = kase(4, 3);
+    expect([heavy, light].sort((a, b) => reviewEffort(a) - reviewEffort(b))[0]).toBe(
+      light,
+    );
   });
 });
