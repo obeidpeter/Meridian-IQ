@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useImportClients,
   type ClientImportRow,
@@ -16,6 +16,7 @@ import { isFeatureDisabled } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { importRowBadgeClasses, importRowLabel } from "@/lib/format";
+import { useFilePicker } from "@workspace/web-ui";
 import {
   Upload,
   Download,
@@ -117,7 +118,6 @@ export function ClientImport() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const importClients = useImportClients();
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const [raw, setRaw] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -131,6 +131,7 @@ export function ClientImport() {
     setRaw(await file.text());
     setFileName(file.name);
   };
+  const filePicker = useFilePicker(onFile);
 
   const run = async (commit: boolean) => {
     if (rows.length === 0) return;
@@ -193,20 +194,14 @@ export function ClientImport() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <input
-              ref={fileRef}
               type="file"
               accept=".csv,text/csv"
               className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) onFile(file);
-                // Allow re-selecting the same (fixed) file.
-                e.target.value = "";
-              }}
+              {...filePicker.inputProps}
             />
             <Button
               variant="outline"
-              onClick={() => fileRef.current?.click()}
+              onClick={filePicker.openPicker}
               data-testid="button-upload"
             >
               <Upload className="w-4 h-4 mr-2" aria-hidden="true" /> Upload CSV
