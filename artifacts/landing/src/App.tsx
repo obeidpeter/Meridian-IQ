@@ -50,6 +50,7 @@ import { PortalHeader } from "@/components/portal-header";
 import { serverErrorFrom } from "@/lib/errors";
 import LandingPage from "@/LandingPage";
 import { AcceptInvite } from "@/AcceptInvite";
+import { ResetPassword } from "@/ResetPassword";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -452,12 +453,21 @@ function SignInPanel() {
           />
         </div>
         <div className="space-y-2">
-          <Label
-            htmlFor="password"
-            className="text-sm font-bold text-slate-800"
-          >
-            Password
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label
+              htmlFor="password"
+              className="text-sm font-bold text-slate-800"
+            >
+              Password
+            </Label>
+            <a
+              href="/reset-password"
+              className="text-xs font-bold text-[#0b6463] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+              data-testid="link-forgot-password"
+            >
+              Forgot your password?
+            </a>
+          </div>
           <div className="relative">
             <Input
               id="password"
@@ -1201,6 +1211,14 @@ export default function App() {
     return (
       <QueryClientProvider client={queryClient}>
         <AcceptInvite />
+      </QueryClientProvider>
+    );
+  }
+
+  if (pathname === "/reset-password") {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ResetPassword />
       </QueryClientProvider>
     );
   }

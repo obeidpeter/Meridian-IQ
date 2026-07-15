@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.10.0
+ * OpenAPI spec version: 0.11.0
  */
 import {
   useMutation,
@@ -74,6 +74,7 @@ import type {
   CpdEnrollment,
   CpdEnrollmentView,
   CreateInvitationInput,
+  CreatePasswordResetInput,
   CreditNoteInput,
   DashboardSummary,
   DraftClaimWithClerkInput,
@@ -149,6 +150,7 @@ import type {
   PartyInput,
   PartyMergeInput,
   PartyUpdateInput,
+  PasswordResetWithToken,
   PaymentFlagInput,
   PortfolioSummary,
   PriceReview,
@@ -164,6 +166,7 @@ import type {
   RecurringInvoiceTemplate,
   RecurringInvoiceTemplateInput,
   RecurringInvoiceTemplateUpdateInput,
+  ResetPasswordInput,
   ResolveCaseInput,
   RevenueShareStatement,
   RunAssessmentInput,
@@ -652,6 +655,146 @@ export const useAcceptInvite = <TError = ErrorType<BadRequestResponse | void>,
         TContext
       > => {
       return useMutation(getAcceptInviteMutationOptions(options));
+    }
+
+export const getResetPasswordUrl = () => {
+
+
+
+
+  return `/api/auth/reset-password`
+}
+
+/**
+ * @summary Redeem a one-time password-reset token and set a new password (public)
+ */
+export const resetPassword = async (resetPasswordInput: ResetPasswordInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getResetPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(resetPasswordInput)
+  }
+);}
+
+
+
+
+export const getResetPasswordMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetPassword>>, TError,{data: BodyType<ResetPasswordInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetPassword>>, TError,{data: BodyType<ResetPasswordInput>}, TContext> => {
+
+const mutationKey = ['resetPassword'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetPassword>>, {data: BodyType<ResetPasswordInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resetPassword(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof resetPassword>>>
+    export type ResetPasswordMutationBody = BodyType<ResetPasswordInput>
+    export type ResetPasswordMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Redeem a one-time password-reset token and set a new password (public)
+ */
+export const useResetPassword = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetPassword>>, TError,{data: BodyType<ResetPasswordInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resetPassword>>,
+        TError,
+        {data: BodyType<ResetPasswordInput>},
+        TContext
+      > => {
+      return useMutation(getResetPasswordMutationOptions(options));
+    }
+
+export const getCreatePasswordResetUrl = () => {
+
+
+
+
+  return `/api/password-resets`
+}
+
+/**
+ * @summary Issue a one-time password-reset link for a user (operator support path); returns the token once
+ */
+export const createPasswordReset = async (createPasswordResetInput: CreatePasswordResetInput, options?: RequestInit): Promise<PasswordResetWithToken> => {
+
+  return customFetch<PasswordResetWithToken>(getCreatePasswordResetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createPasswordResetInput)
+  }
+);}
+
+
+
+
+export const getCreatePasswordResetMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPasswordReset>>, TError,{data: BodyType<CreatePasswordResetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPasswordReset>>, TError,{data: BodyType<CreatePasswordResetInput>}, TContext> => {
+
+const mutationKey = ['createPasswordReset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPasswordReset>>, {data: BodyType<CreatePasswordResetInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPasswordReset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePasswordResetMutationResult = NonNullable<Awaited<ReturnType<typeof createPasswordReset>>>
+    export type CreatePasswordResetMutationBody = BodyType<CreatePasswordResetInput>
+    export type CreatePasswordResetMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Issue a one-time password-reset link for a user (operator support path); returns the token once
+ */
+export const useCreatePasswordReset = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPasswordReset>>, TError,{data: BodyType<CreatePasswordResetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPasswordReset>>,
+        TError,
+        {data: BodyType<CreatePasswordResetInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePasswordResetMutationOptions(options));
     }
 
 export const getListInvitationsUrl = () => {

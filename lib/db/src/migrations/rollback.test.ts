@@ -194,6 +194,11 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("clerk_digests")],
     afterRollback: [not(clerkTenant("clerk_digests"))],
   },
+  {
+    version: 12, // password-reset guardrails
+    atTop: [bypass("password_resets")],
+    afterRollback: [not(bypass("password_resets"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

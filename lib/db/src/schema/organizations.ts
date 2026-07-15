@@ -89,6 +89,36 @@ export const invitationStatusEnum = pgEnum("invitation_status", [
   "revoked",
 ]);
 
+export const passwordResetStatusEnum = pgEnum("password_reset_status", [
+  "pending",
+  "used",
+  "revoked",
+]);
+
+// Operator-issued password recovery (IDN-02): the same single-use-secret
+// posture as invitations — 32 random bytes shown once to the issuing
+// operator, only the sha256 stored, redeemed at the public
+// /auth/reset-password endpoint (the token IS the credential) via a
+// compare-and-set on status. Bypass-only RLS (migration 0012): rows are
+// touched only by the operator issue path and the public redeem context,
+// never by firm principals.
+export const passwordResetsTable = pgTable(
+  "password_resets",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersTable.id),
+    tokenHash: text("token_hash").notNull().unique(),
+    status: passwordResetStatusEnum("status").notNull().default("pending"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    issuedByUserId: text("issued_by_user_id").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("password_resets_user_idx").on(t.userId)],
+);
+
 export const invitationsTable = pgTable(
   "invitations",
   {

@@ -360,6 +360,77 @@ async function journeyPasswordRoundTrip(page, BASE, check) {
   check("password change round-trips (restored)", true);
 }
 
+// ---------- operator-issued password reset (restores the demo password) ------
+// IDN-02 recovery loop end-to-end: an operator issues a one-time reset link,
+// the landing page redeems it, the old password dies, and a second reset
+// restores the demo password. Runs LAST for the same reason as the change-
+// password journey: demo.staff's password is temporarily different.
+async function journeyPasswordReset(page, BASE, check) {
+  const STAFF = "demo.staff@meridianiq.example";
+
+  // Sign in as the operator and issue a reset link for the staff account.
+  await page.request.post(BASE + "/api/auth/login", {
+    data: { email: "ops@meridianiq.example", password: DEMO_PASSWORD },
+    headers: { "x-meridian-csrf": "1" },
+  });
+  const issued = await page.request.post(BASE + "/api/password-resets", {
+    data: { email: STAFF },
+    headers: { "x-meridian-csrf": "1" },
+  });
+  const issuedBody = issued.status() === 201 ? await issued.json() : null;
+  check(
+    "operator issues a one-time password reset link",
+    issued.status() === 201 && !!issuedBody?.token,
+  );
+
+  // Redeem it through the landing reset page.
+  await page.goto(BASE + `/reset-password?token=${issuedBody.token}`, {
+    waitUntil: "networkidle",
+  });
+  await page.waitForSelector('[data-testid="input-reset-password"]', {
+    timeout: 15000,
+  });
+  await page.getByTestId("input-reset-password").fill("reset-temp-pw-1");
+  await page.getByTestId("input-reset-confirm").fill("reset-temp-pw-1");
+  await page.getByTestId("button-set-password").click();
+  await page.waitForSelector('[data-testid="card-reset-success"]', {
+    timeout: 15000,
+  });
+  check("reset page sets the new password", true);
+
+  const oldPw = await page.request.post(BASE + "/api/auth/login", {
+    data: { email: STAFF, password: DEMO_PASSWORD },
+  });
+  check("old password rejected after reset", oldPw.status() === 401);
+  const newPw = await page.request.post(BASE + "/api/auth/login", {
+    data: { email: STAFF, password: "reset-temp-pw-1" },
+  });
+  check("new password signs in after reset", newPw.status() === 200);
+
+  // The redeemed link is single-use.
+  const replay = await page.request.post(BASE + "/api/auth/reset-password", {
+    data: { token: issuedBody.token, password: "reset-temp-pw-2" },
+    headers: { "x-meridian-csrf": "1" },
+  });
+  check("reset link is single-use", replay.status() === 400);
+
+  // Restore the demo password via a second reset so reruns start clean.
+  await page.request.post(BASE + "/api/auth/login", {
+    data: { email: "ops@meridianiq.example", password: DEMO_PASSWORD },
+    headers: { "x-meridian-csrf": "1" },
+  });
+  const restore = await page.request.post(BASE + "/api/password-resets", {
+    data: { email: STAFF },
+    headers: { "x-meridian-csrf": "1" },
+  });
+  const restoreBody = await restore.json();
+  const restored = await page.request.post(BASE + "/api/auth/reset-password", {
+    data: { token: restoreBody.token, password: DEMO_PASSWORD },
+    headers: { "x-meridian-csrf": "1" },
+  });
+  check("second reset restores the demo password", restored.status() === 204);
+}
+
 export async function runJourneys(page, BASE, check) {
   await journeyPortalAuth(page, BASE, check);
   await journeyOperatorDesk(page, BASE, check);
@@ -368,4 +439,5 @@ export async function runJourneys(page, BASE, check) {
   await journeyOwnerConsent(page, BASE, check);
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
+  await journeyPasswordReset(page, BASE, check);
 }

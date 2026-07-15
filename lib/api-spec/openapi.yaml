@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.10.0
+  version: 0.11.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -132,6 +132,44 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "409":
           description: An account with this email already exists
+
+  /auth/reset-password:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      summary: Redeem a one-time password-reset token and set a new password (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordInput"
+      responses:
+        "204":
+          description: Password set; sign in with it (outstanding sessions are revoked)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /password-resets:
+    post:
+      operationId: createPasswordReset
+      tags: [identity]
+      summary: Issue a one-time password-reset link for a user (operator support path); returns the token once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePasswordResetInput"
+      responses:
+        "201":
+          description: Reset issued (token shown once)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordResetWithToken"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /invitations:
     get:
@@ -3057,6 +3095,51 @@ components:
           minLength: 8
         fullName:
           type: string
+
+    PasswordReset:
+      type: object
+      required: [id, email, status, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        status:
+          type: string
+          enum: [pending, used, revoked]
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    PasswordResetWithToken:
+      type: object
+      required: [reset, token]
+      properties:
+        reset:
+          $ref: "#/components/schemas/PasswordReset"
+        # The raw redemption token — shown ONCE. Share the reset link
+        # /reset-password?token=<token> with the user; only its hash is stored.
+        token:
+          type: string
+    CreatePasswordResetInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    ResetPasswordInput:
+      type: object
+      required: [token, password]
+      properties:
+        token:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 8
 
     Firm:
       type: object

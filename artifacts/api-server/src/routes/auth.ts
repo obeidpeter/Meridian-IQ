@@ -6,6 +6,7 @@ import {
   LoginResponse,
   ChangePasswordBody,
   AcceptInviteBody,
+  ResetPasswordBody,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { ROLE_CAPABILITIES } from "../modules/auth/rbac";
@@ -22,6 +23,7 @@ import {
   clearLoginFailures,
 } from "../modules/auth/throttle";
 import { acceptInvitation } from "../modules/auth/invitations";
+import { resetPassword } from "../modules/auth/password-reset";
 import { appendAudit } from "../modules/audit/audit";
 
 // First-party session sign-in (SEC-02). Sets an HttpOnly, SameSite=Lax cookie;
@@ -185,6 +187,14 @@ router.post("/auth/accept-invite", async (req, res): Promise<void> => {
     password: parsed.password,
     fullName: parsed.fullName ?? null,
   });
+  res.sendStatus(204);
+});
+
+// Public like accept-invite: the single-use reset token is the credential
+// (IDN-02). Uniform 400s never disclose why a token is unusable.
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  const parsed = parseOrThrow(ResetPasswordBody, req.body);
+  await resetPassword(parsed.token, parsed.password);
   res.sendStatus(204);
 });
 

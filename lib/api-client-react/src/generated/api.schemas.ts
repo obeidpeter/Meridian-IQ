@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.10.0
+ * OpenAPI spec version: 0.11.0
  */
 export interface HealthStatus {
   status: string;
@@ -105,6 +105,39 @@ export interface AcceptInvitationInput {
   /** @minLength 8 */
   password: string;
   fullName?: string;
+}
+
+export type PasswordResetStatus = typeof PasswordResetStatus[keyof typeof PasswordResetStatus];
+
+
+export const PasswordResetStatus = {
+  pending: 'pending',
+  used: 'used',
+  revoked: 'revoked',
+} as const;
+
+export interface PasswordReset {
+  id: string;
+  email: string;
+  status: PasswordResetStatus;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface PasswordResetWithToken {
+  reset: PasswordReset;
+  token: string;
+}
+
+export interface CreatePasswordResetInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  /** @minLength 1 */
+  token: string;
+  /** @minLength 8 */
+  password: string;
 }
 
 /**

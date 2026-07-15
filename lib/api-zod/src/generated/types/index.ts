@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.10.0
+ * OpenAPI spec version: 0.11.0
  */
 
 export * from './acceptInvitationInput';
@@ -129,6 +129,7 @@ export * from './cpdEnrollmentView';
 export * from './cpdEnrollmentViewStatus';
 export * from './createInvitationInput';
 export * from './createInvitationInputRole';
+export * from './createPasswordResetInput';
 export * from './creditNoteInput';
 export * from './dashboardSummary';
 export * from './dashboardSummaryPenaltyRisk';
@@ -264,6 +265,9 @@ export * from './partyInputType';
 export * from './partyMergeInput';
 export * from './partyType';
 export * from './partyUpdateInput';
+export * from './passwordReset';
+export * from './passwordResetStatus';
+export * from './passwordResetWithToken';
 export * from './paymentFlagInput';
 export * from './paymentFlagInputPaymentStatus';
 export * from './portfolioSummary';
@@ -296,6 +300,7 @@ export * from './recurringInvoiceTemplateInput';
 export * from './recurringInvoiceTemplateInputCadence';
 export * from './recurringInvoiceTemplateUpdateInput';
 export * from './remediationItem';
+export * from './resetPasswordInput';
 export * from './resolveCaseInput';
 export * from './revenueShareStatement';
 export * from './runAssessmentInput';

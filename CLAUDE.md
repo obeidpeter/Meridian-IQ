@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.10.0`).
+contract change (it is currently `0.11.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -101,7 +101,12 @@ DRAFT register entry that still walks the full maker-checker flow.
 - Production identity is Clerk; a first-party email+password cookie session
   (`modules/auth/session.ts`) serves the web apps and demo. Session tokens are
   stateless HMACs carrying `userId.expiry.epoch`; `users.session_epoch` is
-  bumped on password change to revoke outstanding tokens.
+  bumped on password change AND password reset to revoke outstanding tokens.
+  Recovery (IDN-02) is operator-assisted: `POST /password-resets`
+  (`identity.write`) issues a single-use 24h link (sha256-only stored,
+  migration 0012 keeps the table bypass-only) redeemed at the public
+  `/auth/reset-password`; the landing page's "Forgot your password?" routes
+  there.
 - CSRF: a custom-header guard on cookie-authenticated state-changing requests
   (`middleware/principal.ts`); the session cookie is `SameSite=None` for the
   preview iframe, so the frontends set a CSP `frame-ancestors` allowlist
@@ -170,7 +175,7 @@ pnpm --filter @workspace/console run test
 pnpm --filter @workspace/buyer-portal run test
 pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-ui run test
 # web builds (each needs BASE_PATH + PORT), then the e2e journeys:
-pnpm --filter @workspace/scripts run e2e        # 32 checks vs real builds + DB
+pnpm --filter @workspace/scripts run e2e        # 38 checks vs real builds + DB
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of the above.
