@@ -103,11 +103,16 @@ jobs:
       - name: Console app unit tests
         run: pnpm --filter @workspace/console run test
 
-      # The shared display formatters and API-error policy live in workspace
-      # libs (the apps re-export them); their suites are the single home for
-      # those behaviors.
+      # Buyer-portal-specific badge vocabulary (the shared formatters are
+      # covered by the lib suites below).
+      - name: Buyer portal unit tests
+        run: pnpm --filter @workspace/buyer-portal run test
+
+      # The shared display formatters, API-error policy and headless UI
+      # plumbing live in workspace libs (the apps re-export them); their
+      # suites are the single home for those behaviors.
       - name: Shared lib unit tests
-        run: pnpm --filter @workspace/format --filter @workspace/api-errors run test
+        run: pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-ui run test
 
       # CORE-06: tables come from drizzle push; the versioned guardrail
       # migrations (triggers, RLS, retention) must apply AND roll back cleanly.

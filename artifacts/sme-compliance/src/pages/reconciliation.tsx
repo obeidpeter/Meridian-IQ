@@ -28,7 +28,7 @@ import { FilePickerButton } from "@/components/file-picker-button";
 import { RowStatusIcon } from "@/components/row-status-icon";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
-import { isFeatureDisabled } from "@/lib/errors";
+import { isFeatureDisabled, serverErrorMessage } from "@/lib/errors";
 import {
   Landmark,
   ScanSearch,
@@ -223,7 +223,7 @@ export function Reconciliation() {
     } catch (e) {
       toast({
         title: "Could not save decision",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     } finally {
@@ -262,7 +262,7 @@ export function Reconciliation() {
     } catch (e) {
       toast({
         title: "Could not accept matches",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     }

@@ -59,7 +59,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
-import { isFeatureDisabled, errorStatus } from "@/lib/errors";
+import { isFeatureDisabled, errorStatus, serverErrorMessage } from "@/lib/errors";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { DRAFT_KEY, type DraftState } from "@/pages/invoice-new";
@@ -586,7 +586,7 @@ export function InvoiceDetail() {
     } catch (e) {
       toast({
         title: "Submission error",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     }
@@ -609,7 +609,7 @@ export function InvoiceDetail() {
     } catch (e) {
       toast({
         title: "Could not escalate",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     }
@@ -650,7 +650,7 @@ export function InvoiceDetail() {
           adjustKind === "cancel"
             ? "Could not cancel invoice"
             : "Could not issue credit note",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     }
@@ -671,7 +671,7 @@ export function InvoiceDetail() {
     } catch (e) {
       toast({
         title: "Could not request confirmation",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     }

@@ -36,6 +36,8 @@ import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { SkeletonList } from "@/components/skeleton-list";
+import { BuyerSelectOptions } from "@/components/buyer-select-options";
+import { LineItemRow } from "@/components/line-item-row";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
@@ -50,7 +52,7 @@ import {
   toInvoiceLineInputs,
   updateLineAt,
 } from "@/lib/invoice-lines";
-import { Plus, Trash2, Repeat, Pause, Play } from "lucide-react";
+import { Plus, Repeat, Pause, Play } from "lucide-react";
 
 interface TemplateForm {
   name: string;
@@ -203,12 +205,7 @@ function NewRecurringDialog({
                   <SelectValue placeholder="Select a customer…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {buyers.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.legalName}
-                      {b.tin ? ` — ${b.tin}` : " (no TIN)"}
-                    </SelectItem>
-                  ))}
+                  <BuyerSelectOptions buyers={buyers} />
                 </SelectContent>
               </Select>
             )}
@@ -263,91 +260,20 @@ function NewRecurringDialog({
               </Button>
             </div>
             {form.lines.map((l, i) => (
-              <div key={i} className="rounded-lg border p-3 space-y-3">
-                <div className="flex items-start gap-2">
-                  <div className="flex-1">
-                    <Label htmlFor={`line-${i}-description`} className="sr-only">
-                      Line {i + 1} description
-                    </Label>
-                    <Input
-                      id={`line-${i}-description`}
-                      placeholder="Description"
-                      value={l.description}
-                      onChange={(e) =>
-                        setLine(i, { description: e.target.value })
-                      }
-                    />
-                  </div>
-                  {form.lines.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Remove line item"
-                      onClick={() =>
-                        setForm((f) => ({
-                          ...f,
-                          lines: f.lines.filter((_, idx) => idx !== i),
-                        }))
-                      }
-                    >
-                      <Trash2
-                        className="w-4 h-4 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <Label htmlFor={`line-${i}-quantity`} className="text-xs">
-                      Qty
-                    </Label>
-                    <Input
-                      id={`line-${i}-quantity`}
-                      type="number"
-                      min="0"
-                      step="any"
-                      inputMode="decimal"
-                      value={l.quantity}
-                      onChange={(e) => setLine(i, { quantity: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`line-${i}-unit-price`} className="text-xs">
-                      Unit price
-                    </Label>
-                    <Input
-                      id={`line-${i}-unit-price`}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      inputMode="decimal"
-                      value={l.unitPrice}
-                      onChange={(e) =>
-                        setLine(i, { unitPrice: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`line-${i}-vat`} className="text-xs">
-                      VAT rate
-                    </Label>
-                    <Select
-                      value={l.vatRate}
-                      onValueChange={(v) => setLine(i, { vatRate: v })}
-                    >
-                      <SelectTrigger id={`line-${i}-vat`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0.075">7.5% standard</SelectItem>
-                        <SelectItem value="0">0% exempt</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
+              <LineItemRow
+                key={i}
+                index={i}
+                line={l}
+                onPatch={(patch) => setLine(i, patch)}
+                removable={form.lines.length > 1}
+                onRemove={() =>
+                  setForm((f) => ({
+                    ...f,
+                    lines: f.lines.filter((_, idx) => idx !== i),
+                  }))
+                }
+                buttonType="button"
+              />
             ))}
           </div>
 

@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
-  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -25,17 +24,19 @@ import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/page-header";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { AddCustomerDialog } from "@/components/add-customer-dialog";
+import { BuyerSelectOptions } from "@/components/buyer-select-options";
+import { FieldError, invalidClass } from "@/components/field-error";
+import { LineItemRow } from "@/components/line-item-row";
 import { formatNaira } from "@/lib/format";
 import {
   type LineDraft,
   emptyLine,
-  lineTotal,
   lineTotals,
   todayIsoDate,
   toInvoiceLineInputs,
   updateLineAt,
 } from "@/lib/invoice-lines";
-import { Plus, Trash2, CheckCircle2, Circle, Cloud, ShieldCheck } from "lucide-react";
+import { Plus, CheckCircle2, Circle, Cloud, ShieldCheck } from "lucide-react";
 
 // Exported for invoice-detail's "New from this invoice", which seeds this
 // page's offline draft before navigating here.
@@ -67,14 +68,6 @@ function loadDraft(): DraftState {
   return emptyDraft();
 }
 
-/** Inline field error (§7): red text tied to its input via aria-describedby. */
-function FieldError({ id, children }: { id: string; children: string }) {
-  return (
-    <p id={id} role="alert" className="text-sm text-destructive mt-1">
-      {children}
-    </p>
-  );
-}
 
 export function InvoiceNew() {
   usePageTitle("New invoice");
@@ -202,8 +195,6 @@ export function InvoiceNew() {
     { ok: draft.lines.every((l) => Number(l.vatRate) === 0.075 || Number(l.vatRate) === 0), label: "VAT at 7.5% (or exempt)" },
   ];
 
-  const invalidClass = (bad: boolean) =>
-    bad ? "border-destructive focus-visible:ring-destructive" : "";
 
   return (
     <div className="space-y-6">
@@ -306,12 +297,7 @@ export function InvoiceNew() {
                           <SelectValue placeholder="Select a customer…" />
                         </SelectTrigger>
                         <SelectContent>
-                          {buyers.map((b) => (
-                            <SelectItem key={b.id} value={b.id}>
-                              {b.legalName}
-                              {b.tin ? ` — ${b.tin}` : " (no TIN)"}
-                            </SelectItem>
-                          ))}
+                          <BuyerSelectOptions buyers={buyers} />
                         </SelectContent>
                       </Select>
                     </div>
@@ -384,114 +370,24 @@ export function InvoiceNew() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              {draft.lines.map((l, i) => {
-                const descBad = showErrors && !!errors[`line-${i}-desc`];
-                const qtyBad = showErrors && !!errors[`line-${i}-qty`];
-                const priceBad = showErrors && !!errors[`line-${i}-price`];
-                return (
-                  <div key={i} className="rounded-lg border p-3 space-y-3">
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1">
-                        <Label htmlFor={`line-${i}-description`} className="sr-only">
-                          Line {i + 1} description
-                        </Label>
-                        <Input
-                          id={`line-${i}-description`}
-                          placeholder="Description"
-                          value={l.description}
-                          onChange={(e) => setLine(i, { description: e.target.value })}
-                          aria-invalid={descBad}
-                          aria-describedby={descBad ? `line-${i}-description-error` : undefined}
-                          className={invalidClass(descBad)}
-                        />
-                        {descBad && (
-                          <FieldError id={`line-${i}-description-error`}>
-                            {errors[`line-${i}-desc`]}
-                          </FieldError>
-                        )}
-                      </div>
-                      {draft.lines.length > 1 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Remove line item"
-                          onClick={() =>
-                            setDraft((d) => ({ ...d, lines: d.lines.filter((_, idx) => idx !== i) }))
-                          }
-                        >
-                          <Trash2 className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <Label htmlFor={`line-${i}-quantity`} className="text-xs">
-                          Qty
-                        </Label>
-                        <Input
-                          id={`line-${i}-quantity`}
-                          type="number"
-                          min="0"
-                          step="any"
-                          inputMode="decimal"
-                          value={l.quantity}
-                          onChange={(e) => setLine(i, { quantity: e.target.value })}
-                          aria-invalid={qtyBad}
-                          aria-describedby={qtyBad ? `line-${i}-quantity-error` : undefined}
-                          className={invalidClass(qtyBad)}
-                        />
-                        {qtyBad && (
-                          <FieldError id={`line-${i}-quantity-error`}>
-                            {errors[`line-${i}-qty`]}
-                          </FieldError>
-                        )}
-                      </div>
-                      <div>
-                        <Label htmlFor={`line-${i}-unit-price`} className="text-xs">
-                          Unit price
-                        </Label>
-                        <Input
-                          id={`line-${i}-unit-price`}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          inputMode="decimal"
-                          value={l.unitPrice}
-                          onChange={(e) => setLine(i, { unitPrice: e.target.value })}
-                          aria-invalid={priceBad}
-                          aria-describedby={priceBad ? `line-${i}-unit-price-error` : undefined}
-                          className={invalidClass(priceBad)}
-                        />
-                        {priceBad && (
-                          <FieldError id={`line-${i}-unit-price-error`}>
-                            {errors[`line-${i}-price`]}
-                          </FieldError>
-                        )}
-                      </div>
-                      <div>
-                        <Label htmlFor={`line-${i}-vat`} className="text-xs">
-                          VAT rate
-                        </Label>
-                        <Select
-                          value={l.vatRate}
-                          onValueChange={(v) => setLine(i, { vatRate: v })}
-                        >
-                          <SelectTrigger id={`line-${i}-vat`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0.075">7.5% standard</SelectItem>
-                            <SelectItem value="0">0% exempt</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="text-right text-sm text-muted-foreground tabular-nums">
-                      Line total {formatNaira(lineTotal(l).total)}
-                    </div>
-                  </div>
-                );
-              })}
+              {draft.lines.map((l, i) => (
+                <LineItemRow
+                  key={i}
+                  index={i}
+                  line={l}
+                  onPatch={(patch) => setLine(i, patch)}
+                  removable={draft.lines.length > 1}
+                  onRemove={() =>
+                    setDraft((d) => ({ ...d, lines: d.lines.filter((_, idx) => idx !== i) }))
+                  }
+                  errors={{
+                    description: showErrors ? errors[`line-${i}-desc`] : undefined,
+                    quantity: showErrors ? errors[`line-${i}-qty`] : undefined,
+                    unitPrice: showErrors ? errors[`line-${i}-price`] : undefined,
+                  }}
+                  showTotal
+                />
+              ))}
             </CardContent>
           </Card>
         </div>
