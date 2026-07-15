@@ -8,11 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CapabilityGate } from "@/components/capability-gate";
+import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
 import { PageHeader } from "@/components/page-header";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
-import { AlertTriangle, ShieldCheck } from "lucide-react";
+import { handleClerkGatewayError } from "@/lib/clerk";
+import { ShieldCheck } from "lucide-react";
 
 // Register-grounded Q&A for firm principals only (clerk.ask — client_users
 // never see this page). Every answer cites an approved claim from the
@@ -66,23 +67,12 @@ function AskContent() {
   const ask = useAskClerk({
     mutation: {
       onSuccess: () => setDisabledBanner(false),
-      onError: (e) => {
-        const status = errorStatus(e);
-        // 503 CLERK_DISABLED: the kill switch is off — banner, not a toast.
-        if (status === 503) {
-          setDisabledBanner(true);
-          return;
-        }
-        // 429 CLERK_BUDGET_EXHAUSTED: relay the server's own message.
-        toast({
-          title:
-            status === 429
-              ? "Monthly Clerk allowance used up"
-              : "Clerk couldn't take that question",
-          description: serverErrorMessage(e),
-          variant: "destructive",
-        });
-      },
+      onError: (e) =>
+        handleClerkGatewayError(e, {
+          onDisabled: () => setDisabledBanner(true),
+          toast,
+          fallbackTitle: "Clerk couldn't take that question",
+        }),
     },
   });
 
@@ -94,11 +84,7 @@ function AskContent() {
       />
 
       {disabledBanner && (
-        <Alert variant="destructive" data-testid="banner-clerk-disabled">
-          <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>Clerk is unavailable right now</AlertTitle>
-          <AlertDescription>Please try again later.</AlertDescription>
-        </Alert>
+        <ClerkDisabledBanner>Please try again later.</ClerkDisabledBanner>
       )}
 
       <div className="max-w-2xl space-y-4">

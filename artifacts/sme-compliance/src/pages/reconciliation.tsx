@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   useGetMe,
@@ -24,11 +24,11 @@ import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { RequireClientScope } from "@/components/require-client-scope";
+import { FilePickerButton } from "@/components/file-picker-button";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled } from "@/lib/errors";
 import {
-  Upload,
   Landmark,
   ScanSearch,
   CheckCircle2,
@@ -65,7 +65,6 @@ export function Reconciliation() {
   const accept = useAcceptMatchProposal();
   const reject = useRejectMatchProposal();
   const bulkAccept = useBulkAcceptMatchProposals();
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const [csv, setCsv] = useState("");
   const [filename, setFilename] = useState<string | null>(null);
@@ -297,21 +296,11 @@ export function Reconciliation() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                <input
-                  ref={fileRef}
-                  type="file"
+                <FilePickerButton
                   accept=".csv,text/csv,text/plain"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) onFile(file);
-                    // Allow re-selecting the same (fixed) file.
-                    e.target.value = "";
-                  }}
+                  label="Upload CSV"
+                  onFile={onFile}
                 />
-                <Button variant="outline" onClick={() => fileRef.current?.click()}>
-                  <Upload className="w-4 h-4 mr-2" aria-hidden="true" /> Upload CSV
-                </Button>
               </div>
               <div>
                 <Label htmlFor="statement-csv" className="sr-only">

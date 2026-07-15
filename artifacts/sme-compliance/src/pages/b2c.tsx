@@ -22,6 +22,7 @@ import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled } from "@/lib/errors";
+import { idMap } from "@/lib/rows";
 import { Store, Clock3, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import {
   formatNaira,
@@ -83,11 +84,10 @@ function BatchItems({ batchId }: { batchId: string }) {
   });
   const { data: invoices } = useListInvoices();
 
-  const invoiceNumber = useMemo(() => {
-    const map = new Map<string, string>();
-    (invoices || []).forEach((inv) => map.set(inv.id, inv.invoiceNumber));
-    return map;
-  }, [invoices]);
+  const invoiceNumber = useMemo(
+    () => idMap(invoices, (inv) => inv.id, (inv) => inv.invoiceNumber),
+    [invoices],
+  );
 
   if (isLoading) {
     return (

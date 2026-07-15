@@ -3,6 +3,7 @@ import {
   batchSummary,
   captureStatusLabel,
   captureBadgeClasses,
+  handleClerkGatewayError,
   usagePct,
   fieldLabel,
 } from "./clerk";
@@ -104,5 +105,69 @@ describe("fieldLabel", () => {
     expect(fieldLabel("invoiceNumber")).toBe("Invoice number");
     expect(fieldLabel("supplierTaxId")).toBe("Supplier tax id");
     expect(fieldLabel("currency")).toBe("Currency");
+  });
+});
+
+describe("handleClerkGatewayError", () => {
+  const gatewayError = (status: number, message: string) =>
+    Object.assign(new Error("request failed"), {
+      status,
+      data: { error: message },
+    });
+
+  const collect = () => {
+    const calls: Array<{ title: string; description: string }> = [];
+    let disabled = false;
+    return {
+      calls,
+      isDisabled: () => disabled,
+      opts: {
+        onDisabled: () => {
+          disabled = true;
+        },
+        toast: (t: { title: string; description: string }) => {
+          calls.push({ title: t.title, description: t.description });
+        },
+        fallbackTitle: "Clerk couldn't take that",
+      },
+    };
+  };
+
+  test("503 raises the kill-switch banner instead of a toast", () => {
+    const c = collect();
+    handleClerkGatewayError(gatewayError(503, "Clerk is disabled"), c.opts);
+    expect(c.isDisabled()).toBe(true);
+    expect(c.calls).toEqual([]);
+  });
+
+  test("429 relays the server's message under the allowance title", () => {
+    const c = collect();
+    handleClerkGatewayError(gatewayError(429, "Budget exhausted"), c.opts);
+    expect(c.isDisabled()).toBe(false);
+    expect(c.calls).toEqual([
+      {
+        title: "Monthly Clerk allowance used up",
+        description: "Budget exhausted",
+      },
+    ]);
+  });
+
+  test("anything else relays the server's words under the fallback title", () => {
+    const c = collect();
+    handleClerkGatewayError(gatewayError(422, "No speech detected"), c.opts);
+    expect(c.calls).toEqual([
+      {
+        title: "Clerk couldn't take that",
+        description: "No speech detected",
+      },
+    ]);
+  });
+
+  test("untyped errors fall back to the generic message", () => {
+    const c = collect();
+    handleClerkGatewayError(new Error("network down"), c.opts);
+    expect(c.calls).toEqual([
+      { title: "Clerk couldn't take that", description: "network down" },
+    ]);
   });
 });

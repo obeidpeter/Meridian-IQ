@@ -39,6 +39,7 @@ import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
+import { idMap, scopedToSupplier } from "@/lib/rows";
 import { formatNaira, formatDate, pillClasses } from "@/lib/format";
 import { Plus, Trash2, Repeat, Pause, Play } from "lucide-react";
 
@@ -447,18 +448,14 @@ export function Recurring() {
     [parties, me?.clientPartyId],
   );
 
-  const partyName = useMemo(() => {
-    const map = new Map<string, string>();
-    (parties || []).forEach((p) => map.set(p.id, p.legalName));
-    return map;
-  }, [parties]);
+  const partyName = useMemo(
+    () => idMap(parties, (p) => p.id, (p) => p.legalName),
+    [parties],
+  );
 
   // The client's own templates, like the invoice vault scopes its rows.
   const rows = useMemo(
-    () =>
-      (templates || []).filter(
-        (t) => !me?.clientPartyId || t.supplierPartyId === me.clientPartyId,
-      ),
+    () => scopedToSupplier(templates || [], me?.clientPartyId),
     [templates, me?.clientPartyId],
   );
 
