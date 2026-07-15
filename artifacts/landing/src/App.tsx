@@ -23,6 +23,7 @@ import {
   Building2,
   Store,
   Calculator,
+  ArrowLeft,
   ArrowRight,
   Lock,
   LogOut,
@@ -911,8 +912,9 @@ function AccessStory() {
         </a>
         <a
           href="/"
-          className="text-xs font-bold text-white/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
+          className="inline-flex items-center gap-2 rounded-md border border-white/30 px-3.5 py-2 text-sm font-bold text-white/90 transition-colors hover:border-lime-300 hover:bg-white/5 hover:text-lime-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300"
         >
+          <ArrowLeft className="size-4" aria-hidden="true" />
           Back to website
         </a>
       </div>
@@ -1017,9 +1019,10 @@ function AccessPortal({
           </a>
           <a
             href="/"
-            className="text-xs font-bold text-slate-500 hover:text-slate-950"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:border-slate-950 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b6463]"
           >
-            Website
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+            Back to website
           </a>
         </header>
 

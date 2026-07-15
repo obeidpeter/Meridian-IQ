@@ -289,3 +289,109 @@ test("redeeming an unknown token is a generic 400", async () => {
   });
   assert.equal(res.status, 400);
 });
+
+// ---- Operator-issued invitations (new-firm bootstrap) -----------------------
+// An operator carries no firm, so it names the target firm explicitly; the
+// invited firm_admin then self-serves the rest of the firm through the
+// ordinary IDN-01 flow.
+
+const operatorUserId = randomUUID();
+const operator: Principal = {
+  userId: operatorUserId,
+  role: "operator",
+  firmId: null,
+  clientPartyId: null,
+  buyerPartyId: null,
+};
+
+test("an operator bootstraps a new firm's first admin via a targeted invite", async () => {
+  const db = getDb();
+  await db
+    .insert(usersTable)
+    .values({ id: operatorUserId, email: `operator-${SALT}@test.local` })
+    .onConflictDoNothing();
+  const newFirmId = randomUUID();
+  await db
+    .insert(firmsTable)
+    .values({ id: newFirmId, name: `Bootstrap Firm ${SALT}` });
+
+  const inviteBase = await listen(appFor(operator, invitationsRouter));
+  const authBase = await listen(appFor(operator, authRouter));
+
+  const email = `first-admin-${SALT}@test.local`;
+  const { status, json } = await createInvite(inviteBase, {
+    email,
+    role: "firm_admin",
+    firmId: newFirmId,
+  });
+  assert.equal(status, 201);
+  const invitation = json.invitation as Record<string, unknown>;
+  assert.equal(invitation.firmId, newFirmId, "invite targets the named firm");
+  assert.equal(invitation.role, "firm_admin");
+
+  const accept = await fetch(`${authBase}/auth/accept-invite`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ token: json.token, password: "first-admin-pw-1" }),
+  });
+  assert.equal(accept.status, 204);
+
+  const [user] = await getDb()
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
+  assert.ok(user, "first admin user was created");
+  const [membership] = await getDb()
+    .select()
+    .from(membershipsTable)
+    .where(eq(membershipsTable.userId, user.id))
+    .limit(1);
+  assert.equal(membership.firmId, newFirmId, "membership lands in the new firm");
+  assert.equal(membership.role, "firm_admin");
+});
+
+test("an operator invitation must name an existing firm", async () => {
+  const base = await listen(appFor(operator, invitationsRouter));
+
+  const missing = await createInvite(base, {
+    email: `no-firm-${SALT}@test.local`,
+    role: "firm_staff",
+  });
+  assert.equal(missing.status, 400, "firmId is required for an operator");
+
+  const unknown = await createInvite(base, {
+    email: `ghost-firm-${SALT}@test.local`,
+    role: "firm_staff",
+    firmId: randomUUID(),
+  });
+  assert.equal(unknown.status, 404, "the named firm must exist");
+});
+
+test("a firm principal may not target another firm (own firm is fine)", async () => {
+  const db = getDb();
+  const otherFirmId = randomUUID();
+  await db
+    .insert(firmsTable)
+    .values({ id: otherFirmId, name: `Other Firm ${SALT}` });
+
+  const base = await listen(appFor(admin, invitationsRouter));
+
+  const foreign = await createInvite(base, {
+    email: `poacher-${SALT}@test.local`,
+    role: "firm_staff",
+    firmId: otherFirmId,
+  });
+  assert.equal(foreign.status, 403, "a foreign firmId is rejected, not rewritten");
+
+  const own = await createInvite(base, {
+    email: `own-firm-${SALT}@test.local`,
+    role: "firm_staff",
+    firmId,
+  });
+  assert.equal(own.status, 201, "naming the caller's own firm is a no-op");
+  assert.equal(
+    (own.json.invitation as Record<string, unknown>).firmId,
+    firmId,
+  );
+});

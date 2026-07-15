@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.9.0
+ * OpenAPI spec version: 0.10.0
  */
 import {
   useMutation,
@@ -740,7 +740,7 @@ export const getCreateInvitationUrl = () => {
 }
 
 /**
- * @summary Invite a teammate or client into the caller's firm; returns the one-time token
+ * @summary Invite a teammate or client into the caller's firm (operators name a target firm); returns the one-time token
  */
 export const createInvitation = async (createInvitationInput: CreateInvitationInput, options?: RequestInit): Promise<InvitationWithToken> => {
 
@@ -788,7 +788,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateInvitationMutationError = ErrorType<BadRequestResponse>
 
     /**
- * @summary Invite a teammate or client into the caller's firm; returns the one-time token
+ * @summary Invite a teammate or client into the caller's firm (operators name a target firm); returns the one-time token
  */
 export const useCreateInvitation = <TError = ErrorType<BadRequestResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvitation>>, TError,{data: BodyType<CreateInvitationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

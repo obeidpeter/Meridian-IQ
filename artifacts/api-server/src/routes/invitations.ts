@@ -33,6 +33,7 @@ router.post("/invitations", async (req, res): Promise<void> => {
   const created = await createInvitation(req.principal, {
     email: parsed.email,
     role: parsed.role,
+    firmId: parsed.firmId ?? null,
     clientPartyId: parsed.clientPartyId ?? null,
   });
   res.status(201).json(CreateInvitationResponse.parse(created));
