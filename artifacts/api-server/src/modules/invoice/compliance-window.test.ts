@@ -43,29 +43,33 @@ test("status classifiers partition the lifecycle as documented", () => {
   }
 });
 
-test("submissionDeadline adds the statutory window in UTC", () => {
+test("submissionDeadline is Lagos midnight after the statutory window", () => {
+  // Nigeria is WAT (UTC+1, no DST): local midnight is 23:00Z the prior UTC
+  // day. The deadline flips at the LAGOS calendar boundary — an invoice is
+  // overdue the moment the local day turns, not an hour later at UTC midnight.
   assert.equal(
     submissionDeadline("2026-01-01").toISOString(),
-    "2026-01-08T00:00:00.000Z",
+    "2026-01-07T23:00:00.000Z",
   );
   // Month and year rollovers go through setUTCDate, immune to local TZ.
   assert.equal(
     submissionDeadline("2026-01-28").toISOString(),
-    "2026-02-04T00:00:00.000Z",
+    "2026-02-03T23:00:00.000Z",
   );
   assert.equal(
     submissionDeadline("2025-12-28").toISOString(),
-    "2026-01-04T00:00:00.000Z",
+    "2026-01-03T23:00:00.000Z",
   );
   // Leap year: Feb 29 exists in 2028.
   assert.equal(
     submissionDeadline("2028-02-25").toISOString(),
-    "2028-03-03T00:00:00.000Z",
+    "2028-03-02T23:00:00.000Z",
   );
-  // Consistency with daysUntil: on the issue date the full window remains.
+  // Consistency with daysUntil: at the issue date's Lagos midnight the full
+  // window remains.
   const issue = "2026-06-15";
   assert.equal(
-    daysUntil(submissionDeadline(issue), new Date(`${issue}T00:00:00Z`)),
+    daysUntil(submissionDeadline(issue), new Date(`${issue}T00:00:00+01:00`)),
     SUBMISSION_WINDOW_DAYS,
   );
 });

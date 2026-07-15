@@ -65,6 +65,7 @@ import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
 import { getFirmReceivables } from "../modules/invoice/receivables";
 import {
+  SUBMISSION_WINDOW_DAYS,
   daysUntil,
   isStamped,
   isUnsubmitted,
@@ -217,25 +218,125 @@ router.get("/console/receivables", async (req, res): Promise<void> => {
   res.json(GetFirmReceivablesResponse.parse(rollup));
 });
 
+// One aggregate row per client, computed in Postgres. This route used to load
+// every client's full invoice book into JS (one query per client) and fold it
+// with computeClientRisk — O(clients × invoices) per dashboard view, the first
+// thing to fall over as a firm's book grows. The SQL mirrors computeClientRisk
+// exactly (same status buckets, same Lagos-midnight deadline instant as
+// submissionDeadline, same tie-breaks), so the two read paths cannot disagree;
+// /console/clients/:id keeps the JS fold since it needs the row list anyway.
+type ClientRiskAggregate = {
+  clientPartyId: string;
+  totalInvoices: number;
+  unsubmittedCount: number;
+  unsubmittedValue: string;
+  failedCount: number;
+  pendingCount: number;
+  stampedCount: number;
+  overdueCount: number;
+  dueSoon: boolean;
+  earliestOverdueAt: Date | null;
+  earliestOverdueId: string | null;
+  failingInvoiceIds: string[];
+};
+
+async function loadClientRiskAggregates(
+  firmId: string,
+): Promise<Map<string, ClientRiskAggregate>> {
+  const unsubmitted = sql`${invoicesTable.status} IN ('draft', 'validated')`;
+  // submissionDeadline() as a SQL expression: Lagos midnight after the window.
+  const deadline = sql`((${invoicesTable.issueDate}::date + ${sql.raw(
+    String(SUBMISSION_WINDOW_DAYS),
+  )} * interval '1 day')::timestamp AT TIME ZONE 'Africa/Lagos')`;
+  const overdue = sql`${unsubmitted} AND ${deadline} < now()`;
+  const rows = await getDb()
+    .select({
+      clientPartyId: invoicesTable.supplierPartyId,
+      totalInvoices: sql<number>`count(*)::int`,
+      unsubmittedCount: sql<number>`count(*) FILTER (WHERE ${unsubmitted})::int`,
+      unsubmittedValue: sql<string>`coalesce(sum(${invoicesTable.grandTotal}) FILTER (WHERE ${unsubmitted}), 0)::text`,
+      failedCount: sql<number>`count(*) FILTER (WHERE ${invoicesTable.status} = 'failed')::int`,
+      pendingCount: sql<number>`count(*) FILTER (WHERE ${invoicesTable.status} = 'submitted')::int`,
+      stampedCount: sql<number>`count(*) FILTER (WHERE ${invoicesTable.status} IN ('stamped', 'confirmed', 'settled'))::int`,
+      overdueCount: sql<number>`count(*) FILTER (WHERE ${overdue})::int`,
+      // Mirrors daysUntil(deadline, now) in [0, 3]: not yet due, under 4 days out.
+      dueSoon: sql<boolean>`coalesce(bool_or(${unsubmitted} AND ${deadline} >= now() AND ${deadline} < now() + interval '4 days'), false)`,
+      earliestOverdueAt: sql<Date | null>`min(${deadline}) FILTER (WHERE ${overdue})`,
+      // computeClientRisk scans createdAt-DESC and keeps the strictly-earliest
+      // deadline, so ties go to the most recently created invoice.
+      earliestOverdueId: sql<
+        string | null
+      >`(array_agg(${invoicesTable.id} ORDER BY ${deadline} ASC, ${invoicesTable.createdAt} DESC) FILTER (WHERE ${overdue}))[1]`,
+      failingInvoiceIds: sql<
+        string[]
+      >`coalesce(array_agg(${invoicesTable.id} ORDER BY ${invoicesTable.createdAt} DESC) FILTER (WHERE ${invoicesTable.status} = 'failed'), '{}')`,
+    })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.firmId, firmId))
+    .groupBy(invoicesTable.supplierPartyId);
+  return new Map(rows.map((r) => [r.clientPartyId, r]));
+}
+
+function riskFromAggregate(
+  clientPartyId: string,
+  legalName: string,
+  agg: ClientRiskAggregate | undefined,
+): ClientRisk {
+  if (!agg) {
+    return {
+      clientPartyId,
+      legalName,
+      totalInvoices: 0,
+      unsubmittedCount: 0,
+      unsubmittedValue: "0.00",
+      failedCount: 0,
+      pendingCount: 0,
+      stampedCount: 0,
+      overdueCount: 0,
+      penaltyRisk: "low",
+      nextDeadline: null,
+      failingInvoiceIds: [],
+    };
+  }
+  const nextDeadline =
+    agg.earliestOverdueAt && agg.earliestOverdueId
+      ? {
+          id: `submit-${agg.earliestOverdueId}`,
+          clientPartyId,
+          kind: "penalty_watch",
+          title: "Overdue invoice submission",
+          description:
+            "Past the submission window — may attract penalties until stamped.",
+          dueDate: agg.earliestOverdueAt,
+          status: "overdue",
+          severity: "critical",
+          invoiceId: agg.earliestOverdueId,
+        }
+      : null;
+  return {
+    clientPartyId,
+    legalName,
+    totalInvoices: agg.totalInvoices,
+    unsubmittedCount: agg.unsubmittedCount,
+    unsubmittedValue: Number(agg.unsubmittedValue).toFixed(2),
+    failedCount: agg.failedCount,
+    pendingCount: agg.pendingCount,
+    stampedCount: agg.stampedCount,
+    overdueCount: agg.overdueCount,
+    penaltyRisk: computePenaltyRisk(agg.overdueCount, agg.failedCount, agg.dueSoon),
+    nextDeadline,
+    failingInvoiceIds: agg.failingInvoiceIds,
+  };
+}
+
 router.get("/console/portfolio", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
   const firmId = firmScope(req.principal);
   const clients = await loadFirmClients(firmId);
-
-  const risks: ClientRisk[] = [];
-  for (const client of clients) {
-    const invoices = await getDb()
-      .select()
-      .from(invoicesTable)
-      .where(
-        and(
-          eq(invoicesTable.firmId, firmId),
-          eq(invoicesTable.supplierPartyId, client.id),
-        ),
-      )
-      .orderBy(desc(invoicesTable.createdAt));
-    risks.push(computeClientRisk(client.id, client.legalName, invoices));
-  }
+  const aggregates = await loadClientRiskAggregates(firmId);
+  const risks: ClientRisk[] = clients.map((client) =>
+    riskFromAggregate(client.id, client.legalName, aggregates.get(client.id)),
+  );
 
   // Riskiest clients first so the partner triages top-down.
   risks.sort((a, b) => PRIORITY_RANK[a.penaltyRisk] - PRIORITY_RANK[b.penaltyRisk]);

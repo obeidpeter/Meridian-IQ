@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
+import { lagosDateString } from "../../lib/lagos-time";
 import { createDraft } from "./service";
 import { assertPlausibleVatRates, type LineInput } from "./lines";
 
@@ -168,7 +169,9 @@ export async function sweepRecurringInvoices(now = new Date()): Promise<number> 
 }
 
 async function sweepInner(now: Date): Promise<number> {
-  const today = now.toISOString().slice(0, 10);
+  // Templates run on the LAGOS calendar day: a template due on the 1st drafts
+  // at local midnight, not an hour later when UTC catches up.
+  const today = lagosDateString(now);
   const due = await getDb()
     .select()
     .from(recurringInvoiceTemplatesTable)
