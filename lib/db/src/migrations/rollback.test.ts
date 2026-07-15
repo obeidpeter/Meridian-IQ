@@ -199,6 +199,23 @@ const LADDER: LadderStep[] = [
     atTop: [bypass("password_resets")],
     afterRollback: [not(bypass("password_resets"))],
   },
+  {
+    version: 13, // tenant-coverage guardrails (review gap: 9 tenant tables)
+    atTop: [
+      pol("escalations"),
+      pol("memberships"),
+      pol("firms"),
+      pol("operator_cases"),
+      pol("alert_preferences"),
+      pol("consent_records"),
+    ],
+    afterRollback: [
+      not(pol("escalations")),
+      not(pol("memberships")),
+      not(pol("firms")),
+      not(pol("alert_preferences")),
+    ],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

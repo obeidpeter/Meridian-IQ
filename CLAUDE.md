@@ -101,9 +101,17 @@ DRAFT register entry that still walks the full maker-checker flow.
   `modules/auth/throttle.ts`.
 - **Migrations vs push.** Tables come from `drizzle push`; the versioned
   guardrail migrations (`lib/db/src/migrations`, RLS policies, triggers,
-  retention) apply on boot and must roll back cleanly (the rollback test
-  enforces this). Adding a tenant table? Add a firm-keyed RLS policy in a new
-  numbered migration and extend the rollback test.
+  retention) apply on boot outside production and must roll back cleanly (the
+  rollback test enforces this). Adding a tenant table? Add a firm-keyed RLS
+  policy in a new numbered migration and extend the rollback test — the
+  `rls-coverage` test fails CI for any tenant-keyed table without a policy
+  (documented allowlist: `audit_events`), and `rls-isolation.test.ts`
+  (api-server) exercises the policies behaviorally under the real
+  `meridian_app` role. Production does NOT run migrations at boot (deliberate;
+  Publish owns prod schema) — after merging a new guardrail migration, apply
+  it to production manually (`pnpm --filter @workspace/db run migrate` against
+  the prod `DATABASE_URL`); the boot-time guardrail verifier logs exactly
+  which tables are uncovered until then.
 
 ## Auth & sessions
 

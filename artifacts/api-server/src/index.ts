@@ -43,14 +43,42 @@ async function verifyProductionGuardrails(): Promise<void> {
     );
     const policies = Number(rows[0]?.policies ?? 0);
     const triggers = Number(rows[0]?.triggers ?? 0);
-    if (policies === 0 || triggers === 0) {
+    // Coverage sweep (read-only): any tenant-keyed table (firm_id /
+    // client_party_id / party_id column) without forced RLS + a policy is a
+    // gap the CI rls-coverage test would fail on — surface the specific
+    // tables here so a production database that predates a guardrail
+    // migration (e.g. 0013) reports exactly what is missing. audit_events is
+    // the one documented exemption (global hash chain; migration 0013 header).
+    const uncoveredRes = await pool.query(
+      `SELECT c.table_name
+       FROM (SELECT DISTINCT col.table_name
+               FROM information_schema.columns col
+               JOIN information_schema.tables t
+                 ON t.table_name = col.table_name AND t.table_schema = 'public'
+              WHERE col.table_schema = 'public'
+                AND t.table_type = 'BASE TABLE'
+                AND col.column_name IN ('firm_id', 'client_party_id', 'party_id')) c
+       JOIN pg_class k ON k.relname = c.table_name
+       JOIN pg_namespace n ON n.oid = k.relnamespace AND n.nspname = 'public'
+       WHERE NOT (k.relrowsecurity AND k.relforcerowsecurity)
+          OR NOT EXISTS (SELECT 1 FROM pg_policies p
+                           WHERE p.schemaname = 'public'
+                             AND p.tablename = c.table_name)
+       ORDER BY c.table_name`,
+    );
+    const uncovered = (uncoveredRes.rows as { table_name: string }[])
+      .map((r) => r.table_name)
+      .filter((t) => t !== "audit_events");
+    if (policies === 0 || triggers === 0 || uncovered.length > 0) {
       logger.error(
-        { policies, triggers },
-        "SECURITY: production tenant-isolation guardrails are MISSING (RLS " +
-          "policies / append-only triggers). Provision the production database " +
-          "via Replit Publish 'overwrite data' (dev->prod copy) so policies, " +
-          "triggers and functions are carried over. Tenant isolation is NOT " +
-          "enforced until these exist.",
+        { policies, triggers, uncovered },
+        "SECURITY: production tenant-isolation guardrails are MISSING or " +
+          "incomplete (RLS policies / append-only triggers / uncovered " +
+          "tenant-keyed tables listed above). Apply the guardrail migrations " +
+          "to this database (pnpm --filter @workspace/db run migrate with the " +
+          "production DATABASE_URL, or a Publish dev->prod copy). Tenant " +
+          "isolation is NOT fully enforced at the data layer until this is " +
+          "clean.",
       );
     } else {
       logger.info({ policies, triggers }, "Production guardrails verified");
