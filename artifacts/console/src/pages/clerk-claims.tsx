@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { QueryError } from "@/components/query-error";
+import { ClerkDisabledBanner } from "@/components/clerk-shell";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
@@ -46,12 +47,12 @@ import {
   serverErrorMessage,
 } from "@/lib/errors";
 import { formatDate, pillClasses, type BadgeTone } from "@/lib/format";
+import { clerkDisabledToast, serverErrorToast } from "@/pages/clerk-shared";
 import {
   ChevronDown,
   ChevronRight,
   Pencil,
   Plus,
-  PowerOff,
   Send,
   Sparkles,
   Trash2,
@@ -492,12 +493,10 @@ export function ClerkClaims() {
   const handleServerError = (err: unknown, fallback: string) => {
     if (killSwitchTripped(err)) {
       setDisabledBanner(true);
-      toast({
-        title: "Clerk is switched off",
-        description:
-          "The clerk_ai kill switch is disabled, so the claims register is not accepting changes.",
-        variant: "destructive",
-      });
+      clerkDisabledToast(
+        toast,
+        "The clerk_ai kill switch is disabled, so the claims register is not accepting changes.",
+      );
       return;
     }
     if (errorStatus(err) === 403) {
@@ -510,11 +509,7 @@ export function ClerkClaims() {
       });
       return;
     }
-    toast({
-      title: "Something went wrong",
-      description: serverErrorMessage(err) ?? fallback,
-      variant: "destructive",
-    });
+    serverErrorToast(toast, err, fallback);
   };
 
   const createClaim = useCreateClaim({
@@ -722,14 +717,10 @@ export function ClerkClaims() {
       </div>
 
       {disabledBanner && (
-        <Alert variant="destructive" data-testid="banner-clerk-disabled">
-          <PowerOff className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>Clerk is switched off</AlertTitle>
-          <AlertDescription>
-            The <code>clerk_ai</code> feature flag is disabled. The register is
-            read-only while it is off — re-enable it under Feature flags.
-          </AlertDescription>
-        </Alert>
+        <ClerkDisabledBanner>
+          The register is read-only while it is off — re-enable it under
+          Feature flags.
+        </ClerkDisabledBanner>
       )}
 
       {draftOpen && (

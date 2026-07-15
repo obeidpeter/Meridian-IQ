@@ -18,13 +18,16 @@ export function hasStatus(error: unknown, code: number): boolean {
   return errorStatus(error) === code;
 }
 
+/** A dark feature flag surfaces as a 404 from the API. */
+export function isFeatureUnavailable(error: unknown): boolean {
+  return hasStatus(error, 404);
+}
+
 /**
- * Pull the server's message out of a thrown API error, if present. The 403
- * consent refusal from bulk submit arrives as `{ error }`; validation-style
- * failures use `{ message }`. When the payload carries neither, a thrown
- * Error's own message (e.g. a transport failure) is used before the fallback.
+ * The server-provided `message` string from a thrown API error's payload, or
+ * null when the payload carries none.
  */
-export function apiErrorMessage(error: unknown, fallback: string): string {
+export function serverMessage(error: unknown): string | null {
   const data =
     error && typeof error === "object"
       ? (error as { data?: unknown }).data
@@ -33,6 +36,22 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
     const message = (data as { message?: unknown }).message;
     if (typeof message === "string" && message) return message;
   }
+  return null;
+}
+
+/**
+ * Pull the server's message out of a thrown API error, if present. The 403
+ * consent refusal from bulk submit arrives as `{ error }`; validation-style
+ * failures use `{ message }`. When the payload carries neither, a thrown
+ * Error's own message (e.g. a transport failure) is used before the fallback.
+ */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  const fromServer = serverMessage(error);
+  if (fromServer) return fromServer;
+  const data =
+    error && typeof error === "object"
+      ? (error as { data?: unknown }).data
+      : null;
   if (data && typeof data === "object" && "error" in data) {
     const message = (data as { error?: unknown }).error;
     if (typeof message === "string" && message) return message;

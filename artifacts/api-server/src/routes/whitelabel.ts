@@ -10,10 +10,11 @@ import {
   ImportClientsBody,
   ImportClientsResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertSameTenant,
-  tenantFirmId,
+  requireFirmScope,
 } from "../modules/auth/rbac";
 import { requireFlag } from "../modules/flags/flags";
 import { appendAudit } from "../modules/audit/audit";
@@ -30,11 +31,7 @@ const router: IRouter = Router();
 // so this endpoint is on the PUBLIC_PATHS allowlist (no principal — the flag
 // is evaluated globally) and returns branding only — never tenant data.
 router.get("/public/theme", requireFlag("white_label", { global: true }), async (req, res): Promise<void> => {
-  const query = GetPublicThemeQueryParams.safeParse(req.query);
-  if (!query.success) {
-    res.status(400).json({ error: query.error.message });
-    return;
-  }
+  const query = parseOrThrow(GetPublicThemeQueryParams, req.query);
   const [firm] = await getDb()
     .select({
       firmId: firmsTable.id,
@@ -43,7 +40,7 @@ router.get("/public/theme", requireFlag("white_label", { global: true }), async 
       theme: firmsTable.theme,
     })
     .from(firmsTable)
-    .where(eq(firmsTable.subdomain, query.data.subdomain))
+    .where(eq(firmsTable.subdomain, query.subdomain))
     .limit(1);
   if (!firm) {
     res.status(404).json({ error: "No firm on this subdomain" });
@@ -54,21 +51,13 @@ router.get("/public/theme", requireFlag("white_label", { global: true }), async 
 
 router.put("/firms/:id/theme", requireFlag("white_label"), async (req, res): Promise<void> => {
   assertCan(req.principal, "theme.write");
-  const params = UpdateFirmThemeParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const body = UpdateFirmThemeBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
-  assertSameTenant(req.principal, params.data.id);
+  const params = parseOrThrow(UpdateFirmThemeParams, req.params);
+  const body = parseOrThrow(UpdateFirmThemeBody, req.body);
+  assertSameTenant(req.principal, params.id);
   const [existing] = await getDb()
     .select({ id: firmsTable.id, theme: firmsTable.theme, subdomain: firmsTable.subdomain })
     .from(firmsTable)
-    .where(eq(firmsTable.id, params.data.id))
+    .where(eq(firmsTable.id, params.id))
     .limit(1);
   if (!existing) {
     res.status(404).json({ error: "Firm not found" });
@@ -76,11 +65,11 @@ router.put("/firms/:id/theme", requireFlag("white_label"), async (req, res): Pro
   }
   // Subdomains are unique across firms; answer a taken name with a 409 rather
   // than letting the DB constraint surface as a 500.
-  if (body.data.subdomain && body.data.subdomain !== existing.subdomain) {
+  if (body.subdomain && body.subdomain !== existing.subdomain) {
     const [taken] = await getDb()
       .select({ id: firmsTable.id })
       .from(firmsTable)
-      .where(eq(firmsTable.subdomain, body.data.subdomain))
+      .where(eq(firmsTable.subdomain, body.subdomain))
       .limit(1);
     if (taken) {
       throw new DomainError(
@@ -93,17 +82,17 @@ router.put("/firms/:id/theme", requireFlag("white_label"), async (req, res): Pro
   const [row] = await getDb()
     .update(firmsTable)
     .set({
-      theme: body.data.theme as Record<string, unknown>,
-      ...(body.data.subdomain ? { subdomain: body.data.subdomain } : {}),
+      theme: body.theme as Record<string, unknown>,
+      ...(body.subdomain ? { subdomain: body.subdomain } : {}),
     })
-    .where(eq(firmsTable.id, params.data.id))
+    .where(eq(firmsTable.id, params.id))
     .returning();
   await appendAudit({
     actorId: req.principal.userId,
-    firmId: params.data.id,
+    firmId: params.id,
     action: "firm.theme_update",
     entityType: "firm",
-    entityId: params.data.id,
+    entityId: params.id,
     before: { theme: existing.theme, subdomain: existing.subdomain },
     after: { theme: row.theme, subdomain: row.subdomain },
   });
@@ -116,16 +105,8 @@ router.put("/firms/:id/theme", requireFlag("white_label"), async (req, res): Pro
 // with per-row results, mirroring the invoice-import contract.
 router.post("/clients/import", requireFlag("white_label"), async (req, res): Promise<void> => {
   assertCan(req.principal, "clients.import");
-  const firmId = tenantFirmId(req.principal);
-  if (!firmId) {
-    res.status(403).json({ error: "A firm-scoped principal is required" });
-    return;
-  }
-  const parsed = ImportClientsBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const firmId = requireFirmScope(req.principal);
+  const parsed = parseOrThrow(ImportClientsBody, req.body);
 
   type RowResult = {
     rowNumber: number;
@@ -136,8 +117,8 @@ router.post("/clients/import", requireFlag("white_label"), async (req, res): Pro
   };
   const results: RowResult[] = [];
 
-  for (let i = 0; i < parsed.data.rows.length; i++) {
-    const row = parsed.data.rows[i];
+  for (let i = 0; i < parsed.rows.length; i++) {
+    const row = parsed.rows[i];
     const rowNumber = i + 1;
     const errors: { field: string; message: string }[] = [];
     let tin: string | null = null;
@@ -213,7 +194,7 @@ router.post("/clients/import", requireFlag("white_label"), async (req, res): Pro
       });
       continue;
     }
-    if (!parsed.data.commit) {
+    if (!parsed.commit) {
       results.push({ rowNumber, status: "created", partyId: null, engagementId: null, errors: [] });
       continue;
     }
@@ -258,7 +239,7 @@ router.post("/clients/import", requireFlag("white_label"), async (req, res): Pro
   await appendAudit({
     actorId: req.principal.userId,
     firmId,
-    action: parsed.data.commit ? "clients.import" : "clients.import_validate",
+    action: parsed.commit ? "clients.import" : "clients.import_validate",
     entityType: "firm",
     entityId: firmId,
     after: { rows: results.length, created: createdCount, exists: existsCount, invalid: invalidCount },
@@ -269,7 +250,7 @@ router.post("/clients/import", requireFlag("white_label"), async (req, res): Pro
       createdCount,
       existsCount,
       invalidCount,
-      committed: parsed.data.commit,
+      committed: parsed.commit,
       rows: results,
     }),
   );

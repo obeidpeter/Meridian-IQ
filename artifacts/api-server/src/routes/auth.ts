@@ -7,6 +7,7 @@ import {
   ChangePasswordBody,
   AcceptInviteBody,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { ROLE_CAPABILITIES } from "../modules/auth/rbac";
 import {
   SESSION_COOKIE,
@@ -48,12 +49,8 @@ function cookieOptions(req: { secure?: boolean; headers: Record<string, unknown>
 }
 
 router.post("/auth/login", async (req, res): Promise<void> => {
-  const parsed = LoginBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const retryAfter = await isLoginThrottled(req, parsed.data.email);
+  const parsed = parseOrThrow(LoginBody, req.body);
+  const retryAfter = await isLoginThrottled(req, parsed.email);
   if (retryAfter !== null) {
     res.setHeader("Retry-After", String(retryAfter));
     res.status(429).json({
@@ -61,14 +58,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     });
     return;
   }
-  const result = await authenticate(parsed.data.email, parsed.data.password);
+  const result = await authenticate(parsed.email, parsed.password);
   if (!result) {
-    await recordLoginFailure(req, parsed.data.email);
+    await recordLoginFailure(req, parsed.email);
     // Uniform message: never reveal whether the email exists.
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
-  await clearLoginFailures(req, parsed.data.email);
+  await clearLoginFailures(req, parsed.email);
   const memberships = await getDb()
     .select({
       firmId: membershipsTable.firmId,
@@ -130,11 +127,7 @@ router.post("/auth/logout", (req, res): void => {
 // victim rotates their password; the current device is kept signed in by
 // re-issuing its token with the new epoch. The audit event records the rotation.
 router.post("/auth/change-password", async (req, res): Promise<void> => {
-  const parsed = ChangePasswordBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(ChangePasswordBody, req.body);
   const [user] = await getDb()
     .select({
       id: usersTable.id,
@@ -146,7 +139,7 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
     .limit(1);
   if (
     !user?.passwordHash ||
-    !verifyPassword(parsed.data.currentPassword, user.passwordHash)
+    !verifyPassword(parsed.currentPassword, user.passwordHash)
   ) {
     res.status(401).json({ error: "Current password is incorrect" });
     return;
@@ -155,7 +148,7 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
   await getDb()
     .update(usersTable)
     .set({
-      passwordHash: hashPassword(parsed.data.newPassword),
+      passwordHash: hashPassword(parsed.newPassword),
       sessionEpoch: nextEpoch,
     })
     .where(eq(usersTable.id, user.id));
@@ -186,15 +179,11 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
 // 4xx-rollback rule, any error rolls the account creation back with the invite
 // left intact.
 router.post("/auth/accept-invite", async (req, res): Promise<void> => {
-  const parsed = AcceptInviteBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(AcceptInviteBody, req.body);
   await acceptInvitation({
-    token: parsed.data.token,
-    password: parsed.data.password,
-    fullName: parsed.data.fullName ?? null,
+    token: parsed.token,
+    password: parsed.password,
+    fullName: parsed.fullName ?? null,
   });
   res.sendStatus(204);
 });

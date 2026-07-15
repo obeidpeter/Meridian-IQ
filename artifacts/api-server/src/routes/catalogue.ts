@@ -12,6 +12,7 @@ import {
   UpdateErrorCatalogueEntryResponse,
   ListUnmappedErrorCodesResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { assertCan } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
 import {
@@ -67,12 +68,8 @@ router.get("/error-catalogue/unmapped", async (req, res): Promise<void> => {
 });
 
 router.get("/error-catalogue/:code", async (req, res): Promise<void> => {
-  const params = GetErrorCatalogueEntryParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const entry = await getCatalogueEntry(params.data.code);
+  const params = parseOrThrow(GetErrorCatalogueEntryParams, req.params);
+  const entry = await getCatalogueEntry(params.code);
   if (!entry) {
     res.status(404).json({ error: "Catalogue entry not found" });
     return;
@@ -82,12 +79,8 @@ router.get("/error-catalogue/:code", async (req, res): Promise<void> => {
 
 router.post("/error-catalogue", async (req, res): Promise<void> => {
   assertCan(req.principal, "catalogue.write");
-  const parsed = UpsertErrorCatalogueEntryBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const entry = await upsertCatalogueEntry(parsed.data, req.principal.userId);
+  const parsed = parseOrThrow(UpsertErrorCatalogueEntryBody, req.body);
+  const entry = await upsertCatalogueEntry(parsed, req.principal.userId);
   await appendAudit({
     actorId: req.principal.userId,
     action: "catalogue.upsert",
@@ -100,19 +93,11 @@ router.post("/error-catalogue", async (req, res): Promise<void> => {
 
 router.patch("/error-catalogue/:code", async (req, res): Promise<void> => {
   assertCan(req.principal, "catalogue.write");
-  const params = UpdateErrorCatalogueEntryParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = UpdateErrorCatalogueEntryBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const params = parseOrThrow(UpdateErrorCatalogueEntryParams, req.params);
+  const parsed = parseOrThrow(UpdateErrorCatalogueEntryBody, req.body);
   const entry = await updateCatalogueEntry(
-    params.data.code,
-    parsed.data,
+    params.code,
+    parsed,
     req.principal.userId,
   );
   if (!entry) {

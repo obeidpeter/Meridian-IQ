@@ -27,12 +27,14 @@ import {
   BulkAcceptMatchProposalsBody,
   BulkAcceptMatchProposalsResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertClientPartyScope,
   assertPartyAccess,
   assertSameTenant,
-  clientPartyScope,
+  narrowToClientPartyScope,
+  requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { requireFlag } from "../modules/flags/flags";
@@ -57,30 +59,22 @@ const router: IRouter = Router();
 
 router.post("/statements", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.write");
-  const firmId = tenantFirmId(req.principal);
-  if (!firmId) {
-    res.status(403).json({ error: "A firm-scoped principal is required" });
-    return;
-  }
-  const parsed = ImportBankStatementBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  if (parsed.data.csv.length > MAX_STATEMENT_CSV_CHARS) {
+  const firmId = requireFirmScope(req.principal);
+  const parsed = parseOrThrow(ImportBankStatementBody, req.body);
+  if (parsed.csv.length > MAX_STATEMENT_CSV_CHARS) {
     res.status(413).json({
       error: "Statement file is too large to process",
     });
     return;
   }
-  await assertPartyAccess(req.principal, parsed.data.clientPartyId);
+  await assertPartyAccess(req.principal, parsed.clientPartyId);
   const result = await ingestStatement({
     firmId,
-    clientPartyId: parsed.data.clientPartyId,
-    csv: parsed.data.csv,
-    formatKey: parsed.data.formatKey ?? null,
-    filename: parsed.data.filename ?? null,
-    commit: parsed.data.commit,
+    clientPartyId: parsed.clientPartyId,
+    csv: parsed.csv,
+    formatKey: parsed.formatKey ?? null,
+    filename: parsed.filename ?? null,
+    commit: parsed.commit,
     actorId: req.principal.userId,
   });
   res.json(ImportBankStatementResponse.parse(result));
@@ -89,12 +83,10 @@ router.post("/statements", requireFlag("reconciliation"), async (req, res): Prom
 router.get("/statements", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.read");
   const query = ListBankStatementsQueryParams.safeParse(req.query);
-  let clientPartyId = query.success ? query.data.clientPartyId : undefined;
-  // A client_user is confined to its own client party (SEC-03): reject an
-  // explicit sibling id and always constrain the list to its own party.
-  if (clientPartyId) assertClientPartyScope(req.principal, clientPartyId);
-  const scope = clientPartyScope(req.principal);
-  if (scope) clientPartyId = scope;
+  const clientPartyId = narrowToClientPartyScope(
+    req.principal,
+    query.success ? query.data.clientPartyId : undefined,
+  );
   const tenant = tenantFirmId(req.principal);
   const conditions = [];
   if (tenant) conditions.push(eq(bankStatementsTable.firmId, tenant));
@@ -126,39 +118,27 @@ async function loadStatementForTenant(
 
 router.get("/statements/:id", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.read");
-  const params = GetBankStatementParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const statement = await loadStatementForTenant(req, params.data.id);
+  const params = parseOrThrow(GetBankStatementParams, req.params);
+  const statement = await loadStatementForTenant(req, params.id);
   res.json(GetBankStatementResponse.parse(statement));
 });
 
 router.get("/statements/:id/lines", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.read");
-  const params = ListBankStatementLinesParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadStatementForTenant(req, params.data.id);
+  const params = parseOrThrow(ListBankStatementLinesParams, req.params);
+  await loadStatementForTenant(req, params.id);
   const rows = await getDb()
     .select()
     .from(bankStatementLinesTable)
-    .where(eq(bankStatementLinesTable.statementId, params.data.id))
+    .where(eq(bankStatementLinesTable.statementId, params.id))
     .orderBy(asc(bankStatementLinesTable.lineNo));
   res.json(ListBankStatementLinesResponse.parse(rows));
 });
 
 router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "reconciliation.read");
-  const params = ListBankStatementProposalsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadStatementForTenant(req, params.data.id);
+  const params = parseOrThrow(ListBankStatementProposalsParams, req.params);
+  await loadStatementForTenant(req, params.id);
   const lines = await getDb()
     .select({
       id: bankStatementLinesTable.id,
@@ -168,7 +148,7 @@ router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (re
       narration: bankStatementLinesTable.narration,
     })
     .from(bankStatementLinesTable)
-    .where(eq(bankStatementLinesTable.statementId, params.data.id));
+    .where(eq(bankStatementLinesTable.statementId, params.id));
   const lineById = new Map(lines.map((l) => [l.id, l]));
   if (lines.length === 0) {
     res.json(ListBankStatementProposalsResponse.parse([]));
@@ -202,7 +182,7 @@ router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (re
     const line = lineById.get(p.statementLineId);
     return {
       id: p.id,
-      statementId: params.data.id,
+      statementId: params.id,
       statementLineId: p.statementLineId,
       invoiceId: p.invoiceId,
       invoiceNumber: p.invoiceNumber,
@@ -229,23 +209,19 @@ router.post(
   requireFlag("reconciliation"),
   async (req, res): Promise<void> => {
     assertCan(req.principal, "reconciliation.act");
-    const params = AcceptMatchProposalParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
+    const params = parseOrThrow(AcceptMatchProposalParams, req.params);
     // Tenant guard: the proposal row itself carries the firm.
     const [proposal] = await getDb()
       .select({ firmId: matchProposalsTable.firmId })
       .from(matchProposalsTable)
-      .where(eq(matchProposalsTable.id, params.data.id))
+      .where(eq(matchProposalsTable.id, params.id))
       .limit(1);
     if (!proposal) {
       res.status(404).json({ error: "Proposal not found" });
       return;
     }
     assertSameTenant(req.principal, proposal.firmId);
-    const result = await acceptProposal(params.data.id, {
+    const result = await acceptProposal(params.id, {
       userId: req.principal.userId,
       role: req.principal.role,
     });
@@ -261,23 +237,15 @@ router.post(
   requireFlag("reconciliation"),
   async (req, res): Promise<void> => {
     assertCan(req.principal, "reconciliation.act");
-    const params = BulkAcceptMatchProposalsParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
-    const body = BulkAcceptMatchProposalsBody.safeParse(req.body ?? {});
-    if (!body.success) {
-      res.status(400).json({ error: body.error.message });
-      return;
-    }
+    const params = parseOrThrow(BulkAcceptMatchProposalsParams, req.params);
+    const body = parseOrThrow(BulkAcceptMatchProposalsBody, req.body ?? {});
     const [statement] = await getDb()
       .select({
         firmId: bankStatementsTable.firmId,
         clientPartyId: bankStatementsTable.clientPartyId,
       })
       .from(bankStatementsTable)
-      .where(eq(bankStatementsTable.id, params.data.id))
+      .where(eq(bankStatementsTable.id, params.id))
       .limit(1);
     if (!statement) {
       res.status(404).json({ error: "Statement not found" });
@@ -286,9 +254,9 @@ router.post(
     assertSameTenant(req.principal, statement.firmId);
     assertClientPartyScope(req.principal, statement.clientPartyId);
     const result = await bulkAcceptProposals(
-      params.data.id,
+      params.id,
       { userId: req.principal.userId, role: req.principal.role },
-      body.data.threshold,
+      body.threshold,
     );
     res.json(BulkAcceptMatchProposalsResponse.parse(result));
   },
@@ -299,22 +267,18 @@ router.post(
   requireFlag("reconciliation"),
   async (req, res): Promise<void> => {
     assertCan(req.principal, "reconciliation.act");
-    const params = RejectMatchProposalParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
+    const params = parseOrThrow(RejectMatchProposalParams, req.params);
     const [proposal] = await getDb()
       .select({ firmId: matchProposalsTable.firmId })
       .from(matchProposalsTable)
-      .where(eq(matchProposalsTable.id, params.data.id))
+      .where(eq(matchProposalsTable.id, params.id))
       .limit(1);
     if (!proposal) {
       res.status(404).json({ error: "Proposal not found" });
       return;
     }
     assertSameTenant(req.principal, proposal.firmId);
-    const result = await rejectProposal(params.data.id, {
+    const result = await rejectProposal(params.id, {
       userId: req.principal.userId,
       role: req.principal.role,
     });

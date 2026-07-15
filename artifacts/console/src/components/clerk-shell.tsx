@@ -6,8 +6,10 @@ import {
   FileStack,
   ListChecks,
   MessageCircleQuestion,
+  PowerOff,
   Sparkles,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
 
 // The Clerk product shell: Clerk pages render full-bleed inside this dark rail
@@ -116,6 +118,24 @@ export function ClerkShell({ children }: { children: ReactNode }) {
         {children}
       </main>
     </div>
+  );
+}
+
+/**
+ * The kill-switch banner, shared by the Clerk pages: one identity (destructive
+ * tone, PowerOff icon, "Clerk is switched off" title, the flag named) so the
+ * off state reads the same everywhere. Each page supplies its own consequence
+ * sentence as children.
+ */
+export function ClerkDisabledBanner({ children }: { children: ReactNode }) {
+  return (
+    <Alert variant="destructive" data-testid="banner-clerk-disabled">
+      <PowerOff className="h-4 w-4" aria-hidden="true" />
+      <AlertTitle>Clerk is switched off</AlertTitle>
+      <AlertDescription>
+        The <code>clerk_ai</code> feature flag is disabled. {children}
+      </AlertDescription>
+    </Alert>
   );
 }
 

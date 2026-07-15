@@ -9,7 +9,6 @@ import type { ComplianceDeadline } from "@workspace/api-client-react";
 import React, { useCallback, useMemo } from "react";
 import {
   RefreshControl,
-  ScrollView,
   SectionList,
   StyleSheet,
   View,
@@ -25,6 +24,7 @@ import {
   Divider,
   EmptyState,
   ErrorState,
+  ScreenScroll,
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
@@ -127,42 +127,34 @@ export default function DeadlinesScreen() {
 
   if (query.isLoading) {
     return (
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
-        contentContainerStyle={contentContainerStyle}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScreenScroll contentContainerStyle={contentContainerStyle}>
         <View style={{ gap: 12 }}>
           <CardSkeleton lines={2} />
           <CardSkeleton lines={2} />
           <CardSkeleton lines={2} />
         </View>
-      </ScrollView>
+      </ScreenScroll>
     );
   }
 
   if (query.isError) {
     return (
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
+      <ScreenScroll
         contentContainerStyle={contentContainerStyle}
-        showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
         <ErrorState
           message="We couldn't load your compliance calendar."
           onRetry={onRefresh}
         />
-      </ScrollView>
+      </ScreenScroll>
     );
   }
 
   if (deadlines.length === 0) {
     return (
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
+      <ScreenScroll
         contentContainerStyle={contentContainerStyle}
-        showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
         <EmptyState
@@ -170,7 +162,7 @@ export default function DeadlinesScreen() {
           title="No upcoming deadlines"
           message="You're all caught up. New deadlines will appear here."
         />
-      </ScrollView>
+      </ScreenScroll>
     );
   }
 

@@ -5,9 +5,8 @@ import { appendAudit } from "../audit/audit";
 import { assertFirmClerkBudget } from "./budget";
 import {
   createExtractionCase,
-  decodeBase64Checked,
-  extractPdfText,
   fenceDocument,
+  resolveTextSource,
   type CaseContext,
 } from "./cases";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";
@@ -20,9 +19,9 @@ import { assertClerkEnabled, type ClerkGateway } from "./gateway";
 // The segmenter proposes boundaries only; it can no more file an invoice than
 // the extractor can.
 
-export const MAX_BATCH_SEGMENTS = 10;
+const MAX_BATCH_SEGMENTS = 10;
 
-export const SEGMENT_PROMPT_VERSION = "segment.v1";
+const SEGMENT_PROMPT_VERSION = "segment.v1";
 
 const SEGMENT_SYSTEM = `You split a document that may contain SEVERAL invoices into one text segment per invoice.
 
@@ -89,26 +88,11 @@ export async function createBatchCases(
 ): Promise<BatchCasesResult> {
   await assertClerkEnabled();
 
-  let fullText: string;
-  if (input.sourceType === "text") {
-    if (!input.text?.trim()) {
-      throw new DomainError("BAD_UPLOAD", "text is required for a text source", 400);
-    }
-    fullText = input.text;
-  } else {
-    if (!input.pdfBase64) {
-      throw new DomainError("BAD_UPLOAD", "pdfBase64 is required for a pdf source", 400);
-    }
-    const buf = decodeBase64Checked(input.pdfBase64, "PDF");
-    fullText = (await extractPdfText(buf)).trim();
-    if (!fullText) {
-      throw new DomainError(
-        "PDF_NO_TEXT",
-        "The PDF contains no selectable text (it is probably a scan). Upload the invoices one at a time as images instead.",
-        422,
-      );
-    }
-  }
+  const fullText = await resolveTextSource(
+    input.sourceType,
+    input,
+    "Upload the invoices one at a time as images instead.",
+  );
 
   const result = await gateway.infer<SegmentationOutput>({
     purpose: "segment_batch",

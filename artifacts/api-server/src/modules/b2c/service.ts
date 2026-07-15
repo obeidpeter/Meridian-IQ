@@ -10,9 +10,7 @@ import {
 } from "@workspace/db";
 import { DomainError } from "../errors.ts";
 import { appendAudit } from "../audit/audit";
-import { sendMessage } from "../messaging/messaging";
-import { recipientRefFor } from "../messaging/recipient-ref";
-import { sendPushAlert } from "../push/push";
+import { fanOutAlert } from "../messaging/fan-out";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
 
@@ -140,38 +138,19 @@ async function firePreBreachAlerts(now: Date): Promise<number> {
         .from(alertPreferencesTable)
         .where(eq(alertPreferencesTable.clientPartyId, batch.clientPartyId))
         .limit(1);
-      const channels: ("whatsapp" | "sms" | "email")[] = [];
-      if (!prefs || prefs.whatsappEnabled) channels.push("whatsapp");
-      if (!prefs || prefs.smsEnabled) channels.push("sms");
-      if (!prefs || prefs.emailEnabled) channels.push("email");
       // Same PII-free entity ref on every channel so sends correlate.
       const entityId = `batch-${batch.id.replace(/[^a-z]/gi, "").slice(0, 6)}`;
-      for (const channel of channels) {
-        try {
-          await sendMessage({
-            channel,
-            recipientRef: recipientRefFor(batch.clientPartyId),
-            templateKey: "b2c_window_alert",
-            entityType: "b2c_report_batch",
-            entityId,
-          });
-        } catch {
-          // Channel failures are recorded by the messaging module itself.
-        }
-      }
-      if (!prefs || prefs.pushEnabled) {
-        try {
-          await sendPushAlert({
-            clientPartyId: batch.clientPartyId,
-            firmId: batch.firmId,
-            templateKey: "b2c_window_alert",
-            entityType: "b2c_report_batch",
-            entityId,
-          });
-        } catch {
-          // Push failures are recorded in the messages ledger by the module.
-        }
-      }
+      await fanOutAlert({
+        prefs,
+        clientPartyId: batch.clientPartyId,
+        firmId: batch.firmId,
+        templateKey: "b2c_window_alert",
+        entityType: "b2c_report_batch",
+        entityId,
+        // Historical default preserved: with no prefs row, the B2C pre-breach
+        // alert DOES send SMS (drifted from the deadline-reminder default).
+        smsDefaultWhenNoPrefs: true,
+      });
     }
     await getDb()
       .update(b2cReportBatchesTable)

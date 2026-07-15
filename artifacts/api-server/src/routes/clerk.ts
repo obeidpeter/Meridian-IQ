@@ -33,6 +33,7 @@ import {
   DraftClaimWithClerkBody,
   DraftClaimWithClerkResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { assertCan, tenantFirmId } from "../modules/auth/rbac";
 import {
   assertFirmClerkBudget,
@@ -76,14 +77,10 @@ const router: IRouter = Router();
 
 router.get("/clerk/cases", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
-  const query = ListClerkCasesQueryParams.safeParse(req.query);
-  if (!query.success) {
-    res.status(400).json({ error: query.error.message });
-    return;
-  }
+  const query = parseOrThrow(ListClerkCasesQueryParams, req.query);
   const tenant = tenantFirmId(req.principal);
   const rows = await listCases({
-    ...query.data,
+    ...query,
     ...(tenant ? { firmId: tenant } : {}),
     ...(req.principal.role === "client_user"
       ? { createdBy: req.principal.userId }
@@ -94,12 +91,8 @@ router.get("/clerk/cases", async (req, res): Promise<void> => {
 
 router.get("/clerk/cases/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
-  const params = GetClerkCaseParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const row = await getCase(params.data.id);
+  const params = parseOrThrow(GetClerkCaseParams, req.params);
+  const row = await getCase(params.id);
   // Firm principals only see their firm's cases; a client_user only its own
   // submissions. Same 404 as not-found so existence is not disclosed.
   const tenant = tenantFirmId(req.principal);
@@ -116,18 +109,14 @@ router.get("/clerk/cases/:id", async (req, res): Promise<void> => {
 
 router.post("/clerk/cases", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
-  const parsed = CreateClerkCaseBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(CreateClerkCaseBody, req.body);
   // Budget gate BEFORE the provider is touched: an exhausted firm gets a clean
   // 429 without any model call. Operators (no tenant) are uncapped.
   const tenant = tenantFirmId(req.principal);
   if (tenant) await assertFirmClerkBudget(tenant);
   const gateway = await getClerkGateway();
   const row = await createExtractionCase(
-    parsed.data,
+    parsed,
     req.principal.userId,
     gateway,
     undefined,
@@ -141,17 +130,13 @@ router.post("/clerk/cases", async (req, res): Promise<void> => {
 // duplicate guard, extraction, pre-flight and human review).
 router.post("/clerk/cases/batch", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
-  const parsed = CreateClerkCaseBatchBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(CreateClerkCaseBatchBody, req.body);
   // Budget gate up front like single capture; batch.ts re-checks between
   // segments so a firm can't blow far past its allowance in one upload.
   const tenant = tenantFirmId(req.principal);
   if (tenant) await assertFirmClerkBudget(tenant);
   const gateway = await getClerkGateway();
-  const result = await createBatchCases(parsed.data, req.principal.userId, gateway, {
+  const result = await createBatchCases(parsed, req.principal.userId, gateway, {
     firmId: tenant,
   });
   res.status(201).json(CreateClerkCaseBatchResponse.parse(result));
@@ -159,52 +144,32 @@ router.post("/clerk/cases/batch", async (req, res): Promise<void> => {
 
 router.post("/clerk/cases/:id/decision", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
-  const params = DecideClerkCaseParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = DecideClerkCaseBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const row = await decideCase(params.data.id, parsed.data, req.principal.userId);
+  const params = parseOrThrow(DecideClerkCaseParams, req.params);
+  const parsed = parseOrThrow(DecideClerkCaseBody, req.body);
+  const row = await decideCase(params.id, parsed, req.principal.userId);
   res.json(DecideClerkCaseResponse.parse(row));
 });
 
 router.post("/clerk/cases/:id/claim", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
-  const params = ClaimClerkCaseParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const row = await claimCase(params.data.id, req.principal.userId);
+  const params = parseOrThrow(ClaimClerkCaseParams, req.params);
+  const row = await claimCase(params.id, req.principal.userId);
   res.json(ClaimClerkCaseResponse.parse(row));
 });
 
 router.post("/clerk/cases/:id/release", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
-  const params = ReleaseClerkCaseParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const row = await releaseCase(params.data.id, req.principal.userId);
+  const params = parseOrThrow(ReleaseClerkCaseParams, req.params);
+  const row = await releaseCase(params.id, req.principal.userId);
   res.json(ReleaseClerkCaseResponse.parse(row));
 });
 
 router.post("/clerk/cases/:id/retry", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
-  const params = RetryClerkCaseParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  const params = parseOrThrow(RetryClerkCaseParams, req.params);
   const gateway = await getClerkGateway();
   const row = await retryExtraction(
-    params.data.id,
+    params.id,
     req.principal.userId,
     gateway,
   );
@@ -215,12 +180,8 @@ router.get(
   "/clerk/cases/:id/party-suggestions",
   async (req, res): Promise<void> => {
     assertCan(req.principal, "clerk.use");
-    const params = GetClerkPartySuggestionsParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
-    const suggestions = await suggestPartiesForCase(params.data.id);
+    const params = parseOrThrow(GetClerkPartySuggestionsParams, req.params);
+    const suggestions = await suggestPartiesForCase(params.id);
     res.json(GetClerkPartySuggestionsResponse.parse(suggestions));
   },
 );
@@ -250,15 +211,11 @@ router.get("/clerk/metrics", async (req, res): Promise<void> => {
 
 router.post("/clerk/ask", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.ask");
-  const parsed = AskClerkBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(AskClerkBody, req.body);
   const tenant = tenantFirmId(req.principal);
   if (tenant) await assertFirmClerkBudget(tenant);
   const gateway = await getClerkGateway();
-  const row = await askClerk(parsed.data.question, req.principal.userId, gateway, {
+  const row = await askClerk(parsed.question, req.principal.userId, gateway, {
     firmId: tenant,
   });
   res.json(AskClerkResponse.parse(row));
@@ -270,14 +227,10 @@ router.post("/clerk/ask", async (req, res): Promise<void> => {
 // never errors for AI-availability reasons.
 router.post("/clerk/explain-failure", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.ask");
-  const parsed = ExplainInvoiceFailureBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(ExplainInvoiceFailureBody, req.body);
   const gateway = await getClerkGateway();
   const explanation = await explainInvoiceFailure(
-    parsed.data.invoiceId,
+    parsed.invoiceId,
     req.principal,
     gateway,
   );
@@ -308,14 +261,10 @@ router.get("/clerk/digest", async (req, res): Promise<void> => {
 // caller is the maker and can never approve the version it drafted.
 router.post("/clerk/claims/draft", async (req, res): Promise<void> => {
   assertCan(req.principal, "claims.write");
-  const parsed = DraftClaimWithClerkBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(DraftClaimWithClerkBody, req.body);
   const gateway = await getClerkGateway();
   const row = await draftClaimWithClerk(
-    parsed.data.sourceText,
+    parsed.sourceText,
     req.principal.userId,
     gateway,
   );

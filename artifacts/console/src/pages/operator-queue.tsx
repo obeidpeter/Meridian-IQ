@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QueryError } from "@/components/query-error";
+import { PORTAL_URL } from "@/components/require-session";
 import { StatTile } from "@/components/stat-tile";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -254,8 +255,12 @@ export function OperatorQueue() {
                 <p className="text-sm text-muted-foreground mt-1">
                   This queue is for operator accounts. Sign in as an operator
                   from the portal at{" "}
-                  <a href="/" className="underline" data-testid="link-portal">
-                    /
+                  <a
+                    href={PORTAL_URL}
+                    className="underline"
+                    data-testid="link-portal"
+                  >
+                    {PORTAL_URL}
                   </a>
                   .
                 </p>

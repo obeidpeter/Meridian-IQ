@@ -28,7 +28,7 @@ import type { EvalFixture } from "./eval-fixtures";
 //      clerk_auto_eval feature flag (off/missing = fail closed) and runs at
 //      most once per UTC day, attributed as startedBy = null.
 
-export const AUTO_EVAL_FLAG_KEY = "clerk_auto_eval";
+const AUTO_EVAL_FLAG_KEY = "clerk_auto_eval";
 const GROWTH_BATCH = 20;
 // Advisory lock so concurrent instances can't grow/run twice in one pass.
 const EVAL_GROWTH_LOCK_ID = 731_842;

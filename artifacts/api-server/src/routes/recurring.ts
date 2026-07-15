@@ -7,11 +7,13 @@ import {
   UpdateRecurringInvoiceBody,
   UpdateRecurringInvoiceResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertClientPartyScope,
   assertSameTenant,
   clientPartyScope,
+  requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import {
@@ -37,21 +39,13 @@ router.get("/recurring-invoices", async (req, res): Promise<void> => {
 
 router.post("/recurring-invoices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
-  const firmId = tenantFirmId(req.principal);
-  if (!firmId) {
-    res.status(403).json({ error: "A firm-scoped principal is required" });
-    return;
-  }
-  const parsed = CreateRecurringInvoiceBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const firmId = requireFirmScope(req.principal);
+  const parsed = parseOrThrow(CreateRecurringInvoiceBody, req.body);
   // SEC-03: a client_user may only set up recurring drafts for its own party.
-  assertClientPartyScope(req.principal, parsed.data.supplierPartyId);
+  assertClientPartyScope(req.principal, parsed.supplierPartyId);
   const template = await createTemplate(
     firmId,
-    parsed.data,
+    parsed,
     req.principal.userId,
   );
   res.status(201).json(CreateRecurringInvoiceResponse.parse(template));
@@ -59,17 +53,9 @@ router.post("/recurring-invoices", async (req, res): Promise<void> => {
 
 router.patch("/recurring-invoices/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
-  const params = UpdateRecurringInvoiceParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const body = UpdateRecurringInvoiceBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
-  const template = await getTemplate(params.data.id);
+  const params = parseOrThrow(UpdateRecurringInvoiceParams, req.params);
+  const body = parseOrThrow(UpdateRecurringInvoiceBody, req.body);
+  const template = await getTemplate(params.id);
   if (!template) {
     res.status(404).json({ error: "Template not found" });
     return;
@@ -77,8 +63,8 @@ router.patch("/recurring-invoices/:id", async (req, res): Promise<void> => {
   assertSameTenant(req.principal, template.firmId);
   assertClientPartyScope(req.principal, template.supplierPartyId);
   const updated = await setTemplateActive(
-    params.data.id,
-    body.data.active,
+    params.id,
+    body.active,
     req.principal.userId,
   );
   res.json(UpdateRecurringInvoiceResponse.parse(updated));

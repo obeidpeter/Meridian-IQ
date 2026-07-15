@@ -27,6 +27,24 @@ export function validateCac(raw: string): { valid: boolean; normalized: string }
   return { valid, normalized };
 }
 
+// Shared validate-normalize-or-throw used by both write paths (createParty
+// and updateParty), so the two cannot drift on error codes or messages.
+function normalizeTinOrThrow(raw: string): string {
+  const check = validateTin(raw);
+  if (!check.valid) {
+    throw new DomainError("INVALID_TIN", "TIN failed validation", 400);
+  }
+  return check.normalized;
+}
+
+function normalizeCacOrThrow(raw: string): string {
+  const check = validateCac(raw);
+  if (!check.valid) {
+    throw new DomainError("INVALID_CAC", "CAC number failed validation", 400);
+  }
+  return check.normalized;
+}
+
 export interface CreatePartyInput {
   type: PartyType;
   legalName: string;
@@ -48,20 +66,12 @@ export async function createParty(
   let tin = input.tin ?? null;
   let tinValidated = false;
   if (tin) {
-    const check = validateTin(tin);
-    if (!check.valid) {
-      throw new DomainError("INVALID_TIN", "TIN failed validation", 400);
-    }
-    tin = check.normalized;
+    tin = normalizeTinOrThrow(tin);
     tinValidated = true;
   }
   let cac = input.cacNumber ?? null;
   if (cac) {
-    const check = validateCac(cac);
-    if (!check.valid) {
-      throw new DomainError("INVALID_CAC", "CAC number failed validation", 400);
-    }
-    cac = check.normalized;
+    cac = normalizeCacOrThrow(cac);
   }
   const [row] = await getDb()
     .insert(partiesTable)
@@ -121,11 +131,7 @@ export async function updateParty(
       values.tin = null;
       values.tinValidated = false;
     } else {
-      const check = validateTin(patch.tin);
-      if (!check.valid) {
-        throw new DomainError("INVALID_TIN", "TIN failed validation", 400);
-      }
-      values.tin = check.normalized;
+      values.tin = normalizeTinOrThrow(patch.tin);
       values.tinValidated = true;
     }
   }
@@ -133,11 +139,7 @@ export async function updateParty(
     if (patch.cacNumber === null || patch.cacNumber.trim() === "") {
       values.cacNumber = null;
     } else {
-      const check = validateCac(patch.cacNumber);
-      if (!check.valid) {
-        throw new DomainError("INVALID_CAC", "CAC number failed validation", 400);
-      }
-      values.cacNumber = check.normalized;
+      values.cacNumber = normalizeCacOrThrow(patch.cacNumber);
     }
   }
   if (patch.street !== undefined) values.street = patch.street;

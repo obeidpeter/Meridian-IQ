@@ -7,6 +7,7 @@ import {
   RegisterPushDeviceResponse,
   UnregisterPushDeviceBody,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { assertCan } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
 import { isUuid } from "../lib/uuid";
@@ -46,11 +47,7 @@ router.get("/sme/push/devices", async (req, res): Promise<void> => {
 
 router.post("/sme/push/devices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const parsed = RegisterPushDeviceBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(RegisterPushDeviceBody, req.body);
   if (!isUuid(req.principal.userId)) {
     res.status(400).json({
       error: "Push registration requires a real user session",
@@ -63,8 +60,8 @@ router.post("/sme/push/devices", async (req, res): Promise<void> => {
       userId: req.principal.userId,
       firmId: req.principal.firmId,
       clientPartyId: req.principal.clientPartyId,
-      expoPushToken: parsed.data.expoPushToken,
-      platform: parsed.data.platform,
+      expoPushToken: parsed.expoPushToken,
+      platform: parsed.platform,
     })
     .onConflictDoUpdate({
       target: pushDevicesTable.expoPushToken,
@@ -72,7 +69,7 @@ router.post("/sme/push/devices", async (req, res): Promise<void> => {
         userId: req.principal.userId,
         firmId: req.principal.firmId,
         clientPartyId: req.principal.clientPartyId,
-        platform: parsed.data.platform,
+        platform: parsed.platform,
         updatedAt: new Date(),
       },
     })
@@ -83,7 +80,7 @@ router.post("/sme/push/devices", async (req, res): Promise<void> => {
     action: "push.device.register",
     entityType: "push_device",
     entityId: row.id,
-    after: { platform: parsed.data.platform },
+    after: { platform: parsed.platform },
   });
   res.json(RegisterPushDeviceResponse.parse(row));
 });
@@ -92,11 +89,7 @@ router.post("/sme/push/devices", async (req, res): Promise<void> => {
 // user can remove a token; unknown tokens still return 204.
 router.post("/sme/push/devices/unregister", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const parsed = UnregisterPushDeviceBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(UnregisterPushDeviceBody, req.body);
   if (!isUuid(req.principal.userId)) {
     res.sendStatus(204);
     return;
@@ -105,7 +98,7 @@ router.post("/sme/push/devices/unregister", async (req, res): Promise<void> => {
     .delete(pushDevicesTable)
     .where(
       and(
-        eq(pushDevicesTable.expoPushToken, parsed.data.expoPushToken),
+        eq(pushDevicesTable.expoPushToken, parsed.expoPushToken),
         eq(pushDevicesTable.userId, req.principal.userId),
       ),
     )

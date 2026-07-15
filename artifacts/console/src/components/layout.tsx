@@ -37,6 +37,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { roleLabel } from "@/components/capability-gate";
+import { PORTAL_URL } from "@/components/require-session";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
 
 // Every console page maps to the RBAC capability its API surface requires
@@ -267,7 +268,7 @@ export function Layout({ children }: { children: ReactNode }) {
     }
     // Full navigation to the portal so every app re-resolves the (now absent)
     // session instead of trusting cached queries.
-    window.location.href = "/login";
+    window.location.href = PORTAL_URL;
   };
 
   const capabilities = new Set(me?.capabilities ?? []);
@@ -367,7 +368,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         )}
         <a
-          href="/login"
+          href={PORTAL_URL}
           className="flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/65 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#071a1c]"
           data-testid="link-all-apps"
         >

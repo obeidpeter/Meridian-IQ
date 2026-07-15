@@ -24,6 +24,58 @@ function parseCount(raw: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * One selectable radio row inside a padded=false Card: label + description on
+ * the left, a check-circle/circle glyph on the right. Shared by both option
+ * lists so their row anatomy and a11y wiring can't drift apart.
+ */
+function OptionRow({
+  label,
+  description,
+  selected,
+  onPress,
+  accessibilityLabel,
+}: {
+  label: string;
+  /** Secondary line under the label; also announced as the a11y hint. */
+  description: string;
+  selected: boolean;
+  onPress: () => void;
+  /** Screen-reader name when it should differ from the visible label. */
+  accessibilityLabel?: string;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityHint={description}
+      style={({ pressed }) => [
+        styles.optionRow,
+        { opacity: pressed ? 0.7 : 1 },
+      ]}
+    >
+      <View style={{ flex: 1, paddingRight: 12 }}>
+        <AppText variant="label">{label}</AppText>
+        <AppText
+          variant="caption"
+          color={colors.mutedForeground}
+          style={{ marginTop: 2 }}
+        >
+          {description}
+        </AppText>
+      </View>
+      <Feather
+        name={selected ? "check-circle" : "circle"}
+        size={22}
+        color={selected ? colors.primary : colors.mutedForeground}
+      />
+    </Pressable>
+  );
+}
+
 export default function EstimatorScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -72,41 +124,17 @@ export default function EstimatorScreen() {
         WHAT HAPPENED?
       </AppText>
       <Card padded={false}>
-        {FILING_TYPE_OPTIONS.map((option, index) => {
-          const selected = option.value === filingType;
-          return (
-            <View key={option.value}>
-              {index > 0 ? <Divider /> : null}
-              <Pressable
-                onPress={() => setFilingType(option.value)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                accessibilityLabel={option.label}
-                accessibilityHint={option.description}
-                style={({ pressed }) => [
-                  styles.optionRow,
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
-              >
-                <View style={{ flex: 1, paddingRight: 12 }}>
-                  <AppText variant="label">{option.label}</AppText>
-                  <AppText
-                    variant="caption"
-                    color={colors.mutedForeground}
-                    style={{ marginTop: 2 }}
-                  >
-                    {option.description}
-                  </AppText>
-                </View>
-                <Feather
-                  name={selected ? "check-circle" : "circle"}
-                  size={22}
-                  color={selected ? colors.primary : colors.mutedForeground}
-                />
-              </Pressable>
-            </View>
-          );
-        })}
+        {FILING_TYPE_OPTIONS.map((option, index) => (
+          <View key={option.value}>
+            {index > 0 ? <Divider /> : null}
+            <OptionRow
+              label={option.label}
+              description={option.description}
+              selected={option.value === filingType}
+              onPress={() => setFilingType(option.value)}
+            />
+          </View>
+        ))}
       </Card>
 
       {showInvoice ? (
@@ -115,46 +143,22 @@ export default function EstimatorScreen() {
             Turnover band
           </AppText>
           <Card padded={false}>
-            {TURNOVER_BAND_OPTIONS.map((option, index) => {
-              const selected = option.band === band;
-              return (
-                <View key={option.band}>
-                  {index > 0 ? <Divider /> : null}
-                  <Pressable
-                    onPress={() => setBand(option.band)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={`${option.label} — ${formatNaira(
-                      S104_PER_INVOICE[option.band],
-                    )} per invoice`}
-                    accessibilityHint={option.threshold}
-                    style={({ pressed }) => [
-                      styles.optionRow,
-                      { opacity: pressed ? 0.7 : 1 },
-                    ]}
-                  >
-                    <View style={{ flex: 1, paddingRight: 12 }}>
-                      <AppText variant="label">
-                        {option.label} — {formatNaira(S104_PER_INVOICE[option.band])}
-                        /invoice
-                      </AppText>
-                      <AppText
-                        variant="caption"
-                        color={colors.mutedForeground}
-                        style={{ marginTop: 2 }}
-                      >
-                        {option.threshold}
-                      </AppText>
-                    </View>
-                    <Feather
-                      name={selected ? "check-circle" : "circle"}
-                      size={22}
-                      color={selected ? colors.primary : colors.mutedForeground}
-                    />
-                  </Pressable>
-                </View>
-              );
-            })}
+            {TURNOVER_BAND_OPTIONS.map((option, index) => (
+              <View key={option.band}>
+                {index > 0 ? <Divider /> : null}
+                <OptionRow
+                  label={`${option.label} — ${formatNaira(
+                    S104_PER_INVOICE[option.band],
+                  )}/invoice`}
+                  accessibilityLabel={`${option.label} — ${formatNaira(
+                    S104_PER_INVOICE[option.band],
+                  )} per invoice`}
+                  description={option.threshold}
+                  selected={option.band === band}
+                  onPress={() => setBand(option.band)}
+                />
+              </View>
+            ))}
           </Card>
         </>
       ) : null}

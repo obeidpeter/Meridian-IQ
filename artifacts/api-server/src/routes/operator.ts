@@ -18,6 +18,7 @@ import {
   ListRailStatesResponse,
   GetGateMetricsResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { assertCan } from "../modules/auth/rbac";
 import {
   listDeadLetters,
@@ -36,12 +37,8 @@ router.post(
   "/operator/dead-letters/:id/replay",
   async (req, res): Promise<void> => {
     assertCan(req.principal, "operator.queue.act");
-    const params = ReplayDeadLetterParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
-    await replayDead(params.data.id);
+    const params = parseOrThrow(ReplayDeadLetterParams, req.params);
+    await replayDead(params.id);
     res.sendStatus(204);
   },
 );

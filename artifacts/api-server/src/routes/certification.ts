@@ -10,7 +10,8 @@ import {
   CompleteCpdCourseResponse,
   ListCpdEnrollmentsResponse,
 } from "@workspace/api-zod";
-import { assertCan, tenantFirmId } from "../modules/auth/rbac";
+import { parseOrThrow } from "../lib/parse";
+import { assertCan, requireFirmScope, tenantFirmId } from "../modules/auth/rbac";
 import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
@@ -37,21 +38,13 @@ router.post(
   requireFlag("white_label"),
   async (req, res): Promise<void> => {
     assertCan(req.principal, "certification.write");
-    const firmId = tenantFirmId(req.principal);
-    if (!firmId) {
-      res.status(403).json({ error: "A firm-scoped principal is required" });
-      return;
-    }
-    const params = EnrollCpdCourseParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
+    const firmId = requireFirmScope(req.principal);
+    const params = parseOrThrow(EnrollCpdCourseParams, req.params);
     const [course] = await getDb()
       .select()
       .from(cpdCoursesTable)
       .where(
-        and(eq(cpdCoursesTable.id, params.data.id), eq(cpdCoursesTable.active, true)),
+        and(eq(cpdCoursesTable.id, params.id), eq(cpdCoursesTable.active, true)),
       )
       .limit(1);
     if (!course) {
@@ -101,22 +94,14 @@ router.post(
   requireFlag("white_label"),
   async (req, res): Promise<void> => {
     assertCan(req.principal, "certification.write");
-    const firmId = tenantFirmId(req.principal);
-    if (!firmId) {
-      res.status(403).json({ error: "A firm-scoped principal is required" });
-      return;
-    }
-    const params = CompleteCpdCourseParams.safeParse(req.params);
-    if (!params.success) {
-      res.status(400).json({ error: params.error.message });
-      return;
-    }
+    const firmId = requireFirmScope(req.principal);
+    const params = parseOrThrow(CompleteCpdCourseParams, req.params);
     const [enrollment] = await getDb()
       .select()
       .from(cpdEnrollmentsTable)
       .where(
         and(
-          eq(cpdEnrollmentsTable.courseId, params.data.id),
+          eq(cpdEnrollmentsTable.courseId, params.id),
           eq(cpdEnrollmentsTable.firmId, firmId),
           eq(cpdEnrollmentsTable.userId, req.principal.userId),
         ),

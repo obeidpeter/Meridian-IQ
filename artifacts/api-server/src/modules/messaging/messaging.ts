@@ -80,18 +80,9 @@ function simulateProviderSend(channel: MessageChannel): {
   ok: boolean;
   providerMessageId?: string;
 } {
-  // Simulated provider: email always succeeds; whatsapp/sms occasionally do not
-  // (used to exercise failover in tests via the flag below).
-  if (forcedFailChannels.has(channel)) return { ok: false };
+  // Simulated provider: every send succeeds. A real provider integration
+  // would report failures here, which the failover loop below handles.
   return { ok: true, providerMessageId: `prov_${channel}_${Date.now()}` };
-}
-
-const forcedFailChannels = new Set<MessageChannel>();
-export function forceChannelFailure(channel: MessageChannel): void {
-  forcedFailChannels.add(channel);
-}
-export function resetMessaging(): void {
-  forcedFailChannels.clear();
 }
 
 export async function sendMessage(input: SendInput): Promise<Message> {

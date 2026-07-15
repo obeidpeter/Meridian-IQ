@@ -44,6 +44,29 @@ type HandlerOutcome =
   | { kind: "retry"; error: string }
   | { kind: "dead"; error: string };
 
+// Shared mark-failed transition for handleInvoiceSubmit's two terminal paths
+// (business rejection and non-retriable transport error): flip the invoice to
+// `failed` and record the lifecycle transition. The transition reason and any
+// per-branch audit stay with the caller.
+async function markInvoiceFailed(
+  invoiceId: string,
+  invoice: { firmId: string; status: (typeof invoicesTable.$inferSelect)["status"] },
+  reason: string,
+): Promise<void> {
+  await getDb()
+    .update(invoicesTable)
+    .set({ status: "failed" })
+    .where(eq(invoicesTable.id, invoiceId));
+  await recordTransition({
+    invoiceId,
+    firmId: invoice.firmId,
+    fromStatus: invoice.status,
+    toStatus: "failed",
+    actorRole: "system",
+    reason,
+  });
+}
+
 async function handleInvoiceSubmit(
   event: OutboxEvent,
 ): Promise<HandlerOutcome> {
@@ -126,18 +149,7 @@ async function handleInvoiceSubmit(
 
   if (result.status === "rejected") {
     // Terminal business rejection: mark failed, do not retry.
-    await getDb()
-      .update(invoicesTable)
-      .set({ status: "failed" })
-      .where(eq(invoicesTable.id, invoiceId));
-    await recordTransition({
-      invoiceId,
-      firmId: invoice.firmId,
-      fromStatus: invoice.status,
-      toStatus: "failed",
-      actorRole: "system",
-      reason: result.errorCode ?? "rejected",
-    });
+    await markInvoiceFailed(invoiceId, invoice, result.errorCode ?? "rejected");
     await appendAudit({
       firmId: invoice.firmId,
       action: "invoice.rejected",
@@ -153,18 +165,7 @@ async function handleInvoiceSubmit(
     return { kind: "retry", error: result.errorCode ?? "RAIL_ERROR" };
   }
   // Non-retriable transport error: fail terminally.
-  await getDb()
-    .update(invoicesTable)
-    .set({ status: "failed" })
-    .where(eq(invoicesTable.id, invoiceId));
-  await recordTransition({
-    invoiceId,
-    firmId: invoice.firmId,
-    fromStatus: invoice.status,
-    toStatus: "failed",
-    actorRole: "system",
-    reason: result.errorCode ?? "error",
-  });
+  await markInvoiceFailed(invoiceId, invoice, result.errorCode ?? "error");
   return { kind: "dead", error: result.errorCode ?? "UNKNOWN" };
 }
 
@@ -583,6 +584,51 @@ let draining = false;
 let reconciling = false;
 let sweeping = false;
 
+// The guarded pass bodies shared by the interval loops (startWorker) and the
+// external wake-up trigger (runScheduledWorkOnce). Each skips — never overlaps
+// — when its prior run is still in flight, isolates its own errors (logged,
+// not silently swallowed), and reports whether it actually ran.
+
+async function guardedSweepPass(): Promise<boolean> {
+  if (sweeping) return false;
+  sweeping = true;
+  try {
+    await runSweepPass();
+    return true;
+  } finally {
+    sweeping = false;
+  }
+}
+
+async function guardedDrainPass(): Promise<{ ran: boolean; drained: number }> {
+  if (draining) return { ran: false, drained: 0 };
+  draining = true;
+  try {
+    const drained = await drain();
+    return { ran: true, drained };
+  } catch (err) {
+    logger.error({ err }, "outbox drain failed");
+    return { ran: false, drained: 0 };
+  } finally {
+    draining = false;
+  }
+}
+
+async function guardedReconcilePass(): Promise<boolean> {
+  if (reconciling) return false;
+  reconciling = true;
+  try {
+    await reconcile();
+    await reconcileDuplicateStamps();
+    return true;
+  } catch (err) {
+    logger.error({ err }, "pipeline reconcile sweep failed");
+    return false;
+  } finally {
+    reconciling = false;
+  }
+}
+
 // One full pass of everything the in-process timers would run: outbox drain,
 // reconciliation sweeps, and the registered R2 compliance sweeps (pre-breach
 // alerts). Used by the public wake-up endpoint so an Autoscale deployment —
@@ -596,45 +642,13 @@ export async function runScheduledWorkOnce(): Promise<{
   ran: { drain: boolean; reconcile: boolean; sweeps: boolean };
   drained: number;
 }> {
-  const ran = { drain: false, reconcile: false, sweeps: false };
-  let drained = 0;
-
-  if (!sweeping) {
-    sweeping = true;
-    try {
-      await runSweepPass();
-      ran.sweeps = true;
-    } finally {
-      sweeping = false;
-    }
-  }
-
-  if (!draining) {
-    draining = true;
-    try {
-      drained = await drain();
-      ran.drain = true;
-    } catch (err) {
-      logger.error({ err }, "outbox drain failed");
-    } finally {
-      draining = false;
-    }
-  }
-
-  if (!reconciling) {
-    reconciling = true;
-    try {
-      await reconcile();
-      await reconcileDuplicateStamps();
-      ran.reconcile = true;
-    } catch (err) {
-      logger.error({ err }, "pipeline reconcile sweep failed");
-    } finally {
-      reconciling = false;
-    }
-  }
-
-  return { ran, drained };
+  const sweeps = await guardedSweepPass();
+  const { ran: drainRan, drained } = await guardedDrainPass();
+  const reconcileRan = await guardedReconcilePass();
+  return {
+    ran: { drain: drainRan, reconcile: reconcileRan, sweeps },
+    drained,
+  };
 }
 
 // Run sweeps sequentially so one guard covers the whole pass and they don't
@@ -668,44 +682,23 @@ export function startWorker(intervalMs = 1_500): void {
   // each interval fires on a fixed clock regardless of whether the previous
   // run finished. Without a guard, a run that exceeds its period overlaps the
   // next tick and double-processes (which drives the sweep/reconcile
-  // duplication races). Skip a tick while its prior run is still in flight,
-  // and log — rather than silently swallow — errors so a persistently failing
-  // loop is visible.
+  // duplication races). The guarded*Pass helpers skip a tick while its prior
+  // run is still in flight, and log — rather than silently swallow — errors so
+  // a persistently failing loop is visible.
 
   timer = setInterval(() => {
-    if (draining) return;
-    draining = true;
-    void drain()
-      .catch((err) => logger.error({ err }, "outbox drain failed"))
-      .finally(() => {
-        draining = false;
-      });
+    void guardedDrainPass();
   }, intervalMs);
   // Do not keep the event loop alive solely for the worker.
   timer.unref?.();
 
   reconcileTimer = setInterval(() => {
-    if (reconciling) return;
-    reconciling = true;
-    void (async () => {
-      try {
-        await reconcile();
-        await reconcileDuplicateStamps();
-      } catch (err) {
-        logger.error({ err }, "pipeline reconcile sweep failed");
-      } finally {
-        reconciling = false;
-      }
-    })();
+    void guardedReconcilePass();
   }, RECONCILE_INTERVAL_MS);
   reconcileTimer.unref?.();
 
   sweepTimer = setInterval(() => {
-    if (sweeping) return;
-    sweeping = true;
-    void runSweepPass().finally(() => {
-      sweeping = false;
-    });
+    void guardedSweepPass();
   }, SWEEP_INTERVAL_MS);
   sweepTimer.unref?.();
 }

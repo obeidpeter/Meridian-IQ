@@ -18,11 +18,11 @@ import {
 } from "./test-support.ts";
 import {
   claimCase,
-  computeCorrections,
   createExtractionCase,
   decideCase,
   releaseCase,
 } from "./cases.ts";
+import { computeCorrections } from "./corrections.ts";
 import { runClerkWatchdog } from "./watchdog.ts";
 
 // Clerk operations package: correction exhaust, case claiming, and the

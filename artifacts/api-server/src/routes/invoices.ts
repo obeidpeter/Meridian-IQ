@@ -54,6 +54,7 @@ import {
   GetInvoiceStatusLightParams,
   GetInvoiceStatusLightResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { computeStatusLight } from "../modules/clerk/status-light";
 import {
   assertCan,
@@ -62,11 +63,12 @@ import {
   assertBuyerPartyAccess,
   assertPartyAccess,
   clientPartyScope,
+  requireFirmScope,
   tenantFirmId,
   type Principal,
 } from "../modules/auth/rbac";
 import { bulkSubmit } from "../modules/invoice/bulk-submit";
-import { toCsv } from "../lib/csv";
+import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { likePattern } from "../lib/sql";
 import {
   createDraft,
@@ -89,7 +91,9 @@ import { requireFlag } from "../modules/flags/flags";
 
 const router: IRouter = Router();
 
-async function loadForTenant(req: { principal: import("../modules/auth/rbac").Principal }, id: string) {
+// The SEC-03 invoice tenancy loader, shared with the SME escalation routes
+// (routes/sme.ts): one definition of "this principal may reach this invoice".
+export async function loadForTenant(req: { principal: import("../modules/auth/rbac").Principal }, id: string) {
   const bundle = await getInvoiceWithLines(id);
   if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
   assertSameTenant(req.principal, bundle.invoice.firmId);
@@ -159,18 +163,10 @@ router.get("/invoices", async (req, res): Promise<void> => {
 
 router.post("/invoices", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
-  const firmId = tenantFirmId(req.principal);
-  if (!firmId) {
-    res.status(403).json({ error: "A firm-scoped principal is required" });
-    return;
-  }
-  const parsed = CreateInvoiceBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const firmId = requireFirmScope(req.principal);
+  const parsed = parseOrThrow(CreateInvoiceBody, req.body);
   const bundle = await createDraft(
-    { firmId, ...parsed.data },
+    { firmId, ...parsed },
     req.principal.userId,
   );
   res.status(201).json(CreateInvoiceResponse.parse(bundle));
@@ -238,12 +234,11 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
       r.createdAt.toISOString(),
     ]),
   );
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="invoices-${new Date().toISOString().slice(0, 10)}.csv"`,
+  sendCsvAttachment(
+    res,
+    `invoices-${new Date().toISOString().slice(0, 10)}.csv`,
+    csv,
   );
-  res.send(csv);
 });
 
 // Bulk validate & submit: same capability, party-access and consent gates as
@@ -252,29 +247,21 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
 // to know every draft id.
 router.post("/invoices/bulk-submit", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.submit");
-  const body = BulkSubmitInvoicesBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
-  await assertPartyAccess(req.principal, body.data.clientPartyId);
+  const body = parseOrThrow(BulkSubmitInvoicesBody, req.body);
+  await assertPartyAccess(req.principal, body.clientPartyId);
   const result = await bulkSubmit(
-    body.data.clientPartyId,
+    body.clientPartyId,
     tenantFirmId(req.principal),
     req.principal.userId,
-    body.data.limit,
+    body.limit,
   );
   res.json(BulkSubmitInvoicesResponse.parse(result));
 });
 
 router.get("/invoices/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const params = GetInvoiceParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const bundle = await loadForTenant(req, params.data.id);
+  const params = parseOrThrow(GetInvoiceParams, req.params);
+  const bundle = await loadForTenant(req, params.id);
   res.json(GetInvoiceResponse.parse(bundle));
 });
 
@@ -284,20 +271,12 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
 // validated invoice reverts to draft so stale validation cannot be submitted.
 router.patch("/invoices/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
-  const params = UpdateInvoiceParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const body = UpdateInvoiceBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
-  await loadForTenant(req, params.data.id);
+  const params = parseOrThrow(UpdateInvoiceParams, req.params);
+  const body = parseOrThrow(UpdateInvoiceBody, req.body);
+  await loadForTenant(req, params.id);
   const bundle = await updateInvoiceContent(
-    params.data.id,
-    body.data,
+    params.id,
+    body,
     req.principal.userId,
   );
   res.json(UpdateInvoiceResponse.parse(bundle));
@@ -305,43 +284,27 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
 
 router.post("/invoices/:id/validate", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
-  const params = ValidateInvoiceParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadForTenant(req, params.data.id);
-  const result = await validateInvoice(params.data.id, req.principal.userId);
+  const params = parseOrThrow(ValidateInvoiceParams, req.params);
+  await loadForTenant(req, params.id);
+  const result = await validateInvoice(params.id, req.principal.userId);
   res.json(ValidateInvoiceResponse.parse(result));
 });
 
 router.post("/invoices/:id/submit", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.submit");
-  const params = SubmitInvoiceParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadForTenant(req, params.data.id);
-  const invoice = await submitInvoice(params.data.id, req.principal.userId);
+  const params = parseOrThrow(SubmitInvoiceParams, req.params);
+  await loadForTenant(req, params.id);
+  const invoice = await submitInvoice(params.id, req.principal.userId);
   res.status(202).json(SubmitInvoiceResponse.parse(invoice));
 });
 
 router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
-  const params = CancelInvoiceParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  const params = parseOrThrow(CancelInvoiceParams, req.params);
   // CORE-09: cancellation is a first-class lifecycle event and always carries a
   // stated reason.
-  const body = CancelInvoiceBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
-  const { invoice } = await loadForTenant(req, params.data.id);
+  const body = parseOrThrow(CancelInvoiceBody, req.body);
+  const { invoice } = await loadForTenant(req, params.id);
   // Compare-and-set: a concurrent transition (e.g. the worker crediting this
   // invoice) rejects the cancel instead of being overwritten.
   const row = await applyTransition(invoice.id, invoice.status, "cancelled");
@@ -352,7 +315,7 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
     toStatus: "cancelled",
     actorId: req.principal.userId,
     actorRole: req.principal.role,
-    reason: body.data.reason,
+    reason: body.reason,
   });
   await appendAudit({
     actorId: req.principal.userId,
@@ -361,7 +324,7 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
     entityType: "invoice",
     entityId: invoice.id,
     before: { status: invoice.status },
-    after: { status: "cancelled", reason: body.data.reason },
+    after: { status: "cancelled", reason: body.reason },
   });
   // A post-stamp cancellation propagates: reconciliation proposals close and the
   // verification cache is staled so the invoice can never present as eligible.
@@ -383,17 +346,9 @@ router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
 // pipeline credits the original atomically when the credit note stamps.
 router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.submit");
-  const params = CreditNoteInvoiceParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const body = CreditNoteInvoiceBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
-  const { invoice: original, lines } = await loadForTenant(req, params.data.id);
+  const params = parseOrThrow(CreditNoteInvoiceParams, req.params);
+  const body = parseOrThrow(CreditNoteInvoiceBody, req.body);
+  const { invoice: original, lines } = await loadForTenant(req, params.id);
   if (!canTransition(original.status, "credited")) {
     throw new DomainError(
       "NOT_CREDITABLE",
@@ -407,13 +362,13 @@ router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
       supplierPartyId: original.supplierPartyId,
       buyerPartyId: original.buyerPartyId,
       invoiceNumber:
-        body.data.creditNoteNumber ?? `CN-${original.invoiceNumber}`,
+        body.creditNoteNumber ?? `CN-${original.invoiceNumber}`,
       currency: original.currency,
       issueDate: new Date().toISOString().slice(0, 10),
       kind: "credit_note",
       category: original.category,
       relatedInvoiceId: original.id,
-      notes: body.data.reason,
+      notes: body.reason,
       lines: lines.map((l) => ({
         description: l.description,
         quantity: l.quantity,
@@ -444,7 +399,7 @@ router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
     after: {
       creditNoteId: bundle.invoice.id,
       creditNoteNumber: bundle.invoice.invoiceNumber,
-      reason: body.data.reason,
+      reason: body.reason,
     },
   });
   res.status(202).json(CreditNoteInvoiceResponse.parse(submitted));
@@ -452,40 +407,28 @@ router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
 
 router.get("/invoices/:id/ubl", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const params = GetInvoiceUblParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadForTenant(req, params.data.id);
-  const canonical = await buildCanonical(params.data.id);
+  const params = parseOrThrow(GetInvoiceUblParams, req.params);
+  await loadForTenant(req, params.id);
+  const canonical = await buildCanonical(params.id);
   res.json(GetInvoiceUblResponse.parse({ xml: serializeToUbl(canonical) }));
 });
 
 router.get("/invoices/:id/canonical", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const params = GetInvoiceCanonicalParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadForTenant(req, params.data.id);
-  const canonical = await buildCanonical(params.data.id);
+  const params = parseOrThrow(GetInvoiceCanonicalParams, req.params);
+  await loadForTenant(req, params.id);
+  const canonical = await buildCanonical(params.id);
   res.json(GetInvoiceCanonicalResponse.parse(canonical));
 });
 
 router.get("/invoices/:id/stamp", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const params = GetInvoiceStampParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadForTenant(req, params.data.id);
+  const params = parseOrThrow(GetInvoiceStampParams, req.params);
+  await loadForTenant(req, params.id);
   const [stamp] = await getDb()
     .select()
     .from(stampRecordsTable)
-    .where(eq(stampRecordsTable.invoiceId, params.data.id))
+    .where(eq(stampRecordsTable.invoiceId, params.id))
     .orderBy(asc(stampRecordsTable.createdAt))
     .limit(1);
   if (!stamp) {
@@ -497,16 +440,12 @@ router.get("/invoices/:id/stamp", async (req, res): Promise<void> => {
 
 router.get("/invoices/:id/attempts", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const params = ListSubmissionAttemptsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadForTenant(req, params.data.id);
+  const params = parseOrThrow(ListSubmissionAttemptsParams, req.params);
+  await loadForTenant(req, params.id);
   const rows = await getDb()
     .select()
     .from(submissionAttemptsTable)
-    .where(eq(submissionAttemptsTable.invoiceId, params.data.id))
+    .where(eq(submissionAttemptsTable.invoiceId, params.id))
     .orderBy(asc(submissionAttemptsTable.attemptNo));
   res.json(ListSubmissionAttemptsResponse.parse(rows));
 });
@@ -515,25 +454,21 @@ router.get("/invoices/:id/attempts", async (req, res): Promise<void> => {
 // involved — so it is safe for every invoice reader and needs no flag.
 router.get("/invoices/:id/status-light", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const params = GetInvoiceStatusLightParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const { invoice } = await loadForTenant(req, params.data.id);
+  const params = parseOrThrow(GetInvoiceStatusLightParams, req.params);
+  const { invoice } = await loadForTenant(req, params.id);
   const [attempts, confirmations, stamps] = await Promise.all([
     getDb()
       .select()
       .from(submissionAttemptsTable)
-      .where(eq(submissionAttemptsTable.invoiceId, params.data.id)),
+      .where(eq(submissionAttemptsTable.invoiceId, params.id)),
     getDb()
       .select()
       .from(confirmationsTable)
-      .where(eq(confirmationsTable.invoiceId, params.data.id)),
+      .where(eq(confirmationsTable.invoiceId, params.id)),
     getDb()
       .select()
       .from(stampRecordsTable)
-      .where(eq(stampRecordsTable.invoiceId, params.data.id))
+      .where(eq(stampRecordsTable.invoiceId, params.id))
       .orderBy(asc(stampRecordsTable.createdAt))
       .limit(1),
   ]);
@@ -549,16 +484,12 @@ router.get("/invoices/:id/status-light", async (req, res): Promise<void> => {
 // Buyer confirmations are a release-tagged (R1) feature: unreachable when dark.
 router.get("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), async (req, res): Promise<void> => {
   assertCan(req.principal, "confirmation.read");
-  const params = ListConfirmationsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadForTenant(req, params.data.id);
+  const params = parseOrThrow(ListConfirmationsParams, req.params);
+  await loadForTenant(req, params.id);
   const rows = await getDb()
     .select()
     .from(confirmationsTable)
-    .where(eq(confirmationsTable.invoiceId, params.data.id))
+    .where(eq(confirmationsTable.invoiceId, params.id))
     .orderBy(asc(confirmationsTable.createdAt));
   res.json(ListConfirmationsResponse.parse(rows));
 });
@@ -571,26 +502,18 @@ router.get("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), as
 //     (confirmation.respond), with confirming user and method captured.
 // Lineage is append-only rows; a response requires an open `requested` row.
 router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), async (req, res): Promise<void> => {
-  const params = CreateConfirmationParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = CreateConfirmationBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const isRequest = parsed.data.state === "requested";
+  const params = parseOrThrow(CreateConfirmationParams, req.params);
+  const parsed = parseOrThrow(CreateConfirmationBody, req.body);
+  const isRequest = parsed.state === "requested";
 
   let invoice;
   if (isRequest) {
     assertCan(req.principal, "confirmation.write");
-    ({ invoice } = await loadForTenant(req, params.data.id));
+    ({ invoice } = await loadForTenant(req, params.id));
   } else {
     // Buyer-side response: scoped by buyer Party, not by firm tenancy.
     assertCan(req.principal, "confirmation.respond");
-    const bundle = await getInvoiceWithLines(params.data.id);
+    const bundle = await getInvoiceWithLines(params.id);
     if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
     invoice = bundle.invoice;
     assertBuyerPartyAccess(req.principal, invoice.buyerPartyId);
@@ -599,7 +522,7 @@ router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), a
   // The confirmation always belongs to the invoice's own buyer; a mismatched
   // body buyerPartyId must never be trusted (it would bypass the TIN gate and
   // could reference a cross-tenant party).
-  if (parsed.data.buyerPartyId !== invoice.buyerPartyId) {
+  if (parsed.buyerPartyId !== invoice.buyerPartyId) {
     throw new DomainError(
       "BUYER_PARTY_MISMATCH",
       "Confirmation buyerPartyId must match the invoice buyer",
@@ -625,7 +548,7 @@ router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), a
   const [latest] = await getDb()
     .select()
     .from(confirmationsTable)
-    .where(eq(confirmationsTable.invoiceId, params.data.id))
+    .where(eq(confirmationsTable.invoiceId, params.id))
     .orderBy(desc(confirmationsTable.createdAt))
     .limit(1);
   if (isRequest) {
@@ -653,7 +576,7 @@ router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), a
         409,
       );
     }
-    if (!parsed.data.method) {
+    if (!parsed.method) {
       throw new DomainError(
         "METHOD_REQUIRED",
         "A confirmation response must state its method",
@@ -675,17 +598,17 @@ router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), a
   const [row] = await getDb()
     .insert(confirmationsTable)
     .values({
-      invoiceId: params.data.id,
+      invoiceId: params.id,
       buyerPartyId: invoice.buyerPartyId,
-      state: parsed.data.state,
-      method: parsed.data.method ?? null,
-      noSetOff: parsed.data.noSetOff ?? false,
-      note: parsed.data.note ?? null,
+      state: parsed.state,
+      method: parsed.method ?? null,
+      noSetOff: parsed.noSetOff ?? false,
+      note: parsed.note ?? null,
       // BR-02: the confirming user is captured on buyer responses with lineage.
       confirmingUserId: isRequest ? null : req.principal.userId,
     })
     .returning();
-  if (parsed.data.state === "confirmed" && canTransition(invoice.status, "confirmed")) {
+  if (parsed.state === "confirmed" && canTransition(invoice.status, "confirmed")) {
     // Compare-and-set: if the invoice moved concurrently (cancel/credit), the
     // confirmation row stands as lineage but the status transition is skipped.
     const [moved] = await getDb()
@@ -693,7 +616,7 @@ router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), a
       .set({ status: "confirmed" })
       .where(
         and(
-          eq(invoicesTable.id, params.data.id),
+          eq(invoicesTable.id, params.id),
           eq(invoicesTable.status, invoice.status),
         ),
       )
@@ -722,41 +645,29 @@ router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), a
 
 router.get("/invoices/:id/settlements", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const params = ListSettlementsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadForTenant(req, params.data.id);
+  const params = parseOrThrow(ListSettlementsParams, req.params);
+  await loadForTenant(req, params.id);
   const rows = await getDb()
     .select()
     .from(settlementEventsTable)
-    .where(eq(settlementEventsTable.invoiceId, params.data.id))
+    .where(eq(settlementEventsTable.invoiceId, params.id))
     .orderBy(asc(settlementEventsTable.occurredAt));
   res.json(ListSettlementsResponse.parse(rows));
 });
 
 router.post("/invoices/:id/settlements", async (req, res): Promise<void> => {
   assertCan(req.principal, "settlement.write");
-  const params = CreateSettlementParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = CreateSettlementBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const { invoice } = await loadForTenant(req, params.data.id);
+  const params = parseOrThrow(CreateSettlementParams, req.params);
+  const parsed = parseOrThrow(CreateSettlementBody, req.body);
+  const { invoice } = await loadForTenant(req, params.id);
   const [row] = await getDb()
     .insert(settlementEventsTable)
     .values({
-      invoiceId: params.data.id,
-      source: parsed.data.source,
-      amount: parsed.data.amount,
-      confidence: parsed.data.confidence ?? null,
-      occurredAt: parsed.data.occurredAt,
+      invoiceId: params.id,
+      source: parsed.source,
+      amount: parsed.amount,
+      confidence: parsed.confidence ?? null,
+      occurredAt: parsed.occurredAt,
     })
     .returning();
   await appendAudit({

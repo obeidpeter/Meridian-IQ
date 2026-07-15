@@ -26,7 +26,7 @@ import { getClerkGateway } from "./provider";
 // flag (it can spend firm tokens); the unique (firm_id, week_start) key makes
 // the sweep idempotent across instances and passes.
 
-export const DIGEST_FLAG_KEY = "clerk_digest";
+const DIGEST_FLAG_KEY = "clerk_digest";
 const DIGEST_LOCK_ID = 731_843;
 // Firms per sweep pass; the loop naturally resumes where it left off because
 // generated firms drop out of the missing-digest query.

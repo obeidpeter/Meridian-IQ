@@ -15,11 +15,11 @@ import {
   fakeGateway,
 } from "./test-support.ts";
 import {
-  computeLineCorrections,
   createExtractionCase,
   decideCase,
   retryExtraction,
 } from "./cases.ts";
+import { computeLineCorrections } from "./corrections.ts";
 import {
   createClaimDraft,
   decideClaim,

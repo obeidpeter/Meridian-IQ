@@ -8,19 +8,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { AppButton, AppText, Card, TextField } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { hasStatus, serverMessage } from "@/lib/api-error";
 import { useSession } from "@/lib/session";
 
 function errorMessage(error: unknown): string {
-  if (error && typeof error === "object") {
-    const data = (error as { data?: unknown }).data;
-    if (data && typeof data === "object" && "message" in data) {
-      const msg = (data as { message?: unknown }).message;
-      if (typeof msg === "string") return msg;
-    }
-    const status = (error as { status?: unknown }).status;
-    if (status === 401) return "Incorrect email or password.";
-  }
-  return "We couldn't sign you in. Please try again.";
+  return (
+    serverMessage(error) ??
+    (hasStatus(error, 401)
+      ? "Incorrect email or password."
+      : "We couldn't sign you in. Please try again.")
+  );
 }
 
 export function SignIn() {
