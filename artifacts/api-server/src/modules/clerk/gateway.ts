@@ -156,6 +156,14 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
         promptVersion: params.promptVersion,
         inputRef: sha256(params.inputForHash),
       };
+      // Append one ledger row: the call's identity (base) plus the outcome
+      // fields, which stay explicit at each call site below.
+      const ledger = (
+        row: Omit<
+          typeof clerkInferenceCallsTable.$inferInsert,
+          keyof typeof base
+        >,
+      ) => getDb().insert(clerkInferenceCallsTable).values({ ...base, ...row });
 
       let raw: string;
       let promptTokens: number | null = null;
@@ -176,8 +184,7 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        await getDb().insert(clerkInferenceCallsTable).values({
-          ...base,
+        await ledger({
           outputJson: null,
           schemaValid: false,
           outcome: "error",
@@ -191,8 +198,7 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
       try {
         parsed = JSON.parse(raw);
       } catch {
-        await getDb().insert(clerkInferenceCallsTable).values({
-          ...base,
+        await ledger({
           outputJson: { raw: raw.slice(0, 8000) },
           schemaValid: false,
           outcome: "invalid_discarded",
@@ -210,8 +216,7 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
 
       const validated = params.validator.safeParse(parsed);
       if (!validated.success) {
-        await getDb().insert(clerkInferenceCallsTable).values({
-          ...base,
+        await ledger({
           outputJson: parsed,
           schemaValid: false,
           outcome: "invalid_discarded",
@@ -227,8 +232,7 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
         };
       }
 
-      await getDb().insert(clerkInferenceCallsTable).values({
-        ...base,
+      await ledger({
         outputJson: parsed,
         schemaValid: true,
         outcome: "ok",

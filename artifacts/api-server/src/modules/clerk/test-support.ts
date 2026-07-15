@@ -107,7 +107,7 @@ export async function ensureClerkFixtures(input: {
 
 // What the injected fake provider may return: a bare string, or content plus
 // token usage (the cost-tracking tests exercise the latter).
-export type FakeResponse =
+type FakeResponse =
   | string
   | {
       content: string;

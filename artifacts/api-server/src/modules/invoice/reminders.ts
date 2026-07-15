@@ -12,9 +12,7 @@ import {
   deadlineReminderSendsTable,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
-import { sendMessage } from "../messaging/messaging";
-import { recipientRefFor } from "../messaging/recipient-ref";
-import { sendPushAlert } from "../push/push";
+import { fanOutAlert } from "../messaging/fan-out";
 import {
   SUBMISSION_WINDOW_DAYS,
   daysUntil,
@@ -128,37 +126,17 @@ async function sweepInner(now: Date): Promise<number> {
     // No prefs row means the table defaults apply: whatsapp/email/push on,
     // sms off, deadline alerts on.
     if (prefs && !prefs.deadlineAlerts) continue;
-    const channels: ("whatsapp" | "sms" | "email")[] = [];
-    if (!prefs || prefs.whatsappEnabled) channels.push("whatsapp");
-    if (prefs?.smsEnabled) channels.push("sms");
-    if (!prefs || prefs.emailEnabled) channels.push("email");
-
-    for (const channel of channels) {
-      try {
-        await sendMessage({
-          channel,
-          recipientRef: recipientRefFor(inv.supplierPartyId),
-          templateKey: "deadline_reminder",
-          entityType: "invoice",
-          entityId: pointerFor(inv.id),
-        });
-      } catch {
-        // Channel failures are recorded in the messages ledger by the module.
-      }
-    }
-    if (!prefs || prefs.pushEnabled) {
-      try {
-        await sendPushAlert({
-          clientPartyId: inv.supplierPartyId,
-          firmId: inv.firmId,
-          templateKey: "deadline_reminder",
-          entityType: "invoice",
-          entityId: pointerFor(inv.id),
-        });
-      } catch {
-        // Push failures are likewise recorded by the push module.
-      }
-    }
+    await fanOutAlert({
+      prefs,
+      clientPartyId: inv.supplierPartyId,
+      firmId: inv.firmId,
+      templateKey: "deadline_reminder",
+      entityType: "invoice",
+      entityId: pointerFor(inv.id),
+      // Historical default preserved: with no prefs row, deadline reminders
+      // do NOT send SMS (unlike the B2C pre-breach alert).
+      smsDefaultWhenNoPrefs: false,
+    });
   }
   return claimed;
 }

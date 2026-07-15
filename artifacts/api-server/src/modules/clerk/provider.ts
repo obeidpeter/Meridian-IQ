@@ -10,7 +10,7 @@ import { createGateway } from "./gateway";
 // its own module (and loaded lazily) so importing the gateway in tests never
 // requires the AI integration env vars.
 
-export const CLERK_MODEL = "gpt-5.4";
+const CLERK_MODEL = "gpt-5.4";
 
 let cached: ClerkGateway | null = null;
 
