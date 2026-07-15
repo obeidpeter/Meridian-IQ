@@ -27,6 +27,23 @@ const NO_CONTEXT_PATHS = new Set([
   "/api/internal/sweep",
 ]);
 
+// Method-scoped variant for the Clerk routes that call the model provider
+// in-request: a multi-second completion (up to eleven for a full batch
+// intake) must not pin a pooled connection inside an open transaction or run
+// into the 30s request-transaction cap — a full batch at realistic provider
+// latencies EXCEEDS the cap and would roll back every created case after the
+// tokens were already spent. These handlers instead commit each DB stage in a
+// short firm-scoped transaction of their own (modules/clerk/scope.ts) with
+// the same RLS posture this middleware would have given them; only the
+// method+path pairs listed here are exempt, so the GET list/read routes that
+// share the paths keep the ordinary tenant transaction.
+const NO_CONTEXT_ROUTES = new Set([
+  "POST /api/clerk/cases",
+  "POST /api/clerk/cases/batch",
+  "POST /api/clerk/ask",
+  "POST /api/clerk/eval/run",
+]);
+
 // Hard cap on how long a request may hold its transaction open. A handler that
 // never responds (and whose socket never closes) would otherwise pin a pooled
 // connection with an open transaction indefinitely; on timeout we force a
@@ -54,7 +71,10 @@ const REQUEST_TX_TIMEOUT_MS = 30_000;
 class RequestRollback extends Error {}
 
 function tenantContext(req: Request, res: Response, next: NextFunction): void {
-  if (NO_CONTEXT_PATHS.has(req.path)) {
+  if (
+    NO_CONTEXT_PATHS.has(req.path) ||
+    NO_CONTEXT_ROUTES.has(`${req.method} ${req.path}`)
+  ) {
     next();
     return;
   }

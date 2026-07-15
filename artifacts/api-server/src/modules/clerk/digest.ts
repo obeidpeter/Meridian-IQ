@@ -76,7 +76,9 @@ export function digestWeekStart(now: Date = new Date()): Date {
 
 // The digest's facts, straight from SQL over the firm's invoices. Statuses
 // and reference dates mirror compliance-window.ts / receivables.ts so the
-// digest can never disagree with the dashboards.
+// digest can never disagree with the dashboards — including the Lagos-calendar
+// "today" (lib/lagos-time.ts): current_date would use the UTC day, which lags
+// local statutory time by an hour around midnight.
 export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const rows = (
     await getDb().execute<{
@@ -92,17 +94,17 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
         )::int AS unsubmitted,
         COUNT(*) FILTER (
           WHERE i.status IN ('draft', 'validated')
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int >= CURRENT_DATE
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int < CURRENT_DATE + 7
+            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int >= (now() AT TIME ZONE 'Africa/Lagos')::date
+            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int < (now() AT TIME ZONE 'Africa/Lagos')::date + 7
         )::int AS due_soon,
         COUNT(*) FILTER (
           WHERE i.status IN ('draft', 'validated')
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int < CURRENT_DATE
+            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int < (now() AT TIME ZONE 'Africa/Lagos')::date
         )::int AS overdue,
         COUNT(*) FILTER (WHERE i.status = 'failed')::int AS failed,
         COUNT(*) FILTER (
           WHERE i.status IN ('submitted', 'stamped', 'confirmed')
-            AND COALESCE(i.due_date, i.issue_date) < CURRENT_DATE - 60
+            AND COALESCE(i.due_date, i.issue_date) < (now() AT TIME ZONE 'Africa/Lagos')::date - 60
         )::int AS recv_over_60
       FROM invoices i
       WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}
@@ -274,16 +276,25 @@ registerSweep(async function sweepClerkDigests(): Promise<void> {
   // Opt-in: generating digests for every firm can spend firm tokens, so the
   // flag must be turned on deliberately (off/missing = no digests at all).
   if (!(await isFeatureEnabled(DIGEST_FLAG_KEY))) return;
-  await runInBypassContext(async () => {
+  // Candidate selection is a SHORT bypass transaction; generation — which
+  // makes one model call per firm — runs OUTSIDE it. Holding one transaction
+  // (and the advisory lock, and a pooled connection) across up to 20 provider
+  // calls made a slow provider stall the entire shared sweep loop, delaying
+  // the minute-sensitive statutory alerts behind it. The lock now only
+  // de-duplicates candidate selection within a pass; cross-instance
+  // idempotency rests where it always did — the (firm_id, week_start) unique
+  // key — so a rare concurrent pass wastes at most one phrasing call per firm
+  // and never stores a duplicate.
+  const firms = await runInBypassContext(async () => {
     const [{ locked }] = (
       await getDb().execute<{ locked: boolean }>(
         sql`SELECT pg_try_advisory_xact_lock(${DIGEST_LOCK_ID}) AS locked`,
       )
     ).rows;
-    if (!locked) return;
+    if (!locked) return [];
 
     const weekStart = digestWeekStart();
-    const firms = await getDb()
+    return getDb()
       .select({ id: firmsTable.id })
       .from(firmsTable)
       .leftJoin(
@@ -295,21 +306,21 @@ registerSweep(async function sweepClerkDigests(): Promise<void> {
       )
       .where(isNull(clerkDigestsTable.id))
       .limit(DIGEST_BATCH);
-    if (firms.length === 0) return;
-
-    // No provider configured (or kill switch off) still produces digests —
-    // just from the template path.
-    let gateway: ClerkGateway | null = null;
-    try {
-      gateway = await getClerkGateway();
-    } catch {
-      gateway = null;
-    }
-    let generated = 0;
-    for (const firm of firms) {
-      await generateFirmDigest(firm.id, gateway);
-      generated += 1;
-    }
-    logger.info({ generated }, "clerk digest sweep: weekly digests generated");
   });
+  if (firms.length === 0) return;
+
+  // No provider configured (or kill switch off) still produces digests —
+  // just from the template path.
+  let gateway: ClerkGateway | null = null;
+  try {
+    gateway = await getClerkGateway();
+  } catch {
+    gateway = null;
+  }
+  let generated = 0;
+  for (const firm of firms) {
+    await generateFirmDigest(firm.id, gateway);
+    generated += 1;
+  }
+  logger.info({ generated }, "clerk digest sweep: weekly digests generated");
 });

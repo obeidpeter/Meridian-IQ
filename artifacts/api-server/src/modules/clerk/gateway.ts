@@ -1,15 +1,27 @@
 import { createHash } from "node:crypto";
-import { getDb, clerkInferenceCallsTable } from "@workspace/db";
+import { db, clerkInferenceCallsTable } from "@workspace/db";
 import type { z } from "zod/v4";
 import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
+import { firmClerkUsage } from "./budget";
 
 // Inference gateway (Task #40). EVERY model call flows through here:
 //  - the clerk_ai kill switch is checked before any call leaves the platform;
+//  - the per-firm token budget is enforced here as a BACKSTOP for every
+//    firm-attributed call (routes still pre-check for a clean 429; this
+//    guarantees no call site can forget the cap);
 //  - every call is recorded in the append-only clerk_inference_calls ledger
 //    (model, prompt version, input hash, typed output, outcome);
 //  - output is parsed and schema-validated; anything invalid is DISCARDED and
 //    reported as a typed failure — never surfaced to a user (fail closed).
+//
+// Ledger writes deliberately use the ROOT db client (raw pool), never the
+// ambient request transaction: tokens spent at the provider are spent whether
+// or not the surrounding request later rolls back (the 4xx rollback rule
+// would otherwise erase the spend and break "the ledger keeps the true
+// spend"). This requires any caseId passed to infer() to reference an ALREADY
+// COMMITTED case row (the capture and ask paths commit the case before
+// inferring; retry and eval reference existing cases).
 //
 // The provider is injected so fail-closed behaviour is testable without live
 // model calls; the production provider lives in provider.ts.
@@ -113,7 +125,7 @@ export async function recordExternalCall(input: {
   errorText?: string;
   latencyMs: number;
 }): Promise<void> {
-  await getDb().insert(clerkInferenceCallsTable).values({
+  await db.insert(clerkInferenceCallsTable).values({
     caseId: input.caseId ?? null,
     firmId: input.firmId ?? null,
     purpose: input.purpose,
@@ -147,6 +159,23 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
     async infer<T>(params: InferParams<T>): Promise<InferResult<T>> {
       await assertClerkEnabled();
 
+      // Budget backstop for firm-attributed calls. A typed failure, not a
+      // throw: every caller already has a fail-closed path for a model that
+      // did not run (capture marks the case failed, digest/explain fall back
+      // to template text), and no ledger row is written — no call left the
+      // platform, no tokens were spent.
+      if (params.firmId) {
+        const usage = await firmClerkUsage(params.firmId);
+        if (usage.usedTokens >= usage.budgetTokens) {
+          return {
+            ok: false,
+            outcome: "error",
+            message:
+              "The firm's monthly Clerk token allowance is exhausted; the call was not made.",
+          };
+        }
+      }
+
       const startedAt = Date.now();
       const base = {
         caseId: params.caseId ?? null,
@@ -163,7 +192,7 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
           typeof clerkInferenceCallsTable.$inferInsert,
           keyof typeof base
         >,
-      ) => getDb().insert(clerkInferenceCallsTable).values({ ...base, ...row });
+      ) => db.insert(clerkInferenceCallsTable).values({ ...base, ...row });
 
       let raw: string;
       let promptTokens: number | null = null;

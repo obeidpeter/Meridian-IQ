@@ -54,9 +54,18 @@ ledger, schema-validated output, fail closed). Client-facing surfaces
 to their firm by route filters plus migration 0009's firm-keyed RLS, and are
 capped by a per-firm monthly TOKEN budget (`modules/clerk/budget.ts`; tier
 override `billing_tiers.clerk_monthly_tokens`, default
-`CLERK_FIRM_MONTHLY_TOKENS` env, ledger is the spend counter — check the
-budget BEFORE touching the provider so 429s are clean). Review/decide stays
-operator-only (`clerk.use`). The learning loop (`modules/clerk/eval-growth.ts`)
+`CLERK_FIRM_MONTHLY_TOKENS` env, ledger is the spend counter — routes check
+the budget BEFORE touching the provider so 429s are clean, and the gateway
+enforces it again as a backstop no call site can forget). The gateway writes
+the inference ledger on the RAW pool so spend accounting survives any request
+rollback; consequence: a caseId passed to `infer()` must reference an already
+COMMITTED case row. The model-calling routes (capture, batch, ask, eval-run)
+run OUTSIDE the per-request transaction (`app.ts NO_CONTEXT_ROUTES`) — each DB
+stage commits in its own short firm-scoped transaction
+(`modules/clerk/scope.ts`, same RLS posture) so a multi-second provider call
+never pins a pooled connection or hits the 30s transaction cap. Review/decide
+stays operator-only (`clerk.use`) and is compare-and-set on case status, so
+concurrent decisions can never double-apply. The learning loop (`modules/clerk/eval-growth.ts`)
 turns corrected approvals into eval fixtures on the sweep loop; the nightly
 auto-eval is opt-in behind `clerk_auto_eval` (spends tokens). The failure
 explainer (`modules/clerk/explain.ts`) is catalogue-grounded — the model only
