@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Check, Copy, FileCheck2, Grid2x2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, FileCheck2, Grid2x2 } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -267,19 +267,33 @@ export default function App() {
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-4 sm:px-6">
-          <div className="rounded-lg bg-primary p-1.5 text-primary-foreground">
-            <FileCheck2 className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-base font-bold leading-none">MeridianIQ</p>
-            <p className="text-xs text-muted-foreground leading-tight">
-              Nigerian e-invoicing compliance
-            </p>
-          </div>
+          <a
+            href="/"
+            aria-label="MeridianIQ home"
+            className={`inline-flex items-center gap-3 rounded-lg ${FOCUS_RING}`}
+          >
+            <div className="rounded-lg bg-primary p-1.5 text-primary-foreground">
+              <FileCheck2 className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-base font-bold leading-none">MeridianIQ</p>
+              <p className="text-xs text-muted-foreground leading-tight">
+                Nigerian e-invoicing compliance
+              </p>
+            </div>
+          </a>
+          <a
+            href="/"
+            data-testid="link-back-to-website"
+            className={`ml-auto inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted ${FOCUS_RING}`}
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            Back to website
+          </a>
           <a
             href="/login"
             data-testid="link-all-apps"
-            className={`ml-auto inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted ${FOCUS_RING}`}
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted ${FOCUS_RING}`}
           >
             <Grid2x2 className="h-5 w-5" aria-hidden="true" />
             All apps
