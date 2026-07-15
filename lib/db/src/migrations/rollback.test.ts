@@ -107,7 +107,7 @@ const triggerAllowsFailed = (): Probe => ({
   check: lineTriggerAllowsFailed,
 });
 const not = (probe: Probe): Probe => ({
-  desc: `NOT (${probe.desc})`,
+  desc: probe.desc,
   expect: !probe.expect,
   check: probe.check,
 });
@@ -226,6 +226,18 @@ test("migrations apply and roll back cleanly in reverse order", async () => {
       migrations.map((m) => m.version),
       "LADDER must have exactly one step per registered migration, in order",
     );
+    // A dangling supersededBy would silently drop the step's markers from the
+    // fully-applied assertions — it must name a real, later migration.
+    for (const step of LADDER) {
+      if (step.supersededBy !== undefined) {
+        assert.ok(
+          LADDER.some(
+            (s) => s.version === step.supersededBy && s.version > step.version,
+          ),
+          `step ${step.version}: supersededBy ${step.supersededBy} must name a later registered migration`,
+        );
+      }
+    }
 
     await applyMigrations(pool);
     await assertProbes(pool, FULLY_APPLIED, "after apply");

@@ -1,18 +1,44 @@
 // Shared display formatting for the three web apps (console, SME, buyer
-// portal): currency/date/percent formatters, the status-pill design language,
-// and the status helpers every app renders the same way. App-specific badge
-// vocabularies stay in each app's src/lib/format.ts, which re-exports this
+// portal): generic formatters (currency/percent/date — shared even where only
+// one app uses them today), the status-pill design language, and the badge
+// vocabularies rendered by two or more apps. Badge vocabularies with a single
+// consuming app stay in that app's src/lib/format.ts, which re-exports this
 // module so pages keep importing from "@/lib/format".
+
+// Intl formatter construction is expensive (locale-data setup) and these run
+// per table row per render — build each once at module load.
+const NAIRA_FORMAT = new Intl.NumberFormat("en-NG", {
+  style: "currency",
+  currency: "NGN",
+  minimumFractionDigits: 2,
+});
+
+const COMPACT_NAIRA_FORMAT = new Intl.NumberFormat("en-NG", {
+  style: "currency",
+  currency: "NGN",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+const DATE_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
+
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
 export function formatNaira(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   const n = Number(value);
   if (Number.isNaN(n)) return "—";
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    minimumFractionDigits: 2,
-  }).format(n);
+  return NAIRA_FORMAT.format(n);
 }
 
 /**
@@ -25,12 +51,7 @@ export function formatCompactNaira(
   if (value === null || value === undefined) return "—";
   const n = Number(value);
   if (Number.isNaN(n)) return "—";
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(n);
+  return COMPACT_NAIRA_FORMAT.format(n);
 }
 
 /**
@@ -51,24 +72,14 @@ export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return DATE_FORMAT.format(d);
 }
 
 export function formatDateTime(value: string | Date | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return DATE_TIME_FORMAT.format(d);
 }
 
 /** Humanize a raw enum value: "buyer_flag" → "Buyer flag". */
@@ -115,7 +126,7 @@ export function pillClasses(tone: BadgeTone): string {
 
 // ---- Invoice lifecycle -----------------------------------------------------
 
-export type StatusTone =
+type StatusTone =
   | "draft"
   | "pending"
   | "stamped"

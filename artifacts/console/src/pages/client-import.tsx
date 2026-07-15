@@ -197,7 +197,12 @@ export function ClientImport() {
               type="file"
               accept=".csv,text/csv"
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onFile(file);
+                // Allow re-selecting the same (fixed) file.
+                e.target.value = "";
+              }}
             />
             <Button
               variant="outline"

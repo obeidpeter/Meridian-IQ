@@ -83,6 +83,7 @@ import {
   formatNaira,
   formatDate,
   formatDateTime,
+  formatPct,
   statusLabel,
   badgeClasses,
   statusTone,
@@ -1014,7 +1015,7 @@ export function InvoiceDetail() {
                 <p className="font-medium">{l.description}</p>
                 <p className="text-muted-foreground text-xs">
                   {l.quantity} × {formatNaira(l.unitPrice)} · VAT{" "}
-                  {(Number(l.vatRate) * 100).toFixed(1)}%
+                  {formatPct(l.vatRate)}
                 </p>
               </div>
               <span className="font-medium tabular-nums">
