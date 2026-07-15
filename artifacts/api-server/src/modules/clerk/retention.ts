@@ -27,12 +27,13 @@ export async function sweepExpiredCaseContent(): Promise<number> {
 
   const rows = await getDb()
     .update(clerkCasesTable)
-    .set({ sourceText: null, sourceImageB64: null })
+    .set({ sourceText: null, sourceImageB64: null, sourceScanPagesB64: null })
     .where(
       sql`${clerkCasesTable.status} IN ('approved', 'rejected', 'failed')
         AND ${clerkCasesTable.updatedAt} < now() - make_interval(days => ${days})
         AND (${clerkCasesTable.sourceText} IS NOT NULL
-          OR ${clerkCasesTable.sourceImageB64} IS NOT NULL)`,
+          OR ${clerkCasesTable.sourceImageB64} IS NOT NULL
+          OR ${clerkCasesTable.sourceScanPagesB64} IS NOT NULL)`,
     )
     .returning({ id: clerkCasesTable.id, status: clerkCasesTable.status });
 
