@@ -50,13 +50,19 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
-import { apiErrorMessage, hasStatus } from "@/lib/api-error";
+import { apiErrorMessage, isFeatureUnavailable } from "@/lib/api-error";
 import { formatCurrency, formatDate, humanize } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
 // The server rejects statements above 4M characters (SEC-M3); catch that
 // locally so a huge file fails fast with a clear message instead of a 413.
 const MAX_CSV_CHARS = 4_000_000;
+
+// Shown at both pickFile oversize checkpoints (the picker's size probe and the
+// post-read length check) — one constant so the wording can't drift between
+// them.
+const CSV_TOO_LARGE_MESSAGE =
+  "That file is too large for a bank statement. Export a shorter date range and try again.";
 
 // How many parse-report rows to render — a full statement can be hundreds of
 // lines and the report is a decision aid, not a ledger.
@@ -114,9 +120,6 @@ function confidenceTone(confidence: string): BadgeTone {
   if (n >= 0.5) return "warning";
   return "neutral";
 }
-
-/** The reconciliation flag being dark surfaces as a 404 from the API. */
-const isFeatureUnavailable = (error: unknown): boolean => hasStatus(error, 404);
 
 export default function ReconciliationScreen() {
   const colors = useColors();
@@ -219,20 +222,12 @@ export default function ReconciliationScreen() {
       const asset = result.assets[0];
       if (!asset) return;
       if (asset.size != null && asset.size > MAX_CSV_CHARS) {
-        setBanner({
-          tone: "error",
-          message:
-            "That file is too large for a bank statement. Export a shorter date range and try again.",
-        });
+        setBanner({ tone: "error", message: CSV_TOO_LARGE_MESSAGE });
         return;
       }
       const text = await new File(asset.uri).text();
       if (text.length > MAX_CSV_CHARS) {
-        setBanner({
-          tone: "error",
-          message:
-            "That file is too large for a bank statement. Export a shorter date range and try again.",
-        });
+        setBanner({ tone: "error", message: CSV_TOO_LARGE_MESSAGE });
         return;
       }
       setCsv(text);

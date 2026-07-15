@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { AppText, Card, Divider, TextField } from "@/components/ui";
+import { AppText, Card, Divider, rowBetween, TextField } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { formatCurrency } from "@/lib/format";
 import { num } from "@/lib/invoice-form";
@@ -43,7 +43,7 @@ export function LineItemCard({
           : {}),
       }}
     >
-      <View style={styles.rowBetween}>
+      <View style={rowBetween}>
         <AppText variant="label" color={colors.mutedForeground}>
           Item {index + 1}
         </AppText>
@@ -96,7 +96,7 @@ export function LineItemCard({
           />
         </View>
       </View>
-      <View style={styles.rowBetween}>
+      <View style={rowBetween}>
         <AppText variant="caption" color={colors.mutedForeground}>
           Line total
         </AppText>
@@ -115,20 +115,20 @@ export function TotalsCard({
   const colors = useColors();
   return (
     <Card style={{ gap: 8, backgroundColor: colors.secondary }}>
-      <View style={styles.rowBetween}>
+      <View style={rowBetween}>
         <AppText variant="body" color={colors.mutedForeground}>
           Subtotal
         </AppText>
         <AppText variant="body">{formatCurrency(totals.subtotal)}</AppText>
       </View>
-      <View style={styles.rowBetween}>
+      <View style={rowBetween}>
         <AppText variant="body" color={colors.mutedForeground}>
           VAT
         </AppText>
         <AppText variant="body">{formatCurrency(totals.vat)}</AppText>
       </View>
       <Divider />
-      <View style={styles.rowBetween}>
+      <View style={rowBetween}>
         <AppText variant="heading">Total</AppText>
         <AppText variant="heading" color={colors.primary}>
           {formatCurrency(totals.grand)}
@@ -139,11 +139,6 @@ export function TotalsCard({
 }
 
 const styles = StyleSheet.create({
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   trashBtn: {
     minWidth: 44,
     minHeight: 44,

@@ -34,7 +34,7 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
-import { apiErrorMessage } from "@/lib/api-error";
+import { serverMessage } from "@/lib/api-error";
 import {
   blankLine,
   computeTotals,
@@ -295,11 +295,9 @@ export default function InvoiceScreen() {
         // Unlike the detail/fix screens, this banner only ever surfaces a
         // server-sent `message` — anything else (an `{ error }` payload, a
         // transport failure) keeps the friendly fallback.
-        const fallback = "We couldn't submit this invoice. Please try again.";
         const message =
-          data && typeof data === "object" && "message" in data
-            ? apiErrorMessage(error, fallback)
-            : fallback;
+          serverMessage(error) ??
+          "We couldn't submit this invoice. Please try again.";
         setBanner({ tone: "error", message });
         scrollToTop();
         // If a draft was created before the failure, keep its id (so the next

@@ -13,7 +13,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -30,11 +29,12 @@ import {
   Divider,
   EmptyState,
   ErrorState,
+  ScreenScroll,
   Skeleton,
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
-import { hasStatus } from "@/lib/api-error";
+import { isFeatureUnavailable } from "@/lib/api-error";
 import { formatCurrency, formatDateTime, humanize } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
@@ -61,9 +61,6 @@ function useNow(intervalMs = 30_000): number {
   }, [intervalMs]);
   return now;
 }
-
-/** The b2c_reporting flag being dark surfaces as a 404 from the API. */
-const isFeatureUnavailable = (error: unknown): boolean => hasStatus(error, 404);
 
 function countdown(deadlineAt: Date | string, now: number): {
   label: string;
@@ -197,10 +194,8 @@ export default function B2cBatchesScreen() {
 
   if (query.isLoading) {
     return (
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
+      <ScreenScroll
         contentContainerStyle={contentContainerStyle}
-        showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
         {caption}
@@ -209,16 +204,14 @@ export default function B2cBatchesScreen() {
           <CardSkeleton lines={2} />
           <CardSkeleton lines={2} />
         </View>
-      </ScrollView>
+      </ScreenScroll>
     );
   }
 
   if (query.isError) {
     return (
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
+      <ScreenScroll
         contentContainerStyle={contentContainerStyle}
-        showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
         {caption}
@@ -234,16 +227,14 @@ export default function B2cBatchesScreen() {
             onRetry={onRefresh}
           />
         )}
-      </ScrollView>
+      </ScreenScroll>
     );
   }
 
   if (batches.length === 0) {
     return (
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
+      <ScreenScroll
         contentContainerStyle={contentContainerStyle}
-        showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
         {caption}
@@ -252,7 +243,7 @@ export default function B2cBatchesScreen() {
           title="No B2C batches yet"
           message="Stamp a consumer (B2C) invoice and a reporting batch opens automatically."
         />
-      </ScrollView>
+      </ScreenScroll>
     );
   }
 

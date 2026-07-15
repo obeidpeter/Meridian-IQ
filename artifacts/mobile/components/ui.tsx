@@ -6,6 +6,8 @@ import {
   Animated,
   Platform,
   Pressable,
+  ScrollView,
+  ScrollViewProps,
   StyleSheet,
   Text,
   TextInput,
@@ -554,6 +556,34 @@ export function ErrorState({
         </View>
       ) : null}
     </View>
+  );
+}
+
+/**
+ * The full-screen ScrollView shell shared by a list screen's loading/error/
+ * empty branches: themed background, hidden scroll indicator, and the caller's
+ * content-container padding. `refreshControl` is optional so branches that
+ * omit pull-to-refresh keep that behavior.
+ */
+export function ScreenScroll({
+  contentContainerStyle,
+  refreshControl,
+  children,
+}: {
+  contentContainerStyle?: ScrollViewProps["contentContainerStyle"];
+  refreshControl?: ScrollViewProps["refreshControl"];
+  children: React.ReactNode;
+}) {
+  const colors = useColors();
+  return (
+    <ScrollView
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={contentContainerStyle}
+      showsVerticalScrollIndicator={false}
+      refreshControl={refreshControl}
+    >
+      {children}
+    </ScrollView>
   );
 }
 
