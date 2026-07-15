@@ -243,9 +243,10 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   check("server-side search narrows the invoice list", narrowed);
 
   // A draft can be created through the form — when the signed-in client can
-  // see buyer parties. The demo seed engages only client parties, so the
-  // seeded world legitimately shows the "No customers yet" state; in that
-  // case assert the empty state renders and create the draft via the same
+  // see buyer parties. Since the new-customer gap closed (firm staff see
+  // invoice-referenced buyers), the seeded world takes this branch; the
+  // no-customers fallback below stays for seeds without visible buyers —
+  // there, assert the empty state renders and create the draft via the same
   // session's API instead, then verify it surfaces in the list UI.
   const draftNumber = `E2E-${Date.now()}`;
   await page.goto(BASE + "/app/invoices/new", { waitUntil: "networkidle" });
