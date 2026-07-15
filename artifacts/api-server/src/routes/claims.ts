@@ -15,6 +15,7 @@ import {
   DecideClaimBody,
   DecideClaimResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { assertCan } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
 import {
@@ -35,34 +36,22 @@ const router: IRouter = Router();
 
 router.get("/claims", async (req, res): Promise<void> => {
   assertCan(req.principal, "claims.read");
-  const query = ListClaimsQueryParams.safeParse(req.query);
-  if (!query.success) {
-    res.status(400).json({ error: query.error.message });
-    return;
-  }
-  const rows = await listClaims(query.data.claimKey);
+  const query = parseOrThrow(ListClaimsQueryParams, req.query);
+  const rows = await listClaims(query.claimKey);
   res.json(ListClaimsResponse.parse(rows));
 });
 
 router.get("/claims/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "claims.read");
-  const params = GetClaimParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const claim = await getClaim(params.data.id);
+  const params = parseOrThrow(GetClaimParams, req.params);
+  const claim = await getClaim(params.id);
   res.json(GetClaimResponse.parse(claim));
 });
 
 router.post("/claims", async (req, res): Promise<void> => {
   assertCan(req.principal, "claims.write");
-  const parsed = CreateClaimBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const claim = await createClaimDraft(parsed.data, req.principal.userId);
+  const parsed = parseOrThrow(CreateClaimBody, req.body);
+  const claim = await createClaimDraft(parsed, req.principal.userId);
   await appendAudit({
     actorId: req.principal.userId,
     action: "claim.draft",
@@ -75,19 +64,11 @@ router.post("/claims", async (req, res): Promise<void> => {
 
 router.patch("/claims/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "claims.write");
-  const params = UpdateClaimParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = UpdateClaimBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const params = parseOrThrow(UpdateClaimParams, req.params);
+  const parsed = parseOrThrow(UpdateClaimBody, req.body);
   const claim = await updateClaimDraft(
-    params.data.id,
-    parsed.data,
+    params.id,
+    parsed,
     req.principal.userId,
   );
   await appendAudit({
@@ -102,12 +83,8 @@ router.patch("/claims/:id", async (req, res): Promise<void> => {
 
 router.post("/claims/:id/submit", async (req, res): Promise<void> => {
   assertCan(req.principal, "claims.write");
-  const params = SubmitClaimParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const claim = await submitClaim(params.data.id, req.principal.userId);
+  const params = parseOrThrow(SubmitClaimParams, req.params);
+  const claim = await submitClaim(params.id, req.principal.userId);
   await appendAudit({
     actorId: req.principal.userId,
     action: "claim.submit",
@@ -120,32 +97,24 @@ router.post("/claims/:id/submit", async (req, res): Promise<void> => {
 
 router.post("/claims/:id/decision", async (req, res): Promise<void> => {
   assertCan(req.principal, "claims.approve");
-  const params = DecideClaimParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = DecideClaimBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const params = parseOrThrow(DecideClaimParams, req.params);
+  const parsed = parseOrThrow(DecideClaimBody, req.body);
   const claim = await decideClaim(
-    params.data.id,
-    parsed.data.action,
-    parsed.data.note ?? null,
+    params.id,
+    parsed.action,
+    parsed.note ?? null,
     req.principal.userId,
   );
   await appendAudit({
     actorId: req.principal.userId,
-    action: `claim.${parsed.data.action}`,
+    action: `claim.${parsed.action}`,
     entityType: "claim_record",
     entityId: claim.id,
     after: {
       claimKey: claim.claimKey,
       version: claim.version,
       state: claim.state,
-      note: parsed.data.note ?? null,
+      note: parsed.note ?? null,
     },
   });
   res.json(DecideClaimResponse.parse(claim));

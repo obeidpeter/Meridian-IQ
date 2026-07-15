@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { VerifyAuditResponse, ExportAuditResponse } from "@workspace/api-zod";
 import { assertCan } from "../modules/auth/rbac";
 import { verifyChain, exportAuditBundle } from "../modules/audit/audit";
-import { toCsv } from "../lib/csv";
+import { sendCsvAttachment, toCsv } from "../lib/csv";
 
 const router: IRouter = Router();
 
@@ -48,17 +48,14 @@ router.get("/audit/export/csv", async (req, res): Promise<void> => {
       e.hash,
     ]),
   );
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="meridianiq-audit-ledger-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv"`,
-  );
   // Chain state rides along as a response header, not a CSV row, so the file
   // stays strictly tabular.
   res.setHeader("X-Audit-Chain-Valid", String(verification.valid));
-  res.send(csv);
+  sendCsvAttachment(
+    res,
+    `meridianiq-audit-ledger-${new Date().toISOString().slice(0, 10)}.csv`,
+    csv,
+  );
 });
 
 export default router;

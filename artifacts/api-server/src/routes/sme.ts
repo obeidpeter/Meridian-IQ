@@ -32,20 +32,21 @@ import {
   EscalateInvoiceBody,
   EscalateInvoiceResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
-  assertSameTenant,
-  assertClientPartyScope,
   assertPartyAccess,
+  requireFirmScope,
   tenantFirmId,
   type Principal,
 } from "../modules/auth/rbac";
-import { createDraft, bulkCreateDrafts, getInvoiceWithLines } from "../modules/invoice/service";
+import { loadForTenant } from "./invoices";
+import { createDraft, bulkCreateDrafts } from "../modules/invoice/service";
 import {
   getReceivablesSummary,
   listOutstandingReceivables,
 } from "../modules/invoice/receivables";
-import { toCsv } from "../lib/csv";
+import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { isFeatureEnabled } from "../modules/flags/flags";
 import { openBatchesFor } from "../modules/b2c/service";
 import { sendMessage } from "../modules/messaging/messaging";
@@ -193,12 +194,8 @@ async function loadClientInvoices(
 
 router.get("/dashboard/summary", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const query = GetDashboardSummaryQueryParams.safeParse(req.query);
-  if (!query.success) {
-    res.status(400).json({ error: query.error.message });
-    return;
-  }
-  const clientPartyId = query.data.clientPartyId;
+  const query = parseOrThrow(GetDashboardSummaryQueryParams, req.query);
+  const clientPartyId = query.clientPartyId;
   await assertPartyAccess(req.principal, clientPartyId);
   const tenant = tenantFirmId(req.principal);
   const invoices = await loadClientInvoices(clientPartyId, tenant);
@@ -311,12 +308,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
 // posture as the dashboard summary (party access + tenant scoping).
 router.get("/dashboard/receivables", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const query = GetReceivablesSummaryQueryParams.safeParse(req.query);
-  if (!query.success) {
-    res.status(400).json({ error: query.error.message });
-    return;
-  }
-  const clientPartyId = query.data.clientPartyId;
+  const query = parseOrThrow(GetReceivablesSummaryQueryParams, req.query);
+  const clientPartyId = query.clientPartyId;
   await assertPartyAccess(req.principal, clientPartyId);
   const tenant = tenantFirmId(req.principal);
   const summary = await getReceivablesSummary(clientPartyId, tenant);
@@ -329,12 +322,8 @@ router.get(
   "/dashboard/receivables/export",
   async (req, res): Promise<void> => {
     assertCan(req.principal, "invoice.read");
-    const query = ExportReceivablesCsvQueryParams.safeParse(req.query);
-    if (!query.success) {
-      res.status(400).json({ error: query.error.message });
-      return;
-    }
-    const clientPartyId = query.data.clientPartyId;
+    const query = parseOrThrow(ExportReceivablesCsvQueryParams, req.query);
+    const clientPartyId = query.clientPartyId;
     await assertPartyAccess(req.principal, clientPartyId);
     const tenant = tenantFirmId(req.principal);
     const rows = await listOutstandingReceivables(clientPartyId, tenant);
@@ -362,23 +351,18 @@ router.get(
         r.status,
       ]),
     );
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="receivables-${new Date().toISOString().slice(0, 10)}.csv"`,
+    sendCsvAttachment(
+      res,
+      `receivables-${new Date().toISOString().slice(0, 10)}.csv`,
+      csv,
     );
-    res.send(csv);
   },
 );
 
 router.get("/compliance/calendar", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const query = GetComplianceCalendarQueryParams.safeParse(req.query);
-  if (!query.success) {
-    res.status(400).json({ error: query.error.message });
-    return;
-  }
-  const clientPartyId = query.data.clientPartyId;
+  const query = parseOrThrow(GetComplianceCalendarQueryParams, req.query);
+  const clientPartyId = query.clientPartyId;
   await assertPartyAccess(req.principal, clientPartyId);
   const tenant = tenantFirmId(req.principal);
   const invoices = await loadClientInvoices(clientPartyId, tenant);
@@ -448,13 +432,9 @@ function validateImportRow(
 
 router.post("/invoices/import", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
-  const parsed = ImportInvoicesBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const { clientPartyId, rows } = parsed.data;
-  const commit = parsed.data.commit ?? false;
+  const parsed = parseOrThrow(ImportInvoicesBody, req.body);
+  const { clientPartyId, rows } = parsed;
+  const commit = parsed.commit ?? false;
   if (rows.length > MAX_IMPORT_ROWS) {
     res.status(413).json({
       error: `Too many rows: ${rows.length} exceeds the ${MAX_IMPORT_ROWS}-row import limit`,
@@ -462,11 +442,7 @@ router.post("/invoices/import", async (req, res): Promise<void> => {
     return;
   }
   await assertPartyAccess(req.principal, clientPartyId);
-  const firmId = tenantFirmId(req.principal);
-  if (!firmId) {
-    res.status(403).json({ error: "A firm-scoped principal is required" });
-    return;
-  }
+  const firmId = requireFirmScope(req.principal);
 
   const results: {
     rowNumber: number;
@@ -693,19 +669,15 @@ const DEFAULT_PREFS = {
 
 router.get("/clients/:id/alert-preferences", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const params = GetAlertPreferencesParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await assertPartyAccess(req.principal, params.data.id);
+  const params = parseOrThrow(GetAlertPreferencesParams, req.params);
+  await assertPartyAccess(req.principal, params.id);
   const [row] = await getDb()
     .select()
     .from(alertPreferencesTable)
-    .where(eq(alertPreferencesTable.clientPartyId, params.data.id))
+    .where(eq(alertPreferencesTable.clientPartyId, params.id))
     .limit(1);
   const prefs = row ?? {
-    clientPartyId: params.data.id,
+    clientPartyId: params.id,
     ...DEFAULT_PREFS,
     updatedAt: new Date(),
   };
@@ -723,28 +695,20 @@ function assertCanManageAlerts(principal: Principal): void {
 
 router.put("/clients/:id/alert-preferences", async (req, res): Promise<void> => {
   assertCanManageAlerts(req.principal);
-  const params = UpdateAlertPreferencesParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = UpdateAlertPreferencesBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  await assertPartyAccess(req.principal, params.data.id);
+  const params = parseOrThrow(UpdateAlertPreferencesParams, req.params);
+  const parsed = parseOrThrow(UpdateAlertPreferencesBody, req.body);
+  await assertPartyAccess(req.principal, params.id);
   const values = {
-    clientPartyId: params.data.id,
+    clientPartyId: params.id,
     ...DEFAULT_PREFS,
-    ...parsed.data,
+    ...parsed,
   };
   const [row] = await getDb()
     .insert(alertPreferencesTable)
     .values(values)
     .onConflictDoUpdate({
       target: alertPreferencesTable.clientPartyId,
-      set: { ...parsed.data, updatedAt: new Date() },
+      set: { ...parsed, updatedAt: new Date() },
     })
     .returning();
   await appendAudit({
@@ -752,8 +716,8 @@ router.put("/clients/:id/alert-preferences", async (req, res): Promise<void> => 
     firmId: req.principal.firmId,
     action: "alert.preferences.update",
     entityType: "alert_preferences",
-    entityId: params.data.id,
-    after: parsed.data,
+    entityId: params.id,
+    after: parsed,
   });
   res.json(UpdateAlertPreferencesResponse.parse(row));
 });
@@ -761,19 +725,15 @@ router.put("/clients/:id/alert-preferences", async (req, res): Promise<void> => 
 
 router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
   assertCanManageAlerts(req.principal);
-  const params = SendTestAlertParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await assertPartyAccess(req.principal, params.data.id);
+  const params = parseOrThrow(SendTestAlertParams, req.params);
+  await assertPartyAccess(req.principal, params.id);
   const [row] = await getDb()
     .select()
     .from(alertPreferencesTable)
-    .where(eq(alertPreferencesTable.clientPartyId, params.data.id))
+    .where(eq(alertPreferencesTable.clientPartyId, params.id))
     .limit(1);
-  const prefs = row ?? { ...DEFAULT_PREFS, clientPartyId: params.data.id };
-  const recipientRef = recipientRefFor(params.data.id);
+  const prefs = row ?? { ...DEFAULT_PREFS, clientPartyId: params.id };
+  const recipientRef = recipientRefFor(params.id);
 
   const enabled: ("whatsapp" | "sms" | "email")[] = [];
   if (prefs.whatsappEnabled) enabled.push("whatsapp");
@@ -813,7 +773,7 @@ router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
   }
   if (prefs.pushEnabled) {
     const push = await sendPushAlert({
-      clientPartyId: params.data.id,
+      clientPartyId: params.id,
       firmId: req.principal.firmId,
       templateKey: "deadline_reminder",
     });
@@ -822,59 +782,35 @@ router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
   res.json(SendTestAlertResponse.parse(results));
 });
 
-async function loadInvoiceForTenant(
-  req: { principal: import("../modules/auth/rbac").Principal },
-  id: string,
-): Promise<Invoice> {
-  const bundle = await getInvoiceWithLines(id);
-  if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
-  assertSameTenant(req.principal, bundle.invoice.firmId);
-  // SEC-03: a client_user may only reach its own invoices — not a sibling
-  // client's within the same firm (firm-keyed RLS is not a backstop here).
-  // Mirrors invoices.ts loadForTenant; without it the escalation read/write
-  // routes would let a client_user act on any invoice in the firm.
-  assertClientPartyScope(req.principal, bundle.invoice.supplierPartyId);
-  return bundle.invoice;
-}
-
 router.get("/invoices/:id/escalations", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const params = ListEscalationsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadInvoiceForTenant(req, params.data.id);
+  const params = parseOrThrow(ListEscalationsParams, req.params);
+  // SEC-03: the shared tenancy loader keeps a client_user from reaching a
+  // sibling client's invoices; without it the escalation read/write routes
+  // would let a client_user act on any invoice in the firm.
+  await loadForTenant(req, params.id);
   const rows = await getDb()
     .select()
     .from(escalationsTable)
-    .where(eq(escalationsTable.invoiceId, params.data.id))
+    .where(eq(escalationsTable.invoiceId, params.id))
     .orderBy(desc(escalationsTable.createdAt));
   res.json(ListEscalationsResponse.parse(rows));
 });
 
 router.post("/invoices/:id/escalations", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.write");
-  const params = EscalateInvoiceParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = EscalateInvoiceBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const invoice = await loadInvoiceForTenant(req, params.data.id);
+  const params = parseOrThrow(EscalateInvoiceParams, req.params);
+  const parsed = parseOrThrow(EscalateInvoiceBody, req.body);
+  const { invoice } = await loadForTenant(req, params.id);
   const [row] = await getDb()
     .insert(escalationsTable)
     .values({
       invoiceId: invoice.id,
       firmId: invoice.firmId,
       clientPartyId: invoice.supplierPartyId,
-      reason: parsed.data.reason,
-      errorCode: parsed.data.errorCode ?? null,
-      context: parsed.data.context ?? null,
+      reason: parsed.reason,
+      errorCode: parsed.errorCode ?? null,
+      context: parsed.context ?? null,
     })
     .returning();
   // SME-06: an escalation is not just a record — it enters the Compliance

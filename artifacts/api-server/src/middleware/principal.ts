@@ -115,6 +115,41 @@ function header(req: Request, name: string): string | null {
   return v ?? null;
 }
 
+// Tenancy and role for a resolved platform user, from the membership table —
+// the authoritative role-permission source shared by the Clerk and first-party
+// session paths. A user with several memberships selects one with the
+// x-firm-id header; otherwise the first membership is used. No membership (or
+// an unknown x-firm-id) => null.
+async function principalFromMembership(
+  req: Request,
+  userId: string,
+): Promise<Principal | null> {
+  const memberships = await getDb()
+    .select({
+      firmId: membershipsTable.firmId,
+      role: membershipsTable.role,
+      clientPartyId: membershipsTable.clientPartyId,
+      buyerPartyId: membershipsTable.buyerPartyId,
+    })
+    .from(membershipsTable)
+    .where(eq(membershipsTable.userId, userId));
+  if (memberships.length === 0) return null;
+
+  const requestedFirm = header(req, "x-firm-id");
+  const membership = requestedFirm
+    ? memberships.find((m) => m.firmId === requestedFirm)
+    : memberships[0];
+  if (!membership) return null;
+
+  return {
+    userId,
+    role: membership.role,
+    firmId: membership.firmId,
+    clientPartyId: membership.clientPartyId,
+    buyerPartyId: membership.buyerPartyId,
+  };
+}
+
 // Production: map a Clerk-verified user onto a tenant-scoped principal via the
 // platform membership table. Returns null when unauthenticated or unprovisioned.
 async function resolveClerkPrincipal(req: Request): Promise<Principal | null> {
@@ -129,30 +164,7 @@ async function resolveClerkPrincipal(req: Request): Promise<Principal | null> {
     .limit(1);
   if (!user) return null;
 
-  const memberships = await getDb()
-    .select({
-      firmId: membershipsTable.firmId,
-      role: membershipsTable.role,
-      clientPartyId: membershipsTable.clientPartyId,
-      buyerPartyId: membershipsTable.buyerPartyId,
-    })
-    .from(membershipsTable)
-    .where(eq(membershipsTable.userId, user.id));
-  if (memberships.length === 0) return null;
-
-  const requestedFirm = header(req, "x-firm-id");
-  const membership = requestedFirm
-    ? memberships.find((m) => m.firmId === requestedFirm)
-    : memberships[0];
-  if (!membership) return null;
-
-  return {
-    userId: user.id,
-    role: membership.role,
-    firmId: membership.firmId,
-    clientPartyId: membership.clientPartyId,
-    buyerPartyId: membership.buyerPartyId,
-  };
+  return principalFromMembership(req, user.id);
 }
 
 // Development: build a principal from client headers (never trusted in prod).
@@ -209,28 +221,7 @@ async function principalFromSessionToken(
   // password, instead of surviving until their 7-day expiry.
   const epoch = await currentSessionEpoch(userId);
   if (epoch === null || verified.epoch < epoch) return null;
-  const memberships = await getDb()
-    .select({
-      firmId: membershipsTable.firmId,
-      role: membershipsTable.role,
-      clientPartyId: membershipsTable.clientPartyId,
-      buyerPartyId: membershipsTable.buyerPartyId,
-    })
-    .from(membershipsTable)
-    .where(eq(membershipsTable.userId, userId));
-  if (memberships.length === 0) return null;
-  const requestedFirm = header(req, "x-firm-id");
-  const membership = requestedFirm
-    ? memberships.find((m) => m.firmId === requestedFirm)
-    : memberships[0];
-  if (!membership) return null;
-  return {
-    userId,
-    role: membership.role,
-    firmId: membership.firmId,
-    clientPartyId: membership.clientPartyId,
-    buyerPartyId: membership.buyerPartyId,
-  };
+  return principalFromMembership(req, userId);
 }
 
 export function resolvePrincipal(

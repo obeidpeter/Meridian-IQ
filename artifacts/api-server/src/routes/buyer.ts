@@ -11,6 +11,7 @@ import {
   GetBuyerExposureResponse,
   GetBuyerScoreboardResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertBuyerPartyAccess,
@@ -86,20 +87,12 @@ router.get("/buyer/invoices", requireBuyerRails, async (req, res): Promise<void>
 // the mandatory-source hierarchy, Plan 7.4).
 router.post("/invoices/:id/payment-flags", requireBuyerRails, async (req, res): Promise<void> => {
   assertCan(req.principal, "settlement.flag");
-  const params = FlagPaymentParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const body = FlagPaymentBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
+  const params = parseOrThrow(FlagPaymentParams, req.params);
+  const body = parseOrThrow(FlagPaymentBody, req.body);
   const [invoice] = await getDb()
     .select()
     .from(invoicesTable)
-    .where(eq(invoicesTable.id, params.data.id))
+    .where(eq(invoicesTable.id, params.id))
     .limit(1);
   if (!invoice) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
   assertBuyerPartyAccess(req.principal, invoice.buyerPartyId);
@@ -113,8 +106,8 @@ router.post("/invoices/:id/payment-flags", requireBuyerRails, async (req, res): 
   // The contract types amount as a bare string; reject anything that is not a
   // plain decimal before it reaches the numeric column (400, not a DB 500).
   if (
-    body.data.amount !== undefined &&
-    !/^\d+(\.\d{1,2})?$/.test(body.data.amount)
+    body.amount !== undefined &&
+    !/^\d+(\.\d{1,2})?$/.test(body.amount)
   ) {
     throw new DomainError(
       "INVALID_AMOUNT",
@@ -122,22 +115,22 @@ router.post("/invoices/:id/payment-flags", requireBuyerRails, async (req, res): 
       400,
     );
   }
-  const occurredAt = body.data.occurredAt
-    ? new Date(body.data.occurredAt)
+  const occurredAt = body.occurredAt
+    ? new Date(body.occurredAt)
     : new Date();
   const [event] = await getDb()
     .insert(settlementEventsTable)
     .values({
       invoiceId: invoice.id,
       source: "buyer_flag",
-      amount: body.data.amount ?? invoice.grandTotal,
-      paymentStatus: body.data.paymentStatus,
+      amount: body.amount ?? invoice.grandTotal,
+      paymentStatus: body.paymentStatus,
       actorId: req.principal.userId,
       occurredAt,
     })
     .returning();
   if (
-    body.data.paymentStatus === "paid" &&
+    body.paymentStatus === "paid" &&
     canTransition(invoice.status, "settled")
   ) {
     // Compare-and-set: a concurrent cancel/credit wins; the flag event stands

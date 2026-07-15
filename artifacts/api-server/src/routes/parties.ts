@@ -16,6 +16,7 @@ import {
   ValidateCacBody,
   ValidateCacResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { and, sql, type SQL } from "drizzle-orm";
 import { getDb, partiesTable } from "@workspace/db";
 import { likePattern } from "../lib/sql";
@@ -103,13 +104,9 @@ router.get("/parties", async (req, res): Promise<void> => {
 
 router.post("/parties", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.write");
-  const parsed = CreatePartyBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(CreatePartyBody, req.body);
   const party = await createParty(
-    parsed.data,
+    parsed,
     req.principal.userId,
     tenantFirmId(req.principal),
   );
@@ -118,14 +115,10 @@ router.post("/parties", async (req, res): Promise<void> => {
 
 router.post("/parties/merge", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.merge");
-  const parsed = MergePartiesBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(MergePartiesBody, req.body);
   await mergeParties(
-    parsed.data.survivorId,
-    parsed.data.duplicateId,
+    parsed.survivorId,
+    parsed.duplicateId,
     req.principal.userId,
   );
   res.sendStatus(204);
@@ -133,31 +126,19 @@ router.post("/parties/merge", async (req, res): Promise<void> => {
 
 router.post("/parties/:id/split", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.merge");
-  const params = SplitPartyParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await splitParty(params.data.id, req.principal.userId);
+  const params = parseOrThrow(SplitPartyParams, req.params);
+  await splitParty(params.id, req.principal.userId);
   res.sendStatus(204);
 });
 
 router.post("/parties/validate-tin", async (req, res): Promise<void> => {
-  const parsed = ValidateTinBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  res.json(ValidateTinResponse.parse(validateTin(parsed.data.tin)));
+  const parsed = parseOrThrow(ValidateTinBody, req.body);
+  res.json(ValidateTinResponse.parse(validateTin(parsed.tin)));
 });
 
 router.post("/parties/validate-cac", async (req, res): Promise<void> => {
-  const parsed = ValidateCacBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  res.json(ValidateCacResponse.parse(validateCac(parsed.data.cac)));
+  const parsed = parseOrThrow(ValidateCacBody, req.body);
+  res.json(ValidateCacResponse.parse(validateCac(parsed.cac)));
 });
 
 // Correct a party's registration data (fix-and-retry: rejected TIN, missing
@@ -167,41 +148,29 @@ router.post("/parties/validate-cac", async (req, res): Promise<void> => {
 // confines client_users to exactly that party), since a wrong supplier TIN is
 // the client's own data and the fix should not require firm staff.
 router.patch("/parties/:id", async (req, res): Promise<void> => {
-  const params = UpdatePartyParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  const params = parseOrThrow(UpdatePartyParams, req.params);
   const selfService =
     req.principal.role === "client_user" &&
-    req.principal.clientPartyId === params.data.id;
+    req.principal.clientPartyId === params.id;
   if (!selfService && !can(req.principal, "party.write")) {
     assertCan(req.principal, "party.write"); // throws the standard 403
   }
   // Engaged parties pass; firm staff additionally get the invoice-reference
   // fallback so they can fix a buyer whose bad TIN failed one of the firm's
   // invoices. client_users stay confined to their own party (SEC-03).
-  await assertPartyAccessOrInvoiceRef(req.principal, params.data.id);
-  const body = UpdatePartyBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
-  const party = await updateParty(params.data.id, body.data, req.principal.userId);
+  await assertPartyAccessOrInvoiceRef(req.principal, params.id);
+  const body = parseOrThrow(UpdatePartyBody, req.body);
+  const party = await updateParty(params.id, body, req.principal.userId);
   res.json(UpdatePartyResponse.parse(party));
 });
 
 router.get("/parties/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "party.read");
-  const params = GetPartyParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  const params = parseOrThrow(GetPartyParams, req.params);
   // Same access model as PATCH: engagement OR the party appears on one of the
   // firm's invoices — firm staff must be able to view a buyer they may edit.
-  await assertPartyAccessOrInvoiceRef(req.principal, params.data.id);
-  const party = await getParty(params.data.id);
+  await assertPartyAccessOrInvoiceRef(req.principal, params.id);
+  const party = await getParty(params.id);
   if (!party) {
     res.status(404).json({ error: "Party not found" });
     return;

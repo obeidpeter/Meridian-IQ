@@ -12,10 +12,12 @@ import {
   ListErpSyncRunsParams,
   ListErpSyncRunsResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertPartyAccess,
   assertSameTenant,
+  requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { requireFlag } from "../modules/flags/flags";
@@ -52,47 +54,34 @@ router.get("/connections", requireFlag("erp_connectors"), async (req, res): Prom
   if (tenant) conditions.push(eq(erpConnectionsTable.firmId, tenant));
   if (clientPartyId)
     conditions.push(eq(erpConnectionsTable.clientPartyId, clientPartyId));
-  const rows = conditions.length
-    ? await getDb()
-        .select()
-        .from(erpConnectionsTable)
-        .where(and(...conditions))
-        .orderBy(desc(erpConnectionsTable.createdAt))
-    : await getDb()
-        .select()
-        .from(erpConnectionsTable)
-        .orderBy(desc(erpConnectionsTable.createdAt));
+  const rows = await getDb()
+    .select()
+    .from(erpConnectionsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(erpConnectionsTable.createdAt));
   res.json(ListErpConnectionsResponse.parse(rows));
 });
 
 router.post("/connections", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
   assertCan(req.principal, "connector.write");
-  const firmId = tenantFirmId(req.principal);
-  if (!firmId) {
-    res.status(403).json({ error: "A firm-scoped principal is required" });
-    return;
-  }
-  const parsed = CreateErpConnectionBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  if (!findConnector(parsed.data.connectorKey)) {
+  const firmId = requireFirmScope(req.principal);
+  const parsed = parseOrThrow(CreateErpConnectionBody, req.body);
+  if (!findConnector(parsed.connectorKey)) {
     throw new DomainError(
       "UNKNOWN_CONNECTOR",
-      `No connector registered for "${parsed.data.connectorKey}"`,
+      `No connector registered for "${parsed.connectorKey}"`,
       422,
     );
   }
-  await assertPartyAccess(req.principal, parsed.data.clientPartyId);
+  await assertPartyAccess(req.principal, parsed.clientPartyId);
   const [row] = await getDb()
     .insert(erpConnectionsTable)
     .values({
       firmId,
-      clientPartyId: parsed.data.clientPartyId,
-      connectorKey: parsed.data.connectorKey,
-      authConfig: parsed.data.authConfig ?? null,
-      fieldMap: (parsed.data.fieldMap ?? null) as Record<string, string> | null,
+      clientPartyId: parsed.clientPartyId,
+      connectorKey: parsed.connectorKey,
+      authConfig: parsed.authConfig ?? null,
+      fieldMap: (parsed.fieldMap ?? null) as Record<string, string> | null,
     })
     .returning();
   await appendAudit({
@@ -108,15 +97,11 @@ router.post("/connections", requireFlag("erp_connectors"), async (req, res): Pro
 
 router.post("/connections/:id/sync", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
   assertCan(req.principal, "connector.write");
-  const params = SyncErpConnectionParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  const params = parseOrThrow(SyncErpConnectionParams, req.params);
   const [connection] = await getDb()
     .select()
     .from(erpConnectionsTable)
-    .where(eq(erpConnectionsTable.id, params.data.id))
+    .where(eq(erpConnectionsTable.id, params.id))
     .limit(1);
   if (!connection) {
     res.status(404).json({ error: "Connection not found" });
@@ -154,15 +139,11 @@ router.post("/connections/:id/sync", requireFlag("erp_connectors"), async (req, 
 
 router.get("/connections/:id/runs", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
   assertCan(req.principal, "connector.read");
-  const params = ListErpSyncRunsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  const params = parseOrThrow(ListErpSyncRunsParams, req.params);
   const [connection] = await getDb()
     .select({ firmId: erpConnectionsTable.firmId })
     .from(erpConnectionsTable)
-    .where(eq(erpConnectionsTable.id, params.data.id))
+    .where(eq(erpConnectionsTable.id, params.id))
     .limit(1);
   if (!connection) {
     res.status(404).json({ error: "Connection not found" });
@@ -172,7 +153,7 @@ router.get("/connections/:id/runs", requireFlag("erp_connectors"), async (req, r
   const rows = await getDb()
     .select()
     .from(erpSyncRunsTable)
-    .where(eq(erpSyncRunsTable.connectionId, params.data.id))
+    .where(eq(erpSyncRunsTable.connectionId, params.id))
     .orderBy(desc(erpSyncRunsTable.startedAt));
   res.json(ListErpSyncRunsResponse.parse(rows));
 });

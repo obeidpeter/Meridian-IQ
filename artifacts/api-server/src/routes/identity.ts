@@ -13,6 +13,7 @@ import {
   CreateMembershipBody,
   CreateMembershipResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { isUuid } from "../lib/uuid";
 import {
   ROLE_CAPABILITIES,
@@ -63,17 +64,13 @@ router.get("/firms", async (req, res): Promise<void> => {
 
 router.post("/firms", async (req, res): Promise<void> => {
   assertCan(req.principal, "identity.write");
-  const parsed = CreateFirmBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(CreateFirmBody, req.body);
   const [row] = await getDb()
     .insert(firmsTable)
     .values({
-      name: parsed.data.name,
-      subdomain: parsed.data.subdomain ?? null,
-      partyId: parsed.data.partyId ?? null,
+      name: parsed.name,
+      subdomain: parsed.subdomain ?? null,
+      partyId: parsed.partyId ?? null,
     })
     .returning();
   res.status(201).json(CreateFirmResponse.parse(row));
@@ -81,16 +78,12 @@ router.post("/firms", async (req, res): Promise<void> => {
 
 router.get("/firms/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "identity.read");
-  const params = GetFirmParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  assertSameTenant(req.principal, params.data.id);
+  const params = parseOrThrow(GetFirmParams, req.params);
+  assertSameTenant(req.principal, params.id);
   const [row] = await getDb()
     .select()
     .from(firmsTable)
-    .where(eq(firmsTable.id, params.data.id))
+    .where(eq(firmsTable.id, params.id))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Firm not found" });
@@ -101,17 +94,13 @@ router.get("/firms/:id", async (req, res): Promise<void> => {
 
 router.post("/users", async (req, res): Promise<void> => {
   assertCan(req.principal, "identity.write");
-  const parsed = CreateUserBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(CreateUserBody, req.body);
   const [row] = await getDb()
     .insert(usersTable)
     .values({
-      email: parsed.data.email,
-      fullName: parsed.data.fullName ?? null,
-      clerkUserId: parsed.data.clerkUserId ?? null,
+      email: parsed.email,
+      fullName: parsed.fullName ?? null,
+      clerkUserId: parsed.clerkUserId ?? null,
     })
     .returning();
   res.status(201).json(CreateUserResponse.parse(row));
@@ -119,19 +108,15 @@ router.post("/users", async (req, res): Promise<void> => {
 
 router.post("/memberships", async (req, res): Promise<void> => {
   assertCan(req.principal, "identity.write");
-  const parsed = CreateMembershipBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(CreateMembershipBody, req.body);
   const [row] = await getDb()
     .insert(membershipsTable)
     .values({
-      userId: parsed.data.userId,
-      firmId: parsed.data.firmId ?? null,
-      role: parsed.data.role,
-      clientPartyId: parsed.data.clientPartyId ?? null,
-      buyerPartyId: parsed.data.buyerPartyId ?? null,
+      userId: parsed.userId,
+      firmId: parsed.firmId ?? null,
+      role: parsed.role,
+      clientPartyId: parsed.clientPartyId ?? null,
+      buyerPartyId: parsed.buyerPartyId ?? null,
     })
     .returning();
   res.status(201).json(CreateMembershipResponse.parse(row));

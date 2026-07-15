@@ -11,11 +11,13 @@ import {
   UpdateEngagementBody,
   UpdateEngagementResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertClientPartyScope,
   assertSameTenant,
   clientPartyScope,
+  requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
@@ -42,24 +44,16 @@ router.get("/engagements", async (req, res): Promise<void> => {
 
 router.post("/engagements", async (req, res): Promise<void> => {
   assertCan(req.principal, "engagement.write");
-  const firmId = tenantFirmId(req.principal);
-  if (!firmId) {
-    res.status(403).json({ error: "A firm-scoped principal is required" });
-    return;
-  }
-  const parsed = CreateEngagementBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const firmId = requireFirmScope(req.principal);
+  const parsed = parseOrThrow(CreateEngagementBody, req.body);
   const [row] = await getDb()
     .insert(engagementsTable)
     .values({
       firmId,
-      clientPartyId: parsed.data.clientPartyId,
-      type: parsed.data.type,
-      title: parsed.data.title,
-      findings: parsed.data.findings ?? null,
+      clientPartyId: parsed.clientPartyId,
+      type: parsed.type,
+      title: parsed.title,
+      findings: parsed.findings ?? null,
     })
     .returning();
   await appendAudit({
@@ -75,15 +69,11 @@ router.post("/engagements", async (req, res): Promise<void> => {
 
 router.get("/engagements/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "engagement.read");
-  const params = GetEngagementParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  const params = parseOrThrow(GetEngagementParams, req.params);
   const [row] = await getDb()
     .select()
     .from(engagementsTable)
-    .where(eq(engagementsTable.id, params.data.id))
+    .where(eq(engagementsTable.id, params.id))
     .limit(1);
   if (!row) {
     res.status(404).json({ error: "Engagement not found" });
@@ -98,20 +88,12 @@ router.get("/engagements/:id", async (req, res): Promise<void> => {
 
 router.patch("/engagements/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "engagement.write");
-  const params = UpdateEngagementParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = UpdateEngagementBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const params = parseOrThrow(UpdateEngagementParams, req.params);
+  const parsed = parseOrThrow(UpdateEngagementBody, req.body);
   const [existing] = await getDb()
     .select()
     .from(engagementsTable)
-    .where(eq(engagementsTable.id, params.data.id))
+    .where(eq(engagementsTable.id, params.id))
     .limit(1);
   if (!existing) {
     res.status(404).json({ error: "Engagement not found" });
@@ -124,13 +106,13 @@ router.patch("/engagements/:id", async (req, res): Promise<void> => {
   const [row] = await getDb()
     .update(engagementsTable)
     .set({
-      status: parsed.data.status ?? existing.status,
-      title: parsed.data.title ?? existing.title,
-      findings: parsed.data.findings ?? existing.findings,
+      status: parsed.status ?? existing.status,
+      title: parsed.title ?? existing.title,
+      findings: parsed.findings ?? existing.findings,
     })
     .where(
       and(
-        eq(engagementsTable.id, params.data.id),
+        eq(engagementsTable.id, params.id),
         eq(engagementsTable.firmId, existing.firmId),
       ),
     )

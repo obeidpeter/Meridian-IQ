@@ -54,6 +54,7 @@ import {
   ResolveOperatorCaseResponse,
   GetFirmReceivablesResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   tenantFirmId,
@@ -256,11 +257,7 @@ router.get("/console/portfolio", async (req, res): Promise<void> => {
 
 router.get("/console/clients/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
-  const params = GetClientPortfolioParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  const params = parseOrThrow(GetClientPortfolioParams, req.params);
   const firmId = firmScope(req.principal);
   const [client] = await getDb()
     .select({ id: partiesTable.id, legalName: partiesTable.legalName })
@@ -269,7 +266,7 @@ router.get("/console/clients/:id", async (req, res): Promise<void> => {
     .where(
       and(
         eq(engagementsTable.firmId, firmId),
-        eq(engagementsTable.clientPartyId, params.data.id),
+        eq(engagementsTable.clientPartyId, params.id),
       ),
     )
     .limit(1);
@@ -356,21 +353,17 @@ router.post("/console/pipeline", async (req, res): Promise<void> => {
   // Managing the client book is a firm-admin write capability (auditors stay
   // read-only — a read cap must never gate a mutation).
   assertCan(req.principal, "pipeline.write");
-  const parsed = CreateProspectBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(CreateProspectBody, req.body);
   const firmId = firmScope(req.principal);
   const [row] = await getDb()
     .insert(onboardingProspectsTable)
     .values({
       firmId,
-      name: parsed.data.name,
-      contactEmail: parsed.data.contactEmail ?? null,
-      stage: parsed.data.stage ?? "lead",
-      estimatedMonthlyInvoices: parsed.data.estimatedMonthlyInvoices ?? 0,
-      note: parsed.data.note ?? null,
+      name: parsed.name,
+      contactEmail: parsed.contactEmail ?? null,
+      stage: parsed.stage ?? "lead",
+      estimatedMonthlyInvoices: parsed.estimatedMonthlyInvoices ?? 0,
+      note: parsed.note ?? null,
     })
     .returning();
   await appendAudit({
@@ -386,23 +379,15 @@ router.post("/console/pipeline", async (req, res): Promise<void> => {
 
 router.patch("/console/pipeline/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "pipeline.write");
-  const params = UpdateProspectParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = UpdateProspectBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const params = parseOrThrow(UpdateProspectParams, req.params);
+  const parsed = parseOrThrow(UpdateProspectBody, req.body);
   const firmId = firmScope(req.principal);
   const [existing] = await getDb()
     .select()
     .from(onboardingProspectsTable)
     .where(
       and(
-        eq(onboardingProspectsTable.id, params.data.id),
+        eq(onboardingProspectsTable.id, params.id),
         eq(onboardingProspectsTable.firmId, firmId),
       ),
     )
@@ -413,20 +398,20 @@ router.patch("/console/pipeline/:id", async (req, res): Promise<void> => {
   const [row] = await getDb()
     .update(onboardingProspectsTable)
     .set({
-      ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
-      ...(parsed.data.contactEmail !== undefined
-        ? { contactEmail: parsed.data.contactEmail }
+      ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+      ...(parsed.contactEmail !== undefined
+        ? { contactEmail: parsed.contactEmail }
         : {}),
-      ...(parsed.data.stage !== undefined ? { stage: parsed.data.stage } : {}),
-      ...(parsed.data.estimatedMonthlyInvoices !== undefined
-        ? { estimatedMonthlyInvoices: parsed.data.estimatedMonthlyInvoices }
+      ...(parsed.stage !== undefined ? { stage: parsed.stage } : {}),
+      ...(parsed.estimatedMonthlyInvoices !== undefined
+        ? { estimatedMonthlyInvoices: parsed.estimatedMonthlyInvoices }
         : {}),
-      ...(parsed.data.clientPartyId !== undefined
-        ? { clientPartyId: parsed.data.clientPartyId }
+      ...(parsed.clientPartyId !== undefined
+        ? { clientPartyId: parsed.clientPartyId }
         : {}),
-      ...(parsed.data.note !== undefined ? { note: parsed.data.note } : {}),
+      ...(parsed.note !== undefined ? { note: parsed.note } : {}),
     })
-    .where(eq(onboardingProspectsTable.id, params.data.id))
+    .where(eq(onboardingProspectsTable.id, params.id))
     .returning();
   await appendAudit({
     actorId: req.principal.userId,
@@ -566,27 +551,19 @@ router.put("/billing/tiers/:id", async (req, res): Promise<void> => {
   // statements) and must NOT reach the shared pricing rows. Recorded with an
   // audit entry + price-review history rows (PL-01).
   assertCan(req.principal, "billing.tiers.write");
-  const params = UpdateTierParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = UpdateTierBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const params = parseOrThrow(UpdateTierParams, req.params);
+  const parsed = parseOrThrow(UpdateTierBody, req.body);
   const [existing] = await getDb()
     .select()
     .from(billingTiersTable)
-    .where(eq(billingTiersTable.id, params.data.id))
+    .where(eq(billingTiersTable.id, params.id))
     .limit(1);
   if (!existing) {
     throw new DomainError("NOT_FOUND", "Tier not found", 404);
   }
 
   const effectiveDate =
-    parsed.data.effectiveDate ?? new Date().toISOString().slice(0, 10);
+    parsed.effectiveDate ?? new Date().toISOString().slice(0, 10);
   const changes: Record<string, unknown> = {};
   const reviewRows: {
     tierId: string;
@@ -599,7 +576,7 @@ router.put("/billing/tiers/:id", async (req, res): Promise<void> => {
   }[] = [];
   const record = existing as unknown as Record<string, unknown>;
   for (const field of TIER_FIELDS) {
-    const next = (parsed.data as Record<string, unknown>)[field];
+    const next = (parsed as Record<string, unknown>)[field];
     if (next === undefined) continue;
     const oldVal = record[field];
     if (String(oldVal) === String(next)) continue;
@@ -609,7 +586,7 @@ router.put("/billing/tiers/:id", async (req, res): Promise<void> => {
       field,
       oldValue: oldVal === null || oldVal === undefined ? null : String(oldVal),
       newValue: String(next),
-      note: parsed.data.note ?? null,
+      note: parsed.note ?? null,
       effectiveDate,
       actorId: req.principal.userId,
     });
@@ -642,15 +619,11 @@ router.put("/billing/tiers/:id", async (req, res): Promise<void> => {
 
 router.get("/billing/tiers/:id/price-reviews", async (req, res): Promise<void> => {
   assertCan(req.principal, "billing.read");
-  const params = ListPriceReviewsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  const params = parseOrThrow(ListPriceReviewsParams, req.params);
   const rows = await getDb()
     .select()
     .from(priceReviewsTable)
-    .where(eq(priceReviewsTable.tierId, params.data.id))
+    .where(eq(priceReviewsTable.tierId, params.id))
     .orderBy(desc(priceReviewsTable.createdAt));
   res.json(ListPriceReviewsResponse.parse(rows));
 });
@@ -676,16 +649,12 @@ router.get("/billing/subscription", async (req, res): Promise<void> => {
 
 router.put("/billing/subscription", async (req, res): Promise<void> => {
   assertCan(req.principal, "billing.write");
-  const parsed = UpdateSubscriptionBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(UpdateSubscriptionBody, req.body);
   const firmId = firmScope(req.principal);
   const [tier] = await getDb()
     .select()
     .from(billingTiersTable)
-    .where(eq(billingTiersTable.key, parsed.data.tierKey))
+    .where(eq(billingTiersTable.key, parsed.tierKey))
     .limit(1);
   if (!tier) {
     throw new DomainError("NOT_FOUND", "Tier not found", 404);
@@ -695,13 +664,13 @@ router.put("/billing/subscription", async (req, res): Promise<void> => {
     .values({
       firmId,
       tierId: tier.id,
-      status: parsed.data.status ?? "active",
+      status: parsed.status ?? "active",
     })
     .onConflictDoUpdate({
       target: firmSubscriptionsTable.firmId,
       set: {
         tierId: tier.id,
-        status: parsed.data.status ?? "active",
+        status: parsed.status ?? "active",
         updatedAt: new Date(),
       },
     })
@@ -746,14 +715,10 @@ async function firmName(firmId: string): Promise<string | null> {
 
 router.get("/billing/statements", async (req, res): Promise<void> => {
   assertCan(req.principal, "billing.read");
-  const query = ListStatementsQueryParams.safeParse(req.query);
-  if (!query.success) {
-    res.status(400).json({ error: query.error.message });
-    return;
-  }
+  const query = parseOrThrow(ListStatementsQueryParams, req.query);
   const tenant = tenantFirmId(req.principal);
   // Firm principals see their own statements; operator/auditor may pass firmId.
-  const scope = tenant ?? query.data.firmId ?? null;
+  const scope = tenant ?? query.firmId ?? null;
   const rows = await getDb()
     .select()
     .from(revenueShareStatementsTable)
@@ -821,13 +786,9 @@ async function generateStatement(firmId: string, period: string) {
 
 router.post("/billing/statements/generate", async (req, res): Promise<void> => {
   assertCan(req.principal, "billing.write");
-  const parsed = GenerateStatementsBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(GenerateStatementsBody, req.body);
   const tenant = tenantFirmId(req.principal);
-  const targetFirm = tenant ?? parsed.data.firmId ?? req.principal.firmId;
+  const targetFirm = tenant ?? parsed.firmId ?? req.principal.firmId;
   let firmIds: string[];
   if (targetFirm) {
     firmIds = [targetFirm];
@@ -841,7 +802,7 @@ router.post("/billing/statements/generate", async (req, res): Promise<void> => {
 
   const out = [];
   for (const firmId of firmIds) {
-    const row = await generateStatement(firmId, parsed.data.period);
+    const row = await generateStatement(firmId, parsed.period);
     out.push({ ...row, firmName: await firmName(firmId) });
   }
   await appendAudit({
@@ -849,8 +810,8 @@ router.post("/billing/statements/generate", async (req, res): Promise<void> => {
     firmId: req.principal.firmId,
     action: "billing.statements.generate",
     entityType: "revenue_share_statement",
-    entityId: parsed.data.period,
-    after: { period: parsed.data.period, firms: firmIds.length },
+    entityId: parsed.period,
+    after: { period: parsed.period, firms: firmIds.length },
   });
   res.json(GenerateStatementsResponse.parse(out));
 });
@@ -1025,17 +986,13 @@ async function caseViews(rows: OperatorCase[]) {
 
 router.get("/operator/cases", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
-  const query = ListOperatorCasesQueryParams.safeParse(req.query);
-  if (!query.success) {
-    res.status(400).json({ error: query.error.message });
-    return;
-  }
+  const query = parseOrThrow(ListOperatorCasesQueryParams, req.query);
   const rows = await getDb()
     .select()
     .from(operatorCasesTable)
     .where(
-      query.data.status
-        ? eq(operatorCasesTable.status, query.data.status)
+      query.status
+        ? eq(operatorCasesTable.status, query.status)
         : undefined,
     )
     .orderBy(desc(operatorCasesTable.openedAt));
@@ -1083,12 +1040,8 @@ async function loadCase(id: string): Promise<OperatorCase> {
 
 router.post("/operator/cases/:id/claim", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.act");
-  const params = ClaimOperatorCaseParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const existing = await loadCase(params.data.id);
+  const params = parseOrThrow(ClaimOperatorCaseParams, req.params);
+  const existing = await loadCase(params.id);
   // Compare-and-set on status so two operators can't both claim the same open
   // case (lost update); the loser gets a 409 instead of a silent overwrite
   // (CON-M5).
@@ -1126,17 +1079,9 @@ router.post("/operator/cases/:id/claim", async (req, res): Promise<void> => {
 
 router.post("/operator/cases/:id/resolve", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.act");
-  const params = ResolveOperatorCaseParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = ResolveOperatorCaseBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const existing = await loadCase(params.data.id);
+  const params = parseOrThrow(ResolveOperatorCaseParams, req.params);
+  const parsed = parseOrThrow(ResolveOperatorCaseBody, req.body);
+  const existing = await loadCase(params.id);
   const now = new Date();
   // Handling time is measured from the first operator action (claim), not the
   // moment the case opened — otherwise it counts queue wait as handling time.
@@ -1156,8 +1101,8 @@ router.post("/operator/cases/:id/resolve", async (req, res): Promise<void> => {
       firstActionAt: existing.firstActionAt ?? now,
       resolvedAt: now,
       handleSeconds,
-      resolutionCode: parsed.data.resolutionCode,
-      resolutionNote: parsed.data.note ?? null,
+      resolutionCode: parsed.resolutionCode,
+      resolutionNote: parsed.note ?? null,
     })
     .where(
       and(

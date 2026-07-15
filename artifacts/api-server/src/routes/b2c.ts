@@ -11,11 +11,12 @@ import {
   SubmitB2cReportParams,
   SubmitB2cReportResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertClientPartyScope,
   assertSameTenant,
-  clientPartyScope,
+  narrowToClientPartyScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import { requireFlag } from "../modules/flags/flags";
@@ -29,13 +30,11 @@ const router: IRouter = Router();
 router.get("/b2c/reports", requireFlag("b2c_reporting"), async (req, res): Promise<void> => {
   assertCan(req.principal, "b2c.read");
   const query = ListB2cReportsQueryParams.safeParse(req.query);
-  let clientPartyId = query.success ? query.data.clientPartyId : undefined;
+  const clientPartyId = narrowToClientPartyScope(
+    req.principal,
+    query.success ? query.data.clientPartyId : undefined,
+  );
   const status = query.success ? query.data.status : undefined;
-  // A client_user is confined to its own client party (SEC-03): reject an
-  // explicit sibling id and always constrain the list to its own party.
-  if (clientPartyId) assertClientPartyScope(req.principal, clientPartyId);
-  const scope = clientPartyScope(req.principal);
-  if (scope) clientPartyId = scope;
   const tenant = tenantFirmId(req.principal);
   const conditions = [];
   if (tenant) conditions.push(eq(b2cReportBatchesTable.firmId, tenant));
@@ -68,40 +67,28 @@ async function loadBatchForTenant(
 
 router.get("/b2c/reports/:id", requireFlag("b2c_reporting"), async (req, res): Promise<void> => {
   assertCan(req.principal, "b2c.read");
-  const params = GetB2cReportParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const batch = await loadBatchForTenant(req, params.data.id);
+  const params = parseOrThrow(GetB2cReportParams, req.params);
+  const batch = await loadBatchForTenant(req, params.id);
   res.json(GetB2cReportResponse.parse(batch));
 });
 
 router.get("/b2c/reports/:id/items", requireFlag("b2c_reporting"), async (req, res): Promise<void> => {
   assertCan(req.principal, "b2c.read");
-  const params = ListB2cReportItemsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadBatchForTenant(req, params.data.id);
+  const params = parseOrThrow(ListB2cReportItemsParams, req.params);
+  await loadBatchForTenant(req, params.id);
   const rows = await getDb()
     .select()
     .from(b2cReportItemsTable)
-    .where(eq(b2cReportItemsTable.batchId, params.data.id))
+    .where(eq(b2cReportItemsTable.batchId, params.id))
     .orderBy(asc(b2cReportItemsTable.createdAt));
   res.json(ListB2cReportItemsResponse.parse(rows));
 });
 
 router.post("/b2c/reports/:id/submit", requireFlag("b2c_reporting"), async (req, res): Promise<void> => {
   assertCan(req.principal, "b2c.write");
-  const params = SubmitB2cReportParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  await loadBatchForTenant(req, params.data.id);
-  const updated = await submitBatch(params.data.id, {
+  const params = parseOrThrow(SubmitB2cReportParams, req.params);
+  await loadBatchForTenant(req, params.id);
+  const updated = await submitBatch(params.id, {
     userId: req.principal.userId,
     role: req.principal.role,
   });

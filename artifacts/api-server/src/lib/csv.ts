@@ -66,3 +66,19 @@ export function toCsv(header: string[], rows: CsvCell[][]): string {
   const lines = [header, ...rows].map((r) => r.map(serializeCell).join(","));
   return `﻿${lines.join("\r\n")}\r\n`;
 }
+
+// Ships a CSV as a file download — the Content-Type/Content-Disposition pair
+// every export endpoint sends. Structurally typed so this module stays
+// dependency-free (any express Response satisfies it).
+export function sendCsvAttachment(
+  res: {
+    setHeader(name: string, value: string): unknown;
+    send(body: string): unknown;
+  },
+  filename: string,
+  csv: string,
+): void {
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(csv);
+}

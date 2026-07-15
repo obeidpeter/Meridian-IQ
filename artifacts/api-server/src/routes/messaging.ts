@@ -8,6 +8,7 @@ import {
   RecordMessageDeliveryBody,
   ListMessagesResponse,
 } from "@workspace/api-zod";
+import { parseOrThrow } from "../lib/parse";
 import { sendMessage, markDelivery } from "../modules/messaging/messaging";
 import { assertCan } from "../modules/auth/rbac";
 import { requireFlag } from "../modules/flags/flags";
@@ -32,34 +33,22 @@ router.get("/messages", requireFlag("messaging_notifications"), async (req, res)
 
 router.post("/messages", requireFlag("messaging_notifications"), async (req, res): Promise<void> => {
   assertCan(req.principal, "messaging.send");
-  const parsed = SendMessageBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  const parsed = parseOrThrow(SendMessageBody, req.body);
   const row = await sendMessage({
-    channel: parsed.data.channel,
-    recipientRef: parsed.data.recipientRef,
-    templateKey: parsed.data.templateKey,
-    entityType: parsed.data.entityType,
-    entityId: parsed.data.entityId,
+    channel: parsed.channel,
+    recipientRef: parsed.recipientRef,
+    templateKey: parsed.templateKey,
+    entityType: parsed.entityType,
+    entityId: parsed.entityId,
   });
   res.status(201).json(SendMessageResponse.parse(row));
 });
 
 router.post("/messages/:id/delivery", requireFlag("messaging_notifications"), async (req, res): Promise<void> => {
   assertCan(req.principal, "messaging.send");
-  const params = RecordMessageDeliveryParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-  const parsed = RecordMessageDeliveryBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  await markDelivery(params.data.id, parsed.data.delivered);
+  const params = parseOrThrow(RecordMessageDeliveryParams, req.params);
+  const parsed = parseOrThrow(RecordMessageDeliveryBody, req.body);
+  await markDelivery(params.id, parsed.delivered);
   res.sendStatus(204);
 });
 

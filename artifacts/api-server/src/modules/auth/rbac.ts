@@ -20,72 +20,9 @@ export interface Principal {
 }
 
 // Capability strings used to gate actions. Kept coarse-grained and stable so
-// downstream surfaces can reference them.
-export type Capability =
-  | "invoice.read"
-  | "invoice.write"
-  | "invoice.submit"
-  | "engagement.read"
-  | "engagement.write"
-  | "party.read"
-  | "party.write"
-  | "party.merge"
-  | "confirmation.read"
-  | "confirmation.write"
-  | "buyer.verify"
-  | "settlement.write"
-  | "console.portfolio.read"
-  | "pipeline.write"
-  | "billing.read"
-  | "billing.write"
-  // Platform-global pricing (billing_tiers). Operator-only: the tier table has
-  // no firm scope, so a firm_admin holding billing.write must NOT edit it
-  // (SEC-04). billing.write stays firm-scoped (own subscription, own statements).
-  | "billing.tiers.write"
-  | "operator.queue.read"
-  | "operator.queue.act"
-  | "catalogue.write"
-  | "consent.read"
-  | "consent.write"
-  | "flags.read"
-  | "flags.write"
-  | "audit.read"
-  | "audit.export"
-  | "identity.read"
-  | "identity.write"
-  | "invitation.read"
-  | "invitation.write"
-  | "messaging.send"
-  | "statement.read"
-  | "statement.write"
-  | "reconciliation.read"
-  | "reconciliation.act"
-  | "b2c.read"
-  | "b2c.write"
-  | "buyer.rails.read"
-  | "confirmation.respond"
-  | "settlement.flag"
-  | "clients.import"
-  | "theme.write"
-  | "certification.read"
-  | "certification.write"
-  | "connector.read"
-  | "connector.write"
-  // Clerk v0 (Task #40). claims.read is broad reference data; claims.write /
-  // claims.approve are operator-only because claim records are platform-global
-  // governance data (same rationale as billing.tiers.write). clerk.use gates
-  // every AI surface (capture, review, Ask Clerk) — operator-only.
-  | "claims.read"
-  | "claims.write"
-  | "claims.approve"
-  | "clerk.use"
-  // Clerk expansion A: client-facing surfaces. capture = submit documents /
-  // voice notes as intake cases (review stays operator-only via clerk.use);
-  // ask = the register-grounded Q&A. Both are budget-capped per firm.
-  | "clerk.capture"
-  | "clerk.ask";
-
-const ALL: Capability[] = [
+// downstream surfaces can reference them. Declared once; the Capability union
+// type derives from this list, so a new capability is added in one place.
+const ALL = [
   "invoice.read",
   "invoice.write",
   "invoice.submit",
@@ -102,6 +39,9 @@ const ALL: Capability[] = [
   "pipeline.write",
   "billing.read",
   "billing.write",
+  // Platform-global pricing (billing_tiers). Operator-only: the tier table has
+  // no firm scope, so a firm_admin holding billing.write must NOT edit it
+  // (SEC-04). billing.write stays firm-scoped (own subscription, own statements).
   "billing.tiers.write",
   "operator.queue.read",
   "operator.queue.act",
@@ -132,13 +72,22 @@ const ALL: Capability[] = [
   "certification.write",
   "connector.read",
   "connector.write",
+  // Clerk v0 (Task #40). claims.read is broad reference data; claims.write /
+  // claims.approve are operator-only because claim records are platform-global
+  // governance data (same rationale as billing.tiers.write). clerk.use gates
+  // every AI surface (capture, review, Ask Clerk) — operator-only.
   "claims.read",
   "claims.write",
   "claims.approve",
   "clerk.use",
+  // Clerk expansion A: client-facing surfaces. capture = submit documents /
+  // voice notes as intake cases (review stays operator-only via clerk.use);
+  // ask = the register-grounded Q&A. Both are budget-capped per firm.
   "clerk.capture",
   "clerk.ask",
-];
+] as const;
+
+export type Capability = (typeof ALL)[number];
 
 const READ_ONLY: Capability[] = ALL.filter(
   (c) => c.endsWith(".read") || c === "audit.export",
@@ -312,6 +261,20 @@ export function clientPartyScope(principal: Principal): string | null {
   return principal.role === "client_user" ? principal.clientPartyId : null;
 }
 
+// Narrows a list query's clientPartyId filter to the caller's sub-tenant scope
+// (SEC-03): a client_user is confined to its own client party, so an explicit
+// sibling id is rejected and the filter is always pinned to its own party;
+// other roles keep whatever filter they asked for.
+export function narrowToClientPartyScope(
+  principal: Principal,
+  clientPartyId: string | undefined,
+): string | undefined {
+  if (clientPartyId) assertClientPartyScope(principal, clientPartyId);
+  const scope = clientPartyScope(principal);
+  if (scope) clientPartyId = scope;
+  return clientPartyId;
+}
+
 // Row-level tenant isolation (CON-01, SEC-02/03). Returns the firmId a
 // firm-scoped principal is allowed to see, or null for cross-tenant staff
 // (operator/auditor) who may pass an explicit firmId filter instead.
@@ -327,6 +290,21 @@ export function tenantFirmId(principal: Principal): string | null {
     );
   }
   return principal.firmId;
+}
+
+// Like tenantFirmId, but for writes that must land in a firm's tenant: a
+// cross-tenant principal (operator/auditor, which tenantFirmId maps to null)
+// has no firm to write into, so it is rejected instead of passed through.
+export function requireFirmScope(principal: Principal): string {
+  const firmId = tenantFirmId(principal);
+  if (!firmId) {
+    throw new DomainError(
+      "NO_TENANT",
+      "A firm-scoped principal is required",
+      403,
+    );
+  }
+  return firmId;
 }
 
 // Guards a resource's firmId against the principal's tenant. Cross-tenant staff
