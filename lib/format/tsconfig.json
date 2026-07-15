@@ -8,5 +8,11 @@
     "rootDir": "src",
     "lib": ["es2022"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    {
+      "path": "../api-zod"
+    }
+  ]
 }

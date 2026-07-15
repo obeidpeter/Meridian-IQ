@@ -162,6 +162,7 @@ pnpm --filter @workspace/db run test            # migration rollback (real Postg
 pnpm --filter @workspace/mobile run test
 pnpm --filter @workspace/sme-compliance run test
 pnpm --filter @workspace/console run test
+pnpm --filter @workspace/format --filter @workspace/api-errors run test
 # web builds (each needs BASE_PATH + PORT), then the e2e journeys:
 pnpm --filter @workspace/scripts run e2e        # 32 checks vs real builds + DB
 ```

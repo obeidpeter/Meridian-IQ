@@ -5,6 +5,15 @@
 // consuming app stay in that app's src/lib/format.ts, which re-exports this
 // module so pages keep importing from "@/lib/format".
 
+// Type-only: keys the vocabulary maps below to the contract's enums so a new
+// status added to openapi.yaml fails typecheck here instead of silently
+// rendering as a grey humanized pill in three apps. Erased at compile time.
+import type {
+  ComplianceDeadlineSeverity,
+  ConfirmationState,
+  InvoiceStatus,
+} from "@workspace/api-zod";
+
 // Intl formatter construction is expensive (locale-data setup) and these run
 // per table row per render — build each once at module load.
 const NAIRA_FORMAT = new Intl.NumberFormat("en-NG", {
@@ -136,16 +145,24 @@ type StatusTone =
   | "cancelled"
   | "unknown";
 
+// Exhaustive over the contract's InvoiceStatus (typecheck fails on a new
+// status until it is mapped here).
+const STATUS_TONES: Record<InvoiceStatus, StatusTone> = {
+  draft: "draft",
+  validated: "draft",
+  submitted: "pending",
+  stamped: "stamped",
+  confirmed: "stamped",
+  settled: "settled",
+  credited: "credited",
+  failed: "failed",
+  cancelled: "cancelled",
+};
+
 export function statusTone(status: string): StatusTone {
-  if (status === "draft" || status === "validated") return "draft";
-  if (status === "submitted") return "pending";
-  if (status === "stamped" || status === "confirmed") return "stamped";
-  if (status === "settled") return "settled";
-  if (status === "credited") return "credited";
-  if (status === "failed") return "failed";
-  if (status === "cancelled") return "cancelled";
-  // Unknown statuses fall back to slate with the humanized raw label.
-  return "unknown";
+  // Off-contract statuses (version skew) fall back to slate with the
+  // humanized raw label.
+  return (STATUS_TONES as Partial<Record<string, StatusTone>>)[status] ?? "unknown";
 }
 
 export function statusLabel(status: string): string {
@@ -186,49 +203,48 @@ export function severityLabel(severity: string): string {
   return humanize(severity);
 }
 
+// Exhaustive over the contract's ComplianceDeadlineSeverity.
+const SEVERITY_TONES: Record<ComplianceDeadlineSeverity, BadgeTone> = {
+  critical: "red",
+  warning: "amber",
+  info: "blue",
+};
+
 export function severityBadgeClasses(severity: string): string {
-  switch (severity) {
-    case "critical":
-      return pillClasses("red");
-    case "warning":
-      return pillClasses("amber");
-    case "info":
-      return pillClasses("blue");
-    default:
-      return pillClasses("slate");
-  }
+  return pillClasses(
+    (SEVERITY_TONES as Partial<Record<string, BadgeTone>>)[severity] ?? "slate",
+  );
 }
 
 // ---- Buyer rails: confirmation-state tones -------------------------------
 
+// Exhaustive over the contract's ConfirmationState, plus the synthetic "none"
+// the invoice pages render before any confirmation exists.
+const CONFIRMATION_LABELS: Record<ConfirmationState | "none", string> = {
+  requested: "Awaiting response",
+  confirmed: "Confirmed",
+  queried: "Queried",
+  rejected: "Rejected",
+  none: "Not requested",
+};
+
+const CONFIRMATION_TONES: Record<ConfirmationState | "none", BadgeTone> = {
+  requested: "amber",
+  confirmed: "emerald",
+  queried: "blue",
+  rejected: "red",
+  none: "slate",
+};
+
 export function confirmationLabel(state: string): string {
-  switch (state) {
-    case "requested":
-      return "Awaiting response";
-    case "confirmed":
-      return "Confirmed";
-    case "queried":
-      return "Queried";
-    case "rejected":
-      return "Rejected";
-    case "none":
-      return "Not requested";
-    default:
-      return humanize(state);
-  }
+  return (
+    (CONFIRMATION_LABELS as Partial<Record<string, string>>)[state] ??
+    humanize(state)
+  );
 }
 
 export function confirmationBadgeClasses(state: string): string {
-  switch (state) {
-    case "requested":
-      return pillClasses("amber");
-    case "confirmed":
-      return pillClasses("emerald");
-    case "queried":
-      return pillClasses("blue");
-    case "rejected":
-      return pillClasses("red");
-    default:
-      return pillClasses("slate");
-  }
+  return pillClasses(
+    (CONFIRMATION_TONES as Partial<Record<string, BadgeTone>>)[state] ?? "slate",
+  );
 }

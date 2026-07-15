@@ -2,9 +2,7 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 
-/* The pill/badge class strings live in the shared workspace package, outside
-   Tailwind's automatic content detection root - scan it explicitly. */
-@source "../../../lib/format/src";
+@import "@workspace/format/source.css";
 
 @custom-variant dark (&:is(.dark *));
 
