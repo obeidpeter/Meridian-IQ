@@ -16,7 +16,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -36,47 +35,36 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
+import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
 import { idMap, scopedToSupplier } from "@/lib/rows";
 import { formatNaira, formatDate, pillClasses } from "@/lib/format";
+import {
+  type LineDraft,
+  emptyLine,
+  lineTotal,
+  lineTotals,
+  todayIsoDate,
+  toInvoiceLineInputs,
+  updateLineAt,
+} from "@/lib/invoice-lines";
 import { Plus, Trash2, Repeat, Pause, Play } from "lucide-react";
-
-// Same standard rate the invoice form uses; the VAT select stores the
-// fraction string directly, so the payload conversion stays a straight
-// String(Number(...)) like invoice-new's.
-const VAT_STANDARD = "0.075";
-
-interface TemplateLine {
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  vatRate: string;
-}
 
 interface TemplateForm {
   name: string;
   buyerPartyId: string;
   cadence: "weekly" | "monthly";
   startDate: string;
-  lines: TemplateLine[];
+  lines: LineDraft[];
 }
-
-const emptyLine = (): TemplateLine => ({
-  description: "",
-  quantity: "1",
-  unitPrice: "",
-  vatRate: VAT_STANDARD,
-});
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 const emptyForm = (): TemplateForm => ({
   name: "",
   buyerPartyId: "",
   cadence: "monthly",
-  startDate: today(),
+  startDate: todayIsoDate(),
   lines: [emptyLine()],
 });
 
@@ -85,10 +73,7 @@ const cadenceLabel = (cadence: string) =>
 
 // Standing amount per run, derived from the template's own lines.
 const templateTotal = (t: RecurringInvoiceTemplate) =>
-  t.lines.reduce((sum, l) => {
-    const ext = Number(l.quantity) * Number(l.unitPrice);
-    return sum + ext + ext * Number(l.vatRate);
-  }, 0);
+  t.lines.reduce((sum, l) => sum + lineTotal(l).total, 0);
 
 /** "New recurring invoice" dialog: owns its form state and the create
  * mutation; the parent only opens/closes it. Fields reset on close so a
@@ -114,21 +99,10 @@ function NewRecurringDialog({
     onOpenChange(nextOpen);
   };
 
-  const setLine = (i: number, patch: Partial<TemplateLine>) =>
-    setForm((f) => ({
-      ...f,
-      lines: f.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)),
-    }));
+  const setLine = (i: number, patch: Partial<LineDraft>) =>
+    setForm((f) => ({ ...f, lines: updateLineAt(f.lines, i, patch) }));
 
-  const totals = form.lines.reduce(
-    (acc, l) => {
-      const ext = Number(l.quantity || 0) * Number(l.unitPrice || 0);
-      acc.net += ext;
-      acc.vat += ext * Number(l.vatRate || 0);
-      return acc;
-    },
-    { net: 0, vat: 0 },
-  );
+  const totals = lineTotals(form.lines);
 
   const isValid =
     !!form.name.trim() &&
@@ -146,14 +120,7 @@ function NewRecurringDialog({
   const submit = async () => {
     if (!isValid || create.isPending) return;
     try {
-      // Same payload conversion as the invoice form: the VAT select already
-      // holds the fraction string ("0.075"), normalized via String(Number()).
-      const lines: InvoiceLineInput[] = form.lines.map((l) => ({
-        description: l.description.trim(),
-        quantity: String(Number(l.quantity)),
-        unitPrice: String(Number(l.unitPrice)),
-        vatRate: String(Number(l.vatRate)),
-      }));
+      const lines: InvoiceLineInput[] = toInvoiceLineInputs(form.lines);
       await create.mutateAsync({
         data: {
           supplierPartyId,
@@ -513,11 +480,7 @@ export function Recurring() {
         )}
 
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-20" />
-            ))}
-          </div>
+          <SkeletonList count={3} itemClassName="h-20" />
         ) : isError ? (
           <QueryError
             thing="your recurring invoices"

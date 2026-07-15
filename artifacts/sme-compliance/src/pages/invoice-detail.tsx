@@ -63,6 +63,7 @@ import { isFeatureDisabled, errorStatus } from "@/lib/errors";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { DRAFT_KEY, type DraftState } from "@/pages/invoice-new";
+import { emptyLine, todayIsoDate } from "@/lib/invoice-lines";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -692,12 +693,9 @@ export function InvoiceDetail() {
     return {
       invoiceNumber: "",
       buyerPartyId: invoice.buyerPartyId,
-      issueDate: new Date().toISOString().slice(0, 10),
+      issueDate: todayIsoDate(),
       dueDate: "",
-      lines:
-        lines.length > 0
-          ? lines
-          : [{ description: "", quantity: "1", unitPrice: "", vatRate: "0.075" }],
+      lines: lines.length > 0 ? lines : [emptyLine()],
     };
   };
 

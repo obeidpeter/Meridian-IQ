@@ -5,11 +5,11 @@ import {
   getGetComplianceCalendarQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
+import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { CalendarClock, AlertTriangle, ChevronRight } from "lucide-react";
 import { formatDate, severityBadgeClasses } from "@/lib/format";
@@ -52,11 +52,7 @@ export function Calendar() {
 
       <RequireClientScope thing="compliance calendar">
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-20" />
-            ))}
-          </div>
+          <SkeletonList count={5} itemClassName="h-20" />
         ) : isError ? (
           <QueryError thing="your compliance calendar" onRetry={() => refetch()} />
         ) : !deadlines || deadlines.length === 0 ? (

@@ -28,11 +28,10 @@ import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/page-header";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { FilePickerButton } from "@/components/file-picker-button";
+import { RowStatusIcon } from "@/components/row-status-icon";
 import {
   Download,
   FileSpreadsheet,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 import { COLUMNS, parseCsv, mapGridRows, isExcel } from "./import-parse";
 
@@ -314,11 +313,7 @@ export function Import() {
                   key={r.rowNumber}
                   className="flex items-start gap-2 text-sm border rounded-md px-3 py-2"
                 >
-                  {r.status === "invalid" ? (
-                    <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
-                  )}
+                  <RowStatusIcon invalid={r.status === "invalid"} />
                   <div className="min-w-0">
                     <p className="font-medium">
                       Row {r.rowNumber}

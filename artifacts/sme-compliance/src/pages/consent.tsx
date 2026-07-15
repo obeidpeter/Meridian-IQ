@@ -9,11 +9,11 @@ import type { ConsentRecord } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
+import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -148,11 +148,7 @@ export function Consent() {
           )}
 
           {isLoading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-32" />
-              ))}
-            </div>
+            <SkeletonList count={3} itemClassName="h-32" className="space-y-4" />
           ) : isError ? (
             <QueryError thing="the consent ledger" onRetry={() => refetch()} />
           ) : (

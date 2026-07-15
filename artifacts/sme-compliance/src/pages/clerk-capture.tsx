@@ -43,6 +43,7 @@ import {
   usagePct,
 } from "@/lib/clerk";
 import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
+import { SkeletonList } from "@/components/skeleton-list";
 import {
   AlertTriangle,
   ChevronDown,
@@ -548,11 +549,7 @@ function CaptureContent() {
         </CardHeader>
         <CardContent className="space-y-2">
           {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-16" />
-              ))}
-            </div>
+            <SkeletonList count={3} itemClassName="h-16" className="space-y-2" />
           ) : isError ? (
             <QueryError thing="your submissions" onRetry={() => refetch()} />
           ) : sortedCases.length === 0 ? (

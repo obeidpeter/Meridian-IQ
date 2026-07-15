@@ -25,14 +25,13 @@ import { QueryError } from "@/components/query-error";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { FilePickerButton } from "@/components/file-picker-button";
+import { RowStatusIcon } from "@/components/row-status-icon";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled } from "@/lib/errors";
 import {
   Landmark,
   ScanSearch,
-  CheckCircle2,
-  XCircle,
   Check,
   X,
 } from "lucide-react";
@@ -399,11 +398,7 @@ export function Reconciliation() {
                           : ""
                       }`}
                     >
-                      {r.parseStatus === "invalid" ? (
-                        <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" aria-hidden="true" />
-                      ) : (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
-                      )}
+                      <RowStatusIcon invalid={r.parseStatus === "invalid"} />
                       <div className="min-w-0">
                         <p className="font-medium">
                           Line {r.lineNo}
