@@ -1,5 +1,6 @@
 import { humanize, pillClasses, type BadgeTone } from "@/lib/format";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { clerkBudgetExhausted, killSwitchTripped } from "@workspace/api-errors";
+import { serverErrorMessage } from "@/lib/errors";
 
 // ---- Clerk capture cases ---------------------------------------------------
 // Client-side view of the Clerk intake lifecycle. Clients only submit and
@@ -59,14 +60,14 @@ export function handleClerkGatewayError(
     fallbackTitle: string;
   },
 ): void {
-  const status = errorStatus(err);
-  if (status === 503) {
+  if (killSwitchTripped(err)) {
     opts.onDisabled();
     return;
   }
   opts.toast({
-    title:
-      status === 429 ? "Monthly Clerk allowance used up" : opts.fallbackTitle,
+    title: clerkBudgetExhausted(err)
+      ? "Monthly Clerk allowance used up"
+      : opts.fallbackTitle,
     description: serverErrorMessage(err),
     variant: "destructive",
   });

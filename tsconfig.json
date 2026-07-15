@@ -17,6 +17,9 @@
     },
     {
       "path": "./lib/format"
+    },
+    {
+      "path": "./lib/api-errors"
     }
   ]
 }
