@@ -6,6 +6,7 @@ import {
   numeric,
   integer,
   boolean,
+  index,
   jsonb,
   pgEnum,
   unique,
@@ -39,7 +40,11 @@ export const submissionAttemptsTable = pgTable("submission_attempts", {
   responsePayload: jsonb("response_payload").$type<Record<string, unknown>>(),
   errorCode: text("error_code"),
   createdAt: createdAt(),
-});
+// Read by invoice on every detail/status view; append-only, so it only grows.
+// The firm-keyed RLS policy probes invoices per candidate row (EXISTS), which
+// makes an unindexed scan pay twice — same reasoning for the two sibling
+// child tables below.
+}, (t) => [index("submission_attempts_invoice_idx").on(t.invoiceId)]);
 
 // A validated invoice carries an IRN, CSID and QR code (C1). Append-only.
 export const stampRecordsTable = pgTable("stamp_records", {
@@ -56,7 +61,12 @@ export const stampRecordsTable = pgTable("stamp_records", {
   // One canonical stamp per invoice: enforces idempotency so a crash/retry
   // between the stamp insert and the outbox row being marked done cannot write
   // a second stamp (INT-09), without ever deleting an append-only record.
-}, (t) => [unique().on(t.invoiceId)]);
+  // The (irn, csid) index serves the public /verify-stamp lookup, which is
+  // unauthenticated and must not seq-scan an ever-growing table.
+}, (t) => [
+  unique().on(t.invoiceId),
+  index("stamp_records_irn_csid_idx").on(t.irn, t.csid),
+]);
 
 export const confirmationStateEnum = pgEnum("confirmation_state", [
   "requested",
@@ -84,7 +94,7 @@ export const confirmationsTable = pgTable("confirmations", {
   // Reason accompanying a queried/rejected response, returned to the supplier.
   note: text("note"),
   createdAt: createdAt(),
-});
+}, (t) => [index("confirmations_invoice_idx").on(t.invoiceId)]);
 
 // Mandatory-source hierarchy (CR-01). Uploaded evidence alone never qualifies.
 export const settlementSourceEnum = pgEnum("settlement_source", [
@@ -121,7 +131,7 @@ export const settlementEventsTable = pgTable("settlement_events", {
   actorId: text("actor_id"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   createdAt: createdAt(),
-});
+}, (t) => [index("settlement_events_invoice_idx").on(t.invoiceId)]);
 
 // Append-only projection of every invoice status transition (CORE-02). Replaying
 // these rows reconstructs an invoice's status at any timestamp; combined with the
@@ -144,7 +154,7 @@ export const invoiceLifecycleEventsTable = pgTable("invoice_lifecycle_events", {
   actorRole: text("actor_role"),
   reason: text("reason"),
   createdAt: createdAt(),
-});
+}, (t) => [index("invoice_lifecycle_events_invoice_idx").on(t.invoiceId)]);
 
 export type SubmissionAttempt = typeof submissionAttemptsTable.$inferSelect;
 export type StampRecord = typeof stampRecordsTable.$inferSelect;

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.11.0`).
+contract change (it is currently `0.12.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -132,10 +132,15 @@ DRAFT register entry that still walks the full maker-checker flow.
 `modules/pipeline/pipeline.ts` runs three in-process loops: outbox drain,
 reconciliation sweep, and the registered compliance sweeps (deadline
 reminders, recurring invoices, B2C pre-breach alerts, buyer exposure
-refresh, push receipts, login-attempt / password-reset cleanup,
-unmapped-code cases, and the
+refresh, push receipts, login-attempt / password-reset cleanup, outbox +
+stamp-verification retention, unmapped-code cases, and the
 Clerk watchdog / expired-claims / expired-case-content / eval-growth /
 weekly-digest sweeps). Register new periodic work with `registerSweep(fn)`.
+Alert fan-out (`modules/messaging/fan-out.ts`) is consent-gated: no layer-1
+grant, no alert (CORE-03). Statutory day boundaries — submission windows, VAT
+due dates, "overdue today" — use the LAGOS calendar via
+`lib/lagos-time.ts` (SQL: `AT TIME ZONE 'Africa/Lagos'`); never derive a
+business "today" from `toISOString().slice(0, 10)` or `current_date`.
 
 **Multi-instance safety.** The loops are reentrancy-guarded per process, and
 every sweep is **idempotent** by construction (advisory locks, dedup ledgers,

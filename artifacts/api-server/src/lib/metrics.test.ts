@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Counter, Gauge, Histogram, registry } from "./metrics.ts";
+import { Counter, Gauge, Histogram, registry, routeLabel } from "./metrics.ts";
+import type { Request, Response } from "express";
 
 // The hand-rolled Prometheus exposition primitives: cumulative histogram
 // buckets, labeled counters, and gauges must serialize to valid text.
@@ -61,4 +62,49 @@ test("registry exposition includes process and app series", async () => {
   assert.match(text, /http_request_duration_seconds/);
   assert.match(text, /meridian_sweep_last_success_timestamp_seconds/);
   assert.equal(registry.contentType.includes("text/plain"), true);
+});
+
+// The route label must stay bounded under hostile traffic: matched routes
+// report their pattern, unmatched errors collapse into one series, and only
+// successful static paths keep the (id-collapsed) literal path.
+test("routeLabel is bounded: pattern for matched, 'unmatched' for erroring paths", () => {
+  const fake = (over: {
+    route?: { path: string };
+    baseUrl?: string;
+    originalUrl: string;
+    status: number;
+  }) =>
+    [
+      {
+        route: over.route,
+        baseUrl: over.baseUrl ?? "",
+        originalUrl: over.originalUrl,
+        method: "GET",
+      } as unknown as Request,
+      { statusCode: over.status } as unknown as Response,
+    ] as const;
+
+  const [matchedReq, matchedRes] = fake({
+    route: { path: "/invoices/:id" },
+    baseUrl: "/api",
+    originalUrl: "/api/invoices/9be0a0f0-0000-4000-8000-000000000000",
+    status: 200,
+  });
+  assert.equal(routeLabel(matchedReq, matchedRes), "/api/invoices/:id");
+
+  // A bot scan 404s with no matched route: one shared series, not one per path.
+  const [scanReq, scanRes] = fake({ originalUrl: "/wp-admin/setup.php", status: 404 });
+  assert.equal(routeLabel(scanReq, scanRes), "unmatched");
+
+  // A 401 thrown before routing (principal middleware) likewise collapses.
+  const [authReq, authRes] = fake({ originalUrl: "/api/anything-goes-here", status: 401 });
+  assert.equal(routeLabel(authReq, authRes), "unmatched");
+
+  // A successful non-route response (static asset) keeps its bounded path,
+  // with uuid segments still collapsed.
+  const [staticReq, staticRes] = fake({
+    originalUrl: "/assets/app.js?v=1",
+    status: 200,
+  });
+  assert.equal(routeLabel(staticReq, staticRes), "/assets/app.js");
 });

@@ -153,7 +153,14 @@ export const sweepErrorsTotal = new Counter(
 );
 export const sweepLastSuccess = new Gauge(
   "meridian_sweep_last_success_timestamp_seconds",
-  "Unix time of the last completed compliance sweep pass.",
+  "Unix time of the last compliance sweep pass in which every sweep succeeded.",
+);
+// The outbox drain swallows claim errors to protect the loop; this counter is
+// how a persistent claim failure (permissions regression, schema drift)
+// surfaces instead of the pipeline silently processing nothing.
+export const outboxClaimFailuresTotal = new Counter(
+  "meridian_outbox_claim_failures_total",
+  "Errors thrown while claiming the next outbox event.",
 );
 
 const METRICS: Metric[] = [
@@ -161,6 +168,7 @@ const METRICS: Metric[] = [
   sweepRunsTotal,
   sweepErrorsTotal,
   sweepLastSuccess,
+  outboxClaimFailuresTotal,
 ];
 
 // Event-loop lag: the single most useful process-health signal for a Node
@@ -204,6 +212,24 @@ function normalizeRoute(path: string): string {
   return norm || "/";
 }
 
+// The route label for a finished request, chosen so unauthenticated traffic
+// cannot mint unbounded series (every distinct label is a permanent entry in
+// the in-process registry — internet bot scans of /wp-admin, /.env etc. would
+// otherwise each become a new histogram forever):
+//   1. a matched Express route reports its PATTERN (bounded by the route table);
+//   2. anything unmatched that errored (404s from scans, 401s thrown before
+//      routing) collapses into one "unmatched" series;
+//   3. successful non-route responses (static assets) keep the id-collapsed
+//      path — their namespace is the deploy's file tree, which is bounded.
+export function routeLabel(req: Request, res: Response): string {
+  const matched = (req as Request & { route?: { path?: unknown } }).route?.path;
+  if (typeof matched === "string") {
+    return normalizeRoute(`${req.baseUrl ?? ""}${matched}`);
+  }
+  if (res.statusCode >= 400) return "unmatched";
+  return normalizeRoute(req.originalUrl.split("?")[0]);
+}
+
 // Times every request and records it once the response finishes. Runs early in
 // the chain so it captures total in-server time including auth and RLS setup.
 export function metricsMiddleware(
@@ -218,10 +244,9 @@ export function metricsMiddleware(
   }
   const end = httpDuration.startTimer();
   res.on("finish", () => {
-    const path = req.originalUrl.split("?")[0];
     end({
       method: req.method,
-      route: normalizeRoute(path),
+      route: routeLabel(req, res),
       status: String(res.statusCode),
     });
   });
