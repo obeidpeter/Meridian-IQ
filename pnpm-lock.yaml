@@ -251,6 +251,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/format':
+        specifier: workspace:*
+        version: link:../../lib/format
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -371,6 +374,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/format':
+        specifier: workspace:*
+        version: link:../../lib/format
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -904,6 +910,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/format':
+        specifier: workspace:*
+        version: link:../../lib/format
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -995,6 +1004,8 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+
+  lib/format: {}
 
   lib/integrations-openai-ai-server:
     dependencies:
