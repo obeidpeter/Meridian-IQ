@@ -120,6 +120,9 @@ export function Invitations() {
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const clients = portfolio?.clients ?? [];
+  // Operators see invitations across every firm, so the list needs a firm
+  // column to be readable; firm admins only ever see their own and don't.
+  const firmNameById = new Map((firms ?? []).map((f) => [f.id, f.name]));
   const hasClientList = clients.length > 0;
   const isClientRole = role === "client_user";
   // Operators bootstrap firm logins (first admin, then staff); client
@@ -742,6 +745,11 @@ export function Invitations() {
                     <th scope="col" className="py-2 pr-3 font-medium">
                       Role
                     </th>
+                    {isOperator && (
+                      <th scope="col" className="py-2 pr-3 font-medium">
+                        Firm
+                      </th>
+                    )}
                     <th scope="col" className="py-2 pr-3 font-medium">
                       Status
                     </th>
@@ -761,6 +769,18 @@ export function Invitations() {
                     <tr key={inv.id} data-testid={`row-invitation-${inv.id}`}>
                       <td className="py-2.5 pr-3 font-medium">{inv.email}</td>
                       <td className="py-2.5 pr-3">{roleLabel(inv.role)}</td>
+                      {isOperator && (
+                        <td
+                          className="py-2.5 pr-3 text-muted-foreground whitespace-nowrap"
+                          data-testid={`firm-${inv.id}`}
+                        >
+                          {firmNameById.get(inv.firmId) ?? (
+                            <span className="font-mono text-xs">
+                              {inv.firmId.slice(0, 8)}
+                            </span>
+                          )}
+                        </td>
+                      )}
                       <td className="py-2.5 pr-3">
                         <span
                           className={pillClasses(

@@ -132,7 +132,8 @@ DRAFT register entry that still walks the full maker-checker flow.
 `modules/pipeline/pipeline.ts` runs three in-process loops: outbox drain,
 reconciliation sweep, and the registered compliance sweeps (deadline
 reminders, recurring invoices, B2C pre-breach alerts, buyer exposure
-refresh, push receipts, login-attempt cleanup, unmapped-code cases, and the
+refresh, push receipts, login-attempt / password-reset cleanup,
+unmapped-code cases, and the
 Clerk watchdog / expired-claims / expired-case-content / eval-growth /
 weekly-digest sweeps). Register new periodic work with `registerSweep(fn)`.
 
@@ -155,6 +156,10 @@ one full pass on demand.
   RSS, heap, uptime), and sweep liveness (`meridian_sweep_last_success_*`).
   Hand-rolled in `lib/metrics.ts` (a metrics lib would fork drizzle via
   `@opentelemetry/api`).
+- `/api/metrics` and `/api/internal/sweep` are public by default; setting
+  `METRICS_TOKEN` / `SWEEP_TOKEN` closes the endpoint behind that shared
+  secret (`x-op-token` header or `?token=`, `lib/op-token.ts`). Opt-in:
+  unset env keeps today's open behaviour.
 
 ## Verify battery (run before shipping)
 

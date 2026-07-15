@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { runScheduledWorkOnce } from "../modules/pipeline/pipeline";
+import { requireOpToken } from "../lib/op-token";
 
 // Public wake-up trigger for the Autoscale deployment (SME-08 reliability).
 //
@@ -22,6 +23,10 @@ import { runScheduledWorkOnce } from "../modules/pipeline/pipeline";
 // - Hammering it is a cheap no-op: module-level guards collapse concurrent
 //   triggers, and a pass with nothing due does no writes.
 //
+// A deployment that still wants the trigger closed sets SWEEP_TOKEN (opt-in;
+// unset keeps today's open behaviour so existing schedulers are unaffected) —
+// see lib/op-token.ts.
+//
 // GET (not POST) so any dumb pinger/cron can call it, and it stays exempt from
 // the cookie-CSRF guard by construction. The path is listed in
 // NO_CONTEXT_PATHS (app.ts): the pipeline work opens its own bypass
@@ -30,7 +35,7 @@ import { runScheduledWorkOnce } from "../modules/pipeline/pipeline";
 // request-transaction cap).
 const router: IRouter = Router();
 
-router.get("/internal/sweep", async (req, res): Promise<void> => {
+router.get("/internal/sweep", requireOpToken("SWEEP_TOKEN"), async (req, res): Promise<void> => {
   const startedAt = Date.now();
   const result = await runScheduledWorkOnce();
   req.log.info(
