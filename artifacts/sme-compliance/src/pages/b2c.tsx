@@ -22,7 +22,7 @@ import { RequireClientScope } from "@/components/require-client-scope";
 import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
-import { isFeatureDisabled } from "@/lib/errors";
+import { isFeatureDisabled, serverErrorMessage } from "@/lib/errors";
 import { idMap } from "@/lib/rows";
 import { Store, Clock3, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import {
@@ -190,7 +190,7 @@ export function B2cReports() {
     } catch (e) {
       toast({
         title: "Could not mark reported",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     } finally {

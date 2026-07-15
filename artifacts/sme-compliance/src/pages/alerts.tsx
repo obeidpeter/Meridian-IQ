@@ -20,6 +20,7 @@ import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { serverErrorMessage } from "@/lib/errors";
 import { MessageSquare, Phone, Mail, Send } from "lucide-react";
 import { humanize } from "@/lib/format";
 
@@ -98,7 +99,7 @@ export function Alerts() {
     } catch (e) {
       toast({
         title: "Couldn't save alert preferences",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     }
@@ -115,7 +116,7 @@ export function Alerts() {
     } catch (e) {
       toast({
         title: "Couldn't send test alert",
-        description: e instanceof Error ? e.message : "Please try again.",
+        description: serverErrorMessage(e),
         variant: "destructive",
       });
     }

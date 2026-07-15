@@ -24,6 +24,9 @@
       "path": "../../lib/format"
     },
     {
+      "path": "../../lib/web-ui"
+    },
+    {
       "path": "../../lib/api-errors"
     }
   ]
