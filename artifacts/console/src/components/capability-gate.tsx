@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useGetMe } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PORTAL_URL } from "@/components/require-session";
 import { Lock } from "lucide-react";
 
 // Console pages map 1:1 to RBAC capabilities (see modules/auth/rbac.ts on the
@@ -64,7 +65,7 @@ export function CapabilityGate({
                     asChild
                     data-testid="button-switch-account"
                   >
-                    <a href="/">Switch account</a>
+                    <a href={PORTAL_URL}>Switch account</a>
                   </Button>
                 </div>
               </div>

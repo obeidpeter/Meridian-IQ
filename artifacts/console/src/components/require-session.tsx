@@ -7,7 +7,7 @@ import { errorStatus } from "@/lib/errors";
 
 // Full navigation back to the origin landing page. The session cookie is
 // origin-wide (Path=/), so signing in there re-authenticates every app.
-const PORTAL_URL = "/login";
+export const PORTAL_URL = "/login";
 
 function BrandSplash({ children }: { children: ReactNode }) {
   return (

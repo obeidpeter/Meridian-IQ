@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { QueryError } from "@/components/query-error";
-import { ClerkPageHeader } from "@/components/clerk-shell";
+import { ClerkDisabledBanner, ClerkPageHeader } from "@/components/clerk-shell";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
@@ -52,22 +52,35 @@ import {
 } from "@/lib/errors";
 import { formatDateTime, pillClasses } from "@/lib/format";
 import { PartySuggestionChips } from "@/pages/clerk-party-suggestions";
-import { isReadyToApprove, STATUS_TONE } from "@/pages/clerk-shared";
+import type { ApproveForm } from "@/pages/clerk-shared";
+import {
+  approveFormFromCase,
+  clerkDisabledToast,
+  fieldLabel,
+  fileIsPdf,
+  fileToBase64,
+  intakeKind,
+  isReadyToApprove,
+  relativeTime,
+  serverErrorToast,
+  shortActor,
+  STATUS_TONE,
+  truncateSnippet,
+  vatFractionFromPercent,
+  vatPercentInvalid,
+  voiceDuration,
+} from "@/pages/clerk-shared";
 import {
   MAX_RECORD_SECONDS,
   MAX_VOICE_BYTES,
   useVoiceRecorder,
 } from "@/pages/use-voice-recorder";
-import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
-  FileText,
-  MessageSquareText,
   Mic,
   Plus,
   PowerOff,
   Quote,
-  ScanLine,
   ShieldCheck,
 } from "lucide-react";
 
@@ -84,153 +97,11 @@ const CATEGORIES: ClerkCaseDecisionInputCategory[] = ["b2b", "b2g", "b2c"];
 // full page means there may be more — "Load more" appends the next one.
 const PAGE_SIZE = 50;
 
-function fieldValue(kase: ClerkCase, field: string): string {
-  return (
-    kase.extraction?.fields.find((f) => f.field === field)?.value ?? ""
-  );
-}
-
-// Read a File into plain base64. Bytes are encoded directly (chunked to stay
-// under the argument limit), so no data: URL prefix is ever produced — the
-// backend strips one anyway.
-async function fileToBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
-function fileIsPdf(file: File): boolean {
-  return (
-    file.type === "application/pdf" ||
-    file.name.toLowerCase().endsWith(".pdf")
-  );
-}
-
-// Source snippets can quote a whole paragraph; ~300 chars is plenty to verify
-// where a value came from.
-function truncateSnippet(s: string): string {
-  return s.length > 300 ? `${s.slice(0, 300)}…` : s;
-}
-
-// Coarse "n min ago" for claim ages — precision doesn't matter here.
-function relativeTime(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const mins = Math.max(0, Math.round((Date.now() - then) / 60_000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
-}
-
-// "78" -> "1:18" for the voice-note duration chip on the transcript card.
-function voiceDuration(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const r = Math.max(0, Math.round(sec % 60));
-  return `${m}:${String(r).padStart(2, "0")}`;
-}
-
-// Operator ids are opaque — show enough to tell operators apart.
-function shortActor(id: string | null | undefined): string {
-  if (!id) return "unknown";
-  return id.length > 10 ? `${id.slice(0, 8)}…` : id;
-}
-
-interface ApproveForm {
-  firmId: string;
-  supplierPartyId: string;
-  buyerPartyId: string;
-  invoiceNumber: string;
-  issueDate: string;
-  dueDate: string;
-  currency: string;
-  category: ClerkCaseDecisionInputCategory;
-  lines: InvoiceLineInput[];
-}
-
-// The API takes VAT rates as FRACTIONS ("0.075" = 7.5%) and rejects
-// percent-style values loudly. The operator edits a percent in this form, so
-// we normalise the extracted value to percent for display and convert back to
-// a fraction on submit. If extraction found no usable VAT rate we leave the
-// field EMPTY — never invent a default tax rate; the operator must enter one
-// deliberately before approval is allowed.
-function vatPercentFromRaw(raw: string | null): string {
-  if (!raw) return "";
-  const trimmed = String(raw).trim();
-  const n = Number(trimmed.replace("%", "").trim());
-  if (!Number.isFinite(n) || n < 0) return "";
-  if (trimmed.includes("%")) return String(n);
-  // Round away float artifacts (0.07 * 100 → 7.000000000000001).
-  return String(n <= 1 ? Number((n * 100).toFixed(6)) : n);
-}
-
-function vatFractionFromPercent(pct: string): string {
-  const trimmed = String(pct).replace("%", "").trim();
-  if (!trimmed) return "";
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) return pct;
-  return String(n / 100);
-}
-
-// A line's VAT % is submittable only if it is an explicit number in [0, 100].
-function vatPercentInvalid(pct: string): boolean {
-  const trimmed = String(pct).replace("%", "").trim();
-  if (!trimmed) return true;
-  const n = Number(trimmed);
-  return !Number.isFinite(n) || n < 0 || n > 100;
-}
-
-function approveFormFromCase(kase: ClerkCase): ApproveForm {
-  return {
-    firmId: "",
-    supplierPartyId: "",
-    buyerPartyId: "",
-    invoiceNumber: fieldValue(kase, "invoiceNumber"),
-    issueDate: fieldValue(kase, "issueDate"),
-    dueDate: fieldValue(kase, "dueDate"),
-    currency: fieldValue(kase, "currency") || "NGN",
-    category: "b2b",
-    lines: (kase.extraction?.lines ?? []).map((l) => ({
-      description: l.description ?? "",
-      quantity: l.quantity ?? "1",
-      unitPrice: l.unitPrice ?? "0",
-      vatRate: vatPercentFromRaw(l.vatRate),
-    })),
-  };
-}
-
 function ConfidenceBadge({ confidence }: { confidence: number }) {
   const pct = Math.round(confidence * 100);
   const tone =
     confidence >= 0.9 ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400 font-medium";
   return <span className={`text-xs tabular-nums ${tone}`}>{pct}%</span>;
-}
-
-// How each capture source presents in the intake queue and detail header.
-const INTAKE_KIND: Record<
-  string,
-  { label: string; eyebrow: string; icon: LucideIcon }
-> = {
-  voice: { label: "Voice note", eyebrow: "Voice intake", icon: Mic },
-  pdf: { label: "Invoice scan", eyebrow: "Document intake", icon: ScanLine },
-  image: { label: "Invoice scan", eyebrow: "Document intake", icon: ScanLine },
-  text: { label: "Message", eyebrow: "Text intake", icon: MessageSquareText },
-};
-
-function intakeKind(sourceType: string | null | undefined) {
-  return (
-    INTAKE_KIND[sourceType ?? ""] ?? {
-      label: "Document",
-      eyebrow: "Document intake",
-      icon: FileText,
-    }
-  );
 }
 
 // The queue's one-word status line under each intake title.
@@ -249,12 +120,6 @@ const OPEN_STATUSES = new Set<ClerkCase["status"]>([
   "extracted",
   "in_review",
 ]);
-
-// "invoiceNumber" -> "Invoice number" for the extracted key-value rows.
-function fieldLabel(field: string): string {
-  const spaced = field.replace(/([A-Z])/g, " $1").toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -422,22 +287,16 @@ export function ClerkWorkspace() {
   const handleGatewayError = (err: unknown, fallback: string) => {
     if (killSwitchTripped(err)) {
       setDisabledBanner(true);
-      toast({
-        title: "Clerk is switched off",
-        description:
-          "The clerk_ai kill switch is disabled, so no AI calls are being made.",
-        variant: "destructive",
-      });
+      clerkDisabledToast(
+        toast,
+        "The clerk_ai kill switch is disabled, so no AI calls are being made.",
+      );
       return;
     }
     // Relay the server's own words when it sent any — typed rejections
     // (VOICE_UNREADABLE / VOICE_NO_SPEECH 422s, CASE_CLAIMED /
     // CASE_CLAIM_CONFLICT 409s) carry an actionable message.
-    toast({
-      title: "Something went wrong",
-      description: serverErrorMessage(err) ?? fallback,
-      variant: "destructive",
-    });
+    serverErrorToast(toast, err, fallback);
   };
 
   const invalidateCases = () => {
@@ -768,14 +627,10 @@ export function ClerkWorkspace() {
       />
 
       {disabledBanner && (
-        <Alert variant="destructive" data-testid="banner-clerk-disabled">
-          <PowerOff className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>Clerk is switched off</AlertTitle>
-          <AlertDescription>
-            The <code>clerk_ai</code> feature flag is disabled. No AI calls are
-            made while it is off — re-enable it under Feature flags.
-          </AlertDescription>
-        </Alert>
+        <ClerkDisabledBanner>
+          No AI calls are made while it is off — re-enable it under Feature
+          flags.
+        </ClerkDisabledBanner>
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
