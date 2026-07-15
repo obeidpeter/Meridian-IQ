@@ -72,5 +72,3 @@ export const erpSyncRunsTable = pgTable("erp_sync_runs", {
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 });
 
-export type ErpConnection = typeof erpConnectionsTable.$inferSelect;
-export type ErpSyncRun = typeof erpSyncRunsTable.$inferSelect;

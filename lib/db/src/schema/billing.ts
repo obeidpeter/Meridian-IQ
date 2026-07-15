@@ -199,13 +199,4 @@ export const revenueShareStatementsTable = pgTable(
 );
 
 export type BillingTier = typeof billingTiersTable.$inferSelect;
-export type FirmSubscription = typeof firmSubscriptionsTable.$inferSelect;
-export type PriceReview = typeof priceReviewsTable.$inferSelect;
-export type OnboardingProspect = typeof onboardingProspectsTable.$inferSelect;
 export type OperatorCase = typeof operatorCasesTable.$inferSelect;
-export type RevenueShareStatement =
-  typeof revenueShareStatementsTable.$inferSelect;
-export type TierKey = (typeof tierKeyEnum.enumValues)[number];
-export type PipelineStage = (typeof pipelineStageEnum.enumValues)[number];
-export type OperatorCaseStatus = (typeof caseStatusEnum.enumValues)[number];
-export type OperatorCasePriority = (typeof casePriorityEnum.enumValues)[number];

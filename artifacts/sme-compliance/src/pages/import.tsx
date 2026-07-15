@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { readSheet } from "read-excel-file/browser";
 import writeXlsxFile from "write-excel-file/browser";
 import {
@@ -27,12 +27,11 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/page-header";
 import { RequireClientScope } from "@/components/require-client-scope";
+import { FilePickerButton } from "@/components/file-picker-button";
+import { RowStatusIcon } from "@/components/row-status-icon";
 import {
-  Upload,
   Download,
   FileSpreadsheet,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 import { COLUMNS, parseCsv, mapGridRows, isExcel } from "./import-parse";
 
@@ -92,7 +91,6 @@ export function Import() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const importMut = useImportInvoices();
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const [raw, setRaw] = useState("");
   const [fileRows, setFileRows] = useState<InvoiceImportRow[] | null>(null);
@@ -201,21 +199,11 @@ export function Import() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <input
-              ref={fileRef}
-              type="file"
+            <FilePickerButton
               accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) onFile(file);
-                // Allow re-selecting the same (fixed) file.
-                e.target.value = "";
-              }}
+              label="Upload Excel or CSV"
+              onFile={onFile}
             />
-            <Button variant="outline" onClick={() => fileRef.current?.click()}>
-              <Upload className="w-4 h-4 mr-2" aria-hidden="true" /> Upload Excel or CSV
-            </Button>
             <Button
               variant="ghost"
               onClick={() => download("meridianiq-template.csv", TEMPLATE)}
@@ -325,11 +313,7 @@ export function Import() {
                   key={r.rowNumber}
                   className="flex items-start gap-2 text-sm border rounded-md px-3 py-2"
                 >
-                  {r.status === "invalid" ? (
-                    <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" aria-hidden="true" />
-                  )}
+                  <RowStatusIcon invalid={r.status === "invalid"} />
                   <div className="min-w-0">
                     <p className="font-medium">
                       Row {r.rowNumber}

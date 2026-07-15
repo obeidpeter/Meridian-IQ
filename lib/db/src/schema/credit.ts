@@ -74,8 +74,3 @@ export const repaymentEventsTable = pgTable("repayment_events", {
   createdAt: createdAt(),
 });
 
-export type EligibilityAssessment =
-  typeof eligibilityAssessmentsTable.$inferSelect;
-export type FinancingRequest = typeof financingRequestsTable.$inferSelect;
-export type FacilityPosition = typeof facilityPositionsTable.$inferSelect;
-export type RepaymentEvent = typeof repaymentEventsTable.$inferSelect;

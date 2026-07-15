@@ -570,9 +570,13 @@ your operator to flip its flag (Compliance Desk → Feature flags).
 | `erp_connectors` | R2 | ERP integrations | Dark |
 | `credit_readiness` | R3 | Credit layer (dormant by design) | Dark |
 | `bank_data_room` | R4 | Bank data room (dormant by design) | Dark |
+| `clerk_ai` | R3 | Clerk AI copilot (capture extraction + register-backed Q&A) — this is the kill switch: flipping it off instantly disables every Clerk surface | **On** |
 
-R3/R4 flags stay dark until their business gates pass — that's policy, not an
-oversight.
+The credit/bank R3/R4 flags stay dark until their business gates pass — that's
+policy, not an oversight (`clerk_ai` is the exception: it ships on, and exists
+to be switched *off*). Two further Clerk flags are opt-in and unseeded, so they
+default dark: `clerk_auto_eval` (nightly eval run — spends tokens) and
+`clerk_digest` (weekly firm digests).
 
 ---
 
@@ -604,9 +608,9 @@ environment variable.
 ```bash
 pnpm install                                        # dependencies
 pnpm --filter @workspace/db run push                # create/update tables
-pnpm --filter @workspace/api-server run dev         # API server on :5000
+pnpm --filter @workspace/api-server run dev         # API server (requires PORT; the Replit runner uses 8080)
 pnpm run typecheck                                  # full typecheck
-pnpm --filter @workspace/api-server run test        # unit tests (no DB needed)
+pnpm --filter @workspace/api-server run test        # api-server tests (DB-backed — needs the schema pushed + guardrail migrations)
 pnpm --filter @workspace/db run test                # migration rollback test (needs DB)
 pnpm --filter @workspace/api-spec run codegen       # regenerate API clients after editing openapi.yaml
 ```
@@ -633,7 +637,7 @@ links work.
   committed API clients must match `openapi.yaml`), the migration
   rollback test against a real Postgres, and all four production builds.
 - **e2e** — boots the built API server and built frontends behind a
-  path-router and drives **22 headless user-journey checks** (auth incl.
+  path-router and drives **32 headless user-journey checks** (auth incl.
   throttling and password change, the operator Desk, admin advisory, the
   auditor's read-only boundary, consent round-trip, and the credit-note
   lifecycle) against a freshly seeded database.

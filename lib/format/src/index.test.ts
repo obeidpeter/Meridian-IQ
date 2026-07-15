@@ -1,14 +1,20 @@
 import { test, expect, describe } from "vitest";
 import {
-  formatNaira,
-  formatPct,
+  badgeClasses,
+  confirmationBadgeClasses,
+  confirmationLabel,
+  formatCompactNaira,
   formatDate,
   formatDateTime,
+  formatNaira,
+  formatPct,
   humanize,
-  statusTone,
+  pillClasses,
+  severityBadgeClasses,
+  severityLabel,
   statusLabel,
-  badgeClasses,
-} from "./format";
+  statusTone,
+} from "./index";
 
 describe("formatNaira", () => {
   test("returns the em-dash sentinel for null, undefined, and non-numeric input", () => {
@@ -23,6 +29,20 @@ describe("formatNaira", () => {
     expect(formatNaira(150000)).toContain("150,000.00");
     expect(formatNaira("1234.5")).toContain("1,234.50");
     expect(formatNaira(0)).not.toBe("—");
+  });
+});
+
+describe("formatCompactNaira", () => {
+  test("returns the em-dash sentinel for null, undefined, and non-numeric input", () => {
+    expect(formatCompactNaira(null)).toBe("—");
+    expect(formatCompactNaira(undefined)).toBe("—");
+    expect(formatCompactNaira("abc")).toBe("—");
+  });
+
+  test("compacts large amounts to at most one fraction digit", () => {
+    expect(formatCompactNaira(1_200_000)).toContain("1.2M");
+    expect(formatCompactNaira("2500")).toContain("2.5K");
+    expect(formatCompactNaira(0)).not.toBe("—");
   });
 });
 
@@ -98,6 +118,15 @@ describe("humanize", () => {
   });
 });
 
+describe("pillClasses", () => {
+  test("combines the pill recipe with the tone's light and dark classes", () => {
+    const out = pillClasses("emerald");
+    expect(out).toContain("rounded-full");
+    expect(out).toContain("bg-emerald-100");
+    expect(out).toContain("dark:bg-emerald-950");
+  });
+});
+
 describe("statusTone", () => {
   test("collapses raw lifecycle statuses onto tone buckets", () => {
     expect(statusTone("draft")).toBe("draft");
@@ -155,5 +184,35 @@ describe("badgeClasses", () => {
     expect(badgeClasses("draft")).toContain("blue");
     // ...while a genuinely unknown status lands on slate.
     expect(badgeClasses("something-new")).toContain("slate");
+  });
+});
+
+describe("deadline severity", () => {
+  test("labels are humanized and tones map critical/warning/info", () => {
+    expect(severityLabel("critical")).toBe("Critical");
+    expect(severityBadgeClasses("critical")).toContain("red");
+    expect(severityBadgeClasses("warning")).toContain("amber");
+    expect(severityBadgeClasses("info")).toContain("blue");
+    expect(severityBadgeClasses("something-new")).toContain("slate");
+  });
+});
+
+describe("buyer-rails confirmation", () => {
+  test("labels every contract state plus the synthetic pre-request 'none'", () => {
+    expect(confirmationLabel("requested")).toBe("Awaiting response");
+    expect(confirmationLabel("confirmed")).toBe("Confirmed");
+    expect(confirmationLabel("queried")).toBe("Queried");
+    expect(confirmationLabel("rejected")).toBe("Rejected");
+    expect(confirmationLabel("none")).toBe("Not requested");
+    expect(confirmationLabel("weird_state")).toBe("Weird state");
+  });
+
+  test("tones every state, defaulting unknowns to slate", () => {
+    expect(confirmationBadgeClasses("requested")).toContain("amber");
+    expect(confirmationBadgeClasses("confirmed")).toContain("emerald");
+    expect(confirmationBadgeClasses("queried")).toContain("blue");
+    expect(confirmationBadgeClasses("rejected")).toContain("red");
+    expect(confirmationBadgeClasses("none")).toContain("slate");
+    expect(confirmationBadgeClasses("something-new")).toContain("slate");
   });
 });

@@ -19,9 +19,11 @@ import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { RequireClientScope } from "@/components/require-client-scope";
+import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled } from "@/lib/errors";
+import { idMap } from "@/lib/rows";
 import { Store, Clock3, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import {
   formatNaira,
@@ -83,11 +85,10 @@ function BatchItems({ batchId }: { batchId: string }) {
   });
   const { data: invoices } = useListInvoices();
 
-  const invoiceNumber = useMemo(() => {
-    const map = new Map<string, string>();
-    (invoices || []).forEach((inv) => map.set(inv.id, inv.invoiceNumber));
-    return map;
-  }, [invoices]);
+  const invoiceNumber = useMemo(
+    () => idMap(invoices, (inv) => inv.id, (inv) => inv.invoiceNumber),
+    [invoices],
+  );
 
   if (isLoading) {
     return (
@@ -222,11 +223,7 @@ export function B2cReports() {
 
       <RequireClientScope thing="B2C reporting batches">
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-24" />
-            ))}
-          </div>
+          <SkeletonList count={3} itemClassName="h-24" />
         ) : isError ? (
           <QueryError thing="your B2C reporting batches" onRetry={() => refetch()} />
         ) : sorted.length === 0 ? (

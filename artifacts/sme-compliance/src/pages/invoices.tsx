@@ -19,7 +19,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -31,9 +30,11 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
+import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
+import { idMap, scopedToSupplier } from "@/lib/rows";
 import {
   Search,
   FileText,
@@ -426,11 +427,10 @@ export function Invoices() {
     query,
   } = useAccumulatedInvoicePages(search);
 
-  const partyName = useMemo(() => {
-    const map = new Map<string, string>();
-    (parties || []).forEach((p) => map.set(p.id, p.legalName));
-    return map;
-  }, [parties]);
+  const partyName = useMemo(
+    () => idMap(parties, (p) => p.id, (p) => p.legalName),
+    [parties],
+  );
 
   const hasAdvanced =
     !!fromDate || !!toDate || !!minAmount || !!maxAmount;
@@ -511,10 +511,7 @@ export function Invoices() {
   // status tabs group raw statuses by tone (e.g. draft + validated), so they
   // can't map onto the server's exact-match `status` param.
   const scoped = useMemo(
-    () =>
-      loaded.filter(
-        (inv) => !me?.clientPartyId || inv.supplierPartyId === me.clientPartyId,
-      ),
+    () => scopedToSupplier(loaded, me?.clientPartyId),
     [loaded, me?.clientPartyId],
   );
 
@@ -651,11 +648,7 @@ export function Invoices() {
       )}
 
       {initialLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-20" />
-          ))}
-        </div>
+        <SkeletonList count={5} itemClassName="h-20" />
       ) : isError && !hasLoaded ? (
         <QueryError thing="your invoices" onRetry={() => refetch()} />
       ) : rows.length === 0 ? (

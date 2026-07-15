@@ -1,0 +1,5 @@
+/* The pill/badge class strings in this package live outside the apps'
+   automatic Tailwind content-detection roots, so the package owns its scan
+   root: any app stylesheet that @imports this file scans the package source.
+   @source resolves relative to this file. */
+@source "./";

@@ -38,9 +38,12 @@ import {
   captureStatusLabel,
   fieldLabel,
   fileToBase64,
+  handleClerkGatewayError,
   MAX_VOICE_BYTES,
   usagePct,
 } from "@/lib/clerk";
+import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
+import { SkeletonList } from "@/components/skeleton-list";
 import {
   AlertTriangle,
   ChevronDown,
@@ -230,30 +233,12 @@ function CaptureContent() {
     [cases],
   );
 
-  const handleClerkError = (err: unknown) => {
-    const status = errorStatus(err);
-    // 503 CLERK_DISABLED: the kill switch is off — say so in client terms.
-    if (status === 503) {
-      setDisabledBanner(true);
-      return;
-    }
-    // 429 CLERK_BUDGET_EXHAUSTED: relay the server's own message.
-    if (status === 429) {
-      toast({
-        title: "Monthly Clerk allowance used up",
-        description: serverErrorMessage(err),
-        variant: "destructive",
-      });
-      return;
-    }
-    // Typed rejections (422 VOICE_UNREADABLE / VOICE_NO_SPEECH / PDF_NO_TEXT)
-    // carry an actionable message — relay the server's words.
-    toast({
-      title: "Clerk couldn't take that",
-      description: serverErrorMessage(err),
-      variant: "destructive",
+  const handleClerkError = (err: unknown) =>
+    handleClerkGatewayError(err, {
+      onDisabled: () => setDisabledBanner(true),
+      toast,
+      fallbackTitle: "Clerk couldn't take that",
     });
-  };
 
   const createCase = useCreateClerkCase({
     mutation: {
@@ -392,17 +377,13 @@ function CaptureContent() {
       </PageHeader>
 
       {disabledBanner && (
-        <Alert variant="destructive" data-testid="banner-clerk-disabled">
-          <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-          <AlertTitle>Clerk is unavailable right now</AlertTitle>
-          <AlertDescription>
-            Please try again later, or{" "}
-            <Link href="/invoices/new" className="underline">
-              enter the invoice manually
-            </Link>
-            .
-          </AlertDescription>
-        </Alert>
+        <ClerkDisabledBanner>
+          Please try again later, or{" "}
+          <Link href="/invoices/new" className="underline">
+            enter the invoice manually
+          </Link>
+          .
+        </ClerkDisabledBanner>
       )}
 
       <Card>
@@ -568,11 +549,7 @@ function CaptureContent() {
         </CardHeader>
         <CardContent className="space-y-2">
           {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-16" />
-              ))}
-            </div>
+            <SkeletonList count={3} itemClassName="h-16" className="space-y-2" />
           ) : isError ? (
             <QueryError thing="your submissions" onRetry={() => refetch()} />
           ) : sortedCases.length === 0 ? (

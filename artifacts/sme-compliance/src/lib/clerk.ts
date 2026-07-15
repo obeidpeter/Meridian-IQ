@@ -1,4 +1,6 @@
 import { humanize, pillClasses, type BadgeTone } from "@/lib/format";
+import { clerkBudgetExhausted, killSwitchTripped } from "@workspace/api-errors";
+import { serverErrorMessage } from "@/lib/errors";
 
 // ---- Clerk capture cases ---------------------------------------------------
 // Client-side view of the Clerk intake lifecycle. Clients only submit and
@@ -34,6 +36,41 @@ export function captureStatusLabel(status: string): string {
 /** Status pill classes for a Clerk case status (slate for unknown). */
 export function captureBadgeClasses(status: string): string {
   return pillClasses(CAPTURE_STATUS_TONES[status] ?? "slate");
+}
+
+// ---- Gateway error handling --------------------------------------------------
+
+/**
+ * The shared split for Clerk gateway rejections, used by capture and Ask:
+ * 503 CLERK_DISABLED (the kill switch is off) raises the page's banner
+ * instead of a toast; 429 CLERK_BUDGET_EXHAUSTED relays the server's own
+ * message under the allowance title; anything else (e.g. the typed 422
+ * intake rejections, which carry an actionable message) relays the server's
+ * words under the page's fallback title.
+ */
+export function handleClerkGatewayError(
+  err: unknown,
+  opts: {
+    onDisabled: () => void;
+    toast: (t: {
+      title: string;
+      description: string;
+      variant: "destructive";
+    }) => void;
+    fallbackTitle: string;
+  },
+): void {
+  if (killSwitchTripped(err)) {
+    opts.onDisabled();
+    return;
+  }
+  opts.toast({
+    title: clerkBudgetExhausted(err)
+      ? "Monthly Clerk allowance used up"
+      : opts.fallbackTitle,
+    description: serverErrorMessage(err),
+    variant: "destructive",
+  });
 }
 
 // ---- Usage meter -----------------------------------------------------------

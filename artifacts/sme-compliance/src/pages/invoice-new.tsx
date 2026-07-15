@@ -26,41 +26,33 @@ import { PageHeader } from "@/components/page-header";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { AddCustomerDialog } from "@/components/add-customer-dialog";
 import { formatNaira } from "@/lib/format";
+import {
+  type LineDraft,
+  emptyLine,
+  lineTotal,
+  lineTotals,
+  todayIsoDate,
+  toInvoiceLineInputs,
+  updateLineAt,
+} from "@/lib/invoice-lines";
 import { Plus, Trash2, CheckCircle2, Circle, Cloud, ShieldCheck } from "lucide-react";
 
 // Exported for invoice-detail's "New from this invoice", which seeds this
 // page's offline draft before navigating here.
 export const DRAFT_KEY = "meridianiq:invoice-draft";
-const VAT_STANDARD = "0.075";
-
-export interface DraftLine {
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  vatRate: string;
-}
 
 export interface DraftState {
   invoiceNumber: string;
   buyerPartyId: string;
   issueDate: string;
   dueDate: string;
-  lines: DraftLine[];
+  lines: LineDraft[];
 }
-
-const emptyLine = (): DraftLine => ({
-  description: "",
-  quantity: "1",
-  unitPrice: "",
-  vatRate: VAT_STANDARD,
-});
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 const emptyDraft = (): DraftState => ({
   invoiceNumber: "",
   buyerPartyId: "",
-  issueDate: today(),
+  issueDate: todayIsoDate(),
   dueDate: "",
   lines: [emptyLine()],
 });
@@ -129,20 +121,7 @@ export function InvoiceNew() {
 
   const selectedBuyer = buyers.find((b) => b.id === draft.buyerPartyId);
 
-  const lineTotal = (l: DraftLine) => {
-    const ext = Number(l.quantity || 0) * Number(l.unitPrice || 0);
-    const vat = ext * Number(l.vatRate || 0);
-    return { ext, vat, total: ext + vat };
-  };
-  const totals = draft.lines.reduce(
-    (acc, l) => {
-      const { ext, vat } = lineTotal(l);
-      acc.net += ext;
-      acc.vat += vat;
-      return acc;
-    },
-    { net: 0, vat: 0 },
-  );
+  const totals = lineTotals(draft.lines);
 
   const errors: Record<string, string> = {};
   if (!draft.invoiceNumber.trim()) errors.invoiceNumber = "Invoice number is required.";
@@ -172,11 +151,8 @@ export function InvoiceNew() {
     return ids;
   };
 
-  const setLine = (i: number, patch: Partial<DraftLine>) =>
-    setDraft((d) => ({
-      ...d,
-      lines: d.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)),
-    }));
+  const setLine = (i: number, patch: Partial<LineDraft>) =>
+    setDraft((d) => ({ ...d, lines: updateLineAt(d.lines, i, patch) }));
 
   const submit = async () => {
     setShowErrors(true);
@@ -191,12 +167,7 @@ export function InvoiceNew() {
     }
     if (!me?.clientPartyId) return;
     try {
-      const lines: InvoiceLineInput[] = draft.lines.map((l) => ({
-        description: l.description.trim(),
-        quantity: String(Number(l.quantity)),
-        unitPrice: String(Number(l.unitPrice)),
-        vatRate: String(Number(l.vatRate)),
-      }));
+      const lines: InvoiceLineInput[] = toInvoiceLineInputs(draft.lines);
       const res = await create.mutateAsync({
         data: {
           supplierPartyId: me.clientPartyId,

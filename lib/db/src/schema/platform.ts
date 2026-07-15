@@ -161,11 +161,6 @@ export const schemaVersionsTable = pgTable("schema_versions", {
 });
 
 export type FeatureFlag = typeof featureFlagsTable.$inferSelect;
-export type FeatureFlagOverride = typeof featureFlagOverridesTable.$inferSelect;
 export type Message = typeof messagesTable.$inferSelect;
 export type OutboxEvent = typeof outboxTable.$inferSelect;
-export type RailState = typeof railStatesTable.$inferSelect;
-export type StampVerification = typeof stampVerificationsTable.$inferSelect;
 export type MessageChannel = (typeof messageChannelEnum.enumValues)[number];
-export type OutboxStatus = (typeof outboxStatusEnum.enumValues)[number];
-export type CircuitState = (typeof circuitStateEnum.enumValues)[number];

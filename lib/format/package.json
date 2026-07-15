@@ -1,0 +1,17 @@
+{
+  "name": "@workspace/format",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./source.css": "./src/source.css"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@workspace/api-zod": "workspace:*",
+    "vitest": "^4.1.10"
+  }
+}

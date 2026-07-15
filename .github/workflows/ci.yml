@@ -103,6 +103,12 @@ jobs:
       - name: Console app unit tests
         run: pnpm --filter @workspace/console run test
 
+      # The shared display formatters and API-error policy live in workspace
+      # libs (the apps re-export them); their suites are the single home for
+      # those behaviors.
+      - name: Shared lib unit tests
+        run: pnpm --filter @workspace/format --filter @workspace/api-errors run test
+
       # CORE-06: tables come from drizzle push; the versioned guardrail
       # migrations (triggers, RLS, retention) must apply AND roll back cleanly.
       - name: Migration rollback test (real Postgres)

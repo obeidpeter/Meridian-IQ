@@ -120,9 +120,11 @@ DRAFT register entry that still walks the full maker-checker flow.
 ## Background work (the pipeline worker)
 
 `modules/pipeline/pipeline.ts` runs three in-process loops: outbox drain,
-reconciliation sweep, and the registered compliance sweeps (deadline reminders,
-recurring invoices, B2C pre-breach alerts, login-attempt cleanup). Register new
-periodic work with `registerSweep(fn)`.
+reconciliation sweep, and the registered compliance sweeps (deadline
+reminders, recurring invoices, B2C pre-breach alerts, buyer exposure
+refresh, push receipts, login-attempt cleanup, unmapped-code cases, and the
+Clerk watchdog / expired-claims / expired-case-content / eval-growth /
+weekly-digest sweeps). Register new periodic work with `registerSweep(fn)`.
 
 **Multi-instance safety.** The loops are reentrancy-guarded per process, and
 every sweep is **idempotent** by construction (advisory locks, dedup ledgers,
@@ -152,11 +154,15 @@ A scratch Postgres 16 is required (`DATABASE_URL=postgresql://…/meridian_ci`).
 pnpm --filter @workspace/api-spec run codegen   # must produce zero drift
 pnpm run typecheck                              # libs + all packages
 pnpm run lint
-pnpm audit --prod --audit-level=high            # supply-chain gate
+pnpm dlx pnpm@11 audit --prod --audit-level=high   # supply-chain gate (pnpm 10's audit endpoint is retired)
+pnpm --filter @workspace/db run push            # prepare the scratch DB: tables first...
+pnpm --filter @workspace/db run migrate         # ...then guardrail migrations, or the tests hit permission-denied
 pnpm --filter @workspace/api-server run test    # DB-backed; run against meridian_ci
 pnpm --filter @workspace/db run test            # migration rollback (real Postgres)
 pnpm --filter @workspace/mobile run test
 pnpm --filter @workspace/sme-compliance run test
+pnpm --filter @workspace/console run test
+pnpm --filter @workspace/format --filter @workspace/api-errors run test
 # web builds (each needs BASE_PATH + PORT), then the e2e journeys:
 pnpm --filter @workspace/scripts run e2e        # 32 checks vs real builds + DB
 ```

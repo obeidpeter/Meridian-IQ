@@ -114,5 +114,3 @@ export const invoiceLinesTable = pgTable("invoice_lines", {
 export type Invoice = typeof invoicesTable.$inferSelect;
 export type InvoiceLine = typeof invoiceLinesTable.$inferSelect;
 export type InvoiceStatus = (typeof invoiceStatusEnum.enumValues)[number];
-export type InvoiceKind = (typeof invoiceKindEnum.enumValues)[number];
-export type InvoiceCategory = (typeof invoiceCategoryEnum.enumValues)[number];

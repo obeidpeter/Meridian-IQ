@@ -19,6 +19,12 @@
   "references": [
     {
       "path": "../../lib/api-client-react"
+    },
+    {
+      "path": "../../lib/format"
+    },
+    {
+      "path": "../../lib/api-errors"
     }
   ]
 }

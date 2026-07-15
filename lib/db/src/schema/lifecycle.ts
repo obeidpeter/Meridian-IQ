@@ -147,14 +147,6 @@ export const invoiceLifecycleEventsTable = pgTable("invoice_lifecycle_events", {
 });
 
 export type SubmissionAttempt = typeof submissionAttemptsTable.$inferSelect;
-export type InvoiceLifecycleEvent =
-  typeof invoiceLifecycleEventsTable.$inferSelect;
 export type StampRecord = typeof stampRecordsTable.$inferSelect;
 export type Confirmation = typeof confirmationsTable.$inferSelect;
-export type SettlementEvent = typeof settlementEventsTable.$inferSelect;
 export type Rail = (typeof railEnum.enumValues)[number];
-export type SettlementSource = (typeof settlementSourceEnum.enumValues)[number];
-export type SettlementPaymentStatus =
-  (typeof settlementPaymentStatusEnum.enumValues)[number];
-export type ConfirmationState =
-  (typeof confirmationStateEnum.enumValues)[number];
