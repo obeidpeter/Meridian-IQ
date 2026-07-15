@@ -1,168 +1,151 @@
 // Shared formatters, the pill design language and the invoice-lifecycle /
 // deadline-severity helpers live in the workspace package; this module keeps
-// only the console-specific badge vocabularies.
+// only the console-specific badge vocabularies, as data-driven maps with the
+// same fallbacks the old switches had.
 export * from "@workspace/format";
 
-import { humanize, pillClasses } from "@workspace/format";
+import { humanize, pillClasses, type BadgeTone } from "@workspace/format";
+
+const toneOr = (
+  tones: Record<string, BadgeTone>,
+  key: string,
+  fallback: BadgeTone,
+): string => pillClasses(tones[key] ?? fallback);
+
+const labelOr = (labels: Record<string, string>, key: string): string =>
+  labels[key] ?? humanize(key);
 
 // ---- Penalty risk (portfolio) ----------------------------------------------
+
+const RISK_TONES: Record<string, BadgeTone> = {
+  high: "red",
+  medium: "amber",
+  low: "emerald",
+};
 
 export function riskLabel(risk: string): string {
   return `${humanize(risk)} risk`;
 }
 
 export function riskBadgeClasses(risk: string): string {
-  switch (risk) {
-    case "high":
-      return pillClasses("red");
-    case "medium":
-      return pillClasses("amber");
-    case "low":
-      return pillClasses("emerald");
-    default:
-      return pillClasses("slate");
-  }
+  return toneOr(RISK_TONES, risk, "slate");
 }
 
 // ---- Case priority / gap severity (operator queue, advisory) ---------------
 
+const PRIORITY_TONES: Record<string, BadgeTone> = {
+  high: "red",
+  medium: "amber",
+};
+
 export function priorityBadgeClasses(priority: string): string {
-  switch (priority) {
-    case "high":
-      return pillClasses("red");
-    case "medium":
-      return pillClasses("amber");
-    default:
-      return pillClasses("slate");
-  }
+  return toneOr(PRIORITY_TONES, priority, "slate");
 }
 
 // ---- CPD enrollment (certification) ----------------------------------------
 
+const ENROLLMENT_LABELS: Record<string, string> = {
+  enrolled: "Enrolled",
+  completed: "Completed",
+};
+
+const ENROLLMENT_TONES: Record<string, BadgeTone> = {
+  completed: "emerald",
+  enrolled: "amber",
+};
+
 export function enrollmentLabel(status: string): string {
-  switch (status) {
-    case "enrolled":
-      return "Enrolled";
-    case "completed":
-      return "Completed";
-    default:
-      return humanize(status);
-  }
+  return labelOr(ENROLLMENT_LABELS, status);
 }
 
 export function enrollmentBadgeClasses(status: string): string {
-  switch (status) {
-    case "completed":
-      return pillClasses("emerald");
-    case "enrolled":
-      return pillClasses("amber");
-    default:
-      return pillClasses("slate");
-  }
+  return toneOr(ENROLLMENT_TONES, status, "slate");
 }
 
 // ---- Message deliveries (platform ops) --------------------------------------
+
+const MESSAGE_TONES: Record<string, BadgeTone> = {
+  delivered: "emerald",
+  failed: "red",
+  sent: "blue",
+};
 
 export function messageStatusLabel(status: string): string {
   return humanize(status);
 }
 
 export function messageBadgeClasses(status: string): string {
-  switch (status) {
-    case "delivered":
-      return pillClasses("emerald");
-    case "failed":
-      return pillClasses("red");
-    case "sent":
-      return pillClasses("blue");
-    default:
-      return pillClasses("slate");
-  }
+  return toneOr(MESSAGE_TONES, status, "slate");
 }
 
 // ---- Rail circuit breaker (platform ops) ------------------------------------
 // closed = healthy, half_open = probing after a trip, open = failing fast.
 
+const RAIL_LABELS: Record<string, string> = {
+  open: "Circuit open",
+  half_open: "Half-open (probing)",
+  closed: "Healthy",
+};
+
+const RAIL_TONES: Record<string, BadgeTone> = {
+  open: "red",
+  half_open: "amber",
+  closed: "emerald",
+};
+
 export function railStateLabel(state: string): string {
-  switch (state) {
-    case "open":
-      return "Circuit open";
-    case "half_open":
-      return "Half-open (probing)";
-    case "closed":
-      return "Healthy";
-    default:
-      return humanize(state);
-  }
+  return labelOr(RAIL_LABELS, state);
 }
 
 export function railBadgeClasses(state: string): string {
-  switch (state) {
-    case "open":
-      return pillClasses("red");
-    case "half_open":
-      return pillClasses("amber");
-    case "closed":
-      return pillClasses("emerald");
-    default:
-      return pillClasses("slate");
-  }
+  return toneOr(RAIL_TONES, state, "slate");
 }
 
 // ---- ERP connections (integrations) ------------------------------------------
 
+const CONNECTION_TONES: Record<string, BadgeTone> = {
+  active: "emerald",
+  error: "red",
+};
+
 export function connectionBadgeClasses(status: string): string {
-  switch (status) {
-    case "active":
-      return pillClasses("emerald");
-    case "error":
-      return pillClasses("red");
-    default:
-      return pillClasses("slate");
-  }
+  return toneOr(CONNECTION_TONES, status, "slate");
 }
 
 // ---- Client import rows -------------------------------------------------------
 
+const IMPORT_ROW_LABELS: Record<string, string> = {
+  created: "Created",
+  exists: "Already exists",
+  invalid: "Invalid",
+};
+
+const IMPORT_ROW_TONES: Record<string, BadgeTone> = {
+  created: "emerald",
+  exists: "amber",
+  invalid: "red",
+};
+
 export function importRowLabel(status: string): string {
-  switch (status) {
-    case "created":
-      return "Created";
-    case "exists":
-      return "Already exists";
-    case "invalid":
-      return "Invalid";
-    default:
-      return humanize(status);
-  }
+  return labelOr(IMPORT_ROW_LABELS, status);
 }
 
 export function importRowBadgeClasses(status: string): string {
-  switch (status) {
-    case "created":
-      return pillClasses("emerald");
-    case "exists":
-      return pillClasses("amber");
-    case "invalid":
-      return pillClasses("red");
-    default:
-      return pillClasses("slate");
-  }
+  return toneOr(IMPORT_ROW_TONES, status, "slate");
 }
 
 // ---- Assessment bands (advisory) ---------------------------------------------
+
+const BAND_TONES: Record<string, BadgeTone> = {
+  ready: "emerald",
+  partial: "amber",
+};
 
 export function bandLabel(band: string): string {
   return humanize(band);
 }
 
 export function bandBadgeClasses(band: string): string {
-  switch (band) {
-    case "ready":
-      return pillClasses("emerald");
-    case "partial":
-      return pillClasses("amber");
-    default:
-      return pillClasses("red");
-  }
+  // Anything that isn't ready/partial reads as a red not-ready band.
+  return toneOr(BAND_TONES, band, "red");
 }
