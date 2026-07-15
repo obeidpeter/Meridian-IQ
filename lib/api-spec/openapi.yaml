@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.12.0
+  version: 0.13.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2850,6 +2850,27 @@ paths:
                 $ref: "#/components/schemas/ClaimRecord"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /clerk/catalogue-draft:
+    post:
+      operationId: draftCatalogueEntryWithClerk
+      tags: [clerk]
+      summary: Draft an error-catalogue entry from observed rail rejections (returned for operator review, never saved directly)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftCatalogueEntryInput"
+      responses:
+        "200":
+          description: Proposed entry grounded in recent submission attempts carrying the code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueEntryDraft"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /clerk/explain-failure:
     post:
@@ -6514,6 +6535,30 @@ components:
       properties:
         windowDays:
           type: integer
+        # Confidence calibration from the corrections exhaust: for approved
+        # extraction cases, how often a field at a given model confidence was
+        # kept unchanged by the operator. Optional: absent when no corrected
+        # approvals exist in the window.
+        calibration:
+          type: object
+          required: [sampleFields, buckets]
+          properties:
+            sampleFields:
+              type: integer
+            buckets:
+              type: array
+              items:
+                type: object
+                required: [range, fields, meanConfidence, keptRate]
+                properties:
+                  range:
+                    type: string
+                  fields:
+                    type: integer
+                  meanConfidence:
+                    type: number
+                  keptRate:
+                    type: number
         cases:
           type: object
           required: [total, byStatus, byKind]
@@ -6737,6 +6782,29 @@ components:
         source:
           type: string
           enum: [clerk, template]
+    DraftCatalogueEntryInput:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 120
+    CatalogueEntryDraft:
+      type: object
+      required: [code, cause, fix, retriable, sampleCount]
+      properties:
+        code:
+          type: string
+        cause:
+          type: string
+        fix:
+          type: string
+        retriable:
+          type: boolean
+        # How many recent raw rail responses grounded the draft.
+        sampleCount:
+          type: integer
     DraftClaimWithClerkInput:
       type: object
       required: [sourceText]

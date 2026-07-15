@@ -404,6 +404,65 @@ export function HealthPanel() {
             </CardContent>
           </Card>
 
+          {metrics.calibration && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Confidence calibration
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  For approved cases, how often operators KEPT the model's
+                  value at each confidence band ({metrics.calibration.sampleFields}{" "}
+                  compared fields). Well-calibrated extraction keeps the two
+                  columns close; a band where kept-rate falls far below the
+                  confidence says the review-flagging threshold is trusting
+                  numbers it shouldn't.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm" data-testid="table-calibration">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-3 font-medium">Confidence band</th>
+                        <th className="py-2 pr-3 font-medium text-right">Fields</th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Mean confidence
+                        </th>
+                        <th className="py-2 font-medium text-right">Kept rate</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {metrics.calibration.buckets.map((b) => (
+                        <tr key={b.range} data-testid={`row-calibration-${b.range}`}>
+                          <td className="py-2 pr-3">
+                            <code className="text-xs">{b.range}</code>
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {b.fields}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {b.fields === 0 ? "—" : `${Math.round(b.meanConfidence * 100)}%`}
+                          </td>
+                          <td
+                            className={`py-2 text-right tabular-nums ${
+                              b.fields > 0 &&
+                              b.meanConfidence - b.keptRate > 0.15
+                                ? "text-red-600 dark:text-red-400 font-medium"
+                                : ""
+                            }`}
+                          >
+                            {b.fields === 0 ? "—" : `${Math.round(b.keptRate * 100)}%`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Field corrections</CardTitle>

@@ -39,6 +39,16 @@ export function isReadyToApprove(kase: ClerkCase): boolean {
   );
 }
 
+// Expected review effort for queue ordering: flagged fields plus pre-flight
+// findings are exactly the items an operator must look at before deciding.
+// Lighter cases surface first within the non-fast-lane group, so the queue
+// drains by throughput instead of strict arrival order.
+export function reviewEffort(kase: ClerkCase): number {
+  const flagged = (kase.extraction?.fields ?? []).filter((f) => f.flagged).length;
+  const preflight = Array.isArray(kase.preflight) ? kase.preflight.length : 0;
+  return flagged + preflight;
+}
+
 // The kill-switch toast, shared by the Clerk pages: one title, destructive
 // tone; each page states its own consequence as the description.
 export function clerkDisabledToast(

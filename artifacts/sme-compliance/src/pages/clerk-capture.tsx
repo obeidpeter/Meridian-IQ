@@ -87,6 +87,14 @@ function UsageMeter() {
           style={{ width: `${pct}%` }}
         />
       </div>
+      {pct >= 90 && (
+        <p
+          className="mt-1 text-xs text-right text-destructive"
+          data-testid="text-usage-warning"
+        >
+          Nearly used up — submissions may be declined until next month.
+        </p>
+      )}
     </div>
   );
 }

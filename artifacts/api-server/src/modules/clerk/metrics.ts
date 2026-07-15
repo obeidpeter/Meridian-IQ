@@ -1,5 +1,9 @@
 import { sql } from "drizzle-orm";
-import { getDb } from "@workspace/db";
+import {
+  getDb,
+  type ClerkCorrection,
+  type ClerkExtraction,
+} from "@workspace/db";
 
 // Clerk operational metrics (CLK-OBS-04, CLK-OPS-06/07). Pure SQL aggregation
 // over the case table and the append-only inference ledger — the numbers the
@@ -51,6 +55,77 @@ export interface ClerkMetrics {
     answered: number;
     refused: number;
     refusalRate: number;
+  };
+  // Confidence calibration from the corrections exhaust (idea #5): for each
+  // confidence band, how often the operator KEPT the model's value unchanged.
+  // Well-calibrated extraction shows keptRate tracking meanConfidence; a band
+  // where they diverge tells the governance review the flagging threshold
+  // (FLAG_CONFIDENCE_THRESHOLD) is set against miscalibrated numbers. Absent
+  // when the window holds no corrected approvals.
+  calibration?: {
+    sampleFields: number;
+    buckets: {
+      range: string;
+      fields: number;
+      meanConfidence: number;
+      keptRate: number;
+    }[];
+  };
+}
+
+// Pure calibration fold, separately testable: join each approved case's
+// header-field confidences (extraction) with whether the operator changed the
+// value (corrections diff, matched by field name). Line fields are excluded —
+// positional pairing makes their confidence attribution unreliable.
+const CALIBRATION_BANDS = [
+  { range: "0.0-0.5", min: 0, max: 0.5 },
+  { range: "0.5-0.8", min: 0.5, max: 0.8 },
+  { range: "0.8-1.0", min: 0.8, max: 1.0000001 },
+];
+
+export function computeCalibration(
+  cases: {
+    extraction: ClerkExtraction | null;
+    corrections: ClerkCorrection[] | null;
+  }[],
+): NonNullable<ClerkMetrics["calibration"]> | undefined {
+  const acc = CALIBRATION_BANDS.map(() => ({
+    fields: 0,
+    confidenceSum: 0,
+    kept: 0,
+  }));
+  for (const kase of cases) {
+    if (!kase.extraction || !kase.corrections) continue;
+    const changedByField = new Map(
+      kase.corrections
+        .filter((c) => !c.field.startsWith("lines."))
+        .map((c) => [c.field, c.changed]),
+    );
+    for (const field of kase.extraction.fields) {
+      const changed = changedByField.get(field.field);
+      if (changed === undefined) continue; // field not compared at approval
+      const band = CALIBRATION_BANDS.findIndex(
+        (b) => field.confidence >= b.min && field.confidence < b.max,
+      );
+      if (band === -1) continue;
+      acc[band].fields += 1;
+      acc[band].confidenceSum += field.confidence;
+      if (!changed) acc[band].kept += 1;
+    }
+  }
+  const sampleFields = acc.reduce((n, b) => n + b.fields, 0);
+  if (sampleFields === 0) return undefined;
+  return {
+    sampleFields,
+    buckets: CALIBRATION_BANDS.map((band, i) => ({
+      range: band.range,
+      fields: acc[i].fields,
+      meanConfidence:
+        acc[i].fields === 0
+          ? 0
+          : Number((acc[i].confidenceSum / acc[i].fields).toFixed(4)),
+      keptRate: acc[i].fields === 0 ? 0 : rate(acc[i].kept, acc[i].fields),
+    })),
   };
 }
 
@@ -264,6 +339,26 @@ export async function getClerkMetrics(
   const askTotal = askRows[0]?.total ?? 0;
   const answered = askRows[0]?.answered ?? 0;
 
+  // Calibration input: recent approved extractions with a corrections diff.
+  // Bounded (newest 500) so the fold stays cheap as history grows.
+  const calibrationRows = (
+    await db.execute(sql`
+      SELECT extraction, corrections
+      FROM clerk_cases
+      WHERE created_at >= ${since}
+        AND kind = 'extraction'
+        AND status = 'approved'
+        AND extraction IS NOT NULL
+        AND corrections IS NOT NULL
+      ORDER BY created_at DESC
+      LIMIT 500
+    `)
+  ).rows as {
+    extraction: ClerkExtraction | null;
+    corrections: ClerkCorrection[] | null;
+  }[];
+  const calibration = computeCalibration(calibrationRows);
+
   return {
     windowDays,
     cases: {
@@ -316,5 +411,6 @@ export async function getClerkMetrics(
       refused: askTotal - answered,
       refusalRate: rate(askTotal - answered, askTotal),
     },
+    ...(calibration ? { calibration } : {}),
   };
 }
