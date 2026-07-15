@@ -67,5 +67,3 @@ export const b2cReportItemsTable = pgTable(
 );
 
 export type B2cReportBatch = typeof b2cReportBatchesTable.$inferSelect;
-export type B2cReportItem = typeof b2cReportItemsTable.$inferSelect;
-export type B2cBatchStatus = (typeof b2cBatchStatusEnum.enumValues)[number];

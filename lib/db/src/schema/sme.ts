@@ -64,9 +64,6 @@ export const deadlineReminderSendsTable = pgTable(
   ],
 );
 
-export type DeadlineReminderSend =
-  typeof deadlineReminderSendsTable.$inferSelect;
-
 // Guided failure resolution can hand off to a human operator (SME-06). An
 // escalation records why an invoice needs attention and tracks its handling.
 export const escalationStatusEnum = pgEnum("escalation_status", [
@@ -133,5 +130,3 @@ export const pushTicketsTable = pgTable("push_tickets", {
 });
 
 export type AlertPreferences = typeof alertPreferencesTable.$inferSelect;
-export type Escalation = typeof escalationsTable.$inferSelect;
-export type EscalationStatus = (typeof escalationStatusEnum.enumValues)[number];

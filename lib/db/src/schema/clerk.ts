@@ -333,7 +333,6 @@ export const clerkEvalFixturesTable = pgTable("clerk_eval_fixtures", {
   expected: jsonb("expected").$type<Record<string, string | null>>().notNull(),
   createdAt: createdAt(),
 });
-export type ClerkEvalFixtureRow = typeof clerkEvalFixturesTable.$inferSelect;
 
 // ============ Clerk power D — weekly firm digest ============
 // One row per firm per ISO week. The FACTS in a digest are computed by SQL
@@ -368,11 +367,4 @@ export type ClerkDigestRow = typeof clerkDigestsTable.$inferSelect;
 
 export type ClaimRecord = typeof claimRecordsTable.$inferSelect;
 export type ClerkCase = typeof clerkCasesTable.$inferSelect;
-export type ClerkInferenceCall = typeof clerkInferenceCallsTable.$inferSelect;
 export type ClerkEvalRun = typeof clerkEvalRunsTable.$inferSelect;
-export type ClaimState = (typeof claimStateEnum.enumValues)[number];
-export type ClerkCaseKind = (typeof clerkCaseKindEnum.enumValues)[number];
-export type ClerkCaseStatus = (typeof clerkCaseStatusEnum.enumValues)[number];
-export type ClerkSourceType = (typeof clerkSourceTypeEnum.enumValues)[number];
-export type ClerkInferenceOutcome =
-  (typeof clerkInferenceOutcomeEnum.enumValues)[number];

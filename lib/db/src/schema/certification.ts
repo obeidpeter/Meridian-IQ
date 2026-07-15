@@ -63,5 +63,3 @@ export const cpdEnrollmentsTable = pgTable(
   (t) => [unique().on(t.courseId, t.firmId, t.userId)],
 );
 
-export type CpdCourse = typeof cpdCoursesTable.$inferSelect;
-export type CpdEnrollment = typeof cpdEnrollmentsTable.$inferSelect;

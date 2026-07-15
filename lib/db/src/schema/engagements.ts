@@ -49,4 +49,3 @@ export const engagementsTable = pgTable("engagements", {
   index("engagements_client_party_idx").on(t.clientPartyId),
 ]);
 
-export type Engagement = typeof engagementsTable.$inferSelect;

@@ -29,4 +29,3 @@ export const errorCatalogueTable = pgTable("error_catalogue", {
   updatedAt: updatedAt(),
 });
 
-export type ErrorCatalogueEntryRow = typeof errorCatalogueTable.$inferSelect;

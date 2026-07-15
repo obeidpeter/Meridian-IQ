@@ -112,7 +112,4 @@ export const invitationsTable = pgTable(
 
 export type Invitation = typeof invitationsTable.$inferSelect;
 
-export type Firm = typeof firmsTable.$inferSelect;
-export type User = typeof usersTable.$inferSelect;
-export type Membership = typeof membershipsTable.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];

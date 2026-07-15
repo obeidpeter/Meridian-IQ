@@ -141,9 +141,3 @@ export const buyerExposureSnapshotsTable = pgTable("buyer_exposure_snapshots", {
 export type BankStatement = typeof bankStatementsTable.$inferSelect;
 export type BankStatementLine = typeof bankStatementLinesTable.$inferSelect;
 export type MatchProposal = typeof matchProposalsTable.$inferSelect;
-export type BuyerExposureSnapshot =
-  typeof buyerExposureSnapshotsTable.$inferSelect;
-export type MatchProposalStatus =
-  (typeof matchProposalStatusEnum.enumValues)[number];
-export type StatementLineParseStatus =
-  (typeof statementLineParseStatusEnum.enumValues)[number];
