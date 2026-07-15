@@ -98,6 +98,14 @@ On the portal, while signed in, your account card has a **Change password**
 link. You must enter your current password; the new one needs at least 8
 characters. The change is recorded on the audit trail.
 
+### Forgot your password?
+
+Use **Forgot your password?** on the sign-in panel. Resets are issued as
+one-time links: ask your firm administrator — or MeridianIQ support — to send
+you one, then open it and choose a new password (at least 8 characters). The
+link works once, expires after 24 hours, and signs out every other session on
+your account. Operators issue reset links from **Console → Team invitations**.
+
 ### Security you'll notice
 
 - Wrong email or password always produces the same message — the system never
@@ -637,7 +645,7 @@ links work.
   committed API clients must match `openapi.yaml`), the migration
   rollback test against a real Postgres, and all four production builds.
 - **e2e** — boots the built API server and built frontends behind a
-  path-router and drives **32 headless user-journey checks** (auth incl.
+  path-router and drives **38 headless user-journey checks** (auth incl.
   throttling and password change, the operator Desk, admin advisory, the
   auditor's read-only boundary, consent round-trip, and the credit-note
   lifecycle) against a freshly seeded database.

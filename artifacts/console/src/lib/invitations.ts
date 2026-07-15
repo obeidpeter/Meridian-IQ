@@ -15,6 +15,12 @@ export function acceptInviteLink(origin: string, token: string): string {
   return `${base}/accept-invite?token=${encodeURIComponent(token)}`;
 }
 
+/** One-time password-reset link (IDN-02), mirroring the invite link shape. */
+export function resetPasswordLink(origin: string, token: string): string {
+  const base = origin.replace(/\/+$/, "");
+  return `${base}/reset-password?token=${encodeURIComponent(token)}`;
+}
+
 /** Pill tone for an invitation lifecycle status (design language §8). */
 export function invitationStatusTone(status: string): BadgeTone {
   switch (status) {

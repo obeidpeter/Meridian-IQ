@@ -12,6 +12,8 @@ import {
   CreateUserResponse,
   CreateMembershipBody,
   CreateMembershipResponse,
+  CreatePasswordResetBody,
+  CreatePasswordResetResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { isUuid } from "../lib/uuid";
@@ -21,6 +23,7 @@ import {
   assertSameTenant,
   tenantFirmId,
 } from "../modules/auth/rbac";
+import { createPasswordReset } from "../modules/auth/password-reset";
 
 const router: IRouter = Router();
 
@@ -120,6 +123,15 @@ router.post("/memberships", async (req, res): Promise<void> => {
     })
     .returning();
   res.status(201).json(CreateMembershipResponse.parse(row));
+});
+
+// Operator support path (IDN-02): issue a one-time password-reset link for a
+// user who lost access. The raw token is returned once, mirroring invitations.
+router.post("/password-resets", async (req, res): Promise<void> => {
+  assertCan(req.principal, "identity.write");
+  const parsed = parseOrThrow(CreatePasswordResetBody, req.body);
+  const result = await createPasswordReset(req.principal, parsed.email);
+  res.status(201).json(CreatePasswordResetResponse.parse(result));
 });
 
 export default router;

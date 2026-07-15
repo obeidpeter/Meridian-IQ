@@ -3,6 +3,7 @@ import {
   useListInvitations,
   useCreateInvitation,
   useRevokeInvitation,
+  useCreatePasswordReset,
   useCreateFirm,
   useListFirms,
   useGetPortfolio,
@@ -37,6 +38,7 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { formatDateTime, pillClasses } from "@/lib/format";
 import {
   acceptInviteLink,
+  resetPasswordLink,
   invitationStatusTone,
   invitationStatusLabel,
 } from "@/lib/invitations";
@@ -98,12 +100,20 @@ export function Invitations() {
   const create = useCreateInvitation();
   const revoke = useRevokeInvitation();
   const createFirm = useCreateFirm();
+  const createReset = useCreatePasswordReset();
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<CreateInvitationInputRole>("firm_staff");
   const [clientPartyId, setClientPartyId] = useState("");
   const [firmId, setFirmId] = useState("");
   const [newFirmName, setNewFirmName] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [issuedReset, setIssuedReset] = useState<{
+    email: string;
+    link: string;
+  } | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetCopied, setResetCopied] = useState(false);
   const [created, setCreated] = useState<InvitationWithToken | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -227,6 +237,62 @@ export function Invitations() {
       toast({
         title: "Could not provision the firm",
         description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Operator support path (IDN-02): issue a one-time password-reset link for
+  // a user who lost access. The token is shown once, like an invite.
+  const issueReset = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setResetError(null);
+    if (!EMAIL_PATTERN.test(resetEmail.trim())) {
+      setResetError("Enter a valid email address.");
+      return;
+    }
+    try {
+      const result = await createReset.mutateAsync({
+        data: { email: resetEmail.trim() },
+      });
+      setIssuedReset({
+        email: result.reset.email,
+        link: resetPasswordLink(window.location.origin, result.token),
+      });
+      setResetCopied(false);
+      setResetEmail("");
+      toast({
+        title: `Reset link issued for ${result.reset.email}`,
+        description: "Copy the one-time link below — it is shown once.",
+      });
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      const message =
+        status === 404
+          ? "No account with that email."
+          : err instanceof Error
+            ? err.message
+            : "Please try again.";
+      setResetError(message);
+      toast({
+        title: "Could not issue the reset link",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const copyResetLink = async () => {
+    if (!issuedReset) return;
+    try {
+      await navigator.clipboard.writeText(issuedReset.link);
+      setResetCopied(true);
+      toast({ title: "Reset link copied" });
+      window.setTimeout(() => setResetCopied(false), 2000);
+    } catch {
+      toast({
+        title: "Copy failed",
+        description: "Select the link and copy it manually.",
         variant: "destructive",
       });
     }
@@ -459,6 +525,96 @@ export function Invitations() {
           </form>
         </CardContent>
       </Card>
+
+      {isOperator && (
+        <Card data-testid="card-password-reset">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-primary" aria-hidden="true" />
+              Issue a password reset link
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Support path for a user who lost access: issues a one-time link
+              (valid 24 hours) that sets a new password and signs out every
+              existing session. Share it out-of-band, like an invite.
+            </p>
+            <form onSubmit={issueReset} className="flex gap-2" noValidate>
+              <Input
+                type="email"
+                required
+                autoComplete="off"
+                value={resetEmail}
+                onChange={(e) => {
+                  setResetEmail(e.target.value);
+                  setResetError(null);
+                }}
+                placeholder="user@firm.com"
+                aria-label="Email of the account to reset"
+                data-testid="input-reset-email"
+              />
+              <Button
+                type="submit"
+                variant="outline"
+                className="shrink-0"
+                disabled={createReset.isPending}
+                data-testid="button-issue-reset"
+              >
+                {createReset.isPending ? "Issuing…" : "Issue link"}
+              </Button>
+            </form>
+            {resetError && (
+              <p
+                role="alert"
+                className="text-sm text-destructive"
+                data-testid="text-reset-error"
+              >
+                {resetError}
+              </p>
+            )}
+            {issuedReset && (
+              <div
+                className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/40"
+                role="status"
+                aria-live="polite"
+                data-testid="card-reset-token"
+              >
+                <p className="text-sm font-medium">
+                  One-time reset link for {issuedReset.email}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Shown once — copy it now and share it with the user directly.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={issuedReset.link}
+                    onFocus={(e) => e.target.select()}
+                    className="font-mono text-xs"
+                    aria-label="One-time reset link"
+                    data-testid="input-reset-link"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={copyResetLink}
+                    data-testid="button-copy-reset-link"
+                  >
+                    {resetCopied ? (
+                      <Check className="w-4 h-4" aria-hidden="true" />
+                    ) : (
+                      <Copy className="w-4 h-4" aria-hidden="true" />
+                    )}
+                    {resetCopied ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {created && (
         <Card

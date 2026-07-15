@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.10.0
+ * OpenAPI spec version: 0.11.0
  */
 import * as zod from 'zod';
 
@@ -97,6 +97,41 @@ export const AcceptInviteBody = zod.object({
 })
 
 export const AcceptInviteResponse = zod.void()
+
+
+/**
+ * @summary Redeem a one-time password-reset token and set a new password (public)
+ */
+
+export const resetPasswordBodyPasswordMin = 8;
+
+
+
+export const ResetPasswordBody = zod.object({
+  "token": zod.string().min(1),
+  "password": zod.string().min(resetPasswordBodyPasswordMin)
+})
+
+export const ResetPasswordResponse = zod.void()
+
+
+/**
+ * @summary Issue a one-time password-reset link for a user (operator support path); returns the token once
+ */
+export const CreatePasswordResetBody = zod.object({
+  "email": zod.string().email()
+})
+
+export const CreatePasswordResetResponse = zod.object({
+  "reset": zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "status": zod.enum(['pending', 'used', 'revoked']),
+  "expiresAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+}),
+  "token": zod.string()
+})
 
 
 /**
