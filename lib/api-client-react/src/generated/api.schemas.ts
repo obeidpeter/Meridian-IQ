@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.13.0
+ * OpenAPI spec version: 0.14.0
  */
 export interface HealthStatus {
   status: string;
@@ -1900,6 +1900,35 @@ export const OperatorCaseViewStatus = {
   resolved: 'resolved',
 } as const;
 
+export type OperatorCaseViewTriageStatus = typeof OperatorCaseViewTriageStatus[keyof typeof OperatorCaseViewTriageStatus];
+
+
+export const OperatorCaseViewTriageStatus = {
+  proposed: 'proposed',
+  failed: 'failed',
+} as const;
+
+export type OperatorCaseViewTriagePriority = typeof OperatorCaseViewTriagePriority[keyof typeof OperatorCaseViewTriagePriority];
+
+
+export const OperatorCaseViewTriagePriority = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OperatorCaseViewTriage = {
+  status: OperatorCaseViewTriageStatus;
+  category?: string;
+  priority?: OperatorCaseViewTriagePriority;
+  /** @nullable */
+  catalogueCode?: string | null;
+  rationale?: string;
+} | null;
+
 /**
  * @nullable
  */
@@ -1947,6 +1976,8 @@ export interface OperatorCaseView {
   resolvedAt?: string | null;
   /** @nullable */
   handleSeconds?: number | null;
+  /** @nullable */
+  triage?: OperatorCaseViewTriage;
   playbook?: CasePlaybook | null;
   /** @nullable */
   escalations?: CaseEscalation[] | null;

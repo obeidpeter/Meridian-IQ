@@ -77,7 +77,10 @@ export type ClerkPurpose =
   | "draft_claim"
   // Catalogue drafting assistant: proposes an error-catalogue entry from
   // observed rail rejections; the operator reviews and saves it manually.
-  | "draft_catalogue";
+  | "draft_catalogue"
+  // Escalation triage (desk/triage.ts): closed-enum routing proposal for the
+  // operator queue; the operator accepts or overrides, never auto-applied.
+  | "triage_escalation";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;

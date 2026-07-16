@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { isForbidden } from "@/lib/errors";
 import { humanize, priorityBadgeClasses } from "@/lib/format";
-import { Clock, Zap, ShieldCheck, Lock, LifeBuoy, Inbox } from "lucide-react";
+import { Clock, Zap, ShieldCheck, Lock, LifeBuoy, Inbox, Sparkles } from "lucide-react";
 
 function formatDuration(seconds?: number | null): string {
   if (seconds == null) return "—";
@@ -84,6 +84,30 @@ function CaseCard({
             <p className="text-muted-foreground">
               <span className="font-medium text-foreground">Fix:</span>{" "}
               {c.playbook.fix}
+            </p>
+          </div>
+        )}
+
+        {c.triage?.status === "proposed" && (
+          <div
+            className="rounded-md border border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/40 p-3 text-sm space-y-1"
+            data-testid={`triage-${c.id}`}
+          >
+            <p className="font-medium flex items-center gap-1.5 text-violet-900 dark:text-violet-200">
+              <Sparkles className="w-4 h-4" aria-hidden="true" /> Clerk suggests
+              · {humanize(c.triage.category ?? "other")}
+              {c.triage.priority && c.triage.priority !== c.priority
+                ? ` · priority ${c.triage.priority}`
+                : ""}
+              {c.triage.catalogueCode ? ` · ${c.triage.catalogueCode}` : ""}
+            </p>
+            {c.triage.rationale && (
+              <p className="text-violet-900/80 dark:text-violet-200/80">
+                {c.triage.rationale}
+              </p>
+            )}
+            <p className="text-xs text-violet-900/60 dark:text-violet-200/60">
+              A proposal, not a decision — you route the case.
             </p>
           </div>
         )}

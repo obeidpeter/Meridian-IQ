@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.13.0
+  version: 0.14.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5463,6 +5463,26 @@ components:
           format: date-time
         handleSeconds:
           type: ["integer", "null"]
+        # Clerk escalation-triage proposal: suggested routing the operator
+        # accepts or overrides. Absent until the triage sweep (opt-in
+        # clerk_triage flag) has classified the case; status "failed" means
+        # classification was discarded and the card shows nothing.
+        triage:
+          type: ["object", "null"]
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [proposed, failed]
+            category:
+              type: string
+            priority:
+              type: string
+              enum: [low, medium, high]
+            catalogueCode:
+              type: ["string", "null"]
+            rationale:
+              type: string
         playbook:
           oneOf:
             - $ref: "#/components/schemas/CasePlaybook"

@@ -994,6 +994,7 @@ function shapeCaseView(
     firstActionAt: row.firstActionAt,
     resolvedAt: row.resolvedAt,
     handleSeconds: row.handleSeconds,
+    triage: row.triage,
     playbook: deps.playbook,
     escalations: deps.escalations,
   };
