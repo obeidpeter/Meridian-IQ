@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.19.0
+ * OpenAPI spec version: 0.20.0
  */
 import * as zod from 'zod';
 
@@ -4425,6 +4425,32 @@ export const GetClerkDigestResponse = zod.object({
 
 
 /**
+ * @summary Monthly per-client compliance statements (facts computed by SQL; narrative only phrased)
+ */
+export const ListClientStatementsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional()
+})
+
+export const ListClientStatementsResponseItem = zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "monthStart": zod.string(),
+  "headline": zod.string(),
+  "bullets": zod.array(zod.string()),
+  "facts": zod.object({
+  "issuedCount": zod.number(),
+  "issuedTotal": zod.string(),
+  "acceptedCount": zod.number(),
+  "acceptedTotal": zod.string(),
+  "acceptedVat": zod.string(),
+  "failedCount": zod.number(),
+  "stillUnsubmittedCount": zod.number()
+}),
+  "source": zod.enum(['clerk', 'template'])
+})
+export const ListClientStatementsResponse = zod.array(ListClientStatementsResponseItem)
+
+
+/**
  * @summary Draft a structured claim record from pasted source text (enters the normal maker-checker flow)
  */
 export const draftClaimWithClerkBodySourceTextMin = 40;
@@ -4732,6 +4758,26 @@ export const GetClerkMetricsResponse = zod.object({
   "callsWithUsage": zod.number(),
   "tokensPerDecidedCase": zod.number().nullish(),
   "estimatedUsd": zod.number().nullish()
+}),
+  "economics": zod.object({
+  "byPurpose": zod.array(zod.object({
+  "purpose": zod.string(),
+  "calls": zod.number(),
+  "promptTokens": zod.number(),
+  "completionTokens": zod.number(),
+  "errorCount": zod.number(),
+  "estimatedUsd": zod.number().nullish()
+})),
+  "months": zod.array(zod.object({
+  "month": zod.string(),
+  "calls": zod.number(),
+  "promptTokens": zod.number(),
+  "completionTokens": zod.number(),
+  "okCount": zod.number(),
+  "invalidCount": zod.number(),
+  "killedCount": zod.number(),
+  "errorCount": zod.number()
+}))
 }),
   "corrections": zod.array(zod.object({
   "field": zod.string(),

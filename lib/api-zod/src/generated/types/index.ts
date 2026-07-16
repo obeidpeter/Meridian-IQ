@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.19.0
+ * OpenAPI spec version: 0.20.0
  */
 
 export * from './acceptInvitationInput';
@@ -79,6 +79,9 @@ export * from './clerkCaseKind';
 export * from './clerkCasePreflightItem';
 export * from './clerkCasePreflightItemSeverity';
 export * from './clerkCaseStatus';
+export * from './clerkClientStatement';
+export * from './clerkClientStatementFacts';
+export * from './clerkClientStatementSource';
 export * from './clerkCorrection';
 export * from './clerkDigest';
 export * from './clerkDigestSource';
@@ -99,6 +102,9 @@ export * from './clerkMetricsCasesByKind';
 export * from './clerkMetricsCasesByStatus';
 export * from './clerkMetricsCorrectionsItem';
 export * from './clerkMetricsCost';
+export * from './clerkMetricsEconomics';
+export * from './clerkMetricsEconomicsByPurposeItem';
+export * from './clerkMetricsEconomicsMonthsItem';
 export * from './clerkMetricsInference';
 export * from './clerkMetricsInferenceByOutcome';
 export * from './clerkMetricsInferenceCohortsItem';
@@ -247,6 +253,7 @@ export * from './listClerkCasesKind';
 export * from './listClerkCasesParams';
 export * from './listClerkCasesStatus';
 export * from './listClerkEvalRunsParams';
+export * from './listClientStatementsParams';
 export * from './listErpConnectionsParams';
 export * from './listInvoicesParams';
 export * from './listOperatorCasesParams';

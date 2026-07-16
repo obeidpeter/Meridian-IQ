@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.19.0
+  version: 0.20.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2906,6 +2906,28 @@ paths:
                 $ref: "#/components/schemas/ClerkDigest"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /clerk/client-statements:
+    get:
+      operationId: listClientStatements
+      tags: [clerk]
+      summary: Monthly per-client compliance statements (facts computed by SQL; narrative only phrased)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Newest-first statements for the resolved client (client_users are pinned to their own party)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClerkClientStatement"
 
   /clerk/claims/draft:
     post:
@@ -6800,7 +6822,7 @@ components:
           type: string
     ClerkMetrics:
       type: object
-      required: [windowDays, cases, inference, cost, corrections, ask]
+      required: [windowDays, cases, inference, cost, economics, corrections, ask]
       properties:
         windowDays:
           type: integer
@@ -6898,6 +6920,64 @@ components:
               type: ["number", "null"]
             estimatedUsd:
               type: ["number", "null"]
+        # Unit economics (idea #8): pure SQL over the inference ledger. Per
+        # purpose inside the metrics window, and a per-month failure taxonomy
+        # over the trailing months (independent of windowDays).
+        economics:
+          type: object
+          required: [byPurpose, months]
+          properties:
+            byPurpose:
+              type: array
+              items:
+                type: object
+                required:
+                  [purpose, calls, promptTokens, completionTokens, errorCount]
+                properties:
+                  purpose:
+                    type: string
+                  calls:
+                    type: integer
+                  promptTokens:
+                    type: integer
+                  completionTokens:
+                    type: integer
+                  errorCount:
+                    type: integer
+                  estimatedUsd:
+                    type: ["number", "null"]
+            months:
+              type: array
+              items:
+                type: object
+                required:
+                  [
+                    month,
+                    calls,
+                    promptTokens,
+                    completionTokens,
+                    okCount,
+                    invalidCount,
+                    killedCount,
+                    errorCount,
+                  ]
+                properties:
+                  month:
+                    type: string
+                  calls:
+                    type: integer
+                  promptTokens:
+                    type: integer
+                  completionTokens:
+                    type: integer
+                  okCount:
+                    type: integer
+                  invalidCount:
+                    type: integer
+                  killedCount:
+                    type: integer
+                  errorCount:
+                    type: integer
         corrections:
           type: array
           items:
@@ -7320,6 +7400,54 @@ components:
           items:
             type: string
         # 'clerk' = model-phrased narrative; 'template' = deterministic text.
+        source:
+          type: string
+          enum: [clerk, template]
+    ClerkClientStatement:
+      type: object
+      required: [clientPartyId, monthStart, headline, bullets, facts, source]
+      properties:
+        clientPartyId:
+          type: string
+          format: uuid
+        # First day (YYYY-MM-01) of the Lagos calendar month the statement
+        # covers — always a CLOSED month.
+        monthStart:
+          type: string
+        headline:
+          type: string
+        bullets:
+          type: array
+          items:
+            type: string
+        # Every number is SQL-computed; the narrative only phrases these.
+        facts:
+          type: object
+          required:
+            [
+              issuedCount,
+              issuedTotal,
+              acceptedCount,
+              acceptedTotal,
+              acceptedVat,
+              failedCount,
+              stillUnsubmittedCount,
+            ]
+          properties:
+            issuedCount:
+              type: integer
+            issuedTotal:
+              type: string
+            acceptedCount:
+              type: integer
+            acceptedTotal:
+              type: string
+            acceptedVat:
+              type: string
+            failedCount:
+              type: integer
+            stillUnsubmittedCount:
+              type: integer
         source:
           type: string
           enum: [clerk, template]

@@ -330,6 +330,123 @@ export function HealthPanel() {
             </div>
           </div>
 
+          <Card data-testid="section-unit-economics">
+            <CardHeader>
+              <CardTitle className="text-base">
+                Unit economics — where the tokens go
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {metrics.economics.byPurpose.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No inference calls in this window.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-3 font-medium">Purpose</th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Calls
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Prompt tk
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Completion tk
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Errors
+                        </th>
+                        <th className="py-2 font-medium text-right">Est. spend</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {metrics.economics.byPurpose.map((p) => (
+                        <tr
+                          key={p.purpose}
+                          data-testid={`row-economics-${p.purpose}`}
+                        >
+                          <td className="py-2 pr-3">{p.purpose}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {p.calls}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {fmtTokens(p.promptTokens)}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {fmtTokens(p.completionTokens)}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {p.errorCount}
+                          </td>
+                          <td className="py-2 text-right tabular-nums">
+                            {fmtUsd(p.estimatedUsd)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div data-testid="economics-months">
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                  Failure taxonomy by month
+                </p>
+                {metrics.economics.months.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No inference history yet.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                          <th className="py-2 pr-3 font-medium">Month</th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Calls
+                          </th>
+                          <th className="py-2 pr-3 font-medium text-right">OK</th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Invalid
+                          </th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Killed
+                          </th>
+                          <th className="py-2 font-medium text-right">Error</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {metrics.economics.months.map((m) => (
+                          <tr key={m.month} data-testid={`row-economics-month-${m.month}`}>
+                            <td className="py-2 pr-3 tabular-nums">{m.month}</td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {m.calls}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {m.okCount}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {m.invalidCount}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {m.killedCount}
+                            </td>
+                            <td className="py-2 text-right tabular-nums">
+                              {m.errorCount}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardContent className="pt-6 space-y-4">
               <BreakdownRow

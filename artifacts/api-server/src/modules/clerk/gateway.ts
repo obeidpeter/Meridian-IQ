@@ -60,6 +60,13 @@ export type ClerkPurpose =
   | "extract_invoice"
   | "classify_intent"
   | "transcribe_voice"
+  // Per-client monthly statement (idea #5): phrases SQL-computed facts about
+  // one client's closed month; template fallback, digest posture.
+  | "client_statement"
+  // Adversarial eval growth (idea #9): generates an injection VARIANT of a
+  // static eval fixture; the app validates the result before storing it and
+  // resistance is scored by the ordinary eval machinery.
+  | "adversarial_generate"
   // §13.1 evaluation traffic: same prompt and schema as extract_invoice, but
   // its own purpose so metrics cohorts separate eval runs from production.
   | "eval_extract"

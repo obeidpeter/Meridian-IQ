@@ -15,6 +15,7 @@ import {
 import { sql } from "drizzle-orm";
 import { usersTable, firmsTable } from "./organizations.ts";
 import { invoicesTable } from "./invoices.ts";
+import { partiesTable } from "./parties.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
 
 // ============ Clerk v0 — claims register (C0) ============
@@ -357,6 +358,33 @@ export const clerkEvalFixturesTable = pgTable("clerk_eval_fixtures", {
   createdAt: createdAt(),
 });
 
+// ============ Clerk idea #9 — adversarial eval growth (red team) ============
+// Model-GENERATED injection attempts against Clerk's own extraction: a base
+// static fixture's document is rewritten to embed a planted instruction while
+// every legitimate printed value survives verbatim (validated by the app
+// before a row is stored — a variant that fails validation is discarded).
+// Rows join the eval corpus as riskLabel "injection" fixtures, so resistance
+// is measured by the SAME scoreFixture machinery as the hand-written pair.
+// Bypass-only RLS (migration 0016) mirrors clerk_eval_fixtures: adversarial
+// documents are operator/sweep material, never firm-readable.
+export const clerkRedTeamFixturesTable = pgTable("clerk_red_team_fixtures", {
+  id: id(),
+  // Which static fixture the variant was derived from, and the attack shape
+  // the generator was asked for — together the corpus's provenance record.
+  baseKey: text("base_key").notNull(),
+  strategy: text("strategy").notNull(),
+  sourceText: text("source_text").notNull(),
+  // The base fixture's legitimate values — still the ground truth, because
+  // validation guarantees they survive in sourceText.
+  expected: jsonb("expected").$type<Record<string, string | null>>().notNull(),
+  // What the planted instruction tried to force, for the operator reading a
+  // failed run ("the model was told to report grandTotal 1.00").
+  decoys: jsonb("decoys").$type<Record<string, string>>().notNull(),
+  createdAt: createdAt(),
+});
+export type ClerkRedTeamFixtureRow =
+  typeof clerkRedTeamFixturesTable.$inferSelect;
+
 // ============ Clerk power D — weekly firm digest ============
 // One row per firm per ISO week. The FACTS in a digest are computed by SQL
 // (deadlines, failures, receivables); the model only phrases them — and when
@@ -387,6 +415,54 @@ export const clerkDigestsTable = pgTable(
   (t) => [unique().on(t.firmId, t.weekStart)],
 );
 export type ClerkDigestRow = typeof clerkDigestsTable.$inferSelect;
+
+// ============ Clerk idea #5 — per-client monthly statement ============
+// The digest pattern, per client party and per CLOSED Lagos calendar month:
+// every fact is SQL over the client's own invoices for that month, the model
+// only phrases them (template fallback, recorded via `source`), and the sweep
+// generates each (firm, client, month) exactly once — the unique key is the
+// idempotency anchor. Firm-keyed RLS (migration 0015); client routes must
+// ALSO narrow to the caller's party (SEC-03), as everywhere else.
+
+export interface ClientStatementFacts {
+  issuedCount: number;
+  issuedTotal: string;
+  acceptedCount: number;
+  acceptedTotal: string;
+  acceptedVat: string;
+  failedCount: number;
+  stillUnsubmittedCount: number;
+}
+
+export const clerkClientStatementsTable = pgTable(
+  "clerk_client_statements",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    // First day of the Lagos calendar month the statement covers (a closed
+    // month: generation begins only after it ends).
+    monthStart: date("month_start").notNull(),
+    facts: jsonb("facts").$type<ClientStatementFacts>().notNull(),
+    headline: text("headline").notNull(),
+    bullets: jsonb("bullets").$type<string[]>().notNull().default([]),
+    source: clerkDigestSourceEnum("source").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique().on(t.firmId, t.clientPartyId, t.monthStart),
+    index("clerk_client_statements_client_idx").on(
+      t.clientPartyId,
+      t.monthStart,
+    ),
+  ],
+);
+export type ClerkClientStatementRow =
+  typeof clerkClientStatementsTable.$inferSelect;
 
 // ============ Clerk idea #8 — async batch intake ============
 // One row per month-end bundle: the route only QUEUES (no model call in the

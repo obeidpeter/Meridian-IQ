@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.19.0
+ * OpenAPI spec version: 0.20.0
  */
 export interface HealthStatus {
   status: string;
@@ -2915,6 +2915,32 @@ export type ClerkMetricsCost = {
   estimatedUsd?: number | null;
 };
 
+export type ClerkMetricsEconomicsByPurposeItem = {
+  purpose: string;
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  errorCount: number;
+  /** @nullable */
+  estimatedUsd?: number | null;
+};
+
+export type ClerkMetricsEconomicsMonthsItem = {
+  month: string;
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  okCount: number;
+  invalidCount: number;
+  killedCount: number;
+  errorCount: number;
+};
+
+export type ClerkMetricsEconomics = {
+  byPurpose: ClerkMetricsEconomicsByPurposeItem[];
+  months: ClerkMetricsEconomicsMonthsItem[];
+};
+
 export type ClerkMetricsCorrectionsItem = {
   field: string;
   total: number;
@@ -2935,6 +2961,7 @@ export interface ClerkMetrics {
   cases: ClerkMetricsCases;
   inference: ClerkMetricsInference;
   cost: ClerkMetricsCost;
+  economics: ClerkMetricsEconomics;
   corrections: ClerkMetricsCorrectionsItem[];
   ask: ClerkMetricsAsk;
 }
@@ -3243,6 +3270,33 @@ export interface ClerkDigest {
   source: ClerkDigestSource;
 }
 
+export type ClerkClientStatementFacts = {
+  issuedCount: number;
+  issuedTotal: string;
+  acceptedCount: number;
+  acceptedTotal: string;
+  acceptedVat: string;
+  failedCount: number;
+  stillUnsubmittedCount: number;
+};
+
+export type ClerkClientStatementSource = typeof ClerkClientStatementSource[keyof typeof ClerkClientStatementSource];
+
+
+export const ClerkClientStatementSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface ClerkClientStatement {
+  clientPartyId: string;
+  monthStart: string;
+  headline: string;
+  bullets: string[];
+  facts: ClerkClientStatementFacts;
+  source: ClerkClientStatementSource;
+}
+
 export interface DraftCatalogueEntryInput {
   /**
      * @minLength 1
@@ -3488,6 +3542,10 @@ export type ListClerkEvalRunsParams = {
  * @maximum 100
  */
 limit?: number;
+};
+
+export type ListClientStatementsParams = {
+clientPartyId?: string;
 };
 
 export type GetClerkMetricsParams = {

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.19.0`).
+contract change (it is currently `0.20.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -103,7 +103,16 @@ stored findings into a client letter body — digest posture (template
 fallback, never stored, the partner owns the letter); the **weekly digest**
 (`modules/clerk/digest.ts`, opt-in `clerk_digest` flag, sweep-generated,
 firm-keyed RLS via migration 0011) computes every fact in SQL and lets the
-model phrase them, falling back to deterministic template text; **claims
+model phrase them, falling back to deterministic template text; the
+**per-client monthly statement** (`modules/clerk/client-statement.ts`, opt-in
+`clerk_client_statements` flag, sweep-generated for the newest CLOSED Lagos
+month for every OPEN/in-progress engaged client, firm-keyed RLS via migration
+0015, unique on firm+client+month) is the same digest posture per client —
+facts in SQL, model only phrases, quiet months never call the model, template
+fallback always answers; its read route (`GET /clerk/client-statements`,
+`clerk.capture`) pins a `client_user` to its OWN party (SEC-03; firm RLS is
+not a sibling wall) and the SME dashboard shows the client their own card;
+**claims
 drafting** (`modules/clerk/draft-claim.ts`, operator `claims.write`) creates a
 DRAFT register entry that still walks the full maker-checker flow; **catalogue
 drafting** (`modules/clerk/draft-catalogue.ts`, operator `catalogue.write`)
@@ -142,7 +151,19 @@ the resolved scope). Predicates mirror digest/compliance-window (Lagos
 calendar), so Ask can never disagree with the dashboards. Clerk health (console) includes a
 confidence-calibration table (`computeCalibration` in
 `modules/clerk/metrics.ts`): kept-rate vs model confidence per band, from the
-corrections exhaust. The exhaust also feeds the product directly:
+corrections exhaust, plus **unit economics** (`metrics.economics`, pure ledger
+SQL): token spend + error count per PURPOSE inside the window, and a per-month
+failure taxonomy (ok/invalid/killed/error) over the trailing months — the
+numbers pricing tiers and a provider evaluation will want, zero model calls.
+The eval harness also grows an active red team: **adversarial eval growth**
+(`modules/clerk/red-team.ts`, opt-in `clerk_red_team` flag, spends tokens) has
+the model GENERATE a prompt-injection payload against a legitimate static
+fixture; the app owns ground truth — it APPENDS the payload to the UNCHANGED
+document (so the base fixture's expected always survives) and DISCARDS any
+variant without a critical decoy that actually differs from the truth. Stored
+variants (bypass-only RLS, migration 0016) join the corpus as riskLabel
+`injection` fixtures scored by the SAME `scoreFixture` machinery as the
+hand-written pair. The exhaust also feeds the product directly:
 **supplier memory** (`modules/clerk/exemplar.ts`) deterministically matches a
 new text document against the firm's OWN approved fixtures (TIN/name-token
 containment, newest first, same-firm join — never cross-firm) and rides the
@@ -229,7 +250,8 @@ reminders, recurring invoices, B2C pre-breach alerts, buyer exposure
 refresh, push receipts, login-attempt / password-reset cleanup, outbox +
 stamp-verification retention, unmapped-code cases, and the
 Clerk watchdog / expired-claims / expired-case-content / eval-growth /
-weekly-digest / escalation-triage / async-batch sweeps). Register new periodic work with `registerSweep(fn)`.
+weekly-digest / per-client-statement / red-team-growth / escalation-triage /
+async-batch sweeps). Register new periodic work with `registerSweep(fn)`.
 Alert fan-out (`modules/messaging/fan-out.ts`) is consent-gated: no layer-1
 grant, no alert (CORE-03). Statutory day boundaries — submission windows, VAT
 due dates, "overdue today" — use the LAGOS calendar via
