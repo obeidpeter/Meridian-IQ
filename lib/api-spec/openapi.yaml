@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.14.0
+  version: 0.15.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2648,7 +2648,7 @@ paths:
     post:
       operationId: askClerk
       tags: [clerk]
-      summary: Register-only Q&A — answers verbatim from approved claims or refuses
+      summary: Grounded Q&A — approved claims or platform-computed firm-record lookups; refuses anything else
       requestBody:
         required: true
         content:
@@ -6389,6 +6389,10 @@ components:
           type: string
         claimVersion:
           type: integer
+        # Set when the answer came from a platform-computed firm-record lookup
+        # (idea #6) instead of a claims-register proposition.
+        dataIntent:
+          type: string
         proposition:
           type: string
         facts:

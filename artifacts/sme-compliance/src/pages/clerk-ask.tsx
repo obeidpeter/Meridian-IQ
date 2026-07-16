@@ -51,8 +51,17 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Source: {answer.citation} · approved claim{" "}
-          <code>{answer.claimKey}</code> v{answer.claimVersion}
+          {answer.dataIntent ? (
+            <>
+              Source: {answer.citation} · live lookup{" "}
+              <code>{answer.dataIntent}</code>
+            </>
+          ) : (
+            <>
+              Source: {answer.citation} · approved claim{" "}
+              <code>{answer.claimKey}</code> v{answer.claimVersion}
+            </>
+          )}
         </p>
       </CardContent>
     </Card>
@@ -80,7 +89,7 @@ function AskContent() {
     <div className="space-y-6">
       <PageHeader
         title="Ask Clerk"
-        description="Answers come only from the approved compliance register — nothing is improvised."
+        description="Answers come from the approved compliance register or live lookups over your firm's own records — nothing is improvised."
       />
 
       {disabledBanner && (
@@ -91,7 +100,7 @@ function AskContent() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Ask about Nigerian tax rules
+              Ask about Nigerian tax rules — or your firm's own numbers
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -102,14 +111,15 @@ function AskContent() {
               id="ask-question"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="What VAT rate applies to a consulting invoice?"
+              placeholder="What VAT rate applies to a consulting invoice? What is overdue this week?"
               rows={3}
               data-testid="input-ask-question"
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
-                If a question is not covered by the register, Clerk refuses
-                and escalates rather than guessing.
+                Rules come from the approved register; numbers are computed
+                live from your firm's records. Anything else is refused and
+                escalated rather than guessed.
               </p>
               <Button
                 onClick={() => ask.mutate({ data: { question } })}

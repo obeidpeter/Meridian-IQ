@@ -37,8 +37,17 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Source: {answer.citation} · approved claim{" "}
-          <code>{answer.claimKey}</code> v{answer.claimVersion}
+          {answer.dataIntent ? (
+            <>
+              Source: {answer.citation} · live lookup{" "}
+              <code>{answer.dataIntent}</code>
+            </>
+          ) : (
+            <>
+              Source: {answer.citation} · approved claim{" "}
+              <code>{answer.claimKey}</code> v{answer.claimVersion}
+            </>
+          )}
         </p>
       </CardContent>
     </Card>
@@ -56,7 +65,7 @@ export function ClerkAskPage() {
       <ClerkPageHeader
         eyebrow="Claims register"
         title="Ask Clerk"
-        description="Answers come only from the approved claims register — nothing is improvised."
+        description="Answers come from the approved claims register or live lookups over the firm's own records — nothing is improvised."
       />
       <AskPanel
         question={question}
@@ -88,21 +97,22 @@ export function AskPanel({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Ask about Nigerian tax rules
+            Ask about Nigerian tax rules — or the firm's own numbers
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <Textarea
             value={question}
             onChange={(e) => onQuestionChange(e.target.value)}
-            placeholder="What VAT rate applies to a consulting invoice?"
+            placeholder="What VAT rate applies to a consulting invoice? What is overdue this week?"
             rows={3}
             data-testid="input-ask-question"
           />
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              Answers come only from the approved claims register — if a
-              question is not covered, the Clerk refuses and escalates.
+              Rules come from the approved claims register; numbers are
+              computed live from the firm's records. Anything else is refused
+              and escalated.
             </p>
             <Button
               onClick={onAsk}

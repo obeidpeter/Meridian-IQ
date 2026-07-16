@@ -178,13 +178,16 @@ export interface ClerkCorrection {
   changed: boolean;
 }
 
-// Assembled deterministically from an approved ClaimRecord (answered=true) or
-// a neutral refusal (answered=false). Never free model prose.
+// Assembled deterministically from an approved ClaimRecord (claim answers) or
+// a fixed firm-record lookup (data answers, dataIntent set) — or a neutral
+// refusal (answered=false). Never free model prose.
 export interface ClerkAnswer {
   answered: boolean;
   claimId?: string;
   claimKey?: string;
   claimVersion?: number;
+  // Which data-intent lookup produced the answer (e.g. "data.overdue_submissions").
+  dataIntent?: string;
   proposition?: string;
   facts?: ProtectedFact[];
   citation?: string;

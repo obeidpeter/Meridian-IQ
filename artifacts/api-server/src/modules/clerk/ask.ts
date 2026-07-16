@@ -8,9 +8,12 @@ import {
   type ProtectedFact,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
+import { lagosDateString } from "../../lib/lagos-time";
+import { logger } from "../../lib/logger";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";
 import { inClerkScope } from "./scope";
 import { getActiveClaims } from "./claims";
+import { getDataIntent, DATA_INTENTS } from "./data-intents";
 import {
   INTENT_PROMPT_VERSION,
   INTENT_SYSTEM,
@@ -20,11 +23,13 @@ import {
   type IntentOutput,
 } from "./prompts";
 
-// Ask Clerk (Task #40, C1). The model's ONLY job is picking which approved
-// claim a question is about — from a closed enum of active claim keys. The
-// answer itself is assembled deterministically from the claim row: protected
-// facts are inserted verbatim by this code, never generated. Anything outside
-// the register produces a neutral refusal and an escalated case (fail closed).
+// Ask Clerk (Task #40, C1 + idea #6). The model's ONLY job is picking which
+// key a question is about — from a closed enum of active claim keys plus, for
+// firm-scoped askers, the data-intent catalogue (data-intents.ts). The answer
+// itself is assembled deterministically: claim answers insert protected facts
+// verbatim from the claim row; data answers run a fixed, fully parameterized
+// query under the asker's own firm scope. Anything outside the two catalogues
+// produces a neutral refusal and an escalated case (fail closed).
 
 export function formatFact(fact: ProtectedFact): string {
   if (!fact.unit) return fact.value;
@@ -92,6 +97,7 @@ export async function askClerk(
       after: {
         answered: answer.answered,
         claimKey: answer.claimKey ?? null,
+        dataIntent: answer.dataIntent ?? null,
         refusalReason: answer.refusalReason ?? null,
       },
     });
@@ -105,19 +111,34 @@ export async function askClerk(
     );
 
   const active = await getActiveClaims();
-  if (active.length === 0) {
+  // Data intents are firm-record lookups, so they are only offered to a
+  // firm-scoped asker; an operator without a tenant keeps register-only Ask.
+  const dataIntents = ctx.firmId ? DATA_INTENTS : [];
+  if (active.length === 0 && dataIntents.length === 0) {
     return refuse(
       "The register has no active claims yet, so this question has been escalated to an operator.",
     );
   }
 
-  const keys = [...new Set(active.map((c) => c.claimKey))];
+  const keys = [
+    ...new Set([
+      ...active.map((c) => c.claimKey),
+      ...dataIntents.map((i) => i.key),
+    ]),
+  ];
   const registerIndex = active
     .map((c) => `- ${c.claimKey}: ${c.title}`)
     .join("\n");
   const user = [
     "Available claim keys (approved register):",
-    registerIndex,
+    registerIndex || "(none)",
+    ...(dataIntents.length > 0
+      ? [
+          "",
+          "Available data keys (live lookups over the asker's own firm records):",
+          dataIntents.map((i) => `- ${i.key}: ${i.title}`).join("\n"),
+        ]
+      : []),
     "",
     fenceUntrusted("question", "QUESTION", question),
   ].join("\n");
@@ -143,6 +164,42 @@ export async function askClerk(
   if (result.data.claimKey === "none") {
     return refuse(
       "This question is not covered by an approved claim, so it has been escalated to an operator.",
+    );
+  }
+
+  // Data-intent branch (idea #6), taken only when data keys were actually
+  // OFFERED (firm-scoped asker): for those askers the catalogue is checked
+  // first, so the platform-defined meaning of a "data.*" key wins over an
+  // identically named claim. A firm-less asker's enum never contained data
+  // keys, so a "data.*" pick there can only be a register claim — it falls
+  // through to the claims path and answers normally.
+  const firmId = ctx.firmId;
+  const dataIntent = firmId ? getDataIntent(result.data.claimKey) : undefined;
+  if (dataIntent && firmId) {
+    let outcome;
+    try {
+      // The lookup runs in the SAME firm-scoped RLS posture as the request
+      // (and every query also filters firm_id explicitly) — the asker can
+      // only ever see numbers computed from its own firm's rows.
+      outcome = await inClerkScope(firmId, () => dataIntent.run(firmId));
+    } catch (err) {
+      logger.warn(
+        { err, dataIntent: dataIntent.key },
+        "ask clerk: data-intent lookup failed",
+      );
+      return refuse(
+        "The firm-record lookup failed, so the question has been escalated to an operator.",
+      );
+    }
+    return finish(
+      {
+        answered: true,
+        dataIntent: dataIntent.key,
+        proposition: outcome.text,
+        facts: outcome.facts,
+        citation: `Computed live from your firm's records on ${lagosDateString()} (Lagos)`,
+      },
+      "approved",
     );
   }
 

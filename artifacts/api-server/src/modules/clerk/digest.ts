@@ -94,12 +94,15 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
         )::int AS unsubmitted,
         COUNT(*) FILTER (
           WHERE i.status IN ('draft', 'validated')
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int >= (now() AT TIME ZONE 'Africa/Lagos')::date
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int < (now() AT TIME ZONE 'Africa/Lagos')::date + 7
+            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int > (now() AT TIME ZONE 'Africa/Lagos')::date
+            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= (now() AT TIME ZONE 'Africa/Lagos')::date + 7
         )::int AS due_soon,
+        -- The deadline is Lagos midnight STARTING day issue+window, so an
+        -- invoice is overdue ON that day (<=) — same boundary as the
+        -- dashboards, reminders and the Ask Clerk data intents.
         COUNT(*) FILTER (
           WHERE i.status IN ('draft', 'validated')
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int < (now() AT TIME ZONE 'Africa/Lagos')::date
+            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= (now() AT TIME ZONE 'Africa/Lagos')::date
         )::int AS overdue,
         COUNT(*) FILTER (WHERE i.status = 'failed')::int AS failed,
         COUNT(*) FILTER (

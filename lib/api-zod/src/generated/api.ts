@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.14.0
+ * OpenAPI spec version: 0.15.0
  */
 import * as zod from 'zod';
 
@@ -3466,6 +3466,7 @@ export const ListClerkCasesResponseItem = zod.object({
   "claimId": zod.string().optional(),
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3556,6 +3557,7 @@ export const CreateClerkCaseResponse = zod.object({
   "claimId": zod.string().optional(),
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3630,6 +3632,7 @@ export const GetClerkCaseResponse = zod.object({
   "claimId": zod.string().optional(),
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3729,6 +3732,7 @@ export const DecideClerkCaseResponse = zod.object({
   "claimId": zod.string().optional(),
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3761,7 +3765,7 @@ export const DecideClerkCaseResponse = zod.object({
 
 
 /**
- * @summary Register-only Q&A — answers verbatim from approved claims or refuses
+ * @summary Grounded Q&A — approved claims or platform-computed firm-record lookups; refuses anything else
  */
 export const askClerkBodyQuestionMin = 3;
 export const askClerkBodyQuestionMax = 2000;
@@ -3811,6 +3815,7 @@ export const AskClerkResponse = zod.object({
   "claimId": zod.string().optional(),
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3902,6 +3907,7 @@ export const RetryClerkCaseResponse = zod.object({
   "claimId": zod.string().optional(),
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3979,6 +3985,7 @@ export const ClaimClerkCaseResponse = zod.object({
   "claimId": zod.string().optional(),
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -4056,6 +4063,7 @@ export const ReleaseClerkCaseResponse = zod.object({
   "claimId": zod.string().optional(),
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -4241,6 +4249,7 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "claimId": zod.string().optional(),
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.14.0`).
+contract change (it is currently `0.15.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -94,7 +94,16 @@ catalogue routes, never stored directly. **Escalation triage**
 client's escalation never waits on a model call) proposes routing — closed
 category set, priority, catalogue code re-verified against the codes that
 exist — stored on the operator case for the operator to accept or override,
-never applied automatically. Clerk health (console) includes a
+never applied automatically. **Grounded firm-data Q&A**
+(`modules/clerk/data-intents.ts`): Ask Clerk carries a second closed catalogue
+next to the claims register — data intents ("what's overdue?", "what did we
+submit this month?"), offered in the intent enum only to firm-scoped askers.
+The model still only classifies; the app runs the matching FIXED,
+fully-parameterized query (the only runtime input is the principal-resolved
+firmId) inside `inClerkScope(firmId)` plus an explicit firm filter, and
+assembles the answer deterministically (`answer.dataIntent` marks these).
+Predicates mirror digest/compliance-window (Lagos calendar), so Ask can never
+disagree with the dashboards. Clerk health (console) includes a
 confidence-calibration table (`computeCalibration` in
 `modules/clerk/metrics.ts`): kept-rate vs model confidence per band, from the
 corrections exhaust.
