@@ -202,6 +202,11 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   sourceText: text("source_text"),
   // Base64 image payload (image sources). Excluded from list endpoints.
   sourceImageB64: text("source_image_b64"),
+  // Scanned-PDF intake: the rendered page images (base64 PNG, document order)
+  // when a PDF had no selectable text. Kept for retry exactly like
+  // sourceText/sourceImageB64 and purged by the same content-retention
+  // sweep; never returned over the API (the response schemas strip it).
+  sourceScanPagesB64: jsonb("source_scan_pages_b64").$type<string[]>(),
   // sha256 of the exact source content (text/transcript/image bytes) —
   // duplicate-intake detection without retaining a second copy.
   sourceHash: text("source_hash"),

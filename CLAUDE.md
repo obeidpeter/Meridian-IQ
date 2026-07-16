@@ -72,9 +72,15 @@ explainer (`modules/clerk/explain.ts`) is catalogue-grounded — the model only
 rephrases; kill switch/budget failures fall back to the catalogue text, never
 to an error. The power pack keeps the same grounding split: **pre-flight**
 (`modules/clerk/preflight.ts`) is pure model-free validation stored on the
-case at extraction time (empty list = review fast lane); **batch intake**
-(`modules/clerk/batch.ts`) only proposes segment boundaries — every segment
-then walks the normal capture path; the **weekly digest**
+case at extraction time (empty list = review fast lane); **scanned-PDF
+intake** (`rasterizePdfScan` in `modules/clerk/cases.ts`) renders a textless
+PDF's pages (max 4) to images and walks the ordinary vision-extraction path —
+pages are stored on the case for retry (`source_scan_pages_b64`, purged by the
+content-retention sweep, stripped from API responses) and text detection
+relies on `pageJoiner: ""` (pdf-parse's page markers otherwise make every scan
+look like it "has text"); **batch intake**
+(`modules/clerk/batch.ts`) stays text-only and only proposes segment
+boundaries — every segment then walks the normal capture path; the **weekly digest**
 (`modules/clerk/digest.ts`, opt-in `clerk_digest` flag, sweep-generated,
 firm-keyed RLS via migration 0011) computes every fact in SQL and lets the
 model phrase them, falling back to deterministic template text; **claims
