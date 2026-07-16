@@ -60,23 +60,30 @@ function normalizeCacOrThrow(raw: string): string {
 // auditor) see the whole spine. Shared by GET /parties and every other
 // surface that suggests or lists parties to firm principals, so the two can
 // never drift apart.
+// The firm-wide variant, shared with server-side surfaces that operate on
+// behalf of a firm without a full principal (e.g. register pre-flight at
+// extraction time, where only the case's firmId exists).
+export function firmPartySphereCondition(firmId: string): SQL {
+  return sql`(
+    ${partiesTable.id} IN (
+      SELECT client_party_id FROM engagements WHERE firm_id = ${firmId}
+    )
+    OR ${partiesTable.createdByFirmId} = ${firmId}
+    OR EXISTS (
+      SELECT 1 FROM invoices i
+      WHERE i.firm_id = ${firmId}
+        AND (i.supplier_party_id = ${partiesTable.id}
+          OR i.buyer_party_id = ${partiesTable.id})
+    )
+  )`;
+}
+
 export function partySphereCondition(principal: Principal): SQL | null {
   const tenant = tenantFirmId(principal);
   if (tenant === null) return null;
   const scope = clientPartyScope(principal);
   return scope === null
-    ? sql`(
-        ${partiesTable.id} IN (
-          SELECT client_party_id FROM engagements WHERE firm_id = ${tenant}
-        )
-        OR ${partiesTable.createdByFirmId} = ${tenant}
-        OR EXISTS (
-          SELECT 1 FROM invoices i
-          WHERE i.firm_id = ${tenant}
-            AND (i.supplier_party_id = ${partiesTable.id}
-              OR i.buyer_party_id = ${partiesTable.id})
-        )
-      )`
+    ? firmPartySphereCondition(tenant)
     : sql`(
         ${partiesTable.id} = ${scope}
         OR ${partiesTable.createdByUserId} = ${principal.userId}

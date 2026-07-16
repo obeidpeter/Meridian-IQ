@@ -3,10 +3,12 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.17.0
+ * OpenAPI spec version: 0.18.0
  */
+import type { ClerkCasePreflightItemSeverity } from './clerkCasePreflightItemSeverity';
 
 export type ClerkCasePreflightItem = {
   field: string;
   message: string;
+  severity?: ClerkCasePreflightItemSeverity;
 };

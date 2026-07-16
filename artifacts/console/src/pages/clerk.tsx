@@ -9,12 +9,14 @@ import {
   useReleaseClerkCase,
   useRetryClerkCase,
   useGetClerkPartySuggestions,
+  useGetClerkMetrics,
   useGetMe,
   useListFeatureFlags,
   useListFirms,
   useListParties,
   getListClerkCasesQueryKey,
   getGetClerkCaseQueryKey,
+  getGetClerkMetricsQueryKey,
   getGetClerkPartySuggestionsQueryKey,
 } from "@workspace/api-client-react";
 import type {
@@ -56,7 +58,9 @@ import type { ApproveForm } from "@/pages/clerk-shared";
 import {
   approveFormFromCase,
   clerkDisabledToast,
+  correctionHint,
   fieldLabel,
+  fieldWeights,
   fileIsPdf,
   fileToBase64,
   intakeKind,
@@ -529,10 +533,26 @@ export function ClerkWorkspace() {
     }
   };
 
+  // Evidence weights from the corrections exhaust: the metrics endpoint's
+  // per-field override rates make error-prone fields cost more expected
+  // effort than fields operators always keep. Cached generously — the rates
+  // move on the scale of days, not clicks.
+  const { data: queueMetrics } = useGetClerkMetrics(undefined, {
+    query: {
+      queryKey: getGetClerkMetricsQueryKey(undefined),
+      staleTime: 5 * 60_000,
+      retry: false,
+    },
+  });
+  const weights = useMemo(
+    () => fieldWeights(queueMetrics?.corrections),
+    [queueMetrics],
+  );
+
   // Ready-to-approve cases jump the queue (fast lane); the rest order by
-  // expected review effort (fewest flagged fields + pre-flight findings
-  // first), newest breaking ties — the queue drains by operator throughput
-  // rather than strict arrival order.
+  // expected review effort (evidence-weighted flagged fields + pre-flight
+  // findings, lightest first), newest breaking ties — the queue drains by
+  // operator throughput rather than strict arrival order.
   const sortedCases = useMemo(() => {
     const byNewest = [...cases].sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt),
@@ -541,9 +561,9 @@ export function ClerkWorkspace() {
       ...byNewest.filter(isReadyToApprove),
       ...byNewest
         .filter((c) => !isReadyToApprove(c))
-        .sort((a, b) => reviewEffort(a) - reviewEffort(b)),
+        .sort((a, b) => reviewEffort(a, weights) - reviewEffort(b, weights)),
     ];
-  }, [cases]);
+  }, [cases, weights]);
   const readyCount = useMemo(
     () => sortedCases.filter(isReadyToApprove).length,
     [sortedCases],
@@ -1084,13 +1104,26 @@ export function ClerkWorkspace() {
 
                     {selected.extraction && (
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground uppercase mb-1.5">
+                        <p className="text-xs font-medium text-muted-foreground uppercase mb-1.5 flex items-center gap-2">
                           Extracted fields — amber rows need checking
+                          {selected.extraction.exemplarCaseId && (
+                            <span
+                              className="normal-case rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+                              title="Extraction was guided by a previously approved invoice from the same supplier"
+                              data-testid="badge-exemplar"
+                            >
+                              supplier memory
+                            </span>
+                          )}
                         </p>
                         <div className="divide-y text-sm">
                           {selected.extraction.fields.map((f) => {
                             const preflightHit = preflightFields.has(f.field);
                             const snippetOpen = openSnippets.has(f.field);
+                            const hint = correctionHint(
+                              f.field,
+                              queueMetrics?.corrections,
+                            );
                             return (
                               <div key={f.field}>
                                 <div
@@ -1118,6 +1151,15 @@ export function ClerkWorkspace() {
                                   {f.critical && (
                                     <span className="text-[10px] uppercase text-muted-foreground">
                                       critical
+                                    </span>
+                                  )}
+                                  {hint && (
+                                    <span
+                                      className="shrink-0 text-[10px] text-amber-700 dark:text-amber-400"
+                                      title="From the corrections exhaust across recent approved cases"
+                                      data-testid={`hint-${f.field}`}
+                                    >
+                                      {hint}
                                     </span>
                                   )}
                                   <ConfidenceBadge confidence={f.confidence} />

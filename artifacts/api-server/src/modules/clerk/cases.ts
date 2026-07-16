@@ -31,13 +31,18 @@ import {
   CRITICAL_FIELDS,
   EXTRACT_JSON_SCHEMA,
   EXTRACT_PROMPT_VERSION,
+  EXTRACT_EXEMPLAR_PROMPT_VERSION,
   EXTRACT_SYSTEM,
+  EXEMPLAR_SYSTEM_SUFFIX,
   FLAG_CONFIDENCE_THRESHOLD,
+  exemplarSection,
   extractionOutputSchema,
   fenceUntrusted,
   type ExtractionOutput,
 } from "./prompts";
 import { preflightChecks } from "./preflight";
+import { registerPreflightChecks } from "./register-preflight";
+import { findExtractionExemplar, type ExtractionExemplar } from "./exemplar";
 import { inClerkScope } from "./scope";
 
 // Clerk capture cases (Task #40, C1). The Clerk PROPOSES, the operator
@@ -235,20 +240,32 @@ export function normalizeExtraction(output: ExtractionOutput): {
 }
 
 // The model call + case update shared by first-time intake and retries.
+// `exemplar` is the supplier-memory one-shot (exemplar.ts) — text sources
+// only, same-firm only, selected deterministically by the caller.
 async function runExtraction(
   caseId: string,
   user: UserContent,
   inputForHash: string,
   gateway: ClerkGateway,
   firmId: string | null = null,
+  exemplar: ExtractionExemplar | null = null,
 ): Promise<ClerkCase> {
+  // The exemplar variant carries its own prompt version so ledger cohorts
+  // can compare corrected-rates with and without supplier memory.
+  const withExemplar = exemplar !== null && typeof user === "string";
   const result = await gateway.infer<ExtractionOutput>({
     purpose: "extract_invoice",
     caseId,
     firmId,
-    promptVersion: EXTRACT_PROMPT_VERSION,
-    system: EXTRACT_SYSTEM,
-    user,
+    promptVersion: withExemplar
+      ? EXTRACT_EXEMPLAR_PROMPT_VERSION
+      : EXTRACT_PROMPT_VERSION,
+    system: withExemplar
+      ? EXTRACT_SYSTEM + EXEMPLAR_SYSTEM_SUFFIX
+      : EXTRACT_SYSTEM,
+    user: withExemplar
+      ? `${exemplarSection(exemplar)}\n\n${user as string}`
+      : user,
     schemaName: "invoice_extraction",
     jsonSchema: EXTRACT_JSON_SCHEMA,
     validator: extractionOutputSchema,
@@ -260,9 +277,20 @@ async function runExtraction(
     const extraction = {
       fields: normalized.fields,
       lines: normalized.lines,
-      promptVersion: EXTRACT_PROMPT_VERSION,
+      promptVersion: withExemplar
+        ? EXTRACT_EXEMPLAR_PROMPT_VERSION
+        : EXTRACT_PROMPT_VERSION,
       model: gateway.model,
+      // Auditability: which approved case's exemplar rode along.
+      ...(withExemplar ? { exemplarCaseId: exemplar.caseId } : {}),
     };
+    // Register-history checks are deterministic but need the firm's data, so
+    // they run OUTSIDE the short update transaction, then merge into the same
+    // preflight list the console already renders.
+    const preflight = [
+      ...preflightChecks(extraction),
+      ...(await registerPreflightChecks(extraction, firmId)),
+    ];
     const [updated] = await inClerkScope(firmId, () =>
       getDb()
         .update(clerkCasesTable)
@@ -273,7 +301,7 @@ async function runExtraction(
           // Deterministic pre-approval checks, recomputed on every successful
           // (re-)extraction. An empty list marks the case ready for the review
           // fast lane.
-          preflight: preflightChecks(extraction),
+          preflight,
         })
         .where(eq(clerkCasesTable.id, caseId))
         .returning(),
@@ -305,6 +333,11 @@ async function runExtraction(
 // firm (cross-tenant, uncapped) — the pre-expansion behaviour.
 export interface CaseContext {
   firmId?: string | null;
+  // True when the capture was initiated by a client_user: supplier-memory
+  // exemplars then narrow to that user's OWN cases — firm-keyed sharing is
+  // not sufficient between sibling clients (SEC-03), and a fixture is client
+  // document content.
+  clientScoped?: boolean;
 }
 
 export async function retryExtraction(
@@ -342,12 +375,17 @@ export async function retryExtraction(
       409,
     );
   }
+  const exemplar =
+    existing.sourceText && existing.firmId
+      ? await findExtractionExemplar(existing.sourceText, existing.firmId)
+      : null;
   const updated = await runExtraction(
     id,
     user,
     inputForHash,
     gateway,
     existing.firmId,
+    exemplar,
   );
   await appendAudit({
     actorId,
@@ -523,12 +561,24 @@ export async function createExtractionCase(
     return row;
   });
 
+  // Supplier memory (text sources with a firm scope): a deterministic match
+  // against the firm's own approved fixtures rides along as a one-shot;
+  // client-initiated captures narrow the pool to the caller's own cases.
+  const exemplar =
+    sourceText && ctx.firmId
+      ? await findExtractionExemplar(
+          sourceText,
+          ctx.firmId,
+          ctx.clientScoped ? actorId : null,
+        )
+      : null;
   const updated = await runExtraction(
     created.id,
     user,
     inputForHash,
     gateway,
     ctx.firmId ?? null,
+    exemplar,
   );
 
   await appendAudit({
@@ -854,6 +904,17 @@ export async function decideCase(
     .where(eq(firmsTable.id, input.firmId!))
     .limit(1);
   if (!firm) throw new DomainError("FIRM_NOT_FOUND", "Firm not found", 404);
+  // A client-captured case belongs to its firm; approving it into a DIFFERENT
+  // firm would re-attribute one firm's document (and its exemplar pool) to
+  // another. Operator captures (no firm) are attributed here as before.
+  if (existing.firmId && existing.firmId !== input.firmId) {
+    throw new DomainError(
+      "CASE_FIRM_MISMATCH",
+      "This case was captured for a different firm than the approval names.",
+      409,
+    );
+  }
+
   await assertPartyInFirm(input.firmId!, input.supplierPartyId!, "supplier");
   await assertPartyInFirm(input.firmId!, input.buyerPartyId!, "buyer");
 

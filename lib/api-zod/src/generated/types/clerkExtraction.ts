@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.17.0
+ * OpenAPI spec version: 0.18.0
  */
 import type { ClerkExtractionField } from './clerkExtractionField';
 import type { ClerkExtractionLine } from './clerkExtractionLine';
@@ -11,6 +11,7 @@ import type { ClerkExtractionLine } from './clerkExtractionLine';
 export interface ClerkExtraction {
   fields: ClerkExtractionField[];
   lines: ClerkExtractionLine[];
+  exemplarCaseId?: string;
   promptVersion: string;
   model: string;
 }

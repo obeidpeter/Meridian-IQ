@@ -28,23 +28,70 @@ export const STATUS_TONE: Record<string, BadgeTone> = {
 
 // Fast-lane predicate for the intake queue: a case is "ready to approve" when
 // extraction succeeded, the server's deterministic pre-flight found nothing
-// blocking (an EMPTY array — null/undefined means it never ran, which is not
-// the same as clear), and every critical field arrived with a value at high
-// confidence. Purely a triage hint: approval still needs the operator's eyes.
+// BLOCKING (advisory issues — e.g. "the register knows a TIN this document
+// doesn't print" — inform the reviewer without costing the fast lane; a
+// null/undefined list means pre-flight never ran, which is not the same as
+// clear), and every critical field arrived with a value at high confidence.
+// Purely a triage hint: approval still needs the operator's eyes.
 export function isReadyToApprove(kase: ClerkCase): boolean {
   if (kase.status !== "extracted") return false;
-  if (!Array.isArray(kase.preflight) || kase.preflight.length > 0) return false;
+  if (!Array.isArray(kase.preflight)) return false;
+  if (kase.preflight.some((i) => i.severity !== "advisory")) return false;
   return (kase.extraction?.fields ?? []).every(
     (f) => !f.critical || (f.value != null && f.confidence >= 0.9),
   );
 }
 
+// Evidence weights from the corrections exhaust (metrics.corrections):
+// fields operators historically correct often demand more attention than
+// fields they always keep. A field below the sample floor carries weight 1 —
+// no evidence, no bias. Line fields are excluded (positional pairing makes
+// their attribution unreliable, same reasoning as calibration).
+export interface FieldCorrectionStat {
+  field: string;
+  total: number;
+  overrideRate: number;
+}
+
+const WEIGHT_MIN_SAMPLES = 20;
+
+export function fieldWeights(
+  stats: FieldCorrectionStat[] | undefined,
+): Map<string, number> {
+  const weights = new Map<string, number>();
+  for (const s of stats ?? []) {
+    if (s.total >= WEIGHT_MIN_SAMPLES && !s.field.startsWith("lines.")) {
+      weights.set(s.field, 1 + Math.min(1, Math.max(0, s.overrideRate)));
+    }
+  }
+  return weights;
+}
+
+// The display floor for the review pane's "historically corrected" hint —
+// stricter than the weighting floor because a visible warning label needs
+// more evidence than a subtle ordering nudge.
+export function correctionHint(
+  field: string,
+  stats: FieldCorrectionStat[] | undefined,
+): string | null {
+  const s = (stats ?? []).find((x) => x.field === field);
+  if (!s || s.total < WEIGHT_MIN_SAMPLES || s.overrideRate < 0.15) return null;
+  return `corrected in ${Math.round(s.overrideRate * 100)}% of past cases`;
+}
+
 // Expected review effort for queue ordering: flagged fields plus pre-flight
 // findings are exactly the items an operator must look at before deciding.
 // Lighter cases surface first within the non-fast-lane group, so the queue
-// drains by throughput instead of strict arrival order.
-export function reviewEffort(kase: ClerkCase): number {
-  const flagged = (kase.extraction?.fields ?? []).filter((f) => f.flagged).length;
+// drains by throughput instead of strict arrival order. With weights, each
+// flagged field counts by its historical correction evidence (1..2) instead
+// of flat 1 — error-prone fields cost more expected effort.
+export function reviewEffort(
+  kase: ClerkCase,
+  weights?: Map<string, number>,
+): number {
+  const flagged = (kase.extraction?.fields ?? [])
+    .filter((f) => f.flagged)
+    .reduce((acc, f) => acc + (weights?.get(f.field) ?? 1), 0);
   const preflight = Array.isArray(kase.preflight) ? kase.preflight.length : 0;
   return flagged + preflight;
 }
