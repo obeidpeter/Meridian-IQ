@@ -86,7 +86,14 @@ export type ClerkPurpose =
   | "explain_match"
   // Natural-language invoice drafting (draft-invoice.ts): one sentence into a
   // prefilled draft form the client reviews and saves through createDraft.
-  | "draft_invoice";
+  | "draft_invoice"
+  // Statement-format bootstrap (draft-format.ts): proposes a column mapping
+  // from a sample export; the deterministic parser validates before any save.
+  | "draft_format"
+  // Advisory narrative drafting (advisory/narrative.ts): phrases the
+  // platform-computed assessment/VAT-risk facts; template fallback, never
+  // stored — the firm partner edits and owns the letter.
+  | "draft_narrative";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;

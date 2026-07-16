@@ -9,6 +9,8 @@ import {
   GetAssessmentResponse,
   AnalyzeVatRiskBody,
   AnalyzeVatRiskResponse,
+  DraftEngagementNarrativeParams,
+  DraftEngagementNarrativeResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
@@ -23,6 +25,8 @@ import {
   computeAssessment,
 } from "../modules/advisory/questionnaire";
 import { parseLedgerCsv, analyzeLedger } from "../modules/advisory/vatRisk";
+import { draftEngagementNarrative } from "../modules/advisory/narrative";
+import { getClerkGateway } from "../modules/clerk/provider";
 import { verifyStampBatch } from "../modules/rails/adapter";
 
 const router: IRouter = Router();
@@ -171,6 +175,27 @@ router.post("/vat-risk/analyze", async (req, res): Promise<void> => {
   }
 
   res.json(AnalyzeVatRiskResponse.parse({ engagementId, ...report }));
+});
+
+// Idea #10: Clerk drafts the client-facing letter body from a completed
+// engagement's platform-computed findings. Best-effort model phrasing with
+// the deterministic template fallback (digest posture) — never errors for
+// AI-availability reasons, never stored: the firm partner edits and owns it.
+router.post("/engagements/:id/narrative", async (req, res): Promise<void> => {
+  assertCan(req.principal, "engagement.write");
+  const params = parseOrThrow(DraftEngagementNarrativeParams, req.params);
+  let gateway = null;
+  try {
+    gateway = await getClerkGateway();
+  } catch {
+    gateway = null;
+  }
+  const result = await draftEngagementNarrative(
+    params.id,
+    req.principal,
+    gateway,
+  );
+  res.json(DraftEngagementNarrativeResponse.parse(result));
 });
 
 export default router;

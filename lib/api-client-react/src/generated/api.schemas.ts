@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.16.0
+ * OpenAPI spec version: 0.17.0
  */
 export interface HealthStatus {
   status: string;
@@ -3008,6 +3008,150 @@ export interface InvoiceDraftResult {
   buyerSuggestions: ClerkPartySuggestion[];
   model: string;
   promptVersion: string;
+}
+
+export type CreateClerkBatchInputSourceType = typeof CreateClerkBatchInputSourceType[keyof typeof CreateClerkBatchInputSourceType];
+
+
+export const CreateClerkBatchInputSourceType = {
+  pdf: 'pdf',
+  text: 'text',
+} as const;
+
+export interface CreateClerkBatchInput {
+  sourceType: CreateClerkBatchInputSourceType;
+  name?: string;
+  text?: string;
+  pdfBase64?: string;
+}
+
+export type ClerkBatchViewStatus = typeof ClerkBatchViewStatus[keyof typeof ClerkBatchViewStatus];
+
+
+export const ClerkBatchViewStatus = {
+  queued: 'queued',
+  processing: 'processing',
+  done: 'done',
+  failed: 'failed',
+} as const;
+
+export interface ClerkBatchView {
+  id: string;
+  /** @nullable */
+  firmId?: string | null;
+  /** @nullable */
+  name?: string | null;
+  status: ClerkBatchViewStatus;
+  /** @nullable */
+  totalSegments?: number | null;
+  processedSegments: number;
+  createdCases: number;
+  skippedDuplicates: number;
+  /** @nullable */
+  failReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StatementColumnMap {
+  date: string;
+  narration: string;
+  /** @nullable */
+  reference?: string | null;
+  /** @nullable */
+  debit?: string | null;
+  /** @nullable */
+  credit?: string | null;
+  /** @nullable */
+  amount?: string | null;
+  /** @nullable */
+  drcr?: string | null;
+}
+
+export type MappingValidationRowParseStatus = typeof MappingValidationRowParseStatus[keyof typeof MappingValidationRowParseStatus];
+
+
+export const MappingValidationRowParseStatus = {
+  parsed: 'parsed',
+  invalid: 'invalid',
+} as const;
+
+export interface MappingValidationRow {
+  lineNo: number;
+  parseStatus: MappingValidationRowParseStatus;
+  /** @nullable */
+  valueDate: string | null;
+  /** @nullable */
+  amount: string | null;
+  /** @nullable */
+  direction: string | null;
+  /** @nullable */
+  error: string | null;
+}
+
+export interface MappingValidation {
+  headerFound: boolean;
+  lineCount: number;
+  parsedCount: number;
+  parseRate: number;
+  preview: MappingValidationRow[];
+}
+
+export interface StatementFormatView {
+  id: string;
+  key: string;
+  bankName: string;
+  columns: StatementColumnMap;
+  createdAt: string;
+}
+
+export interface CreateStatementFormatInput {
+  /** @maxLength 60 */
+  key?: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  bankName: string;
+  columns: StatementColumnMap;
+  /**
+     * @minLength 10
+     * @maxLength 100000
+     */
+  sampleCsv: string;
+}
+
+export interface CreateStatementFormatResult {
+  mapping: StatementFormatView;
+  validation: MappingValidation;
+}
+
+export interface DraftStatementFormatInput {
+  /**
+     * @minLength 20
+     * @maxLength 20000
+     */
+  sampleCsv: string;
+}
+
+export interface StatementFormatDraft {
+  bankName: string;
+  columns: StatementColumnMap;
+  validation: MappingValidation;
+}
+
+export type EngagementNarrativeSource = typeof EngagementNarrativeSource[keyof typeof EngagementNarrativeSource];
+
+
+export const EngagementNarrativeSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface EngagementNarrative {
+  engagementId: string;
+  narrative: string;
+  source: EngagementNarrativeSource;
 }
 
 export type ClerkEvalFixtureResultRiskLabel = typeof ClerkEvalFixtureResultRiskLabel[keyof typeof ClerkEvalFixtureResultRiskLabel];

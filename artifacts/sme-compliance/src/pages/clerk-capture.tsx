@@ -1,17 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   useCreateClerkCase,
-  useCreateClerkCaseBatch,
+  useCreateClerkBatch,
+  useGetClerkBatch,
   useGetClerkCase,
   useGetClerkUsage,
   useListClerkCases,
+  getGetClerkBatchQueryKey,
   getGetClerkCaseQueryKey,
   getGetClerkUsageQueryKey,
   getListClerkCasesQueryKey,
 } from "@workspace/api-client-react";
 import type {
-  BatchClerkCasesResult,
+  ClerkBatchView,
   ClerkCase,
   ClerkCaseCreateInput,
   ListClerkCasesParams,
@@ -214,14 +216,11 @@ function CaptureContent() {
     payload: ClerkCaseCreateInput;
     message: string;
   } | null>(null);
-  // Batch intake: "This contains multiple invoices" routes the same text/PDF
-  // through the batch endpoint, which segments the document and opens one
-  // case per invoice. The result summary sticks inline (unlike the toasts)
-  // until any source input changes.
+  // Batch intake (async, idea #8): "This contains multiple invoices" QUEUES
+  // the bundle — up to 50 invoices — and the progress card below polls the
+  // batch's counters while the platform segments and extracts out of band.
   const [batchMode, setBatchMode] = useState(false);
-  const [batchResult, setBatchResult] = useState<BatchClerkCasesResult | null>(
-    null,
-  );
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
 
   // The server scopes this list to the caller (a client_user sees only their
   // own submissions), so no client-side ownership filter is needed.
@@ -288,35 +287,39 @@ function CaptureContent() {
     },
   });
 
-  const createBatch = useCreateClerkCaseBatch({
+  const createBatch = useCreateClerkBatch({
     mutation: {
-      onSuccess: (result: BatchClerkCasesResult) => {
-        queryClient.invalidateQueries({
-          queryKey: getListClerkCasesQueryKey(),
-        });
-        queryClient.invalidateQueries({ queryKey: getGetClerkUsageQueryKey() });
-        setBatchResult(result);
+      onSuccess: (batch: ClerkBatchView) => {
+        setActiveBatchId(batch.id);
         setCaptureText("");
         setCaptureFile(null);
         setPendingDuplicate(null);
         setDisabledBanner(false);
       },
-      onError: (e) => {
-        // 502 BATCH_SEGMENTATION_FAILED: Clerk couldn't split the bundle —
-        // point at the single-invoice path instead of relaying the raw error.
-        if (errorStatus(e) === 502) {
-          toast({
-            title: "Clerk couldn't split that document",
-            description:
-              "Try uploading the invoices one at a time — each becomes its own submission.",
-            variant: "destructive",
-          });
-          return;
-        }
-        handleClerkError(e);
+      onError: (e) => handleClerkError(e),
+    },
+  });
+
+  // Poll the queued batch's progress; segmentation failures now surface here
+  // as the batch's failReason instead of a submit-time error.
+  const { data: activeBatch } = useGetClerkBatch(activeBatchId || "", {
+    query: {
+      enabled: !!activeBatchId,
+      queryKey: getGetClerkBatchQueryKey(activeBatchId || ""),
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        return status === "queued" || status === "processing" ? 2000 : false;
       },
     },
   });
+  // When the batch lands, the new cases and the spent tokens appear at once.
+  const activeBatchStatus = activeBatch?.status;
+  useEffect(() => {
+    if (activeBatchStatus === "done" || activeBatchStatus === "failed") {
+      queryClient.invalidateQueries({ queryKey: getListClerkCasesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetClerkUsageQueryKey() });
+    }
+  }, [activeBatchStatus, queryClient]);
 
   const isPdfFile =
     captureFile != null &&
@@ -327,7 +330,7 @@ function CaptureContent() {
   const batchEligible = captureVoice == null && (captureFile == null || isPdfFile);
 
   const submitCapture = async () => {
-    setBatchResult(null);
+    setActiveBatchId(null);
     if (batchMode && batchEligible && (captureFile || captureText.trim())) {
       if (captureFile) {
         const b64 = await fileToBase64(captureFile);
@@ -411,7 +414,7 @@ function CaptureContent() {
               onChange={(e) => {
                 setCaptureFile(e.target.files?.[0] ?? null);
                 setPendingDuplicate(null);
-                setBatchResult(null);
+                setActiveBatchId(null);
               }}
               disabled={captureVoice != null}
               data-testid="input-capture-file"
@@ -426,7 +429,7 @@ function CaptureContent() {
               onChange={(e) => {
                 const f = e.target.files?.[0] ?? null;
                 setPendingDuplicate(null);
-                setBatchResult(null);
+                setActiveBatchId(null);
                 if (f && f.size > MAX_VOICE_BYTES) {
                   toast({
                     title: "Voice note too large",
@@ -458,7 +461,7 @@ function CaptureContent() {
               onChange={(e) => {
                 setCaptureText(e.target.value);
                 setPendingDuplicate(null);
-                setBatchResult(null);
+                setActiveBatchId(null);
               }}
               placeholder="INVOICE No: ..."
               rows={5}
@@ -475,7 +478,7 @@ function CaptureContent() {
                 checked={batchMode}
                 onChange={(e) => {
                   setBatchMode(e.target.checked);
-                  setBatchResult(null);
+                  setActiveBatchId(null);
                 }}
                 data-testid="batch-toggle"
               />
@@ -500,17 +503,44 @@ function CaptureContent() {
                 : "Reading…"
               : "Send to Clerk"}
           </Button>
-          {batchResult && (
-            <Alert data-testid="batch-result">
+          {activeBatch && (
+            <Alert
+              variant={activeBatch.status === "failed" ? "destructive" : "default"}
+              data-testid="batch-progress"
+            >
               <FileCheck2 className="h-4 w-4" aria-hidden="true" />
-              <AlertTitle>Sent to Clerk</AlertTitle>
+              <AlertTitle>
+                {activeBatch.status === "queued"
+                  ? "Bundle queued"
+                  : activeBatch.status === "processing"
+                    ? "Clerk is working through your bundle…"
+                    : activeBatch.status === "done"
+                      ? "Bundle processed"
+                      : "Bundle failed"}
+              </AlertTitle>
               <AlertDescription>
-                {batchSummary(
-                  batchResult.cases.length,
-                  batchResult.skippedDuplicates,
+                {activeBatch.status === "failed" ? (
+                  activeBatch.failReason ??
+                  "The bundle could not be processed. Try uploading the invoices one at a time."
+                ) : activeBatch.status === "done" ? (
+                  <>
+                    {batchSummary(
+                      activeBatch.createdCases,
+                      activeBatch.skippedDuplicates,
+                    )}
+                    {activeBatch.createdCases > 0 &&
+                      " — your accountant will review each one before anything is created."}
+                  </>
+                ) : (
+                  <>
+                    {activeBatch.totalSegments
+                      ? `${activeBatch.processedSegments} of ${activeBatch.totalSegments} invoices read`
+                      : "Splitting the document into invoices…"}
+                    {activeBatch.createdCases > 0 &&
+                      ` · ${activeBatch.createdCases} submitted so far`}
+                    {" — you can leave this page; the work continues."}
+                  </>
                 )}
-                {batchResult.cases.length > 0 &&
-                  " — your accountant will review each one before anything is created."}
               </AlertDescription>
             </Alert>
           )}

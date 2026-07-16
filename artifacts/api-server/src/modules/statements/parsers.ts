@@ -379,8 +379,78 @@ export const STATEMENT_PARSERS: StatementParser[] = [
   genericParser,
 ];
 
+// Build a parser from a stored column mapping (custom-formats.ts). The
+// mapping names HEADERS, matched after the same normalization the built-in
+// parsers use, so column order and cosmetic punctuation never matter. The
+// parse pipeline is byte-identical to the code-defined banks — a custom
+// format gains no behaviour of its own, only column locations.
+export interface ColumnNameMapping {
+  date: string;
+  narration: string;
+  reference?: string | null;
+  debit?: string | null;
+  credit?: string | null;
+  amount?: string | null;
+  drcr?: string | null;
+}
+
+export function parserFromMapping(mapping: {
+  key: string;
+  bankName: string;
+  columns: ColumnNameMapping;
+}): StatementParser {
+  const col = (name: string | null | undefined) =>
+    name?.trim() ? normalizeHeader(name) : null;
+  const date = col(mapping.columns.date);
+  const narration = col(mapping.columns.narration);
+  const debit = col(mapping.columns.debit);
+  const credit = col(mapping.columns.credit);
+  const amount = col(mapping.columns.amount);
+  const find = (h: string[], name: string | null): number | null => {
+    if (!name) return null;
+    const i = h.indexOf(name);
+    return i === -1 ? null : i;
+  };
+  return makeParser({
+    key: mapping.key,
+    bankName: mapping.bankName,
+    headerMatch: (h) =>
+      date !== null &&
+      narration !== null &&
+      h.includes(date) &&
+      h.includes(narration) &&
+      // Amount evidence must be locatable, same rule as the generic parser.
+      ((amount !== null && h.includes(amount)) ||
+        (debit !== null &&
+          credit !== null &&
+          h.includes(debit) &&
+          h.includes(credit))),
+    locate: (h) => {
+      const dateIdx = find(h, date);
+      const narrationIdx = find(h, narration);
+      if (dateIdx === null || narrationIdx === null) return null;
+      return {
+        date: dateIdx,
+        narration: narrationIdx,
+        reference: find(h, col(mapping.columns.reference)),
+        debit: find(h, debit),
+        credit: find(h, credit),
+        amount: find(h, amount),
+        drcr: find(h, col(mapping.columns.drcr)),
+      };
+    },
+  });
+}
+
 export function findParser(key: string): StatementParser | null {
   return STATEMENT_PARSERS.find((p) => p.key === key) ?? null;
+}
+
+// The first few raw rows of an export — the window every parser's detect()
+// scans (banks prefix exports with account metadata before the header row).
+export function parseCsvHeadersOnly(text: string): string[][] {
+  const grid = parseCsv(text);
+  return grid.slice(0, Math.min(grid.length, 10));
 }
 
 // Detect a parser from the file content (scanning for a recognisable header

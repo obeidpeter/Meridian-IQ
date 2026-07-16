@@ -38,6 +38,13 @@ import {
   AssistMatchProposalsResponse,
   DraftInvoiceWithClerkBody,
   DraftInvoiceWithClerkResponse,
+  CreateClerkBatchBody,
+  CreateClerkBatchResponse,
+  ListClerkBatchesResponse,
+  GetClerkBatchParams,
+  GetClerkBatchResponse,
+  DraftStatementFormatWithClerkBody,
+  DraftStatementFormatWithClerkResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { assertCan, tenantFirmId } from "../modules/auth/rbac";
@@ -54,8 +61,15 @@ import {
   releaseCase,
   retryExtraction,
 } from "../modules/clerk/cases";
+import { and, desc, eq } from "drizzle-orm";
+import { getDb, clerkBatchesTable, type ClerkBatch } from "@workspace/db";
 import { askClerk } from "../modules/clerk/ask";
 import { createBatchCases } from "../modules/clerk/batch";
+import {
+  createClerkBatch,
+  kickBatchProcessing,
+} from "../modules/clerk/batch-async";
+import { draftFormatMappingWithClerk } from "../modules/clerk/draft-format";
 import { latestDigestForFirm } from "../modules/clerk/digest";
 import { draftCatalogueEntryWithClerk } from "../modules/clerk/draft-catalogue";
 import { draftClaimWithClerk } from "../modules/clerk/draft-claim";
@@ -245,6 +259,90 @@ router.post("/clerk/explain-failure", async (req, res): Promise<void> => {
     gateway,
   );
   res.json(ExplainInvoiceFailureResponse.parse(explanation));
+});
+
+// ---- Async batch intake (idea #8) ----
+// The route only QUEUES: no model call happens in the request. Processing
+// starts immediately in-process and is guaranteed by the sweep (reclaim on
+// crash); the UI polls the batch row's progress counters.
+
+const stripBatch = (b: ClerkBatch) => ({
+  id: b.id,
+  firmId: b.firmId,
+  name: b.name,
+  status: b.status,
+  totalSegments: b.totalSegments,
+  processedSegments: b.processedSegments,
+  createdCases: b.createdCases,
+  skippedDuplicates: b.skippedDuplicates,
+  failReason: b.failReason,
+  createdAt: b.createdAt,
+  updatedAt: b.updatedAt,
+});
+
+router.post("/clerk/batches", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.capture");
+  const parsed = parseOrThrow(CreateClerkBatchBody, req.body);
+  // Budget gate covers the segmentation + extractions the processor will run;
+  // an exhausted firm gets a clean 429 before anything is queued.
+  const tenant = tenantFirmId(req.principal);
+  if (tenant) await assertFirmClerkBudget(tenant);
+  const batch = await createClerkBatch(parsed, req.principal.userId, {
+    firmId: tenant,
+  });
+  kickBatchProcessing(batch.id);
+  res.status(202).json(CreateClerkBatchResponse.parse(stripBatch(batch)));
+});
+
+router.get("/clerk/batches", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.capture");
+  const tenant = tenantFirmId(req.principal);
+  const conditions = [];
+  if (tenant) conditions.push(eq(clerkBatchesTable.firmId, tenant));
+  if (req.principal.role === "client_user") {
+    conditions.push(eq(clerkBatchesTable.createdBy, req.principal.userId));
+  }
+  const rows = await getDb()
+    .select()
+    .from(clerkBatchesTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(clerkBatchesTable.createdAt))
+    .limit(50);
+  res.json(ListClerkBatchesResponse.parse(rows.map(stripBatch)));
+});
+
+router.get("/clerk/batches/:id", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.capture");
+  const params = parseOrThrow(GetClerkBatchParams, req.params);
+  const [row] = await getDb()
+    .select()
+    .from(clerkBatchesTable)
+    .where(eq(clerkBatchesTable.id, params.id))
+    .limit(1);
+  // Same 404 posture as cases: firm principals only their firm's batches, a
+  // client_user only its own submissions; existence is never disclosed.
+  const tenant = tenantFirmId(req.principal);
+  if (
+    !row ||
+    (tenant && row.firmId !== tenant) ||
+    (req.principal.role === "client_user" &&
+      row.createdBy !== req.principal.userId)
+  ) {
+    res.status(404).json({ error: "Batch not found" });
+    return;
+  }
+  res.json(GetClerkBatchResponse.parse(stripBatch(row)));
+});
+
+// Statement-format bootstrap (idea #9): Clerk proposes a column mapping from
+// a pasted sample; the deterministic parser's validation run travels with the
+// draft. Saving goes through POST /statement-formats, which re-validates.
+router.post("/clerk/format-draft", async (req, res): Promise<void> => {
+  assertCan(req.principal, "catalogue.write");
+  const parsed = parseOrThrow(DraftStatementFormatWithClerkBody, req.body);
+  const gateway = await getClerkGateway();
+  const draft = await draftFormatMappingWithClerk(parsed.sampleCsv, gateway);
+  res.json(DraftStatementFormatWithClerkResponse.parse(draft));
 });
 
 // Reconciliation match assist (idea #2): explains one statement line's

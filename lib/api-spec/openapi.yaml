@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.16.0
+  version: 0.17.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1325,6 +1325,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/VatRiskReport"
 
+  /engagements/{id}/narrative:
+    post:
+      operationId: draftEngagementNarrative
+      tags: [advisory]
+      summary: Clerk-drafted client letter body from an engagement's computed findings (template fallback, never stored)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Letter body for the firm to edit and own
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EngagementNarrative"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          description: The engagement's findings do not match the expected shape
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -2031,6 +2056,58 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  # ---- Custom statement formats (Clerk idea #9, operator platform config) ----
+  /statement-formats:
+    get:
+      operationId: listStatementFormats
+      tags: [reconciliation]
+      summary: Operator-managed custom statement-format mappings
+      responses:
+        "200":
+          description: Stored custom formats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StatementFormatView"
+    post:
+      operationId: createStatementFormat
+      tags: [reconciliation]
+      summary: Save a custom format — rejected unless it parses the provided sample
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStatementFormatInput"
+      responses:
+        "201":
+          description: Stored mapping plus its validation run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateStatementFormatResult"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          description: The mapping could not parse the sample
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /statement-formats/{id}:
+    delete:
+      operationId: deleteStatementFormat
+      tags: [reconciliation]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   # ---- R2: Buyer Rails v1 (BR-01, BR-02, BR-04, BR-05) ----
   /buyer/invoices:
@@ -2936,6 +3013,106 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "502":
           description: Clerk could not produce a valid draft (fail closed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Clerk AI disabled by the kill switch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---- Async batch intake (Clerk idea #8) ----
+  /clerk/batches:
+    post:
+      operationId: createClerkBatch
+      tags: [clerk]
+      summary: Queue a month-end bundle — segmentation and extraction run out of band
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClerkBatchInput"
+      responses:
+        "202":
+          description: Queued; poll the batch for progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkBatchView"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          description: The document could not be read as text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Clerk AI disabled by the kill switch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: listClerkBatches
+      tags: [clerk]
+      summary: The caller's recent batches, newest first
+      responses:
+        "200":
+          description: Batches visible to the caller
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClerkBatchView"
+  /clerk/batches/{id}:
+    get:
+      operationId: getClerkBatch
+      tags: [clerk]
+      summary: One batch's live progress counters
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkBatchView"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /clerk/format-draft:
+    post:
+      operationId: draftStatementFormatWithClerk
+      tags: [clerk]
+      summary: Propose a statement-format column mapping from a sample — validated by the deterministic parser, never stored
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftStatementFormatInput"
+      responses:
+        "200":
+          description: Draft mapping plus the parser's validation run over the sample
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementFormatDraft"
+        "422":
+          description: The sample has no readable header row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Clerk could not produce a usable mapping (fail closed)
           content:
             application/json:
               schema:
@@ -6869,6 +7046,177 @@ components:
           type: string
         promptVersion:
           type: string
+    CreateClerkBatchInput:
+      type: object
+      required: [sourceType]
+      properties:
+        sourceType:
+          type: string
+          enum: [pdf, text]
+        name:
+          type: string
+        text:
+          type: string
+        pdfBase64:
+          type: string
+    ClerkBatchView:
+      type: object
+      required:
+        [
+          id,
+          status,
+          processedSegments,
+          createdCases,
+          skippedDuplicates,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: ["string", "null"]
+        name:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [queued, processing, done, failed]
+        totalSegments:
+          type: ["integer", "null"]
+        processedSegments:
+          type: integer
+        createdCases:
+          type: integer
+        skippedDuplicates:
+          type: integer
+        failReason:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    StatementColumnMap:
+      type: object
+      required: [date, narration]
+      properties:
+        date:
+          type: string
+        narration:
+          type: string
+        reference:
+          type: ["string", "null"]
+        debit:
+          type: ["string", "null"]
+        credit:
+          type: ["string", "null"]
+        amount:
+          type: ["string", "null"]
+        drcr:
+          type: ["string", "null"]
+    MappingValidationRow:
+      type: object
+      required: [lineNo, parseStatus, valueDate, amount, direction, error]
+      properties:
+        lineNo:
+          type: integer
+        parseStatus:
+          type: string
+          enum: [parsed, invalid]
+        valueDate:
+          type: ["string", "null"]
+        amount:
+          type: ["string", "null"]
+        direction:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+    MappingValidation:
+      type: object
+      required: [headerFound, lineCount, parsedCount, parseRate, preview]
+      properties:
+        headerFound:
+          type: boolean
+        lineCount:
+          type: integer
+        parsedCount:
+          type: integer
+        parseRate:
+          type: number
+        preview:
+          type: array
+          items:
+            $ref: "#/components/schemas/MappingValidationRow"
+    StatementFormatView:
+      type: object
+      required: [id, key, bankName, columns, createdAt]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        bankName:
+          type: string
+        columns:
+          $ref: "#/components/schemas/StatementColumnMap"
+        createdAt:
+          type: string
+          format: date-time
+    CreateStatementFormatInput:
+      type: object
+      required: [bankName, columns, sampleCsv]
+      properties:
+        key:
+          type: string
+          maxLength: 60
+        bankName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        columns:
+          $ref: "#/components/schemas/StatementColumnMap"
+        sampleCsv:
+          type: string
+          minLength: 10
+          maxLength: 100000
+    CreateStatementFormatResult:
+      type: object
+      required: [mapping, validation]
+      properties:
+        mapping:
+          $ref: "#/components/schemas/StatementFormatView"
+        validation:
+          $ref: "#/components/schemas/MappingValidation"
+    DraftStatementFormatInput:
+      type: object
+      required: [sampleCsv]
+      properties:
+        sampleCsv:
+          type: string
+          minLength: 20
+          maxLength: 20000
+    StatementFormatDraft:
+      type: object
+      required: [bankName, columns, validation]
+      properties:
+        bankName:
+          type: string
+        columns:
+          $ref: "#/components/schemas/StatementColumnMap"
+        validation:
+          $ref: "#/components/schemas/MappingValidation"
+    EngagementNarrative:
+      type: object
+      required: [engagementId, narrative, source]
+      properties:
+        engagementId:
+          type: string
+        narrative:
+          type: string
+        source:
+          type: string
+          enum: [clerk, template]
     ClerkEvalFixtureResult:
       type: object
       required:

@@ -11,7 +11,7 @@ import {
   unique,
   index,
 } from "drizzle-orm/pg-core";
-import { firmsTable } from "./organizations.ts";
+import { firmsTable, usersTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
 import { invoicesTable } from "./invoices.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
@@ -117,6 +117,40 @@ export const matchProposalsTable = pgTable(
   // The reconcile job is idempotent: one proposal per (line, invoice) pair.
   (t) => [unique().on(t.statementLineId, t.invoiceId)],
 );
+
+// Custom statement-format mappings (Clerk idea #9). Platform reference data
+// like the error catalogue: operator-managed, no tenant key, consumed by the
+// deterministic parser seam (parsers.ts) at ingestion time. Columns are
+// NORMALIZED HEADER NAMES (lowercase, letters only) located in the export's
+// header row at parse time — never indexes, so column reordering is harmless.
+// Clerk may PROPOSE a mapping from sample rows; saving goes through the
+// ordinary operator route, which validates by actually parsing the sample.
+export interface StatementColumnMapping {
+  date: string;
+  narration: string;
+  reference?: string | null;
+  debit?: string | null;
+  credit?: string | null;
+  amount?: string | null;
+  drcr?: string | null;
+}
+
+export const statementFormatMappingsTable = pgTable(
+  "statement_format_mappings",
+  {
+    id: id(),
+    // The parser key, e.g. "custom_keystone" — namespaced so it can never
+    // collide with a built-in parser key.
+    key: text("key").notNull().unique(),
+    bankName: text("bank_name").notNull(),
+    columns: jsonb("columns").$type<StatementColumnMapping>().notNull(),
+    createdBy: uuid("created_by").references(() => usersTable.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+);
+export type StatementFormatMapping =
+  typeof statementFormatMappingsTable.$inferSelect;
 
 // Daily buyer input-VAT exposure snapshots (BR-01). Reads serve the latest
 // snapshot; the pipeline worker refreshes at least daily.
