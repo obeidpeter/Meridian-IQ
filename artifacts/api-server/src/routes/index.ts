@@ -29,6 +29,7 @@ import claimsRouter from "./claims";
 import clerkRouter from "./clerk";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
+import "../modules/desk/triage";
 import "../modules/clerk/watchdog";
 import "../modules/clerk/eval-growth";
 import "../modules/clerk/digest";

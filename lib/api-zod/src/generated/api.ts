@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.13.0
+ * OpenAPI spec version: 0.14.0
  */
 import * as zod from 'zod';
 
@@ -2386,6 +2386,13 @@ export const ListOperatorCasesResponseItem = zod.object({
   "firstActionAt": zod.coerce.date().nullish(),
   "resolvedAt": zod.coerce.date().nullish(),
   "handleSeconds": zod.number().nullish(),
+  "triage": zod.object({
+  "status": zod.enum(['proposed', 'failed']),
+  "category": zod.string().optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "catalogueCode": zod.string().nullish(),
+  "rationale": zod.string().optional()
+}).nullish(),
   "playbook": zod.union([zod.object({
   "code": zod.string(),
   "category": zod.string(),
@@ -2443,6 +2450,13 @@ export const ClaimOperatorCaseResponse = zod.object({
   "firstActionAt": zod.coerce.date().nullish(),
   "resolvedAt": zod.coerce.date().nullish(),
   "handleSeconds": zod.number().nullish(),
+  "triage": zod.object({
+  "status": zod.enum(['proposed', 'failed']),
+  "category": zod.string().optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "catalogueCode": zod.string().nullish(),
+  "rationale": zod.string().optional()
+}).nullish(),
   "playbook": zod.union([zod.object({
   "code": zod.string(),
   "category": zod.string(),
@@ -2492,6 +2506,13 @@ export const ResolveOperatorCaseResponse = zod.object({
   "firstActionAt": zod.coerce.date().nullish(),
   "resolvedAt": zod.coerce.date().nullish(),
   "handleSeconds": zod.number().nullish(),
+  "triage": zod.object({
+  "status": zod.enum(['proposed', 'failed']),
+  "category": zod.string().optional(),
+  "priority": zod.enum(['low', 'medium', 'high']).optional(),
+  "catalogueCode": zod.string().nullish(),
+  "rationale": zod.string().optional()
+}).nullish(),
   "playbook": zod.union([zod.object({
   "code": zod.string(),
   "category": zod.string(),

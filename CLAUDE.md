@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.12.0`).
+contract change (it is currently `0.14.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -89,7 +89,12 @@ DRAFT register entry that still walks the full maker-checker flow; **catalogue
 drafting** (`modules/clerk/draft-catalogue.ts`, operator `catalogue.write`)
 proposes an error-catalogue entry grounded in observed rail rejections — the
 draft is returned for the operator to edit and save through the ordinary
-catalogue routes, never stored directly. Clerk health (console) includes a
+catalogue routes, never stored directly. **Escalation triage**
+(`modules/desk/triage.ts`, opt-in `clerk_triage` flag, sweep-driven so the
+client's escalation never waits on a model call) proposes routing — closed
+category set, priority, catalogue code re-verified against the codes that
+exist — stored on the operator case for the operator to accept or override,
+never applied automatically. Clerk health (console) includes a
 confidence-calibration table (`computeCalibration` in
 `modules/clerk/metrics.ts`): kept-rate vs model confidence per band, from the
 corrections exhaust.
@@ -165,7 +170,7 @@ reminders, recurring invoices, B2C pre-breach alerts, buyer exposure
 refresh, push receipts, login-attempt / password-reset cleanup, outbox +
 stamp-verification retention, unmapped-code cases, and the
 Clerk watchdog / expired-claims / expired-case-content / eval-growth /
-weekly-digest sweeps). Register new periodic work with `registerSweep(fn)`.
+weekly-digest / escalation-triage sweeps). Register new periodic work with `registerSweep(fn)`.
 Alert fan-out (`modules/messaging/fan-out.ts`) is consent-gated: no layer-1
 grant, no alert (CORE-03). Statutory day boundaries — submission windows, VAT
 due dates, "overdue today" — use the LAGOS calendar via

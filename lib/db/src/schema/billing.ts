@@ -141,6 +141,16 @@ export const casePriorityEnum = pgEnum("operator_case_priority", [
   "high",
 ]);
 
+export interface CaseTriage {
+  status: "proposed" | "failed";
+  category?: string;
+  priority?: "low" | "medium" | "high";
+  catalogueCode?: string | null;
+  rationale?: string;
+  model?: string;
+  promptVersion?: string;
+}
+
 export const operatorCasesTable = pgTable("operator_cases", {
   id: id(),
   firmId: uuid("firm_id")
@@ -157,6 +167,11 @@ export const operatorCasesTable = pgTable("operator_cases", {
   ),
   resolutionCode: text("resolution_code"),
   resolutionNote: text("resolution_note"),
+  // Clerk escalation-triage proposal (modules/desk/triage.ts): model-suggested
+  // routing the operator accepts or overrides — never applied automatically.
+  // status "failed" marks a case whose classification was discarded (or that
+  // has no escalation text to classify) so the sweep never retries it forever.
+  triage: jsonb("triage").$type<CaseTriage | null>(),
   openedAt: timestamp("opened_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
