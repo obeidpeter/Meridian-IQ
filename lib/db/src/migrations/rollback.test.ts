@@ -221,6 +221,16 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("clerk_batches")],
     afterRollback: [not(clerkTenant("clerk_batches"))],
   },
+  {
+    version: 15, // client statement guardrails
+    atTop: [clerkTenant("clerk_client_statements")],
+    afterRollback: [not(clerkTenant("clerk_client_statements"))],
+  },
+  {
+    version: 16, // red-team fixture guardrails
+    atTop: [bypass("clerk_red_team_fixtures")],
+    afterRollback: [not(bypass("clerk_red_team_fixtures"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

@@ -44,6 +44,29 @@ export interface ClerkMetrics {
     tokensPerDecidedCase: number | null;
     estimatedUsd: number | null;
   };
+  // Unit economics (idea #8): where the tokens actually go, and how the
+  // failure taxonomy moves over time. Pure ledger SQL — the numbers pricing
+  // decisions and a provider evaluation will want.
+  economics: {
+    byPurpose: {
+      purpose: string;
+      calls: number;
+      promptTokens: number;
+      completionTokens: number;
+      errorCount: number;
+      estimatedUsd: number | null;
+    }[];
+    months: {
+      month: string; // "YYYY-MM" (UTC — the budget month boundary)
+      calls: number;
+      promptTokens: number;
+      completionTokens: number;
+      okCount: number;
+      invalidCount: number;
+      killedCount: number;
+      errorCount: number;
+    }[];
+  };
   corrections: {
     field: string;
     total: number;
@@ -325,6 +348,59 @@ export async function getClerkMetrics(
         )
       : null;
 
+  // Unit economics: token spend per purpose inside the window. USD estimates
+  // reuse the same env rates as the headline figure (null when unconfigured).
+  const purposeRows = (
+    await db.execute(sql`
+      SELECT
+        purpose,
+        COUNT(*)::int AS calls,
+        COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
+        COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+        COUNT(*) FILTER (WHERE outcome = 'error')::int AS error_count
+      FROM clerk_inference_calls
+      WHERE created_at >= ${since}
+      GROUP BY purpose
+      ORDER BY (COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(completion_tokens), 0)) DESC
+    `)
+  ).rows as {
+    purpose: string;
+    calls: number;
+    prompt_tokens: string;
+    completion_tokens: string;
+    error_count: number;
+  }[];
+
+  // Failure taxonomy over the trailing six UTC months (the budget month
+  // boundary), independent of windowDays so the trend stays visible when the
+  // operator narrows the window.
+  const monthRows = (
+    await db.execute(sql`
+      SELECT
+        to_char(date_trunc('month', created_at), 'YYYY-MM') AS month,
+        COUNT(*)::int AS calls,
+        COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
+        COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+        COUNT(*) FILTER (WHERE outcome = 'ok')::int AS ok_count,
+        COUNT(*) FILTER (WHERE outcome = 'invalid_discarded')::int AS invalid_count,
+        COUNT(*) FILTER (WHERE outcome = 'killed')::int AS killed_count,
+        COUNT(*) FILTER (WHERE outcome = 'error')::int AS error_count
+      FROM clerk_inference_calls
+      WHERE created_at >= date_trunc('month', now()) - interval '5 months'
+      GROUP BY 1
+      ORDER BY 1 DESC
+    `)
+  ).rows as {
+    month: string;
+    calls: number;
+    prompt_tokens: string;
+    completion_tokens: string;
+    ok_count: number;
+    invalid_count: number;
+    killed_count: number;
+    error_count: number;
+  }[];
+
   // Ask outcomes come from the answer payload: answered=true means a claim
   // rendered; everything else was a refusal-and-escalate.
   const askRows = (
@@ -398,6 +474,38 @@ export async function getClerkMetrics(
       callsWithUsage,
       tokensPerDecidedCase,
       estimatedUsd,
+    },
+    economics: {
+      byPurpose: purposeRows.map((p) => {
+        const pt = Number(p.prompt_tokens);
+        const ct = Number(p.completion_tokens);
+        return {
+          purpose: p.purpose,
+          calls: p.calls,
+          promptTokens: pt,
+          completionTokens: ct,
+          errorCount: p.error_count,
+          estimatedUsd:
+            Number.isFinite(inputRate) && Number.isFinite(outputRate)
+              ? Number(
+                  (
+                    (pt / 1_000_000) * inputRate +
+                    (ct / 1_000_000) * outputRate
+                  ).toFixed(4),
+                )
+              : null,
+        };
+      }),
+      months: monthRows.map((m) => ({
+        month: m.month,
+        calls: m.calls,
+        promptTokens: Number(m.prompt_tokens),
+        completionTokens: Number(m.completion_tokens),
+        okCount: m.ok_count,
+        invalidCount: m.invalid_count,
+        killedCount: m.killed_count,
+        errorCount: m.error_count,
+      })),
     },
     corrections: correctionRows.map((c) => ({
       field: c.field,

@@ -33,6 +33,8 @@ import "../modules/desk/triage";
 import "../modules/clerk/watchdog";
 import "../modules/clerk/eval-growth";
 import "../modules/clerk/digest";
+import "../modules/clerk/client-statement";
+import "../modules/clerk/red-team";
 import "../modules/push/register";
 import "../modules/invoice/register";
 

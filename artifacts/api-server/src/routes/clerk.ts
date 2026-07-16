@@ -30,6 +30,8 @@ import {
   CreateClerkCaseBatchBody,
   CreateClerkCaseBatchResponse,
   GetClerkDigestResponse,
+  ListClientStatementsQueryParams,
+  ListClientStatementsResponse,
   DraftClaimWithClerkBody,
   DraftClaimWithClerkResponse,
   DraftCatalogueEntryWithClerkBody,
@@ -47,7 +49,12 @@ import {
   DraftStatementFormatWithClerkResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
-import { assertCan, tenantFirmId } from "../modules/auth/rbac";
+import {
+  assertCan,
+  assertClientPartyScope,
+  clientPartyScope,
+  tenantFirmId,
+} from "../modules/auth/rbac";
 import {
   assertFirmClerkBudget,
   firmClerkUsage,
@@ -71,6 +78,8 @@ import {
 } from "../modules/clerk/batch-async";
 import { draftFormatMappingWithClerk } from "../modules/clerk/draft-format";
 import { latestDigestForFirm } from "../modules/clerk/digest";
+import { listClientStatements } from "../modules/clerk/client-statement";
+import { DomainError } from "../modules/errors";
 import { draftCatalogueEntryWithClerk } from "../modules/clerk/draft-catalogue";
 import { draftClaimWithClerk } from "../modules/clerk/draft-claim";
 import { draftInvoiceWithClerk } from "../modules/clerk/draft-invoice";
@@ -407,6 +416,39 @@ router.get("/clerk/digest", async (req, res): Promise<void> => {
     return;
   }
   res.json(GetClerkDigestResponse.parse(digest));
+});
+
+// Per-client monthly statements (idea #5). Read-only (generation is on the
+// opt-in clerk_client_statements sweep), gated on clerk.capture so the CLIENT
+// whose month it is can read their own. A client_user is pinned to its own
+// party (SEC-03); a firm principal names the client via query and is bounded
+// by firm-keyed RLS. Firm RLS is not a sibling wall, so the party is enforced
+// here regardless.
+router.get("/clerk/client-statements", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.capture");
+  const query = parseOrThrow(ListClientStatementsQueryParams, req.query);
+  const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
+  if (!tenant) {
+    throw new DomainError(
+      "NO_TENANT",
+      "A firm scope is required for client statements",
+      400,
+    );
+  }
+  // A client_user resolves to its OWN party whatever the query says; a firm
+  // principal must name the client. assertClientPartyScope is the SEC-03 wall
+  // (no-op for firm principals, 403 for a client_user naming another party).
+  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
+  if (!target) {
+    throw new DomainError(
+      "MISSING_CLIENT",
+      "clientPartyId is required",
+      400,
+    );
+  }
+  assertClientPartyScope(req.principal, target);
+  const rows = await listClientStatements(tenant, target);
+  res.json(ListClientStatementsResponse.parse(rows));
 });
 
 // Claims drafting assistant (power C5): operator pastes a statutory excerpt,

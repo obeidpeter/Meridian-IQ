@@ -2,6 +2,8 @@ import {
   useGetMe,
   useGetClerkDigest,
   getGetClerkDigestQueryKey,
+  useListClientStatements,
+  getListClientStatementsQueryKey,
   useGetDashboardSummary,
   getGetDashboardSummaryQueryKey,
   useGetReceivablesSummary,
@@ -23,6 +25,7 @@ import {
   FileText,
   Activity,
   Sparkles,
+  CalendarCheck,
   Wallet,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -273,6 +276,69 @@ function ClerkDigestCard() {
   );
 }
 
+// "2026-06-01" -> "June 2026" for the statement's display period.
+const STATEMENT_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+function statementMonthLabel(monthStart: string): string {
+  const [y, m] = monthStart.split("-");
+  return `${STATEMENT_MONTHS[Number(m) - 1] ?? m} ${y}`;
+}
+
+// Per-client monthly statement (idea #5): the newest CLOSED month's summary
+// for this client, generated server-side on the opt-in sweep. Client-scoped
+// (clerk.capture, the client's own party), read-only, renders only on
+// success — no statement yet or any error means no card at all.
+function ClientStatementCard({ clientPartyId }: { clientPartyId: string }) {
+  const { data: statements, isSuccess } = useListClientStatements(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getListClientStatementsQueryKey({ clientPartyId }),
+        retry: false,
+      },
+    },
+  );
+  const statement = statements?.[0];
+  if (!isSuccess || !statement) return null;
+  return (
+    <Card data-testid="client-statement">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CalendarCheck className="w-5 h-5" aria-hidden="true" /> Your
+          compliance month
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="font-semibold">{statement.headline}</p>
+        {statement.bullets.length > 0 && (
+          <ul className="space-y-1.5 text-sm text-muted-foreground list-disc pl-4">
+            {statement.bullets.map((bullet, i) => (
+              <li key={i}>{bullet}</li>
+            ))}
+          </ul>
+        )}
+        <p className="text-xs text-muted-foreground pt-3 border-t">
+          {statementMonthLabel(statement.monthStart)}
+          {statement.source === "clerk" && " · Written by Clerk"}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
@@ -311,6 +377,9 @@ export function Dashboard() {
   // Same capability check CapabilityGate applies, minus its denial card: a
   // dashboard tile should simply be absent for roles that can't use it.
   const canAskClerk = !!me?.capabilities.includes("clerk.ask");
+  // The monthly statement belongs to the client whose month it is (capture,
+  // not ask), so a client_user sees it even though it never sees the digest.
+  const canSeeStatement = !!me?.capabilities.includes("clerk.capture");
   const {
     data: summary,
     isLoading,
@@ -481,6 +550,10 @@ export function Dashboard() {
               />
 
               {canAskClerk && <ClerkDigestCard />}
+
+              {canSeeStatement && me?.clientPartyId && (
+                <ClientStatementCard clientPartyId={me.clientPartyId} />
+              )}
             </div>
           </>
         )}

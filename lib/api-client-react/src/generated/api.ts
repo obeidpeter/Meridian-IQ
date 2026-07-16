@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.19.0
+ * OpenAPI spec version: 0.20.0
  */
 import {
   useMutation,
@@ -57,6 +57,7 @@ import type {
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseDecisionInput,
+  ClerkClientStatement,
   ClerkDigest,
   ClerkEvalRun,
   ClerkMetrics,
@@ -138,6 +139,7 @@ import type {
   ListClaimsParams,
   ListClerkCasesParams,
   ListClerkEvalRunsParams,
+  ListClientStatementsParams,
   ListErpConnectionsParams,
   ListInvoicesParams,
   ListOperatorCasesParams,
@@ -11725,6 +11727,90 @@ export function useGetClerkDigest<TData = Awaited<ReturnType<typeof getClerkDige
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetClerkDigestQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListClientStatementsUrl = (params?: ListClientStatementsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/client-statements?${stringifiedParams}` : `/api/clerk/client-statements`
+}
+
+/**
+ * @summary Monthly per-client compliance statements (facts computed by SQL; narrative only phrased)
+ */
+export const listClientStatements = async (params?: ListClientStatementsParams, options?: RequestInit): Promise<ClerkClientStatement[]> => {
+
+  return customFetch<ClerkClientStatement[]>(getListClientStatementsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClientStatementsQueryKey = (params?: ListClientStatementsParams,) => {
+    return [
+    `/api/clerk/client-statements`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListClientStatementsQueryOptions = <TData = Awaited<ReturnType<typeof listClientStatements>>, TError = ErrorType<unknown>>(params?: ListClientStatementsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientStatements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClientStatementsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClientStatements>>> = ({ signal }) => listClientStatements(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClientStatements>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClientStatementsQueryResult = NonNullable<Awaited<ReturnType<typeof listClientStatements>>>
+export type ListClientStatementsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Monthly per-client compliance statements (facts computed by SQL; narrative only phrased)
+ */
+
+export function useListClientStatements<TData = Awaited<ReturnType<typeof listClientStatements>>, TError = ErrorType<unknown>>(
+ params?: ListClientStatementsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientStatements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClientStatementsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

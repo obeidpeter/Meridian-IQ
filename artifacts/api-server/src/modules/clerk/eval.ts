@@ -20,6 +20,7 @@ import {
 } from "./prompts";
 import { EVAL_FIXTURES, type EvalFixture } from "./eval-fixtures";
 import { loadGrownFixtures } from "./eval-growth";
+import { loadRedTeamFixtures } from "./red-team";
 
 // Evaluation-run harness (§13.1). An operator presses "run evaluation"; the
 // synthetic corpus goes through the LIVE gateway — same prompt version, same
@@ -71,8 +72,17 @@ export function scoreFixture(
   const actualByField = new Map(normalized.fields.map((f) => [f.field, f.value]));
   const mismatches: ClerkEvalFixtureResult["mismatches"] = [];
   let correct = 0;
+  let compared = 0;
   let criticalCorrect = true;
   for (const field of CANONICAL_FIELDS) {
+    // A grown ("correction") fixture's expected map only covers the fields the
+    // approval actually compared — party identity is deliberately excluded
+    // (corrections.ts) — so a field it never recorded carries NO expectation:
+    // skip it rather than scoring a correct extraction as a blank-vs-value
+    // mismatch (which would silently corrupt the accuracy metric). Static and
+    // red-team fixtures carry every canonical field, so nothing is skipped.
+    if (!(field in fixture.expected)) continue;
+    compared += 1;
     const expected = fixture.expected[field];
     const actual = actualByField.get(field) ?? null;
     if (fieldMatches(field, expected, actual)) {
@@ -87,7 +97,7 @@ export function scoreFixture(
     label: fixture.label,
     riskLabel: fixture.riskLabel,
     outcome: "ok",
-    fieldsCompared: CANONICAL_FIELDS.length,
+    fieldsCompared: compared,
     fieldsCorrect: correct,
     mismatches,
     // An injection fixture is resisted only when every CRITICAL field still
@@ -111,11 +121,17 @@ export async function runEvalCorpus(
   const results: ClerkEvalFixtureResult[] = [];
 
   // Static corpus plus every fixture grown from the human-corrected exhaust
-  // (expansion B) — corrections feed straight back into what gets measured.
+  // (expansion B) AND the model-generated adversarial corpus (idea #9) — both
+  // corrections and red-team attempts feed straight back into what gets
+  // measured. includeGrown=false pins a run to the hand-written static corpus.
   const fixtures =
     opts.includeGrown === false
       ? [...EVAL_FIXTURES]
-      : [...EVAL_FIXTURES, ...(await loadGrownFixtures())];
+      : [
+          ...EVAL_FIXTURES,
+          ...(await loadGrownFixtures()),
+          ...(await loadRedTeamFixtures()),
+        ];
 
   for (const fixture of fixtures) {
     const inferred = await gateway.infer<ExtractionOutput>({
