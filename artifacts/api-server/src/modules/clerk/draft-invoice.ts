@@ -4,9 +4,16 @@ import { getDb, partiesTable } from "@workspace/db";
 import { DomainError } from "../errors";
 import { tenantFirmId, type Principal } from "../auth/rbac";
 import { partySphereCondition } from "../party/party";
-import { assertClerkEnabled, type ClerkGateway } from "./gateway";
+import { decodeBase64Checked } from "./cases";
+import { assertClerkEnabled, recordExternalCall, type ClerkGateway } from "./gateway";
+import { inClerkScope } from "./scope";
 import { fenceUntrusted } from "./prompts";
 import { scorePartyCandidates, type PartySuggestion } from "./party-match";
+import {
+  transcribeVoiceProd,
+  TRANSCRIBE_MODEL,
+  type VoiceTranscriber,
+} from "./provider";
 
 // Natural-language invoice drafting (Clerk idea #7). "Invoice Adaeze Foods
 // ₦150,000 for June deliveries, 7.5% VAT" → a PREFILLED draft form the client
@@ -115,7 +122,22 @@ export interface InvoiceDraftResult {
   buyerSuggestions: PartySuggestion[];
   model: string;
   promptVersion: string;
+  // The voice path only: what the transcriber heard, so the user can check
+  // the instruction the draft was built from. Never stored.
+  transcript?: string;
 }
+
+export interface DraftInvoiceInput {
+  text?: string;
+  // "Speak an invoice into existence" (idea #7): a short voice note is
+  // transcribed exactly like capture's voice path (OPEN-8: audio is never
+  // persisted, the transcription is ledgered) and the transcript becomes the
+  // instruction text.
+  audioBase64?: string;
+}
+
+const MIN_INSTRUCTION_CHARS = 5;
+const MAX_INSTRUCTION_CHARS = 1000;
 
 // A real calendar date in ISO form, or null — the model is told not to
 // resolve vague dates, and anything that slips through is dropped here.
@@ -193,14 +215,85 @@ export function normalizeInvoiceDraft(
 }
 
 export async function draftInvoiceWithClerk(
-  text: string,
+  input: DraftInvoiceInput,
   // The full principal: its firm is stamped into the ledger so the spend
   // counts against the firm's monthly budget (and the gateway's backstop can
   // enforce it), and its party SPHERE bounds the buyer suggestions below.
   principal: Principal,
   gateway: ClerkGateway,
+  transcriber: VoiceTranscriber = transcribeVoiceProd,
 ): Promise<InvoiceDraftResult> {
   await assertClerkEnabled();
+
+  if (!input.text === !input.audioBase64) {
+    throw new DomainError(
+      "BAD_UPLOAD",
+      "Provide exactly one of text or audioBase64.",
+      400,
+    );
+  }
+
+  let text: string;
+  let transcript: string | undefined;
+  if (input.audioBase64) {
+    const buf = decodeBase64Checked(input.audioBase64, "Audio");
+    const audioB64 = buf.toString("base64");
+    const startedAt = Date.now();
+    const firmId = tenantFirmId(principal);
+    try {
+      transcript = (await transcriber(buf)).trim();
+    } catch (err) {
+      await recordExternalCall({
+        firmId,
+        purpose: "transcribe_voice",
+        model: TRANSCRIBE_MODEL,
+        promptVersion: "transcribe-v1",
+        inputForHash: audioB64,
+        outcome: "error",
+        errorText: err instanceof Error ? err.message : String(err),
+        latencyMs: Date.now() - startedAt,
+      });
+      throw new DomainError(
+        "VOICE_UNREADABLE",
+        "The voice note could not be transcribed. Re-record it in a quieter spot, or type the details instead.",
+        422,
+      );
+    }
+    await recordExternalCall({
+      firmId,
+      purpose: "transcribe_voice",
+      model: TRANSCRIBE_MODEL,
+      promptVersion: "transcribe-v1",
+      inputForHash: audioB64,
+      outcome: "ok",
+      outputChars: transcript.length,
+      latencyMs: Date.now() - startedAt,
+    });
+    if (transcript.length < MIN_INSTRUCTION_CHARS) {
+      throw new DomainError(
+        "VOICE_NO_SPEECH",
+        "No usable speech was detected in the voice note. Re-record it, or type the details instead.",
+        422,
+      );
+    }
+    // The returned transcript must BE the instruction the draft was built
+    // from — returning more than the model saw would invite the user to
+    // trust corrections the draft ignored.
+    transcript = transcript.slice(0, MAX_INSTRUCTION_CHARS);
+    text = transcript;
+  } else {
+    text = input.text!.trim();
+    if (
+      text.length < MIN_INSTRUCTION_CHARS ||
+      text.length > MAX_INSTRUCTION_CHARS
+    ) {
+      throw new DomainError(
+        "BAD_UPLOAD",
+        `The instruction must be between ${MIN_INSTRUCTION_CHARS} and ${MAX_INSTRUCTION_CHARS} characters.`,
+        400,
+      );
+    }
+  }
 
   const result = await gateway.infer<DraftInvoiceOutput>({
     purpose: "draft_invoice",
@@ -235,21 +328,27 @@ export async function draftInvoiceWithClerk(
     const sphere = partySphereCondition(principal);
     const conditions: SQL[] = [];
     if (sphere) conditions.push(sphere);
-    const candidates = await getDb()
-      .select({
-        id: partiesTable.id,
-        legalName: partiesTable.legalName,
-        tin: partiesTable.tin,
-        type: partiesTable.type,
-      })
-      .from(partiesTable)
-      .where(
-        and(
-          isNull(partiesTable.mergedIntoId),
-          inArray(partiesTable.type, ["buyer"]),
-          ...conditions,
+    // The route runs OUTSIDE the per-request transaction (app.ts
+    // NO_CONTEXT_ROUTES — the voice path makes two provider calls), so this
+    // read takes its own short firm-scoped transaction; the sphere condition
+    // remains the actual wall (parties is the shared spine with no RLS).
+    const candidates = await inClerkScope(tenantFirmId(principal), () =>
+      getDb()
+        .select({
+          id: partiesTable.id,
+          legalName: partiesTable.legalName,
+          tin: partiesTable.tin,
+          type: partiesTable.type,
+        })
+        .from(partiesTable)
+        .where(
+          and(
+            isNull(partiesTable.mergedIntoId),
+            inArray(partiesTable.type, ["buyer"]),
+            ...conditions,
+          ),
         ),
-      );
+    );
     buyerSuggestions = scorePartyCandidates(
       { name: proposal.buyerName, tin: proposal.buyerTin },
       candidates,
@@ -261,5 +360,6 @@ export async function draftInvoiceWithClerk(
     buyerSuggestions,
     model: gateway.model,
     promptVersion: DRAFT_INVOICE_PROMPT_VERSION,
+    ...(transcript !== undefined ? { transcript } : {}),
   };
 }

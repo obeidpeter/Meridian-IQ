@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.18.0
+ * OpenAPI spec version: 0.19.0
  */
 
 export interface DraftInvoiceWithClerkInput {
@@ -11,5 +11,6 @@ export interface DraftInvoiceWithClerkInput {
      * @minLength 5
      * @maxLength 1000
      */
-  text: string;
+  text?: string;
+  audioBase64?: string;
 }

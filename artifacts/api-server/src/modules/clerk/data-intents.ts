@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { getDb, type ProtectedFact } from "@workspace/db";
+import { lagosParts } from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import { firmClerkUsage } from "./budget";
 
@@ -36,14 +37,34 @@ export interface DataIntentResult {
   facts: ProtectedFact[];
 }
 
+// Resolved lookup parameters (idea #4). Every value here is APP-RESOLVED
+// from closed enumerated keys the model picked — the model's key selects an
+// entry in a map the app built; nothing model-authored reaches SQL.
+export interface DataIntentParams {
+  // First day of a Lagos calendar month (YYYY-MM-01) + its display label.
+  monthStart?: string;
+  monthLabel?: string;
+  // One of the firm's own client parties (principal-scoped list).
+  clientPartyId?: string;
+  clientName?: string;
+}
+
 export interface DataIntent {
   key: string;
   // Model-facing one-liner in the closed key list (trusted platform text).
   title: string;
-  run(firmId: string): Promise<DataIntentResult>;
+  // Which parameters this lookup can honour; a param the model picked for a
+  // lookup that cannot honour it refuses rather than silently ignoring it.
+  accepts: { month?: boolean; client?: boolean };
+  run(firmId: string, params?: DataIntentParams): Promise<DataIntentResult>;
 }
 
 const LAGOS_TODAY = sql`(now() AT TIME ZONE 'Africa/Lagos')::date`;
+
+// " for Adaeze Foods Ltd" — the client-scope suffix for answer texts.
+function forClient(params?: DataIntentParams): string {
+  return params?.clientName ? ` for ${params.clientName}` : "";
+}
 
 interface InvoiceAggregate {
   count: number;
@@ -53,11 +74,16 @@ interface InvoiceAggregate {
 
 // One round trip per lookup: count + value total + up to SAMPLE_LIMIT invoice
 // numbers matching a fixed predicate. `predicate` is always a literal SQL
-// fragment from the catalogue below — never constructed from model output.
+// fragment from the catalogue below — never constructed from model output —
+// and the optional client filter is the app-resolved party id.
 async function invoiceAggregate(
   firmId: string,
   predicate: SQL,
+  params?: DataIntentParams,
 ): Promise<InvoiceAggregate> {
+  const clientFilter = params?.clientPartyId
+    ? sql` AND i.supplier_party_id = ${params.clientPartyId}`
+    : sql``;
   const rows = (
     await getDb().execute<{
       n: number;
@@ -67,7 +93,7 @@ async function invoiceAggregate(
       WITH hits AS (
         SELECT i.invoice_number, i.issue_date, i.grand_total
         FROM invoices i
-        WHERE i.kind = 'invoice' AND i.firm_id = ${firmId} AND (${predicate})
+        WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}${clientFilter} AND (${predicate})
       )
       SELECT
         (SELECT COUNT(*) FROM hits)::int AS n,
@@ -140,7 +166,8 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   {
     key: "data.overdue_submissions",
     title: `invoices past the ${SUBMISSION_WINDOW_DAYS}-day statutory submission window (not yet submitted)`,
-    async run(firmId) {
+    accepts: { client: true },
+    async run(firmId, params) {
       // The statutory deadline is Lagos MIDNIGHT STARTING day issue+window
       // (compliance-window.ts submissionDeadline), so an invoice is overdue
       // ON that Lagos day — hence <=, matching the console/SME dashboards
@@ -149,12 +176,13 @@ export const DATA_INTENTS: readonly DataIntent[] = [
         firmId,
         sql`i.status IN ('draft', 'validated')
           AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${LAGOS_TODAY}`,
+        params,
       );
       return {
         text:
           agg.count === 0
-            ? `No invoices are past the ${SUBMISSION_WINDOW_DAYS}-day submission window. Nothing is overdue today.`
-            : `${plural(agg.count, "invoice")} ${isAre(agg.count)} past the ${SUBMISSION_WINDOW_DAYS}-day submission window: ${nameSample(agg)}. Submit these first to limit penalty exposure.`,
+            ? `No invoices${forClient(params)} are past the ${SUBMISSION_WINDOW_DAYS}-day submission window. Nothing is overdue today.`
+            : `${plural(agg.count, "invoice")}${forClient(params)} ${isAre(agg.count)} past the ${SUBMISSION_WINDOW_DAYS}-day submission window: ${nameSample(agg)}. Submit these first to limit penalty exposure.`,
         facts: invoiceFacts(agg, "Invoices past the submission window"),
       };
     },
@@ -162,18 +190,20 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   {
     key: "data.due_soon_submissions",
     title: "invoices whose statutory submission deadline falls in the next 7 days",
-    async run(firmId) {
+    accepts: { client: true },
+    async run(firmId, params) {
       const agg = await invoiceAggregate(
         firmId,
         sql`i.status IN ('draft', 'validated')
           AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int > ${LAGOS_TODAY}
           AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${LAGOS_TODAY} + 7`,
+        params,
       );
       return {
         text:
           agg.count === 0
-            ? "No submission deadlines fall in the next 7 days."
-            : `${plural(agg.count, "invoice")} ${isAre(agg.count)} due for submission within the next 7 days: ${nameSample(agg)}.`,
+            ? `No submission deadlines${forClient(params)} fall in the next 7 days.`
+            : `${plural(agg.count, "invoice")}${forClient(params)} ${isAre(agg.count)} due for submission within the next 7 days: ${nameSample(agg)}.`,
         facts: invoiceFacts(agg, "Deadlines in the next 7 days"),
       };
     },
@@ -181,13 +211,18 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   {
     key: "data.failed_submissions",
     title: "invoices whose rail submission failed and needs a fix",
-    async run(firmId) {
-      const agg = await invoiceAggregate(firmId, sql`i.status = 'failed'`);
+    accepts: { client: true },
+    async run(firmId, params) {
+      const agg = await invoiceAggregate(
+        firmId,
+        sql`i.status = 'failed'`,
+        params,
+      );
       return {
         text:
           agg.count === 0
-            ? "No invoices are currently in a failed submission state."
-            : `${plural(agg.count, "invoice")} failed rail submission: ${nameSample(agg)}. Open each invoice for the specific catalogue fix.`,
+            ? `No invoices${forClient(params)} are currently in a failed submission state.`
+            : `${plural(agg.count, "invoice")}${forClient(params)} failed rail submission: ${nameSample(agg)}. Open each invoice for the specific catalogue fix.`,
         facts: invoiceFacts(agg, "Failed submissions"),
       };
     },
@@ -195,57 +230,79 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   {
     key: "data.unsubmitted_invoices",
     title: "invoices still unsubmitted (sitting in draft or validated)",
-    async run(firmId) {
+    accepts: { client: true },
+    async run(firmId, params) {
       const agg = await invoiceAggregate(
         firmId,
         sql`i.status IN ('draft', 'validated')`,
+        params,
       );
       return {
         text:
           agg.count === 0
-            ? "Every invoice has been submitted — nothing is sitting in draft or validated."
-            : `${plural(agg.count, "invoice")} ${isAre(agg.count)} still unsubmitted (draft or validated): ${nameSample(agg)}.`,
+            ? `Every invoice${forClient(params)} has been submitted — nothing is sitting in draft or validated.`
+            : `${plural(agg.count, "invoice")}${forClient(params)} ${isAre(agg.count)} still unsubmitted (draft or validated): ${nameSample(agg)}.`,
         facts: invoiceFacts(agg, "Unsubmitted invoices"),
       };
     },
   },
   {
     key: "data.submitted_this_month",
-    title: "invoices accepted by the e-invoicing rails so far this calendar month",
-    async run(firmId) {
+    title:
+      "invoices accepted by the e-invoicing rails in a calendar month (this month unless another listed month is named)",
+    accepts: { month: true, client: true },
+    async run(firmId, params) {
+      // The month window is the app-resolved first-of-month date (Lagos
+      // calendar); default = the current Lagos month, exactly as before.
+      const monthWindow = params?.monthStart
+        ? sql`sa.created_at AT TIME ZONE 'Africa/Lagos'
+              >= ${params.monthStart}::timestamp
+            AND sa.created_at AT TIME ZONE 'Africa/Lagos'
+              < ${params.monthStart}::timestamp + interval '1 month'`
+        : sql`date_trunc('month', sa.created_at AT TIME ZONE 'Africa/Lagos')
+              = date_trunc('month', now() AT TIME ZONE 'Africa/Lagos')`;
       const agg = await invoiceAggregate(
         firmId,
         sql`EXISTS (
           SELECT 1 FROM submission_attempts sa
           WHERE sa.invoice_id = i.id
             AND sa.status = 'accepted'
-            AND date_trunc('month', sa.created_at AT TIME ZONE 'Africa/Lagos')
-              = date_trunc('month', now() AT TIME ZONE 'Africa/Lagos')
+            AND ${monthWindow}
         )`,
+        params,
       );
+      const period = params?.monthLabel
+        ? `in ${params.monthLabel}`
+        : "so far this month";
       return {
         text:
           agg.count === 0
-            ? "No invoices have been accepted by the rails so far this month."
-            : `${plural(agg.count, "invoice")} ${agg.count === 1 ? "was" : "were"} accepted by the rails so far this month, NGN ${agg.totalNgn} in total: ${nameSample(agg)}.`,
-        facts: invoiceFacts(agg, "Accepted by the rails this month", true),
+            ? `No invoices${forClient(params)} were accepted by the rails ${period}.`
+            : `${plural(agg.count, "invoice")}${forClient(params)} ${agg.count === 1 ? "was" : "were"} accepted by the rails ${period}, NGN ${agg.totalNgn} in total: ${nameSample(agg)}.`,
+        facts: invoiceFacts(
+          agg,
+          `Accepted by the rails ${period}`,
+          true,
+        ),
       };
     },
   },
   {
     key: "data.aged_receivables",
     title: `receivables more than ${RECEIVABLE_AGE_DAYS} days old (submitted but unpaid)`,
-    async run(firmId) {
+    accepts: { client: true },
+    async run(firmId, params) {
       const agg = await invoiceAggregate(
         firmId,
         sql`i.status IN ('submitted', 'stamped', 'confirmed')
           AND COALESCE(i.due_date, i.issue_date) < ${LAGOS_TODAY} - ${RECEIVABLE_AGE_DAYS}::int`,
+        params,
       );
       return {
         text:
           agg.count === 0
-            ? `No receivables are more than ${RECEIVABLE_AGE_DAYS} days old.`
-            : `${plural(agg.count, "receivable")} ${isAre(agg.count)} more than ${RECEIVABLE_AGE_DAYS} days old, NGN ${agg.totalNgn} in total: ${nameSample(agg)}. Consider chasing payment.`,
+            ? `No receivables${forClient(params)} are more than ${RECEIVABLE_AGE_DAYS} days old.`
+            : `${plural(agg.count, "receivable")}${forClient(params)} ${isAre(agg.count)} more than ${RECEIVABLE_AGE_DAYS} days old, NGN ${agg.totalNgn} in total: ${nameSample(agg)}. Consider chasing payment.`,
         facts: invoiceFacts(agg, `Receivables over ${RECEIVABLE_AGE_DAYS} days`, true),
       };
     },
@@ -253,6 +310,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   {
     key: "data.clerk_allowance",
     title: "the firm's Clerk AI token allowance and usage this month",
+    accepts: {},
     async run(firmId) {
       const usage = await firmClerkUsage(firmId);
       const remaining = Math.max(0, usage.budgetTokens - usage.usedTokens);
@@ -286,6 +344,46 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   },
 ];
 
+// The closed month options offered to the classifier: the current Lagos
+// month plus the eleven before it. Keys are "YYYY-MM"; the app resolves a
+// picked key back through THIS list (never the model's text).
+export interface MonthOption {
+  key: string;
+  label: string;
+  monthStart: string; // YYYY-MM-01
+}
+
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+export function lagosMonthOptions(count = 12, now = new Date()): MonthOption[] {
+  const { year, monthIndex } = lagosParts(now);
+  return Array.from({ length: count }, (_, i) => {
+    // Date.UTC-style overflow carries negative months into prior years.
+    const d = new Date(Date.UTC(year, monthIndex - i, 1));
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth();
+    const mm = String(m + 1).padStart(2, "0");
+    return {
+      key: `${y}-${mm}`,
+      label: `${MONTH_NAMES[m]} ${y}${i === 0 ? " (current month)" : ""}`,
+      monthStart: `${y}-${mm}-01`,
+    };
+  });
+}
+
 const BY_KEY = new Map(DATA_INTENTS.map((i) => [i.key, i]));
 
 export function getDataIntent(key: string): DataIntent | undefined {
@@ -298,8 +396,9 @@ export function getDataIntent(key: string): DataIntent | undefined {
 export async function runDataIntent(
   key: string,
   firmId: string,
+  params?: DataIntentParams,
 ): Promise<DataIntentResult | null> {
   const intent = BY_KEY.get(key);
   if (!intent) return null;
-  return intent.run(firmId);
+  return intent.run(firmId, params);
 }

@@ -3,8 +3,9 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.18.0
+ * OpenAPI spec version: 0.19.0
  */
+import type { ClerkAnswerDataParams } from './clerkAnswerDataParams';
 import type { ProtectedFact } from './protectedFact';
 
 export interface ClerkAnswer {
@@ -13,6 +14,7 @@ export interface ClerkAnswer {
   claimKey?: string;
   claimVersion?: number;
   dataIntent?: string;
+  dataParams?: ClerkAnswerDataParams;
   proposition?: string;
   facts?: ProtectedFact[];
   citation?: string;

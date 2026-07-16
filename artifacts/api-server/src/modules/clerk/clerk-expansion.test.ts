@@ -238,6 +238,36 @@ test("explainInvoiceFailure: an exhausted budget falls back to catalogue text", 
   assert.deepEqual(result.nextSteps, [`test fix ${SALT}`]);
 });
 
+test("explainInvoiceFailure: a client_user reaches only its own party's invoices (SEC-03)", async () => {
+  // The route now gates on clerk.capture so the client who owns the failed
+  // invoice can use the fix flow; the module remains the scope authority.
+  const gateway = fakeGateway(() =>
+    JSON.stringify({
+      explanation: "Plain words for the client.",
+      nextSteps: ["Fix the field", "Resubmit"],
+    }),
+  );
+  const clientPrincipal: Principal = {
+    userId,
+    role: "client_user",
+    firmId,
+    clientPartyId: clientId,
+    buyerPartyId: null,
+  };
+  const result = await explainInvoiceFailure(invoiceId, clientPrincipal, gateway);
+  assert.equal(result.errorCode, CODE);
+  assert.equal(result.source, "clerk");
+
+  // A sibling client of the SAME firm shares the firm-keyed RLS scope — the
+  // party check is the only wall, and it must hold.
+  const sibling: Principal = { ...clientPrincipal, clientPartyId: buyerId };
+  await assert.rejects(
+    explainInvoiceFailure(invoiceId, sibling, gateway),
+    (err: Error & { code?: string; status?: number }) =>
+      err.code === "CROSS_CLIENT" && err.status === 403,
+  );
+});
+
 test("explainInvoiceFailure: 404 when the invoice never failed", async () => {
   const bundle = await createDraft(
     {

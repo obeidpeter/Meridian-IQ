@@ -177,7 +177,7 @@ export const EXTRACT_JSON_SCHEMA: Record<string, unknown> = {
 // Ask Clerk intent classification (C1)
 // ---------------------------------------------------------------------------
 
-export const INTENT_PROMPT_VERSION = "intent.v2";
+export const INTENT_PROMPT_VERSION = "intent.v3";
 
 export const INTENT_SYSTEM = `You classify a compliance question against a FIXED list of keys.
 There are two kinds of keys:
@@ -191,16 +191,23 @@ Rules:
 - Pick a claim key ONLY when the question asks what a rule, rate or requirement is.
 - If no key clearly matches, or the question asks about several different topics at once, or the question asks for advice beyond a single registered fact or lookup, answer "none".
 - category is the transaction category the question is about, or "unknown" if it does not say.
+- month: when the question names a calendar month or period AND a month list is provided, the matching month key; otherwise "none". Never guess a month the question does not name.
+- client: when the question names one of the listed clients AND a client list is provided, that client's key; otherwise "none". Never match a name that is not clearly one of the listed clients.
 - Output JSON only, matching the provided schema.`;
 
 export const INTENT_CATEGORIES = ["b2b", "b2g", "b2c", "unknown"] as const;
 
-// The claimKey enum is CLOSED over the offered keys — the active register
-// plus, for firm-scoped askers, the data-intent catalogue (plus "none") — so
-// the model can only ever name a real, approved key. The caller re-verifies
-// membership after the call (fail-closed) — see ask.ts.
+// Every enum is CLOSED over what the app offered — the active register plus,
+// for firm-scoped askers, the data-intent catalogue, month keys and client
+// keys (each plus "none") — so the model can only ever name a real key. The
+// caller re-verifies membership after the call (fail-closed) — see ask.ts.
+// Params are REQUIRED in the JSON schema (strict mode demands it; "none" is
+// the no-param value) but optional-with-default in the zod validator so
+// param-less outputs stay valid.
 export function intentJsonSchema(
   activeClaimKeys: string[],
+  monthKeys: string[] = [],
+  clientKeys: string[] = [],
 ): Record<string, unknown> {
   return {
     type: "object",
@@ -208,20 +215,36 @@ export function intentJsonSchema(
     properties: {
       claimKey: { type: "string", enum: [...activeClaimKeys, "none"] },
       category: { type: "string", enum: [...INTENT_CATEGORIES] },
+      month: { type: "string", enum: [...monthKeys, "none"] },
+      client: { type: "string", enum: [...clientKeys, "none"] },
     },
-    required: ["claimKey", "category"],
+    required: ["claimKey", "category", "month", "client"],
   };
 }
 
-export function intentValidator(activeClaimKeys: string[]) {
+export function intentValidator(
+  activeClaimKeys: string[],
+  monthKeys: string[] = [],
+  clientKeys: string[] = [],
+) {
   const values: [string, ...string[]] = ["none", ...activeClaimKeys];
   return z.object({
     claimKey: z.enum(values),
     category: z.enum(INTENT_CATEGORIES),
+    month: z
+      .enum(["none", ...monthKeys] as [string, ...string[]])
+      .optional()
+      .default("none"),
+    client: z
+      .enum(["none", ...clientKeys] as [string, ...string[]])
+      .optional()
+      .default("none"),
   });
 }
 
 export type IntentOutput = {
   claimKey: string;
   category: (typeof INTENT_CATEGORIES)[number];
+  month?: string;
+  client?: string;
 };

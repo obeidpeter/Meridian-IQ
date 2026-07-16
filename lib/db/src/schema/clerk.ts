@@ -194,6 +194,9 @@ export interface ClerkAnswer {
   claimVersion?: number;
   // Which data-intent lookup produced the answer (e.g. "data.overdue_submissions").
   dataIntent?: string;
+  // App-resolved lookup parameters for display (e.g. {month: "May 2026",
+  // client: "Adaeze Foods Ltd"}). Absent for unparameterized answers.
+  dataParams?: Record<string, string>;
   proposition?: string;
   facts?: ProtectedFact[];
   citation?: string;

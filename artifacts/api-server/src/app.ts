@@ -47,6 +47,9 @@ const NO_CONTEXT_ROUTES = new Set([
   // the fire-and-forget processor kick can claim it on another connection.
   "POST /api/clerk/batches",
   "POST /api/clerk/format-draft",
+  // Two sequential provider calls on the voice path (transcription + draft
+  // inference) — far too slow to hold a pooled connection or fit the 30s cap.
+  "POST /api/clerk/draft-invoice",
 ]);
 
 // Hard cap on how long a request may hold its transaction open. A handler that

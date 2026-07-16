@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.18.0`).
+contract change (it is currently `0.19.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -70,7 +70,12 @@ turns corrected approvals into eval fixtures on the sweep loop; the nightly
 auto-eval is opt-in behind `clerk_auto_eval` (spends tokens). The failure
 explainer (`modules/clerk/explain.ts`) is catalogue-grounded — the model only
 rephrases; kill switch/budget failures fall back to the catalogue text, never
-to an error. The power pack keeps the same grounding split: **pre-flight**
+to an error. Its route is gated on `clerk.capture` (NOT `clerk.ask`) so the
+client whose invoice failed can use it — the module itself enforces tenant +
+SEC-03 party scope; the SME invoice detail's failed card is its consumer
+(fix-and-retry: PATCH the still-mutable failed invoice, then resubmit, with
+`ERROR_FOCUS` in `sme-compliance/src/lib/error-focus.ts` — mirrored on mobile
+— flagging which fields a rail code implicates). The power pack keeps the same grounding split: **pre-flight**
 (`modules/clerk/preflight.ts`) is pure model-free validation stored on the
 case at extraction time (empty list = review fast lane); **scanned-PDF
 intake** (`rasterizePdfScan` in `modules/clerk/cases.ts`) renders a textless
@@ -109,10 +114,14 @@ catalogue routes, never stored directly; **reconciliation match assist**
 explains one statement line's candidate set — ranking and highlights are
 computed from the matcher's recorded features, Clerk only phrases the
 comparison, template fallback always answers; **NL invoice drafting**
-(`modules/clerk/draft-invoice.ts`, `clerk.capture`) turns one sentence into a
-prefilled SME draft form — every extracted value re-validated/normalised by
-the app, buyer identity a deterministic register suggestion, nothing stored
-(the client saves through the ordinary `createDraft` path). **Escalation triage**
+(`modules/clerk/draft-invoice.ts`, `clerk.capture`) turns one sentence — typed,
+or spoken via the mobile "Speak it" card ({text | audioBase64} exactly-one;
+audio is never persisted, the transcription is ledgered as `transcribe_voice`,
+and the transcript walks the same fenced path and is returned for the user to
+check) — into a prefilled SME draft form — every extracted value
+re-validated/normalised by the app, buyer identity a deterministic register
+suggestion, nothing stored (the client saves through the ordinary
+`createDraft` path). **Escalation triage**
 (`modules/desk/triage.ts`, opt-in `clerk_triage` flag, sweep-driven so the
 client's escalation never waits on a model call) proposes routing — closed
 category set, priority, catalogue code re-verified against the codes that
@@ -122,11 +131,15 @@ never applied automatically. **Grounded firm-data Q&A**
 next to the claims register — data intents ("what's overdue?", "what did we
 submit this month?"), offered in the intent enum only to firm-scoped askers.
 The model still only classifies; the app runs the matching FIXED,
-fully-parameterized query (the only runtime input is the principal-resolved
-firmId) inside `inClerkScope(firmId)` plus an explicit firm filter, and
-assembles the answer deterministically (`answer.dataIntent` marks these).
-Predicates mirror digest/compliance-window (Lagos calendar), so Ask can never
-disagree with the dashboards. Clerk health (console) includes a
+fully-parameterized query (runtime inputs: the principal-resolved firmId plus
+optional month/client parameters the model can only pick from CLOSED app-built
+option lists — the last 12 Lagos months and the firm's own engaged clients
+under opaque `c1..cN` keys, resolved back through the app's own maps; a param
+a lookup can't honour REFUSES, never silently answers unfiltered) inside
+`inClerkScope(firmId)` plus an explicit firm filter, and assembles the answer
+deterministically (`answer.dataIntent` marks these, `answer.dataParams` names
+the resolved scope). Predicates mirror digest/compliance-window (Lagos
+calendar), so Ask can never disagree with the dashboards. Clerk health (console) includes a
 confidence-calibration table (`computeCalibration` in
 `modules/clerk/metrics.ts`): kept-rate vs model confidence per band, from the
 corrections exhaust. The exhaust also feeds the product directly:

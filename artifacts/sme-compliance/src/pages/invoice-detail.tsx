@@ -6,8 +6,11 @@ import {
   useGetInvoiceStamp,
   useListEscalations,
   useGetErrorCatalogueEntry,
+  useGetMe,
   useValidateInvoice,
   useSubmitInvoice,
+  useUpdateInvoice,
+  useExplainInvoiceFailure,
   useEscalateInvoice,
   useCancelInvoice,
   useCreditNoteInvoice,
@@ -36,6 +39,7 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,7 +67,17 @@ import { isFeatureDisabled, errorStatus, serverErrorMessage } from "@/lib/errors
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { DRAFT_KEY, type DraftState } from "@/pages/invoice-new";
-import { emptyLine, todayIsoDate } from "@/lib/invoice-lines";
+import { LineItemRow } from "@/components/line-item-row";
+import { FieldError } from "@/components/field-error";
+import {
+  emptyLine,
+  lineTotals,
+  todayIsoDate,
+  toInvoiceLineInputs,
+  updateLineAt,
+  type LineDraft,
+} from "@/lib/invoice-lines";
+import { ERROR_FOCUS } from "@/lib/error-focus";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -79,6 +93,9 @@ import {
   Undo2,
   FileQuestion,
   FilePlus,
+  Sparkles,
+  Wrench,
+  Plus,
 } from "lucide-react";
 import {
   formatNaira,
@@ -535,13 +552,25 @@ export function InvoiceDetail() {
 
   const validate = useValidateInvoice();
   const submit = useSubmitInvoice();
+  const updateInvoice = useUpdateInvoice();
+  const explainFailure = useExplainInvoiceFailure();
   const escalate = useEscalateInvoice();
   const cancelInvoice = useCancelInvoice();
   const creditNote = useCreditNoteInvoice();
   const createConfirmation = useCreateConfirmation();
+  const { data: me } = useGetMe();
 
   const [reason, setReason] = useState("");
   const [showEscalate, setShowEscalate] = useState(false);
+  // "Fix & resubmit" (fix-and-retry): an editable copy of the failed
+  // invoice's content, seeded when the form opens. Null = form closed.
+  const [fix, setFix] = useState<{
+    invoiceNumber: string;
+    issueDate: string;
+    dueDate: string;
+    lines: LineDraft[];
+  } | null>(null);
+  const [showFixErrors, setShowFixErrors] = useState(false);
   // CORE-09 adjustment dialog: cancel or credit-note, both reason-first.
   const [adjustKind, setAdjustKind] = useState<"cancel" | "credit" | null>(null);
   const [adjustReason, setAdjustReason] = useState("");
@@ -556,6 +585,10 @@ export function InvoiceDetail() {
 
   const handleSubmit = async () => {
     if (!invoice) return;
+    // A new attempt makes any fetched explanation stale: if this submission
+    // fails again the error may be different, and yesterday's explanation
+    // must not sit next to today's catalogue entry.
+    explainFailure.reset();
     try {
       if (invoice.status === "draft") {
         const res = await validate.mutateAsync({ id });
@@ -586,6 +619,81 @@ export function InvoiceDetail() {
     } catch (e) {
       toast({
         title: "Submission error",
+        description: serverErrorMessage(e),
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Seed the fix form from what the invoice holds right now. vatRate is
+  // normalised through String(Number(...)) ("0.0750" → "0.075") so the VAT
+  // select recognises the stored value.
+  const openFix = () => {
+    if (!invoice) return;
+    setFix({
+      invoiceNumber: invoice.invoiceNumber,
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate ?? "",
+      lines: (data?.lines ?? []).map((l) => ({
+        description: l.description,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        vatRate: String(Number(l.vatRate)),
+      })),
+    });
+    setShowFixErrors(false);
+  };
+
+  const fixErrors: Record<string, string> = {};
+  if (fix) {
+    if (!fix.invoiceNumber.trim())
+      fixErrors.invoiceNumber = "Invoice number is required.";
+    if (!fix.issueDate) fixErrors.issueDate = "Issue date is required.";
+    fix.lines.forEach((l, i) => {
+      if (!l.description.trim())
+        fixErrors[`line-${i}-desc`] = "Description required.";
+      if (!(Number(l.quantity) > 0)) fixErrors[`line-${i}-qty`] = "Qty must be > 0.";
+      if (!(Number(l.unitPrice) >= 0) || l.unitPrice === "")
+        fixErrors[`line-${i}-price`] = "Price required.";
+    });
+  }
+
+  const handleFixResubmit = async () => {
+    if (!fix) return;
+    setShowFixErrors(true);
+    if (Object.keys(fixErrors).length > 0) return;
+    // Same staleness rule as handleSubmit: the explanation belonged to the
+    // failure being fixed, not to whatever this resubmission produces.
+    explainFailure.reset();
+    try {
+      await updateInvoice.mutateAsync({
+        id,
+        data: {
+          invoiceNumber: fix.invoiceNumber.trim(),
+          issueDate: fix.issueDate,
+          dueDate: fix.dueDate || null,
+          lines: toInvoiceLineInputs(fix.lines),
+        },
+      });
+      await submit.mutateAsync({ id });
+      setFix(null);
+      queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
+      queryClient.invalidateQueries({
+        queryKey: getListSubmissionAttemptsQueryKey(id),
+      });
+      toast({
+        title: "Corrected and resubmitted",
+        description: "We'll notify you once it clears the rail.",
+      });
+    } catch (e) {
+      // The PATCH may have landed even when the resubmit failed — refresh so
+      // the page shows whatever state the server actually reached.
+      queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
+      queryClient.invalidateQueries({
+        queryKey: getListSubmissionAttemptsQueryKey(id),
+      });
+      toast({
+        title: "Could not resubmit",
         description: serverErrorMessage(e),
         variant: "destructive",
       });
@@ -803,7 +911,16 @@ export function InvoiceDetail() {
     );
   }
 
-  const canSubmit = invoice.status === "draft" || invoice.status === "validated";
+  // draft/validated submit for the first time; failed retries the transmission
+  // (failed → submitted is a legal lifecycle transition — the fix-and-retry
+  // flow below is for when the content itself needs correcting first).
+  const canSubmit = ["draft", "validated", "failed"].includes(invoice.status);
+  // Same capability the explain-failure route checks. The catalogue card
+  // renders regardless; only Clerk's rephrasing needs the capability.
+  const canClerkExplain = !!me?.capabilities.includes("clerk.capture");
+  // Which fields the rail's error code implicates — those inputs get a
+  // "flagged" pill so the user knows where to look first.
+  const focus = ERROR_FOCUS[errorCode ?? ""] ?? [];
   // CORE-09: cancellation is allowed from any non-terminal, non-inflight state;
   // a credit note adjusts a stamped/confirmed/settled invoice. Mirrors the
   // server's lifecycle TRANSITIONS map — the server still has the final say.
@@ -852,7 +969,11 @@ export function InvoiceDetail() {
           {canSubmit && (
             <Button onClick={handleSubmit} disabled={validate.isPending || submit.isPending}>
               <Send className="w-4 h-4 mr-2" aria-hidden="true" />
-              {validate.isPending || submit.isPending ? "Submitting…" : "Submit for stamping"}
+              {validate.isPending || submit.isPending
+                ? "Submitting…"
+                : invoice.status === "failed"
+                  ? "Retry transmission"
+                  : "Submit for stamping"}
             </Button>
           )}
           {canCredit && (
@@ -973,10 +1094,210 @@ export function InvoiceDetail() {
               </p>
             )}
 
+            {/* Clerk's plain-language read: button-triggered (never auto —
+                a page view must not spend tokens), grounded server-side in
+                the same catalogue entry shown above. */}
+            {canClerkExplain &&
+              (explainFailure.data ? (
+                <div className="rounded-lg border bg-background p-3 space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-medium">Clerk&apos;s explanation</p>
+                    <span
+                      className={pillClasses(
+                        explainFailure.data.source === "clerk" ? "blue" : "slate",
+                      )}
+                    >
+                      {explainFailure.data.source === "clerk"
+                        ? "Clerk-phrased"
+                        : "Catalogue text"}
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground">
+                    {explainFailure.data.explanation}
+                  </p>
+                  <ol className="list-decimal ml-4 space-y-1 text-muted-foreground">
+                    {explainFailure.data.nextSteps.map((step, i) => (
+                      <li key={i}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => explainFailure.mutate({ data: { invoiceId: id } })}
+                    disabled={explainFailure.isPending}
+                    data-testid="button-explain-failure"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" aria-hidden="true" />
+                    {explainFailure.isPending
+                      ? "Asking Clerk…"
+                      : "Explain in plain language"}
+                  </Button>
+                  {explainFailure.isError && (
+                    <p className="text-xs text-muted-foreground">
+                      Clerk couldn&apos;t add anything — the guidance above still
+                      applies.
+                    </p>
+                  )}
+                </div>
+              ))}
+
+            {/* Fix & resubmit: edit the failed invoice's content in place
+                (PATCH keeps it failed), then resubmit (failed → submitted). */}
+            {fix ? (
+              <div className="rounded-lg border bg-background p-3 space-y-3" data-testid="fix-form">
+                <p className="font-medium">
+                  Correct the flagged details, then resubmit
+                </p>
+                {focus.includes("parties") && (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40 p-2 text-amber-800 dark:text-amber-300">
+                    The rail rejected a TIN. TINs live on the business and
+                    customer records, not on this invoice — ask your firm to
+                    correct the record (or escalate below), then retry the
+                    transmission.
+                  </p>
+                )}
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <Label htmlFor="fix-invoice-number" className="flex items-center gap-2">
+                      Invoice number
+                      {focus.includes("invoiceNumber") && (
+                        <span className={pillClasses("amber")}>flagged</span>
+                      )}
+                    </Label>
+                    <Input
+                      id="fix-invoice-number"
+                      value={fix.invoiceNumber}
+                      onChange={(e) =>
+                        setFix((f) => f && { ...f, invoiceNumber: e.target.value })
+                      }
+                      className="mt-1"
+                    />
+                    {showFixErrors && fixErrors.invoiceNumber && (
+                      <FieldError id="fix-invoice-number-error">
+                        {fixErrors.invoiceNumber}
+                      </FieldError>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="fix-issue-date" className="flex items-center gap-2">
+                      Issue date
+                      {focus.includes("invoice") && (
+                        <span className={pillClasses("amber")}>flagged</span>
+                      )}
+                    </Label>
+                    <Input
+                      id="fix-issue-date"
+                      type="date"
+                      value={fix.issueDate}
+                      onChange={(e) =>
+                        setFix((f) => f && { ...f, issueDate: e.target.value })
+                      }
+                      className="mt-1"
+                    />
+                    {showFixErrors && fixErrors.issueDate && (
+                      <FieldError id="fix-issue-date-error">
+                        {fixErrors.issueDate}
+                      </FieldError>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="fix-due-date">Due date (optional)</Label>
+                    <Input
+                      id="fix-due-date"
+                      type="date"
+                      value={fix.dueDate}
+                      onChange={(e) =>
+                        setFix((f) => f && { ...f, dueDate: e.target.value })
+                      }
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    Line items
+                    {focus.includes("lines") && (
+                      <span className={pillClasses("amber")}>flagged</span>
+                    )}
+                  </p>
+                  {fix.lines.map((line, i) => (
+                    <LineItemRow
+                      key={i}
+                      index={i}
+                      line={line}
+                      onPatch={(patch) =>
+                        setFix((f) => f && { ...f, lines: updateLineAt(f.lines, i, patch) })
+                      }
+                      removable={fix.lines.length > 1}
+                      onRemove={() =>
+                        setFix(
+                          (f) =>
+                            f && { ...f, lines: f.lines.filter((_, j) => j !== i) },
+                        )
+                      }
+                      errors={
+                        showFixErrors
+                          ? {
+                              description: fixErrors[`line-${i}-desc`],
+                              quantity: fixErrors[`line-${i}-qty`],
+                              unitPrice: fixErrors[`line-${i}-price`],
+                            }
+                          : undefined
+                      }
+                      showTotal
+                    />
+                  ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setFix((f) => f && { ...f, lines: [...f.lines, emptyLine()] })
+                    }
+                  >
+                    <Plus className="w-4 h-4 mr-2" aria-hidden="true" /> Add line
+                  </Button>
+                  <p className="text-right text-muted-foreground tabular-nums">
+                    Total {formatNaira(lineTotals(fix.lines).net + lineTotals(fix.lines).vat)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleFixResubmit}
+                    disabled={updateInvoice.isPending || submit.isPending}
+                    data-testid="button-fix-resubmit"
+                  >
+                    {updateInvoice.isPending || submit.isPending
+                      ? "Resubmitting…"
+                      : "Save & resubmit"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setFix(null)}
+                    disabled={updateInvoice.isPending || submit.isPending}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
             {!showEscalate ? (
-              <Button variant="outline" size="sm" onClick={() => setShowEscalate(true)}>
-                <LifeBuoy className="w-4 h-4 mr-2" aria-hidden="true" /> Escalate to my firm
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {!fix && (
+                  <Button size="sm" onClick={openFix} data-testid="button-open-fix">
+                    <Wrench className="w-4 h-4 mr-2" aria-hidden="true" /> Fix &
+                    resubmit
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setShowEscalate(true)}>
+                  <LifeBuoy className="w-4 h-4 mr-2" aria-hidden="true" /> Escalate to my firm
+                </Button>
+              </div>
             ) : (
               <div className="space-y-2">
                 <Label htmlFor="escalate-reason" className="sr-only">
