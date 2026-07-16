@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.15.0
+ * OpenAPI spec version: 0.16.0
  */
 import {
   useMutation,
@@ -26,6 +26,7 @@ import type {
   AlertPreferencesInput,
   AskClerkInput,
   AssessmentReport,
+  AssistMatchProposalsInput,
   AuditBundle,
   AuditVerification,
   B2cReportBatch,
@@ -80,6 +81,7 @@ import type {
   DashboardSummary,
   DraftCatalogueEntryInput,
   DraftClaimWithClerkInput,
+  DraftInvoiceWithClerkInput,
   Engagement,
   EngagementInput,
   EngagementUpdate,
@@ -119,6 +121,7 @@ import type {
   InvitationWithToken,
   Invoice,
   InvoiceDetail,
+  InvoiceDraftResult,
   InvoiceImportInput,
   InvoiceImportResult,
   InvoiceInput,
@@ -135,6 +138,7 @@ import type {
   ListPartiesParams,
   ListStatementsParams,
   LoginInput,
+  MatchAssist,
   MatchDecisionResult,
   MatchProposalView,
   Me,
@@ -11652,6 +11656,146 @@ export const useExplainInvoiceFailure = <TError = ErrorType<NotFoundResponse>,
         TContext
       > => {
       return useMutation(getExplainInvoiceFailureMutationOptions(options));
+    }
+
+export const getAssistMatchProposalsUrl = () => {
+
+
+
+
+  return `/api/clerk/reconciliation-assist`
+}
+
+/**
+ * @summary Grounded explanation of a statement line's match candidates (template fallback)
+ */
+export const assistMatchProposals = async (assistMatchProposalsInput: AssistMatchProposalsInput, options?: RequestInit): Promise<MatchAssist> => {
+
+  return customFetch<MatchAssist>(getAssistMatchProposalsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assistMatchProposalsInput)
+  }
+);}
+
+
+
+
+export const getAssistMatchProposalsMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assistMatchProposals>>, TError,{data: BodyType<AssistMatchProposalsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assistMatchProposals>>, TError,{data: BodyType<AssistMatchProposalsInput>}, TContext> => {
+
+const mutationKey = ['assistMatchProposals'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assistMatchProposals>>, {data: BodyType<AssistMatchProposalsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  assistMatchProposals(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssistMatchProposalsMutationResult = NonNullable<Awaited<ReturnType<typeof assistMatchProposals>>>
+    export type AssistMatchProposalsMutationBody = BodyType<AssistMatchProposalsInput>
+    export type AssistMatchProposalsMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Grounded explanation of a statement line's match candidates (template fallback)
+ */
+export const useAssistMatchProposals = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assistMatchProposals>>, TError,{data: BodyType<AssistMatchProposalsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assistMatchProposals>>,
+        TError,
+        {data: BodyType<AssistMatchProposalsInput>},
+        TContext
+      > => {
+      return useMutation(getAssistMatchProposalsMutationOptions(options));
+    }
+
+export const getDraftInvoiceWithClerkUrl = () => {
+
+
+
+
+  return `/api/clerk/draft-invoice`
+}
+
+/**
+ * @summary Draft an invoice form from one sentence — returned for review, never saved
+ */
+export const draftInvoiceWithClerk = async (draftInvoiceWithClerkInput: DraftInvoiceWithClerkInput, options?: RequestInit): Promise<InvoiceDraftResult> => {
+
+  return customFetch<InvoiceDraftResult>(getDraftInvoiceWithClerkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftInvoiceWithClerkInput)
+  }
+);}
+
+
+
+
+export const getDraftInvoiceWithClerkMutationOptions = <TError = ErrorType<BadRequestResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftInvoiceWithClerk>>, TError,{data: BodyType<DraftInvoiceWithClerkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftInvoiceWithClerk>>, TError,{data: BodyType<DraftInvoiceWithClerkInput>}, TContext> => {
+
+const mutationKey = ['draftInvoiceWithClerk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftInvoiceWithClerk>>, {data: BodyType<DraftInvoiceWithClerkInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftInvoiceWithClerk(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftInvoiceWithClerkMutationResult = NonNullable<Awaited<ReturnType<typeof draftInvoiceWithClerk>>>
+    export type DraftInvoiceWithClerkMutationBody = BodyType<DraftInvoiceWithClerkInput>
+    export type DraftInvoiceWithClerkMutationError = ErrorType<BadRequestResponse | Error>
+
+    /**
+ * @summary Draft an invoice form from one sentence — returned for review, never saved
+ */
+export const useDraftInvoiceWithClerk = <TError = ErrorType<BadRequestResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftInvoiceWithClerk>>, TError,{data: BodyType<DraftInvoiceWithClerkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftInvoiceWithClerk>>,
+        TError,
+        {data: BodyType<DraftInvoiceWithClerkInput>},
+        TContext
+      > => {
+      return useMutation(getDraftInvoiceWithClerkMutationOptions(options));
     }
 
 export const getGetClerkUsageUrl = () => {

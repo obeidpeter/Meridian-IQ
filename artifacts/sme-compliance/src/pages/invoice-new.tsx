@@ -4,6 +4,7 @@ import {
   useGetMe,
   useListParties,
   useCreateInvoice,
+  useDraftInvoiceWithClerk,
   useListErrorCatalogue,
   getListInvoicesQueryKey,
   type InvoiceLineInput,
@@ -11,6 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,15 +30,24 @@ import { BuyerSelectOptions } from "@/components/buyer-select-options";
 import { FieldError, invalidClass } from "@/components/field-error";
 import { LineItemRow } from "@/components/line-item-row";
 import { formatNaira } from "@/lib/format";
+import { handleClerkGatewayError } from "@/lib/clerk";
 import {
   type LineDraft,
+  VAT_STANDARD,
   emptyLine,
   lineTotals,
   todayIsoDate,
   toInvoiceLineInputs,
   updateLineAt,
 } from "@/lib/invoice-lines";
-import { Plus, CheckCircle2, Circle, Cloud, ShieldCheck } from "lucide-react";
+import {
+  Plus,
+  CheckCircle2,
+  Circle,
+  Cloud,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 
 // Exported for invoice-detail's "New from this invoice", which seeds this
 // page's offline draft before navigating here.
@@ -96,6 +107,57 @@ export function InvoiceNew() {
     () => (parties || []).filter((p) => p.type === "buyer"),
     [parties],
   );
+
+  // "Draft with Clerk" (idea #7): one sentence prefills the SAME form below —
+  // Clerk proposes, the client reviews and saves through the ordinary create
+  // path; nothing exists until they click "Create invoice".
+  const clerkDraft = useDraftInvoiceWithClerk();
+  const [clerkText, setClerkText] = useState("");
+  const [clerkNote, setClerkNote] = useState<string | null>(null);
+
+  const draftWithClerk = async () => {
+    try {
+      const res = await clerkDraft.mutateAsync({ data: { text: clerkText } });
+      const p = res.proposal;
+      // Buyer identity is only ever a suggestion: preselect the top match if
+      // it is a customer the picker actually offers; otherwise say what Clerk
+      // read so the user can pick or add the customer themselves.
+      const top = res.buyerSuggestions[0];
+      const matchedBuyerId =
+        top && buyers.some((b) => b.id === top.partyId) ? top.partyId : "";
+      setDraft((d) => ({
+        invoiceNumber: p.invoiceNumber ?? d.invoiceNumber,
+        buyerPartyId: matchedBuyerId || d.buyerPartyId,
+        issueDate: p.issueDate ?? d.issueDate,
+        dueDate: p.dueDate ?? d.dueDate,
+        lines:
+          p.lines.length > 0
+            ? p.lines.map((l) => ({
+                description: l.description,
+                quantity: l.quantity,
+                unitPrice: l.unitPrice ?? "",
+                // The form offers the two lawful choices; anything else the
+                // instruction implied defaults to standard for the user to see.
+                vatRate: l.vatRate === "0" ? "0" : VAT_STANDARD,
+              }))
+            : d.lines,
+      }));
+      setClerkNote(
+        p.buyerName && !matchedBuyerId
+          ? `Clerk read the customer as "${p.buyerName}" — pick or add them below, then check every field.`
+          : "Prefilled from your instruction — check every field before saving.",
+      );
+    } catch (e) {
+      handleClerkGatewayError(e, {
+        onDisabled: () =>
+          setClerkNote(
+            "Clerk is currently unavailable — fill the form manually.",
+          ),
+        toast,
+        fallbackTitle: "Clerk couldn't draft that",
+      });
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -230,6 +292,53 @@ export function InvoiceNew() {
       />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
+          <Card className="border-violet-200 dark:border-violet-900">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles
+                  className="w-4 h-4 text-violet-600 dark:text-violet-400"
+                  aria-hidden="true"
+                />
+                Draft with Clerk
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Label htmlFor="clerk-draft-text" className="sr-only">
+                Describe the invoice
+              </Label>
+              <Textarea
+                id="clerk-draft-text"
+                value={clerkText}
+                onChange={(e) => setClerkText(e.target.value)}
+                rows={2}
+                placeholder='e.g. "Invoice Adaeze Foods ₦150,000 for June deliveries, 7.5% VAT"'
+                data-testid="input-clerk-draft"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  Clerk prefills the form below — you review and save; nothing
+                  is created until you do.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={draftWithClerk}
+                  disabled={clerkText.trim().length < 5 || clerkDraft.isPending}
+                  data-testid="button-clerk-draft"
+                >
+                  {clerkDraft.isPending ? "Drafting…" : "Draft it"}
+                </Button>
+              </div>
+              {clerkNote && (
+                <p
+                  className="text-xs text-violet-800 dark:text-violet-300"
+                  data-testid="text-clerk-note"
+                >
+                  {clerkNote}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Details</CardTitle>

@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import {
   getDb,
   partiesTable,
@@ -7,6 +7,11 @@ import {
 } from "@workspace/db";
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
+import {
+  clientPartyScope,
+  tenantFirmId,
+  type Principal,
+} from "../auth/rbac";
 
 // Party integrity (CORE-08): TIN/CAC validation and merge/split that preserve
 // history (rows are never deleted; lineage is recorded via mergedIntoId + audit).
@@ -43,6 +48,46 @@ function normalizeCacOrThrow(raw: string): string {
     throw new DomainError("INVALID_CAC", "CAC number failed validation", 400);
   }
   return check.normalized;
+}
+
+// The parties table is the SHARED SPINE — no tenant key, no RLS — so every
+// firm-facing read must scope to the caller's party SPHERE in app code. Three
+// ways into a firm's sphere: an engagement, appearing on one of the firm's
+// invoices, or having been captured by the firm (provenance column). A
+// client_user (SEC-03) gets the strictly narrower version: its OWN party,
+// parties on its OWN invoices, and parties it captured itself — never a
+// sibling client's customer list. Null = cross-tenant staff (operator,
+// auditor) see the whole spine. Shared by GET /parties and every other
+// surface that suggests or lists parties to firm principals, so the two can
+// never drift apart.
+export function partySphereCondition(principal: Principal): SQL | null {
+  const tenant = tenantFirmId(principal);
+  if (tenant === null) return null;
+  const scope = clientPartyScope(principal);
+  return scope === null
+    ? sql`(
+        ${partiesTable.id} IN (
+          SELECT client_party_id FROM engagements WHERE firm_id = ${tenant}
+        )
+        OR ${partiesTable.createdByFirmId} = ${tenant}
+        OR EXISTS (
+          SELECT 1 FROM invoices i
+          WHERE i.firm_id = ${tenant}
+            AND (i.supplier_party_id = ${partiesTable.id}
+              OR i.buyer_party_id = ${partiesTable.id})
+        )
+      )`
+    : sql`(
+        ${partiesTable.id} = ${scope}
+        OR ${partiesTable.createdByUserId} = ${principal.userId}
+        OR EXISTS (
+          SELECT 1 FROM invoices i
+          WHERE i.firm_id = ${tenant}
+            AND i.supplier_party_id = ${scope}
+            AND (i.supplier_party_id = ${partiesTable.id}
+              OR i.buyer_party_id = ${partiesTable.id})
+        )
+      )`;
 }
 
 export interface CreatePartyInput {

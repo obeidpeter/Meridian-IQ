@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.15.0`).
+contract change (it is currently `0.16.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -89,7 +89,15 @@ DRAFT register entry that still walks the full maker-checker flow; **catalogue
 drafting** (`modules/clerk/draft-catalogue.ts`, operator `catalogue.write`)
 proposes an error-catalogue entry grounded in observed rail rejections — the
 draft is returned for the operator to edit and save through the ordinary
-catalogue routes, never stored directly. **Escalation triage**
+catalogue routes, never stored directly; **reconciliation match assist**
+(`modules/clerk/reconcile-assist.ts`, behind the `reconciliation` flag)
+explains one statement line's candidate set — ranking and highlights are
+computed from the matcher's recorded features, Clerk only phrases the
+comparison, template fallback always answers; **NL invoice drafting**
+(`modules/clerk/draft-invoice.ts`, `clerk.capture`) turns one sentence into a
+prefilled SME draft form — every extracted value re-validated/normalised by
+the app, buyer identity a deterministic register suggestion, nothing stored
+(the client saves through the ordinary `createDraft` path). **Escalation triage**
 (`modules/desk/triage.ts`, opt-in `clerk_triage` flag, sweep-driven so the
 client's escalation never waits on a model call) proposes routing — closed
 category set, priority, catalogue code re-verified against the codes that

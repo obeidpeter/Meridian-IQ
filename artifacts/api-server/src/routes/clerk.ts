@@ -34,6 +34,10 @@ import {
   DraftClaimWithClerkResponse,
   DraftCatalogueEntryWithClerkBody,
   DraftCatalogueEntryWithClerkResponse,
+  AssistMatchProposalsBody,
+  AssistMatchProposalsResponse,
+  DraftInvoiceWithClerkBody,
+  DraftInvoiceWithClerkResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { assertCan, tenantFirmId } from "../modules/auth/rbac";
@@ -55,7 +59,10 @@ import { createBatchCases } from "../modules/clerk/batch";
 import { latestDigestForFirm } from "../modules/clerk/digest";
 import { draftCatalogueEntryWithClerk } from "../modules/clerk/draft-catalogue";
 import { draftClaimWithClerk } from "../modules/clerk/draft-claim";
+import { draftInvoiceWithClerk } from "../modules/clerk/draft-invoice";
 import { explainInvoiceFailure } from "../modules/clerk/explain";
+import { assistMatch } from "../modules/clerk/reconcile-assist";
+import { requireFlag } from "../modules/flags/flags";
 import { getClerkMetrics } from "../modules/clerk/metrics";
 import { getClerkGateway } from "../modules/clerk/provider";
 import { suggestPartiesForCase } from "../modules/clerk/party-match";
@@ -238,6 +245,51 @@ router.post("/clerk/explain-failure", async (req, res): Promise<void> => {
     gateway,
   );
   res.json(ExplainInvoiceFailureResponse.parse(explanation));
+});
+
+// Reconciliation match assist (idea #2): explains one statement line's
+// pending candidates. Ranking and highlights are computed from the matcher's
+// recorded features; Clerk only phrases the comparison and the deterministic
+// template text answers whenever it can't — this never errors for
+// AI-availability reasons.
+router.post(
+  "/clerk/reconciliation-assist",
+  requireFlag("reconciliation"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "reconciliation.read");
+    const parsed = parseOrThrow(AssistMatchProposalsBody, req.body);
+    // Best-effort gateway: no provider configured still explains via the
+    // template path (digest posture), unlike the fail-closed capture routes.
+    let gateway = null;
+    try {
+      gateway = await getClerkGateway();
+    } catch {
+      gateway = null;
+    }
+    const result = await assistMatch(
+      parsed.statementLineId,
+      req.principal,
+      gateway,
+    );
+    res.json(AssistMatchProposalsResponse.parse(result));
+  },
+);
+
+// Natural-language invoice drafting (idea #7): one sentence in, a prefilled
+// draft-form proposal out. Nothing is stored and no invoice is created — the
+// client reviews the form and saves through the ordinary createDraft path.
+router.post("/clerk/draft-invoice", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.capture");
+  const parsed = parseOrThrow(DraftInvoiceWithClerkBody, req.body);
+  const tenant = tenantFirmId(req.principal);
+  if (tenant) await assertFirmClerkBudget(tenant);
+  const gateway = await getClerkGateway();
+  const result = await draftInvoiceWithClerk(
+    parsed.text,
+    req.principal,
+    gateway,
+  );
+  res.json(DraftInvoiceWithClerkResponse.parse(result));
 });
 
 // The firm's latest weekly digest (power D). Facts are SQL-computed; the

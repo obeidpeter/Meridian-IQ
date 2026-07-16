@@ -8,10 +8,12 @@ import {
   useAcceptMatchProposal,
   useRejectMatchProposal,
   useBulkAcceptMatchProposals,
+  useAssistMatchProposals,
   getListBankStatementsQueryKey,
   getListBankStatementProposalsQueryKey,
   type StatementImportResult,
   type MatchProposalView,
+  type MatchAssist,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +35,7 @@ import {
   Landmark,
   ScanSearch,
   Check,
+  Sparkles,
   X,
 } from "lucide-react";
 import {
@@ -64,6 +67,31 @@ export function Reconciliation() {
   const accept = useAcceptMatchProposal();
   const reject = useRejectMatchProposal();
   const bulkAccept = useBulkAcceptMatchProposals();
+  const assistMut = useAssistMatchProposals();
+
+  // Clerk's read on an ambiguous line's candidates, keyed by the proposal
+  // whose "Why this match?" was clicked. The ranking and highlights inside are
+  // computed by the deterministic matcher; Clerk only phrases the comparison.
+  const [assistById, setAssistById] = useState<Record<string, MatchAssist>>({});
+  const [assistingId, setAssistingId] = useState<string | null>(null);
+
+  const explainMatch = async (p: MatchProposalView) => {
+    setAssistingId(p.id);
+    try {
+      const res = await assistMut.mutateAsync({
+        data: { statementLineId: p.statementLineId },
+      });
+      setAssistById((m) => ({ ...m, [p.id]: res }));
+    } catch (e) {
+      toast({
+        title: "Clerk couldn't explain this match",
+        description: serverErrorMessage(e),
+        variant: "destructive",
+      });
+    } finally {
+      setAssistingId(null);
+    }
+  };
 
   const [csv, setCsv] = useState("");
   const [filename, setFilename] = useState<string | null>(null);
@@ -607,6 +635,52 @@ export function Reconciliation() {
                           Invoice status: {statusLabel(p.invoiceStatus)}
                         </span>
                       </div>
+                      {p.status === "proposed" &&
+                        Number(p.confidence) < 0.85 &&
+                        !assistById[p.id] && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => explainMatch(p)}
+                            disabled={assistingId !== null}
+                            data-testid={`button-assist-${p.id}`}
+                          >
+                            <Sparkles className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+                            {assistingId === p.id
+                              ? "Asking Clerk…"
+                              : "Why this match?"}
+                          </Button>
+                        )}
+                      {assistById[p.id] && (
+                        <div
+                          className="rounded-md border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 space-y-1"
+                          data-testid={`assist-${p.id}`}
+                        >
+                          <p className="text-xs font-medium text-violet-800 dark:text-violet-300 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                            {assistById[p.id].source === "clerk"
+                              ? "Clerk's read on this line"
+                              : "Match evidence"}
+                          </p>
+                          <p className="text-sm">{assistById[p.id].explanation}</p>
+                          {(assistById[p.id].ranked.find(
+                            (r) => r.proposalId === p.id,
+                          )?.highlights.length ?? 0) > 0 && (
+                            <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                              {assistById[p.id].ranked
+                                .find((r) => r.proposalId === p.id)!
+                                .highlights.map((h, i) => (
+                                  <li key={i}>{h}</li>
+                                ))}
+                            </ul>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Ranked by the deterministic matcher — accepting
+                            stays your decision.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}

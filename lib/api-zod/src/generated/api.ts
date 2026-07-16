@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.15.0
+ * OpenAPI spec version: 0.16.0
  */
 import * as zod from 'zod';
 
@@ -4368,6 +4368,68 @@ export const ExplainInvoiceFailureResponse = zod.object({
   "explanation": zod.string(),
   "nextSteps": zod.array(zod.string()),
   "source": zod.enum(['clerk', 'catalogue'])
+})
+
+
+/**
+ * @summary Grounded explanation of a statement line's match candidates (template fallback)
+ */
+export const AssistMatchProposalsBody = zod.object({
+  "statementLineId": zod.string()
+})
+
+export const AssistMatchProposalsResponse = zod.object({
+  "statementLineId": zod.string(),
+  "explanation": zod.string(),
+  "source": zod.enum(['clerk', 'template']),
+  "ranked": zod.array(zod.object({
+  "proposalId": zod.string(),
+  "invoiceId": zod.string(),
+  "invoiceNumber": zod.string(),
+  "confidence": zod.string(),
+  "highlights": zod.array(zod.string())
+}))
+})
+
+
+/**
+ * @summary Draft an invoice form from one sentence — returned for review, never saved
+ */
+export const draftInvoiceWithClerkBodyTextMin = 5;
+export const draftInvoiceWithClerkBodyTextMax = 1000;
+
+
+
+export const DraftInvoiceWithClerkBody = zod.object({
+  "text": zod.string().min(draftInvoiceWithClerkBodyTextMin).max(draftInvoiceWithClerkBodyTextMax)
+})
+
+export const DraftInvoiceWithClerkResponse = zod.object({
+  "proposal": zod.object({
+  "buyerName": zod.string().nullable(),
+  "buyerTin": zod.string().nullable(),
+  "invoiceNumber": zod.string().nullable(),
+  "issueDate": zod.string().nullable(),
+  "dueDate": zod.string().nullable(),
+  "currency": zod.string().nullable(),
+  "lines": zod.array(zod.object({
+  "description": zod.string(),
+  "quantity": zod.string(),
+  "unitPrice": zod.string().nullable(),
+  "vatRate": zod.string().nullable()
+}))
+}),
+  "buyerSuggestions": zod.array(zod.object({
+  "partyId": zod.string(),
+  "legalName": zod.string(),
+  "tin": zod.string().nullable(),
+  "type": zod.string(),
+  "confidence": zod.number(),
+  "tinScore": zod.number(),
+  "nameScore": zod.number()
+})),
+  "model": zod.string(),
+  "promptVersion": zod.string()
 })
 
 
