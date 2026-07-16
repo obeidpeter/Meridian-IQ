@@ -9,6 +9,8 @@ import {
   type PreflightIssue,
 } from "@workspace/db";
 import { logger } from "../../lib/logger";
+import { lagosDateString } from "../../lib/lagos-time";
+import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import { firmPartySphereCondition } from "../party/party";
 
 // Register-history pre-flight (exhaust idea #6). The pure pre-flight checks
@@ -41,6 +43,14 @@ import { firmPartySphereCondition } from "../party/party";
 const VAT_DEVIATION = 0.02;
 // History smaller than this proves nothing about a supplier's habits.
 const VAT_MIN_SAMPLES = 5;
+// Amount-outlier bounds (history-based anomaly, exhaust idea #1): a total
+// this many times the supplier's median — or that fraction of it — is worth a
+// second look. Deliberately wide: invoice sizes legitimately vary a lot, and
+// a false warning trains reviewers to ignore the check. Same minimum-history
+// rule as the VAT check.
+const AMOUNT_OUTLIER_FACTOR = 10;
+// A future issue date beyond tomorrow (clock skew allowance) is suspicious.
+const FUTURE_DATE_SLACK_DAYS = 1;
 // Only statuses that represent real, live commercial documents inform the
 // supplier's "usual rate" — failed and cancelled papers do not.
 const HISTORY_STATUSES = [
@@ -173,12 +183,76 @@ export function identityIssues(
   return issues;
 }
 
+// Resolve the document's supplier to a register party: an exact TIN match
+// outranks strong-name evidence (shared with the VAT and history checks).
+function resolveSupplier(
+  extraction: ClerkExtraction,
+  candidates: SphereParty[],
+): SphereParty | null {
+  const supplierName = fieldValue(extraction, "supplierName");
+  const supplierTin = normalizeTin(fieldValue(extraction, "supplierTin"));
+  const suppliers = candidates.filter((c) => c.type === "client_business");
+  return (
+    suppliers.find(
+      (c) => supplierTin.length >= 6 && normalizeTin(c.tin) === supplierTin,
+    ) ??
+    suppliers.find((c) => strongNameMatch(supplierName, c.legalName)) ??
+    null
+  );
+}
+
+// Issue-date sanity (exhaust idea #1) — pure, no register needed, so it runs
+// for operator captures too. Two shapes of trouble: a date so old the invoice
+// arrives ALREADY past the statutory submission window (penalty exposure the
+// moment it is approved), and a date in the future (usually a misread digit).
+// Both advisory: dates on real paper are sometimes genuinely odd, and review
+// is where a human confirms them.
+export function issueDateIssues(
+  extraction: ClerkExtraction,
+  today: string = lagosDateString(),
+): PreflightIssue[] {
+  const raw = fieldValue(extraction, "issueDate");
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return [];
+  const issue = new Date(`${raw}T00:00:00Z`);
+  const now = new Date(`${today}T00:00:00Z`);
+  if (Number.isNaN(issue.getTime())) return [];
+  const ageDays = Math.round((now.getTime() - issue.getTime()) / 86_400_000);
+  if (ageDays >= SUBMISSION_WINDOW_DAYS) {
+    return [
+      {
+        field: "issueDate",
+        severity: "advisory",
+        message: `The issue date is ${ageDays} days ago — this invoice is already past the ${SUBMISSION_WINDOW_DAYS}-day submission window on arrival. Submit promptly, or confirm the date was read correctly`,
+      },
+    ];
+  }
+  if (ageDays < -FUTURE_DATE_SLACK_DAYS) {
+    return [
+      {
+        field: "issueDate",
+        severity: "advisory",
+        message: `The issue date is in the future (${raw}) — confirm it was read correctly`,
+      },
+    ];
+  }
+  return [];
+}
+
 export async function registerPreflightChecks(
   extraction: ClerkExtraction,
   firmId: string | null,
+  // SEC-03: when the capture is by a client_user, this is that user's OWN
+  // party. The history checks below aggregate a matched supplier's invoice
+  // ledger into issue TEXT the client can read on its own case — firm-keyed
+  // RLS is not a sibling wall, so for a client-scoped capture those checks run
+  // ONLY when the matched supplier is the capturing client itself. A
+  // firm/operator capture (null here) keeps the full firm-wide view.
+  capturingClientPartyId: string | null = null,
 ): Promise<PreflightIssue[]> {
+  // Date sanity needs no register, so operator captures get it too.
+  const dateIssues = issueDateIssues(extraction);
   // Operator captures have no firm, hence no sphere to check against.
-  if (!firmId) return [];
+  if (!firmId) return dateIssues;
   try {
     const sphere = firmPartySphereCondition(firmId);
     const candidates = await runInBypassContext(() =>
@@ -200,6 +274,7 @@ export async function registerPreflightChecks(
     );
 
     const issues: PreflightIssue[] = [
+      ...dateIssues,
       ...identityIssues(
         "supplier",
         {
@@ -218,12 +293,140 @@ export async function registerPreflightChecks(
       ),
     ];
 
-    issues.push(...(await vatHistoryIssues(extraction, firmId, candidates)));
+    issues.push(
+      ...(await vatHistoryIssues(
+        extraction,
+        firmId,
+        candidates,
+        capturingClientPartyId,
+      )),
+    );
+    issues.push(
+      ...(await supplierHistoryIssues(
+        extraction,
+        firmId,
+        candidates,
+        capturingClientPartyId,
+      )),
+    );
     return issues;
   } catch (err) {
     logger.warn({ err, firmId }, "register preflight failed; skipping checks");
+    return dateIssues;
+  }
+}
+
+// Duplicate detection + amount outlier (exhaust idea #1), one SQL round trip
+// over the supplier's own invoice history in this firm:
+//  - an existing non-cancelled invoice with the SAME number is very likely a
+//    duplicate submission — a full (non-advisory) issue, because approving it
+//    creates a real compliance mess;
+//  - failing that, an invoice with the same issue date AND the same total is
+//    a probable duplicate under a different number — advisory;
+//  - a total far outside the supplier's usual range (× / ÷ the outlier
+//    factor of the median over enough live invoices) is worth a second look —
+//    advisory, exactly the OCR-slipped-digit a tired reviewer approves.
+async function supplierHistoryIssues(
+  extraction: ClerkExtraction,
+  firmId: string,
+  candidates: SphereParty[],
+  capturingClientPartyId: string | null,
+): Promise<PreflightIssue[]> {
+  const supplier = resolveSupplier(extraction, candidates);
+  if (!supplier) return [];
+  // SEC-03: a client_user must never learn a sibling client's invoice history
+  // through these messages — only run when the matched supplier is its own.
+  if (capturingClientPartyId && supplier.id !== capturingClientPartyId) {
     return [];
   }
+
+  const invoiceNumber = fieldValue(extraction, "invoiceNumber")?.trim() ?? "";
+  const issueDate = fieldValue(extraction, "issueDate");
+  const validDate =
+    issueDate && /^\d{4}-\d{2}-\d{2}$/.test(issueDate) ? issueDate : null;
+  const grandTotal = num(fieldValue(extraction, "grandTotal"));
+
+  const rows = (
+    await runInBypassContext(() =>
+      getDb().execute<{
+        dup_number: number;
+        dup_status: string | null;
+        dup_date_total: number;
+        n_history: number;
+        median_total: string | null;
+      }>(sql`
+        SELECT
+          COUNT(*) FILTER (
+            WHERE ${invoiceNumber !== ""}
+              AND upper(${invoicesTable.invoiceNumber}) = upper(${invoiceNumber})
+          )::int AS dup_number,
+          (array_agg(${invoicesTable.status}) FILTER (
+            WHERE ${invoiceNumber !== ""}
+              AND upper(${invoicesTable.invoiceNumber}) = upper(${invoiceNumber})
+          ))[1] AS dup_status,
+          COUNT(*) FILTER (
+            WHERE ${validDate !== null && grandTotal !== null}
+              AND ${invoicesTable.issueDate} = ${validDate ?? "1970-01-01"}::date
+              AND ${invoicesTable.grandTotal}::numeric = ${grandTotal ?? 0}::numeric
+          )::int AS dup_date_total,
+          COUNT(*) FILTER (
+            WHERE ${invoicesTable.status} IN ('validated', 'submitted', 'stamped', 'confirmed', 'settled')
+          )::int AS n_history,
+          percentile_cont(0.5) WITHIN GROUP (
+            ORDER BY ${invoicesTable.grandTotal}::numeric
+          ) FILTER (
+            WHERE ${invoicesTable.status} IN ('validated', 'submitted', 'stamped', 'confirmed', 'settled')
+          ) AS median_total
+        FROM ${invoicesTable}
+        WHERE ${and(
+          eq(invoicesTable.firmId, firmId),
+          eq(invoicesTable.supplierPartyId, supplier.id),
+          eq(invoicesTable.kind, "invoice"),
+          // Cancelled AND credited (credit-note-reversed) are dead paper — a
+          // re-issue under the same number is not a duplicate. Mirrors the
+          // HISTORY_STATUSES posture and recurring-suggest's exclusion.
+          sql`${invoicesTable.status} NOT IN ('cancelled', 'credited')`,
+        )}
+      `),
+    )
+  ).rows;
+  const r = rows[0];
+  if (!r) return [];
+
+  const issues: PreflightIssue[] = [];
+  if (Number(r.dup_number) > 0) {
+    issues.push({
+      field: "invoiceNumber",
+      message: `An invoice with this number already exists for this supplier (status: ${r.dup_status ?? "unknown"}) — this looks like a duplicate submission`,
+    });
+  } else if (Number(r.dup_date_total) > 0) {
+    issues.push({
+      field: "invoiceNumber",
+      severity: "advisory",
+      message:
+        "An invoice from this supplier with the same issue date and the same total already exists under a different number — check for a duplicate",
+    });
+  }
+
+  const nHistory = Number(r.n_history ?? 0);
+  const median = r.median_total != null ? Number(r.median_total) : null;
+  if (
+    grandTotal !== null &&
+    grandTotal > 0 &&
+    nHistory >= VAT_MIN_SAMPLES &&
+    median !== null &&
+    Number.isFinite(median) &&
+    median > 0 &&
+    (grandTotal > median * AMOUNT_OUTLIER_FACTOR ||
+      grandTotal < median / AMOUNT_OUTLIER_FACTOR)
+  ) {
+    issues.push({
+      field: "grandTotal",
+      severity: "advisory",
+      message: `The total (NGN ${grandTotal}) is far outside this supplier's usual range (median NGN ${median} over ${nHistory} invoices) — double-check the amount`,
+    });
+  }
+  return issues;
 }
 
 // Unusual VAT treatment: the document's effective rate (vatTotal/subtotal)
@@ -233,20 +436,20 @@ async function vatHistoryIssues(
   extraction: ClerkExtraction,
   firmId: string,
   candidates: SphereParty[],
+  capturingClientPartyId: string | null,
 ): Promise<PreflightIssue[]> {
   const subtotal = num(fieldValue(extraction, "subtotal"));
   const vatTotal = num(fieldValue(extraction, "vatTotal"));
   if (subtotal === null || subtotal <= 0 || vatTotal === null) return [];
   const docRate = vatTotal / subtotal;
 
-  const supplierName = fieldValue(extraction, "supplierName");
-  const supplierTin = normalizeTin(fieldValue(extraction, "supplierTin"));
-  const suppliers = candidates.filter((c) => c.type === "client_business");
-  const supplier =
-    suppliers.find(
-      (c) => supplierTin.length >= 6 && normalizeTin(c.tin) === supplierTin,
-    ) ?? suppliers.find((c) => strongNameMatch(supplierName, c.legalName));
+  const supplier = resolveSupplier(extraction, candidates);
   if (!supplier) return [];
+  // SEC-03: same sibling-isolation rule as supplierHistoryIssues — a
+  // client_user only sees its own supplier's rate history.
+  if (capturingClientPartyId && supplier.id !== capturingClientPartyId) {
+    return [];
+  }
 
   const rows = (
     await runInBypassContext(() =>

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.20.0`).
+contract change (it is currently `0.21.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -154,7 +154,8 @@ confidence-calibration table (`computeCalibration` in
 corrections exhaust, plus **unit economics** (`metrics.economics`, pure ledger
 SQL): token spend + error count per PURPOSE inside the window, and a per-month
 failure taxonomy (ok/invalid/killed/error) over the trailing months — the
-numbers pricing tiers and a provider evaluation will want, zero model calls.
+numbers pricing tiers and a provider evaluation will want, zero model calls —
+and a per-supplier accuracy table (`metrics.supplierAccuracy`, below).
 The eval harness also grows an active red team: **adversarial eval growth**
 (`modules/clerk/red-team.ts`, opt-in `clerk_red_team` flag, spends tokens) has
 the model GENERATE a prompt-injection payload against a legitimate static
@@ -173,11 +174,21 @@ uses exemplars); **register-history pre-flight**
 (`modules/clerk/register-preflight.ts`, zero model calls) checks extracted
 supplier/buyer identities against the firm's party SPHERE
 (`firmPartySphereCondition` — parties are the shared spine, no tenant RLS)
-and the supplier's own invoice history (VAT-rate deviation), with register
-TINs only ever masked in issue text; and the console weights review-queue
-effort and shows per-field "historically corrected" hints from
-`metrics.corrections` (`fieldWeights`/`correctionHint` in clerk-shared —
-never auto-accept, ordering and hints only).
+and the supplier's own invoice history (VAT-rate deviation, plus the
+history-based anomaly flags: duplicate invoice number = full issue,
+same-date-same-total and amount-outlier-vs-median = advisory, and a pure
+issue-date sanity check — overdue-on-arrival / future-dated — that runs even
+for operator captures), with register TINs only ever masked in issue text;
+**recurring suggestions** (`modules/invoice/recurring-suggest.ts`, zero model
+calls, nothing stored) mine a client's own invoices for monthly billing
+patterns (3+ invoices, monthly median gap, clustered amounts, buyers already
+covered by ANY template excluded) and prefill the existing template dialog —
+the client disposes; **per-supplier accuracy** (`metrics.supplierAccuracy`,
+pure SQL) joins the corrections exhaust to the approved invoice's register
+supplier so the health page names whose documents Clerk reads worst; and the
+console weights review-queue effort and shows per-field "historically
+corrected" hints from `metrics.corrections` (`fieldWeights`/`correctionHint`
+in clerk-shared — never auto-accept, ordering and hints only).
 
 ## Data layer & multi-tenant isolation (the part to get right)
 

@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.20.0
+  version: 0.21.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1239,6 +1239,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RecurringInvoiceTemplate"
+  /recurring-suggestions:
+    get:
+      operationId: listRecurringSuggestions
+      tags: [recurring]
+      summary: Deterministic "make this recurring?" suggestions mined from the client's own invoice history
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Detected monthly billing patterns not yet covered by a template (client_users are pinned to their own party)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecurringSuggestion"
   /recurring-invoices/{id}:
     patch:
       operationId: updateRecurringInvoice
@@ -4187,6 +4208,28 @@ components:
         updatedAt:
           type: string
           format: date-time
+    RecurringSuggestion:
+      type: object
+      required: [buyerPartyId, buyerName, count, medianAmount, lastIssueDate, lines]
+      properties:
+        buyerPartyId:
+          type: string
+          format: uuid
+        buyerName:
+          type: string
+        # How many invoices matched the monthly pattern.
+        count:
+          type: integer
+        medianAmount:
+          type: string
+        lastIssueDate:
+          type: string
+        # Seed lines from the newest invoice in the pattern, ready to prefill
+        # the template dialog.
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLineInput"
     CancelInvoiceInput:
       type: object
       required: [reason]
@@ -6822,7 +6865,17 @@ components:
           type: string
     ClerkMetrics:
       type: object
-      required: [windowDays, cases, inference, cost, economics, corrections, ask]
+      required:
+        [
+          windowDays,
+          cases,
+          inference,
+          cost,
+          economics,
+          corrections,
+          supplierAccuracy,
+          ask,
+        ]
       properties:
         windowDays:
           type: integer
@@ -6987,6 +7040,28 @@ components:
               field:
                 type: string
               total:
+                type: integer
+              overridden:
+                type: integer
+              overrideRate:
+                type: number
+        # Per-supplier override rates from the corrections exhaust (idea #9):
+        # which suppliers' documents Clerk reads worst. Supplier identity is
+        # the approved invoice's register party, never an extracted string.
+        supplierAccuracy:
+          type: array
+          items:
+            type: object
+            required:
+              [supplierName, firmName, cases, fieldsCompared, overridden, overrideRate]
+            properties:
+              supplierName:
+                type: string
+              firmName:
+                type: ["string", "null"]
+              cases:
+                type: integer
+              fieldsCompared:
                 type: integer
               overridden:
                 type: integer

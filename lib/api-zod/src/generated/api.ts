@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.20.0
+ * OpenAPI spec version: 0.21.0
  */
 import * as zod from 'zod';
 
@@ -1471,6 +1471,32 @@ export const CreateRecurringInvoiceResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary Deterministic "make this recurring?" suggestions mined from the client's own invoice history
+ */
+export const ListRecurringSuggestionsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional()
+})
+
+
+
+
+export const ListRecurringSuggestionsResponseItem = zod.object({
+  "buyerPartyId": zod.string().uuid(),
+  "buyerName": zod.string(),
+  "count": zod.number(),
+  "medianAmount": zod.string(),
+  "lastIssueDate": zod.string(),
+  "lines": zod.array(zod.object({
+  "description": zod.string().min(1),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string()
+}))
+})
+export const ListRecurringSuggestionsResponse = zod.array(ListRecurringSuggestionsResponseItem)
 
 
 /**
@@ -4782,6 +4808,14 @@ export const GetClerkMetricsResponse = zod.object({
   "corrections": zod.array(zod.object({
   "field": zod.string(),
   "total": zod.number(),
+  "overridden": zod.number(),
+  "overrideRate": zod.number()
+})),
+  "supplierAccuracy": zod.array(zod.object({
+  "supplierName": zod.string(),
+  "firmName": zod.string().nullable(),
+  "cases": zod.number(),
+  "fieldsCompared": zod.number(),
   "overridden": zod.number(),
   "overrideRate": zod.number()
 })),
