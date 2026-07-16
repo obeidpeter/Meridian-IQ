@@ -26,6 +26,7 @@ import {
   parseStatementText,
   type ParsedStatement,
 } from "./parsers.ts";
+import { parseWithCustomFormats } from "./custom-formats.ts";
 import {
   proposeMatches,
   type MatchCandidate,
@@ -95,7 +96,11 @@ export async function ingestStatement(input: IngestInput): Promise<IngestResult>
       403,
     );
   }
-  const parsed = parseStatementText(input.csv, input.formatKey);
+  // Built-in bank parsers first, then the operator-managed custom mappings
+  // (custom-formats.ts) — same detect-then-parse contract either way.
+  const parsed =
+    parseStatementText(input.csv, input.formatKey) ??
+    (await parseWithCustomFormats(input.csv, input.formatKey));
   if (!parsed) {
     throw new DomainError(
       input.formatKey ? "UNKNOWN_FORMAT" : "FORMAT_NOT_DETECTED",

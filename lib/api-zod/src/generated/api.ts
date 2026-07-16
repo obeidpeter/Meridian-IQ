@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.16.0
+ * OpenAPI spec version: 0.17.0
  */
 import * as zod from 'zod';
 
@@ -1644,6 +1644,20 @@ export const AnalyzeVatRiskResponse = zod.object({
 
 
 /**
+ * @summary Clerk-drafted client letter body from an engagement's computed findings (template fallback, never stored)
+ */
+export const DraftEngagementNarrativeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DraftEngagementNarrativeResponse = zod.object({
+  "engagementId": zod.string(),
+  "narrative": zod.string(),
+  "source": zod.enum(['clerk', 'template'])
+})
+
+
+/**
  * @summary Compliance dashboard summary for an SME client
  */
 export const GetDashboardSummaryQueryParams = zod.object({
@@ -2706,6 +2720,94 @@ export const RejectMatchProposalResponse = zod.object({
   "invoiceStatus": zod.string(),
   "settlementEventId": zod.string().nullable()
 })
+
+
+/**
+ * @summary Operator-managed custom statement-format mappings
+ */
+export const ListStatementFormatsResponseItem = zod.object({
+  "id": zod.string(),
+  "key": zod.string(),
+  "bankName": zod.string(),
+  "columns": zod.object({
+  "date": zod.string(),
+  "narration": zod.string(),
+  "reference": zod.string().nullish(),
+  "debit": zod.string().nullish(),
+  "credit": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "drcr": zod.string().nullish()
+}),
+  "createdAt": zod.coerce.date()
+})
+export const ListStatementFormatsResponse = zod.array(ListStatementFormatsResponseItem)
+
+
+/**
+ * @summary Save a custom format — rejected unless it parses the provided sample
+ */
+export const createStatementFormatBodyKeyMax = 60;
+
+export const createStatementFormatBodyBankNameMax = 80;
+
+export const createStatementFormatBodySampleCsvMin = 10;
+export const createStatementFormatBodySampleCsvMax = 100000;
+
+
+
+export const CreateStatementFormatBody = zod.object({
+  "key": zod.string().max(createStatementFormatBodyKeyMax).optional(),
+  "bankName": zod.string().min(1).max(createStatementFormatBodyBankNameMax),
+  "columns": zod.object({
+  "date": zod.string(),
+  "narration": zod.string(),
+  "reference": zod.string().nullish(),
+  "debit": zod.string().nullish(),
+  "credit": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "drcr": zod.string().nullish()
+}),
+  "sampleCsv": zod.string().min(createStatementFormatBodySampleCsvMin).max(createStatementFormatBodySampleCsvMax)
+})
+
+export const CreateStatementFormatResponse = zod.object({
+  "mapping": zod.object({
+  "id": zod.string(),
+  "key": zod.string(),
+  "bankName": zod.string(),
+  "columns": zod.object({
+  "date": zod.string(),
+  "narration": zod.string(),
+  "reference": zod.string().nullish(),
+  "debit": zod.string().nullish(),
+  "credit": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "drcr": zod.string().nullish()
+}),
+  "createdAt": zod.coerce.date()
+}),
+  "validation": zod.object({
+  "headerFound": zod.boolean(),
+  "lineCount": zod.number(),
+  "parsedCount": zod.number(),
+  "parseRate": zod.number(),
+  "preview": zod.array(zod.object({
+  "lineNo": zod.number(),
+  "parseStatus": zod.enum(['parsed', 'invalid']),
+  "valueDate": zod.string().nullable(),
+  "amount": zod.string().nullable(),
+  "direction": zod.string().nullable(),
+  "error": zod.string().nullable()
+}))
+})
+})
+
+
+export const DeleteStatementFormatParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteStatementFormatResponse = zod.void()
 
 
 /**
@@ -4430,6 +4532,112 @@ export const DraftInvoiceWithClerkResponse = zod.object({
 })),
   "model": zod.string(),
   "promptVersion": zod.string()
+})
+
+
+/**
+ * @summary Queue a month-end bundle — segmentation and extraction run out of band
+ */
+export const CreateClerkBatchBody = zod.object({
+  "sourceType": zod.enum(['pdf', 'text']),
+  "name": zod.string().optional(),
+  "text": zod.string().optional(),
+  "pdfBase64": zod.string().optional()
+})
+
+export const CreateClerkBatchResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "status": zod.enum(['queued', 'processing', 'done', 'failed']),
+  "totalSegments": zod.number().nullish(),
+  "processedSegments": zod.number(),
+  "createdCases": zod.number(),
+  "skippedDuplicates": zod.number(),
+  "failReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary The caller's recent batches, newest first
+ */
+export const ListClerkBatchesResponseItem = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "status": zod.enum(['queued', 'processing', 'done', 'failed']),
+  "totalSegments": zod.number().nullish(),
+  "processedSegments": zod.number(),
+  "createdCases": zod.number(),
+  "skippedDuplicates": zod.number(),
+  "failReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListClerkBatchesResponse = zod.array(ListClerkBatchesResponseItem)
+
+
+/**
+ * @summary One batch's live progress counters
+ */
+export const GetClerkBatchParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetClerkBatchResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string().nullish(),
+  "name": zod.string().nullish(),
+  "status": zod.enum(['queued', 'processing', 'done', 'failed']),
+  "totalSegments": zod.number().nullish(),
+  "processedSegments": zod.number(),
+  "createdCases": zod.number(),
+  "skippedDuplicates": zod.number(),
+  "failReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Propose a statement-format column mapping from a sample — validated by the deterministic parser, never stored
+ */
+export const draftStatementFormatWithClerkBodySampleCsvMin = 20;
+export const draftStatementFormatWithClerkBodySampleCsvMax = 20000;
+
+
+
+export const DraftStatementFormatWithClerkBody = zod.object({
+  "sampleCsv": zod.string().min(draftStatementFormatWithClerkBodySampleCsvMin).max(draftStatementFormatWithClerkBodySampleCsvMax)
+})
+
+export const DraftStatementFormatWithClerkResponse = zod.object({
+  "bankName": zod.string(),
+  "columns": zod.object({
+  "date": zod.string(),
+  "narration": zod.string(),
+  "reference": zod.string().nullish(),
+  "debit": zod.string().nullish(),
+  "credit": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "drcr": zod.string().nullish()
+}),
+  "validation": zod.object({
+  "headerFound": zod.boolean(),
+  "lineCount": zod.number(),
+  "parsedCount": zod.number(),
+  "parseRate": zod.number(),
+  "preview": zod.array(zod.object({
+  "lineNo": zod.number(),
+  "parseStatus": zod.enum(['parsed', 'invalid']),
+  "valueDate": zod.string().nullable(),
+  "amount": zod.string().nullable(),
+  "direction": zod.string().nullable(),
+  "error": zod.string().nullable()
+}))
+})
 })
 
 

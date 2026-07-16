@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.16.0
+ * OpenAPI spec version: 0.17.0
  */
 import {
   useMutation,
@@ -53,6 +53,7 @@ import type {
   ClaimDraftInput,
   ClaimRecord,
   ClaimUpdateInput,
+  ClerkBatchView,
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseDecisionInput,
@@ -75,15 +76,20 @@ import type {
   CpdCourse,
   CpdEnrollment,
   CpdEnrollmentView,
+  CreateClerkBatchInput,
   CreateInvitationInput,
   CreatePasswordResetInput,
+  CreateStatementFormatInput,
+  CreateStatementFormatResult,
   CreditNoteInput,
   DashboardSummary,
   DraftCatalogueEntryInput,
   DraftClaimWithClerkInput,
   DraftInvoiceWithClerkInput,
+  DraftStatementFormatInput,
   Engagement,
   EngagementInput,
+  EngagementNarrative,
   EngagementUpdate,
   ErpConnection,
   ErpConnectionInput,
@@ -182,6 +188,8 @@ import type {
   StampRecord,
   StampVerifyInput,
   StampVerifyResult,
+  StatementFormatDraft,
+  StatementFormatView,
   StatementImportInput,
   StatementImportResult,
   StatusLight,
@@ -5583,6 +5591,76 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getAnalyzeVatRiskMutationOptions(options));
     }
 
+export const getDraftEngagementNarrativeUrl = (id: string,) => {
+
+
+
+
+  return `/api/engagements/${id}/narrative`
+}
+
+/**
+ * @summary Clerk-drafted client letter body from an engagement's computed findings (template fallback, never stored)
+ */
+export const draftEngagementNarrative = async (id: string, options?: RequestInit): Promise<EngagementNarrative> => {
+
+  return customFetch<EngagementNarrative>(getDraftEngagementNarrativeUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getDraftEngagementNarrativeMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftEngagementNarrative>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftEngagementNarrative>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['draftEngagementNarrative'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftEngagementNarrative>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  draftEngagementNarrative(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftEngagementNarrativeMutationResult = NonNullable<Awaited<ReturnType<typeof draftEngagementNarrative>>>
+
+    export type DraftEngagementNarrativeMutationError = ErrorType<NotFoundResponse | ConflictResponse | Error>
+
+    /**
+ * @summary Clerk-drafted client letter body from an engagement's computed findings (template fallback, never stored)
+ */
+export const useDraftEngagementNarrative = <TError = ErrorType<NotFoundResponse | ConflictResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftEngagementNarrative>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftEngagementNarrative>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDraftEngagementNarrativeMutationOptions(options));
+    }
+
 export const getGetDashboardSummaryUrl = (params: GetDashboardSummaryParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -8459,6 +8537,217 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getRejectMatchProposalMutationOptions(options));
+    }
+
+export const getListStatementFormatsUrl = () => {
+
+
+
+
+  return `/api/statement-formats`
+}
+
+/**
+ * @summary Operator-managed custom statement-format mappings
+ */
+export const listStatementFormats = async ( options?: RequestInit): Promise<StatementFormatView[]> => {
+
+  return customFetch<StatementFormatView[]>(getListStatementFormatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStatementFormatsQueryKey = () => {
+    return [
+    `/api/statement-formats`
+    ] as const;
+    }
+
+
+export const getListStatementFormatsQueryOptions = <TData = Awaited<ReturnType<typeof listStatementFormats>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStatementFormats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStatementFormatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStatementFormats>>> = ({ signal }) => listStatementFormats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStatementFormats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStatementFormatsQueryResult = NonNullable<Awaited<ReturnType<typeof listStatementFormats>>>
+export type ListStatementFormatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Operator-managed custom statement-format mappings
+ */
+
+export function useListStatementFormats<TData = Awaited<ReturnType<typeof listStatementFormats>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStatementFormats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStatementFormatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateStatementFormatUrl = () => {
+
+
+
+
+  return `/api/statement-formats`
+}
+
+/**
+ * @summary Save a custom format — rejected unless it parses the provided sample
+ */
+export const createStatementFormat = async (createStatementFormatInput: CreateStatementFormatInput, options?: RequestInit): Promise<CreateStatementFormatResult> => {
+
+  return customFetch<CreateStatementFormatResult>(getCreateStatementFormatUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createStatementFormatInput)
+  }
+);}
+
+
+
+
+export const getCreateStatementFormatMutationOptions = <TError = ErrorType<ConflictResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStatementFormat>>, TError,{data: BodyType<CreateStatementFormatInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createStatementFormat>>, TError,{data: BodyType<CreateStatementFormatInput>}, TContext> => {
+
+const mutationKey = ['createStatementFormat'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createStatementFormat>>, {data: BodyType<CreateStatementFormatInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createStatementFormat(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateStatementFormatMutationResult = NonNullable<Awaited<ReturnType<typeof createStatementFormat>>>
+    export type CreateStatementFormatMutationBody = BodyType<CreateStatementFormatInput>
+    export type CreateStatementFormatMutationError = ErrorType<ConflictResponse | Error>
+
+    /**
+ * @summary Save a custom format — rejected unless it parses the provided sample
+ */
+export const useCreateStatementFormat = <TError = ErrorType<ConflictResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStatementFormat>>, TError,{data: BodyType<CreateStatementFormatInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createStatementFormat>>,
+        TError,
+        {data: BodyType<CreateStatementFormatInput>},
+        TContext
+      > => {
+      return useMutation(getCreateStatementFormatMutationOptions(options));
+    }
+
+export const getDeleteStatementFormatUrl = (id: string,) => {
+
+
+
+
+  return `/api/statement-formats/${id}`
+}
+
+export const deleteStatementFormat = async (id: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteStatementFormatUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteStatementFormatMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteStatementFormat>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteStatementFormat>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteStatementFormat'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteStatementFormat>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteStatementFormat(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteStatementFormatMutationResult = NonNullable<Awaited<ReturnType<typeof deleteStatementFormat>>>
+
+    export type DeleteStatementFormatMutationError = ErrorType<NotFoundResponse>
+
+    export const useDeleteStatementFormat = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteStatementFormat>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteStatementFormat>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteStatementFormatMutationOptions(options));
     }
 
 export const getListBuyerInvoicesUrl = (params?: ListBuyerInvoicesParams,) => {
@@ -11796,6 +12085,300 @@ export const useDraftInvoiceWithClerk = <TError = ErrorType<BadRequestResponse |
         TContext
       > => {
       return useMutation(getDraftInvoiceWithClerkMutationOptions(options));
+    }
+
+export const getCreateClerkBatchUrl = () => {
+
+
+
+
+  return `/api/clerk/batches`
+}
+
+/**
+ * @summary Queue a month-end bundle — segmentation and extraction run out of band
+ */
+export const createClerkBatch = async (createClerkBatchInput: CreateClerkBatchInput, options?: RequestInit): Promise<ClerkBatchView> => {
+
+  return customFetch<ClerkBatchView>(getCreateClerkBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createClerkBatchInput)
+  }
+);}
+
+
+
+
+export const getCreateClerkBatchMutationOptions = <TError = ErrorType<BadRequestResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClerkBatch>>, TError,{data: BodyType<CreateClerkBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClerkBatch>>, TError,{data: BodyType<CreateClerkBatchInput>}, TContext> => {
+
+const mutationKey = ['createClerkBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClerkBatch>>, {data: BodyType<CreateClerkBatchInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createClerkBatch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateClerkBatchMutationResult = NonNullable<Awaited<ReturnType<typeof createClerkBatch>>>
+    export type CreateClerkBatchMutationBody = BodyType<CreateClerkBatchInput>
+    export type CreateClerkBatchMutationError = ErrorType<BadRequestResponse | Error>
+
+    /**
+ * @summary Queue a month-end bundle — segmentation and extraction run out of band
+ */
+export const useCreateClerkBatch = <TError = ErrorType<BadRequestResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClerkBatch>>, TError,{data: BodyType<CreateClerkBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createClerkBatch>>,
+        TError,
+        {data: BodyType<CreateClerkBatchInput>},
+        TContext
+      > => {
+      return useMutation(getCreateClerkBatchMutationOptions(options));
+    }
+
+export const getListClerkBatchesUrl = () => {
+
+
+
+
+  return `/api/clerk/batches`
+}
+
+/**
+ * @summary The caller's recent batches, newest first
+ */
+export const listClerkBatches = async ( options?: RequestInit): Promise<ClerkBatchView[]> => {
+
+  return customFetch<ClerkBatchView[]>(getListClerkBatchesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClerkBatchesQueryKey = () => {
+    return [
+    `/api/clerk/batches`
+    ] as const;
+    }
+
+
+export const getListClerkBatchesQueryOptions = <TData = Awaited<ReturnType<typeof listClerkBatches>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClerkBatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClerkBatchesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClerkBatches>>> = ({ signal }) => listClerkBatches({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClerkBatches>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClerkBatchesQueryResult = NonNullable<Awaited<ReturnType<typeof listClerkBatches>>>
+export type ListClerkBatchesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The caller's recent batches, newest first
+ */
+
+export function useListClerkBatches<TData = Awaited<ReturnType<typeof listClerkBatches>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClerkBatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClerkBatchesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetClerkBatchUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/batches/${id}`
+}
+
+/**
+ * @summary One batch's live progress counters
+ */
+export const getClerkBatch = async (id: string, options?: RequestInit): Promise<ClerkBatchView> => {
+
+  return customFetch<ClerkBatchView>(getGetClerkBatchUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkBatchQueryKey = (id: string,) => {
+    return [
+    `/api/clerk/batches/${id}`
+    ] as const;
+    }
+
+
+export const getGetClerkBatchQueryOptions = <TData = Awaited<ReturnType<typeof getClerkBatch>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkBatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkBatchQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkBatch>>> = ({ signal }) => getClerkBatch(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkBatch>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkBatchQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkBatch>>>
+export type GetClerkBatchQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary One batch's live progress counters
+ */
+
+export function useGetClerkBatch<TData = Awaited<ReturnType<typeof getClerkBatch>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkBatch>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkBatchQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDraftStatementFormatWithClerkUrl = () => {
+
+
+
+
+  return `/api/clerk/format-draft`
+}
+
+/**
+ * @summary Propose a statement-format column mapping from a sample — validated by the deterministic parser, never stored
+ */
+export const draftStatementFormatWithClerk = async (draftStatementFormatInput: DraftStatementFormatInput, options?: RequestInit): Promise<StatementFormatDraft> => {
+
+  return customFetch<StatementFormatDraft>(getDraftStatementFormatWithClerkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftStatementFormatInput)
+  }
+);}
+
+
+
+
+export const getDraftStatementFormatWithClerkMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftStatementFormatWithClerk>>, TError,{data: BodyType<DraftStatementFormatInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftStatementFormatWithClerk>>, TError,{data: BodyType<DraftStatementFormatInput>}, TContext> => {
+
+const mutationKey = ['draftStatementFormatWithClerk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftStatementFormatWithClerk>>, {data: BodyType<DraftStatementFormatInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftStatementFormatWithClerk(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftStatementFormatWithClerkMutationResult = NonNullable<Awaited<ReturnType<typeof draftStatementFormatWithClerk>>>
+    export type DraftStatementFormatWithClerkMutationBody = BodyType<DraftStatementFormatInput>
+    export type DraftStatementFormatWithClerkMutationError = ErrorType<Error>
+
+    /**
+ * @summary Propose a statement-format column mapping from a sample — validated by the deterministic parser, never stored
+ */
+export const useDraftStatementFormatWithClerk = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftStatementFormatWithClerk>>, TError,{data: BodyType<DraftStatementFormatInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftStatementFormatWithClerk>>,
+        TError,
+        {data: BodyType<DraftStatementFormatInput>},
+        TContext
+      > => {
+      return useMutation(getDraftStatementFormatWithClerkMutationOptions(options));
     }
 
 export const getGetClerkUsageUrl = () => {

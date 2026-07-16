@@ -4,6 +4,7 @@ import {
   useGetAssessmentQuestionnaire,
   useRunAssessment,
   useAnalyzeVatRisk,
+  useDraftEngagementNarrative,
 } from "@workspace/api-client-react";
 import type {
   AssessmentReport,
@@ -34,6 +35,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileSearch,
+  Sparkles,
 } from "lucide-react";
 import {
   formatNaira,
@@ -50,6 +52,79 @@ import {
 const CSV_PLACEHOLDER = `invoice number,supplier tin,supplier name,irn,csid,invoice amount,vat amount
 INV-1003,20000000-0002,Adaeze Foods Ltd,IRN-DEMO-1003,CSID-DEMO-1003,720000,54000
 INV-9001,99000000-0009,Ghost Traders Ltd,IRN-FAKE-1,CSID-FAKE-1,250000,18750`;
+
+// Idea #10: Clerk drafts the client-facing letter body from the engagement's
+// platform-computed findings (deterministic template when Clerk can't run).
+// The draft lands in an editable textarea — the partner edits, owns and sends
+// it through their own channels; nothing is stored or sent from here.
+function NarrativeCard({ engagementId }: { engagementId: string }) {
+  const { toast } = useToast();
+  const draftMut = useDraftEngagementNarrative();
+  const [narrative, setNarrative] = useState<string | null>(null);
+  const [source, setSource] = useState<"clerk" | "template" | null>(null);
+
+  const draft = () => {
+    draftMut.mutate(
+      { id: engagementId },
+      {
+        onSuccess: (r) => {
+          setNarrative(r.narrative);
+          setSource(r.source);
+        },
+        onError: () =>
+          toast({
+            title: "Could not draft the letter",
+            description: "Try again, or write it from the report above.",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  return (
+    <Card data-testid="card-narrative">
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Sparkles
+            className="w-4 h-4 text-violet-600 dark:text-violet-400"
+            aria-hidden="true"
+          />
+          Client letter
+        </CardTitle>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={draft}
+          disabled={draftMut.isPending}
+          data-testid="button-draft-narrative"
+        >
+          {draftMut.isPending
+            ? "Drafting…"
+            : narrative
+              ? "Redraft"
+              : "Draft with Clerk"}
+        </Button>
+      </CardHeader>
+      {narrative !== null && (
+        <CardContent className="space-y-2">
+          <Textarea
+            value={narrative}
+            onChange={(e) => setNarrative(e.target.value)}
+            rows={10}
+            data-testid="input-narrative"
+          />
+          <p className="text-xs text-muted-foreground">
+            {source === "clerk"
+              ? "Phrased by Clerk from the computed findings — every number comes from the report above."
+              : "Deterministic template text from the computed findings."}{" "}
+            Edit freely; you own the letter, and nothing is stored or sent from
+            here.
+          </p>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
 
 function AssessmentTab() {
   const { data: portfolio } = useGetPortfolio();
@@ -269,6 +344,7 @@ function AssessmentTab() {
           </CardContent>
         </Card>
       )}
+      {report && <NarrativeCard engagementId={report.engagementId} />}
     </div>
   );
 }
@@ -371,6 +447,10 @@ function VatRiskTab() {
               </CardContent>
             </Card>
           </div>
+
+          {report.engagementId && (
+            <NarrativeCard engagementId={report.engagementId} />
+          )}
 
           <Card data-testid="card-vat-rows">
             <CardHeader>

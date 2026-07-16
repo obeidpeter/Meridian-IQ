@@ -5,10 +5,19 @@ import {
   useListUnmappedErrorCodes,
   useUpsertErrorCatalogueEntry,
   useDraftCatalogueEntryWithClerk,
+  useListStatementFormats,
+  useCreateStatementFormat,
+  useDeleteStatementFormat,
+  useDraftStatementFormatWithClerk,
   getListErrorCatalogueQueryKey,
   getListUnmappedErrorCodesQueryKey,
+  getListStatementFormatsQueryKey,
 } from "@workspace/api-client-react";
-import type { ErrorCatalogueEntry } from "@workspace/api-client-react";
+import type {
+  ErrorCatalogueEntry,
+  StatementColumnMap,
+  MappingValidation,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,6 +59,249 @@ const EMPTY_FORM: EntryForm = {
   fix: "",
   retriable: false,
 };
+
+// Custom statement formats (Clerk idea #9): operator platform config, like
+// the catalogue entries above. Clerk proposes a column mapping from a pasted
+// sample; the DETERMINISTIC parser's validation run is shown before the
+// operator saves — and the save route re-validates, so a mapping that cannot
+// parse its own sample can never be stored.
+function StatementFormatsSection() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: formats } = useListStatementFormats();
+  const createFormat = useCreateStatementFormat();
+  const deleteFormat = useDeleteStatementFormat();
+  const clerkFormat = useDraftStatementFormatWithClerk();
+
+  const [open, setOpen] = useState(false);
+  const [sample, setSample] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [columns, setColumns] = useState<StatementColumnMap | null>(null);
+  const [validation, setValidation] = useState<MappingValidation | null>(null);
+
+  const reset = () => {
+    setSample("");
+    setBankName("");
+    setColumns(null);
+    setValidation(null);
+  };
+
+  const draft = () => {
+    clerkFormat.mutate(
+      { data: { sampleCsv: sample } },
+      {
+        onSuccess: (d) => {
+          setBankName(d.bankName);
+          setColumns(d.columns);
+          setValidation(d.validation);
+        },
+        onError: () =>
+          toast({
+            title: "Clerk could not map that sample",
+            description:
+              "Check the sample includes the header row, or type the column names manually.",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  const save = () => {
+    if (!columns || !bankName.trim()) return;
+    createFormat.mutate(
+      { data: { bankName: bankName.trim(), columns, sampleCsv: sample } },
+      {
+        onSuccess: () => {
+          toast({ title: `${bankName.trim()} format saved` });
+          setOpen(false);
+          reset();
+          queryClient.invalidateQueries({
+            queryKey: getListStatementFormatsQueryKey(),
+          });
+        },
+        onError: (e) =>
+          toast({
+            title: "Could not save the format",
+            description:
+              e instanceof Error
+                ? e.message
+                : "The mapping failed validation against the sample.",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  const columnField = (key: keyof StatementColumnMap, label: string) => (
+    <div className="space-y-1">
+      <Label htmlFor={`fmt-${key}`} className="text-xs">
+        {label}
+      </Label>
+      <Input
+        id={`fmt-${key}`}
+        value={(columns?.[key] as string | null | undefined) ?? ""}
+        onChange={(e) =>
+          setColumns((c) => ({
+            ...(c ?? { date: "", narration: "" }),
+            [key]: e.target.value || null,
+          }))
+        }
+        placeholder="header name"
+      />
+    </div>
+  );
+
+  return (
+    <Card data-testid="card-statement-formats">
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base">
+          Custom bank-statement formats
+        </CardTitle>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setOpen(true)}
+          data-testid="button-new-format"
+        >
+          <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New from sample
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {(formats ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No custom formats yet. When a client's bank export isn't
+            recognised, paste a sample here and Clerk proposes the column
+            mapping — the parser validates it before anything is saved.
+          </p>
+        ) : (
+          (formats ?? []).map((f) => (
+            <div
+              key={f.id}
+              className="flex flex-wrap items-center justify-between gap-2 border rounded-md px-3 py-2 text-sm"
+              data-testid={`format-${f.key}`}
+            >
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {f.bankName} <code className="text-xs">{f.key}</code>
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  date: {f.columns.date} · narration: {f.columns.narration}
+                  {f.columns.amount ? ` · amount: ${f.columns.amount}` : ""}
+                  {f.columns.debit ? ` · debit: ${f.columns.debit}` : ""}
+                  {f.columns.credit ? ` · credit: ${f.columns.credit}` : ""}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  deleteFormat.mutate(
+                    { id: f.id },
+                    {
+                      onSuccess: () =>
+                        queryClient.invalidateQueries({
+                          queryKey: getListStatementFormatsQueryKey(),
+                        }),
+                    },
+                  )
+                }
+                aria-label={`Delete ${f.bankName}`}
+                data-testid={`button-delete-${f.key}`}
+              >
+                Delete
+              </Button>
+            </div>
+          ))
+        )}
+      </CardContent>
+
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) reset();
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New statement format</DialogTitle>
+            <DialogDescription>
+              Paste the export's header row plus a dozen data lines. Clerk
+              proposes the mapping; the parser proves it works before you save.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Textarea
+              value={sample}
+              onChange={(e) => setSample(e.target.value)}
+              rows={5}
+              placeholder="Date,Narration,Amount,DR/CR&#10;01/07/2026,TRF FROM …,150000.00,CR"
+              className="font-mono text-xs"
+              data-testid="input-format-sample"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={draft}
+              disabled={sample.trim().length < 20 || clerkFormat.isPending}
+              data-testid="button-draft-format"
+            >
+              <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" />
+              {clerkFormat.isPending ? "Reading…" : "Draft with Clerk"}
+            </Button>
+            {columns && (
+              <>
+                <div className="space-y-1">
+                  <Label htmlFor="fmt-bank" className="text-xs">
+                    Bank / format name
+                  </Label>
+                  <Input
+                    id="fmt-bank"
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {columnField("date", "Date column")}
+                  {columnField("narration", "Narration column")}
+                  {columnField("amount", "Amount column (single)")}
+                  {columnField("drcr", "DR/CR marker column")}
+                  {columnField("debit", "Debit column")}
+                  {columnField("credit", "Credit column")}
+                </div>
+                {validation && (
+                  <p
+                    className={`text-sm ${
+                      validation.parsedCount > 0
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-destructive"
+                    }`}
+                    data-testid="text-format-validation"
+                  >
+                    Parser check: {validation.parsedCount} of{" "}
+                    {validation.lineCount} sample line(s) parsed (
+                    {Math.round(validation.parseRate * 100)}%).
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={save}
+              disabled={
+                !columns || !bankName.trim() || createFormat.isPending
+              }
+              data-testid="button-save-format"
+            >
+              {createFormat.isPending ? "Validating…" : "Validate & save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
 
 export function Catalogue() {
   usePageTitle("Error catalogue");
@@ -335,6 +587,8 @@ export function Catalogue() {
           ))}
         </div>
       )}
+
+      {canWrite && <StatementFormatsSection />}
 
       <Dialog open={form !== null} onOpenChange={(open) => !open && setForm(null)}>
         <DialogContent>

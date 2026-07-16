@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.16.0
+ * OpenAPI spec version: 0.17.0
  */
 
 export * from './acceptInvitationInput';
@@ -66,6 +66,8 @@ export * from './claimRecord';
 export * from './claimRecordState';
 export * from './claimUpdateInput';
 export * from './clerkAnswer';
+export * from './clerkBatchView';
+export * from './clerkBatchViewStatus';
 export * from './clerkCase';
 export * from './clerkCaseCreateInput';
 export * from './clerkCaseCreateInputSourceType';
@@ -131,20 +133,27 @@ export * from './cpdEnrollment';
 export * from './cpdEnrollmentStatus';
 export * from './cpdEnrollmentView';
 export * from './cpdEnrollmentViewStatus';
+export * from './createClerkBatchInput';
+export * from './createClerkBatchInputSourceType';
 export * from './createInvitationInput';
 export * from './createInvitationInputRole';
 export * from './createPasswordResetInput';
+export * from './createStatementFormatInput';
+export * from './createStatementFormatResult';
 export * from './creditNoteInput';
 export * from './dashboardSummary';
 export * from './dashboardSummaryPenaltyRisk';
 export * from './draftCatalogueEntryInput';
 export * from './draftClaimWithClerkInput';
 export * from './draftInvoiceWithClerkInput';
+export * from './draftStatementFormatInput';
 export * from './engagement';
 export * from './engagementFindings';
 export * from './engagementInput';
 export * from './engagementInputFindings';
 export * from './engagementInputType';
+export * from './engagementNarrative';
+export * from './engagementNarrativeSource';
 export * from './engagementStatus';
 export * from './engagementType';
 export * from './engagementUpdate';
@@ -243,6 +252,9 @@ export * from './listOperatorCasesStatus';
 export * from './listPartiesParams';
 export * from './listStatementsParams';
 export * from './loginInput';
+export * from './mappingValidation';
+export * from './mappingValidationRow';
+export * from './mappingValidationRowParseStatus';
 export * from './matchAssist';
 export * from './matchAssistCandidate';
 export * from './matchAssistSource';
@@ -329,6 +341,9 @@ export * from './stampRecord';
 export * from './stampRecordRail';
 export * from './stampVerifyInput';
 export * from './stampVerifyResult';
+export * from './statementColumnMap';
+export * from './statementFormatDraft';
+export * from './statementFormatView';
 export * from './statementImportInput';
 export * from './statementImportResult';
 export * from './statementRowResult';

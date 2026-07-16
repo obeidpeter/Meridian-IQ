@@ -26,6 +26,10 @@ import {
   BulkAcceptMatchProposalsParams,
   BulkAcceptMatchProposalsBody,
   BulkAcceptMatchProposalsResponse,
+  ListStatementFormatsResponse,
+  CreateStatementFormatBody,
+  CreateStatementFormatResponse,
+  DeleteStatementFormatParams,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
@@ -45,6 +49,11 @@ import {
   rejectProposal,
 } from "../modules/statements/service";
 import { bulkAcceptProposals } from "../modules/statements/bulk-accept";
+import {
+  deleteFormatMapping,
+  listFormatMappings,
+  saveFormatMapping,
+} from "../modules/statements/custom-formats";
 
 // Bank-statement ingestion and reconciliation v1 (INT-05, SME-07). All surfaces
 // are gated by the R2 `reconciliation` flag: unreachable while dark (PL-02).
@@ -200,6 +209,57 @@ router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (re
     };
   });
   res.json(ListBankStatementProposalsResponse.parse(view));
+});
+
+// ---- custom statement formats (Clerk idea #9) ----
+// Operator-managed platform reference data, like the error catalogue — hence
+// catalogue.write. Saving REQUIRES a validation run against the caller's
+// sample; a mapping that cannot parse its own sample is rejected (422), so a
+// wrong proposal (Clerk's or a human's) can never be stored. NOT behind the
+// reconciliation flag: formats are platform config, useful before rollout.
+
+router.get("/statement-formats", async (req, res): Promise<void> => {
+  assertCan(req.principal, "catalogue.write");
+  const rows = await listFormatMappings();
+  res.json(
+    ListStatementFormatsResponse.parse(
+      rows.map((r) => ({
+        id: r.id,
+        key: r.key,
+        bankName: r.bankName,
+        columns: r.columns,
+        createdAt: r.createdAt,
+      })),
+    ),
+  );
+});
+
+router.post("/statement-formats", async (req, res): Promise<void> => {
+  assertCan(req.principal, "catalogue.write");
+  const parsed = parseOrThrow(CreateStatementFormatBody, req.body);
+  const { mapping, validation } = await saveFormatMapping(
+    parsed,
+    req.principal.userId,
+  );
+  res.status(201).json(
+    CreateStatementFormatResponse.parse({
+      mapping: {
+        id: mapping.id,
+        key: mapping.key,
+        bankName: mapping.bankName,
+        columns: mapping.columns,
+        createdAt: mapping.createdAt,
+      },
+      validation,
+    }),
+  );
+});
+
+router.delete("/statement-formats/:id", async (req, res): Promise<void> => {
+  assertCan(req.principal, "catalogue.write");
+  const params = parseOrThrow(DeleteStatementFormatParams, req.params);
+  await deleteFormatMapping(params.id, req.principal.userId);
+  res.status(204).end();
 });
 
 // ---- reconciliation decisions ----

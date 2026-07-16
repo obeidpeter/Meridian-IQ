@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { getDb, clerkCasesTable } from "@workspace/db";
+import { getDb, clerkBatchesTable, clerkCasesTable } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 
 // Content retention sweep (OPEN-8 minimisation posture). Raw uploaded invoice
@@ -51,5 +51,38 @@ export async function sweepExpiredCaseContent(): Promise<number> {
       },
     });
   }
-  return rows.length;
+
+  // Async batches (idea #8) hold the same C3 material in sourceText/segments.
+  // Terminal batches clear it inline; this backstop catches batches that
+  // NEVER reach a terminal state — kill switch left off, no provider
+  // configured — so a queued bundle cannot hold client document content
+  // indefinitely. The batch is failed (visibly, with a reason) and purged.
+  const staleBatches = await getDb()
+    .update(clerkBatchesTable)
+    .set({
+      status: "failed",
+      failReason:
+        "The bundle sat unprocessed past the retention window and its content was purged. Upload it again when Clerk is available.",
+      sourceText: null,
+      segments: null,
+    })
+    .where(
+      sql`${clerkBatchesTable.status} IN ('queued', 'processing')
+        AND ${clerkBatchesTable.updatedAt} < now() - make_interval(days => ${days})
+        AND (${clerkBatchesTable.sourceText} IS NOT NULL
+          OR ${clerkBatchesTable.segments} IS NOT NULL)`,
+    )
+    .returning({ id: clerkBatchesTable.id });
+  for (const row of staleBatches) {
+    await appendAudit({
+      actorId: "clerk-sweep",
+      actorRole: "system",
+      action: "clerk.batch.content_purged",
+      entityType: "clerk_batch",
+      entityId: row.id,
+      after: { retentionDays: days },
+    });
+  }
+
+  return rows.length + staleBatches.length;
 }

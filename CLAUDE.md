@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.16.0`).
+contract change (it is currently `0.17.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -80,7 +80,22 @@ content-retention sweep, stripped from API responses) and text detection
 relies on `pageJoiner: ""` (pdf-parse's page markers otherwise make every scan
 look like it "has text"); **batch intake**
 (`modules/clerk/batch.ts`) stays text-only and only proposes segment
-boundaries — every segment then walks the normal capture path; the **weekly digest**
+boundaries — every segment then walks the normal capture path; **async batch**
+(`modules/clerk/batch-async.ts`, `clerk_batches` + firm-keyed RLS migration
+0014) queues a month-end bundle (cap 50) with NO model call in the request —
+an immediate in-process kick plus the sweep (claim CAS, 10-min reclaim)
+process it with the digest split-pattern, per-segment progress counters the
+UI polls, source text cleared at terminal states, kill switch parks work
+instead of consuming it; **custom statement formats**
+(`modules/statements/custom-formats.ts`, operator `catalogue.write`, global
+reference data like the error catalogue) store column-name mappings consumed
+by the same parser seam — saving REQUIRES the mapping to parse its own
+sample, and `modules/clerk/draft-format.ts` proposes mappings from a pasted
+sample with header names re-verified against what actually exists;
+**advisory narratives** (`modules/advisory/narrative.ts`,
+`engagement.write`) phrase a completed assessment/VAT-risk engagement's
+stored findings into a client letter body — digest posture (template
+fallback, never stored, the partner owns the letter); the **weekly digest**
 (`modules/clerk/digest.ts`, opt-in `clerk_digest` flag, sweep-generated,
 firm-keyed RLS via migration 0011) computes every fact in SQL and lets the
 model phrase them, falling back to deterministic template text; **claims
@@ -187,7 +202,7 @@ reminders, recurring invoices, B2C pre-breach alerts, buyer exposure
 refresh, push receipts, login-attempt / password-reset cleanup, outbox +
 stamp-verification retention, unmapped-code cases, and the
 Clerk watchdog / expired-claims / expired-case-content / eval-growth /
-weekly-digest / escalation-triage sweeps). Register new periodic work with `registerSweep(fn)`.
+weekly-digest / escalation-triage / async-batch sweeps). Register new periodic work with `registerSweep(fn)`.
 Alert fan-out (`modules/messaging/fan-out.ts`) is consent-gated: no layer-1
 grant, no alert (CORE-03). Statutory day boundaries — submission windows, VAT
 due dates, "overdue today" — use the LAGOS calendar via

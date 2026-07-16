@@ -216,6 +216,11 @@ const LADDER: LadderStep[] = [
       not(pol("alert_preferences")),
     ],
   },
+  {
+    version: 14, // async batch guardrails
+    atTop: [clerkTenant("clerk_batches")],
+    afterRollback: [not(clerkTenant("clerk_batches"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

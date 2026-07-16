@@ -43,6 +43,10 @@ const NO_CONTEXT_ROUTES = new Set([
   "POST /api/clerk/ask",
   "POST /api/clerk/eval/run",
   "POST /api/clerk/catalogue-draft",
+  // Queues only (no model call), but the batch row must be COMMITTED before
+  // the fire-and-forget processor kick can claim it on another connection.
+  "POST /api/clerk/batches",
+  "POST /api/clerk/format-draft",
 ]);
 
 // Hard cap on how long a request may hold its transaction open. A handler that

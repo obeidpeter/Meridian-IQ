@@ -373,6 +373,59 @@ export const clerkDigestsTable = pgTable(
 );
 export type ClerkDigestRow = typeof clerkDigestsTable.$inferSelect;
 
+// ============ Clerk idea #8 — async batch intake ============
+// One row per month-end bundle: the route only QUEUES (no model call in the
+// request), the processor segments and walks each segment through the normal
+// capture path, updating the progress counters the UI polls. sourceText is
+// the resolved document text, cleared the moment the batch reaches a terminal
+// state; firm-keyed RLS (migration 0014) mirrors clerk_cases.
+
+export const clerkBatchStatusEnum = pgEnum("clerk_batch_status", [
+  "queued",
+  "processing",
+  "done",
+  "failed",
+]);
+
+export const clerkBatchesTable = pgTable(
+  "clerk_batches",
+  {
+    id: id(),
+    // Null for operator batches, like clerk_cases.firmId.
+    firmId: uuid("firm_id").references(() => firmsTable.id),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => usersTable.id),
+    name: text("name"),
+    // Resolved document text awaiting segmentation. Untrusted content;
+    // cleared the moment segmentation succeeds (the segments then carry the
+    // content) and at terminal states; the retention sweep purges stragglers.
+    sourceText: text("source_text"),
+    // The segment texts, persisted ONCE at segmentation time so that resume,
+    // reclaim and slicing never re-segment (model nondeterminism would shift
+    // boundaries and defeat the duplicate guard). processedSegments is the
+    // cursor into this array. Cleared at terminal states.
+    segments: jsonb("segments").$type<{ label: string | null; text: string }[]>(),
+    status: clerkBatchStatusEnum("status").notNull().default("queued"),
+    // Null until segmentation has run.
+    totalSegments: integer("total_segments"),
+    processedSegments: integer("processed_segments").notNull().default(0),
+    createdCases: integer("created_cases").notNull().default(0),
+    skippedDuplicates: integer("skipped_duplicates").notNull().default(0),
+    failReason: text("fail_reason"),
+    // When the current processor claimed the row; a crashed processor's claim
+    // goes stale and the sweep reclaims it.
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("clerk_batches_status_idx").on(t.status),
+    index("clerk_batches_firm_idx").on(t.firmId, t.createdAt),
+  ],
+);
+export type ClerkBatch = typeof clerkBatchesTable.$inferSelect;
+
 export type ClaimRecord = typeof claimRecordsTable.$inferSelect;
 export type ClerkCase = typeof clerkCasesTable.$inferSelect;
 export type ClerkEvalRun = typeof clerkEvalRunsTable.$inferSelect;
