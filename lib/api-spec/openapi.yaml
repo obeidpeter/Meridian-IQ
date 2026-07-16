@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.17.0
+  version: 0.18.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -6604,6 +6604,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ClerkExtractionLine"
+        # Supplier memory: the approved case whose fixture rode along as the
+        # one-shot example (absent when extracted cold).
+        exemplarCaseId:
+          type: string
         promptVersion:
           type: string
         model:
@@ -6659,7 +6663,8 @@ components:
         sourceDurationSec:
           type: ["integer", "null"]
         # Deterministic pre-flight issues computed at extraction time (empty =
-        # clean; null = computed before this feature existed).
+        # clean; null = computed before this feature existed). "advisory"
+        # issues inform the reviewer without blocking the fast lane.
         preflight:
           type: ["array", "null"]
           items:
@@ -6670,6 +6675,9 @@ components:
                 type: string
               message:
                 type: string
+              severity:
+                type: string
+                enum: [advisory]
         extraction:
           anyOf:
             - $ref: "#/components/schemas/ClerkExtraction"

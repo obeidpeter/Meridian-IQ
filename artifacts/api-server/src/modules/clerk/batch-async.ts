@@ -277,7 +277,10 @@ export async function processBatch(
         batch.createdBy,
         gateway,
         undefined,
-        { firmId: batch.firmId },
+        // The batch row does not record the creator's role, so supplier
+        // memory stays conservatively client-scoped (creator's own cases) —
+        // a staff-created batch just gets a smaller exemplar pool.
+        { firmId: batch.firmId, clientScoped: true },
       );
       created += 1;
     } catch (err) {

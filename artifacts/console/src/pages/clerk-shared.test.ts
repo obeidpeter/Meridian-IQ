@@ -10,6 +10,8 @@ import {
   vatFractionFromPercent,
   vatPercentFromRaw,
   vatPercentInvalid,
+  correctionHint,
+  fieldWeights,
   reviewEffort,
 } from "./clerk-shared";
 
@@ -63,6 +65,36 @@ describe("isReadyToApprove", () => {
       isReadyToApprove(
         makeCase({
           preflight: [{ field: "issueDate", message: "Issue date is in the future" }],
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("advisory-only pre-flight keeps the fast lane", () => {
+    expect(
+      isReadyToApprove(
+        makeCase({
+          preflight: [
+            {
+              field: "buyerTin",
+              message: "No buyer TIN was read, but this customer has one",
+              severity: "advisory",
+            },
+          ],
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isReadyToApprove(
+        makeCase({
+          preflight: [
+            {
+              field: "buyerTin",
+              message: "advisory",
+              severity: "advisory",
+            },
+            { field: "grandTotal", message: "totals do not add up" },
+          ],
         }),
       ),
     ).toBe(false);
@@ -298,6 +330,23 @@ describe("approveFormFromCase", () => {
   });
 });
 
+describe("correctionHint", () => {
+  const stats = [
+    { field: "supplierTin", total: 40, overrideRate: 0.22 },
+    { field: "buyerName", total: 40, overrideRate: 0.05 },
+    { field: "issueDate", total: 8, overrideRate: 0.9 },
+  ];
+
+  test("shows only well-evidenced, frequently-corrected fields", () => {
+    expect(correctionHint("supplierTin", stats)).toBe(
+      "corrected in 22% of past cases",
+    );
+    expect(correctionHint("buyerName", stats)).toBeNull(); // rarely corrected
+    expect(correctionHint("issueDate", stats)).toBeNull(); // too few samples
+    expect(correctionHint("supplierTin", undefined)).toBeNull();
+  });
+});
+
 describe("reviewEffort", () => {
   const kase = (flagged: number, preflight: number) =>
     ({
@@ -332,6 +381,22 @@ describe("reviewEffort", () => {
   test("counts flagged fields plus pre-flight findings", () => {
     expect(reviewEffort(kase(3, 2))).toBe(5);
     expect(reviewEffort(kase(0, 0))).toBe(0);
+  });
+
+  test("evidence weights make error-prone flagged fields cost more", () => {
+    // f0 historically corrected half the time; f1 has too few samples.
+    const weights = fieldWeights([
+      { field: "f0", total: 40, overrideRate: 0.5 },
+      { field: "f1", total: 5, overrideRate: 0.9 },
+      { field: "lines.0.vatRate", total: 100, overrideRate: 0.8 },
+    ]);
+    expect(weights.get("f0")).toBe(1.5);
+    expect(weights.has("f1")).toBe(false);
+    expect(weights.has("lines.0.vatRate")).toBe(false);
+    // kase(2, 0) flags f0 and f1: weighted 1.5 + 1 instead of flat 2.
+    expect(reviewEffort(kase(2, 0), weights)).toBe(2.5);
+    // No weights = the historical flat behaviour, unchanged.
+    expect(reviewEffort(kase(2, 0))).toBe(2);
   });
 
   test("lighter cases sort ahead of heavier ones", () => {

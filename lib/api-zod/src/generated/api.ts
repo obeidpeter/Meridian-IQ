@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.17.0
+ * OpenAPI spec version: 0.18.0
  */
 import * as zod from 'zod';
 
@@ -3541,7 +3541,8 @@ export const ListClerkCasesResponseItem = zod.object({
   "sourceDurationSec": zod.number().nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
-  "message": zod.string()
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
 })).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
@@ -3559,6 +3560,7 @@ export const ListClerkCasesResponseItem = zod.object({
   "vatRate": zod.string().nullable(),
   "confidence": zod.number()
 })),
+  "exemplarCaseId": zod.string().optional(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -3632,7 +3634,8 @@ export const CreateClerkCaseResponse = zod.object({
   "sourceDurationSec": zod.number().nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
-  "message": zod.string()
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
 })).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
@@ -3650,6 +3653,7 @@ export const CreateClerkCaseResponse = zod.object({
   "vatRate": zod.string().nullable(),
   "confidence": zod.number()
 })),
+  "exemplarCaseId": zod.string().optional(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -3707,7 +3711,8 @@ export const GetClerkCaseResponse = zod.object({
   "sourceDurationSec": zod.number().nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
-  "message": zod.string()
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
 })).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
@@ -3725,6 +3730,7 @@ export const GetClerkCaseResponse = zod.object({
   "vatRate": zod.string().nullable(),
   "confidence": zod.number()
 })),
+  "exemplarCaseId": zod.string().optional(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -3807,7 +3813,8 @@ export const DecideClerkCaseResponse = zod.object({
   "sourceDurationSec": zod.number().nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
-  "message": zod.string()
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
 })).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
@@ -3825,6 +3832,7 @@ export const DecideClerkCaseResponse = zod.object({
   "vatRate": zod.string().nullable(),
   "confidence": zod.number()
 })),
+  "exemplarCaseId": zod.string().optional(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -3890,7 +3898,8 @@ export const AskClerkResponse = zod.object({
   "sourceDurationSec": zod.number().nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
-  "message": zod.string()
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
 })).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
@@ -3908,6 +3917,7 @@ export const AskClerkResponse = zod.object({
   "vatRate": zod.string().nullable(),
   "confidence": zod.number()
 })),
+  "exemplarCaseId": zod.string().optional(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -3982,7 +3992,8 @@ export const RetryClerkCaseResponse = zod.object({
   "sourceDurationSec": zod.number().nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
-  "message": zod.string()
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
 })).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
@@ -4000,6 +4011,7 @@ export const RetryClerkCaseResponse = zod.object({
   "vatRate": zod.string().nullable(),
   "confidence": zod.number()
 })),
+  "exemplarCaseId": zod.string().optional(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -4060,7 +4072,8 @@ export const ClaimClerkCaseResponse = zod.object({
   "sourceDurationSec": zod.number().nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
-  "message": zod.string()
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
 })).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
@@ -4078,6 +4091,7 @@ export const ClaimClerkCaseResponse = zod.object({
   "vatRate": zod.string().nullable(),
   "confidence": zod.number()
 })),
+  "exemplarCaseId": zod.string().optional(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -4138,7 +4152,8 @@ export const ReleaseClerkCaseResponse = zod.object({
   "sourceDurationSec": zod.number().nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
-  "message": zod.string()
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
 })).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
@@ -4156,6 +4171,7 @@ export const ReleaseClerkCaseResponse = zod.object({
   "vatRate": zod.string().nullable(),
   "confidence": zod.number()
 })),
+  "exemplarCaseId": zod.string().optional(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -4324,7 +4340,8 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "sourceDurationSec": zod.number().nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
-  "message": zod.string()
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
 })).nullish(),
   "extraction": zod.union([zod.object({
   "fields": zod.array(zod.object({
@@ -4342,6 +4359,7 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "vatRate": zod.string().nullable(),
   "confidence": zod.number()
 })),
+  "exemplarCaseId": zod.string().optional(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),

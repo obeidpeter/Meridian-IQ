@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.17.0
+ * OpenAPI spec version: 0.18.0
  */
 export interface HealthStatus {
   status: string;
@@ -2665,6 +2665,7 @@ export interface ClerkExtractionLine {
 export interface ClerkExtraction {
   fields: ClerkExtractionField[];
   lines: ClerkExtractionLine[];
+  exemplarCaseId?: string;
   promptVersion: string;
   model: string;
 }
@@ -2702,9 +2703,17 @@ export const ClerkCaseStatus = {
   failed: 'failed',
 } as const;
 
+export type ClerkCasePreflightItemSeverity = typeof ClerkCasePreflightItemSeverity[keyof typeof ClerkCasePreflightItemSeverity];
+
+
+export const ClerkCasePreflightItemSeverity = {
+  advisory: 'advisory',
+} as const;
+
 export type ClerkCasePreflightItem = {
   field: string;
   message: string;
+  severity?: ClerkCasePreflightItemSeverity;
 };
 
 export interface ClerkCorrection {

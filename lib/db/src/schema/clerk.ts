@@ -157,14 +157,20 @@ export interface ClerkExtraction {
   lines: ExtractionLine[];
   promptVersion: string;
   model: string;
+  // Supplier memory: the approved case whose fixture rode along as the
+  // one-shot example for this extraction (absent when extracted cold).
+  exemplarCaseId?: string;
 }
 
 // Deterministic pre-approval checks run over the extraction (never the model):
-// missing critical values, malformed dates/rates, totals that don't add up.
-// Empty array = nothing blocking; null = extraction never succeeded.
+// missing critical values, malformed dates/rates, totals that don't add up,
+// register-history disagreements. Empty array = nothing blocking; null =
+// extraction never succeeded. "advisory" issues inform the reviewer but do
+// not knock a case out of the ready-to-approve fast lane.
 export interface PreflightIssue {
   field: string;
   message: string;
+  severity?: "advisory";
 }
 
 // Per-field record of what the operator changed between the model's proposal
@@ -339,6 +345,12 @@ export const clerkEvalFixturesTable = pgTable("clerk_eval_fixtures", {
   label: text("label").notNull(),
   sourceText: text("source_text").notNull(),
   expected: jsonb("expected").$type<Record<string, string | null>>().notNull(),
+  // The APPROVED invoice's supplier party identity (name/TIN from the
+  // register, not extracted strings) — corrections deliberately exclude party
+  // identity, so supplier memory (exemplar.ts) matches on these columns.
+  // Null on fixtures grown before this existed (they simply never match).
+  supplierName: text("supplier_name"),
+  supplierTin: text("supplier_tin"),
   createdAt: createdAt(),
 });
 

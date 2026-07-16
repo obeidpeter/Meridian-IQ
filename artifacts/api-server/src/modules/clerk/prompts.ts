@@ -67,6 +67,37 @@ export const CRITICAL_FIELDS: ReadonlySet<CanonicalField> = new Set([
 // Non-critical fields below this confidence are flagged for human review.
 export const FLAG_CONFIDENCE_THRESHOLD = 0.8;
 
+// Supplier memory (exhaust idea #1): when intake deterministically matches a
+// previously APPROVED invoice from the same supplier (exemplar.ts), the
+// extraction call carries that example — its own ledger prompt version so
+// cohort metrics can compare corrected-rates with and without it.
+export const EXTRACT_EXEMPLAR_PROMPT_VERSION = "extract.v1+ex1";
+
+export const EXEMPLAR_SYSTEM_SUFFIX = `
+A reference example may precede the document: a PREVIOUS invoice from the same supplier together with its human-approved extraction. Use it only to resolve ambiguity in spelling, identifier formats and layout for THIS supplier. The new document's printed values always win; never copy a value from the example that the new document does not show.`;
+
+// Exemplar documents are past client uploads — untrusted content, fenced like
+// the live document. The approved values are operator-confirmed (trusted).
+const EXEMPLAR_TEXT_CAP = 6_000;
+
+export function exemplarSection(exemplar: {
+  sourceText: string;
+  expected: Record<string, string | null>;
+}): string {
+  const headerValues = Object.fromEntries(
+    Object.entries(exemplar.expected).filter(([k]) => !k.startsWith("lines.")),
+  );
+  return [
+    "Reference example — a previous invoice from the same supplier, with its human-APPROVED extraction:",
+    fenceUntrusted(
+      "example document",
+      "EXAMPLE DOCUMENT",
+      exemplar.sourceText.slice(0, EXEMPLAR_TEXT_CAP),
+    ),
+    `Approved values for the example: ${JSON.stringify(headerValues)}`,
+  ].join("\n");
+}
+
 export const EXTRACT_SYSTEM = `You are an invoice field extraction engine for a Nigerian tax-compliance platform.
 You will be given the content of ONE supplier invoice (an image or raw text).
 Extract the canonical fields and line items exactly as printed in the document.

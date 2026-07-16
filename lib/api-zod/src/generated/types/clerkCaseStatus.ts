@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.17.0
+ * OpenAPI spec version: 0.18.0
  */
 
 export type ClerkCaseStatus = typeof ClerkCaseStatus[keyof typeof ClerkCaseStatus];

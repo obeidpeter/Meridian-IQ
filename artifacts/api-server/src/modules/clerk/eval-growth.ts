@@ -5,6 +5,8 @@ import {
   clerkCasesTable,
   clerkEvalFixturesTable,
   clerkEvalRunsTable,
+  invoicesTable,
+  partiesTable,
   type ClerkCase,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
@@ -87,7 +89,10 @@ export async function loadGrownFixtures(
 }
 
 // Turn newly corrected approvals into fixtures (one per case, capped per
-// pass). Insert races resolve on the caseId unique constraint.
+// pass). Insert races resolve on the caseId unique constraint. The approved
+// invoice's supplier party identity (register name/TIN, never extracted
+// strings — corrections exclude party identity by design) rides onto the
+// fixture so supplier memory (exemplar.ts) can match future documents.
 export async function growEvalFixtures(
   limit = GROWTH_BATCH,
 ): Promise<number> {
@@ -98,12 +103,19 @@ export async function growEvalFixtures(
       sourceText: clerkCasesTable.sourceText,
       corrections: clerkCasesTable.corrections,
       status: clerkCasesTable.status,
+      supplierName: partiesTable.legalName,
+      supplierTin: partiesTable.tin,
     })
     .from(clerkCasesTable)
     .leftJoin(
       clerkEvalFixturesTable,
       eq(clerkEvalFixturesTable.caseId, clerkCasesTable.id),
     )
+    .leftJoin(
+      invoicesTable,
+      eq(invoicesTable.id, clerkCasesTable.createdInvoiceId),
+    )
+    .leftJoin(partiesTable, eq(partiesTable.id, invoicesTable.supplierPartyId))
     .where(
       and(
         eq(clerkCasesTable.kind, "extraction"),
@@ -117,11 +129,15 @@ export async function growEvalFixtures(
 
   let grown = 0;
   for (const candidate of candidates) {
-    const fixture = fixtureFromCase(candidate as ClerkCase);
+    const fixture = fixtureFromCase(candidate);
     if (!fixture) continue;
     const inserted = await getDb()
       .insert(clerkEvalFixturesTable)
-      .values(fixture)
+      .values({
+        ...fixture,
+        supplierName: candidate.supplierName ?? null,
+        supplierTin: candidate.supplierTin ?? null,
+      })
       .onConflictDoNothing({ target: clerkEvalFixturesTable.caseId })
       .returning({ id: clerkEvalFixturesTable.id });
     grown += inserted.length;

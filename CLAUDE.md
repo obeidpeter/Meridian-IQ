@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.17.0`).
+contract change (it is currently `0.18.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -129,7 +129,21 @@ Predicates mirror digest/compliance-window (Lagos calendar), so Ask can never
 disagree with the dashboards. Clerk health (console) includes a
 confidence-calibration table (`computeCalibration` in
 `modules/clerk/metrics.ts`): kept-rate vs model confidence per band, from the
-corrections exhaust.
+corrections exhaust. The exhaust also feeds the product directly:
+**supplier memory** (`modules/clerk/exemplar.ts`) deterministically matches a
+new text document against the firm's OWN approved fixtures (TIN/name-token
+containment, newest first, same-firm join — never cross-firm) and rides the
+match along as a fenced one-shot with its own ledger prompt version
+(`extract.v1+ex1`, `extraction.exemplarCaseId` for audit; eval replay never
+uses exemplars); **register-history pre-flight**
+(`modules/clerk/register-preflight.ts`, zero model calls) checks extracted
+supplier/buyer identities against the firm's party SPHERE
+(`firmPartySphereCondition` — parties are the shared spine, no tenant RLS)
+and the supplier's own invoice history (VAT-rate deviation), with register
+TINs only ever masked in issue text; and the console weights review-queue
+effort and shows per-field "historically corrected" hints from
+`metrics.corrections` (`fieldWeights`/`correctionHint` in clerk-shared —
+never auto-accept, ordering and hints only).
 
 ## Data layer & multi-tenant isolation (the part to get right)
 
