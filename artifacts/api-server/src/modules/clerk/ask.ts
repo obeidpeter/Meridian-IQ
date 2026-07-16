@@ -140,6 +140,7 @@ export async function askClerk(
   // the app itself built.
   const months = dataIntents.length > 0 ? lagosMonthOptions() : [];
   const monthByKey = new Map(months.map((m) => [m.key, m]));
+  const CLIENT_OPTION_CAP = 40;
   const clients =
     dataIntents.length > 0 && ctx.firmId
       ? await inClerkScope(ctx.firmId, () =>
@@ -155,10 +156,14 @@ export async function askClerk(
             )
             .where(eq(engagementsTable.firmId, ctx.firmId!))
             .orderBy(partiesTable.legalName)
-            .limit(40),
+            // One past the cap so truncation is DETECTED, never silent.
+            .limit(CLIENT_OPTION_CAP + 1),
         )
       : [];
-  const clientOptions = clients.map((c, i) => ({ key: `c${i + 1}`, ...c }));
+  const clientsTruncated = clients.length > CLIENT_OPTION_CAP;
+  const clientOptions = clients
+    .slice(0, CLIENT_OPTION_CAP)
+    .map((c, i) => ({ key: `c${i + 1}`, ...c }));
   const clientByKey = new Map(clientOptions.map((c) => [c.key, c]));
 
   const registerIndex = active
@@ -179,7 +184,19 @@ export async function askClerk(
             ? [
                 "",
                 "Client keys (the asker's own clients, for data lookups):",
-                clientOptions.map((c) => `- ${c.key}: ${c.name}`).join("\n"),
+                // Client legal names are user-authored — they ride inside a
+                // fence so a name can never smuggle instructions; the c1..cN
+                // keys around them are app-built and trusted.
+                fenceUntrusted(
+                  "client name directory (match names to keys only)",
+                  "CLIENT_NAMES",
+                  clientOptions.map((c) => `- ${c.key}: ${c.name}`).join("\n"),
+                ),
+                ...(clientsTruncated
+                  ? [
+                      'This client list is INCOMPLETE. If the question names a client that is not listed, answer claimKey "none" — never answer a client-scoped question firm-wide.',
+                    ]
+                  : []),
               ]
             : []),
         ]

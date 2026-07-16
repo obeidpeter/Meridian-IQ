@@ -6,6 +6,7 @@ import { tenantFirmId, type Principal } from "../auth/rbac";
 import { partySphereCondition } from "../party/party";
 import { decodeBase64Checked } from "./cases";
 import { assertClerkEnabled, recordExternalCall, type ClerkGateway } from "./gateway";
+import { inClerkScope } from "./scope";
 import { fenceUntrusted } from "./prompts";
 import { scorePartyCandidates, type PartySuggestion } from "./party-match";
 import {
@@ -275,7 +276,11 @@ export async function draftInvoiceWithClerk(
         422,
       );
     }
-    text = transcript.slice(0, MAX_INSTRUCTION_CHARS);
+    // The returned transcript must BE the instruction the draft was built
+    // from — returning more than the model saw would invite the user to
+    // trust corrections the draft ignored.
+    transcript = transcript.slice(0, MAX_INSTRUCTION_CHARS);
+    text = transcript;
   } else {
     text = input.text!.trim();
     if (
@@ -323,21 +328,27 @@ export async function draftInvoiceWithClerk(
     const sphere = partySphereCondition(principal);
     const conditions: SQL[] = [];
     if (sphere) conditions.push(sphere);
-    const candidates = await getDb()
-      .select({
-        id: partiesTable.id,
-        legalName: partiesTable.legalName,
-        tin: partiesTable.tin,
-        type: partiesTable.type,
-      })
-      .from(partiesTable)
-      .where(
-        and(
-          isNull(partiesTable.mergedIntoId),
-          inArray(partiesTable.type, ["buyer"]),
-          ...conditions,
+    // The route runs OUTSIDE the per-request transaction (app.ts
+    // NO_CONTEXT_ROUTES — the voice path makes two provider calls), so this
+    // read takes its own short firm-scoped transaction; the sphere condition
+    // remains the actual wall (parties is the shared spine with no RLS).
+    const candidates = await inClerkScope(tenantFirmId(principal), () =>
+      getDb()
+        .select({
+          id: partiesTable.id,
+          legalName: partiesTable.legalName,
+          tin: partiesTable.tin,
+          type: partiesTable.type,
+        })
+        .from(partiesTable)
+        .where(
+          and(
+            isNull(partiesTable.mergedIntoId),
+            inArray(partiesTable.type, ["buyer"]),
+            ...conditions,
+          ),
         ),
-      );
+    );
     buyerSuggestions = scorePartyCandidates(
       { name: proposal.buyerName, tin: proposal.buyerTin },
       candidates,

@@ -190,6 +190,11 @@ before(async () => {
       attemptNo: 1,
       idempotencyKey: `di-${SALT}`,
       status: "accepted",
+      // Anchored to the SAME month list the assertions use (mid-month, so
+      // it is inside MONTHS[0] whatever today is) instead of insert-time
+      // now() — otherwise a Lagos month rollover between module load and
+      // this insert would break every this-month assertion.
+      createdAt: new Date(`${MONTHS[0].key}-15T12:00:00Z`),
     },
     {
       invoiceId: acceptedOldId,

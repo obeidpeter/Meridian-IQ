@@ -140,34 +140,70 @@ export default function InvoiceScreen() {
   const canSpeak = !!me?.capabilities?.includes("clerk.capture");
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [recording, setRecording] = useState(false);
+  // Synchronous re-entrancy guard, same hazard submittingRef covers below: a
+  // double-tap can fire before React commits the disabled prop, and two
+  // stop-and-draft runs would mean two paid transcriptions.
+  const voiceBusyRef = useRef(false);
 
   const startRecording = async () => {
-    const permission = await AudioModule.requestRecordingPermissionsAsync();
-    if (!permission.granted) {
+    if (voiceBusyRef.current) return;
+    voiceBusyRef.current = true;
+    try {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        setBanner({
+          tone: "error",
+          message: "Microphone access is needed to speak an invoice.",
+        });
+        return;
+      }
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
+      recorder.record();
+      setRecording(true);
+    } catch {
+      // Recording never started: put the audio session back and say so —
+      // a swallowed rejection here would strand the device in record mode.
+      setAudioModeAsync({ allowsRecording: false }).catch(() => {});
       setBanner({
         tone: "error",
-        message: "Microphone access is needed to speak an invoice.",
+        message: "Recording couldn't start — try again.",
       });
-      return;
+    } finally {
+      voiceBusyRef.current = false;
     }
-    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    recorder.record();
-    setRecording(true);
   };
 
   const stopAndDraft = async () => {
-    setRecording(false);
-    await recorder.stop();
-    await setAudioModeAsync({ allowsRecording: false });
-    const uri = recorder.uri;
-    if (!uri) {
+    if (voiceBusyRef.current) return;
+    voiceBusyRef.current = true;
+    let audioBase64: string;
+    try {
+      setRecording(false);
+      await recorder.stop();
+      const uri = recorder.uri;
+      if (!uri) {
+        setBanner({
+          tone: "error",
+          message: "Nothing was recorded — try again.",
+        });
+        return;
+      }
+      audioBase64 = await new File(uri).base64();
+    } catch {
       setBanner({
         tone: "error",
-        message: "Nothing was recorded — try again.",
+        message: "The voice note couldn't be read — try recording again.",
       });
       return;
+    } finally {
+      // Whatever happened above, never leave the device audio session in
+      // recording mode.
+      setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+      voiceBusyRef.current = false;
     }
-    const audioBase64 = await new File(uri).base64();
     voiceDraft.mutate(
       { data: { audioBase64 } },
       {
@@ -433,7 +469,10 @@ export default function InvoiceScreen() {
               icon={recording ? "square" : "mic"}
               onPress={recording ? stopAndDraft : startRecording}
               loading={voiceDraft.isPending}
-              disabled={voiceDraft.isPending || busy}
+              // parties.isLoading: the buyer list must be loaded before a
+              // draft applies, or a valid suggestion gets discarded as
+              // "not in your list".
+              disabled={voiceDraft.isPending || busy || parties.isLoading}
             />
           </Card>
         ) : null}

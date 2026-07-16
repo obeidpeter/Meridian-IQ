@@ -150,6 +150,17 @@ export function LineItemRow({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              {/* An invoice seeded from saved data may legally carry a
+                  non-catalogue rate (the server accepts any fraction in
+                  [0,1)); surface it so the select never renders blank and
+                  the value survives an untouched round-trip. */}
+              {line.vatRate &&
+                Number.isFinite(Number(line.vatRate)) &&
+                !["0.075", "0"].includes(line.vatRate) && (
+                  <SelectItem value={line.vatRate}>
+                    {`${Number((Number(line.vatRate) * 100).toFixed(4))}% (as saved)`}
+                  </SelectItem>
+                )}
               <SelectItem value="0.075">7.5% standard</SelectItem>
               <SelectItem value="0">0% exempt</SelectItem>
             </SelectContent>

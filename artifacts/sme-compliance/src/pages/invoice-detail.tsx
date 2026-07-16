@@ -585,6 +585,10 @@ export function InvoiceDetail() {
 
   const handleSubmit = async () => {
     if (!invoice) return;
+    // A new attempt makes any fetched explanation stale: if this submission
+    // fails again the error may be different, and yesterday's explanation
+    // must not sit next to today's catalogue entry.
+    explainFailure.reset();
     try {
       if (invoice.status === "draft") {
         const res = await validate.mutateAsync({ id });
@@ -658,6 +662,9 @@ export function InvoiceDetail() {
     if (!fix) return;
     setShowFixErrors(true);
     if (Object.keys(fixErrors).length > 0) return;
+    // Same staleness rule as handleSubmit: the explanation belonged to the
+    // failure being fixed, not to whatever this resubmission produces.
+    explainFailure.reset();
     try {
       await updateInvoice.mutateAsync({
         id,
