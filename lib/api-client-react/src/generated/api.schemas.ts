@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.18.0
+ * OpenAPI spec version: 0.19.0
  */
 export interface HealthStatus {
   status: string;
@@ -2670,12 +2670,15 @@ export interface ClerkExtraction {
   model: string;
 }
 
+export type ClerkAnswerDataParams = {[key: string]: string};
+
 export interface ClerkAnswer {
   answered: boolean;
   claimId?: string;
   claimKey?: string;
   claimVersion?: number;
   dataIntent?: string;
+  dataParams?: ClerkAnswerDataParams;
   proposition?: string;
   facts?: ProtectedFact[];
   citation?: string;
@@ -2984,7 +2987,8 @@ export interface DraftInvoiceWithClerkInput {
      * @minLength 5
      * @maxLength 1000
      */
-  text: string;
+  text?: string;
+  audioBase64?: string;
 }
 
 export interface InvoiceDraftLine {
@@ -3017,6 +3021,7 @@ export interface InvoiceDraftResult {
   buyerSuggestions: ClerkPartySuggestion[];
   model: string;
   promptVersion: string;
+  transcript?: string;
 }
 
 export type CreateClerkBatchInputSourceType = typeof CreateClerkBatchInputSourceType[keyof typeof CreateClerkBatchInputSourceType];

@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import {
   getDb,
   clerkCasesTable,
+  engagementsTable,
+  partiesTable,
   type ClerkCase,
   type ClaimRecord,
   type ClerkAnswer,
@@ -13,7 +15,12 @@ import { logger } from "../../lib/logger";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";
 import { inClerkScope } from "./scope";
 import { getActiveClaims } from "./claims";
-import { getDataIntent, DATA_INTENTS } from "./data-intents";
+import {
+  getDataIntent,
+  lagosMonthOptions,
+  DATA_INTENTS,
+  type DataIntentParams,
+} from "./data-intents";
 import {
   INTENT_PROMPT_VERSION,
   INTENT_SYSTEM,
@@ -126,6 +133,34 @@ export async function askClerk(
       ...dataIntents.map((i) => i.key),
     ]),
   ];
+
+  // Closed parameter options (idea #4), offered only alongside data intents:
+  // the last twelve Lagos months, and the firm's own client parties under
+  // OPAQUE keys the app maps back — the model can only ever pick an entry
+  // the app itself built.
+  const months = dataIntents.length > 0 ? lagosMonthOptions() : [];
+  const monthByKey = new Map(months.map((m) => [m.key, m]));
+  const clients =
+    dataIntents.length > 0 && ctx.firmId
+      ? await inClerkScope(ctx.firmId, () =>
+          getDb()
+            .selectDistinct({
+              id: partiesTable.id,
+              name: partiesTable.legalName,
+            })
+            .from(partiesTable)
+            .innerJoin(
+              engagementsTable,
+              eq(engagementsTable.clientPartyId, partiesTable.id),
+            )
+            .where(eq(engagementsTable.firmId, ctx.firmId!))
+            .orderBy(partiesTable.legalName)
+            .limit(40),
+        )
+      : [];
+  const clientOptions = clients.map((c, i) => ({ key: `c${i + 1}`, ...c }));
+  const clientByKey = new Map(clientOptions.map((c) => [c.key, c]));
+
   const registerIndex = active
     .map((c) => `- ${c.claimKey}: ${c.title}`)
     .join("\n");
@@ -137,12 +172,24 @@ export async function askClerk(
           "",
           "Available data keys (live lookups over the asker's own firm records):",
           dataIntents.map((i) => `- ${i.key}: ${i.title}`).join("\n"),
+          "",
+          "Month keys (for data lookups that take a month):",
+          months.map((m) => `- ${m.key}: ${m.label}`).join("\n"),
+          ...(clientOptions.length > 0
+            ? [
+                "",
+                "Client keys (the asker's own clients, for data lookups):",
+                clientOptions.map((c) => `- ${c.key}: ${c.name}`).join("\n"),
+              ]
+            : []),
         ]
       : []),
     "",
     fenceUntrusted("question", "QUESTION", question),
   ].join("\n");
 
+  const monthKeys = months.map((m) => m.key);
+  const clientKeys = clientOptions.map((c) => c.key);
   const result = await gateway.infer<IntentOutput>({
     purpose: "classify_intent",
     caseId: created.id,
@@ -151,8 +198,8 @@ export async function askClerk(
     system: INTENT_SYSTEM,
     user,
     schemaName: "intent_classification",
-    jsonSchema: intentJsonSchema(keys),
-    validator: intentValidator(keys) as never,
+    jsonSchema: intentJsonSchema(keys, monthKeys, clientKeys),
+    validator: intentValidator(keys, monthKeys, clientKeys) as never,
     inputForHash: question,
   });
 
@@ -176,12 +223,52 @@ export async function askClerk(
   const firmId = ctx.firmId;
   const dataIntent = firmId ? getDataIntent(result.data.claimKey) : undefined;
   if (dataIntent && firmId) {
+    // Parameter resolution (idea #4): the model picked closed keys; the app
+    // maps them back through ITS OWN option lists. An unknown key, or a
+    // param the chosen lookup cannot honour, refuses — never a silently
+    // unfiltered answer pretending to be a filtered one.
+    const monthKey = result.data.month ?? "none";
+    const clientKey = result.data.client ?? "none";
+    const params: DataIntentParams = {};
+    if (monthKey !== "none") {
+      const month = monthByKey.get(monthKey);
+      if (!month) {
+        return refuse(
+          "The month in the question could not be resolved, so it has been escalated to an operator.",
+        );
+      }
+      if (!dataIntent.accepts.month) {
+        return refuse(
+          "That lookup always answers as of today and cannot be filtered to a month. Ask about rail submissions for month-by-month figures.",
+        );
+      }
+      params.monthStart = month.monthStart;
+      params.monthLabel = month.label.replace(" (current month)", "");
+    }
+    if (clientKey !== "none") {
+      const client = clientByKey.get(clientKey);
+      if (!client) {
+        return refuse(
+          "The client named in the question could not be resolved, so it has been escalated to an operator.",
+        );
+      }
+      if (!dataIntent.accepts.client) {
+        return refuse(
+          "That lookup covers the whole firm and cannot be filtered to one client.",
+        );
+      }
+      params.clientPartyId = client.id;
+      params.clientName = client.name;
+    }
+
     let outcome;
     try {
       // The lookup runs in the SAME firm-scoped RLS posture as the request
       // (and every query also filters firm_id explicitly) — the asker can
       // only ever see numbers computed from its own firm's rows.
-      outcome = await inClerkScope(firmId, () => dataIntent.run(firmId));
+      outcome = await inClerkScope(firmId, () =>
+        dataIntent.run(firmId, params),
+      );
     } catch (err) {
       logger.warn(
         { err, dataIntent: dataIntent.key },
@@ -191,10 +278,15 @@ export async function askClerk(
         "The firm-record lookup failed, so the question has been escalated to an operator.",
       );
     }
+    const dataParams = {
+      ...(params.monthLabel ? { month: params.monthLabel } : {}),
+      ...(params.clientName ? { client: params.clientName } : {}),
+    };
     return finish(
       {
         answered: true,
         dataIntent: dataIntent.key,
+        ...(Object.keys(dataParams).length > 0 ? { dataParams } : {}),
         proposition: outcome.text,
         facts: outcome.facts,
         citation: `Computed live from your firm's records on ${lagosDateString()} (Lagos)`,

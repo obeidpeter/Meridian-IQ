@@ -249,9 +249,12 @@ router.post("/clerk/ask", async (req, res): Promise<void> => {
 // Grounded failure explainer (expansion C): catalogue cause/fix for the
 // invoice's latest failed attempt, Clerk-phrased when available. Falls back to
 // the catalogue text itself when the kill switch or budget says no, so this
-// never errors for AI-availability reasons.
+// never errors for AI-availability reasons. Gated on clerk.capture (not
+// clerk.ask): the fix-and-retry flow belongs to the client whose invoice
+// failed, and the module pins the invoice to the principal's firm AND client
+// party (SEC-03) before a word is generated.
 router.post("/clerk/explain-failure", async (req, res): Promise<void> => {
-  assertCan(req.principal, "clerk.ask");
+  assertCan(req.principal, "clerk.capture");
   const parsed = parseOrThrow(ExplainInvoiceFailureBody, req.body);
   const gateway = await getClerkGateway();
   const explanation = await explainInvoiceFailure(
@@ -383,11 +386,7 @@ router.post("/clerk/draft-invoice", async (req, res): Promise<void> => {
   const tenant = tenantFirmId(req.principal);
   if (tenant) await assertFirmClerkBudget(tenant);
   const gateway = await getClerkGateway();
-  const result = await draftInvoiceWithClerk(
-    parsed.text,
-    req.principal,
-    gateway,
-  );
+  const result = await draftInvoiceWithClerk(parsed, req.principal, gateway);
   res.json(DraftInvoiceWithClerkResponse.parse(result));
 });
 

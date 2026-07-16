@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   getDb,
   firmsTable,
@@ -172,7 +172,7 @@ test("a sentence becomes a normalised proposal with a register buyer suggestion"
   const calls: CompletionRequest[] = [];
   const text = `Invoice ${BUYER_NAME} ₦150,000 for June deliveries, 7.5% VAT`;
   const result = await draftInvoiceWithClerk(
-    text,
+    { text },
     firmAPrincipal,
     fakeGateway((req) => {
       calls.push(req);
@@ -206,7 +206,7 @@ test("a foreign firm never sees another firm's buyer in the suggestions", async 
   // naming it in the instruction must NOT enumerate it (the parties table is
   // the shared spine with no RLS; the sphere filter is the only wall).
   const result = await draftInvoiceWithClerk(
-    `Invoice ${BUYER_NAME} ₦99 for nothing`,
+    { text: `Invoice ${BUYER_NAME} ₦99 for nothing` },
     firmBPrincipal,
     fakeGateway(() => validOutput({ buyerName: BUYER_NAME })),
   );
@@ -219,7 +219,7 @@ test("a foreign firm never sees another firm's buyer in the suggestions", async 
 
 test("the call is ledgered with the firm it was made for", async () => {
   await draftInvoiceWithClerk(
-    "Invoice someone 500 naira",
+    { text: "Invoice someone 500 naira" },
     firmAPrincipal,
     fakeGateway(() => validOutput({ buyerName: null })),
   );
@@ -235,10 +235,118 @@ test("the call is ledgered with the firm it was made for", async () => {
   assert.equal(row?.purpose, "draft_invoice");
 });
 
+// ---- Voice input ("speak an invoice into existence") -----------------------
+// The transcript is the instruction: it walks the exact same fenced,
+// re-validated path as typed text. Audio is never persisted; the
+// transcription itself is ledgered (ok or error) so the spend and the
+// failure modes are auditable.
+
+const latestTranscriptionRow = async () => {
+  const [row] = await getDb()
+    .select({
+      purpose: clerkInferenceCallsTable.purpose,
+      outcome: clerkInferenceCallsTable.outcome,
+      errorText: clerkInferenceCallsTable.errorText,
+      model: clerkInferenceCallsTable.model,
+    })
+    .from(clerkInferenceCallsTable)
+    .where(
+      and(
+        eq(clerkInferenceCallsTable.firmId, firmAId),
+        eq(clerkInferenceCallsTable.purpose, "transcribe_voice"),
+      ),
+    )
+    .orderBy(desc(clerkInferenceCallsTable.createdAt))
+    .limit(1);
+  return row;
+};
+
+test("exactly one of text or audioBase64 must be provided", async () => {
+  const inputs = [
+    {},
+    { text: "Invoice X 100", audioBase64: Buffer.from("x").toString("base64") },
+  ];
+  for (const input of inputs) {
+    await assert.rejects(
+      draftInvoiceWithClerk(
+        input,
+        firmAPrincipal,
+        fakeGateway(() => validOutput()),
+      ),
+      (err: Error & { code?: string; status?: number }) =>
+        err.code === "BAD_UPLOAD" && err.status === 400,
+    );
+  }
+});
+
+test("a voice note is transcribed, ledgered and drafted like typed text", async () => {
+  const audioBase64 = Buffer.from(`fake-audio-${SALT}`).toString("base64");
+  const spoken = `Invoice ${BUYER_NAME} 150,000 naira for June deliveries`;
+  const calls: CompletionRequest[] = [];
+  const result = await draftInvoiceWithClerk(
+    { audioBase64 },
+    firmAPrincipal,
+    fakeGateway((req) => {
+      calls.push(req);
+      return validOutput({ buyerName: BUYER_NAME });
+    }),
+    async () => spoken,
+  );
+
+  // What was heard is returned for the user to check, and IS the instruction.
+  assert.equal(result.transcript, spoken);
+  assert.equal(calls.length, 1);
+  assert.ok((calls[0].user as string).includes(spoken));
+  assert.ok((calls[0].user as string).includes("-----BEGIN INSTRUCTION-----"));
+  assert.ok(
+    result.buyerSuggestions.some((s) => s.partyId === buyerPartyId),
+    "the voice path keeps the deterministic buyer suggestion",
+  );
+
+  const row = await latestTranscriptionRow();
+  assert.equal(row?.outcome, "ok");
+  assert.equal(row?.model, "gpt-4o-mini-transcribe");
+});
+
+test("an unreadable voice note fails typed — and the failure is ledgered", async () => {
+  await assert.rejects(
+    draftInvoiceWithClerk(
+      { audioBase64: Buffer.from("noise").toString("base64") },
+      firmAPrincipal,
+      fakeGateway(() => {
+        throw new Error("the draft model must not be called");
+      }),
+      async () => {
+        throw new Error("upstream transcode blew up");
+      },
+    ),
+    (err: Error & { code?: string; status?: number }) =>
+      err.code === "VOICE_UNREADABLE" && err.status === 422,
+  );
+  const row = await latestTranscriptionRow();
+  assert.equal(row?.outcome, "error");
+  assert.ok(row?.errorText?.includes("upstream transcode blew up"));
+});
+
+test("silence yields VOICE_NO_SPEECH, never an invented instruction", async () => {
+  await assert.rejects(
+    draftInvoiceWithClerk(
+      { audioBase64: Buffer.from("hiss").toString("base64") },
+      firmAPrincipal,
+      fakeGateway(() => {
+        throw new Error("the draft model must not be called");
+      }),
+      async () => "uh", // trims to fewer than the 5-char minimum
+    ),
+    (err: Error & { code?: string; status?: number }) =>
+      err.code === "VOICE_NO_SPEECH" && err.status === 422,
+  );
+});
+
 test("invalid model output fails closed with a typed 502", async () => {
   await assert.rejects(
     draftInvoiceWithClerk(
-      "Invoice X 100",
+      { text: "Invoice X 100" },
       firmAPrincipal,
       fakeGateway(() => "nope"),
     ),
@@ -247,7 +355,7 @@ test("invalid model output fails closed with a typed 502", async () => {
   );
   await assert.rejects(
     draftInvoiceWithClerk(
-      "Invoice X 100",
+      { text: "Invoice X 100" },
       firmAPrincipal,
       fakeGateway(() => JSON.stringify({ wrong: "shape" })),
     ),

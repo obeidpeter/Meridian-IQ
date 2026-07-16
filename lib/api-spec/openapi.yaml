@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.18.0
+  version: 0.19.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -6628,6 +6628,12 @@ components:
         # (idea #6) instead of a claims-register proposition.
         dataIntent:
           type: string
+        # App-resolved lookup parameters for display (idea #4), e.g.
+        # {month: "May 2026", client: "Adaeze Foods Ltd"}.
+        dataParams:
+          type: object
+          additionalProperties:
+            type: string
         proposition:
           type: string
         facts:
@@ -7001,12 +7007,16 @@ components:
             $ref: "#/components/schemas/MatchAssistCandidate"
     DraftInvoiceWithClerkInput:
       type: object
-      required: [text]
+      # Exactly one of text / audioBase64 — enforced by the handler (400).
       properties:
         text:
           type: string
           minLength: 5
           maxLength: 1000
+        # Idea #7: a short voice note; transcribed like capture's voice path
+        # (audio never persisted, transcription ledgered).
+        audioBase64:
+          type: string
     InvoiceDraftLine:
       type: object
       required: [description, quantity, unitPrice, vatRate]
@@ -7053,6 +7063,9 @@ components:
         model:
           type: string
         promptVersion:
+          type: string
+        # Voice drafts only: what the transcriber heard.
+        transcript:
           type: string
     CreateClerkBatchInput:
       type: object

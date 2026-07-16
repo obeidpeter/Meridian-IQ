@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.18.0
+ * OpenAPI spec version: 0.19.0
  */
 import * as zod from 'zod';
 
@@ -3571,6 +3571,7 @@ export const ListClerkCasesResponseItem = zod.object({
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
   "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3664,6 +3665,7 @@ export const CreateClerkCaseResponse = zod.object({
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
   "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3741,6 +3743,7 @@ export const GetClerkCaseResponse = zod.object({
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
   "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3843,6 +3846,7 @@ export const DecideClerkCaseResponse = zod.object({
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
   "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -3928,6 +3932,7 @@ export const AskClerkResponse = zod.object({
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
   "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -4022,6 +4027,7 @@ export const RetryClerkCaseResponse = zod.object({
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
   "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -4102,6 +4108,7 @@ export const ClaimClerkCaseResponse = zod.object({
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
   "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -4182,6 +4189,7 @@ export const ReleaseClerkCaseResponse = zod.object({
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
   "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -4370,6 +4378,7 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "claimKey": zod.string().optional(),
   "claimVersion": zod.number().optional(),
   "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
   "proposition": zod.string().optional(),
   "facts": zod.array(zod.object({
   "key": zod.string(),
@@ -4521,7 +4530,8 @@ export const draftInvoiceWithClerkBodyTextMax = 1000;
 
 
 export const DraftInvoiceWithClerkBody = zod.object({
-  "text": zod.string().min(draftInvoiceWithClerkBodyTextMin).max(draftInvoiceWithClerkBodyTextMax)
+  "text": zod.string().min(draftInvoiceWithClerkBodyTextMin).max(draftInvoiceWithClerkBodyTextMax).optional(),
+  "audioBase64": zod.string().optional()
 })
 
 export const DraftInvoiceWithClerkResponse = zod.object({
@@ -4549,7 +4559,8 @@ export const DraftInvoiceWithClerkResponse = zod.object({
   "nameScore": zod.number()
 })),
   "model": zod.string(),
-  "promptVersion": zod.string()
+  "promptVersion": zod.string(),
+  "transcript": zod.string().optional()
 })
 
 

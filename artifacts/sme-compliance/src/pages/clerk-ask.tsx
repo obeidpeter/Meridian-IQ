@@ -55,6 +55,12 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
             <>
               Source: {answer.citation} · live lookup{" "}
               <code>{answer.dataIntent}</code>
+              {answer.dataParams && (
+                <>
+                  {" · scope: "}
+                  {Object.values(answer.dataParams).join(" · ")}
+                </>
+              )}
             </>
           ) : (
             <>
