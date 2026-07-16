@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.15.0
+ * OpenAPI spec version: 0.16.0
  */
 export interface HealthStatus {
   status: string;
@@ -2941,6 +2941,73 @@ export interface ClerkPartySuggestion {
 export interface ClerkPartySuggestions {
   supplier: ClerkPartySuggestion[];
   buyer: ClerkPartySuggestion[];
+}
+
+export interface AssistMatchProposalsInput {
+  statementLineId: string;
+}
+
+export interface MatchAssistCandidate {
+  proposalId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  confidence: string;
+  highlights: string[];
+}
+
+export type MatchAssistSource = typeof MatchAssistSource[keyof typeof MatchAssistSource];
+
+
+export const MatchAssistSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface MatchAssist {
+  statementLineId: string;
+  explanation: string;
+  source: MatchAssistSource;
+  ranked: MatchAssistCandidate[];
+}
+
+export interface DraftInvoiceWithClerkInput {
+  /**
+     * @minLength 5
+     * @maxLength 1000
+     */
+  text: string;
+}
+
+export interface InvoiceDraftLine {
+  description: string;
+  quantity: string;
+  /** @nullable */
+  unitPrice: string | null;
+  /** @nullable */
+  vatRate: string | null;
+}
+
+export interface InvoiceDraftProposal {
+  /** @nullable */
+  buyerName: string | null;
+  /** @nullable */
+  buyerTin: string | null;
+  /** @nullable */
+  invoiceNumber: string | null;
+  /** @nullable */
+  issueDate: string | null;
+  /** @nullable */
+  dueDate: string | null;
+  /** @nullable */
+  currency: string | null;
+  lines: InvoiceDraftLine[];
+}
+
+export interface InvoiceDraftResult {
+  proposal: InvoiceDraftProposal;
+  buyerSuggestions: ClerkPartySuggestion[];
+  model: string;
+  promptVersion: string;
 }
 
 export type ClerkEvalFixtureResultRiskLabel = typeof ClerkEvalFixtureResultRiskLabel[keyof typeof ClerkEvalFixtureResultRiskLabel];

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.15.0
+ * OpenAPI spec version: 0.16.0
  */
 
 export * from './acceptInvitationInput';
@@ -18,6 +18,7 @@ export * from './askClerkInput';
 export * from './assessmentAnswer';
 export * from './assessmentReport';
 export * from './assessmentReportBand';
+export * from './assistMatchProposalsInput';
 export * from './auditBundle';
 export * from './auditEvent';
 export * from './auditVerification';
@@ -138,6 +139,7 @@ export * from './dashboardSummary';
 export * from './dashboardSummaryPenaltyRisk';
 export * from './draftCatalogueEntryInput';
 export * from './draftClaimWithClerkInput';
+export * from './draftInvoiceWithClerkInput';
 export * from './engagement';
 export * from './engagementFindings';
 export * from './engagementInput';
@@ -208,6 +210,9 @@ export * from './invitationWithToken';
 export * from './invoice';
 export * from './invoiceCategory';
 export * from './invoiceDetail';
+export * from './invoiceDraftLine';
+export * from './invoiceDraftProposal';
+export * from './invoiceDraftResult';
 export * from './invoiceImportInput';
 export * from './invoiceImportResult';
 export * from './invoiceImportRow';
@@ -238,6 +243,9 @@ export * from './listOperatorCasesStatus';
 export * from './listPartiesParams';
 export * from './listStatementsParams';
 export * from './loginInput';
+export * from './matchAssist';
+export * from './matchAssistCandidate';
+export * from './matchAssistSource';
 export * from './matchDecisionResult';
 export * from './matchDecisionResultStatus';
 export * from './matchProposalView';

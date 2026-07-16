@@ -80,7 +80,13 @@ export type ClerkPurpose =
   | "draft_catalogue"
   // Escalation triage (desk/triage.ts): closed-enum routing proposal for the
   // operator queue; the operator accepts or overrides, never auto-applied.
-  | "triage_escalation";
+  | "triage_escalation"
+  // Reconciliation match assist (reconcile-assist.ts): phrases the matcher's
+  // recorded per-feature evidence for one statement line; template fallback.
+  | "explain_match"
+  // Natural-language invoice drafting (draft-invoice.ts): one sentence into a
+  // prefilled draft form the client reviews and saves through createDraft.
+  | "draft_invoice";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;

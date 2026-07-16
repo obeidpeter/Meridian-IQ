@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.15.0
+  version: 0.16.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2892,6 +2892,60 @@ paths:
                 $ref: "#/components/schemas/FailureExplanation"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /clerk/reconciliation-assist:
+    post:
+      operationId: assistMatchProposals
+      tags: [clerk]
+      summary: Grounded explanation of a statement line's match candidates (template fallback)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistMatchProposalsInput"
+      responses:
+        "200":
+          description: Deterministic ranking + highlights; Clerk-phrased comparison when available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchAssist"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /clerk/draft-invoice:
+    post:
+      operationId: draftInvoiceWithClerk
+      tags: [clerk]
+      summary: Draft an invoice form from one sentence — returned for review, never saved
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftInvoiceWithClerkInput"
+      responses:
+        "200":
+          description: Normalised form proposal plus deterministic buyer suggestions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceDraftResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "502":
+          description: Clerk could not produce a valid draft (fail closed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Clerk AI disabled by the kill switch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /clerk/usage:
     get:
@@ -6721,6 +6775,100 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ClerkPartySuggestion"
+    AssistMatchProposalsInput:
+      type: object
+      required: [statementLineId]
+      properties:
+        statementLineId:
+          type: string
+    MatchAssistCandidate:
+      type: object
+      required: [proposalId, invoiceId, invoiceNumber, confidence, highlights]
+      properties:
+        proposalId:
+          type: string
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        confidence:
+          type: string
+        # Plain-language readings of the matcher's recorded feature scores —
+        # computed by the app, never the model.
+        highlights:
+          type: array
+          items:
+            type: string
+    MatchAssist:
+      type: object
+      required: [statementLineId, explanation, source, ranked]
+      properties:
+        statementLineId:
+          type: string
+        explanation:
+          type: string
+        source:
+          type: string
+          enum: [clerk, template]
+        ranked:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchAssistCandidate"
+    DraftInvoiceWithClerkInput:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 5
+          maxLength: 1000
+    InvoiceDraftLine:
+      type: object
+      required: [description, quantity, unitPrice, vatRate]
+      properties:
+        description:
+          type: string
+        quantity:
+          type: string
+        unitPrice:
+          type: ["string", "null"]
+        vatRate:
+          type: ["string", "null"]
+    InvoiceDraftProposal:
+      type: object
+      required:
+        [buyerName, buyerTin, invoiceNumber, issueDate, dueDate, currency, lines]
+      properties:
+        buyerName:
+          type: ["string", "null"]
+        buyerTin:
+          type: ["string", "null"]
+        invoiceNumber:
+          type: ["string", "null"]
+        issueDate:
+          type: ["string", "null"]
+        dueDate:
+          type: ["string", "null"]
+        currency:
+          type: ["string", "null"]
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceDraftLine"
+    InvoiceDraftResult:
+      type: object
+      required: [proposal, buyerSuggestions, model, promptVersion]
+      properties:
+        proposal:
+          $ref: "#/components/schemas/InvoiceDraftProposal"
+        buyerSuggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkPartySuggestion"
+        model:
+          type: string
+        promptVersion:
+          type: string
     ClerkEvalFixtureResult:
       type: object
       required:
