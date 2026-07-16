@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.14.0
+ * OpenAPI spec version: 0.15.0
  */
 import {
   useMutation,
@@ -10718,7 +10718,7 @@ export const getAskClerkUrl = () => {
 }
 
 /**
- * @summary Register-only Q&A — answers verbatim from approved claims or refuses
+ * @summary Grounded Q&A — approved claims or platform-computed firm-record lookups; refuses anything else
  */
 export const askClerk = async (askClerkInput: AskClerkInput, options?: RequestInit): Promise<ClerkCase> => {
 
@@ -10766,7 +10766,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type AskClerkMutationError = ErrorType<BadRequestResponse | Error>
 
     /**
- * @summary Register-only Q&A — answers verbatim from approved claims or refuses
+ * @summary Grounded Q&A — approved claims or platform-computed firm-record lookups; refuses anything else
  */
 export const useAskClerk = <TError = ErrorType<BadRequestResponse | Error>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askClerk>>, TError,{data: BodyType<AskClerkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.14.0
+ * OpenAPI spec version: 0.15.0
  */
 export interface HealthStatus {
   status: string;
@@ -2674,6 +2674,7 @@ export interface ClerkAnswer {
   claimId?: string;
   claimKey?: string;
   claimVersion?: number;
+  dataIntent?: string;
   proposition?: string;
   facts?: ProtectedFact[];
   citation?: string;
