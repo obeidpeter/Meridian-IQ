@@ -12,6 +12,10 @@ import {
   getListUnbilledIncomeQueryKey,
   useListPaymentBehaviour,
   getListPaymentBehaviourQueryKey,
+  useGetCashflowOutlook,
+  getGetCashflowOutlookQueryKey,
+  useGetChaseList,
+  getGetChaseListQueryKey,
 } from "@workspace/api-client-react";
 import type { ReceivablesBucket, ReceivablesSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -432,6 +436,140 @@ function UnbilledIncomeCard({ clientPartyId }: { clientPartyId: string }) {
   );
 }
 
+// Cash-flow outlook (round-10 idea #1): expected inflows by week, projected
+// server-side from each buyer's own payment rhythm (falling back to due
+// dates / standard terms). Deterministic, renders only when there is money
+// outstanding.
+function CashflowCard({ clientPartyId }: { clientPartyId: string }) {
+  const { data: outlook, isSuccess } = useGetCashflowOutlook(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetCashflowOutlookQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  const group = outlook?.groups[0];
+  if (!isSuccess || !group || group.total.count === 0) return null;
+  const weekLabel = (i: number) =>
+    i === 0 ? "This week" : i === 1 ? "Next week" : `Week +${i}`;
+  return (
+    <Card data-testid="cashflow-outlook">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Activity className="w-5 h-5" aria-hidden="true" /> Expected inflows
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        {group.overdueExpected.count > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-900 dark:bg-amber-950/40">
+            <span className="text-amber-800 dark:text-amber-300">
+              Already past expected ({group.overdueExpected.count} inv)
+            </span>
+            <span className="font-semibold tabular-nums text-amber-800 dark:text-amber-300">
+              {formatNaira(group.overdueExpected.amount)}
+            </span>
+          </div>
+        )}
+        {group.weeks.map((w, i) => (
+          <div
+            key={w.startDate}
+            className="flex items-center justify-between gap-3"
+          >
+            <span className="text-muted-foreground">
+              {weekLabel(i)}
+              <span className="text-xs"> · {w.count} inv</span>
+            </span>
+            <span className="font-medium tabular-nums">
+              {formatNaira(w.amount)}
+            </span>
+          </div>
+        ))}
+        {group.later.count > 0 && (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">
+              Later <span className="text-xs">· {group.later.count} inv</span>
+            </span>
+            <span className="font-medium tabular-nums">
+              {formatNaira(group.later.amount)}
+            </span>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground pt-3 border-t">
+          Projected from each customer&apos;s own payment history where we
+          have one, otherwise due dates. {group.currency} only
+          {outlook.groups.length > 1 ? " (other currencies not shown)" : ""}.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Chase list (round-10 idea #2): the receivables most worth chasing this
+// week — ranked by days beyond each buyer's OWN expected payment date, not
+// raw age. Each row opens the invoice, where the reminder-draft button is.
+function ChaseListCard({ clientPartyId }: { clientPartyId: string }) {
+  const { data: rows, isSuccess } = useGetChaseList(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetChaseListQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  if (!isSuccess || !rows || rows.length === 0) return null;
+  return (
+    <Card data-testid="chase-list">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Clock className="w-5 h-5" aria-hidden="true" /> Worth chasing
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {rows.map((r) => (
+          <div
+            key={r.invoiceId}
+            className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+            data-testid={`chase-${r.invoiceId}`}
+          >
+            <div className="min-w-0">
+              <p className="font-semibold truncate">{r.buyerName}</p>
+              <p className="text-xs text-muted-foreground">
+                {r.invoiceNumber} ·{" "}
+                {r.currency === "NGN"
+                  ? formatNaira(r.grandTotal)
+                  : `${r.currency} ${r.grandTotal}`}{" "}
+                · {r.daysBeyondExpected}d{" "}
+                {r.basis === "rhythm"
+                  ? "beyond their usual"
+                  : r.basis === "dueDate"
+                    ? "past due"
+                    : "past standard terms"}
+                {r.basis === "rhythm" && r.dueDate
+                  ? ` · was due ${formatDate(r.dueDate)}`
+                  : ""}
+              </p>
+            </div>
+            <Button asChild size="sm" variant="secondary">
+              <Link href={`/invoices/${r.invoiceId}`}>Chase</Link>
+            </Button>
+          </div>
+        ))}
+        <p className="text-xs text-muted-foreground pt-3 border-t">
+          Ranked by how far each invoice is past that customer&apos;s own
+          payment rhythm. Open one to draft a reminder.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
@@ -650,6 +788,14 @@ export function Dashboard() {
 
               {me?.clientPartyId && (
                 <UnbilledIncomeCard clientPartyId={me.clientPartyId} />
+              )}
+
+              {me?.clientPartyId && (
+                <CashflowCard clientPartyId={me.clientPartyId} />
+              )}
+
+              {me?.clientPartyId && (
+                <ChaseListCard clientPartyId={me.clientPartyId} />
               )}
             </div>
           </>

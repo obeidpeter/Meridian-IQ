@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.29.0
+ * OpenAPI spec version: 0.30.0
  */
 export interface HealthStatus {
   status: string;
@@ -1386,6 +1386,78 @@ export interface FirmReceivables {
 export interface ReceivablesBucket {
   amount: string;
   count: number;
+}
+
+export interface CashflowBucket {
+  amount: string;
+  count: number;
+}
+
+export type CashflowOutlookGroupsItemWeeksItem = {
+  startDate: string;
+  amount: string;
+  count: number;
+};
+
+export type CashflowOutlookGroupsItem = {
+  currency: string;
+  overdueExpected: CashflowBucket;
+  weeks: CashflowOutlookGroupsItemWeeksItem[];
+  later: CashflowBucket;
+  total: CashflowBucket;
+};
+
+export interface CashflowOutlook {
+  asOf: string;
+  groups: CashflowOutlookGroupsItem[];
+}
+
+export type ChaseRowBasis = typeof ChaseRowBasis[keyof typeof ChaseRowBasis];
+
+
+export const ChaseRowBasis = {
+  rhythm: 'rhythm',
+  dueDate: 'dueDate',
+  terms: 'terms',
+} as const;
+
+export interface ChaseRow {
+  invoiceId: string;
+  invoiceNumber: string;
+  buyerPartyId: string;
+  buyerName: string;
+  currency: string;
+  grandTotal: string;
+  /** @nullable */
+  dueDate: string | null;
+  expectedDate: string;
+  basis: ChaseRowBasis;
+  daysBeyondExpected: number;
+}
+
+export type ClerkAdoptionReportTotals = {
+  extractionCases: number;
+  approvedCases: number;
+  approvedShare: number;
+  keptRate: number;
+};
+
+export type ClerkAdoptionReportClientsItem = {
+  clientPartyId: string;
+  clientName: string;
+  approvedCases: number;
+  fieldsCompared: number;
+  fieldsKept: number;
+  keptRate: number;
+  /** @nullable */
+  avgReviewMinutes: number | null;
+  lastApprovedAt: string;
+};
+
+export interface ClerkAdoptionReport {
+  windowDays: number;
+  totals: ClerkAdoptionReportTotals;
+  clients: ClerkAdoptionReportClientsItem[];
 }
 
 export type ReceivablesSummaryGroupsItemBuckets = {
@@ -3868,6 +3940,14 @@ clientPartyId: string;
 };
 
 export type GetReceivablesSummaryParams = {
+clientPartyId: string;
+};
+
+export type GetCashflowOutlookParams = {
+clientPartyId: string;
+};
+
+export type GetChaseListParams = {
 clientPartyId: string;
 };
 

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.29.0`).
+contract change (it is currently `0.30.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -143,6 +143,14 @@ firm-funded) phrases the pack's computed facts into a note the partner edits
 and owns — digest posture with NO route budget pre-check (kill switch,
 missing provider, exhausted budget, invalid output, quiet month all answer
 with the deterministic template, and a quiet month never calls the model);
+the **adoption & impact report** (`modules/clerk/adoption.ts`,
+`GET /console/clerk-adoption`, `console.portfolio.read`, console portfolio
+card, pure SQL) slices the firm's own cases per client — capture volume,
+kept-rate from the corrections exhaust, review turnaround (same expression
+as `metrics.avgDecisionMinutes`), attribution via the approved invoice's
+supplier party (the only deterministic join for every capture path;
+non-approved cases count in firm totals only) — the renewal-conversation
+numbers, zero model calls;
 the **rejection-pattern report** (`modules/desk/rejection-patterns.ts`,
 `GET /rejection-patterns`, `console.portfolio.read`, console portfolio card,
 pure SQL) aggregates the firm's own rejected submission attempts into
@@ -287,6 +295,14 @@ calls, nothing stored) mines per-buyer days-to-pay medians from the client's
 own ACCEPTED reconciliation matches (credit lines with a value date only —
 the human-confirmed exhaust, 3+ settlements required, negatives dropped):
 "usually pays ~Nd" chips on the receivables debtors and the invoice detail,
+the projection engine for the **cash-flow outlook + chase list**
+(`modules/invoice/cashflow.ts`, `GET /dashboard/cashflow` +
+`GET /dashboard/chase-list`, zero model calls, nothing stored) — one shared
+per-invoice projection (expected settlement = buyer rhythm > due date >
+default 30-day terms, same `OUTSTANDING` fragment as receivables.ts) rolled
+into week-bucketed expected inflows (already-late money in its own bucket,
+never future inflow) and a capped "worth chasing" list ranked by days beyond
+each buyer's OWN expectation, each row opening the invoice's chaser button —
 and the grounding for the **payment-chaser draft**
 (`modules/clerk/draft-chaser.ts`, `POST /clerk/draft-chaser`, `clerk.capture`
 + module-enforced tenant/SEC-03 like the explainer) — digest posture: the

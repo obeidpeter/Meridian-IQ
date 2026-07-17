@@ -11,6 +11,8 @@ import {
   useGetRejectionPatterns,
   useGetFirmComplianceCalendar,
   getGetFirmComplianceCalendarQueryKey,
+  useGetClerkAdoptionReport,
+  getGetClerkAdoptionReportQueryKey,
   useDraftVatPackCoverNote,
   type VatPackCoverNote,
 } from "@workspace/api-client-react";
@@ -47,6 +49,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   formatNaira,
   formatDate,
+  formatPct,
   riskBadgeClasses,
   riskLabel,
 } from "@/lib/format";
@@ -351,6 +354,79 @@ function ComplianceCalendarCard() {
           submission windows and VAT filing dates, computed live. No AI
           involved.
         </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Clerk adoption & impact (round-10 idea #3): per-client capture volume,
+// kept-rate and review turnaround — the "is Clerk working for us" numbers.
+// Renders only when clients have approved captures in the window.
+function ClerkAdoptionCard() {
+  const { data: report, isSuccess } = useGetClerkAdoptionReport({
+    query: { queryKey: getGetClerkAdoptionReportQueryKey(), retry: false },
+  });
+  if (!isSuccess || !report || report.clients.length === 0) return null;
+  return (
+    <Card
+      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid="card-clerk-adoption"
+    >
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Sparkles className="w-4 h-4 text-primary" aria-hidden="true" />
+          Clerk adoption &amp; impact
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Last {report.windowDays} days: {report.totals.extractionCases}{" "}
+          documents read, {report.totals.approvedCases} approved into invoices
+          ({formatPct(report.totals.approvedShare)});{" "}
+          {formatPct(report.totals.keptRate)} of extracted fields kept
+          unchanged. Computed from your own cases — no AI involved.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-clerk-adoption">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">Client</th>
+                <th className="py-2 pr-3 font-medium text-right">Approved</th>
+                <th className="py-2 pr-3 font-medium text-right">Kept</th>
+                <th className="py-2 pr-3 font-medium text-right">
+                  Review time
+                </th>
+                <th className="py-2 font-medium text-right">Last approved</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {report.clients.slice(0, 8).map((c) => (
+                <tr
+                  key={c.clientPartyId}
+                  data-testid={`row-adoption-${c.clientPartyId}`}
+                >
+                  <td className="py-2 pr-3 max-w-[16rem] truncate">
+                    {c.clientName}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {c.approvedCases}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {c.fieldsCompared === 0 ? "—" : formatPct(c.keptRate)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {c.avgReviewMinutes == null
+                      ? "—"
+                      : `${c.avgReviewMinutes}m`}
+                  </td>
+                  <td className="py-2 text-right text-xs text-muted-foreground">
+                    {formatDate(c.lastApprovedAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </CardContent>
     </Card>
   );
@@ -820,6 +896,8 @@ export function Portfolio() {
       <VatPackCard />
 
       <RejectionPatternsCard />
+
+      <ClerkAdoptionCard />
 
       <ReceivablesCard />
     </div>

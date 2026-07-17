@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.29.0
+ * OpenAPI spec version: 0.30.0
  */
 import * as zod from 'zod';
 
@@ -1937,6 +1937,60 @@ export const GetReceivablesSummaryResponse = zod.object({
 
 
 /**
+ * @summary Expected inflows by week, projected from each buyer's own payment rhythm (deterministic — nothing stored, no model)
+ */
+export const GetCashflowOutlookQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const GetCashflowOutlookResponse = zod.object({
+  "asOf": zod.string(),
+  "groups": zod.array(zod.object({
+  "currency": zod.string(),
+  "overdueExpected": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "weeks": zod.array(zod.object({
+  "startDate": zod.string(),
+  "amount": zod.string(),
+  "count": zod.number()
+})),
+  "later": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "total": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+})
+}))
+})
+
+
+/**
+ * @summary Outstanding receivables ranked by days beyond the buyer's OWN expected payment date (deterministic)
+ */
+export const GetChaseListQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const GetChaseListResponseItem = zod.object({
+  "invoiceId": zod.string(),
+  "invoiceNumber": zod.string(),
+  "buyerPartyId": zod.string(),
+  "buyerName": zod.string(),
+  "currency": zod.string(),
+  "grandTotal": zod.string(),
+  "dueDate": zod.string().nullable(),
+  "expectedDate": zod.string(),
+  "basis": zod.enum(['rhythm', 'dueDate', 'terms']),
+  "daysBeyondExpected": zod.number()
+})
+export const GetChaseListResponse = zod.array(GetChaseListResponseItem)
+
+
+/**
  * @summary Bulk validate (and optionally commit) invoices from a spreadsheet
  */
 export const ImportInvoicesBody = zod.object({
@@ -2185,6 +2239,30 @@ export const GetFirmReceivablesResponse = zod.object({
   "outstanding": zod.string(),
   "invoiceCount": zod.number(),
   "oldestDueDate": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Per-client Clerk adoption and impact from the firm's own cases (pure SQL)
+ */
+export const GetClerkAdoptionReportResponse = zod.object({
+  "windowDays": zod.number(),
+  "totals": zod.object({
+  "extractionCases": zod.number(),
+  "approvedCases": zod.number(),
+  "approvedShare": zod.number(),
+  "keptRate": zod.number()
+}),
+  "clients": zod.array(zod.object({
+  "clientPartyId": zod.string(),
+  "clientName": zod.string(),
+  "approvedCases": zod.number(),
+  "fieldsCompared": zod.number(),
+  "fieldsKept": zod.number(),
+  "keptRate": zod.number(),
+  "avgReviewMinutes": zod.number().nullable(),
+  "lastApprovedAt": zod.string()
 }))
 })
 

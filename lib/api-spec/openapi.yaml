@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.29.0
+  version: 0.30.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1565,6 +1565,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReceivablesSummary"
 
+  /dashboard/cashflow:
+    get:
+      operationId: getCashflowOutlook
+      tags: [sme]
+      summary: Expected inflows by week, projected from each buyer's own payment rhythm (deterministic — nothing stored, no model)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Week-bucketed expected settlements per currency, with already-late money in its own bucket
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashflowOutlook"
+
+  /dashboard/chase-list:
+    get:
+      operationId: getChaseList
+      tags: [sme]
+      summary: Outstanding receivables ranked by days beyond the buyer's OWN expected payment date (deterministic)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The invoices most worth chasing, most beyond expectation first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChaseRow"
+
   /invoices/import:
     post:
       operationId: importInvoices
@@ -1756,6 +1796,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FirmReceivables"
+  /console/clerk-adoption:
+    get:
+      operationId: getClerkAdoptionReport
+      tags: [console]
+      summary: Per-client Clerk adoption and impact from the firm's own cases (pure SQL)
+      responses:
+        "200":
+          description: Capture volume, kept-rate and review turnaround per client over the trailing window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkAdoptionReport"
   /console/portfolio:
     get:
       operationId: getPortfolio
@@ -5377,6 +5429,136 @@ components:
           type: string
         count:
           type: integer
+    CashflowBucket:
+      type: object
+      required: [amount, count]
+      properties:
+        amount:
+          type: string
+        count:
+          type: integer
+    CashflowOutlook:
+      type: object
+      required: [asOf, groups]
+      properties:
+        asOf:
+          type: string
+        groups:
+          type: array
+          items:
+            type: object
+            required: [currency, overdueExpected, weeks, later, total]
+            properties:
+              currency:
+                type: string
+              # Money already past its expected date — late, not future inflow.
+              overdueExpected:
+                $ref: "#/components/schemas/CashflowBucket"
+              # Consecutive 7-day buckets starting today.
+              weeks:
+                type: array
+                items:
+                  type: object
+                  required: [startDate, amount, count]
+                  properties:
+                    startDate:
+                      type: string
+                    amount:
+                      type: string
+                    count:
+                      type: integer
+              later:
+                $ref: "#/components/schemas/CashflowBucket"
+              total:
+                $ref: "#/components/schemas/CashflowBucket"
+    ChaseRow:
+      type: object
+      required:
+        [
+          invoiceId,
+          invoiceNumber,
+          buyerPartyId,
+          buyerName,
+          currency,
+          grandTotal,
+          dueDate,
+          expectedDate,
+          basis,
+          daysBeyondExpected,
+        ]
+      properties:
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        buyerPartyId:
+          type: string
+        buyerName:
+          type: string
+        currency:
+          type: string
+        grandTotal:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        # The buyer's own expected settlement date (rhythm > due date > terms).
+        expectedDate:
+          type: string
+        basis:
+          type: string
+          enum: [rhythm, dueDate, terms]
+        daysBeyondExpected:
+          type: integer
+    ClerkAdoptionReport:
+      type: object
+      required: [windowDays, totals, clients]
+      properties:
+        windowDays:
+          type: integer
+        totals:
+          type: object
+          required: [extractionCases, approvedCases, approvedShare, keptRate]
+          properties:
+            extractionCases:
+              type: integer
+            approvedCases:
+              type: integer
+            approvedShare:
+              type: number
+            keptRate:
+              type: number
+        clients:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                clientPartyId,
+                clientName,
+                approvedCases,
+                fieldsCompared,
+                fieldsKept,
+                keptRate,
+                avgReviewMinutes,
+                lastApprovedAt,
+              ]
+            properties:
+              clientPartyId:
+                type: string
+              clientName:
+                type: string
+              approvedCases:
+                type: integer
+              fieldsCompared:
+                type: integer
+              fieldsKept:
+                type: integer
+              keptRate:
+                type: number
+              avgReviewMinutes:
+                type: ["number", "null"]
+              lastApprovedAt:
+                type: string
     ReceivablesSummary:
       type: object
       required: [asOf, groups, topDebtors]

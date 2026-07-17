@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.29.0
+ * OpenAPI spec version: 0.30.0
  */
 import {
   useMutation,
@@ -48,12 +48,15 @@ import type {
   CacCheckInput,
   CancelInvoiceInput,
   CanonicalInvoice,
+  CashflowOutlook,
   CatalogueEntryDraft,
   ChangePasswordInput,
+  ChaseRow,
   ClaimDecisionInput,
   ClaimDraftInput,
   ClaimRecord,
   ClaimUpdateInput,
+  ClerkAdoptionReport,
   ClerkBatchView,
   ClerkCase,
   ClerkCaseCreateInput,
@@ -127,6 +130,8 @@ import type {
   ForbiddenResponse,
   GateMetrics,
   GenerateStatementsInput,
+  GetCashflowOutlookParams,
+  GetChaseListParams,
   GetClerkMetricsParams,
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
@@ -6584,6 +6589,174 @@ export function useGetReceivablesSummary<TData = Awaited<ReturnType<typeof getRe
 
 
 
+export const getGetCashflowOutlookUrl = (params: GetCashflowOutlookParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/cashflow?${stringifiedParams}` : `/api/dashboard/cashflow`
+}
+
+/**
+ * @summary Expected inflows by week, projected from each buyer's own payment rhythm (deterministic — nothing stored, no model)
+ */
+export const getCashflowOutlook = async (params: GetCashflowOutlookParams, options?: RequestInit): Promise<CashflowOutlook> => {
+
+  return customFetch<CashflowOutlook>(getGetCashflowOutlookUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCashflowOutlookQueryKey = (params?: GetCashflowOutlookParams,) => {
+    return [
+    `/api/dashboard/cashflow`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCashflowOutlookQueryOptions = <TData = Awaited<ReturnType<typeof getCashflowOutlook>>, TError = ErrorType<unknown>>(params: GetCashflowOutlookParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCashflowOutlook>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCashflowOutlookQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCashflowOutlook>>> = ({ signal }) => getCashflowOutlook(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCashflowOutlook>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCashflowOutlookQueryResult = NonNullable<Awaited<ReturnType<typeof getCashflowOutlook>>>
+export type GetCashflowOutlookQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Expected inflows by week, projected from each buyer's own payment rhythm (deterministic — nothing stored, no model)
+ */
+
+export function useGetCashflowOutlook<TData = Awaited<ReturnType<typeof getCashflowOutlook>>, TError = ErrorType<unknown>>(
+ params: GetCashflowOutlookParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCashflowOutlook>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCashflowOutlookQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetChaseListUrl = (params: GetChaseListParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/chase-list?${stringifiedParams}` : `/api/dashboard/chase-list`
+}
+
+/**
+ * @summary Outstanding receivables ranked by days beyond the buyer's OWN expected payment date (deterministic)
+ */
+export const getChaseList = async (params: GetChaseListParams, options?: RequestInit): Promise<ChaseRow[]> => {
+
+  return customFetch<ChaseRow[]>(getGetChaseListUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetChaseListQueryKey = (params?: GetChaseListParams,) => {
+    return [
+    `/api/dashboard/chase-list`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetChaseListQueryOptions = <TData = Awaited<ReturnType<typeof getChaseList>>, TError = ErrorType<unknown>>(params: GetChaseListParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChaseList>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetChaseListQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getChaseList>>> = ({ signal }) => getChaseList(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getChaseList>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetChaseListQueryResult = NonNullable<Awaited<ReturnType<typeof getChaseList>>>
+export type GetChaseListQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Outstanding receivables ranked by days beyond the buyer's OWN expected payment date (deterministic)
+ */
+
+export function useGetChaseList<TData = Awaited<ReturnType<typeof getChaseList>>, TError = ErrorType<unknown>>(
+ params: GetChaseListParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChaseList>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetChaseListQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getImportInvoicesUrl = () => {
 
 
@@ -7368,6 +7541,83 @@ export function useGetFirmReceivables<TData = Awaited<ReturnType<typeof getFirmR
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetFirmReceivablesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetClerkAdoptionReportUrl = () => {
+
+
+
+
+  return `/api/console/clerk-adoption`
+}
+
+/**
+ * @summary Per-client Clerk adoption and impact from the firm's own cases (pure SQL)
+ */
+export const getClerkAdoptionReport = async ( options?: RequestInit): Promise<ClerkAdoptionReport> => {
+
+  return customFetch<ClerkAdoptionReport>(getGetClerkAdoptionReportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkAdoptionReportQueryKey = () => {
+    return [
+    `/api/console/clerk-adoption`
+    ] as const;
+    }
+
+
+export const getGetClerkAdoptionReportQueryOptions = <TData = Awaited<ReturnType<typeof getClerkAdoptionReport>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkAdoptionReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkAdoptionReportQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkAdoptionReport>>> = ({ signal }) => getClerkAdoptionReport({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkAdoptionReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkAdoptionReportQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkAdoptionReport>>>
+export type GetClerkAdoptionReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-client Clerk adoption and impact from the firm's own cases (pure SQL)
+ */
+
+export function useGetClerkAdoptionReport<TData = Awaited<ReturnType<typeof getClerkAdoptionReport>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkAdoptionReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkAdoptionReportQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
