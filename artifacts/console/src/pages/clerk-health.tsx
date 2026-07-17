@@ -5,9 +5,11 @@ import {
   useListClerkEvalRuns,
   useGetExtractionPrompt,
   useRunPromptCanary,
+  useGetClerkTierReport,
   getGetClerkMetricsQueryKey,
   getListClerkEvalRunsQueryKey,
   getGetExtractionPromptQueryKey,
+  getGetClerkTierReportQueryKey,
 } from "@workspace/api-client-react";
 import type {
   ClerkMetricsCases,
@@ -316,6 +318,16 @@ export function HealthPanel() {
     refetch,
   } = useGetClerkMetrics(params, {
     query: { queryKey: getGetClerkMetricsQueryKey(params) },
+  });
+
+  // Tier-suggestion report (round-9 idea #3): pure ledger SQL, so it loads
+  // eagerly like the metrics — no model call, no cost to a page view.
+  const { data: tierReport } = useGetClerkTierReport({
+    query: {
+      queryKey: getGetClerkTierReportQueryKey(),
+      staleTime: 5 * 60_000,
+      retry: false,
+    },
   });
 
   // Evaluation runs: the synthetic fixture corpus scored against the live
@@ -1070,6 +1082,76 @@ export function HealthPanel() {
               UTC month boundary the per-firm budgets use; cost estimates need
               CLERK_COST_PER_1M_INPUT_USD / _OUTPUT_USD set.
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {tierReport && tierReport.rows.length > 0 && (
+        <Card data-testid="section-tier-report">
+          <CardHeader>
+            <CardTitle className="text-base">Model-tier evidence</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Trailing {tierReport.windowDays} days from the inference ledger,
+              joined with the tier map in force (base model{" "}
+              <span className="font-mono">{tierReport.baseModel}</span>).
+              Recommendations are deterministic; act on them via
+              CLERK_MODEL_TIERS and validate with a prompt canary first.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="table-tier-report">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Purpose</th>
+                    <th className="py-2 pr-3 font-medium text-right">Calls</th>
+                    <th className="py-2 pr-3 font-medium text-right">Tokens</th>
+                    <th className="py-2 pr-3 font-medium text-right">Share</th>
+                    <th className="py-2 pr-3 font-medium text-right">Valid</th>
+                    <th className="py-2 pr-3 font-medium">Model</th>
+                    <th className="py-2 font-medium">Recommendation</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {tierReport.rows.map((r) => (
+                    <tr key={r.purpose}>
+                      <td className="py-2 pr-3 font-mono text-xs">{r.purpose}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {r.calls}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {r.totalTokens.toLocaleString()}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {formatPct(r.spendShare)}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {formatPct(r.validRate)}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-xs">
+                        {r.currentModel}
+                        {r.tiered ? " (tier)" : ""}
+                      </td>
+                      <td className="py-2" title={r.reason}>
+                        <span
+                          className={pillClasses(
+                            r.recommendation === "candidate"
+                              ? "emerald"
+                              : r.recommendation === "tiered"
+                                ? "blue"
+                                : r.recommendation === "revert"
+                                  ? "red"
+                                  : "slate",
+                          )}
+                        >
+                          {r.recommendation.replace("_", " ")}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
       )}

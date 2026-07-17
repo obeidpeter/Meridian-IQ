@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.28.0
+ * OpenAPI spec version: 0.29.0
  */
 import {
   useMutation,
@@ -43,6 +43,7 @@ import type {
   BulkSubmitResult,
   BuyerExposure,
   BuyerInvoice,
+  BuyerPaymentBehaviour,
   BuyerSupplier,
   CacCheckInput,
   CancelInvoiceInput,
@@ -62,6 +63,7 @@ import type {
   ClerkEvalRun,
   ClerkMetrics,
   ClerkPartySuggestions,
+  ClerkTierReport,
   ClerkUsage,
   ClientImportDraft,
   ClientImportInput,
@@ -90,6 +92,7 @@ import type {
   DraftClaimWithClerkInput,
   DraftClientImportInput,
   DraftInvoiceWithClerkInput,
+  DraftPaymentChaserInput,
   DraftStatementFormatInput,
   DraftVatCoverNoteInput,
   Engagement,
@@ -154,6 +157,7 @@ import type {
   ListLineItemSuggestionsParams,
   ListOperatorCasesParams,
   ListPartiesParams,
+  ListPaymentBehaviourParams,
   ListRecurringSuggestionsParams,
   ListStatementsParams,
   ListUnbilledIncomeParams,
@@ -177,6 +181,7 @@ import type {
   PartyMergeInput,
   PartyUpdateInput,
   PasswordResetWithToken,
+  PaymentChaserDraft,
   PaymentFlagInput,
   PortfolioSummary,
   PriceReview,
@@ -3024,6 +3029,90 @@ export function useListLineItemSuggestions<TData = Awaited<ReturnType<typeof lis
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListLineItemSuggestionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListPaymentBehaviourUrl = (params?: ListPaymentBehaviourParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/payment-behaviour?${stringifiedParams}` : `/api/payment-behaviour`
+}
+
+/**
+ * @summary Per-buyer days-to-pay medians mined from the client's own accepted reconciliation matches (deterministic — nothing stored, no model)
+ */
+export const listPaymentBehaviour = async (params?: ListPaymentBehaviourParams, options?: RequestInit): Promise<BuyerPaymentBehaviour[]> => {
+
+  return customFetch<BuyerPaymentBehaviour[]>(getListPaymentBehaviourUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPaymentBehaviourQueryKey = (params?: ListPaymentBehaviourParams,) => {
+    return [
+    `/api/payment-behaviour`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListPaymentBehaviourQueryOptions = <TData = Awaited<ReturnType<typeof listPaymentBehaviour>>, TError = ErrorType<BadRequestResponse>>(params?: ListPaymentBehaviourParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPaymentBehaviour>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPaymentBehaviourQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPaymentBehaviour>>> = ({ signal }) => listPaymentBehaviour(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPaymentBehaviour>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPaymentBehaviourQueryResult = NonNullable<Awaited<ReturnType<typeof listPaymentBehaviour>>>
+export type ListPaymentBehaviourQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Per-buyer days-to-pay medians mined from the client's own accepted reconciliation matches (deterministic — nothing stored, no model)
+ */
+
+export function useListPaymentBehaviour<TData = Awaited<ReturnType<typeof listPaymentBehaviour>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ListPaymentBehaviourParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPaymentBehaviour>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPaymentBehaviourQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -12843,6 +12932,153 @@ export const useExplainInvoiceFailure = <TError = ErrorType<NotFoundResponse>,
       > => {
       return useMutation(getExplainInvoiceFailureMutationOptions(options));
     }
+
+export const getDraftPaymentChaserUrl = () => {
+
+
+
+
+  return `/api/clerk/draft-chaser`
+}
+
+/**
+ * @summary A payment-reminder draft for one outstanding receivable, grounded in stored facts (template fallback, nothing stored)
+ */
+export const draftPaymentChaser = async (draftPaymentChaserInput: DraftPaymentChaserInput, options?: RequestInit): Promise<PaymentChaserDraft> => {
+
+  return customFetch<PaymentChaserDraft>(getDraftPaymentChaserUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftPaymentChaserInput)
+  }
+);}
+
+
+
+
+export const getDraftPaymentChaserMutationOptions = <TError = ErrorType<NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftPaymentChaser>>, TError,{data: BodyType<DraftPaymentChaserInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftPaymentChaser>>, TError,{data: BodyType<DraftPaymentChaserInput>}, TContext> => {
+
+const mutationKey = ['draftPaymentChaser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftPaymentChaser>>, {data: BodyType<DraftPaymentChaserInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftPaymentChaser(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftPaymentChaserMutationResult = NonNullable<Awaited<ReturnType<typeof draftPaymentChaser>>>
+    export type DraftPaymentChaserMutationBody = BodyType<DraftPaymentChaserInput>
+    export type DraftPaymentChaserMutationError = ErrorType<NotFoundResponse | void>
+
+    /**
+ * @summary A payment-reminder draft for one outstanding receivable, grounded in stored facts (template fallback, nothing stored)
+ */
+export const useDraftPaymentChaser = <TError = ErrorType<NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftPaymentChaser>>, TError,{data: BodyType<DraftPaymentChaserInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftPaymentChaser>>,
+        TError,
+        {data: BodyType<DraftPaymentChaserInput>},
+        TContext
+      > => {
+      return useMutation(getDraftPaymentChaserMutationOptions(options));
+    }
+
+export const getGetClerkTierReportUrl = () => {
+
+
+
+
+  return `/api/clerk/tier-report`
+}
+
+/**
+ * @summary Per-purpose model-tier evidence and deterministic recommendations from the inference ledger (pure SQL)
+ */
+export const getClerkTierReport = async ( options?: RequestInit): Promise<ClerkTierReport> => {
+
+  return customFetch<ClerkTierReport>(getGetClerkTierReportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkTierReportQueryKey = () => {
+    return [
+    `/api/clerk/tier-report`
+    ] as const;
+    }
+
+
+export const getGetClerkTierReportQueryOptions = <TData = Awaited<ReturnType<typeof getClerkTierReport>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkTierReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkTierReportQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkTierReport>>> = ({ signal }) => getClerkTierReport({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkTierReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkTierReportQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkTierReport>>>
+export type GetClerkTierReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-purpose model-tier evidence and deterministic recommendations from the inference ledger (pure SQL)
+ */
+
+export function useGetClerkTierReport<TData = Awaited<ReturnType<typeof getClerkTierReport>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkTierReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkTierReportQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getAssistMatchProposalsUrl = () => {
 

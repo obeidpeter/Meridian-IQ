@@ -10,6 +10,8 @@ import {
   getGetReceivablesSummaryQueryKey,
   useListUnbilledIncome,
   getListUnbilledIncomeQueryKey,
+  useListPaymentBehaviour,
+  getListPaymentBehaviourQueryKey,
 } from "@workspace/api-client-react";
 import type { ReceivablesBucket, ReceivablesSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -130,6 +132,26 @@ function ReceivablesCard({
 }) {
   const primary = summary?.groups[0];
 
+  // Buyer payment rhythm (round-9 idea #1): per-buyer days-to-pay medians
+  // mined server-side from this client's own accepted reconciliation
+  // matches. Informational chip only — the per-invoice "beyond their usual"
+  // judgement lives on the invoice detail, where both sides of the
+  // comparison share the same anchor date.
+  const { data: behaviour } = useListPaymentBehaviour(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId && !!summary?.topDebtors.length,
+        queryKey: getListPaymentBehaviourQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  const rhythmByBuyer = new Map(
+    (behaviour ?? []).map((b) => [b.buyerPartyId, b.medianDaysToPay]),
+  );
+
   // CSV of the per-invoice rows behind this aging summary, as a plain browser
   // navigation (no query hook): the endpoint answers with a Content-Disposition
   // attachment and auth rides the session cookie.
@@ -223,7 +245,17 @@ function ReceivablesCard({
                       key={debtor.buyerPartyId}
                       className="flex items-center justify-between gap-3 text-sm"
                     >
-                      <span className="min-w-0 truncate">{debtor.buyerName}</span>
+                      <span className="min-w-0 truncate">
+                        {debtor.buyerName}
+                        {rhythmByBuyer.has(debtor.buyerPartyId) && (
+                          <span
+                            className="ml-1.5 text-xs text-muted-foreground"
+                            data-testid={`rhythm-${debtor.buyerPartyId}`}
+                          >
+                            usually pays ~{rhythmByBuyer.get(debtor.buyerPartyId)}d
+                          </span>
+                        )}
+                      </span>
                       <span className="shrink-0 font-medium tabular-nums">
                         {formatNaira(debtor.outstanding)}
                         <span className="text-xs text-muted-foreground font-normal">

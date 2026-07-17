@@ -11,6 +11,9 @@ import {
   useSubmitInvoice,
   useUpdateInvoice,
   useExplainInvoiceFailure,
+  useDraftPaymentChaser,
+  useListPaymentBehaviour,
+  getListPaymentBehaviourQueryKey,
   useEscalateInvoice,
   useCancelInvoice,
   useCreditNoteInvoice,
@@ -491,6 +494,122 @@ function EscalationsCard({ escalations }: { escalations: Escalation[] }) {
             )}
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Payment-chaser draft (round-9 idea #2): a "chase this" button on an
+// outstanding receivable. The letter is drafted server-side from stored
+// facts (digest posture — template always answers) and NEVER sent by the
+// platform: the client copies it into their own email. The buyer's mined
+// payment rhythm renders alongside so the client knows whether this buyer is
+// late for THEM before chasing at all.
+function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
+  const [copied, setCopied] = useState(false);
+  const draft = useDraftPaymentChaser();
+  const { data: behaviour } = useListPaymentBehaviour(
+    { clientPartyId: invoice.supplierPartyId },
+    {
+      query: {
+        queryKey: getListPaymentBehaviourQueryKey({
+          clientPartyId: invoice.supplierPartyId,
+        }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  const buyerBehaviour = behaviour?.find(
+    (b) => b.buyerPartyId === invoice.buyerPartyId,
+  );
+
+  const copyDraft = async () => {
+    if (!draft.data) return;
+    try {
+      await navigator.clipboard.writeText(
+        `${draft.data.subject}\n\n${draft.data.body}`,
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard denied: the text stays on screen to copy by hand.
+    }
+  };
+
+  return (
+    <Card data-testid="payment-reminder">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Send className="w-4 h-4" aria-hidden="true" /> Awaiting payment
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {buyerBehaviour && (
+          <p className="text-muted-foreground" data-testid="payment-rhythm">
+            {buyerBehaviour.buyerName} usually pays in about{" "}
+            {buyerBehaviour.medianDaysToPay} day(s) (from{" "}
+            {buyerBehaviour.settledCount} matched payments).
+          </p>
+        )}
+        {draft.data ? (
+          <div className="rounded-lg border bg-background p-3 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-medium">{draft.data.subject}</p>
+              <span
+                className={pillClasses(
+                  draft.data.source === "clerk" ? "blue" : "slate",
+                )}
+              >
+                {draft.data.source === "clerk" ? "Clerk-phrased" : "Template"}
+              </span>
+            </div>
+            <p className="whitespace-pre-wrap text-muted-foreground">
+              {draft.data.body}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyDraft}
+                data-testid="button-copy-chaser"
+              >
+                {copied ? "Copied" : "Copy to clipboard"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => draft.mutate({ data: { invoiceId: invoice.id } })}
+                disabled={draft.isPending}
+              >
+                {draft.isPending ? "Redrafting…" : "Redraft"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Review before sending — you send this from your own email;
+              nothing is sent for you.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => draft.mutate({ data: { invoiceId: invoice.id } })}
+              disabled={draft.isPending}
+              data-testid="button-draft-chaser"
+            >
+              <Sparkles className="w-4 h-4 mr-2" aria-hidden="true" />
+              {draft.isPending ? "Drafting…" : "Draft a payment reminder"}
+            </Button>
+            {draft.isError && (
+              <p className="text-xs text-muted-foreground">
+                Couldn&apos;t draft a reminder just now — try again in a
+                moment.
+              </p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1073,6 +1192,15 @@ export function InvoiceDetail() {
           </CardContent>
         </Card>
       )}
+
+      {/* Chase-payment card: the receivables definition exactly — issued to
+          the buyer, payment not yet observed. Same capability as the other
+          Clerk phrasings on this page. */}
+      {canClerkExplain &&
+        invoice.kind === "invoice" &&
+        ["submitted", "stamped", "confirmed"].includes(invoice.status) && (
+          <PaymentReminderCard invoice={invoice} />
+        )}
 
       {tone === "failed" && (
         <Card className="border-destructive/30 bg-destructive/5">
