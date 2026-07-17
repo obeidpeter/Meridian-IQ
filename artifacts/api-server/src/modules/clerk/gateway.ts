@@ -263,6 +263,15 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
           if (completed.model) base.model = completed.model;
         }
       } catch (err) {
+        // A tiered provider attaches the model it routed to before throwing,
+        // so a broken tier's failures cohort under ITS model, not the default.
+        if (
+          err &&
+          typeof err === "object" &&
+          typeof (err as { clerkModel?: unknown }).clerkModel === "string"
+        ) {
+          base.model = (err as { clerkModel: string }).clerkModel;
+        }
         const message = err instanceof Error ? err.message : String(err);
         await ledger({
           outputJson: null,

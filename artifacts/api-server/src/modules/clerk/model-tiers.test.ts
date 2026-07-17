@@ -81,6 +81,39 @@ test("the ledger records the model that actually served a tiered call", async ()
   assert.equal(row.model, `mini-${SALT}`, "per-call model, not the default");
 });
 
+test("a provider throw still ledgers the tiered model, not the default", async () => {
+  const promptVersion = `tiers-err-${SALT}`;
+  const gateway = fakeGateway(() => {
+    // The production provider attaches the routed model before rethrowing;
+    // the gateway must carry it onto the ERROR ledger row.
+    const err = new Error("upstream unavailable");
+    (err as unknown as { clerkModel: string }).clerkModel = `mini-err-${SALT}`;
+    throw err;
+  });
+  const result = await gateway.infer<{ ok: boolean }>({
+    purpose: "classify_intent",
+    promptVersion,
+    system: "test",
+    user: "test",
+    schemaName: "t",
+    jsonSchema: { type: "object" },
+    validator: z.object({ ok: z.boolean() }),
+    inputForHash: `tiers-err-${SALT}`,
+  });
+  assert.equal(result.ok, false);
+  const [row] = await getDb()
+    .select({
+      model: clerkInferenceCallsTable.model,
+      outcome: clerkInferenceCallsTable.outcome,
+    })
+    .from(clerkInferenceCallsTable)
+    .where(eq(clerkInferenceCallsTable.promptVersion, promptVersion))
+    .orderBy(desc(clerkInferenceCallsTable.createdAt))
+    .limit(1);
+  assert.equal(row.outcome, "error");
+  assert.equal(row.model, `mini-err-${SALT}`, "failure cohorts under its tier");
+});
+
 test("platform spend sums the ledger with the funded split and a sane pace", async () => {
   const metrics = await getClerkMetrics(30);
   const spend = metrics.platformSpend;
