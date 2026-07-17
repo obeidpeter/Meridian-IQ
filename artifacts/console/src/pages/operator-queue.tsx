@@ -453,6 +453,14 @@ export function OperatorQueue() {
         <Card data-testid="operator-brief">
           <CardContent className="pt-6 space-y-1.5 text-sm">
             <p className="font-semibold">This morning</p>
+            {brief.openCases.oldestTitle && (
+              <p className="text-muted-foreground" data-testid="brief-oldest-case">
+                {brief.openCases.byPriority
+                  .map((p) => `${p.count} ${p.priority}`)
+                  .join(" · ")}{" "}
+                open — longest waiting: “{brief.openCases.oldestTitle.slice(0, 80)}”.
+              </p>
+            )}
             <p className="text-muted-foreground">
               {brief.unansweredEscalations.count > 0
                 ? `${brief.unansweredEscalations.count} client escalation(s) await a reply — oldest: “${(brief.unansweredEscalations.oldestReason ?? "").slice(0, 80)}”.`

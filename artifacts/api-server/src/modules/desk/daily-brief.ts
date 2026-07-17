@@ -6,6 +6,7 @@ import {
   detectResistanceDrop,
   injectionResistanceMonths,
 } from "../clerk/resistance-watch";
+import { UNMAPPED_TITLE_PREFIX } from "./sweeps";
 
 // Operator daily brief (round-12 idea #1). The firm side has the weekly
 // digest; the desk starts its day with tab-hopping. One deterministic
@@ -59,6 +60,8 @@ export async function computeOperatorBrief(
     `)
   ).rows[0];
 
+  // One pass: the count plus the oldest ROW (id tiebreaker so reason and
+  // timestamp can never come from two different created_at-tied rows).
   const escalationRows = (
     await db.execute<{
       count: number;
@@ -66,12 +69,8 @@ export async function computeOperatorBrief(
       oldest_at: string | null;
     }>(sql`
       SELECT COUNT(*)::int AS count,
-        (SELECT reason FROM escalations
-          WHERE operator_reply IS NULL AND status IN ('open', 'acknowledged')
-          ORDER BY created_at ASC LIMIT 1) AS oldest_reason,
-        (SELECT created_at::text FROM escalations
-          WHERE operator_reply IS NULL AND status IN ('open', 'acknowledged')
-          ORDER BY created_at ASC LIMIT 1) AS oldest_at
+        (array_agg(reason ORDER BY created_at ASC, id ASC))[1] AS oldest_reason,
+        (array_agg(created_at ORDER BY created_at ASC, id ASC))[1]::text AS oldest_at
       FROM escalations
       WHERE operator_reply IS NULL AND status IN ('open', 'acknowledged')
     `)
@@ -90,12 +89,13 @@ export async function computeOperatorBrief(
       SELECT COUNT(*)::int AS count
       FROM operator_cases
       WHERE status IN ('open', 'in_progress')
-        AND title LIKE 'Unmapped code %'
+        AND title LIKE ${`${UNMAPPED_TITLE_PREFIX}%`}
     `)
   ).rows;
 
   // Yesterday on the Lagos calendar — the desk's statutory day, like every
-  // other "today" on the platform.
+  // other "today" on the platform. `now` feeds the SQL (not just asOf) so
+  // the boundary is pinnable in tests.
   const decidedRows = (
     await db.execute<{ count: number }>(sql`
       SELECT COUNT(*)::int AS count
@@ -103,7 +103,7 @@ export async function computeOperatorBrief(
       WHERE kind = 'extraction'
         AND decided_by IS NOT NULL
         AND (updated_at AT TIME ZONE 'Africa/Lagos')::date
-          = (now() AT TIME ZONE 'Africa/Lagos')::date - 1
+          = (${now.toISOString()}::timestamptz AT TIME ZONE 'Africa/Lagos')::date - 1
     `)
   ).rows;
 

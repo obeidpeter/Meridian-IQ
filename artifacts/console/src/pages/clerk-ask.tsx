@@ -88,7 +88,16 @@ export function ClerkAskPage() {
                 ...(previousCaseId ? { previousCaseId } : {}),
               },
             },
-            { onSuccess: (row) => setPreviousCaseId(row.id) },
+            {
+              // Only a DATA answer carries scope worth threading — keeping
+              // the last data-answered id preserves the thread across a
+              // refusal or register-claim answer in between.
+              onSuccess: (row) => {
+                if (row.answer?.answered && row.answer?.dataIntent) {
+                  setPreviousCaseId(row.id);
+                }
+              },
+            },
           )
         }
         isPending={ask.isPending}

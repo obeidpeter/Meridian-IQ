@@ -26,9 +26,14 @@ const partyId = randomUUID();
 const invoiceId = randomUUID();
 const userId = randomUUID();
 
+// One pinned clock for seed AND query: the brief takes `now` into its SQL,
+// so a suite that straddles Lagos midnight between before() and the test
+// body still agrees with itself about which day is "yesterday".
+const NOW = new Date();
+
 function lagosYesterdayNoonUtc(): Date {
   // 11:00 UTC = 12:00 Lagos, safely inside the previous Lagos day.
-  const d = new Date(Date.now() + 60 * 60 * 1000);
+  const d = new Date(NOW.getTime() + 60 * 60 * 1000);
   d.setUTCDate(d.getUTCDate() - 1);
   d.setUTCHours(11, 0, 0, 0);
   return d;
@@ -99,7 +104,7 @@ before(async () => {
 });
 
 test("the brief counts the seeded work as lower bounds with named oldest items", async () => {
-  const brief = await computeOperatorBrief();
+  const brief = await computeOperatorBrief(NOW);
   const totalOpen = brief.openCases.byPriority.reduce(
     (s, p) => s + p.count,
     0,

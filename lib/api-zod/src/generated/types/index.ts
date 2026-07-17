@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.32.0
+ * OpenAPI spec version: 0.33.0
  */
 
 export * from './acceptInvitationInput';
@@ -61,6 +61,10 @@ export * from './cashflowBucket';
 export * from './cashflowOutlook';
 export * from './cashflowOutlookGroupsItem';
 export * from './cashflowOutlookGroupsItemWeeksItem';
+export * from './catalogueCoverageReport';
+export * from './catalogueCoverageReportOpenUnmappedItem';
+export * from './catalogueCoverageReportRecentMappingsItem';
+export * from './catalogueCoverageReportSla';
 export * from './catalogueEntryDraft';
 export * from './changePasswordInput';
 export * from './chaseRow';
@@ -185,6 +189,7 @@ export * from './draftClaimWithClerkInput';
 export * from './draftClientImportInput';
 export * from './draftInvoiceWithClerkInput';
 export * from './draftPaymentChaserInput';
+export * from './draftQuarterlyNoteInput';
 export * from './draftStatementFormatInput';
 export * from './draftVatCoverNoteInput';
 export * from './engagement';
@@ -253,8 +258,10 @@ export * from './getComplianceCalendarParams';
 export * from './getDashboardSummaryParams';
 export * from './getMergeImpactParams';
 export * from './getPublicThemeParams';
+export * from './getQuarterlyReviewParams';
 export * from './getReceivablesSummaryParams';
 export * from './getVatPackParams';
+export * from './getVatSettlementCheckParams';
 export * from './graphEdge';
 export * from './graphNode';
 export * from './graphNodeKind';
@@ -377,6 +384,16 @@ export * from './pushDeviceInput';
 export * from './pushDeviceInputPlatform';
 export * from './pushDevicePlatform';
 export * from './pushDeviceUnregisterInput';
+export * from './quarterlyReview';
+export * from './quarterlyReviewClerk';
+export * from './quarterlyReviewCoverNote';
+export * from './quarterlyReviewCoverNoteSource';
+export * from './quarterlyReviewMonthsItem';
+export * from './quarterlyReviewReceivables';
+export * from './quarterlyReviewReceivablesGroupsItem';
+export * from './quarterlyReviewSubmissions';
+export * from './quarterlyReviewTopRejectionsItem';
+export * from './quarterlyReviewVatTotals';
 export * from './questionnaireQuestion';
 export * from './questionnaireSection';
 export * from './questionnaireTemplate';
@@ -452,3 +469,5 @@ export * from './vatRiskLedgerRow';
 export * from './vatRiskReport';
 export * from './vatRiskRowResult';
 export * from './vatRiskRowResultStatus';
+export * from './vatSettlementCheck';
+export * from './vatSettlementCheckUnsettledItem';

@@ -5,9 +5,13 @@ import { getDb } from "@workspace/db";
 // ask an operator to merge two parties; this shows deterministically what
 // each side CARRIES before the irreversible-feeling click — invoices in both
 // roles, engagements, client-user memberships, recurring templates, learned
-// aliases, bank statements and escalations. Counts only, one SQL pass per
-// side, zero model calls, nothing stored. Same gate as the merge itself
-// (party.merge): whoever may merge may preview.
+// aliases, bank statements, escalations, consent grants (the CORE-03 spine)
+// and operator cases. Counts only, one SQL pass per side, zero model calls,
+// nothing stored. Same gate as the merge itself (party.merge): whoever may
+// merge may preview. mergeParties only flags mergedIntoId — nothing is
+// re-pointed — so a duplicate that carries the live consent grant or an open
+// desk case is exactly what this preview must surface before the operator
+// picks the other side as survivor.
 
 export interface PartyMergeSide {
   partyId: string;
@@ -22,6 +26,8 @@ export interface PartyMergeSide {
   aliases: number;
   bankStatements: number;
   escalations: number;
+  consents: number;
+  operatorCases: number;
 }
 
 export interface MergeImpact {
@@ -43,6 +49,8 @@ async function sideImpact(partyId: string): Promise<PartyMergeSide | null> {
       aliases: number;
       statements: number;
       escalations: number;
+      consents: number;
+      operator_cases: number;
     }>(sql`
       SELECT
         p.legal_name,
@@ -56,7 +64,9 @@ async function sideImpact(partyId: string): Promise<PartyMergeSide | null> {
           WHERE t.supplier_party_id = ${partyId} OR t.buyer_party_id = ${partyId})::int AS templates,
         (SELECT COUNT(*) FROM party_name_aliases a WHERE a.party_id = ${partyId})::int AS aliases,
         (SELECT COUNT(*) FROM bank_statements b WHERE b.client_party_id = ${partyId})::int AS statements,
-        (SELECT COUNT(*) FROM escalations x WHERE x.client_party_id = ${partyId})::int AS escalations
+        (SELECT COUNT(*) FROM escalations x WHERE x.client_party_id = ${partyId})::int AS escalations,
+        (SELECT COUNT(*) FROM consent_records c WHERE c.party_id = ${partyId})::int AS consents,
+        (SELECT COUNT(*) FROM operator_cases oc WHERE oc.client_party_id = ${partyId})::int AS operator_cases
       FROM parties p
       WHERE p.id = ${partyId}
     `)
@@ -76,6 +86,8 @@ async function sideImpact(partyId: string): Promise<PartyMergeSide | null> {
     aliases: Number(r.aliases),
     bankStatements: Number(r.statements),
     escalations: Number(r.escalations),
+    consents: Number(r.consents),
+    operatorCases: Number(r.operator_cases),
   };
 }
 

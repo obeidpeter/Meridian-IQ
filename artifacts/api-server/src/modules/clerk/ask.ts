@@ -201,10 +201,16 @@ export async function askClerk(
     if (prevIntent && keys.includes(prevIntent)) {
       // The stored dataParams carry the resolved display LABELS (month label,
       // client legal name) — map them back to THIS request's option keys; a
-      // label no longer in the offered lists contributes nothing.
+      // label no longer in the offered lists contributes nothing. Stored
+      // month labels are stripped of the " (current month)" suffix at answer
+      // time, so strip the offered labels the same way before comparing —
+      // otherwise a same-month follow-up silently loses its month scope.
       const prevParams = prev?.answer?.dataParams;
       const prevMonthKey = prevParams?.month
-        ? (months.find((m) => m.label === prevParams.month)?.key ?? null)
+        ? (months.find(
+            (m) =>
+              m.label.replace(" (current month)", "") === prevParams.month,
+          )?.key ?? null)
         : null;
       const prevClientKey = prevParams?.client
         ? (clientOptions.find((c) => c.name === prevParams.client)?.key ??

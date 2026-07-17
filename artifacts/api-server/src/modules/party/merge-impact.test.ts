@@ -11,6 +11,8 @@ import {
   engagementsTable,
   partyNameAliasesTable,
   recurringInvoiceTemplatesTable,
+  consentRecordsTable,
+  operatorCasesTable,
 } from "@workspace/db";
 import { computeMergeImpact } from "./merge-impact.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
@@ -81,6 +83,23 @@ before(async () => {
       alias: `MI-ALIAS-${SALT.toUpperCase()}`,
     }),
   );
+  // The consent spine and desk cases resolve through the party id too —
+  // the review of round 12 flagged them as the operationally material counts.
+  await db.insert(consentRecordsTable).values({
+    partyId: heavyId,
+    layer: 1,
+    action: "grant",
+    scope: "alerts",
+    basis: `mi-basis-${SALT}`,
+    channel: "email",
+  });
+  await db.insert(operatorCasesTable).values({
+    firmId,
+    clientPartyId: heavyId,
+    title: `MI desk case ${SALT}`,
+    priority: "medium",
+    status: "open",
+  });
 });
 
 test("each side reports exactly what it carries; a missing party is null", async () => {
@@ -94,11 +113,15 @@ test("each side reports exactly what it carries; a missing party is null", async
   assert.equal(impact.survivor.engagements, 1);
   assert.equal(impact.survivor.recurringTemplates, 1);
   assert.equal(impact.survivor.aliases, 1);
+  assert.equal(impact.survivor.consents, 1);
+  assert.equal(impact.survivor.operatorCases, 1);
   assert.equal(impact.survivor.merged, false);
 
   assert.equal(impact.duplicate.legalName, `MI Light ${SALT}`);
   assert.equal(impact.duplicate.invoicesAsSupplier, 0);
   assert.equal(impact.duplicate.engagements, 0);
+  assert.equal(impact.duplicate.consents, 0);
+  assert.equal(impact.duplicate.operatorCases, 0);
 
   // The buyer side of the same invoices counts under the buyer party.
   const buyerImpact = await runInBypassContext(() =>

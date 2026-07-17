@@ -153,6 +153,8 @@ function PartyCarryCounts({ partyId }: { partyId: string }) {
     `${side.aliases} aliases`,
     `${side.bankStatements} statements`,
     `${side.escalations} escalations`,
+    `${side.consents} consents`,
+    `${side.operatorCases} desk cases`,
   ];
   return (
     <span

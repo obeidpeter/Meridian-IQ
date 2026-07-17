@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.32.0
+ * OpenAPI spec version: 0.33.0
  */
 import {
   useMutation,
@@ -49,6 +49,7 @@ import type {
   CancelInvoiceInput,
   CanonicalInvoice,
   CashflowOutlook,
+  CatalogueCoverageReport,
   CatalogueEntryDraft,
   ChangePasswordInput,
   ChaseRow,
@@ -96,6 +97,7 @@ import type {
   DraftClientImportInput,
   DraftInvoiceWithClerkInput,
   DraftPaymentChaserInput,
+  DraftQuarterlyNoteInput,
   DraftStatementFormatInput,
   DraftVatCoverNoteInput,
   Engagement,
@@ -137,8 +139,10 @@ import type {
   GetDashboardSummaryParams,
   GetMergeImpactParams,
   GetPublicThemeParams,
+  GetQuarterlyReviewParams,
   GetReceivablesSummaryParams,
   GetVatPackParams,
+  GetVatSettlementCheckParams,
   HealthStatus,
   IdentifierCheck,
   Invitation,
@@ -199,6 +203,8 @@ import type {
   PushDevice,
   PushDeviceInput,
   PushDeviceUnregisterInput,
+  QuarterlyReview,
+  QuarterlyReviewCoverNote,
   QuestionnaireTemplate,
   RailState,
   ReceivablesSummary,
@@ -241,7 +247,8 @@ import type {
   VatPack,
   VatPackCoverNote,
   VatRiskInput,
-  VatRiskReport
+  VatRiskReport,
+  VatSettlementCheck
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -3049,6 +3056,244 @@ export const useDraftVatPackCoverNote = <TError = ErrorType<BadRequestResponse>,
       return useMutation(getDraftVatPackCoverNoteMutationOptions(options));
     }
 
+export const getGetVatSettlementCheckUrl = (params?: GetVatSettlementCheckParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/vat-pack/settlement-check?${stringifiedParams}` : `/api/vat-pack/settlement-check`
+}
+
+/**
+ * @summary Settlement coverage of the pack month's accepted invoices (assurance view — unsettled means unobserved, not unpaid)
+ */
+export const getVatSettlementCheck = async (params?: GetVatSettlementCheckParams, options?: RequestInit): Promise<VatSettlementCheck> => {
+
+  return customFetch<VatSettlementCheck>(getGetVatSettlementCheckUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVatSettlementCheckQueryKey = (params?: GetVatSettlementCheckParams,) => {
+    return [
+    `/api/vat-pack/settlement-check`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetVatSettlementCheckQueryOptions = <TData = Awaited<ReturnType<typeof getVatSettlementCheck>>, TError = ErrorType<BadRequestResponse>>(params?: GetVatSettlementCheckParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatSettlementCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVatSettlementCheckQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVatSettlementCheck>>> = ({ signal }) => getVatSettlementCheck(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVatSettlementCheck>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVatSettlementCheckQueryResult = NonNullable<Awaited<ReturnType<typeof getVatSettlementCheck>>>
+export type GetVatSettlementCheckQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Settlement coverage of the pack month's accepted invoices (assurance view — unsettled means unobserved, not unpaid)
+ */
+
+export function useGetVatSettlementCheck<TData = Awaited<ReturnType<typeof getVatSettlementCheck>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetVatSettlementCheckParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatSettlementCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVatSettlementCheckQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetQuarterlyReviewUrl = (params?: GetQuarterlyReviewParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/quarterly-review?${stringifiedParams}` : `/api/quarterly-review`
+}
+
+/**
+ * @summary Firm quarterly review pack — the closed quarter's monthly VAT packs, submissions, rejections, receivables snapshot and Clerk throughput in one deterministic document
+ */
+export const getQuarterlyReview = async (params?: GetQuarterlyReviewParams, options?: RequestInit): Promise<QuarterlyReview> => {
+
+  return customFetch<QuarterlyReview>(getGetQuarterlyReviewUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetQuarterlyReviewQueryKey = (params?: GetQuarterlyReviewParams,) => {
+    return [
+    `/api/quarterly-review`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetQuarterlyReviewQueryOptions = <TData = Awaited<ReturnType<typeof getQuarterlyReview>>, TError = ErrorType<BadRequestResponse>>(params?: GetQuarterlyReviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuarterlyReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetQuarterlyReviewQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuarterlyReview>>> = ({ signal }) => getQuarterlyReview(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getQuarterlyReview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetQuarterlyReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getQuarterlyReview>>>
+export type GetQuarterlyReviewQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Firm quarterly review pack — the closed quarter's monthly VAT packs, submissions, rejections, receivables snapshot and Clerk throughput in one deterministic document
+ */
+
+export function useGetQuarterlyReview<TData = Awaited<ReturnType<typeof getQuarterlyReview>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetQuarterlyReviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuarterlyReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetQuarterlyReviewQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDraftQuarterlyCoverNoteUrl = () => {
+
+
+
+
+  return `/api/quarterly-review/cover-note`
+}
+
+/**
+ * @summary Draft a cover note phrasing the quarterly review's computed facts (template fallback; nothing stored — the partner edits and owns it)
+ */
+export const draftQuarterlyCoverNote = async (draftQuarterlyNoteInput?: DraftQuarterlyNoteInput, options?: RequestInit): Promise<QuarterlyReviewCoverNote> => {
+
+  return customFetch<QuarterlyReviewCoverNote>(getDraftQuarterlyCoverNoteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftQuarterlyNoteInput)
+  }
+);}
+
+
+
+
+export const getDraftQuarterlyCoverNoteMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>, TError,{data?: BodyType<DraftQuarterlyNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>, TError,{data?: BodyType<DraftQuarterlyNoteInput>}, TContext> => {
+
+const mutationKey = ['draftQuarterlyCoverNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>, {data?: BodyType<DraftQuarterlyNoteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftQuarterlyCoverNote(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftQuarterlyCoverNoteMutationResult = NonNullable<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>>
+    export type DraftQuarterlyCoverNoteMutationBody = BodyType<DraftQuarterlyNoteInput> | undefined
+    export type DraftQuarterlyCoverNoteMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Draft a cover note phrasing the quarterly review's computed facts (template fallback; nothing stored — the partner edits and owns it)
+ */
+export const useDraftQuarterlyCoverNote = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>, TError,{data?: BodyType<DraftQuarterlyNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftQuarterlyCoverNote>>,
+        TError,
+        {data?: BodyType<DraftQuarterlyNoteInput>},
+        TContext
+      > => {
+      return useMutation(getDraftQuarterlyCoverNoteMutationOptions(options));
+    }
+
 export const getListLineItemSuggestionsUrl = (params?: ListLineItemSuggestionsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -5204,6 +5449,83 @@ export function useListUnmappedErrorCodes<TData = Awaited<ReturnType<typeof list
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListUnmappedErrorCodesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCatalogueCoverageUrl = () => {
+
+
+
+
+  return `/api/error-catalogue/coverage`
+}
+
+/**
+ * @summary Catalogue coverage & mapping SLA — the INT-02 measurement (pure SQL, platform-wide)
+ */
+export const getCatalogueCoverage = async ( options?: RequestInit): Promise<CatalogueCoverageReport> => {
+
+  return customFetch<CatalogueCoverageReport>(getGetCatalogueCoverageUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCatalogueCoverageQueryKey = () => {
+    return [
+    `/api/error-catalogue/coverage`
+    ] as const;
+    }
+
+
+export const getGetCatalogueCoverageQueryOptions = <TData = Awaited<ReturnType<typeof getCatalogueCoverage>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogueCoverage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCatalogueCoverageQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCatalogueCoverage>>> = ({ signal }) => getCatalogueCoverage({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCatalogueCoverage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCatalogueCoverageQueryResult = NonNullable<Awaited<ReturnType<typeof getCatalogueCoverage>>>
+export type GetCatalogueCoverageQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Catalogue coverage & mapping SLA — the INT-02 measurement (pure SQL, platform-wide)
+ */
+
+export function useGetCatalogueCoverage<TData = Awaited<ReturnType<typeof getCatalogueCoverage>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogueCoverage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCatalogueCoverageQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

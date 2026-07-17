@@ -659,3 +659,46 @@ test("multi-turn: a previous data answer threads follow-up context by keys only"
     "cross-firm context never leaks",
   );
 });
+
+test("multi-turn: a current-month scope survives the label round-trip", async () => {
+  // The stored dataParams strip " (current month)" from the label; the
+  // follow-up mapping must strip the offered labels the same way, or the
+  // single most common follow-up ("…and for Acme?" after a this-month
+  // question) silently loses its month (round-12 review, finding 1).
+  const currentMonthKey = lagosMonthOptions()[0].key;
+  const firstGateway = fakeGateway(() =>
+    JSON.stringify({
+      claimKey: "data.submitted_this_month",
+      category: "unknown",
+      month: currentMonthKey,
+      client: "none",
+    }),
+  );
+  const first = await askClerk(
+    `What did we submit this month? ${SALT}`,
+    askerId,
+    firstGateway,
+    { firmId: firmA },
+  );
+  assert.equal(first.answer?.dataIntent, "data.submitted_this_month");
+  assert.ok(first.answer?.dataParams?.month, "month label stored");
+
+  const prompts: string[] = [];
+  const followGateway = fakeGateway((req) => {
+    prompts.push(req.user as string);
+    return JSON.stringify({
+      claimKey: "data.submitted_this_month",
+      category: "unknown",
+      month: currentMonthKey,
+      client: "c1",
+    });
+  });
+  await askClerk(`And for DI Party A? ${SALT}`, askerId, followGateway, {
+    firmId: firmA,
+    previousCaseId: first.id,
+  });
+  assert.ok(
+    prompts[0].includes(`month ${currentMonthKey}`),
+    `current-month key carried into the context (prompt: ${prompts[0].slice(0, 400)})`,
+  );
+});

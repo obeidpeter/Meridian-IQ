@@ -9,9 +9,11 @@ import {
   useCreateStatementFormat,
   useDeleteStatementFormat,
   useDraftStatementFormatWithClerk,
+  useGetCatalogueCoverage,
   getListErrorCatalogueQueryKey,
   getListUnmappedErrorCodesQueryKey,
   getListStatementFormatsQueryKey,
+  getGetCatalogueCoverageQueryKey,
 } from "@workspace/api-client-react";
 import type {
   ErrorCatalogueEntry,
@@ -303,6 +305,102 @@ function StatementFormatsSection() {
   );
 }
 
+// Catalogue coverage (round-13 idea #5): the INT-02 measurement — how much
+// rejection traffic the catalogue maps, the age of the unmapped debt, and
+// how fast new codes entered the catalogue after first sighting. Pure SQL
+// server-side; renders only for catalogue stewards.
+function CatalogueCoverageCard({ enabled }: { enabled: boolean }) {
+  const { data: coverage, isSuccess } = useGetCatalogueCoverage({
+    query: {
+      enabled,
+      queryKey: getGetCatalogueCoverageQueryKey(),
+      retry: false,
+    },
+  });
+  if (!enabled || !isSuccess || !coverage) return null;
+  const pct = (v: number | null | undefined) =>
+    v == null ? "—" : `${(v * 100).toFixed(1)}%`;
+  return (
+    <Card data-testid="card-catalogue-coverage">
+      <CardHeader>
+        <CardTitle className="text-base">
+          Coverage — last {coverage.windowDays} days
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+          <div data-testid="coverage-mapped-share">
+            <p className="text-xs text-muted-foreground">Rejections mapped</p>
+            <p className="text-lg font-semibold tabular-nums">
+              {pct(coverage.mappedShare)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {coverage.mappedAttempts} of {coverage.rejectedAttempts} coded
+              attempts
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Codes seen</p>
+            <p className="text-lg font-semibold tabular-nums">
+              {coverage.mappedCodes}/{coverage.distinctCodes}
+            </p>
+            <p className="text-xs text-muted-foreground">mapped today</p>
+          </div>
+          <div data-testid="coverage-sla">
+            <p className="text-xs text-muted-foreground">
+              Mapped within a day
+            </p>
+            <p className="text-lg font-semibold tabular-nums">
+              {pct(coverage.sla.withinOneDayShare)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {coverage.sla.judged} entr{coverage.sla.judged === 1 ? "y" : "ies"}{" "}
+              judged · {coverage.sla.proactive} proactive
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Avg days to map</p>
+            <p className="text-lg font-semibold tabular-nums">
+              {coverage.sla.avgDaysToMap ?? "—"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              worst {coverage.sla.maxDaysToMap ?? "—"}
+            </p>
+          </div>
+        </div>
+        {coverage.uncodedRejections > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {coverage.uncodedRejections} rejection(s) carried no code at all —
+            those can never be mapped and sit outside the share above.
+          </p>
+        )}
+        {coverage.openUnmapped.length > 0 && (
+          <div className="text-xs text-muted-foreground">
+            Oldest unmapped debt:{" "}
+            {coverage.openUnmapped
+              .slice(0, 3)
+              .map(
+                (u) =>
+                  `${u.code} (since ${formatDateTime(u.firstSeen)}${u.openCase ? ", desk case open" : ", NO desk case"})`,
+              )
+              .join(" · ")}
+            {coverage.unmappedTruncated ? " · more exist" : ""}
+          </div>
+        )}
+        {coverage.recentMappings.length > 0 && (
+          <div className="text-xs text-muted-foreground">
+            Recently mapped:{" "}
+            {coverage.recentMappings
+              .slice(0, 3)
+              .map((m) => `${m.code} in ${m.daysToMap}d`)
+              .join(" · ")}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function Catalogue() {
   usePageTitle("Error catalogue");
   const { data: me } = useGetMe();
@@ -474,6 +572,8 @@ export function Catalogue() {
           </CardContent>
         </Card>
       )}
+
+      <CatalogueCoverageCard enabled={canWrite} />
 
       <div className="relative max-w-sm">
         <Label htmlFor="catalogue-search" className="sr-only">

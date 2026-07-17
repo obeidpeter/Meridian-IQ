@@ -86,7 +86,12 @@ function AskContent() {
     mutation: {
       onSuccess: (row) => {
         setDisabledBanner(false);
-        setPreviousCaseId(row.id);
+        // Only a DATA answer carries scope worth threading — keeping the
+        // last data-answered id preserves the thread across a refusal or
+        // register-claim answer in between.
+        if (row.answer?.answered && row.answer?.dataIntent) {
+          setPreviousCaseId(row.id);
+        }
       },
       onError: (e) =>
         handleClerkGatewayError(e, {

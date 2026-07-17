@@ -146,6 +146,27 @@ firm-funded) phrases the pack's computed facts into a note the partner edits
 and owns — digest posture with NO route budget pre-check (kill switch,
 missing provider, exhausted budget, invalid output, quiet month all answer
 with the deterministic template, and a quiet month never calls the model);
+its **settlement cross-check** (`modules/clerk/vat-settlement.ts`,
+`GET /vat-pack/settlement-check`, same gate + month discipline,
+deterministic, nothing stored) splits the pack month's accepted invoices —
+the pack's EXACT population, invoices only — by what settlement the
+platform has OBSERVED (status settled / the receivables OUTSTANDING
+fragment / credited, a strict partition), with a capped largest-first
+unsettled list (cap+1 truncation flag) and a note pinning the semantics:
+unsettled means UNOBSERVED, not unpaid — an assurance view, never an
+accusation; the **quarterly review pack**
+(`modules/advisory/quarterly-pack.ts`, `GET /quarterly-review`, same gate,
+console portfolio card) assembles a CLOSED Lagos quarter into one
+deterministic document — the three monthly VAT packs summed via the SAME
+`computeVatPack` calls (so the quarterly and monthly surfaces cannot
+disagree), in-quarter submission outcomes and top rejection codes
+(GROUPING SETS keeps the total honest beyond the row cap), an
+as-of-generation per-currency receivables snapshot (the OUTSTANDING
+fragment), and in-quarter Clerk throughput; its **cover note**
+(`modules/advisory/quarterly-note.ts`, `POST /quarterly-review/cover-note`,
+purpose `draft_quarterly_note`, firm-funded) is the vat-note contract
+exactly — digest posture, quiet quarter never calls the model, template
+always answers;
 the **adoption & impact report** (`modules/clerk/adoption.ts`,
 `GET /console/clerk-adoption`, `console.portfolio.read`, console portfolio
 card, pure SQL) slices the firm's own cases per client — capture volume,
@@ -159,7 +180,15 @@ the **rejection-pattern report** (`modules/desk/rejection-patterns.ts`,
 pure SQL) aggregates the firm's own rejected submission attempts into
 recurring catalogue-grounded causes over a trailing window plus the
 equal-length window before it, unmapped codes included — the aggregate view
-the one-case-at-a-time desk never sees; the **firm compliance calendar**
+the one-case-at-a-time desk never sees; the **catalogue coverage report**
+(`modules/desk/catalogue-coverage.ts`, `GET /error-catalogue/coverage`,
+`catalogue.write`, catalogue-page card, pure SQL, platform-wide like the
+catalogue itself) is the INT-02 measurement — the share of rejection
+traffic the catalogue maps today, the currently-unmapped codes with the
+age of the debt and whether the unmapped-code sweep's desk case is
+tracking each, and the mapping SLA (time from a code's first rejected
+sighting to its catalogue entry; entries mapped before any sighting count
+as proactive, never judged); the **firm compliance calendar**
 (`modules/invoice/compliance-calendar.ts`, `GET /compliance-calendar`, same
 gate, console portfolio card, deterministic) is the month-ahead view of the
 SAME statutory clocks each client's dashboard shows — submission-window
@@ -177,7 +206,8 @@ resistance-drop verdict as the health banner (`detectResistanceDrop` over
 **merge impact preview** (`modules/party/merge-impact.ts`,
 `GET /parties/merge-impact`, `party.merge`, pure SQL) counts each side's
 direct FK references (invoices as supplier/buyer, engagements, logins,
-recurring templates, aliases, statements, escalations) before an
+recurring templates, aliases, statements, escalations, consent grants —
+the CORE-03 spine — and desk cases) before an
 irreversible party merge — the console merge dialog shows a "Carries:"
 line per candidate so the operator picks the survivor with the evidence
 in hand;

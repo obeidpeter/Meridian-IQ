@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.32.0
+ * OpenAPI spec version: 0.33.0
  */
 export interface HealthStatus {
   status: string;
@@ -889,6 +889,153 @@ export interface DraftVatCoverNoteInput {
   month?: string;
 }
 
+export type VatSettlementCheckUnsettledItem = {
+  invoiceId: string;
+  invoiceNumber: string;
+  clientName: string;
+  buyerName: string;
+  issueDate: string;
+  dueDate: string | null;
+  currency: string;
+  grandTotal: string;
+  status: string;
+};
+
+export interface VatSettlementCheck {
+  monthStart: string;
+  monthLabel: string;
+  months: string[];
+  acceptedCount: number;
+  acceptedTotal: string;
+  settledCount: number;
+  settledTotal: string;
+  outstandingCount: number;
+  outstandingTotal: string;
+  creditedCount: number;
+  creditedTotal: string;
+  settledShare: number | null;
+  unsettled: VatSettlementCheckUnsettledItem[];
+  unsettledTruncated: boolean;
+  note: string;
+}
+
+export type QuarterlyReviewMonthsItem = {
+  monthStart: string;
+  monthLabel: string;
+  acceptedCount: number;
+  acceptedVat: string;
+  creditVat: string;
+  netVat: string;
+};
+
+export type QuarterlyReviewVatTotals = {
+  acceptedCount: number;
+  acceptedVat: string;
+  creditVat: string;
+  netVat: string;
+};
+
+export type QuarterlyReviewSubmissions = {
+  accepted: number;
+  rejected: number;
+};
+
+export type QuarterlyReviewTopRejectionsItem = {
+  errorCode: string;
+  category: string | null;
+  count: number;
+};
+
+export type QuarterlyReviewReceivablesGroupsItem = {
+  currency: string;
+  outstandingTotal: string;
+  invoiceCount: number;
+};
+
+export type QuarterlyReviewReceivables = {
+  asOf: string;
+  groups: QuarterlyReviewReceivablesGroupsItem[];
+};
+
+export type QuarterlyReviewClerk = {
+  captures: number;
+  approved: number;
+  rejected: number;
+};
+
+export interface QuarterlyReview {
+  quarterStart: string;
+  quarterLabel: string;
+  quarters: string[];
+  months: QuarterlyReviewMonthsItem[];
+  vatTotals: QuarterlyReviewVatTotals;
+  submissions: QuarterlyReviewSubmissions;
+  topRejections: QuarterlyReviewTopRejectionsItem[];
+  rejectionTotal: number;
+  receivables: QuarterlyReviewReceivables;
+  clerk: QuarterlyReviewClerk;
+  note: string;
+}
+
+export interface DraftQuarterlyNoteInput {
+  /** @pattern ^\d{4}-\d{2}-01$ */
+  quarter?: string;
+}
+
+export type QuarterlyReviewCoverNoteSource = typeof QuarterlyReviewCoverNoteSource[keyof typeof QuarterlyReviewCoverNoteSource];
+
+
+export const QuarterlyReviewCoverNoteSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface QuarterlyReviewCoverNote {
+  quarterStart: string;
+  quarterLabel: string;
+  note: string;
+  source: QuarterlyReviewCoverNoteSource;
+  disclosure: string;
+}
+
+export type CatalogueCoverageReportOpenUnmappedItem = {
+  code: string;
+  occurrences: number;
+  firstSeen: string;
+  lastSeen: string;
+  openCase: boolean;
+};
+
+export type CatalogueCoverageReportSla = {
+  judged: number;
+  avgDaysToMap: number | null;
+  maxDaysToMap: number | null;
+  withinOneDayShare: number | null;
+  proactive: number;
+};
+
+export type CatalogueCoverageReportRecentMappingsItem = {
+  code: string;
+  firstSeen: string;
+  mappedAt: string;
+  daysToMap: number;
+};
+
+export interface CatalogueCoverageReport {
+  windowDays: number;
+  slaWindowDays: number;
+  rejectedAttempts: number;
+  mappedAttempts: number;
+  mappedShare: number | null;
+  uncodedRejections: number;
+  distinctCodes: number;
+  mappedCodes: number;
+  openUnmapped: CatalogueCoverageReportOpenUnmappedItem[];
+  unmappedTruncated: boolean;
+  sla: CatalogueCoverageReportSla;
+  recentMappings: CatalogueCoverageReportRecentMappingsItem[];
+}
+
 export type VatPackCoverNoteSource = typeof VatPackCoverNoteSource[keyof typeof VatPackCoverNoteSource];
 
 
@@ -1488,6 +1635,8 @@ export interface PartyMergeSide {
   aliases: number;
   bankStatements: number;
   escalations: number;
+  consents: number;
+  operatorCases: number;
 }
 
 export interface MergeImpact {
@@ -3978,6 +4127,22 @@ export type ExportVatPackCsvParams = {
  * @pattern ^\d{4}-\d{2}-01$
  */
 month?: string;
+};
+
+export type GetVatSettlementCheckParams = {
+/**
+ * A closed Lagos month's first day (YYYY-MM-01); defaults to the newest closed month.
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
+};
+
+export type GetQuarterlyReviewParams = {
+/**
+ * First month of a closed Lagos quarter (YYYY-MM-01); defaults to the newest closed quarter.
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+quarter?: string;
 };
 
 export type ListLineItemSuggestionsParams = {

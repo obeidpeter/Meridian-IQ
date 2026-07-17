@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.32.0
+  version: 0.33.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -753,6 +753,70 @@ paths:
                 $ref: "#/components/schemas/VatPackCoverNote"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /vat-pack/settlement-check:
+    get:
+      operationId: getVatSettlementCheck
+      tags: [invoices]
+      summary: Settlement coverage of the pack month's accepted invoices (assurance view — unsettled means unobserved, not unpaid)
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: A closed Lagos month's first day (YYYY-MM-01); defaults to the newest closed month.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: Settled/outstanding/credited split of the month's accepted value plus the unsettled list (deterministic — no model involvement)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VatSettlementCheck"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /quarterly-review:
+    get:
+      operationId: getQuarterlyReview
+      tags: [invoices]
+      summary: Firm quarterly review pack — the closed quarter's monthly VAT packs, submissions, rejections, receivables snapshot and Clerk throughput in one deterministic document
+      parameters:
+        - name: quarter
+          in: query
+          required: false
+          description: First month of a closed Lagos quarter (YYYY-MM-01); defaults to the newest closed quarter.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: The assembled quarterly review (deterministic — no model involvement)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuarterlyReview"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /quarterly-review/cover-note:
+    post:
+      operationId: draftQuarterlyCoverNote
+      tags: [invoices]
+      summary: Draft a cover note phrasing the quarterly review's computed facts (template fallback; nothing stored — the partner edits and owns it)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftQuarterlyNoteInput"
+      responses:
+        "200":
+          description: The drafted note plus the pack's basis disclosure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuarterlyReviewCoverNote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /line-item-suggestions:
     get:
       operationId: listLineItemSuggestions
@@ -1274,6 +1338,18 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/UnmappedErrorCode"
+  /error-catalogue/coverage:
+    get:
+      operationId: getCatalogueCoverage
+      tags: [operator]
+      summary: Catalogue coverage & mapping SLA — the INT-02 measurement (pure SQL, platform-wide)
+      responses:
+        "200":
+          description: Coverage of rejection traffic, unmapped-code debt and time-to-mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueCoverageReport"
   /operator/gate-metrics:
     get:
       operationId: getGateMetrics
@@ -4737,6 +4813,326 @@ components:
         month:
           type: string
           pattern: '^\d{4}-\d{2}-01$'
+    VatSettlementCheck:
+      type: object
+      required:
+        [
+          monthStart,
+          monthLabel,
+          months,
+          acceptedCount,
+          acceptedTotal,
+          settledCount,
+          settledTotal,
+          outstandingCount,
+          outstandingTotal,
+          creditedCount,
+          creditedTotal,
+          settledShare,
+          unsettled,
+          unsettledTruncated,
+          note,
+        ]
+      properties:
+        monthStart:
+          type: string
+        monthLabel:
+          type: string
+        months:
+          type: array
+          items:
+            type: string
+        # The pack month's accepted invoices (the VAT pack's population,
+        # invoices only) split by what settlement the platform has OBSERVED.
+        acceptedCount:
+          type: integer
+        acceptedTotal:
+          type: string
+        settledCount:
+          type: integer
+        settledTotal:
+          type: string
+        outstandingCount:
+          type: integer
+        outstandingTotal:
+          type: string
+        creditedCount:
+          type: integer
+        creditedTotal:
+          type: string
+        # settledTotal / acceptedTotal (4dp); null when the month had no value.
+        settledShare:
+          type: number
+          nullable: true
+        unsettled:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                invoiceId,
+                invoiceNumber,
+                clientName,
+                buyerName,
+                issueDate,
+                dueDate,
+                currency,
+                grandTotal,
+                status,
+              ]
+            properties:
+              invoiceId:
+                type: string
+                format: uuid
+              invoiceNumber:
+                type: string
+              clientName:
+                type: string
+              buyerName:
+                type: string
+              issueDate:
+                type: string
+              dueDate:
+                type: string
+                nullable: true
+              currency:
+                type: string
+              grandTotal:
+                type: string
+              status:
+                type: string
+        unsettledTruncated:
+          type: boolean
+        # Assurance-not-accusation disclosure — travels with every render.
+        note:
+          type: string
+    QuarterlyReview:
+      type: object
+      required:
+        [
+          quarterStart,
+          quarterLabel,
+          quarters,
+          months,
+          vatTotals,
+          submissions,
+          topRejections,
+          rejectionTotal,
+          receivables,
+          clerk,
+          note,
+        ]
+      properties:
+        quarterStart:
+          type: string
+        quarterLabel:
+          type: string
+        # The closed Lagos quarters on offer (newest first, first-month keys).
+        quarters:
+          type: array
+          items:
+            type: string
+        # Per month: the monthly VAT pack's totals, unchanged.
+        months:
+          type: array
+          items:
+            type: object
+            required:
+              [monthStart, monthLabel, acceptedCount, acceptedVat, creditVat, netVat]
+            properties:
+              monthStart:
+                type: string
+              monthLabel:
+                type: string
+              acceptedCount:
+                type: integer
+              acceptedVat:
+                type: string
+              creditVat:
+                type: string
+              netVat:
+                type: string
+        vatTotals:
+          type: object
+          required: [acceptedCount, acceptedVat, creditVat, netVat]
+          properties:
+            acceptedCount:
+              type: integer
+            acceptedVat:
+              type: string
+            creditVat:
+              type: string
+            netVat:
+              type: string
+        submissions:
+          type: object
+          required: [accepted, rejected]
+          properties:
+            accepted:
+              type: integer
+            rejected:
+              type: integer
+        # Top rejection codes (capped); rejectionTotal comes from the same
+        # SQL pass so the quarter total stays honest beyond the cap.
+        topRejections:
+          type: array
+          items:
+            type: object
+            required: [errorCode, category, count]
+            properties:
+              errorCode:
+                type: string
+              category:
+                type: string
+                nullable: true
+              count:
+                type: integer
+        rejectionTotal:
+          type: integer
+        # As-of-generation snapshot, per currency — a balance has no quarter.
+        receivables:
+          type: object
+          required: [asOf, groups]
+          properties:
+            asOf:
+              type: string
+            groups:
+              type: array
+              items:
+                type: object
+                required: [currency, outstandingTotal, invoiceCount]
+                properties:
+                  currency:
+                    type: string
+                  outstandingTotal:
+                    type: string
+                  invoiceCount:
+                    type: integer
+        clerk:
+          type: object
+          required: [captures, approved, rejected]
+          properties:
+            captures:
+              type: integer
+            approved:
+              type: integer
+            rejected:
+              type: integer
+        note:
+          type: string
+    DraftQuarterlyNoteInput:
+      type: object
+      properties:
+        quarter:
+          type: string
+          pattern: '^\d{4}-\d{2}-01$'
+    QuarterlyReviewCoverNote:
+      type: object
+      required: [quarterStart, quarterLabel, note, source, disclosure]
+      properties:
+        quarterStart:
+          type: string
+        quarterLabel:
+          type: string
+        # The drafted text — the partner edits and owns it; nothing is stored.
+        note:
+          type: string
+        source:
+          type: string
+          enum: [clerk, template]
+        # The pack's basis note, so the caveats travel with the text.
+        disclosure:
+          type: string
+    CatalogueCoverageReport:
+      type: object
+      required:
+        [
+          windowDays,
+          slaWindowDays,
+          rejectedAttempts,
+          mappedAttempts,
+          mappedShare,
+          uncodedRejections,
+          distinctCodes,
+          mappedCodes,
+          openUnmapped,
+          unmappedTruncated,
+          sla,
+          recentMappings,
+        ]
+      properties:
+        windowDays:
+          type: integer
+        slaWindowDays:
+          type: integer
+        # Coded rejected attempts in the window, and how many carry a code
+        # the catalogue maps TODAY (current-state coverage).
+        rejectedAttempts:
+          type: integer
+        mappedAttempts:
+          type: integer
+        mappedShare:
+          type: number
+          nullable: true
+        uncodedRejections:
+          type: integer
+        distinctCodes:
+          type: integer
+        mappedCodes:
+          type: integer
+        # Currently-unmapped codes, oldest mapping debt first.
+        openUnmapped:
+          type: array
+          items:
+            type: object
+            required: [code, occurrences, firstSeen, lastSeen, openCase]
+            properties:
+              code:
+                type: string
+              occurrences:
+                type: integer
+              firstSeen:
+                type: string
+              lastSeen:
+                type: string
+              openCase:
+                type: boolean
+        unmappedTruncated:
+          type: boolean
+        # INT-02 SLA over entries created in the SLA window that were SEEN
+        # before being mapped; proactive entries are counted, never judged.
+        sla:
+          type: object
+          required:
+            [judged, avgDaysToMap, maxDaysToMap, withinOneDayShare, proactive]
+          properties:
+            judged:
+              type: integer
+            avgDaysToMap:
+              type: number
+              nullable: true
+            maxDaysToMap:
+              type: number
+              nullable: true
+            withinOneDayShare:
+              type: number
+              nullable: true
+            proactive:
+              type: integer
+        recentMappings:
+          type: array
+          items:
+            type: object
+            required: [code, firstSeen, mappedAt, daysToMap]
+            properties:
+              code:
+                type: string
+              firstSeen:
+                type: string
+              mappedAt:
+                type: string
+              daysToMap:
+                type: number
     VatPackCoverNote:
       type: object
       required: [monthStart, monthLabel, note, source, disclosure]
@@ -5623,6 +6019,8 @@ components:
           aliases,
           bankStatements,
           escalations,
+          consents,
+          operatorCases,
         ]
       properties:
         partyId:
@@ -5648,6 +6046,13 @@ components:
         bankStatements:
           type: integer
         escalations:
+          type: integer
+        # The CORE-03 consent spine and desk cases resolve through the party
+        # id too — a duplicate carrying the live grant or an open case is
+        # exactly what the operator must see before picking a survivor.
+        consents:
+          type: integer
+        operatorCases:
           type: integer
     MergeImpact:
       type: object
