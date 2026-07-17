@@ -12,6 +12,7 @@ import {
   vatPercentInvalid,
   correctionHint,
   fieldWeights,
+  groupQueueByBatch,
   reviewEffort,
 } from "./clerk-shared";
 
@@ -405,5 +406,46 @@ describe("reviewEffort", () => {
     expect([heavy, light].sort((a, b) => reviewEffort(a) - reviewEffort(b))[0]).toBe(
       light,
     );
+  });
+});
+
+describe("groupQueueByBatch", () => {
+  const c = (id: string, batchId: string | null = null) =>
+    makeCase({ id, batchId });
+
+  test("unbatched cases pass through one-per-group in order", () => {
+    const groups = groupQueueByBatch([c("a"), c("b"), c("c")]);
+    expect(groups.map((g) => g.batchId)).toEqual([null, null, null]);
+    expect(groups.map((g) => g.cases[0].id)).toEqual(["a", "b", "c"]);
+  });
+
+  test("batch siblings coalesce at the first sibling's position", () => {
+    const groups = groupQueueByBatch([
+      c("a", "batch-1"),
+      c("b"),
+      c("c", "batch-1"),
+      c("d", "batch-2"),
+    ]);
+    expect(groups.map((g) => g.batchId)).toEqual(["batch-1", null, "batch-2"]);
+    expect(groups[0].cases.map((k) => k.id)).toEqual(["a", "c"]);
+    expect(groups[2].cases.map((k) => k.id)).toEqual(["d"]);
+  });
+
+  test("within a group the incoming (fast-lane) order is preserved", () => {
+    const groups = groupQueueByBatch([
+      c("ready", "batch-1"),
+      c("light", "batch-1"),
+      c("heavy", "batch-1"),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].cases.map((k) => k.id)).toEqual([
+      "ready",
+      "light",
+      "heavy",
+    ]);
+  });
+
+  test("an empty queue groups to nothing", () => {
+    expect(groupQueueByBatch([])).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   useListClerkCases,
+  useListClerkBatches,
   useGetClerkCase,
   useCreateClerkCase,
   useCreateClerkCaseBatch,
@@ -15,6 +16,7 @@ import {
   useListFirms,
   useListParties,
   getListClerkCasesQueryKey,
+  getListClerkBatchesQueryKey,
   getGetClerkCaseQueryKey,
   getGetClerkMetricsQueryKey,
   getGetClerkPartySuggestionsQueryKey,
@@ -63,6 +65,7 @@ import {
   fieldWeights,
   fileIsPdf,
   fileToBase64,
+  groupQueueByBatch,
   intakeKind,
   isReadyToApprove,
   relativeTime,
@@ -313,6 +316,9 @@ export function ClerkWorkspace() {
     // getListClerkCasesQueryKey({}) prefix-matches every paged/filtered
     // variant of the list, so all cached pages go stale together.
     queryClient.invalidateQueries({ queryKey: getListClerkCasesQueryKey({}) });
+    // The batch group headers count decided cases, so a decision must also
+    // refresh the batches list or "reviewed R of C" lags behind the pills.
+    queryClient.invalidateQueries({ queryKey: getListClerkBatchesQueryKey() });
     if (selectedId) {
       queryClient.invalidateQueries({
         queryKey: getGetClerkCaseQueryKey(selectedId),
@@ -567,6 +573,26 @@ export function ClerkWorkspace() {
   const readyCount = useMemo(
     () => sortedCases.filter(isReadyToApprove).length,
     [sortedCases],
+  );
+
+  // Batch-aware grouping (round-8 idea #3): a bundle's segments stay together
+  // under one header with per-batch progress; unbatched cases are untouched.
+  const queueGroups = useMemo(
+    () => groupQueueByBatch(sortedCases),
+    [sortedCases],
+  );
+  const hasBatchGroups = queueGroups.some((g) => g.batchId !== null);
+  const { data: queueBatches } = useListClerkBatches({
+    query: {
+      queryKey: getListClerkBatchesQueryKey(),
+      enabled: hasBatchGroups,
+      staleTime: 60_000,
+      retry: false,
+    },
+  });
+  const batchById = useMemo(
+    () => new Map((queueBatches ?? []).map((b) => [b.id, b])),
+    [queueBatches],
   );
 
   const approveDisabled =
@@ -884,7 +910,8 @@ export function ClerkWorkspace() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {sortedCases.map((c) => {
+                    {queueGroups.map((g) => {
+                      const rows = g.cases.map((c) => {
                       const kind = intakeKind(c.sourceType);
                       const Icon = kind.icon;
                       const status = QUEUE_STATUS[c.status];
@@ -938,6 +965,33 @@ export function ClerkWorkspace() {
                             </span>
                           </span>
                         </button>
+                      );
+                      });
+                      if (g.batchId === null) return rows;
+                      const batch = batchById.get(g.batchId);
+                      return (
+                        <div
+                          key={`batch-${g.batchId}`}
+                          className="space-y-2 rounded-xl border border-dashed border-border p-2"
+                          data-testid={`group-batch-${g.batchId}`}
+                        >
+                          <p className="px-1 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              {batch?.name?.trim() || "Batch intake"}
+                            </span>
+                            {/* Counts only when the batch row resolved — a
+                                batch beyond the newest-50 list must not
+                                assert "0 reviewed". */}
+                            {batch && (
+                              <>
+                                {" · "}
+                                {batch.reviewedCases} of {batch.createdCases}{" "}
+                                reviewed
+                              </>
+                            )}
+                          </p>
+                          {rows}
+                        </div>
                       );
                     })}
                   </div>

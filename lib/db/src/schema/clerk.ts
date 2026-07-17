@@ -228,6 +228,10 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   extraction: jsonb("extraction").$type<ClerkExtraction>(),
   // Recomputed on every successful (re-)extraction; see modules/clerk/preflight.
   preflight: jsonb("preflight").$type<PreflightIssue[]>(),
+  // The async batch this case was created from, when it came out of one
+  // (round-8 idea #3): the review queue groups a bundle's segments together
+  // and shows per-batch progress. Null for one-off captures.
+  batchId: uuid("batch_id").references(() => clerkBatchesTable.id),
   // --- question cases ---
   question: text("question"),
   answer: jsonb("answer").$type<ClerkAnswer>(),
@@ -256,6 +260,8 @@ export const clerkCasesTable = pgTable("clerk_cases", {
 (t) => [
   index("clerk_cases_source_hash_idx").on(t.sourceHash),
   index("clerk_cases_status_idx").on(t.status),
+  // The batch progress join counts a batch's reviewed cases.
+  index("clerk_cases_batch_idx").on(t.batchId),
 ]);
 
 // Append-only ledger of every model invocation (enforced by trigger in

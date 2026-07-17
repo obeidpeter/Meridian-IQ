@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.27.0
+ * OpenAPI spec version: 0.28.0
  */
 import * as zod from 'zod';
 
@@ -1626,6 +1626,26 @@ export const ListRecurringSuggestionsResponseItem = zod.object({
 }))
 })
 export const ListRecurringSuggestionsResponse = zod.array(ListRecurringSuggestionsResponseItem)
+
+
+/**
+ * @summary Expected-but-absent invoices mined deterministically from the client's own monthly billing patterns
+ */
+export const ListUnbilledIncomeQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional()
+})
+
+export const ListUnbilledIncomeResponseItem = zod.object({
+  "buyerPartyId": zod.string().uuid(),
+  "buyerName": zod.string(),
+  "count": zod.number(),
+  "medianAmount": zod.string(),
+  "medianGapDays": zod.number(),
+  "lastIssueDate": zod.string(),
+  "expectedByDate": zod.string(),
+  "overdueDays": zod.number()
+})
+export const ListUnbilledIncomeResponse = zod.array(ListUnbilledIncomeResponseItem)
 
 
 /**
@@ -3749,6 +3769,7 @@ export const ListClerkCasesResponseItem = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
   "claimedBy": zod.string().nullish(),
   "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
@@ -3843,6 +3864,7 @@ export const CreateClerkCaseResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
   "claimedBy": zod.string().nullish(),
   "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
@@ -3921,6 +3943,7 @@ export const GetClerkCaseResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
   "claimedBy": zod.string().nullish(),
   "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
@@ -4024,6 +4047,7 @@ export const DecideClerkCaseResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
   "claimedBy": zod.string().nullish(),
   "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
@@ -4110,6 +4134,7 @@ export const AskClerkResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
   "claimedBy": zod.string().nullish(),
   "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
@@ -4205,6 +4230,7 @@ export const RetryClerkCaseResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
   "claimedBy": zod.string().nullish(),
   "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
@@ -4286,6 +4312,7 @@ export const ClaimClerkCaseResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
   "claimedBy": zod.string().nullish(),
   "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
@@ -4367,6 +4394,7 @@ export const ReleaseClerkCaseResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
   "claimedBy": zod.string().nullish(),
   "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
@@ -4614,6 +4642,7 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "refusalReason": zod.string().optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
   "claimedBy": zod.string().nullish(),
   "claimedAt": zod.coerce.date().nullish(),
   "createdBy": zod.string(),
@@ -4834,6 +4863,7 @@ export const CreateClerkBatchResponse = zod.object({
   "processedSegments": zod.number(),
   "createdCases": zod.number(),
   "skippedDuplicates": zod.number(),
+  "reviewedCases": zod.number(),
   "failReason": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4853,6 +4883,7 @@ export const ListClerkBatchesResponseItem = zod.object({
   "processedSegments": zod.number(),
   "createdCases": zod.number(),
   "skippedDuplicates": zod.number(),
+  "reviewedCases": zod.number(),
   "failReason": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4877,6 +4908,7 @@ export const GetClerkBatchResponse = zod.object({
   "processedSegments": zod.number(),
   "createdCases": zod.number(),
   "skippedDuplicates": zod.number(),
+  "reviewedCases": zod.number(),
   "failReason": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -5141,7 +5173,14 @@ export const GetClerkMetricsResponse = zod.object({
   "injectionResisted": zod.number(),
   "resistanceRate": zod.number()
 }))
-})
+}),
+  "resistanceAlert": zod.object({
+  "fromMonth": zod.string(),
+  "toMonth": zod.string(),
+  "fromRate": zod.number(),
+  "toRate": zod.number(),
+  "injectionFixtures": zod.number()
+}).optional()
 })
 
 

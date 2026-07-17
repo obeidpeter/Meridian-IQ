@@ -321,6 +321,8 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     overdueCount: 0,
     failedCount: 0,
     receivablesOver60Count: 0,
+    unbilledCount: 0,
+    unbilledClients: 0,
   });
   assert.match(quiet.headline, /on track/);
   assert.equal(quiet.bullets.length, 1);
@@ -331,10 +333,13 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     overdueCount: 2,
     failedCount: 1,
     receivablesOver60Count: 4,
+    unbilledCount: 2,
+    unbilledClients: 1,
   });
   assert.equal(busy.headline, "3 invoices need attention this week.");
-  assert.equal(busy.bullets.length, 5);
+  assert.equal(busy.bullets.length, 6);
   assert.match(busy.bullets[0], /2 invoices are past the 7-day submission window/);
+  assert.match(busy.bullets[5], /2 regular invoices look unraised across 1 client/);
 });
 
 test("digestWeekStart anchors to Monday 00:00 UTC", () => {

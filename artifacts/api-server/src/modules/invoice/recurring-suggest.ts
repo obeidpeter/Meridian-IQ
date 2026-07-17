@@ -36,7 +36,8 @@ const MEDIAN_GAP_MIN_DAYS = 21;
 const MEDIAN_GAP_MAX_DAYS = 45;
 const AMOUNT_TOLERANCE = 0.25; // within ±25% of the median amount
 const AMOUNT_CLUSTER_SHARE = 0.6; // …for at least 60% of the invoices
-const LOOKBACK_DAYS = 365;
+// Shared with unbilled-income.ts so both surfaces mine the same year.
+export const LOOKBACK_DAYS = 365;
 const MAX_SUGGESTIONS = 5;
 
 export interface RecurringSuggestion {
@@ -48,7 +49,7 @@ export interface RecurringSuggestion {
   lines: LineInput[];
 }
 
-interface HistoryRow {
+export interface HistoryRow {
   id: string;
   issueDate: string;
   grandTotal: number;
@@ -70,10 +71,13 @@ function daysBetween(a: string, b: string): number {
 }
 
 // Pure pattern detection over one buyer's invoices (oldest-first), exported
-// for unit tests. Returns the pattern summary or null.
+// for unit tests. Returns the pattern summary or null. medianGapDays is the
+// observed billing cadence — unbilled-income.ts projects the next expected
+// issue date from it.
 export function detectMonthlyPattern(invoices: HistoryRow[]): {
   count: number;
   medianAmount: number;
+  medianGapDays: number;
   lastInvoiceId: string;
   lastIssueDate: string;
 } | null {
@@ -118,17 +122,22 @@ export function detectMonthlyPattern(invoices: HistoryRow[]): {
     // amount), so the card's "N invoices … about ₦X each" is honest.
     count: amounts.length,
     medianAmount,
+    medianGapDays: Math.round(medianGap),
     lastInvoiceId: last.id,
     lastIssueDate: last.issueDate,
   };
 }
 
-// Buyers already covered by ANY template (active or paused) are excluded —
-// re-suggesting a pattern the client deliberately paused is nagging, not help.
-export async function listRecurringSuggestions(
+// One client's billing history grouped per buyer, with buyers already covered
+// by ANY template (active or paused) excluded — the recurring engine handles
+// those, and re-suggesting a pattern the client deliberately paused is
+// nagging, not help. Shared by the recurring suggestions and the
+// unbilled-income check so the two surfaces mine the SAME history under the
+// SAME exclusions.
+export async function buyerBillingHistories(
   firmId: string,
   clientPartyId: string,
-): Promise<RecurringSuggestion[]> {
+): Promise<Map<string, { name: string; invoices: HistoryRow[] }>> {
   const db = getDb();
   const covered = (
     await db
@@ -185,6 +194,15 @@ export async function listRecurringSuggestions(
     }
     byBuyer.set(row.buyerPartyId, entry);
   }
+  return byBuyer;
+}
+
+export async function listRecurringSuggestions(
+  firmId: string,
+  clientPartyId: string,
+): Promise<RecurringSuggestion[]> {
+  const db = getDb();
+  const byBuyer = await buyerBillingHistories(firmId, clientPartyId);
 
   const patterns: Array<{
     buyerPartyId: string;

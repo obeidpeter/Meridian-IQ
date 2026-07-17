@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.27.0
+ * OpenAPI spec version: 0.28.0
  */
 export interface HealthStatus {
   status: string;
@@ -842,6 +842,17 @@ export interface RecurringSuggestion {
   medianAmount: string;
   lastIssueDate: string;
   lines: InvoiceLineInput[];
+}
+
+export interface UnbilledIncomeAlert {
+  buyerPartyId: string;
+  buyerName: string;
+  count: number;
+  medianAmount: string;
+  medianGapDays: number;
+  lastIssueDate: string;
+  expectedByDate: string;
+  overdueDays: number;
 }
 
 export type VatPackRowsItem = {
@@ -2884,6 +2895,8 @@ export interface ClerkCase {
   /** @nullable */
   firmId?: string | null;
   /** @nullable */
+  batchId?: string | null;
+  /** @nullable */
   claimedBy?: string | null;
   /** @nullable */
   claimedAt?: string | null;
@@ -3131,6 +3144,14 @@ export type ClerkMetricsInjectionTrend = {
   byPromptVersion: ClerkMetricsInjectionTrendByPromptVersionItem[];
 };
 
+export type ClerkMetricsResistanceAlert = {
+  fromMonth: string;
+  toMonth: string;
+  fromRate: number;
+  toRate: number;
+  injectionFixtures: number;
+};
+
 export interface ClerkMetrics {
   windowDays: number;
   calibration?: ClerkMetricsCalibration;
@@ -3143,6 +3164,7 @@ export interface ClerkMetrics {
   ask: ClerkMetricsAsk;
   platformSpend: ClerkMetricsPlatformSpend;
   injectionTrend: ClerkMetricsInjectionTrend;
+  resistanceAlert?: ClerkMetricsResistanceAlert;
 }
 
 export interface ClerkPartySuggestion {
@@ -3277,6 +3299,7 @@ export interface ClerkBatchView {
   processedSegments: number;
   createdCases: number;
   skippedDuplicates: number;
+  reviewedCases: number;
   /** @nullable */
   failReason?: string | null;
   createdAt: string;
@@ -3763,6 +3786,10 @@ clientPartyId?: string;
 };
 
 export type ListRecurringSuggestionsParams = {
+clientPartyId?: string;
+};
+
+export type ListUnbilledIncomeParams = {
 clientPartyId?: string;
 };
 

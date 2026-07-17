@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.27.0
+  version: 0.28.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1371,6 +1371,27 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/RecurringSuggestion"
+  /unbilled-income:
+    get:
+      operationId: listUnbilledIncome
+      tags: [recurring]
+      summary: Expected-but-absent invoices mined deterministically from the client's own monthly billing patterns
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Buyers with a monthly billing habit and nothing issued this cycle (client_users are pinned to their own party)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UnbilledIncomeAlert"
   /recurring-invoices/{id}:
     patch:
       operationId: updateRecurringInvoice
@@ -4460,6 +4481,40 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InvoiceLineInput"
+    UnbilledIncomeAlert:
+      type: object
+      required:
+        [
+          buyerPartyId,
+          buyerName,
+          count,
+          medianAmount,
+          medianGapDays,
+          lastIssueDate,
+          expectedByDate,
+          overdueDays,
+        ]
+      properties:
+        buyerPartyId:
+          type: string
+          format: uuid
+        buyerName:
+          type: string
+        # How many invoices matched the monthly pattern.
+        count:
+          type: integer
+        medianAmount:
+          type: string
+        # The pattern's observed billing cadence in days.
+        medianGapDays:
+          type: integer
+        lastIssueDate:
+          type: string
+        # lastIssueDate + medianGapDays — when the next invoice was expected.
+        expectedByDate:
+          type: string
+        overdueDays:
+          type: integer
     VatPack:
       type: object
       required: [monthStart, monthLabel, months, rows, totals, note]
@@ -7185,6 +7240,10 @@ components:
             - type: "null"
         firmId:
           type: ["string", "null"]
+        # The async batch this case came out of (null for one-off captures) —
+        # the review queue groups a bundle's segments together.
+        batchId:
+          type: ["string", "null"]
         claimedBy:
           type: ["string", "null"]
         claimedAt:
@@ -7581,6 +7640,23 @@ components:
                     type: integer
                   resistanceRate:
                     type: number
+        # Present when the newest measured month's injection resistance fell
+        # materially below the previous one — the same deterministic rule the
+        # resistance-watch sweep alerts on, so banner and alert always agree.
+        resistanceAlert:
+          type: object
+          required: [fromMonth, toMonth, fromRate, toRate, injectionFixtures]
+          properties:
+            fromMonth:
+              type: string
+            toMonth:
+              type: string
+            fromRate:
+              type: number
+            toRate:
+              type: number
+            injectionFixtures:
+              type: integer
     ClerkCorrection:
       type: object
       required: [field, extracted, final, changed]
@@ -7750,6 +7826,7 @@ components:
           processedSegments,
           createdCases,
           skippedDuplicates,
+          reviewedCases,
           createdAt,
           updatedAt,
         ]
@@ -7775,6 +7852,10 @@ components:
         createdCases:
           type: integer
         skippedDuplicates:
+          type: integer
+        # Of the batch's created cases, how many the operator has decided
+        # (approved or rejected) — the review queue's per-bundle progress.
+        reviewedCases:
           type: integer
         failReason:
           type: ["string", "null"]

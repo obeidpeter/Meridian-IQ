@@ -11,6 +11,7 @@ import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
+import { countFirmUnbilled } from "../invoice/unbilled-income";
 import { assertFirmClerkBudget } from "./budget";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
 import { getClerkGateway } from "./provider";
@@ -62,6 +63,10 @@ export interface DigestFacts {
   overdueCount: number;
   failedCount: number;
   receivablesOver60Count: number;
+  // Expected-but-unraised recurring invoices across the firm's clients
+  // (unbilled-income.ts — same miner as the recurring/unbilled cards).
+  unbilledCount: number;
+  unbilledClients: number;
 }
 
 // Monday 00:00 UTC of the week containing `now` — the digest's identity key.
@@ -114,12 +119,15 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     `)
   ).rows;
   const r = rows[0];
+  const unbilled = await countFirmUnbilled(firmId);
   return {
     unsubmittedCount: Number(r?.unsubmitted ?? 0),
     dueSoonCount: Number(r?.due_soon ?? 0),
     overdueCount: Number(r?.overdue ?? 0),
     failedCount: Number(r?.failed ?? 0),
     receivablesOver60Count: Number(r?.recv_over_60 ?? 0),
+    unbilledCount: unbilled.alerts,
+    unbilledClients: unbilled.clients,
   };
 }
 
@@ -161,6 +169,11 @@ export function buildTemplateDigest(facts: DigestFacts): {
   if (facts.receivablesOver60Count > 0) {
     bullets.push(
       `${plural(facts.receivablesOver60Count, "receivable")} ${isAre(facts.receivablesOver60Count)} more than 60 days old — consider chasing payment.`,
+    );
+  }
+  if (facts.unbilledCount > 0) {
+    bullets.push(
+      `${plural(facts.unbilledCount, "regular invoice")} ${facts.unbilledCount === 1 ? "looks" : "look"} unraised across ${plural(facts.unbilledClients, "client")} — ${facts.unbilledCount === 1 ? "a monthly billing habit" : "monthly billing habits"} with nothing issued this cycle.`,
     );
   }
   const urgent = facts.overdueCount + facts.failedCount;
@@ -221,6 +234,7 @@ export async function generateFirmDigest(
       `- Invoices that failed submission: ${facts.failedCount}`,
       `- Unsubmitted invoices in total (draft or validated): ${facts.unsubmittedCount}`,
       `- Receivables older than 60 days: ${facts.receivablesOver60Count}`,
+      `- Regular monthly invoices that look unraised this cycle: ${facts.unbilledCount} (across ${facts.unbilledClients} client(s))`,
       `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
     ].join("\n");
     const result = await gateway.infer<z.infer<typeof digestOutput>>({

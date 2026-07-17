@@ -358,6 +358,9 @@ export interface CaseContext {
   // The capturing client_user's OWN party (SEC-03): register-history preflight
   // checks are scoped to it so a client can never read a sibling's ledger.
   clientPartyId?: string | null;
+  // Set by the async-batch processor so the review queue can group a
+  // bundle's segments together. Never an API input.
+  batchId?: string | null;
 }
 
 // The client party a case's CREATOR is confined to, or null when the creator
@@ -604,6 +607,7 @@ export async function createExtractionCase(
         sourceDurationSec:
           input.sourceType === "voice" ? (input.durationSec ?? null) : null,
         firmId: ctx.firmId ?? null,
+        batchId: ctx.batchId ?? null,
         createdBy: actorId,
       })
       .returning();
@@ -697,6 +701,7 @@ export async function listCases(filter: {
       question: clerkCasesTable.question,
       answer: clerkCasesTable.answer,
       firmId: clerkCasesTable.firmId,
+      batchId: clerkCasesTable.batchId,
       claimedBy: clerkCasesTable.claimedBy,
       claimedAt: clerkCasesTable.claimedAt,
       createdBy: clerkCasesTable.createdBy,

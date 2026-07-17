@@ -1088,6 +1088,27 @@ export function HealthPanel() {
               critical field kept its legitimate value. Pure SQL, no model
               involved in the judgment.
             </p>
+            {metrics.resistanceAlert && (
+              <div
+                className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+                data-testid="alert-resistance-drop"
+              >
+                <p className="font-semibold">
+                  Injection resistance dropped:{" "}
+                  {formatPct(metrics.resistanceAlert.fromRate)} in{" "}
+                  {metrics.resistanceAlert.fromMonth} →{" "}
+                  {formatPct(metrics.resistanceAlert.toRate)} in{" "}
+                  {metrics.resistanceAlert.toMonth} (
+                  {metrics.resistanceAlert.injectionFixtures} injection
+                  fixtures).
+                </p>
+                <p className="mt-1 text-xs">
+                  Review recent prompt changes and the red-team fixtures before
+                  promoting anything. The sweep has recorded this drop in the
+                  audit ledger.
+                </p>
+              </div>
+            )}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm" data-testid="table-injection-months">
