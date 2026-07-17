@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import {
   useImportClients,
+  useDraftClientImportWithClerk,
   type ClientImportRow,
   type ClientImportResult,
+  type ClientImportDraft,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +26,7 @@ import {
   XCircle,
   Copy,
   Users,
+  Sparkles,
 } from "lucide-react";
 
 const COLUMNS = [
@@ -118,20 +121,56 @@ export function ClientImport() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const importClients = useImportClients();
+  const clerkDraft = useDraftClientImportWithClerk();
 
   const [raw, setRaw] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<ClientImportResult | null>(null);
+  const [draft, setDraft] = useState<ClientImportDraft | null>(null);
   const [featureDark, setFeatureDark] = useState(false);
 
-  const rows = useMemo(() => parseClientRows(raw), [raw]);
+  const pastedRows = useMemo(() => parseClientRows(raw), [raw]);
+  // A Clerk draft supersedes the strict-template parse: its rows already went
+  // through the header-verified mapping, so they feed the SAME validate/commit
+  // flow — nothing is created until the ordinary import commit.
+  const rows = draft ? draft.rows : pastedRows;
 
   const onFile = async (file: File) => {
     setResult(null);
+    setDraft(null);
     setRaw(await file.text());
     setFileName(file.name);
   };
   const filePicker = useFilePicker(onFile);
+
+  // The pasted text is in OUR template exactly when every row has a legalName
+  // after a strict-header parse; anything else (practice-management exports,
+  // renamed headers) is what the Clerk mapping is for.
+  const looksLikeTemplate =
+    pastedRows.length > 0 && pastedRows.every((r) => r.legalName.trim() !== "");
+
+  const draftWithClerk = () => {
+    clerkDraft.mutate(
+      { data: { sampleCsv: raw } },
+      {
+        onSuccess: (res) => {
+          setDraft(res);
+          setResult(null);
+          toast({
+            title: "Draft ready",
+            description: `${res.rows.length} row(s) mapped from your file — review, then validate.`,
+          });
+        },
+        onError: () =>
+          toast({
+            title: "Clerk could not map that file",
+            description:
+              "Check the sample includes a header row naming the client column, or reshape it to the CSV template.",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
 
   const run = async (commit: boolean) => {
     if (rows.length === 0) return;
@@ -227,6 +266,7 @@ export function ClientImport() {
                 setRaw(e.target.value);
                 setFileName(null);
                 setResult(null);
+                setDraft(null);
               }}
               data-testid="input-csv"
             />
@@ -238,11 +278,78 @@ export function ClientImport() {
                   Loaded <span className="font-medium">{fileName}</span> —{" "}
                 </>
               ) : null}
-              {rows.length} row{rows.length === 1 ? "" : "s"} ready.
+              {rows.length} row{rows.length === 1 ? "" : "s"} ready
+              {draft ? " (mapped by Clerk)" : ""}.
             </p>
+          )}
+          {raw.trim().length >= 20 && !looksLikeTemplate && !draft && (
+            <div className="rounded-md border border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/40 p-3 space-y-2">
+              <p className="text-sm text-violet-900 dark:text-violet-200">
+                Headers don't match the template? Clerk can map your
+                practice-management export's columns — you review the mapping
+                before anything is validated or created.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={draftWithClerk}
+                disabled={clerkDraft.isPending || raw.length > 20000}
+                data-testid="button-clerk-draft-import"
+              >
+                <Sparkles className="w-4 h-4 mr-1.5" aria-hidden="true" />
+                {clerkDraft.isPending ? "Mapping…" : "Draft with Clerk"}
+              </Button>
+              {raw.length > 20000 && (
+                <p className="text-xs text-violet-900/70 dark:text-violet-200/70">
+                  The file is too large for Clerk mapping (20,000 character
+                  cap) — reshape it to the CSV template instead.
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
+
+      {draft && (
+        <Card data-testid="card-clerk-mapping">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-primary" aria-hidden="true" />
+              Clerk's column mapping
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {Object.entries(draft.columns).map(([target, source]) => (
+                <p key={target} className="text-sm">
+                  <span className="font-medium">{target}</span>{" "}
+                  <span className="text-muted-foreground">
+                    ← {source ?? "(not in the file)"}
+                  </span>
+                </p>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground" data-testid="text-mapping-stats">
+              Parsed {draft.validation.parsedCount} of{" "}
+              {draft.validation.lineCount} data row
+              {draft.validation.lineCount === 1 ? "" : "s"} under this mapping.
+              Every row still goes through the ordinary validate-then-commit
+              checks below.
+            </p>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setDraft(null);
+                setResult(null);
+              }}
+              data-testid="button-discard-mapping"
+            >
+              Discard mapping
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <Button

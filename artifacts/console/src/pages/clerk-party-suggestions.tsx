@@ -27,10 +27,16 @@ export function PartySuggestionChips({
           data-testid={`${testId}-${s.partyId}`}
         >
           {s.legalName} · {Math.round(s.confidence * 100)}%
-          {s.tinScore === 1 && (
+          {s.viaAlias ? (
             <span className="text-[10px] uppercase font-semibold">
-              TIN match
+              Remembered
             </span>
+          ) : (
+            s.tinScore === 1 && (
+              <span className="text-[10px] uppercase font-semibold">
+                TIN match
+              </span>
+            )
           )}
         </button>
       ))}

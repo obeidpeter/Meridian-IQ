@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.22.0
+ * OpenAPI spec version: 0.23.0
  */
 import type { EscalationContext } from './escalationContext';
 import type { EscalationStatus } from './escalationStatus';
@@ -19,5 +19,9 @@ export interface Escalation {
   status: EscalationStatus;
   /** @nullable */
   context?: EscalationContext;
+  /** @nullable */
+  operatorReply?: string | null;
+  /** @nullable */
+  repliedAt?: Date | null;
   createdAt: Date;
 }

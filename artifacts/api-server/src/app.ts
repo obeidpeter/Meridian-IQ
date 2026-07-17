@@ -50,6 +50,7 @@ const NO_CONTEXT_ROUTES = new Set([
   // Two sequential provider calls on the voice path (transcription + draft
   // inference) — far too slow to hold a pooled connection or fit the 30s cap.
   "POST /api/clerk/draft-invoice",
+  "POST /api/clerk/client-import-draft",
 ]);
 
 // Hard cap on how long a request may hold its transaction open. A handler that

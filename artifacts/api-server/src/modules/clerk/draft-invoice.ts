@@ -8,7 +8,11 @@ import { decodeBase64Checked } from "./cases";
 import { assertClerkEnabled, recordExternalCall, type ClerkGateway } from "./gateway";
 import { inClerkScope } from "./scope";
 import { fenceUntrusted } from "./prompts";
-import { scorePartyCandidates, type PartySuggestion } from "./party-match";
+import {
+  applyAlias,
+  scorePartyCandidates,
+  type PartySuggestion,
+} from "./party-match";
 import {
   transcribeVoiceProd,
   TRANSCRIBE_MODEL,
@@ -332,8 +336,8 @@ export async function draftInvoiceWithClerk(
     // NO_CONTEXT_ROUTES — the voice path makes two provider calls), so this
     // read takes its own short firm-scoped transaction; the sphere condition
     // remains the actual wall (parties is the shared spine with no RLS).
-    const candidates = await inClerkScope(tenantFirmId(principal), () =>
-      getDb()
+    buyerSuggestions = await inClerkScope(tenantFirmId(principal), async () => {
+      const candidates = await getDb()
         .select({
           id: partiesTable.id,
           legalName: partiesTable.legalName,
@@ -347,12 +351,19 @@ export async function draftInvoiceWithClerk(
             inArray(partiesTable.type, ["buyer"]),
             ...conditions,
           ),
+        );
+      // Alias memory (idea #6) reads the firm-keyed alias table, so it stays
+      // inside the same firm scope as the candidate read.
+      return applyAlias(
+        tenantFirmId(principal),
+        proposal.buyerName,
+        scorePartyCandidates(
+          { name: proposal.buyerName, tin: proposal.buyerTin },
+          candidates,
         ),
-    );
-    buyerSuggestions = scorePartyCandidates(
-      { name: proposal.buyerName, tin: proposal.buyerTin },
-      candidates,
-    );
+        candidates,
+      );
+    });
   }
 
   return {

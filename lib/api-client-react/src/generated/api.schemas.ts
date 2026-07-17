@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.22.0
+ * OpenAPI spec version: 0.23.0
  */
 export interface HealthStatus {
   status: string;
@@ -1628,6 +1628,10 @@ export interface Escalation {
   status: EscalationStatus;
   /** @nullable */
   context?: EscalationContext;
+  /** @nullable */
+  operatorReply?: string | null;
+  /** @nullable */
+  repliedAt?: string | null;
   createdAt: string;
 }
 
@@ -1980,6 +1984,10 @@ export interface CaseEscalation {
   status: string;
   /** @nullable */
   context?: CaseEscalationContext;
+  /** @nullable */
+  operatorReply?: string | null;
+  /** @nullable */
+  repliedAt?: string | null;
   createdAt: string;
 }
 
@@ -3024,6 +3032,7 @@ export interface ClerkPartySuggestion {
   confidence: number;
   tinScore: number;
   nameScore: number;
+  viaAlias?: boolean;
 }
 
 export interface ClerkPartySuggestions {
@@ -3228,6 +3237,66 @@ export interface StatementFormatDraft {
   bankName: string;
   columns: StatementColumnMap;
   validation: MappingValidation;
+}
+
+export interface DraftClientImportInput {
+  /**
+     * @minLength 20
+     * @maxLength 20000
+     */
+  sampleCsv: string;
+}
+
+export type ClientImportDraftColumns = {
+  legalName: string;
+  /** @nullable */
+  tin: string | null;
+  /** @nullable */
+  cacNumber: string | null;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  street: string | null;
+  /** @nullable */
+  city: string | null;
+  /** @nullable */
+  engagementTitle: string | null;
+};
+
+export type ClientImportDraftValidation = {
+  headerFound: boolean;
+  lineCount: number;
+  parsedCount: number;
+  parseRate: number;
+};
+
+export interface ClientImportDraft {
+  columns: ClientImportDraftColumns;
+  rows: ClientImportRow[];
+  validation: ClientImportDraftValidation;
+}
+
+export type EscalationReplyDraftSource = typeof EscalationReplyDraftSource[keyof typeof EscalationReplyDraftSource];
+
+
+export const EscalationReplyDraftSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface EscalationReplyDraft {
+  draft: string;
+  source: EscalationReplyDraftSource;
+  /** @nullable */
+  errorCode: string | null;
+}
+
+export interface ReplyToEscalationInput {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  reply: string;
 }
 
 export type EngagementNarrativeSource = typeof EngagementNarrativeSource[keyof typeof EngagementNarrativeSource];

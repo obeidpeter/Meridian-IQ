@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.22.0
+ * OpenAPI spec version: 0.23.0
  */
 import {
   useMutation,
@@ -63,6 +63,7 @@ import type {
   ClerkMetrics,
   ClerkPartySuggestions,
   ClerkUsage,
+  ClientImportDraft,
   ClientImportInput,
   ClientImportResult,
   ClientPortfolioDetail,
@@ -86,6 +87,7 @@ import type {
   DashboardSummary,
   DraftCatalogueEntryInput,
   DraftClaimWithClerkInput,
+  DraftClientImportInput,
   DraftInvoiceWithClerkInput,
   DraftStatementFormatInput,
   Engagement,
@@ -101,6 +103,7 @@ import type {
   ErrorCatalogueUpsertInput,
   Escalation,
   EscalationInput,
+  EscalationReplyDraft,
   ExplainFailureInput,
   ExportInvoicesCsvParams,
   ExportReceivablesCsvParams,
@@ -184,6 +187,7 @@ import type {
   RecurringInvoiceTemplateInput,
   RecurringInvoiceTemplateUpdateInput,
   RecurringSuggestion,
+  ReplyToEscalationInput,
   ResetPasswordInput,
   ResolveCaseInput,
   RevenueShareStatement,
@@ -12722,6 +12726,217 @@ export const useDraftStatementFormatWithClerk = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getDraftStatementFormatWithClerkMutationOptions(options));
+    }
+
+export const getDraftClientImportWithClerkUrl = () => {
+
+
+
+
+  return `/api/clerk/client-import-draft`
+}
+
+/**
+ * @summary Propose a column mapping for an arbitrary customer-list CSV — header-verified, parser-proven, never stored
+ */
+export const draftClientImportWithClerk = async (draftClientImportInput: DraftClientImportInput, options?: RequestInit): Promise<ClientImportDraft> => {
+
+  return customFetch<ClientImportDraft>(getDraftClientImportWithClerkUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftClientImportInput)
+  }
+);}
+
+
+
+
+export const getDraftClientImportWithClerkMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftClientImportWithClerk>>, TError,{data: BodyType<DraftClientImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftClientImportWithClerk>>, TError,{data: BodyType<DraftClientImportInput>}, TContext> => {
+
+const mutationKey = ['draftClientImportWithClerk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftClientImportWithClerk>>, {data: BodyType<DraftClientImportInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftClientImportWithClerk(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftClientImportWithClerkMutationResult = NonNullable<Awaited<ReturnType<typeof draftClientImportWithClerk>>>
+    export type DraftClientImportWithClerkMutationBody = BodyType<DraftClientImportInput>
+    export type DraftClientImportWithClerkMutationError = ErrorType<Error>
+
+    /**
+ * @summary Propose a column mapping for an arbitrary customer-list CSV — header-verified, parser-proven, never stored
+ */
+export const useDraftClientImportWithClerk = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftClientImportWithClerk>>, TError,{data: BodyType<DraftClientImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftClientImportWithClerk>>,
+        TError,
+        {data: BodyType<DraftClientImportInput>},
+        TContext
+      > => {
+      return useMutation(getDraftClientImportWithClerkMutationOptions(options));
+    }
+
+export const getDraftEscalationReplyUrl = (id: string,) => {
+
+
+
+
+  return `/api/escalations/${id}/reply-draft`
+}
+
+/**
+ * @summary Draft a grounded reply to an escalation (catalogue fix + attempt history; template fallback; operator edits and sends)
+ */
+export const draftEscalationReply = async (id: string, options?: RequestInit): Promise<EscalationReplyDraft> => {
+
+  return customFetch<EscalationReplyDraft>(getDraftEscalationReplyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getDraftEscalationReplyMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftEscalationReply>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftEscalationReply>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['draftEscalationReply'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftEscalationReply>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  draftEscalationReply(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftEscalationReplyMutationResult = NonNullable<Awaited<ReturnType<typeof draftEscalationReply>>>
+
+    export type DraftEscalationReplyMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Draft a grounded reply to an escalation (catalogue fix + attempt history; template fallback; operator edits and sends)
+ */
+export const useDraftEscalationReply = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftEscalationReply>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftEscalationReply>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDraftEscalationReplyMutationOptions(options));
+    }
+
+export const getReplyToEscalationUrl = (id: string,) => {
+
+
+
+
+  return `/api/escalations/${id}/reply`
+}
+
+/**
+ * @summary Send the operator's reply to an escalation (acknowledges an open escalation)
+ */
+export const replyToEscalation = async (id: string,
+    replyToEscalationInput: ReplyToEscalationInput, options?: RequestInit): Promise<Escalation> => {
+
+  return customFetch<Escalation>(getReplyToEscalationUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(replyToEscalationInput)
+  }
+);}
+
+
+
+
+export const getReplyToEscalationMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replyToEscalation>>, TError,{id: string;data: BodyType<ReplyToEscalationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof replyToEscalation>>, TError,{id: string;data: BodyType<ReplyToEscalationInput>}, TContext> => {
+
+const mutationKey = ['replyToEscalation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof replyToEscalation>>, {id: string;data: BodyType<ReplyToEscalationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  replyToEscalation(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReplyToEscalationMutationResult = NonNullable<Awaited<ReturnType<typeof replyToEscalation>>>
+    export type ReplyToEscalationMutationBody = BodyType<ReplyToEscalationInput>
+    export type ReplyToEscalationMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Send the operator's reply to an escalation (acknowledges an open escalation)
+ */
+export const useReplyToEscalation = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replyToEscalation>>, TError,{id: string;data: BodyType<ReplyToEscalationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof replyToEscalation>>,
+        TError,
+        {id: string;data: BodyType<ReplyToEscalationInput>},
+        TContext
+      > => {
+      return useMutation(getReplyToEscalationMutationOptions(options));
     }
 
 export const getGetClerkUsageUrl = () => {

@@ -231,6 +231,11 @@ const LADDER: LadderStep[] = [
     atTop: [bypass("clerk_red_team_fixtures")],
     afterRollback: [not(bypass("clerk_red_team_fixtures"))],
   },
+  {
+    version: 17, // party-name alias guardrails
+    atTop: [clerkTenant("party_name_aliases")],
+    afterRollback: [not(clerkTenant("party_name_aliases"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except
