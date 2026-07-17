@@ -93,20 +93,29 @@ export async function draftVatCoverNote(
   if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
 
   const facts = vatNoteFacts(pack);
-  const result = await gateway.infer<z.infer<typeof noteOutput>>({
-    purpose: "draft_vat_note",
-    caseId: null,
-    // Firm work product, so the firm's own allowance funds it (the route
-    // pre-checks for a clean 429; the gateway backstop re-checks).
-    firmId,
-    promptVersion: NOTE_PROMPT_VERSION,
-    system: NOTE_SYSTEM,
-    user: facts,
-    schemaName: "vat_cover_note",
-    jsonSchema: noteJsonSchema,
-    validator: noteOutput,
-    inputForHash: facts,
-  });
-  if (!result.ok) return fallback;
-  return { ...fallback, note: result.data.note, source: "clerk" };
+  // The try/catch closes the kill-switch TOCTOU: if clerk_ai flips off
+  // between the check above and the call, the gateway's own assert throws —
+  // and for this surface even that must answer with the template.
+  try {
+    const result = await gateway.infer<z.infer<typeof noteOutput>>({
+      purpose: "draft_vat_note",
+      caseId: null,
+      // Firm work product, so the firm's own allowance funds it. There is
+      // deliberately NO route budget pre-check: the gateway backstop turns
+      // an exhausted allowance into a typed failure, which answers with the
+      // template below — never a 429 (see the route comment).
+      firmId,
+      promptVersion: NOTE_PROMPT_VERSION,
+      system: NOTE_SYSTEM,
+      user: facts,
+      schemaName: "vat_cover_note",
+      jsonSchema: noteJsonSchema,
+      validator: noteOutput,
+      inputForHash: facts,
+    });
+    if (!result.ok) return fallback;
+    return { ...fallback, note: result.data.note, source: "clerk" };
+  } catch {
+    return fallback;
+  }
 }

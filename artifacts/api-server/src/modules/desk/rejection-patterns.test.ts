@@ -128,7 +128,10 @@ test("aggregates the firm's own rejections with trend and catalogue grounding", 
   assert.equal(raw.count, 1);
   assert.equal(raw.cause, null, "no catalogue entry yet");
 
-  assert.ok(report.totalRejections >= 4);
+  // Totals come from the same SQL pass as the rows (GROUPING SETS), so they
+  // are the true firm-window totals, independent of the row cap.
+  assert.equal(report.totalRejections, 4, "3 mapped + 1 unmapped in-window");
+  assert.equal(report.previousTotal, 1);
 });
 
 test("another firm's rejections never leak in", async () => {

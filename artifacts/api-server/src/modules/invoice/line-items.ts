@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb, invoicesTable, invoiceLinesTable } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
 
@@ -6,9 +6,8 @@ import { lagosDateString } from "../../lib/lagos-time";
 // already show WHAT they sell: the same line descriptions, at consistent
 // prices, month after month. This module MINES that catalogue
 // deterministically — no model call, nothing stored, computed on demand —
-// for three consumers:
+// for two consumers:
 //  - the SME draft form's "frequent items" chips (prefill a line);
-//  - NL invoice drafting (fill a price the instruction didn't state);
 //  - capture pre-flight (flag a unit price far off this item's history —
 //    the OCR-slipped-digit on a line, cheaper to catch than to unwind).
 //
@@ -27,8 +26,24 @@ const PRICE_CHECK_MIN_OCCURRENCES = 3;
 // (×10): totals vary with quantity, a specific item's unit price does not.
 const PRICE_OUTLIER_FACTOR = 4;
 const MAX_ITEMS = 30;
-// Live commercial documents only — mirrors register-preflight's exclusions.
+// Newest lines considered per mining pass — a safety cap so one very busy
+// client cannot make every capture pay for its full annual line history.
+const MAX_LINES = 5000;
+// The suggestions consumer casts a wide net: everything except dead paper —
+// mirrors recurring-suggest's exclusions.
 const DEAD_STATUSES = ["cancelled", "credited"] as const;
+// The pre-flight BASELINE is stricter: only documents that lived on the
+// rails may define an item's "usual" price. A Clerk approval creates a DRAFT
+// invoice, so a mis-extracted draft price must not seed the very check built
+// to catch the next mis-extraction. Mirrors register-preflight's
+// HISTORY_STATUSES.
+const LIVE_STATUSES = [
+  "validated",
+  "submitted",
+  "stamped",
+  "confirmed",
+  "settled",
+] as const;
 
 export interface LineItemSuggestion {
   // Normalized identity of the item (see itemKey) — stable across word
@@ -112,7 +127,9 @@ export function aggregateLineItems(lines: MinedLine[]): LineItemSuggestion[] {
       key,
       description: newest.description,
       count: group.length,
-      medianUnitPrice: String(median(prices)),
+      // Two decimals: an even-count median of 2-decimal prices otherwise
+      // carries float noise straight into the form's price input.
+      medianUnitPrice: median(prices).toFixed(2),
       vatRate: String(modalRate),
       lastUsed: newest.issueDate,
     });
@@ -121,10 +138,13 @@ export function aggregateLineItems(lines: MinedLine[]): LineItemSuggestion[] {
   return items.slice(0, MAX_ITEMS);
 }
 
-// The client's item catalogue, mined from its own live invoices in this firm.
+// The client's item catalogue, mined from its own invoices in this firm.
+// `liveOnly` narrows the basis to rails-proven documents — the pre-flight
+// baseline — while the default keeps the suggestion net wide.
 export async function listLineItemSuggestions(
   firmId: string,
   clientPartyId: string,
+  opts: { liveOnly?: boolean } = {},
 ): Promise<LineItemSuggestion[]> {
   const since = lagosDateString(new Date(Date.now() - LOOKBACK_DAYS * 86_400_000));
   const rows = await getDb()
@@ -141,12 +161,15 @@ export async function listLineItemSuggestions(
         eq(invoicesTable.firmId, firmId),
         eq(invoicesTable.supplierPartyId, clientPartyId),
         eq(invoicesTable.kind, "invoice"),
-        notInArray(invoicesTable.status, [...DEAD_STATUSES]),
+        opts.liveOnly
+          ? inArray(invoicesTable.status, [...LIVE_STATUSES])
+          : notInArray(invoicesTable.status, [...DEAD_STATUSES]),
         gte(invoicesTable.issueDate, since),
         sql`${invoiceLinesTable.unitPrice}::numeric > 0`,
       ),
     )
-    .orderBy(desc(invoicesTable.issueDate));
+    .orderBy(desc(invoicesTable.issueDate))
+    .limit(MAX_LINES);
 
   return aggregateLineItems(
     rows.map((r) => ({
