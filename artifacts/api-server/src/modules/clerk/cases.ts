@@ -8,7 +8,6 @@ import {
   invoicesTable,
   firmsTable,
   membershipsTable,
-  partiesTable,
   type ClerkCase,
   type ExtractionField,
   type ExtractionLine,
@@ -1040,39 +1039,20 @@ export async function decideCase(
 
   // Alias memory (exhaust idea #6): the approval just paired the DOCUMENT's
   // names with human-confirmed register parties — remember both. Best-effort
-  // (the module logs and continues); the approval is already committed logic
-  // above and must never fail over exhaust.
+  // and fully self-contained on the raw pool (register-name reads included):
+  // nothing here can touch the ambient transaction, so the approval can
+  // never fail over exhaust.
   const extractedField = (field: string): string | null =>
     existing.extraction?.fields.find((f) => f.field === field)?.value ?? null;
-  const [supplierParty] = await getDb()
-    .select({ id: partiesTable.id, legalName: partiesTable.legalName })
-    .from(partiesTable)
-    .where(eq(partiesTable.id, input.supplierPartyId!))
-    .limit(1);
-  const [buyerParty] = await getDb()
-    .select({ id: partiesTable.id, legalName: partiesTable.legalName })
-    .from(partiesTable)
-    .where(eq(partiesTable.id, input.buyerPartyId!))
-    .limit(1);
   await recordPartyAliases(input.firmId ?? null, [
-    ...(supplierParty
-      ? [
-          {
-            extractedName: extractedField("supplierName"),
-            partyId: supplierParty.id,
-            partyLegalName: supplierParty.legalName,
-          },
-        ]
-      : []),
-    ...(buyerParty
-      ? [
-          {
-            extractedName: extractedField("buyerName"),
-            partyId: buyerParty.id,
-            partyLegalName: buyerParty.legalName,
-          },
-        ]
-      : []),
+    {
+      extractedName: extractedField("supplierName"),
+      partyId: input.supplierPartyId!,
+    },
+    {
+      extractedName: extractedField("buyerName"),
+      partyId: input.buyerPartyId!,
+    },
   ]);
   return row;
 }

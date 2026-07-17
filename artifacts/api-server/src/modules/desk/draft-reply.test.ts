@@ -145,6 +145,12 @@ test("discarded output falls back to the template, never an error", async () => 
   assert.ok(draft.draft.length > 0, "a sendable reply either way");
 });
 
+test("no gateway at all (unconfigured provider) still answers with the template", async () => {
+  const draft = await draftEscalationReply(escalationId, null);
+  assert.equal(draft.source, "template");
+  assert.ok(draft.draft.includes(`test cause ${SALT}`));
+});
+
 test("a missing escalation is a clean 404", async () => {
   await assert.rejects(
     draftEscalationReply(randomUUID(), fakeGateway(() => "unused")),

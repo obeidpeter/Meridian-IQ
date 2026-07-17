@@ -61,11 +61,7 @@ test("aliasKey: names with no identity produce no key", () => {
 
 test("record + lookup round trip, scoped to the recording firm", async () => {
   await recordPartyAliases(firmId, [
-    {
-      extractedName: `DANGOTE CEM ${SALT}`,
-      partyId: partyA,
-      partyLegalName: `Dangote Cement ${SALT} Plc`,
-    },
+    { extractedName: `DANGOTE CEM ${SALT}`, partyId: partyA },
   ]);
   assert.equal(await lookupPartyAlias(firmId, `Dangote Cem ${SALT}`), partyA);
   assert.equal(
@@ -80,12 +76,10 @@ test("record + lookup round trip, scoped to the recording firm", async () => {
 });
 
 test("an alias identical to the register name is not stored", async () => {
+  // partyB's register name is "Lafarge Africa {SALT} Plc" — loaded by the
+  // module itself, so the identical-key skip works off the real register row.
   await recordPartyAliases(firmId, [
-    {
-      extractedName: `Lafarge Africa ${SALT} PLC`,
-      partyId: partyB,
-      partyLegalName: `Lafarge Africa ${SALT} Plc`,
-    },
+    { extractedName: `Lafarge Africa ${SALT} PLC`, partyId: partyB },
   ]);
   assert.equal(
     await lookupPartyAlias(firmId, `Lafarge Africa ${SALT}`),
@@ -97,19 +91,11 @@ test("an alias identical to the register name is not stored", async () => {
 test("newest confirmation wins when a name is re-pointed", async () => {
   const alias = `WACO Industries ${SALT}`;
   await recordPartyAliases(firmId, [
-    {
-      extractedName: alias,
-      partyId: partyA,
-      partyLegalName: `Dangote Cement ${SALT} Plc`,
-    },
+    { extractedName: alias, partyId: partyA },
   ]);
   assert.equal(await lookupPartyAlias(firmId, alias), partyA);
   await recordPartyAliases(firmId, [
-    {
-      extractedName: alias,
-      partyId: partyB,
-      partyLegalName: `Lafarge Africa ${SALT} Plc`,
-    },
+    { extractedName: alias, partyId: partyB },
   ]);
   assert.equal(await lookupPartyAlias(firmId, alias), partyB);
 });
@@ -117,11 +103,7 @@ test("newest confirmation wins when a name is re-pointed", async () => {
 test("applyAlias nominates, the candidate set decides", async () => {
   const name = `Golden Harvest ${SALT}`;
   await recordPartyAliases(firmId, [
-    {
-      extractedName: name,
-      partyId: partyA,
-      partyLegalName: `Dangote Cement ${SALT} Plc`,
-    },
+    { extractedName: name, partyId: partyA },
   ]);
   const candidates = [
     {
@@ -160,15 +142,29 @@ test("applyAlias nominates, the candidate set decides", async () => {
   const deduped = await applyAlias(firmId, name, scored, candidates);
   assert.equal(deduped.length, 1);
   assert.equal(deduped[0].viaAlias, true);
+
+  // A remembered NAME never outranks an exact-TIN match for a DIFFERENT
+  // party: names collide and can be steered by document text, TINs cannot.
+  const tinMatch = [
+    {
+      partyId: partyB,
+      legalName: `Lafarge Africa ${SALT} Plc`,
+      tin: "12345678-0001",
+      type: "buyer",
+      confidence: 0.6,
+      tinScore: 1,
+      nameScore: 0,
+    },
+  ];
+  const guarded = await applyAlias(firmId, name, tinMatch, candidates);
+  assert.equal(guarded.length, 1);
+  assert.equal(guarded[0].partyId, partyB, "the TIN match stays on top");
+  assert.equal(guarded[0].viaAlias, undefined, "the memory stays silent");
 });
 
 test("no firm means no memory in either direction", async () => {
   await recordPartyAliases(null, [
-    {
-      extractedName: `Orphan ${SALT}`,
-      partyId: partyA,
-      partyLegalName: "Different",
-    },
+    { extractedName: `Orphan ${SALT}`, partyId: partyA },
   ]);
   assert.equal(await lookupPartyAlias(null, `Orphan ${SALT}`), null);
   assert.equal(await lookupPartyAlias(firmId, `Orphan ${SALT}`), null);
