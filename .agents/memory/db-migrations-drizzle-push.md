@@ -95,3 +95,26 @@ non-TTY post-merge push with a "truncate?" prompt.
 - Bare `onConflictDoNothing()` (no named target) in seed.ts infers the arbiter
   from any unique index, so a standalone unique index works the same as the old
   table constraint — no `ON CONFLICT ON CONSTRAINT <name>` dependency exists.
+
+## The e2e harness consumes its seed — NEVER point it at meridian_ci
+
+`scripts/src/e2e/run.mjs` does NOT reset the database; it boots the built
+server against whatever `DATABASE_URL` says and relies on the boot seed. The
+journeys MUTATE that seed: each successful pass credits one of the demo
+client's stamped invoices (the credit-note journey), so a reused database
+runs out of stamped invoices after two passes and the run fails with
+`FAIL a stamped, consented invoice exists to credit` (36/37 — the dependent
+CORE-09 check is skipped, which is why the total drops from 38).
+
+Always give the e2e its own freshly created scratch DB per run:
+
+```
+psql .../postgres -c "DROP DATABASE IF EXISTS meridian_e2e"
+psql .../postgres -c "CREATE DATABASE meridian_e2e"
+DATABASE_URL=.../meridian_e2e pnpm --filter @workspace/db run push
+DATABASE_URL=.../meridian_e2e pnpm --filter @workspace/db run migrate
+DATABASE_URL=.../meridian_e2e pnpm --filter @workspace/scripts run e2e
+```
+
+CI is immune (fresh DB per workflow run), so "local e2e fails, CI passes"
+with this exact signature means a polluted local e2e DB, not a regression.
