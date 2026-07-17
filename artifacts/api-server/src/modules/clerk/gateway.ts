@@ -79,6 +79,12 @@ export type ClerkPurpose =
   // §13.1 evaluation traffic: same prompt and schema as extract_invoice, but
   // its own purpose so metrics cohorts separate eval runs from production.
   | "eval_extract"
+  // Prompt canary (prompt-canary.ts): candidate-vs-incumbent corpus passes;
+  // its own purpose so canary spend never blends into the eval cohort.
+  | "eval_canary"
+  // Scanned-bundle segmentation (batch-async): one vision call proposing
+  // page ranges; the app validates coverage before anything else runs.
+  | "segment_scan"
   // Catalogue-grounded failure explainer (expansion C): rephrases an error
   // catalogue entry in plain language; never invents remediation steps.
   | "explain_failure"

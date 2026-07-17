@@ -51,6 +51,8 @@ const NO_CONTEXT_ROUTES = new Set([
   // inference) — far too slow to hold a pooled connection or fit the 30s cap.
   "POST /api/clerk/draft-invoice",
   "POST /api/clerk/client-import-draft",
+  // A canary is 2× a corpus pass of model calls — far past the 30s cap.
+  "POST /api/clerk/eval/canary",
 ]);
 
 // Hard cap on how long a request may hold its transaction open. A handler that

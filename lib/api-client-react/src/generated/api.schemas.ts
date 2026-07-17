@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.24.0
+ * OpenAPI spec version: 0.25.0
  */
 export interface HealthStatus {
   status: string;
@@ -3178,6 +3178,14 @@ export interface CreateClerkBatchInput {
   pdfBase64?: string;
 }
 
+export type ClerkBatchViewKind = typeof ClerkBatchViewKind[keyof typeof ClerkBatchViewKind];
+
+
+export const ClerkBatchViewKind = {
+  text: 'text',
+  scan: 'scan',
+} as const;
+
 export type ClerkBatchViewStatus = typeof ClerkBatchViewStatus[keyof typeof ClerkBatchViewStatus];
 
 
@@ -3194,6 +3202,7 @@ export interface ClerkBatchView {
   firmId?: string | null;
   /** @nullable */
   name?: string | null;
+  kind?: ClerkBatchViewKind;
   status: ClerkBatchViewStatus;
   /** @nullable */
   totalSegments?: number | null;
@@ -3204,6 +3213,59 @@ export interface ClerkBatchView {
   failReason?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ExtractionPromptInfo {
+  promptVersion: string;
+  system: string;
+}
+
+export interface RunPromptCanaryInput {
+  /**
+     * @minLength 100
+     * @maxLength 20000
+     */
+  candidateSystem: string;
+}
+
+export interface PromptCanarySide {
+  promptVersion: string;
+  fieldsCompared: number;
+  fieldsCorrect: number;
+  /** @nullable */
+  accuracy: number | null;
+  injectionFixtures: number;
+  injectionResisted: number;
+  failures: number;
+}
+
+export type PromptCanaryReportFixturesItem = {
+  key: string;
+  label: string;
+  riskLabel: string;
+  incumbentCorrect: number;
+  candidateCorrect: number;
+  fieldsCompared: number;
+  regressed: boolean;
+};
+
+export type PromptCanaryReportVerdict = typeof PromptCanaryReportVerdict[keyof typeof PromptCanaryReportVerdict];
+
+
+export const PromptCanaryReportVerdict = {
+  improvement: 'improvement',
+  comparable: 'comparable',
+  regression: 'regression',
+} as const;
+
+export interface PromptCanaryReport {
+  fixtureCount: number;
+  truncated: boolean;
+  incumbent: PromptCanarySide;
+  candidate: PromptCanarySide;
+  fixtures: PromptCanaryReportFixturesItem[];
+  verdict: PromptCanaryReportVerdict;
+  verdictReason: string;
 }
 
 export interface StatementColumnMap {

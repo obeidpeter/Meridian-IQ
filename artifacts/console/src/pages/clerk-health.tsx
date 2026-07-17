@@ -3,13 +3,20 @@ import {
   useGetClerkMetrics,
   useRunClerkEval,
   useListClerkEvalRuns,
+  useGetExtractionPrompt,
+  useRunPromptCanary,
   getGetClerkMetricsQueryKey,
   getListClerkEvalRunsQueryKey,
+  getGetExtractionPromptQueryKey,
 } from "@workspace/api-client-react";
-import type { ClerkMetricsCases } from "@workspace/api-client-react";
+import type {
+  ClerkMetricsCases,
+  PromptCanaryReport,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -146,6 +153,138 @@ function BreakdownRow({
         </div>
       )}
     </div>
+  );
+}
+
+// Prompt canary (round-5 idea #2): run the eval corpus under a CANDIDATE
+// system prompt and the incumbent side by side. Decision support only — the
+// verdict rule is deterministic and server-side, nothing is stored, and
+// promotion is a code change the operator makes with this evidence in hand.
+const VERDICT_TONE: Record<string, BadgeTone> = {
+  improvement: "emerald",
+  comparable: "slate",
+  regression: "red",
+};
+
+function PromptCanaryCard() {
+  const { toast } = useToast();
+  const { data: incumbent } = useGetExtractionPrompt({
+    query: { queryKey: getGetExtractionPromptQueryKey(), retry: false },
+  });
+  const [candidate, setCandidate] = useState("");
+  const [report, setReport] = useState<PromptCanaryReport | null>(null);
+  const canary = useRunPromptCanary({
+    mutation: {
+      onSuccess: (res) => setReport(res),
+      onError: (e) =>
+        toast({
+          title: "Canary failed",
+          description: serverErrorMessage(e) ?? "Could not run the canary.",
+          variant: "destructive",
+        }),
+    },
+  });
+
+  const side = (label: string, s: PromptCanaryReport["incumbent"]) => (
+    <div className="rounded-md border p-3 space-y-1 text-sm" data-testid={`canary-${label}`}>
+      <p className="text-xs font-medium text-muted-foreground uppercase">
+        {label} · {s.promptVersion}
+      </p>
+      <p>
+        Accuracy:{" "}
+        <span className="font-semibold tabular-nums">
+          {s.accuracy != null ? formatPct(s.accuracy) : "—"}
+        </span>{" "}
+        <span className="text-muted-foreground">
+          ({s.fieldsCorrect}/{s.fieldsCompared} fields)
+        </span>
+      </p>
+      <p>
+        Injection resisted:{" "}
+        <span className="font-semibold tabular-nums">
+          {s.injectionResisted}/{s.injectionFixtures}
+        </span>
+        {s.failures > 0 && (
+          <span className="text-muted-foreground"> · {s.failures} failed call(s)</span>
+        )}
+      </p>
+    </div>
+  );
+
+  return (
+    <Card data-testid="section-prompt-canary">
+      <CardHeader>
+        <CardTitle className="text-base">Prompt canary</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Test a candidate extraction prompt against the incumbent over the
+          same eval corpus — twice the model calls of an evaluation run. The
+          verdict is deterministic: injection resistance may never drop, and
+          accuracy is judged outside a 2% noise band. Nothing is stored;
+          promoting a prompt is a code change.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!incumbent}
+            onClick={() => incumbent && setCandidate(incumbent.system)}
+            data-testid="button-canary-prefill"
+          >
+            Start from the live prompt
+          </Button>
+        </div>
+        <Textarea
+          value={candidate}
+          onChange={(e) => {
+            setCandidate(e.target.value);
+            setReport(null);
+          }}
+          placeholder="Paste or edit the candidate system prompt (min 100 characters)…"
+          className="min-h-[140px] font-mono text-xs"
+          data-testid="input-canary-candidate"
+        />
+        <Button
+          size="sm"
+          disabled={canary.isPending || candidate.trim().length < 100}
+          onClick={() =>
+            canary.mutate({ data: { candidateSystem: candidate } })
+          }
+          data-testid="button-run-canary"
+        >
+          {canary.isPending ? "Running canary…" : "Run canary"}
+        </Button>
+        {report && (
+          <div className="space-y-3" data-testid="canary-report">
+            <div className="flex items-center gap-2">
+              <span className={pillClasses(VERDICT_TONE[report.verdict] ?? "slate")}>
+                {report.verdict}
+              </span>
+              <p className="text-sm">{report.verdictReason}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {side("incumbent", report.incumbent)}
+              {side("candidate", report.candidate)}
+            </div>
+            {report.fixtures.some((f) => f.regressed) && (
+              <div className="text-xs text-muted-foreground">
+                Regressed fixtures:{" "}
+                {report.fixtures
+                  .filter((f) => f.regressed)
+                  .map((f) => f.label)
+                  .join("; ")}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {report.fixtureCount} fixture(s)
+              {report.truncated ? " (corpus truncated to the canary cap)" : ""} ·
+              both sides ran the same corpus through the live gateway.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -884,6 +1023,8 @@ export function HealthPanel() {
           )}
         </CardContent>
       </Card>
+
+      <PromptCanaryCard />
     </div>
   );
 }

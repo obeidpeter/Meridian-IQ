@@ -3,8 +3,9 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.24.0
+ * OpenAPI spec version: 0.25.0
  */
+import type { ClerkBatchViewKind } from './clerkBatchViewKind';
 import type { ClerkBatchViewStatus } from './clerkBatchViewStatus';
 
 export interface ClerkBatchView {
@@ -13,6 +14,7 @@ export interface ClerkBatchView {
   firmId?: string | null;
   /** @nullable */
   name?: string | null;
+  kind?: ClerkBatchViewKind;
   status: ClerkBatchViewStatus;
   /** @nullable */
   totalSegments?: number | null;

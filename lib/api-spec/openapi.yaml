@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.24.0
+  version: 0.25.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2969,6 +2969,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClerkEvalRun"
+  /clerk/eval/prompt:
+    get:
+      operationId: getExtractionPrompt
+      tags: [clerk]
+      summary: The incumbent extraction system prompt and version (start a canary candidate from what actually runs)
+      responses:
+        "200":
+          description: The live prompt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractionPromptInfo"
+  /clerk/eval/canary:
+    post:
+      operationId: runPromptCanary
+      tags: [clerk]
+      summary: Run the eval corpus under a candidate system prompt and the incumbent side by side; deterministic diff and verdict, nothing stored
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunPromptCanaryInput"
+      responses:
+        "200":
+          description: The canary report — candidate vs incumbent with a deterministic verdict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptCanaryReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /clerk/eval/runs:
     get:
       operationId: listClerkEvalRuns
@@ -7601,6 +7633,11 @@ components:
           type: ["string", "null"]
         name:
           type: ["string", "null"]
+        # 'scan' when the bundle was a textless PDF processed via the vision
+        # segmentation path (round-5 idea #1).
+        kind:
+          type: string
+          enum: [text, scan]
         status:
           type: string
           enum: [queued, processing, done, failed]
@@ -7620,6 +7657,90 @@ components:
         updatedAt:
           type: string
           format: date-time
+    ExtractionPromptInfo:
+      type: object
+      required: [promptVersion, system]
+      properties:
+        promptVersion:
+          type: string
+        system:
+          type: string
+    RunPromptCanaryInput:
+      type: object
+      required: [candidateSystem]
+      properties:
+        candidateSystem:
+          type: string
+          minLength: 100
+          maxLength: 20000
+    PromptCanarySide:
+      type: object
+      required:
+        [
+          promptVersion,
+          fieldsCompared,
+          fieldsCorrect,
+          accuracy,
+          injectionFixtures,
+          injectionResisted,
+          failures,
+        ]
+      properties:
+        promptVersion:
+          type: string
+        fieldsCompared:
+          type: integer
+        fieldsCorrect:
+          type: integer
+        accuracy:
+          type: ["number", "null"]
+        injectionFixtures:
+          type: integer
+        injectionResisted:
+          type: integer
+        failures:
+          type: integer
+    PromptCanaryReport:
+      type: object
+      required:
+        [fixtureCount, truncated, incumbent, candidate, fixtures, verdict, verdictReason]
+      properties:
+        fixtureCount:
+          type: integer
+        truncated:
+          type: boolean
+        incumbent:
+          $ref: "#/components/schemas/PromptCanarySide"
+        candidate:
+          $ref: "#/components/schemas/PromptCanarySide"
+        fixtures:
+          type: array
+          items:
+            type: object
+            required:
+              [key, label, riskLabel, incumbentCorrect, candidateCorrect, fieldsCompared, regressed]
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              riskLabel:
+                type: string
+              incumbentCorrect:
+                type: integer
+              candidateCorrect:
+                type: integer
+              fieldsCompared:
+                type: integer
+              regressed:
+                type: boolean
+        # The deterministic verdict rule: injection resistance may never
+        # drop; accuracy changes inside the noise band are comparable.
+        verdict:
+          type: string
+          enum: [improvement, comparable, regression]
+        verdictReason:
+          type: string
     StatementColumnMap:
       type: object
       required: [date, narration]

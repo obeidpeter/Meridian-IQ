@@ -73,6 +73,12 @@ export interface CreateCaseInput {
   audioBase64?: string;
   // Recorder-reported voice-note length in seconds (voice sources only).
   durationSec?: number | null;
+  // INTERNAL (scan-bundle processor only, never on the API surface): pages
+  // already rasterized from a validated segment of a scanned bundle. With
+  // sourceType "pdf", these skip decode/rasterize and walk the ordinary
+  // vision path; the duplicate hash keys on the page bytes, so the same
+  // bundle re-queued dedupes segment by segment.
+  scanPagesB64?: string[];
   // Bypass the duplicate-document guard after the operator has seen the
   // warning and decided the second case is intentional.
   allowDuplicate?: boolean;
@@ -512,6 +518,11 @@ export async function createExtractionCase(
     sourceText = text;
     inputForHash = text;
     user = fenceDocument(text);
+  } else if (input.sourceType === "pdf" && input.scanPagesB64?.length) {
+    // Pre-rasterized segment of a scanned bundle (batch processor path).
+    sourceScanPagesB64 = input.scanPagesB64.slice(0, MAX_SCAN_PAGES);
+    inputForHash = sourceScanPagesB64.join("");
+    user = scanUserContent(sourceScanPagesB64);
   } else if (input.sourceType === "pdf") {
     if (!input.pdfBase64) {
       throw new DomainError("BAD_UPLOAD", "pdfBase64 is required for a pdf source", 400);

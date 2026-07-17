@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.24.0
+ * OpenAPI spec version: 0.25.0
  */
 
 export * from './acceptInvitationInput';
@@ -68,6 +68,7 @@ export * from './claimUpdateInput';
 export * from './clerkAnswer';
 export * from './clerkAnswerDataParams';
 export * from './clerkBatchView';
+export * from './clerkBatchViewKind';
 export * from './clerkBatchViewStatus';
 export * from './clerkCase';
 export * from './clerkCaseCreateInput';
@@ -198,6 +199,7 @@ export * from './explainFailureInput';
 export * from './exportInvoicesCsvParams';
 export * from './exportReceivablesCsvParams';
 export * from './exportVatPackCsvParams';
+export * from './extractionPromptInfo';
 export * from './failureExplanation';
 export * from './failureExplanationSource';
 export * from './featureFlag';
@@ -322,6 +324,10 @@ export * from './paymentFlagInput';
 export * from './paymentFlagInputPaymentStatus';
 export * from './portfolioSummary';
 export * from './priceReview';
+export * from './promptCanaryReport';
+export * from './promptCanaryReportFixturesItem';
+export * from './promptCanaryReportVerdict';
+export * from './promptCanarySide';
 export * from './prospectInput';
 export * from './prospectInputStage';
 export * from './prospectUpdate';
@@ -358,6 +364,7 @@ export * from './resetPasswordInput';
 export * from './resolveCaseInput';
 export * from './revenueShareStatement';
 export * from './runAssessmentInput';
+export * from './runPromptCanaryInput';
 export * from './scoreboardRow';
 export * from './settlementEvent';
 export * from './settlementEventPaymentStatus';

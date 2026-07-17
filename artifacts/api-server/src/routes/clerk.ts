@@ -49,6 +49,9 @@ import {
   DraftStatementFormatWithClerkResponse,
   DraftClientImportWithClerkBody,
   DraftClientImportWithClerkResponse,
+  GetExtractionPromptResponse,
+  RunPromptCanaryBody,
+  RunPromptCanaryResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
@@ -99,6 +102,11 @@ import {
   runEvalCorpus,
   withAccuracy,
 } from "../modules/clerk/eval";
+import { runPromptCanary } from "../modules/clerk/prompt-canary";
+import {
+  EXTRACT_PROMPT_VERSION,
+  EXTRACT_SYSTEM,
+} from "../modules/clerk/prompts";
 
 const router: IRouter = Router();
 
@@ -245,6 +253,34 @@ router.get("/clerk/eval/runs", async (req, res): Promise<void> => {
   res.json(ListClerkEvalRunsResponse.parse(runs.map(withAccuracy)));
 });
 
+// Prompt canary (round-5 idea #2). The incumbent extraction prompt, so the
+// operator can start a candidate from what actually runs today...
+router.get("/clerk/eval/prompt", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  res.json(
+    GetExtractionPromptResponse.parse({
+      promptVersion: EXTRACT_PROMPT_VERSION,
+      system: EXTRACT_SYSTEM,
+    }),
+  );
+});
+
+// ...and the canary itself: candidate vs incumbent over the eval corpus,
+// deterministic scoring and verdict, nothing stored — decision support for
+// a prompt change the operator makes in code. Spends tokens (2× a corpus
+// pass); operator-gated like the eval run.
+router.post("/clerk/eval/canary", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const parsed = parseOrThrow(RunPromptCanaryBody, req.body);
+  const gateway = await getClerkGateway();
+  const report = await runPromptCanary(
+    req.principal.userId,
+    parsed.candidateSystem,
+    gateway,
+  );
+  res.json(RunPromptCanaryResponse.parse(report));
+});
+
 router.get("/clerk/metrics", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
   const query = GetClerkMetricsQueryParams.safeParse(req.query);
@@ -293,6 +329,7 @@ const stripBatch = (b: ClerkBatch) => ({
   id: b.id,
   firmId: b.firmId,
   name: b.name,
+  kind: b.sourceKind,
   status: b.status,
   totalSegments: b.totalSegments,
   processedSegments: b.processedSegments,
