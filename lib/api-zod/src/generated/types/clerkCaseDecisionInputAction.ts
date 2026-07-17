@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.31.0
+ * OpenAPI spec version: 0.33.0
  */
 
 export type ClerkCaseDecisionInputAction = typeof ClerkCaseDecisionInputAction[keyof typeof ClerkCaseDecisionInputAction];

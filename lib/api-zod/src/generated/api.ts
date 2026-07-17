@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.31.0
+ * OpenAPI spec version: 0.33.0
  */
 import * as zod from 'zod';
 
@@ -400,6 +400,50 @@ export const UpdatePartyResponse = zod.object({
 })
 
 
+/**
+ * @summary What each side of a proposed party merge carries (deterministic counts)
+ */
+export const GetMergeImpactQueryParams = zod.object({
+  "survivorId": zod.coerce.string().uuid(),
+  "duplicateId": zod.coerce.string().uuid()
+})
+
+export const GetMergeImpactResponse = zod.object({
+  "survivor": zod.union([zod.object({
+  "partyId": zod.string(),
+  "legalName": zod.string().nullable(),
+  "tin": zod.string().nullable(),
+  "merged": zod.boolean(),
+  "invoicesAsSupplier": zod.number(),
+  "invoicesAsBuyer": zod.number(),
+  "engagements": zod.number(),
+  "memberships": zod.number(),
+  "recurringTemplates": zod.number(),
+  "aliases": zod.number(),
+  "bankStatements": zod.number(),
+  "escalations": zod.number(),
+  "consents": zod.number(),
+  "operatorCases": zod.number()
+}),zod.null()]),
+  "duplicate": zod.union([zod.object({
+  "partyId": zod.string(),
+  "legalName": zod.string().nullable(),
+  "tin": zod.string().nullable(),
+  "merged": zod.boolean(),
+  "invoicesAsSupplier": zod.number(),
+  "invoicesAsBuyer": zod.number(),
+  "engagements": zod.number(),
+  "memberships": zod.number(),
+  "recurringTemplates": zod.number(),
+  "aliases": zod.number(),
+  "bankStatements": zod.number(),
+  "escalations": zod.number(),
+  "consents": zod.number(),
+  "operatorCases": zod.number()
+}),zod.null()])
+})
+
+
 export const MergePartiesBody = zod.object({
   "survivorId": zod.string(),
   "duplicateId": zod.string()
@@ -761,6 +805,119 @@ export const DraftVatPackCoverNoteBody = zod.object({
 export const DraftVatPackCoverNoteResponse = zod.object({
   "monthStart": zod.string(),
   "monthLabel": zod.string(),
+  "note": zod.string(),
+  "source": zod.enum(['clerk', 'template']),
+  "disclosure": zod.string()
+})
+
+
+/**
+ * @summary Settlement coverage of the pack month's accepted invoices (assurance view — unsettled means unobserved, not unpaid)
+ */
+export const getVatSettlementCheckQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const GetVatSettlementCheckQueryParams = zod.object({
+  "month": zod.coerce.string().regex(getVatSettlementCheckQueryMonthRegExp).optional().describe('A closed Lagos month\'s first day (YYYY-MM-01); defaults to the newest closed month.')
+})
+
+export const GetVatSettlementCheckResponse = zod.object({
+  "monthStart": zod.string(),
+  "monthLabel": zod.string(),
+  "months": zod.array(zod.string()),
+  "acceptedCount": zod.number(),
+  "acceptedTotal": zod.string(),
+  "settledCount": zod.number(),
+  "settledTotal": zod.string(),
+  "outstandingCount": zod.number(),
+  "outstandingTotal": zod.string(),
+  "creditedCount": zod.number(),
+  "creditedTotal": zod.string(),
+  "settledShare": zod.number().nullable(),
+  "unsettled": zod.array(zod.object({
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "clientName": zod.string(),
+  "buyerName": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullable(),
+  "currency": zod.string(),
+  "grandTotal": zod.string(),
+  "status": zod.string()
+})),
+  "unsettledTruncated": zod.boolean(),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Firm quarterly review pack — the closed quarter's monthly VAT packs, submissions, rejections, receivables snapshot and Clerk throughput in one deterministic document
+ */
+export const getQuarterlyReviewQueryQuarterRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const GetQuarterlyReviewQueryParams = zod.object({
+  "quarter": zod.coerce.string().regex(getQuarterlyReviewQueryQuarterRegExp).optional().describe('First month of a closed Lagos quarter (YYYY-MM-01); defaults to the newest closed quarter.')
+})
+
+export const GetQuarterlyReviewResponse = zod.object({
+  "quarterStart": zod.string(),
+  "quarterLabel": zod.string(),
+  "quarters": zod.array(zod.string()),
+  "months": zod.array(zod.object({
+  "monthStart": zod.string(),
+  "monthLabel": zod.string(),
+  "acceptedCount": zod.number(),
+  "acceptedVat": zod.string(),
+  "creditVat": zod.string(),
+  "netVat": zod.string()
+})),
+  "vatTotals": zod.object({
+  "acceptedCount": zod.number(),
+  "acceptedVat": zod.string(),
+  "creditVat": zod.string(),
+  "netVat": zod.string()
+}),
+  "submissions": zod.object({
+  "accepted": zod.number(),
+  "rejected": zod.number()
+}),
+  "topRejections": zod.array(zod.object({
+  "errorCode": zod.string(),
+  "category": zod.string().nullable(),
+  "count": zod.number()
+})),
+  "rejectionTotal": zod.number(),
+  "receivables": zod.object({
+  "asOf": zod.string(),
+  "groups": zod.array(zod.object({
+  "currency": zod.string(),
+  "outstandingTotal": zod.string(),
+  "invoiceCount": zod.number()
+}))
+}),
+  "clerk": zod.object({
+  "captures": zod.number(),
+  "approved": zod.number(),
+  "rejected": zod.number()
+}),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Draft a cover note phrasing the quarterly review's computed facts (template fallback; nothing stored — the partner edits and owns it)
+ */
+export const draftQuarterlyCoverNoteBodyQuarterRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const DraftQuarterlyCoverNoteBody = zod.object({
+  "quarter": zod.string().regex(draftQuarterlyCoverNoteBodyQuarterRegExp).optional()
+})
+
+export const DraftQuarterlyCoverNoteResponse = zod.object({
+  "quarterStart": zod.string(),
+  "quarterLabel": zod.string(),
   "note": zod.string(),
   "source": zod.enum(['clerk', 'template']),
   "disclosure": zod.string()
@@ -1448,6 +1605,42 @@ export const ListUnmappedErrorCodesResponseItem = zod.object({
   "lastSeenAt": zod.coerce.date()
 })
 export const ListUnmappedErrorCodesResponse = zod.array(ListUnmappedErrorCodesResponseItem)
+
+
+/**
+ * @summary Catalogue coverage & mapping SLA — the INT-02 measurement (pure SQL, platform-wide)
+ */
+export const GetCatalogueCoverageResponse = zod.object({
+  "windowDays": zod.number(),
+  "slaWindowDays": zod.number(),
+  "rejectedAttempts": zod.number(),
+  "mappedAttempts": zod.number(),
+  "mappedShare": zod.number().nullable(),
+  "uncodedRejections": zod.number(),
+  "distinctCodes": zod.number(),
+  "mappedCodes": zod.number(),
+  "openUnmapped": zod.array(zod.object({
+  "code": zod.string(),
+  "occurrences": zod.number(),
+  "firstSeen": zod.string(),
+  "lastSeen": zod.string(),
+  "openCase": zod.boolean()
+})),
+  "unmappedTruncated": zod.boolean(),
+  "sla": zod.object({
+  "judged": zod.number(),
+  "avgDaysToMap": zod.number().nullable(),
+  "maxDaysToMap": zod.number().nullable(),
+  "withinOneDayShare": zod.number().nullable(),
+  "proactive": zod.number()
+}),
+  "recentMappings": zod.array(zod.object({
+  "code": zod.string(),
+  "firstSeen": zod.string(),
+  "mappedAt": zod.string(),
+  "daysToMap": zod.number()
+}))
+})
 
 
 /**
@@ -2240,6 +2433,35 @@ export const GetFirmReceivablesResponse = zod.object({
   "invoiceCount": zod.number(),
   "oldestDueDate": zod.string().nullable()
 }))
+})
+
+
+/**
+ * @summary The desk's deterministic daily brief — queues, stuck work, platform state, yesterday's throughput
+ */
+export const GetOperatorBriefResponse = zod.object({
+  "asOf": zod.string(),
+  "openCases": zod.object({
+  "byPriority": zod.array(zod.object({
+  "priority": zod.string(),
+  "count": zod.number()
+})),
+  "oldestTitle": zod.string().nullable(),
+  "oldestOpenedAt": zod.string().nullable()
+}),
+  "unansweredEscalations": zod.object({
+  "count": zod.number(),
+  "oldestReason": zod.string().nullable(),
+  "oldestRaisedAt": zod.string().nullable()
+}),
+  "stuckBatches": zod.object({
+  "count": zod.number(),
+  "oldestQueuedAt": zod.string().nullable()
+}),
+  "unmappedCodeCases": zod.number(),
+  "clerkEnabled": zod.boolean(),
+  "resistanceAlert": zod.boolean(),
+  "decidedYesterday": zod.number()
 })
 
 
@@ -4171,7 +4393,8 @@ export const askClerkBodyQuestionMax = 2000;
 
 
 export const AskClerkBody = zod.object({
-  "question": zod.string().min(askClerkBodyQuestionMin).max(askClerkBodyQuestionMax)
+  "question": zod.string().min(askClerkBodyQuestionMin).max(askClerkBodyQuestionMax),
+  "previousCaseId": zod.string().uuid().optional()
 })
 
 export const AskClerkResponse = zod.object({

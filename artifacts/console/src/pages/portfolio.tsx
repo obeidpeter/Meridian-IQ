@@ -15,6 +15,12 @@ import {
   getGetClerkAdoptionReportQueryKey,
   useDraftVatPackCoverNote,
   type VatPackCoverNote,
+  useGetVatSettlementCheck,
+  getGetVatSettlementCheckQueryKey,
+  useGetQuarterlyReview,
+  getGetQuarterlyReviewQueryKey,
+  useDraftQuarterlyCoverNote,
+  type QuarterlyReviewCoverNote,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -279,6 +285,348 @@ function VatPackCard() {
                 variant="ghost"
                 onClick={() => setNote(null)}
                 data-testid="button-discard-cover-note"
+              >
+                Discard
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// VAT settlement cross-check (round-13 idea #6): how much of the pack
+// month's accepted value the platform has OBSERVED settling. Deliberately an
+// assurance view — the server's note says "unobserved, not unpaid" and it
+// renders with every state.
+function VatSettlementCard() {
+  const [month, setMonth] = useState<string | undefined>(undefined);
+  const params = month ? { month } : undefined;
+  const { data: check, isSuccess } = useGetVatSettlementCheck(params, {
+    query: { queryKey: getGetVatSettlementCheckQueryKey(params), retry: false },
+  });
+  if (!isSuccess || !check) return null;
+  return (
+    <Card
+      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid="card-vat-settlement"
+    >
+      <CardHeader>
+        <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
+          <span>Settlement cross-check — {check.monthLabel}</span>
+          <Select value={check.monthStart} onValueChange={(m) => setMonth(m)}>
+            <SelectTrigger
+              className="h-8 w-44 text-xs"
+              data-testid="select-vat-settlement-month"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {check.months.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {packMonthLabel(m)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {check.acceptedCount === 0 ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-vat-settlement-empty"
+          >
+            No invoices were accepted by the rails in {check.monthLabel}.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatTile
+                label="Accepted"
+                value={`${check.acceptedCount}`}
+                detail={formatNaira(check.acceptedTotal)}
+                testId="tile-settlement-accepted"
+              />
+              <StatTile
+                label="Settlement observed"
+                value={
+                  check.settledShare != null ? formatPct(check.settledShare) : "—"
+                }
+                detail={`${check.settledCount} · ${formatNaira(check.settledTotal)}`}
+                testId="tile-settlement-observed"
+              />
+              <StatTile
+                label="Not yet observed"
+                value={`${check.outstandingCount}`}
+                detail={formatNaira(check.outstandingTotal)}
+                testId="tile-settlement-outstanding"
+              />
+              <StatTile
+                label="Since credited"
+                value={`${check.creditedCount}`}
+                detail={formatNaira(check.creditedTotal)}
+                testId="tile-settlement-credited"
+              />
+            </div>
+            {check.unsettled.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="table-vat-unsettled">
+                  <thead>
+                    <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Invoice</th>
+                      <th className="py-2 pr-3 font-medium">Client</th>
+                      <th className="py-2 pr-3 font-medium">Buyer</th>
+                      <th className="py-2 pr-3 font-medium">Due</th>
+                      <th className="py-2 font-medium text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {check.unsettled.map((r) => (
+                      <tr key={r.invoiceId} data-testid={`row-unsettled-${r.invoiceId}`}>
+                        <td className="py-2 pr-3">{r.invoiceNumber}</td>
+                        <td className="py-2 pr-3">{r.clientName}</td>
+                        <td className="py-2 pr-3">{r.buyerName}</td>
+                        <td className="py-2 pr-3">{formatDate(r.dueDate)}</td>
+                        <td className="py-2 text-right tabular-nums">
+                          {formatMoney(r.grandTotal, r.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {check.unsettledTruncated && (
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    Showing the largest {check.unsettled.length} — more exist.
+                  </p>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        <p className="text-xs text-muted-foreground">{check.note}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Quarterly review pack (round-13 idea #4): the closed quarter's monthly VAT
+// packs, submission outcomes, rejection causes, receivables snapshot and
+// Clerk throughput — one deterministic document for the quarterly client-book
+// conversation, with an optional phrased cover note (digest posture).
+function QuarterlyReviewCard() {
+  const { toast } = useToast();
+  const [quarter, setQuarter] = useState<string | undefined>(undefined);
+  const params = quarter ? { quarter } : undefined;
+  const { data: review, isSuccess } = useGetQuarterlyReview(params, {
+    query: { queryKey: getGetQuarterlyReviewQueryKey(params), retry: false },
+  });
+
+  const coverNote = useDraftQuarterlyCoverNote();
+  const [note, setNote] = useState<QuarterlyReviewCoverNote | null>(null);
+  const [noteText, setNoteText] = useState("");
+
+  if (!isSuccess || !review) return null;
+  const quarterShort = (q: string) => {
+    const [y, m] = q.split("-");
+    return `Q${Math.floor((Number(m) - 1) / 3) + 1} ${y}`;
+  };
+  return (
+    <Card
+      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid="card-quarterly-review"
+    >
+      <CardHeader>
+        <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
+          <span>Quarterly review — {review.quarterLabel}</span>
+          <span className="flex items-center gap-2">
+            <Select
+              value={review.quarterStart}
+              onValueChange={(q) => {
+                setQuarter(q);
+                setNote(null);
+              }}
+            >
+              <SelectTrigger
+                className="h-8 w-28 text-xs"
+                data-testid="select-quarterly-quarter"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {review.quarters.map((q) => (
+                  <SelectItem key={q} value={q}>
+                    {quarterShort(q)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={coverNote.isPending}
+              onClick={() =>
+                coverNote.mutate(
+                  { data: { quarter: review.quarterStart } },
+                  {
+                    onSuccess: (res) => {
+                      setNote(res);
+                      setNoteText(res.note);
+                    },
+                    onError: () =>
+                      toast({
+                        title: "Could not draft the note",
+                        variant: "destructive",
+                      }),
+                  },
+                )
+              }
+              data-testid="button-quarterly-cover-note"
+            >
+              <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" />
+              {coverNote.isPending ? "Drafting…" : "Cover note"}
+            </Button>
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-quarterly-months">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">Month</th>
+                <th className="py-2 pr-3 font-medium text-right">Accepted</th>
+                <th className="py-2 pr-3 font-medium text-right">Output VAT</th>
+                <th className="py-2 pr-3 font-medium text-right">Credits</th>
+                <th className="py-2 font-medium text-right">Net VAT</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {review.months.map((m) => (
+                <tr key={m.monthStart}>
+                  <td className="py-2 pr-3">{m.monthLabel}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {m.acceptedCount}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {formatNaira(m.acceptedVat)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {Number(m.creditVat) > 0 ? `−${formatNaira(m.creditVat)}` : "—"}
+                  </td>
+                  <td className="py-2 text-right tabular-nums font-medium">
+                    {formatNaira(m.netVat)}
+                  </td>
+                </tr>
+              ))}
+              <tr className="font-semibold">
+                <td className="py-2 pr-3">Quarter</td>
+                <td className="py-2 pr-3 text-right tabular-nums">
+                  {review.vatTotals.acceptedCount}
+                </td>
+                <td className="py-2 pr-3 text-right tabular-nums">
+                  {formatNaira(review.vatTotals.acceptedVat)}
+                </td>
+                <td className="py-2 pr-3 text-right tabular-nums">
+                  {Number(review.vatTotals.creditVat) > 0
+                    ? `−${formatNaira(review.vatTotals.creditVat)}`
+                    : "—"}
+                </td>
+                <td className="py-2 text-right tabular-nums">
+                  {formatNaira(review.vatTotals.netVat)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile
+            label="Submissions accepted"
+            value={`${review.submissions.accepted}`}
+            testId="tile-quarterly-accepted"
+          />
+          <StatTile
+            label="Rejected"
+            value={`${review.rejectionTotal}`}
+            detail={
+              review.topRejections.length > 0
+                ? review.topRejections
+                    .slice(0, 2)
+                    .map((r) => `${r.errorCode} ×${r.count}`)
+                    .join(" · ")
+                : undefined
+            }
+            testId="tile-quarterly-rejected"
+          />
+          <StatTile
+            label="Receivables today"
+            value={
+              review.receivables.groups.length > 0
+                ? formatMoney(
+                    review.receivables.groups[0].outstandingTotal,
+                    review.receivables.groups[0].currency,
+                  )
+                : "—"
+            }
+            detail={
+              review.receivables.groups.length > 1
+                ? `+ ${review.receivables.groups.length - 1} more currenc${review.receivables.groups.length > 2 ? "ies" : "y"}`
+                : undefined
+            }
+            testId="tile-quarterly-receivables"
+          />
+          <StatTile
+            label="Clerk captures"
+            value={`${review.clerk.captures}`}
+            detail={`${review.clerk.approved} approved`}
+            testId="tile-quarterly-clerk"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">{review.note}</p>
+        {note && (
+          <div
+            className="rounded-md border p-3 space-y-2"
+            data-testid="quarterly-cover-note"
+          >
+            <p className="text-xs font-medium text-muted-foreground">
+              Cover note for {note.quarterLabel} —{" "}
+              {note.source === "clerk"
+                ? "Clerk phrased the pack's own numbers; edit before sending."
+                : "template text (Clerk unavailable); edit before sending."}{" "}
+              Nothing is stored — copy it into your letter.
+            </p>
+            <Textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              className="min-h-[110px] text-sm"
+              data-testid="input-quarterly-cover-note"
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(noteText);
+                    toast({ title: "Copied" });
+                  } catch {
+                    toast({
+                      title: "Could not copy",
+                      description: "Select the text and copy it manually.",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                data-testid="button-copy-quarterly-note"
+              >
+                <Copy className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" /> Copy
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setNote(null)}
+                data-testid="button-discard-quarterly-note"
               >
                 Discard
               </Button>
@@ -894,6 +1242,10 @@ export function Portfolio() {
       <ComplianceCalendarCard />
 
       <VatPackCard />
+
+      <VatSettlementCard />
+
+      <QuarterlyReviewCard />
 
       <RejectionPatternsCard />
 

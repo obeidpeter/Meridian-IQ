@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.31.0
+ * OpenAPI spec version: 0.33.0
  */
 import {
   useMutation,
@@ -49,6 +49,7 @@ import type {
   CancelInvoiceInput,
   CanonicalInvoice,
   CashflowOutlook,
+  CatalogueCoverageReport,
   CatalogueEntryDraft,
   ChangePasswordInput,
   ChaseRow,
@@ -96,6 +97,7 @@ import type {
   DraftClientImportInput,
   DraftInvoiceWithClerkInput,
   DraftPaymentChaserInput,
+  DraftQuarterlyNoteInput,
   DraftStatementFormatInput,
   DraftVatCoverNoteInput,
   Engagement,
@@ -135,9 +137,12 @@ import type {
   GetClerkMetricsParams,
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
+  GetMergeImpactParams,
   GetPublicThemeParams,
+  GetQuarterlyReviewParams,
   GetReceivablesSummaryParams,
   GetVatPackParams,
+  GetVatSettlementCheckParams,
   HealthStatus,
   IdentifierCheck,
   Invitation,
@@ -173,11 +178,13 @@ import type {
   Me,
   Membership,
   MembershipInput,
+  MergeImpact,
   Message,
   MessageDeliveryInput,
   MessageInput,
   NotFoundResponse,
   OnboardingProspect,
+  OperatorBrief,
   OperatorCaseView,
   OperatorQueueStats,
   OutboxEvent,
@@ -196,6 +203,8 @@ import type {
   PushDevice,
   PushDeviceInput,
   PushDeviceUnregisterInput,
+  QuarterlyReview,
+  QuarterlyReviewCoverNote,
   QuestionnaireTemplate,
   RailState,
   ReceivablesSummary,
@@ -238,7 +247,8 @@ import type {
   VatPack,
   VatPackCoverNote,
   VatRiskInput,
-  VatRiskReport
+  VatRiskReport,
+  VatSettlementCheck
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1672,6 +1682,90 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getUpdatePartyMutationOptions(options));
     }
 
+export const getGetMergeImpactUrl = (params: GetMergeImpactParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/parties/merge-impact?${stringifiedParams}` : `/api/parties/merge-impact`
+}
+
+/**
+ * @summary What each side of a proposed party merge carries (deterministic counts)
+ */
+export const getMergeImpact = async (params: GetMergeImpactParams, options?: RequestInit): Promise<MergeImpact> => {
+
+  return customFetch<MergeImpact>(getGetMergeImpactUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMergeImpactQueryKey = (params?: GetMergeImpactParams,) => {
+    return [
+    `/api/parties/merge-impact`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMergeImpactQueryOptions = <TData = Awaited<ReturnType<typeof getMergeImpact>>, TError = ErrorType<unknown>>(params: GetMergeImpactParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMergeImpact>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMergeImpactQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMergeImpact>>> = ({ signal }) => getMergeImpact(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMergeImpact>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMergeImpactQueryResult = NonNullable<Awaited<ReturnType<typeof getMergeImpact>>>
+export type GetMergeImpactQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary What each side of a proposed party merge carries (deterministic counts)
+ */
+
+export function useGetMergeImpact<TData = Awaited<ReturnType<typeof getMergeImpact>>, TError = ErrorType<unknown>>(
+ params: GetMergeImpactParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMergeImpact>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMergeImpactQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getMergePartiesUrl = () => {
 
 
@@ -2960,6 +3054,244 @@ export const useDraftVatPackCoverNote = <TError = ErrorType<BadRequestResponse>,
         TContext
       > => {
       return useMutation(getDraftVatPackCoverNoteMutationOptions(options));
+    }
+
+export const getGetVatSettlementCheckUrl = (params?: GetVatSettlementCheckParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/vat-pack/settlement-check?${stringifiedParams}` : `/api/vat-pack/settlement-check`
+}
+
+/**
+ * @summary Settlement coverage of the pack month's accepted invoices (assurance view — unsettled means unobserved, not unpaid)
+ */
+export const getVatSettlementCheck = async (params?: GetVatSettlementCheckParams, options?: RequestInit): Promise<VatSettlementCheck> => {
+
+  return customFetch<VatSettlementCheck>(getGetVatSettlementCheckUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVatSettlementCheckQueryKey = (params?: GetVatSettlementCheckParams,) => {
+    return [
+    `/api/vat-pack/settlement-check`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetVatSettlementCheckQueryOptions = <TData = Awaited<ReturnType<typeof getVatSettlementCheck>>, TError = ErrorType<BadRequestResponse>>(params?: GetVatSettlementCheckParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatSettlementCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVatSettlementCheckQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVatSettlementCheck>>> = ({ signal }) => getVatSettlementCheck(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVatSettlementCheck>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVatSettlementCheckQueryResult = NonNullable<Awaited<ReturnType<typeof getVatSettlementCheck>>>
+export type GetVatSettlementCheckQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Settlement coverage of the pack month's accepted invoices (assurance view — unsettled means unobserved, not unpaid)
+ */
+
+export function useGetVatSettlementCheck<TData = Awaited<ReturnType<typeof getVatSettlementCheck>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetVatSettlementCheckParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatSettlementCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVatSettlementCheckQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetQuarterlyReviewUrl = (params?: GetQuarterlyReviewParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/quarterly-review?${stringifiedParams}` : `/api/quarterly-review`
+}
+
+/**
+ * @summary Firm quarterly review pack — the closed quarter's monthly VAT packs, submissions, rejections, receivables snapshot and Clerk throughput in one deterministic document
+ */
+export const getQuarterlyReview = async (params?: GetQuarterlyReviewParams, options?: RequestInit): Promise<QuarterlyReview> => {
+
+  return customFetch<QuarterlyReview>(getGetQuarterlyReviewUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetQuarterlyReviewQueryKey = (params?: GetQuarterlyReviewParams,) => {
+    return [
+    `/api/quarterly-review`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetQuarterlyReviewQueryOptions = <TData = Awaited<ReturnType<typeof getQuarterlyReview>>, TError = ErrorType<BadRequestResponse>>(params?: GetQuarterlyReviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuarterlyReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetQuarterlyReviewQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuarterlyReview>>> = ({ signal }) => getQuarterlyReview(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getQuarterlyReview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetQuarterlyReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getQuarterlyReview>>>
+export type GetQuarterlyReviewQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Firm quarterly review pack — the closed quarter's monthly VAT packs, submissions, rejections, receivables snapshot and Clerk throughput in one deterministic document
+ */
+
+export function useGetQuarterlyReview<TData = Awaited<ReturnType<typeof getQuarterlyReview>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetQuarterlyReviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuarterlyReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetQuarterlyReviewQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDraftQuarterlyCoverNoteUrl = () => {
+
+
+
+
+  return `/api/quarterly-review/cover-note`
+}
+
+/**
+ * @summary Draft a cover note phrasing the quarterly review's computed facts (template fallback; nothing stored — the partner edits and owns it)
+ */
+export const draftQuarterlyCoverNote = async (draftQuarterlyNoteInput?: DraftQuarterlyNoteInput, options?: RequestInit): Promise<QuarterlyReviewCoverNote> => {
+
+  return customFetch<QuarterlyReviewCoverNote>(getDraftQuarterlyCoverNoteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftQuarterlyNoteInput)
+  }
+);}
+
+
+
+
+export const getDraftQuarterlyCoverNoteMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>, TError,{data?: BodyType<DraftQuarterlyNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>, TError,{data?: BodyType<DraftQuarterlyNoteInput>}, TContext> => {
+
+const mutationKey = ['draftQuarterlyCoverNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>, {data?: BodyType<DraftQuarterlyNoteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftQuarterlyCoverNote(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftQuarterlyCoverNoteMutationResult = NonNullable<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>>
+    export type DraftQuarterlyCoverNoteMutationBody = BodyType<DraftQuarterlyNoteInput> | undefined
+    export type DraftQuarterlyCoverNoteMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Draft a cover note phrasing the quarterly review's computed facts (template fallback; nothing stored — the partner edits and owns it)
+ */
+export const useDraftQuarterlyCoverNote = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftQuarterlyCoverNote>>, TError,{data?: BodyType<DraftQuarterlyNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftQuarterlyCoverNote>>,
+        TError,
+        {data?: BodyType<DraftQuarterlyNoteInput>},
+        TContext
+      > => {
+      return useMutation(getDraftQuarterlyCoverNoteMutationOptions(options));
     }
 
 export const getListLineItemSuggestionsUrl = (params?: ListLineItemSuggestionsParams,) => {
@@ -5117,6 +5449,83 @@ export function useListUnmappedErrorCodes<TData = Awaited<ReturnType<typeof list
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListUnmappedErrorCodesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCatalogueCoverageUrl = () => {
+
+
+
+
+  return `/api/error-catalogue/coverage`
+}
+
+/**
+ * @summary Catalogue coverage & mapping SLA — the INT-02 measurement (pure SQL, platform-wide)
+ */
+export const getCatalogueCoverage = async ( options?: RequestInit): Promise<CatalogueCoverageReport> => {
+
+  return customFetch<CatalogueCoverageReport>(getGetCatalogueCoverageUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCatalogueCoverageQueryKey = () => {
+    return [
+    `/api/error-catalogue/coverage`
+    ] as const;
+    }
+
+
+export const getGetCatalogueCoverageQueryOptions = <TData = Awaited<ReturnType<typeof getCatalogueCoverage>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogueCoverage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCatalogueCoverageQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCatalogueCoverage>>> = ({ signal }) => getCatalogueCoverage({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCatalogueCoverage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCatalogueCoverageQueryResult = NonNullable<Awaited<ReturnType<typeof getCatalogueCoverage>>>
+export type GetCatalogueCoverageQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Catalogue coverage & mapping SLA — the INT-02 measurement (pure SQL, platform-wide)
+ */
+
+export function useGetCatalogueCoverage<TData = Awaited<ReturnType<typeof getCatalogueCoverage>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogueCoverage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCatalogueCoverageQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -7541,6 +7950,83 @@ export function useGetFirmReceivables<TData = Awaited<ReturnType<typeof getFirmR
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetFirmReceivablesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOperatorBriefUrl = () => {
+
+
+
+
+  return `/api/console/operator-brief`
+}
+
+/**
+ * @summary The desk's deterministic daily brief — queues, stuck work, platform state, yesterday's throughput
+ */
+export const getOperatorBrief = async ( options?: RequestInit): Promise<OperatorBrief> => {
+
+  return customFetch<OperatorBrief>(getGetOperatorBriefUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOperatorBriefQueryKey = () => {
+    return [
+    `/api/console/operator-brief`
+    ] as const;
+    }
+
+
+export const getGetOperatorBriefQueryOptions = <TData = Awaited<ReturnType<typeof getOperatorBrief>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperatorBrief>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOperatorBriefQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOperatorBrief>>> = ({ signal }) => getOperatorBrief({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOperatorBrief>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOperatorBriefQueryResult = NonNullable<Awaited<ReturnType<typeof getOperatorBrief>>>
+export type GetOperatorBriefQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The desk's deterministic daily brief — queues, stuck work, platform state, yesterday's throughput
+ */
+
+export function useGetOperatorBrief<TData = Awaited<ReturnType<typeof getOperatorBrief>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperatorBrief>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOperatorBriefQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

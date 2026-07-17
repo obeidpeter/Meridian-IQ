@@ -57,6 +57,12 @@ import {
   GetVatPackResponse,
   DraftVatPackCoverNoteBody,
   DraftVatPackCoverNoteResponse,
+  GetVatSettlementCheckQueryParams,
+  GetVatSettlementCheckResponse,
+  GetQuarterlyReviewQueryParams,
+  GetQuarterlyReviewResponse,
+  DraftQuarterlyCoverNoteBody,
+  DraftQuarterlyCoverNoteResponse,
   ListLineItemSuggestionsQueryParams,
   ListLineItemSuggestionsResponse,
   ListPaymentBehaviourQueryParams,
@@ -81,6 +87,12 @@ import {
   computeVatPack,
 } from "../modules/clerk/vat-pack";
 import { draftVatCoverNote } from "../modules/clerk/vat-note";
+import { computeVatSettlementCheck } from "../modules/clerk/vat-settlement";
+import {
+  closedLagosQuarters,
+  computeQuarterlyReview,
+} from "../modules/advisory/quarterly-pack";
+import { draftQuarterlyCoverNote } from "../modules/advisory/quarterly-note";
 import { getClerkGateway } from "../modules/clerk/provider";
 import { listLineItemSuggestions } from "../modules/invoice/line-items";
 import { listPaymentBehaviour } from "../modules/invoice/payment-behaviour";
@@ -343,6 +355,74 @@ router.post("/vat-pack/cover-note", async (req, res): Promise<void> => {
   const gateway = await getClerkGateway().catch(() => null);
   const note = await draftVatCoverNote(firmId, month, gateway);
   res.json(DraftVatPackCoverNoteResponse.parse(note));
+});
+
+// VAT settlement cross-check (round-13 idea #6): how much of the pack
+// month's accepted value has the platform OBSERVED settling. Same gate and
+// month discipline as the pack itself; deterministic, nothing stored. The
+// module's note carries the assurance-not-accusation disclosure.
+router.get("/vat-pack/settlement-check", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const firmId = requireFirmScope(req.principal);
+  const query = parseOrThrow(GetVatSettlementCheckQueryParams, req.query);
+  const months = closedLagosMonths();
+  const month = query.month ?? months[0];
+  if (!months.includes(month)) {
+    throw new DomainError(
+      "BAD_MONTH",
+      "month must be one of the last 12 closed Lagos months (YYYY-MM-01)",
+      400,
+    );
+  }
+  const check = await computeVatSettlementCheck(firmId, month);
+  res.json(GetVatSettlementCheckResponse.parse(check));
+});
+
+// Quarterly review pack (round-13 idea #4): the firm's closed quarter in one
+// deterministic document — the monthly VAT packs summed, submission
+// outcomes, top rejection causes, a receivables snapshot and Clerk
+// throughput. Firm principals only, same as the VAT pack.
+async function resolveQuarterlyReview(principal: Principal, rawQuery: unknown) {
+  assertCan(principal, "console.portfolio.read");
+  const firmId = requireFirmScope(principal);
+  const query = parseOrThrow(GetQuarterlyReviewQueryParams, rawQuery);
+  const quarters = closedLagosQuarters();
+  const quarter = query.quarter ?? quarters[0];
+  if (!quarters.includes(quarter)) {
+    throw new DomainError(
+      "BAD_QUARTER",
+      "quarter must be the first month of one of the last 4 closed Lagos quarters (YYYY-MM-01)",
+      400,
+    );
+  }
+  return computeQuarterlyReview(firmId, quarter);
+}
+
+router.get("/quarterly-review", async (req, res): Promise<void> => {
+  const review = await resolveQuarterlyReview(req.principal, req.query);
+  res.json(GetQuarterlyReviewResponse.parse(review));
+});
+
+// Quarterly review cover note: digest posture end to end — kill switch,
+// missing provider, exhausted budget or invalid output all answer with the
+// deterministic template (never an error), so there is no route budget
+// pre-check, exactly like the VAT cover note.
+router.post("/quarterly-review/cover-note", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const firmId = requireFirmScope(req.principal);
+  const body = parseOrThrow(DraftQuarterlyCoverNoteBody, req.body ?? {});
+  const quarters = closedLagosQuarters();
+  const quarter = body.quarter ?? quarters[0];
+  if (!quarters.includes(quarter)) {
+    throw new DomainError(
+      "BAD_QUARTER",
+      "quarter must be the first month of one of the last 4 closed Lagos quarters (YYYY-MM-01)",
+      400,
+    );
+  }
+  const gateway = await getClerkGateway().catch(() => null);
+  const note = await draftQuarterlyCoverNote(firmId, quarter, gateway);
+  res.json(DraftQuarterlyCoverNoteResponse.parse(note));
 });
 
 // Frequent line items (round-4 idea #1): mined on demand from the client's

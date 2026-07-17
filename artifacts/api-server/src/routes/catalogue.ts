@@ -11,6 +11,7 @@ import {
   UpdateErrorCatalogueEntryBody,
   UpdateErrorCatalogueEntryResponse,
   ListUnmappedErrorCodesResponse,
+  GetCatalogueCoverageResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { assertCan } from "../modules/auth/rbac";
@@ -21,6 +22,7 @@ import {
   upsertCatalogueEntry,
   updateCatalogueEntry,
 } from "../modules/catalogue/catalogue";
+import { computeCatalogueCoverage } from "../modules/desk/catalogue-coverage";
 
 const router: IRouter = Router();
 
@@ -65,6 +67,18 @@ router.get("/error-catalogue/unmapped", async (req, res): Promise<void> => {
       })),
     ),
   );
+});
+
+// Catalogue coverage report (round-13 idea #5): the INT-02 measurement —
+// how much rejection traffic the catalogue maps, which codes are still
+// unmapped (and whether the desk is tracking them), and how fast new codes
+// entered the catalogue after first sighting. Pure SQL, platform-wide (the
+// catalogue is global reference data), operator stewards only. Must register
+// before /error-catalogue/:code or "coverage" is read as a code.
+router.get("/error-catalogue/coverage", async (req, res): Promise<void> => {
+  assertCan(req.principal, "catalogue.write");
+  const report = await computeCatalogueCoverage();
+  res.json(GetCatalogueCoverageResponse.parse(report));
 });
 
 router.get("/error-catalogue/:code", async (req, res): Promise<void> => {

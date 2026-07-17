@@ -10,6 +10,8 @@ import {
   UpdatePartyBody,
   UpdatePartyResponse,
   MergePartiesBody,
+  GetMergeImpactQueryParams,
+  GetMergeImpactResponse,
   SplitPartyParams,
   ValidateTinBody,
   ValidateTinResponse,
@@ -36,6 +38,7 @@ import {
   validateTin,
   validateCac,
 } from "../modules/party/party";
+import { computeMergeImpact } from "../modules/party/merge-impact";
 
 const router: IRouter = Router();
 
@@ -74,6 +77,16 @@ router.post("/parties", async (req, res): Promise<void> => {
     tenantFirmId(req.principal),
   );
   res.status(201).json(CreatePartyResponse.parse(party));
+});
+
+// Merge impact preview (round-12 idea #2): what each side of a proposed
+// merge carries, so accepting a duplicate suggestion is an informed act.
+// Same gate as the merge itself; counts only, nothing stored.
+router.get("/parties/merge-impact", async (req, res): Promise<void> => {
+  assertCan(req.principal, "party.merge");
+  const query = parseOrThrow(GetMergeImpactQueryParams, req.query);
+  const impact = await computeMergeImpact(query.survivorId, query.duplicateId);
+  res.json(GetMergeImpactResponse.parse(impact));
 });
 
 router.post("/parties/merge", async (req, res): Promise<void> => {

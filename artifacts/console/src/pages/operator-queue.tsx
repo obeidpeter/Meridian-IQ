@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   useGetMe,
   useListOperatorCases,
+  useGetOperatorBrief,
+  getGetOperatorBriefQueryKey,
   useGetOperatorQueueStats,
   useClaimOperatorCase,
   useResolveOperatorCase,
@@ -333,6 +335,16 @@ export function OperatorQueue() {
   // Auditors hold operator.queue.read but not .act — the queue renders
   // read-only for them instead of offering buttons that 403.
   const canAct = (me?.capabilities ?? []).includes("operator.queue.act");
+  // Daily brief (round-12 idea #1): "what needs me first" — operators only
+  // (the route 403s auditors), pure SQL, renders only on success.
+  const { data: brief } = useGetOperatorBrief({
+    query: {
+      queryKey: getGetOperatorBriefQueryKey(),
+      enabled: canAct,
+      staleTime: 5 * 60_000,
+      retry: false,
+    },
+  });
   const { data, isLoading, error, refetch } = useListOperatorCases({ status });
   const {
     data: stats,
@@ -436,6 +448,42 @@ export function OperatorQueue() {
           Cross-tenant cases with playbook prompts and one-click resolutions.
         </p>
       </div>
+
+      {brief && (
+        <Card data-testid="operator-brief">
+          <CardContent className="pt-6 space-y-1.5 text-sm">
+            <p className="font-semibold">This morning</p>
+            {brief.openCases.oldestTitle && (
+              <p className="text-muted-foreground" data-testid="brief-oldest-case">
+                {brief.openCases.byPriority
+                  .map((p) => `${p.count} ${p.priority}`)
+                  .join(" · ")}{" "}
+                open — longest waiting: “{brief.openCases.oldestTitle.slice(0, 80)}”.
+              </p>
+            )}
+            <p className="text-muted-foreground">
+              {brief.unansweredEscalations.count > 0
+                ? `${brief.unansweredEscalations.count} client escalation(s) await a reply — oldest: “${(brief.unansweredEscalations.oldestReason ?? "").slice(0, 80)}”.`
+                : "No client escalations await a reply."}{" "}
+              {brief.stuckBatches.count > 0
+                ? `${brief.stuckBatches.count} batch(es) still queued or processing.`
+                : ""}{" "}
+              {brief.unmappedCodeCases > 0
+                ? `${brief.unmappedCodeCases} unmapped rejection code(s) need catalogue entries.`
+                : ""}{" "}
+              {brief.decidedYesterday} case(s) were decided yesterday.
+            </p>
+            {(!brief.clerkEnabled || brief.resistanceAlert) && (
+              <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                {!brief.clerkEnabled ? "Clerk AI is currently DISABLED. " : ""}
+                {brief.resistanceAlert
+                  ? "Injection resistance dropped month-over-month — see Clerk health."
+                  : ""}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatTile

@@ -303,6 +303,9 @@ router.post("/clerk/ask", async (req, res): Promise<void> => {
   const gateway = await getClerkGateway();
   const row = await askClerk(parsed.question, req.principal.userId, gateway, {
     firmId: tenant,
+    // Multi-turn (round 12): the asker's previous case in this thread; the
+    // module re-verifies it belongs to this firm before any context is used.
+    previousCaseId: parsed.previousCaseId ?? null,
   });
   res.json(AskClerkResponse.parse(row));
 });

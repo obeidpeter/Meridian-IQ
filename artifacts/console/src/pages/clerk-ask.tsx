@@ -66,17 +66,40 @@ export function ClerkAskPage() {
   usePageTitle("Ask Clerk");
   const ask = useAskClerk();
   const [question, setQuestion] = useState("");
+  // Multi-turn (round 12): the previous answered case threads follow-ups —
+  // "and for June?" reuses the last lookup's platform-recorded scope. The
+  // server re-verifies the id belongs to this firm before using it.
+  const [previousCaseId, setPreviousCaseId] = useState<string | null>(null);
   return (
     <div className="space-y-6">
       <ClerkPageHeader
         eyebrow="Claims register"
         title="Ask Clerk"
-        description="Answers come from the approved claims register or live lookups over the firm's own records — nothing is improvised."
+        description="Answers come from the approved claims register or live lookups over the firm's own records — nothing is improvised. Follow-ups like “and for June?” carry the previous question's scope."
       />
       <AskPanel
         question={question}
         onQuestionChange={setQuestion}
-        onAsk={() => ask.mutate({ data: { question } })}
+        onAsk={() =>
+          ask.mutate(
+            {
+              data: {
+                question,
+                ...(previousCaseId ? { previousCaseId } : {}),
+              },
+            },
+            {
+              // Only a DATA answer carries scope worth threading — keeping
+              // the last data-answered id preserves the thread across a
+              // refusal or register-claim answer in between.
+              onSuccess: (row) => {
+                if (row.answer?.answered && row.answer?.dataIntent) {
+                  setPreviousCaseId(row.id);
+                }
+              },
+            },
+          )
+        }
         isPending={ask.isPending}
         answer={ask.data?.answer}
       />

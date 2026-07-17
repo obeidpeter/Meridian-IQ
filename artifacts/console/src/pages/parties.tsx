@@ -3,7 +3,9 @@ import {
   useListParties,
   useMergeParties,
   useSplitParty,
+  useGetMergeImpact,
   getListPartiesQueryKey,
+  getGetMergeImpactQueryKey,
 } from "@workspace/api-client-react";
 import type { ListPartiesParams, Party } from "@workspace/api-client-react";
 import { humanize } from "@/lib/format";
@@ -127,6 +129,42 @@ export function findDuplicateGroups(parties: Party[]): DupGroup[] {
 
 // Keystrokes settle for ~300 ms before a search hits the server.
 const SEARCH_DEBOUNCE_MS = 300;
+
+// Merge impact preview (round-12 idea #2): what this party CARRIES, shown
+// under each candidate in the merge dialog so choosing a survivor is an
+// informed act. The pair endpoint returns per-side counts; asking with the
+// same id on both sides yields exactly this party's counts.
+function PartyCarryCounts({ partyId }: { partyId: string }) {
+  const params = { survivorId: partyId, duplicateId: partyId };
+  const { data } = useGetMergeImpact(params, {
+    query: {
+      queryKey: getGetMergeImpactQueryKey(params),
+      staleTime: 60_000,
+      retry: false,
+    },
+  });
+  const side = data?.survivor;
+  if (!side) return null;
+  const parts = [
+    `${side.invoicesAsSupplier + side.invoicesAsBuyer} invoices`,
+    `${side.engagements} engagements`,
+    `${side.memberships} logins`,
+    `${side.recurringTemplates} templates`,
+    `${side.aliases} aliases`,
+    `${side.bankStatements} statements`,
+    `${side.escalations} escalations`,
+    `${side.consents} consents`,
+    `${side.operatorCases} desk cases`,
+  ];
+  return (
+    <span
+      className="block text-xs text-muted-foreground mt-1"
+      data-testid={`carry-${partyId}`}
+    >
+      Carries: {parts.join(" · ")}
+    </span>
+  );
+}
 
 export function Parties() {
   usePageTitle("Party integrity");
@@ -521,7 +559,7 @@ export function Parties() {
                   onChange={() => setSurvivorId(p.id)}
                   data-testid={`radio-survivor-${p.id}`}
                 />
-                <span className="text-sm">
+                <span className="text-sm min-w-0">
                   <span className="font-medium">{p.legalName}</span>
                   <br />
                   <span className="text-muted-foreground">
@@ -530,6 +568,7 @@ export function Parties() {
                     {p.street ? ` · ${p.street}` : ""}
                     {p.city ? `, ${p.city}` : ""}
                   </span>
+                  <PartyCarryCounts partyId={p.id} />
                 </span>
               </label>
             ))}

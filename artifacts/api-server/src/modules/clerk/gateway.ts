@@ -78,6 +78,9 @@ export type ClerkPurpose =
   // VAT filing cover note (round-4 idea #6): phrases the deterministic VAT
   // pack's computed facts; template fallback, nothing stored.
   | "draft_vat_note"
+  // Quarterly review cover note (round-13 idea #4): phrases the deterministic
+  // quarterly review pack's computed facts; template fallback, nothing stored.
+  | "draft_quarterly_note"
   // Adversarial eval growth (idea #9): generates an injection VARIANT of a
   // static eval fixture; the app validates the result before storing it and
   // resistance is scored by the ordinary eval machinery.
