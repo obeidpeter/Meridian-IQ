@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.25.0
+ * OpenAPI spec version: 0.26.0
  */
 import {
   useMutation,
@@ -67,6 +67,7 @@ import type {
   ClientImportInput,
   ClientImportResult,
   ClientPortfolioDetail,
+  ComplianceCalendar,
   ComplianceDeadline,
   Confirmation,
   ConfirmationInput,
@@ -3098,6 +3099,83 @@ export function useGetRejectionPatterns<TData = Awaited<ReturnType<typeof getRej
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetRejectionPatternsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFirmComplianceCalendarUrl = () => {
+
+
+
+
+  return `/api/compliance-calendar`
+}
+
+/**
+ * @summary The firm's month-ahead statutory calendar — submission windows and VAT dates aggregated across clients (deterministic)
+ */
+export const getFirmComplianceCalendar = async ( options?: RequestInit): Promise<ComplianceCalendar> => {
+
+  return customFetch<ComplianceCalendar>(getGetFirmComplianceCalendarUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFirmComplianceCalendarQueryKey = () => {
+    return [
+    `/api/compliance-calendar`
+    ] as const;
+    }
+
+
+export const getGetFirmComplianceCalendarQueryOptions = <TData = Awaited<ReturnType<typeof getFirmComplianceCalendar>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFirmComplianceCalendar>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFirmComplianceCalendarQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFirmComplianceCalendar>>> = ({ signal }) => getFirmComplianceCalendar({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFirmComplianceCalendar>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFirmComplianceCalendarQueryResult = NonNullable<Awaited<ReturnType<typeof getFirmComplianceCalendar>>>
+export type GetFirmComplianceCalendarQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm's month-ahead statutory calendar — submission windows and VAT dates aggregated across clients (deterministic)
+ */
+
+export function useGetFirmComplianceCalendar<TData = Awaited<ReturnType<typeof getFirmComplianceCalendar>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFirmComplianceCalendar>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFirmComplianceCalendarQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.25.0
+ * OpenAPI spec version: 0.26.0
  */
 import * as zod from 'zod';
 
@@ -803,6 +803,27 @@ export const GetRejectionPatternsResponse = zod.object({
   "clientCount": zod.number(),
   "previousCount": zod.number(),
   "lastSeen": zod.string()
+}))
+})
+
+
+/**
+ * @summary The firm's month-ahead statutory calendar — submission windows and VAT dates aggregated across clients (deterministic)
+ */
+export const GetFirmComplianceCalendarResponse = zod.object({
+  "horizonDays": zod.number(),
+  "overdue": zod.object({
+  "invoices": zod.number(),
+  "clients": zod.number()
+}),
+  "days": zod.array(zod.object({
+  "date": zod.string(),
+  "events": zod.array(zod.object({
+  "kind": zod.enum(['invoice_submission', 'vat_return']),
+  "label": zod.string(),
+  "invoices": zod.number().optional(),
+  "clients": zod.number().optional()
+}))
 }))
 })
 
@@ -5093,6 +5114,22 @@ export const GetClerkMetricsResponse = zod.object({
   "answered": zod.number(),
   "refused": zod.number(),
   "refusalRate": zod.number()
+}),
+  "injectionTrend": zod.object({
+  "months": zod.array(zod.object({
+  "month": zod.string(),
+  "runs": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "resistanceRate": zod.number()
+})),
+  "byPromptVersion": zod.array(zod.object({
+  "promptVersion": zod.string(),
+  "runs": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "resistanceRate": zod.number()
+}))
 })
 })
 

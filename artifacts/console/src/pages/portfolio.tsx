@@ -9,6 +9,8 @@ import {
   useGetPortfolio,
   useGetVatPack,
   useGetRejectionPatterns,
+  useGetFirmComplianceCalendar,
+  getGetFirmComplianceCalendarQueryKey,
   useDraftVatPackCoverNote,
   type VatPackCoverNote,
 } from "@workspace/api-client-react";
@@ -280,6 +282,75 @@ function VatPackCard() {
             </div>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Firm-level compliance calendar (round-6 idea #5): the month-ahead view of
+// the same statutory clocks each client's dashboard shows — same constants,
+// same Lagos-calendar predicates server-side, so this card can never
+// disagree with what a client sees.
+function ComplianceCalendarCard() {
+  const { data: calendar, isSuccess } = useGetFirmComplianceCalendar({
+    query: { queryKey: getGetFirmComplianceCalendarQueryKey(), retry: false },
+  });
+  if (!isSuccess || !calendar) return null;
+  if (calendar.days.length === 0 && calendar.overdue.invoices === 0) {
+    return null;
+  }
+  return (
+    <Card
+      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid="card-compliance-calendar"
+    >
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Clock className="w-4 h-4 text-primary" aria-hidden="true" />
+          Compliance calendar — next {calendar.horizonDays} days
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {calendar.overdue.invoices > 0 && (
+          <div
+            className="rounded-md border border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/40 px-3 py-2 text-sm text-red-900 dark:text-red-200"
+            data-testid="calendar-overdue"
+          >
+            {calendar.overdue.invoices} unsubmitted invoice(s) across{" "}
+            {calendar.overdue.clients} client(s) are already past their
+            submission window.
+          </div>
+        )}
+        {calendar.days.map((day) => (
+          <div
+            key={day.date}
+            className="flex items-start gap-3 text-sm border-b last:border-b-0 pb-2 last:pb-0"
+            data-testid={`calendar-day-${day.date}`}
+          >
+            <span className="font-medium tabular-nums shrink-0 w-28">
+              {formatDate(day.date)}
+            </span>
+            <div className="min-w-0 space-y-0.5">
+              {day.events.map((e, i) => (
+                <p
+                  key={i}
+                  className={
+                    e.kind === "vat_return"
+                      ? "font-medium"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {e.label}
+                </p>
+              ))}
+            </div>
+          </div>
+        ))}
+        <p className="text-xs text-muted-foreground">
+          Same statutory clocks as each client's dashboard (Lagos calendar) —
+          submission windows and VAT filing dates, computed live. No AI
+          involved.
+        </p>
       </CardContent>
     </Card>
   );
@@ -743,6 +814,8 @@ export function Portfolio() {
       </Card>
 
       <ClerkWeeklyDigestCard />
+
+      <ComplianceCalendarCard />
 
       <VatPackCard />
 

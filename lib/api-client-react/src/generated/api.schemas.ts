@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.25.0
+ * OpenAPI spec version: 0.26.0
  */
 export interface HealthStatus {
   status: string;
@@ -901,6 +901,37 @@ export interface LineItemSuggestion {
   medianUnitPrice: string;
   vatRate: string;
   lastUsed: string;
+}
+
+export type ComplianceCalendarOverdue = {
+  invoices: number;
+  clients: number;
+};
+
+export type ComplianceCalendarDaysItemEventsItemKind = typeof ComplianceCalendarDaysItemEventsItemKind[keyof typeof ComplianceCalendarDaysItemEventsItemKind];
+
+
+export const ComplianceCalendarDaysItemEventsItemKind = {
+  invoice_submission: 'invoice_submission',
+  vat_return: 'vat_return',
+} as const;
+
+export type ComplianceCalendarDaysItemEventsItem = {
+  kind: ComplianceCalendarDaysItemEventsItemKind;
+  label: string;
+  invoices?: number;
+  clients?: number;
+};
+
+export type ComplianceCalendarDaysItem = {
+  date: string;
+  events: ComplianceCalendarDaysItemEventsItem[];
+};
+
+export interface ComplianceCalendar {
+  horizonDays: number;
+  overdue: ComplianceCalendarOverdue;
+  days: ComplianceCalendarDaysItem[];
 }
 
 export type RejectionPatternReportRowsItem = {
@@ -3065,6 +3096,27 @@ export type ClerkMetricsAsk = {
   refusalRate: number;
 };
 
+export type ClerkMetricsInjectionTrendMonthsItem = {
+  month: string;
+  runs: number;
+  injectionFixtures: number;
+  injectionResisted: number;
+  resistanceRate: number;
+};
+
+export type ClerkMetricsInjectionTrendByPromptVersionItem = {
+  promptVersion: string;
+  runs: number;
+  injectionFixtures: number;
+  injectionResisted: number;
+  resistanceRate: number;
+};
+
+export type ClerkMetricsInjectionTrend = {
+  months: ClerkMetricsInjectionTrendMonthsItem[];
+  byPromptVersion: ClerkMetricsInjectionTrendByPromptVersionItem[];
+};
+
 export interface ClerkMetrics {
   windowDays: number;
   calibration?: ClerkMetricsCalibration;
@@ -3075,6 +3127,7 @@ export interface ClerkMetrics {
   corrections: ClerkMetricsCorrectionsItem[];
   supplierAccuracy: ClerkMetricsSupplierAccuracyItem[];
   ask: ClerkMetricsAsk;
+  injectionTrend: ClerkMetricsInjectionTrend;
 }
 
 export interface ClerkPartySuggestion {

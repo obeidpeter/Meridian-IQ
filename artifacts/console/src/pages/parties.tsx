@@ -56,11 +56,17 @@ const TYPE_LABELS: Record<Party["type"], string> = {
   bank: "Bank",
 };
 
-function normalizeName(name: string): string {
+export function normalizeName(name: string): string {
+  // Order-insensitive token key (mirrors the server's alias-memory
+  // normalization): "Adaeze Foods" and "Foods Adaeze Ltd" are the same
+  // business entered twice; suffix words and word order carry no identity.
   return name
     .toLowerCase()
-    .replace(/\b(ltd|limited|plc|inc|co|company|group)\b/g, "")
-    .replace(/[^a-z0-9]/g, "");
+    .replace(/\b(ltd|limited|plc|inc|co|company|group|enterprises|enterprise|ventures|and|the|of)\b/g, " ")
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3)
+    .sort()
+    .join(" ");
 }
 
 interface DupGroup {
@@ -70,7 +76,7 @@ interface DupGroup {
 }
 
 // Duplicate candidates: live parties sharing a TIN, else a normalized name.
-function findDuplicateGroups(parties: Party[]): DupGroup[] {
+export function findDuplicateGroups(parties: Party[]): DupGroup[] {
   const live = parties.filter((p) => !p.mergedIntoId);
   const groups: DupGroup[] = [];
   const seen = new Set<string>();
@@ -99,9 +105,14 @@ function findDuplicateGroups(parties: Party[]): DupGroup[] {
     byName.set(key, list);
   }
   for (const [key, list] of byName) {
-    if (list.length > 1) {
-      groups.push({ key: `name:${key}`, reason: "similar name", parties: list });
-    }
+    if (list.length < 2) continue;
+    // Two DIFFERENT registered TINs are two different taxpayers whatever the
+    // names say — suggesting that merge is noise that teaches operators to
+    // ignore the card. A name group only stands when at most one distinct
+    // TIN is present (the untinned rows are the plausible duplicates).
+    const tins = new Set(list.map((p) => p.tin).filter((t): t is string => !!t));
+    if (tins.size > 1) continue;
+    groups.push({ key: `name:${key}`, reason: "similar name", parties: list });
   }
   return groups;
 }
