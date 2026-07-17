@@ -477,6 +477,18 @@ function EscalationsCard({ escalations }: { escalations: Escalation[] }) {
               <span className="text-xs text-muted-foreground">{formatDate(e.createdAt)}</span>
             </div>
             <p className="text-muted-foreground">{e.reason}</p>
+            {e.operatorReply && (
+              <div
+                className="mt-2 rounded-md bg-muted/60 px-3 py-2"
+                data-testid={`escalation-reply-${e.id}`}
+              >
+                <p className="text-xs font-medium text-muted-foreground">
+                  Compliance Desk replied
+                  {e.repliedAt ? ` · ${formatDate(e.repliedAt)}` : ""}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap">{e.operatorReply}</p>
+              </div>
+            )}
           </div>
         ))}
       </CardContent>

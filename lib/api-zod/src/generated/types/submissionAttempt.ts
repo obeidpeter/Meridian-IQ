@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.22.0
+ * OpenAPI spec version: 0.23.0
  */
 import type { SubmissionAttemptRail } from './submissionAttemptRail';
 import type { SubmissionAttemptStatus } from './submissionAttemptStatus';

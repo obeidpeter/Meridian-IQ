@@ -358,6 +358,35 @@ export const clerkEvalFixturesTable = pgTable("clerk_eval_fixtures", {
   createdAt: createdAt(),
 });
 
+// ============ Clerk idea #6 — buyer/supplier alias memory ============
+// The exhaust learns NAMES: when an approval (or any future confirmed pick)
+// pairs an extracted party name with a register party, the normalized name
+// key is remembered per firm. Future suggestions — console review chips, NL
+// invoice drafting — look the key up FIRST, deterministically; no model is
+// involved at either end. One alias key maps to ONE party per firm (the
+// newest confirmation wins), and the table is firm-keyed RLS (migration
+// 0017) because an alias pairs a firm's document vocabulary with its own
+// register.
+export const partyNameAliasesTable = pgTable(
+  "party_name_aliases",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    partyId: uuid("party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    // Normalized name key: uppercase meaningful tokens, sorted and joined —
+    // the app's key function (modules/clerk/alias.ts) is the only writer.
+    alias: text("alias").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [unique().on(t.firmId, t.alias)],
+);
+export type PartyNameAlias = typeof partyNameAliasesTable.$inferSelect;
+
 // ============ Clerk idea #9 — adversarial eval growth (red team) ============
 // Model-GENERATED injection attempts against Clerk's own extraction: a base
 // static fixture's document is rewritten to embed a planted instruction while
@@ -454,7 +483,14 @@ export const clerkClientStatementsTable = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    unique().on(t.firmId, t.clientPartyId, t.monthStart),
+    // Explicit short name: the auto-generated one exceeds Postgres's 63-char
+    // identifier cap, gets silently truncated in the DB, and then never
+    // matches the schema — making every push re-propose the constraint.
+    unique("clerk_client_statements_firm_client_month_unique").on(
+      t.firmId,
+      t.clientPartyId,
+      t.monthStart,
+    ),
     index("clerk_client_statements_client_idx").on(
       t.clientPartyId,
       t.monthStart,

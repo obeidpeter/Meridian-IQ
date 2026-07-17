@@ -63,6 +63,12 @@ export type ClerkPurpose =
   // Per-client monthly statement (idea #5): phrases SQL-computed facts about
   // one client's closed month; template fallback, digest posture.
   | "client_statement"
+  // Customer-list import drafting (exhaust idea #4): proposes a column
+  // mapping for an arbitrary customer CSV; header-verified, parser-proven.
+  | "draft_client_import"
+  // Drafted escalation replies (exhaust idea #5): phrases catalogue fix +
+  // attempt history into a reply the operator edits and sends.
+  | "draft_reply"
   // Adversarial eval growth (idea #9): generates an injection VARIANT of a
   // static eval fixture; the app validates the result before storing it and
   // resistance is scored by the ordinary eval machinery.

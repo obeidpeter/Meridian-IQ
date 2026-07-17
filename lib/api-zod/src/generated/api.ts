@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.22.0
+ * OpenAPI spec version: 0.23.0
  */
 import * as zod from 'zod';
 
@@ -2012,6 +2012,8 @@ export const ListEscalationsResponseItem = zod.object({
   "errorCode": zod.string().nullish(),
   "status": zod.enum(['open', 'acknowledged', 'resolved']),
   "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "operatorReply": zod.string().nullish(),
+  "repliedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListEscalationsResponse = zod.array(ListEscalationsResponseItem)
@@ -2039,6 +2041,8 @@ export const EscalateInvoiceResponse = zod.object({
   "errorCode": zod.string().nullish(),
   "status": zod.enum(['open', 'acknowledged', 'resolved']),
   "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "operatorReply": zod.string().nullish(),
+  "repliedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -2495,6 +2499,8 @@ export const ListOperatorCasesResponseItem = zod.object({
   "errorCode": zod.string().nullish(),
   "status": zod.string(),
   "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "operatorReply": zod.string().nullish(),
+  "repliedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })).nullish()
 })
@@ -2559,6 +2565,8 @@ export const ClaimOperatorCaseResponse = zod.object({
   "errorCode": zod.string().nullish(),
   "status": zod.string(),
   "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "operatorReply": zod.string().nullish(),
+  "repliedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })).nullish()
 })
@@ -2615,6 +2623,8 @@ export const ResolveOperatorCaseResponse = zod.object({
   "errorCode": zod.string().nullish(),
   "status": zod.string(),
   "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "operatorReply": zod.string().nullish(),
+  "repliedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })).nullish()
 })
@@ -4311,7 +4321,8 @@ export const GetClerkPartySuggestionsResponse = zod.object({
   "type": zod.string(),
   "confidence": zod.number(),
   "tinScore": zod.number(),
-  "nameScore": zod.number()
+  "nameScore": zod.number(),
+  "viaAlias": zod.boolean().optional()
 })),
   "buyer": zod.array(zod.object({
   "partyId": zod.string(),
@@ -4320,7 +4331,8 @@ export const GetClerkPartySuggestionsResponse = zod.object({
   "type": zod.string(),
   "confidence": zod.number(),
   "tinScore": zod.number(),
-  "nameScore": zod.number()
+  "nameScore": zod.number(),
+  "viaAlias": zod.boolean().optional()
 }))
 })
 
@@ -4657,7 +4669,8 @@ export const DraftInvoiceWithClerkResponse = zod.object({
   "type": zod.string(),
   "confidence": zod.number(),
   "tinScore": zod.number(),
-  "nameScore": zod.number()
+  "nameScore": zod.number(),
+  "viaAlias": zod.boolean().optional()
 })),
   "model": zod.string(),
   "promptVersion": zod.string(),
@@ -4768,6 +4781,93 @@ export const DraftStatementFormatWithClerkResponse = zod.object({
   "error": zod.string().nullable()
 }))
 })
+})
+
+
+/**
+ * @summary Propose a column mapping for an arbitrary customer-list CSV — header-verified, parser-proven, never stored
+ */
+export const draftClientImportWithClerkBodySampleCsvMin = 20;
+export const draftClientImportWithClerkBodySampleCsvMax = 20000;
+
+
+
+export const DraftClientImportWithClerkBody = zod.object({
+  "sampleCsv": zod.string().min(draftClientImportWithClerkBodySampleCsvMin).max(draftClientImportWithClerkBodySampleCsvMax)
+})
+
+
+
+
+export const DraftClientImportWithClerkResponse = zod.object({
+  "columns": zod.object({
+  "legalName": zod.string(),
+  "tin": zod.string().nullable(),
+  "cacNumber": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "street": zod.string().nullable(),
+  "city": zod.string().nullable(),
+  "engagementTitle": zod.string().nullable()
+}),
+  "rows": zod.array(zod.object({
+  "legalName": zod.string().min(1),
+  "tin": zod.string().optional(),
+  "cacNumber": zod.string().optional(),
+  "email": zod.string().optional(),
+  "street": zod.string().optional(),
+  "city": zod.string().optional(),
+  "engagementTitle": zod.string().optional()
+})),
+  "validation": zod.object({
+  "headerFound": zod.boolean(),
+  "lineCount": zod.number(),
+  "parsedCount": zod.number(),
+  "parseRate": zod.number()
+})
+})
+
+
+/**
+ * @summary Draft a grounded reply to an escalation (catalogue fix + attempt history; template fallback; operator edits and sends)
+ */
+export const DraftEscalationReplyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DraftEscalationReplyResponse = zod.object({
+  "draft": zod.string(),
+  "source": zod.enum(['clerk', 'template']),
+  "errorCode": zod.string().nullable()
+})
+
+
+/**
+ * @summary Send the operator's reply to an escalation (acknowledges an open escalation)
+ */
+export const ReplyToEscalationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const replyToEscalationBodyReplyMax = 2000;
+
+
+
+export const ReplyToEscalationBody = zod.object({
+  "reply": zod.string().min(1).max(replyToEscalationBodyReplyMax)
+})
+
+export const ReplyToEscalationResponse = zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "reason": zod.string(),
+  "errorCode": zod.string().nullish(),
+  "status": zod.enum(['open', 'acknowledged', 'resolved']),
+  "context": zod.record(zod.string(), zod.unknown()).nullish(),
+  "operatorReply": zod.string().nullish(),
+  "repliedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
 })
 
 

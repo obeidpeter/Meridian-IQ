@@ -53,6 +53,11 @@ import {
   ResolveOperatorCaseBody,
   ResolveOperatorCaseResponse,
   GetFirmReceivablesResponse,
+  DraftEscalationReplyParams,
+  DraftEscalationReplyResponse,
+  ReplyToEscalationParams,
+  ReplyToEscalationBody,
+  ReplyToEscalationResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
@@ -63,6 +68,11 @@ import {
 } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
+import {
+  draftEscalationReply,
+  sendEscalationReply,
+} from "../modules/desk/draft-reply";
+import { getClerkGateway } from "../modules/clerk/provider";
 import { getFirmReceivables } from "../modules/invoice/receivables";
 import {
   SUBMISSION_WINDOW_DAYS,
@@ -931,6 +941,8 @@ type EscalationView = {
   errorCode: string | null;
   status: (typeof escalationsTable.$inferSelect)["status"];
   context: Record<string, unknown> | null;
+  operatorReply: string | null;
+  repliedAt: Date | null;
   createdAt: Date;
 };
 
@@ -957,6 +969,8 @@ function escalationView(
     errorCode: e.errorCode,
     status: e.status,
     context: e.context,
+    operatorReply: e.operatorReply,
+    repliedAt: e.repliedAt,
     createdAt: e.createdAt,
   };
 }
@@ -1229,6 +1243,33 @@ router.post("/operator/cases/:id/resolve", async (req, res): Promise<void> => {
     after: { resolutionCode: row.resolutionCode, handleSeconds },
   });
   res.json(ResolveOperatorCaseResponse.parse(await caseView(row)));
+});
+
+// Drafted escalation replies (exhaust idea #5). The draft is grounded in the
+// catalogue + real attempt history and NEVER sent by the model — the operator
+// edits and presses send, and the send route is the only writer of
+// operator_reply. Platform-funded, like the other operator drafting tools.
+router.post(
+  "/escalations/:id/reply-draft",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "operator.queue.act");
+    const params = parseOrThrow(DraftEscalationReplyParams, req.params);
+    const gateway = await getClerkGateway();
+    const draft = await draftEscalationReply(params.id, gateway);
+    res.json(DraftEscalationReplyResponse.parse(draft));
+  },
+);
+
+router.post("/escalations/:id/reply", async (req, res): Promise<void> => {
+  assertCan(req.principal, "operator.queue.act");
+  const params = parseOrThrow(ReplyToEscalationParams, req.params);
+  const body = parseOrThrow(ReplyToEscalationBody, req.body);
+  const updated = await sendEscalationReply(
+    params.id,
+    body.reply,
+    req.principal.userId,
+  );
+  res.json(ReplyToEscalationResponse.parse(updated));
 });
 
 export default router;

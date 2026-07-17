@@ -47,12 +47,15 @@ import {
   GetClerkBatchResponse,
   DraftStatementFormatWithClerkBody,
   DraftStatementFormatWithClerkResponse,
+  DraftClientImportWithClerkBody,
+  DraftClientImportWithClerkResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertClientPartyScope,
   clientPartyScope,
+  requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
 import {
@@ -78,6 +81,7 @@ import {
   kickBatchProcessing,
 } from "../modules/clerk/batch-async";
 import { draftFormatMappingWithClerk } from "../modules/clerk/draft-format";
+import { draftClientImportWithClerk } from "../modules/clerk/draft-client-import";
 import { latestDigestForFirm } from "../modules/clerk/digest";
 import { listClientStatements } from "../modules/clerk/client-statement";
 import { DomainError } from "../modules/errors";
@@ -403,6 +407,24 @@ router.post("/clerk/draft-invoice", async (req, res): Promise<void> => {
   const gateway = await getClerkGateway();
   const result = await draftInvoiceWithClerk(parsed, req.principal, gateway);
   res.json(DraftInvoiceWithClerkResponse.parse(result));
+});
+
+// Customer-list import drafting (exhaust idea #4): the statement-format seam
+// applied to the client import. Firm-scoped and firm-funded (clients.import
+// is a firm_admin capability); the draft never writes — the rows still walk
+// the ordinary /clients/import validate/commit flow.
+router.post("/clerk/client-import-draft", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clients.import");
+  const firmId = requireFirmScope(req.principal);
+  const parsed = parseOrThrow(DraftClientImportWithClerkBody, req.body);
+  await assertFirmClerkBudget(firmId);
+  const gateway = await getClerkGateway();
+  const draft = await draftClientImportWithClerk(
+    parsed.sampleCsv,
+    firmId,
+    gateway,
+  );
+  res.json(DraftClientImportWithClerkResponse.parse(draft));
 });
 
 // The firm's latest weekly digest (power D). Facts are SQL-computed; the

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.22.0
+ * OpenAPI spec version: 0.23.0
  */
 
 export * from './acceptInvitationInput';
@@ -113,6 +113,9 @@ export * from './clerkPartySuggestion';
 export * from './clerkPartySuggestions';
 export * from './clerkUsage';
 export * from './clerkUsagePaceBand';
+export * from './clientImportDraft';
+export * from './clientImportDraftColumns';
+export * from './clientImportDraftValidation';
 export * from './clientImportInput';
 export * from './clientImportResult';
 export * from './clientImportRow';
@@ -155,6 +158,7 @@ export * from './dashboardSummary';
 export * from './dashboardSummaryPenaltyRisk';
 export * from './draftCatalogueEntryInput';
 export * from './draftClaimWithClerkInput';
+export * from './draftClientImportInput';
 export * from './draftInvoiceWithClerkInput';
 export * from './draftStatementFormatInput';
 export * from './engagement';
@@ -186,6 +190,8 @@ export * from './escalation';
 export * from './escalationContext';
 export * from './escalationInput';
 export * from './escalationInputContext';
+export * from './escalationReplyDraft';
+export * from './escalationReplyDraftSource';
 export * from './escalationStatus';
 export * from './explainFailureInput';
 export * from './exportInvoicesCsvParams';
@@ -342,6 +348,7 @@ export * from './recurringInvoiceTemplateInputCadence';
 export * from './recurringInvoiceTemplateUpdateInput';
 export * from './recurringSuggestion';
 export * from './remediationItem';
+export * from './replyToEscalationInput';
 export * from './resetPasswordInput';
 export * from './resolveCaseInput';
 export * from './revenueShareStatement';

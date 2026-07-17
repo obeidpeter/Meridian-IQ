@@ -58,6 +58,11 @@ api-server workflow after a merge touches it.
   name built from many columns can exceed that and be silently truncated, so the
   schema's expected name never matches the stored name → perpetual rename diffs.
   Give wide unique constraints an explicit short `unique("name")`.
+  - Fixed for `clerk_client_statements` (July 2026, 0.23.0 round): now
+    `unique("clerk_client_statements_firm_client_month_unique")`. The first
+    push after this change does one drop+add cycle (prompts "truncate?" on a
+    non-empty table — answer the default "No, add without truncating"; safe,
+    the table has no duplicate keys); pushes after that are idempotent.
 
 ## memberships duplicate accumulation
 `memberships` accumulated duplicate rows because the old unique index used the

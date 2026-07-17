@@ -2,6 +2,7 @@ import { inArray, isNull, and } from "drizzle-orm";
 import { getDb, partiesTable, type Party } from "@workspace/db";
 import { DomainError } from "../errors";
 import { getCase } from "./cases";
+import { lookupPartyAlias } from "./alias";
 
 // Party-matching suggestions at approval (pilot target: ≥70% of cases without
 // manual re-keying). The extraction already proposes supplier/buyer names and
@@ -21,6 +22,9 @@ export interface PartySuggestion {
   confidence: number;
   tinScore: number;
   nameScore: number;
+  // Alias memory (idea #6): true when this suggestion came from a remembered
+  // extracted-name → party pairing a human previously confirmed.
+  viaAlias?: boolean;
 }
 
 export interface PartySuggestions {
@@ -153,11 +157,49 @@ export async function suggestPartiesForCase(
       ),
     );
 
+  const supplier = scorePartyCandidates(
+    supplierIdentity,
+    candidates.filter((c) => c.type === "client_business"),
+  );
+  const buyer = scorePartyCandidates(buyerIdentity, candidates);
+
+  // Alias memory (idea #6): a remembered pairing outranks scoring — a human
+  // already confirmed this exact document name means that party. The memory
+  // only NOMINATES; the party must still be in the candidate set above
+  // (right type, not merged) before it may lead.
   return {
-    supplier: scorePartyCandidates(
-      supplierIdentity,
+    supplier: await applyAlias(
+      kase.firmId,
+      supplierIdentity.name,
+      supplier,
       candidates.filter((c) => c.type === "client_business"),
     ),
-    buyer: scorePartyCandidates(buyerIdentity, candidates),
+    buyer: await applyAlias(kase.firmId, buyerIdentity.name, buyer, candidates),
   };
+}
+
+export async function applyAlias(
+  firmId: string | null,
+  extractedName: string | null,
+  scored: PartySuggestion[],
+  candidates: Pick<Party, "id" | "legalName" | "tin" | "type">[],
+): Promise<PartySuggestion[]> {
+  const partyId = await lookupPartyAlias(firmId, extractedName);
+  if (!partyId) return scored;
+  const candidate = candidates.find((c) => c.id === partyId);
+  if (!candidate) return scored;
+  const aliasSuggestion: PartySuggestion = {
+    partyId: candidate.id,
+    legalName: candidate.legalName,
+    tin: candidate.tin,
+    type: candidate.type,
+    confidence: 1,
+    tinScore: 0,
+    nameScore: 1,
+    viaAlias: true,
+  };
+  return [
+    aliasSuggestion,
+    ...scored.filter((s) => s.partyId !== partyId),
+  ].slice(0, MAX_SUGGESTIONS);
 }

@@ -6,6 +6,7 @@ import {
   jsonb,
   pgEnum,
   index,
+  timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { firmsTable, usersTable } from "./organizations.ts";
@@ -87,6 +88,11 @@ export const escalationsTable = pgTable("escalations", {
   errorCode: text("error_code"),
   status: escalationStatusEnum("status").notNull().default("open"),
   context: jsonb("context").$type<Record<string, unknown>>(),
+  // Operator reply (idea #5): the operator's answer to the client, shown on
+  // the SME escalation card. Written through the reply route only — a Clerk
+  // DRAFT never lands here without an operator pressing send.
+  operatorReply: text("operator_reply"),
+  repliedAt: timestamp("replied_at", { withTimezone: true }),
   createdAt: createdAt(),
 }, (t) => [
   // The operator case view and the SME escalation list both look up by
@@ -94,6 +100,7 @@ export const escalationsTable = pgTable("escalations", {
   index("escalations_invoice_idx").on(t.invoiceId),
   index("escalations_firm_idx").on(t.firmId),
 ]);
+export type Escalation = typeof escalationsTable.$inferSelect;
 
 // Expo push-notification device registrations (mobile companion app). One row
 // per device token; a token is globally unique and re-registering it moves it

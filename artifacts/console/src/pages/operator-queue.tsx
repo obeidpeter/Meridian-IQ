@@ -5,17 +5,21 @@ import {
   useGetOperatorQueueStats,
   useClaimOperatorCase,
   useResolveOperatorCase,
+  useDraftEscalationReply,
+  useReplyToEscalation,
   getListOperatorCasesQueryKey,
   getGetOperatorQueueStatsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   OperatorCaseView,
+  CaseEscalation,
   ListOperatorCasesStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -36,10 +40,128 @@ function formatDuration(seconds?: number | null): string {
   return `${m}m ${s}s`;
 }
 
+// One client escalation inside a case card: the reason, the operator's reply
+// once sent, and (for operators) a draft-and-send flow. The draft is grounded
+// server-side (catalogue fix + attempt history) and lands in an editable
+// textarea — nothing goes to the client until the operator sends it.
+function EscalationItem({
+  escalation,
+  canAct,
+  onReplied,
+}: {
+  escalation: CaseEscalation;
+  canAct: boolean;
+  onReplied: () => void;
+}) {
+  const { toast } = useToast();
+  const draftReply = useDraftEscalationReply();
+  const sendReply = useReplyToEscalation();
+  const [reply, setReply] = useState<string | null>(null);
+  const [draftSource, setDraftSource] = useState<string | null>(null);
+
+  const handleDraft = () => {
+    draftReply.mutate(
+      { id: escalation.id },
+      {
+        onSuccess: (res) => {
+          setReply(res.draft);
+          setDraftSource(res.source);
+        },
+        onError: () =>
+          toast({ title: "Could not draft a reply", variant: "destructive" }),
+      },
+    );
+  };
+
+  const handleSend = () => {
+    if (!reply?.trim()) return;
+    sendReply.mutate(
+      { id: escalation.id, data: { reply: reply.trim() } },
+      {
+        onSuccess: () => {
+          toast({ title: "Reply sent to the client" });
+          setReply(null);
+          setDraftSource(null);
+          onReplied();
+        },
+        onError: () =>
+          toast({ title: "Could not send the reply", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-1.5" data-testid={`escalation-${escalation.id}`}>
+      <p className="text-amber-900/80 dark:text-amber-200/80">
+        “{escalation.reason}”
+      </p>
+      {escalation.operatorReply ? (
+        <div className="rounded-md bg-background/60 px-2.5 py-1.5">
+          <p className="text-xs font-medium text-muted-foreground">Replied</p>
+          <p className="text-foreground/80 whitespace-pre-wrap">
+            {escalation.operatorReply}
+          </p>
+        </div>
+      ) : canAct && reply === null ? (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={draftReply.isPending}
+          onClick={handleDraft}
+          data-testid={`button-draft-reply-${escalation.id}`}
+        >
+          <Sparkles className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+          {draftReply.isPending ? "Drafting…" : "Draft reply"}
+        </Button>
+      ) : canAct && reply !== null ? (
+        <div className="space-y-2">
+          {draftSource && (
+            <p className="text-xs text-muted-foreground">
+              {draftSource === "clerk"
+                ? "Clerk drafted this from the error playbook and attempt history — edit before sending."
+                : "Template draft (Clerk unavailable) — edit before sending."}
+            </p>
+          )}
+          <Textarea
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+            className="min-h-[100px] text-sm bg-background"
+            maxLength={2000}
+            data-testid={`input-reply-${escalation.id}`}
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={sendReply.isPending || !reply.trim()}
+              onClick={handleSend}
+              data-testid={`button-send-reply-${escalation.id}`}
+            >
+              {sendReply.isPending ? "Sending…" : "Send reply"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={sendReply.isPending}
+              onClick={() => {
+                setReply(null);
+                setDraftSource(null);
+              }}
+              data-testid={`button-discard-reply-${escalation.id}`}
+            >
+              Discard
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function CaseCard({
   c,
   onClaim,
   onResolve,
+  onReplied,
   claiming,
   resolving,
   canAct,
@@ -47,6 +169,7 @@ function CaseCard({
   c: OperatorCaseView;
   onClaim: (c: OperatorCaseView) => void;
   onResolve: (c: OperatorCaseView, code: string, note: string) => void;
+  onReplied: () => void;
   claiming: boolean;
   resolving: boolean;
   canAct: boolean;
@@ -119,9 +242,12 @@ function CaseCard({
               escalation
             </p>
             {(c.escalations ?? []).map((e) => (
-              <p key={e.id} className="text-amber-900/80 dark:text-amber-200/80">
-                “{e.reason}”
-              </p>
+              <EscalationItem
+                key={e.id}
+                escalation={e}
+                canAct={canAct}
+                onReplied={onReplied}
+              />
             ))}
           </div>
         )}
@@ -389,6 +515,7 @@ export function OperatorQueue() {
               c={c}
               onClaim={handleClaim}
               onResolve={handleResolve}
+              onReplied={invalidate}
               claiming={claim.isPending && pendingCaseId === c.id}
               resolving={resolve.isPending && pendingCaseId === c.id}
               canAct={canAct}

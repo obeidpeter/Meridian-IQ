@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.22.0
+  version: 0.23.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -3210,6 +3210,93 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /clerk/client-import-draft:
+    post:
+      operationId: draftClientImportWithClerk
+      tags: [clerk]
+      summary: Propose a column mapping for an arbitrary customer-list CSV — header-verified, parser-proven, never stored
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftClientImportInput"
+      responses:
+        "200":
+          description: Verified mapping plus the deterministically parsed rows, ready for the ordinary import validate/commit flow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientImportDraft"
+        "422":
+          description: The sample has no usable header/data rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Clerk could not produce a usable mapping (fail closed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Clerk AI disabled by the kill switch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /escalations/{id}/reply-draft:
+    post:
+      operationId: draftEscalationReply
+      tags: [operator]
+      summary: Draft a grounded reply to an escalation (catalogue fix + attempt history; template fallback; operator edits and sends)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A reply draft — nothing is sent or stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EscalationReplyDraft"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /escalations/{id}/reply:
+    post:
+      operationId: replyToEscalation
+      tags: [operator]
+      summary: Send the operator's reply to an escalation (acknowledges an open escalation)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplyToEscalationInput"
+      responses:
+        "200":
+          description: The escalation with the reply recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Escalation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /clerk/usage:
     get:
       operationId: getClerkUsage
@@ -5370,6 +5457,13 @@ components:
         context:
           type: ["object", "null"]
           additionalProperties: true
+        # Operator reply (idea #5): the desk's answer, shown on the client's
+        # escalation card. Written only through the reply route.
+        operatorReply:
+          type: ["string", "null"]
+        repliedAt:
+          type: ["string", "null"]
+          format: date-time
         createdAt:
           type: string
           format: date-time
@@ -5914,6 +6008,11 @@ components:
         context:
           type: ["object", "null"]
           additionalProperties: true
+        operatorReply:
+          type: ["string", "null"]
+        repliedAt:
+          type: ["string", "null"]
+          format: date-time
         createdAt:
           type: string
           format: date-time
@@ -7219,6 +7318,10 @@ components:
           type: number
         nameScore:
           type: number
+        # Alias memory (idea #6): this suggestion is a remembered pairing a
+        # human previously confirmed, not a fresh score.
+        viaAlias:
+          type: boolean
     ClerkPartySuggestions:
       type: object
       required: [supplier, buyer]
@@ -7492,6 +7595,75 @@ components:
           $ref: "#/components/schemas/StatementColumnMap"
         validation:
           $ref: "#/components/schemas/MappingValidation"
+    DraftClientImportInput:
+      type: object
+      required: [sampleCsv]
+      properties:
+        sampleCsv:
+          type: string
+          minLength: 20
+          maxLength: 20000
+    ClientImportDraft:
+      type: object
+      required: [columns, rows, validation]
+      properties:
+        # Which export column carries each import field (null = not present).
+        columns:
+          type: object
+          required: [legalName, tin, cacNumber, email, street, city, engagementTitle]
+          properties:
+            legalName:
+              type: string
+            tin:
+              type: ["string", "null"]
+            cacNumber:
+              type: ["string", "null"]
+            email:
+              type: ["string", "null"]
+            street:
+              type: ["string", "null"]
+            city:
+              type: ["string", "null"]
+            engagementTitle:
+              type: ["string", "null"]
+        # Deterministically parsed rows — feed them straight into the ordinary
+        # /clients/import validate/commit flow.
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientImportRow"
+        validation:
+          type: object
+          required: [headerFound, lineCount, parsedCount, parseRate]
+          properties:
+            headerFound:
+              type: boolean
+            lineCount:
+              type: integer
+            parsedCount:
+              type: integer
+            parseRate:
+              type: number
+    EscalationReplyDraft:
+      type: object
+      required: [draft, source, errorCode]
+      properties:
+        draft:
+          type: string
+        # 'clerk' = model-phrased; 'template' = deterministic text.
+        source:
+          type: string
+          enum: [clerk, template]
+        errorCode:
+          type: ["string", "null"]
+    ReplyToEscalationInput:
+      type: object
+      required: [reply]
+      properties:
+        reply:
+          type: string
+          minLength: 1
+          maxLength: 2000
     EngagementNarrative:
       type: object
       required: [engagementId, narrative, source]

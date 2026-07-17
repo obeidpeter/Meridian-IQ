@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.22.0`).
+contract change (it is currently `0.23.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -136,12 +136,26 @@ and the transcript walks the same fenced path and is returned for the user to
 check) — into a prefilled SME draft form — every extracted value
 re-validated/normalised by the app, buyer identity a deterministic register
 suggestion, nothing stored (the client saves through the ordinary
-`createDraft` path). **Escalation triage**
+`createDraft` path); **customer-list import drafting**
+(`modules/clerk/draft-client-import.ts`, `clients.import` + firm scope,
+firm-funded) is the draft-format seam pointed at the client book: Clerk NAMES
+which export column carries each import field, every proposal is re-verified
+against the headers that literally exist (hallucinated required column fails
+closed 502, hallucinated optional column dropped), and the returned rows come
+from the deterministic mapper — they feed the ordinary `/clients/import`
+validate-then-commit flow, so Clerk can never create a party. **Escalation triage**
 (`modules/desk/triage.ts`, opt-in `clerk_triage` flag, sweep-driven so the
 client's escalation never waits on a model call) proposes routing — closed
 category set, priority, catalogue code re-verified against the codes that
 exist — stored on the operator case for the operator to accept or override,
-never applied automatically. **Grounded firm-data Q&A**
+never applied automatically; **drafted escalation replies**
+(`modules/desk/draft-reply.ts`, operator `operator.queue.act`,
+platform-funded) apply the explainer posture to the desk: the draft is
+grounded in the catalogue cause/fix + the invoice's real attempt history (the
+client's message only inside the fence), template fallback always answers,
+and `sendEscalationReply` is the ONLY writer of `escalations.operator_reply`
+(acknowledges an open escalation; the SME invoice detail shows the client the
+reply). **Grounded firm-data Q&A**
 (`modules/clerk/data-intents.ts`): Ask Clerk carries a second closed catalogue
 next to the claims register — data intents ("what's overdue?", "what did we
 submit this month?"), offered in the intent enum only to firm-scoped askers.
@@ -176,7 +190,16 @@ new text document against the firm's OWN approved fixtures (TIN/name-token
 containment, newest first, same-firm join — never cross-firm) and rides the
 match along as a fenced one-shot with its own ledger prompt version
 (`extract.v1+ex1`, `extraction.exemplarCaseId` for audit; eval replay never
-uses exemplars); **register-history pre-flight**
+uses exemplars); **party alias memory** (`modules/clerk/alias.ts`,
+`party_name_aliases` + firm-keyed RLS migration 0017, zero model calls) learns
+NAMES where supplier memory learns documents: every approval records the
+extracted supplier/buyer name → confirmed-party pairing under a normalized
+key (order/case/legal-suffix noise stripped; identical-to-register aliases
+teach nothing; newest confirmation wins), and suggestion surfaces
+(`applyAlias` in party-match, NL invoice drafting) consult it FIRST — the
+memory only nominates, the caller's candidate filters (type, sphere, merged)
+decide, and a remembered pick shows as `viaAlias` ("Remembered" chip);
+**register-history pre-flight**
 (`modules/clerk/register-preflight.ts`, zero model calls) checks extracted
 supplier/buyer identities against the firm's party SPHERE
 (`firmPartySphereCondition` — parties are the shared spine, no tenant RLS)
