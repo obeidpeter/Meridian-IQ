@@ -41,14 +41,20 @@ export interface CompletionRequest {
   user: UserContent;
   schemaName: string;
   jsonSchema: Record<string, unknown>;
+  // The ledger purpose of the call. Providers with per-purpose model tiers
+  // (round-7 idea #1) route on it; simple providers ignore it.
+  purpose?: string;
 }
 
 // Providers may return a bare string (tests, simple providers) or the string
-// plus token usage where the API reports it (CLK-NFR-04 cost-to-serve).
+// plus token usage where the API reports it (CLK-NFR-04 cost-to-serve) and
+// the model that ACTUALLY served the call (tiered providers) — the ledger
+// records that, so per-model cohorts stay honest under tiering.
 export interface CompletionResult {
   content: string;
   promptTokens?: number | null;
   completionTokens?: number | null;
+  model?: string;
 }
 
 export interface ClerkProvider {
@@ -222,6 +228,8 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
         caseId: params.caseId ?? null,
         firmId: params.firmId ?? null,
         purpose: params.purpose,
+        // Reassigned below when a tiered provider reports the model that
+        // actually served the call.
         model: provider.model,
         promptVersion: params.promptVersion,
         inputRef: sha256(params.inputForHash),
@@ -244,6 +252,7 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
           user: params.user,
           schemaName: params.schemaName,
           jsonSchema: params.jsonSchema,
+          purpose: params.purpose,
         });
         if (typeof completed === "string") {
           raw = completed;
@@ -251,8 +260,18 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
           raw = completed.content;
           promptTokens = completed.promptTokens ?? null;
           completionTokens = completed.completionTokens ?? null;
+          if (completed.model) base.model = completed.model;
         }
       } catch (err) {
+        // A tiered provider attaches the model it routed to before throwing,
+        // so a broken tier's failures cohort under ITS model, not the default.
+        if (
+          err &&
+          typeof err === "object" &&
+          typeof (err as { clerkModel?: unknown }).clerkModel === "string"
+        ) {
+          base.model = (err as { clerkModel: string }).clerkModel;
+        }
         const message = err instanceof Error ? err.message : String(err);
         await ledger({
           outputJson: null,

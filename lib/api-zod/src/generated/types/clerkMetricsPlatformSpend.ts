@@ -6,13 +6,16 @@
  * OpenAPI spec version: 0.27.0
  */
 
-export type ClerkMetricsEconomicsMonthsItem = {
+export type ClerkMetricsPlatformSpend = {
   month: string;
-  calls: number;
   promptTokens: number;
   completionTokens: number;
-  okCount: number;
-  invalidCount: number;
-  killedCount: number;
-  errorCount: number;
+  totalTokens: number;
+  firmFundedTokens: number;
+  platformFundedTokens: number;
+  /** @nullable */
+  estimatedUsd: number | null;
+  projectedTokens: number;
+  /** @nullable */
+  projectedUsd: number | null;
 };

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.26.0
+ * OpenAPI spec version: 0.27.0
  */
 import type { EngagementInputFindings } from './engagementInputFindings';
 import type { EngagementInputType } from './engagementInputType';

@@ -32,6 +32,21 @@ describe("normalizeName", () => {
       normalizeName("Adaeze Fabrics"),
     );
   });
+
+  it("groups acronym twins without vanishing them", () => {
+    expect(normalizeName("AB Ltd")).toBe(normalizeName("A.B. Ltd"));
+    expect(normalizeName("AB Ltd")).not.toBe("");
+  });
+
+  it("does not collide names on a single shared short token", () => {
+    expect(normalizeName("A.A. Oil")).not.toBe(normalizeName("K.C. Oil"));
+  });
+
+  it("keeps digit tokens as identity", () => {
+    expect(normalizeName("Zone 1 Logistics")).not.toBe(
+      normalizeName("Zone 2 Logistics"),
+    );
+  });
 });
 
 describe("findDuplicateGroups", () => {

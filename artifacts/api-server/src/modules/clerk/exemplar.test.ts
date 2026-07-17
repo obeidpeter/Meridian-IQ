@@ -15,6 +15,7 @@ import {
 import { createExtractionCase } from "./cases.ts";
 import { growEvalFixtures } from "./eval-growth.ts";
 import {
+  demotedExemplars,
   findExtractionExemplar,
   matchesSupplierName,
   matchesSupplierTin,
@@ -310,4 +311,69 @@ test("cold capture stays byte-identical: no fence, no version suffix", async () 
   const user = calls[0].user as string;
   assert.equal(user.includes("EXAMPLE DOCUMENT"), false);
   assert.equal(calls[0].system.includes("reference example"), false);
+});
+
+test("demotedExemplars: enough history AND a high override rate", () => {
+  const demoted = demotedExemplars([
+    // Heavily overridden with real history: demoted.
+    { exemplarCaseId: "bad", cases: 3, fieldsCompared: 12, fieldsChanged: 7 },
+    // High rate but thin history: judgment withheld.
+    { exemplarCaseId: "thin", cases: 2, fieldsCompared: 8, fieldsChanged: 8 },
+    // Real history, low override rate: kept.
+    { exemplarCaseId: "good", cases: 5, fieldsCompared: 20, fieldsChanged: 3 },
+  ]);
+  assert.deepEqual([...demoted], ["bad"]);
+});
+
+test("hygiene: a proven-misleading exemplar is skipped for the next candidate", async () => {
+  const hygName = `Hygiene Metals ${SALT}`;
+  const hygTin = `99887766${SALT.slice(-4)}`;
+  const doc = `INVOICE from ${hygName} TIN ${hygTin} for supplies ${SALT}`;
+  // Older good candidate, then a newer one that will be demoted.
+  const older = await seedFixture(
+    firmA,
+    { supplierName: hygName, supplierTin: hygTin },
+    `${doc} older`,
+  );
+  const newer = await seedFixture(
+    firmA,
+    { supplierName: hygName, supplierTin: hygTin },
+    `${doc} newer`,
+  );
+  // Sanity: without descendants, the newer fixture wins.
+  const beforeHygiene = await findExtractionExemplar(doc, firmA);
+  assert.equal(beforeHygiene?.caseId, newer);
+
+  // Three approved descendants of the newer exemplar, mostly overridden.
+  const corrections = [
+    { field: "invoiceNumber", extracted: "A", final: "B", changed: true },
+    { field: "issueDate", extracted: "A", final: "B", changed: true },
+    { field: "grandTotal", extracted: "A", final: "B", changed: true },
+    { field: "currency", extracted: "NGN", final: "NGN", changed: false },
+  ];
+  for (let i = 0; i < 3; i++) {
+    await getDb().insert(clerkCasesTable).values({
+      id: randomUUID(),
+      kind: "extraction",
+      status: "approved",
+      sourceType: "text",
+      firmId: firmA,
+      createdBy: userId,
+      extraction: {
+        fields: [],
+        lines: [],
+        promptVersion: "extract.v1+ex1",
+        model: "fake",
+        exemplarCaseId: newer,
+      } as never,
+      corrections: corrections as never,
+    });
+  }
+
+  const afterHygiene = await findExtractionExemplar(doc, firmA);
+  assert.equal(
+    afterHygiene?.caseId,
+    older,
+    "the demoted exemplar yields to the next candidate",
+  );
 });

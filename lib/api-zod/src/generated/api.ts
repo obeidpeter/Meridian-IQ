@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.26.0
+ * OpenAPI spec version: 0.27.0
  */
 import * as zod from 'zod';
 
@@ -5114,6 +5114,17 @@ export const GetClerkMetricsResponse = zod.object({
   "answered": zod.number(),
   "refused": zod.number(),
   "refusalRate": zod.number()
+}),
+  "platformSpend": zod.object({
+  "month": zod.string(),
+  "promptTokens": zod.number(),
+  "completionTokens": zod.number(),
+  "totalTokens": zod.number(),
+  "firmFundedTokens": zod.number(),
+  "platformFundedTokens": zod.number(),
+  "estimatedUsd": zod.number().nullable(),
+  "projectedTokens": zod.number(),
+  "projectedUsd": zod.number().nullable()
 }),
   "injectionTrend": zod.object({
   "months": zod.array(zod.object({
