@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import { DomainError } from "../errors";
+import { MAX_SCAN_PAGES } from "./cases";
 import type { ClerkGateway, UserContent } from "./gateway";
 
 // Scanned month-end bundles (round-5 idea #1). The async batch path is
@@ -16,6 +17,11 @@ import type { ClerkGateway, UserContent } from "./gateway";
 //  - each validated segment then walks the ORDINARY vision-extraction case
 //    path (same duplicate guard, preflight, budget, human review) — the
 //    bundle machinery adds throughput, never authority.
+//
+// Known blind spot (accepted, mirrors image-vs-pdf): a segment's duplicate
+// hash keys on its RENDERED page bytes, a single-capture scan's on the PDF
+// bytes — the same invoice uploaded alone and inside a bundle makes two
+// live cases. The reviewer sees both; nothing auto-approves.
 
 // Pages per bundle. Bounds rasterization cost, the segmentation call's
 // image count, and the row size of the stored PDF.
@@ -99,10 +105,14 @@ export async function rasterizeBundle(
     const pages = shot.pages
       .map((p) => p.dataUrl?.replace(/^data:image\/png;base64,/, "") ?? "")
       .filter((p) => p.length > 0);
-    if (pages.length === 0) {
+    // Fail-closed on ANY dropped page, not just all of them: thumbnails and
+    // full pages render independently, and a page that drops in one pass but
+    // not the other would shift every index after it — validated ranges
+    // would then slice the wrong pages into segments.
+    if (pages.length !== Math.min(shot.total, MAX_BATCH_SCAN_PAGES)) {
       throw new DomainError(
         "PDF_UNREADABLE",
-        "The PDF could not be rendered. Upload a clearer scan.",
+        "The PDF could not be rendered completely. Upload a clearer scan.",
         422,
       );
     }
@@ -194,6 +204,15 @@ export function validateScanSegments(
   for (let i = 0; i < sorted.length; i++) {
     const s = sorted[i];
     if (s.endPage < s.startPage) bad(`range ${s.startPage}-${s.endPage} is inverted`);
+    // One segment = one invoice, and a single capture takes at most
+    // MAX_SCAN_PAGES pages. Refusing here mirrors the single-scan cap —
+    // silently truncating a long invoice to its first pages would put a
+    // partial document in front of the reviewer with nothing saying so.
+    if (s.endPage - s.startPage + 1 > MAX_SCAN_PAGES) {
+      bad(
+        `an invoice spans ${s.endPage - s.startPage + 1} pages; the per-invoice cap is ${MAX_SCAN_PAGES}`,
+      );
+    }
     if (i > 0 && s.startPage !== sorted[i - 1].endPage + 1) {
       bad("pages skipped or covered twice");
     }

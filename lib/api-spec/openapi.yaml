@@ -3220,7 +3220,7 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
         "422":
-          description: The document could not be read as text
+          description: The document could not be processed (unreadable PDF, or a scanned bundle past the 24-page cap)
           content:
             application/json:
               schema:

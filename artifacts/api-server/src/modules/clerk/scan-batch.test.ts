@@ -135,6 +135,14 @@ test("validateScanSegments: legal splits pass sorted; anything else fails closed
   ); // overlap
   bad([{ startPage: 1, endPage: 3, label: null }], 4); // last page uncovered
   bad([{ startPage: 2, endPage: 1, label: null }], 2); // inverted
+  bad([{ startPage: 1, endPage: 5, label: null }], 5); // one invoice > 4 pages
+  bad(
+    [
+      { startPage: 1, endPage: 6, label: null },
+      { startPage: 7, endPage: 8, label: null },
+    ],
+    8,
+  ); // long range inside an otherwise-legal split — never silently truncated
 });
 
 test("a textless PDF queues as a scan bundle and processes into per-segment cases", async () => {

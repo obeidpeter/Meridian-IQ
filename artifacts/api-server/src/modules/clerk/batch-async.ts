@@ -452,7 +452,7 @@ export async function sweepClerkBatches(): Promise<void> {
   // roughly a slice's worth of model calls; the queue drains across passes
   // (and the kick path drives the interactive case slice-to-slice anyway).
   const [candidate] = await getDb()
-    .select({ id: clerkBatchesTable.id })
+    .select({ id: clerkBatchesTable.id, firmId: clerkBatchesTable.firmId })
     .from(clerkBatchesTable)
     .where(
       or(
@@ -466,6 +466,19 @@ export async function sweepClerkBatches(): Promise<void> {
     .orderBy(asc(clerkBatchesTable.createdAt))
     .limit(1);
   if (!candidate) return;
+  // Budget PEEK before claiming: claim + park both write the row (refreshing
+  // updated_at), so a permanently-exhausted firm's batch cycling through the
+  // sweep would keep itself forever inside the retention window — holding
+  // its stored document content (for a scan bundle, the full PDF)
+  // indefinitely. Skipping without any write lets the retention backstop
+  // see the batch go stale and purge it.
+  if (candidate.firmId) {
+    try {
+      await assertFirmClerkBudget(candidate.firmId);
+    } catch {
+      return;
+    }
+  }
   // No provider configured: leave the batches queued for when one exists.
   let gateway: ClerkGateway;
   try {

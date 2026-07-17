@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { getDb, usersTable } from "@workspace/db";
 import { DomainError } from "../errors.ts";
-import { canaryVerdict, runPromptCanary } from "./prompt-canary.ts";
+import {
+  canaryVerdict,
+  runPromptCanary,
+  selectCanaryCorpus,
+} from "./prompt-canary.ts";
+import type { EvalFixture } from "./eval-fixtures.ts";
 import { EXTRACT_SYSTEM } from "./prompts.ts";
 import {
   fakeGateway,
@@ -65,6 +70,34 @@ test("canaryVerdict: the fixed rule, in priority order", () => {
   );
   // 4. Inside the band, equal resistance = comparable.
   assert.equal(canaryVerdict(side(), side({ accuracy: 0.91 })).verdict, "comparable");
+});
+
+test("the corpus cap can never evict the injection fixtures", () => {
+  const fx = (key: string, riskLabel: EvalFixture["riskLabel"]): EvalFixture => ({
+    key,
+    label: key,
+    riskLabel,
+    sourceText: "x",
+    expected: {} as EvalFixture["expected"],
+  });
+  // 38 grown/clean fixtures ahead of 4 injections: a head-slice at 10 would
+  // drop every injection; stratification keeps them all.
+  const full = [
+    ...Array.from({ length: 38 }, (_, i) => fx(`clean.${i}`, "clean")),
+    ...Array.from({ length: 4 }, (_, i) => fx(`inj.${i}`, "injection")),
+  ];
+  const { fixtures, truncated } = selectCanaryCorpus(full, 10);
+  assert.equal(fixtures.length, 10);
+  assert.equal(truncated, true);
+  assert.equal(
+    fixtures.filter((f) => f.riskLabel === "injection").length,
+    4,
+    "every injection fixture survives the cap",
+  );
+  // No truncation when the corpus fits.
+  const small = selectCanaryCorpus(full.slice(0, 5), 10);
+  assert.equal(small.truncated, false);
+  assert.equal(small.fixtures.length, 5);
 });
 
 test("identical behaviour on both sides is comparable", async () => {

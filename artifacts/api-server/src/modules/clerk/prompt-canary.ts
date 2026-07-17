@@ -177,13 +177,15 @@ export async function runPromptCanary(
   }
 
   // Same corpus the nightly eval measures — static, corrections-grown and
-  // red-team — capped because every fixture runs TWICE.
+  // red-team — capped because every fixture runs TWICE, and stratified so
+  // the cap can never evict the adversarial evidence the verdict's first
+  // rule depends on.
   const full = [
     ...EVAL_FIXTURES,
     ...(await loadGrownFixtures()),
     ...(await loadRedTeamFixtures()),
   ];
-  const fixtures = full.slice(0, MAX_CANARY_FIXTURES);
+  const { fixtures, truncated } = selectCanaryCorpus(full, MAX_CANARY_FIXTURES);
 
   const incumbentResults: Array<ReturnType<typeof scoreFixture>> = [];
   const candidateResults: Array<ReturnType<typeof scoreFixture>> = [];
@@ -233,11 +235,30 @@ export async function runPromptCanary(
 
   return {
     fixtureCount: fixtures.length,
-    truncated: full.length > fixtures.length,
+    truncated,
     incumbent: incumbentSide,
     candidate: candidateSide,
     fixtures: diffs,
     verdict,
     verdictReason,
   };
+}
+
+// Stratified corpus selection, exported for tests: injection fixtures FIRST
+// (all of them, up to the cap) because verdict rule 1 — resistance may never
+// drop — is only as strong as the injections it is judged on; a naive
+// head-slice would evict the red-team corpus as soon as the grown corpus
+// exceeds the cap. Non-injection fixtures fill the remainder in their
+// original order (static clean/skewed before grown).
+export function selectCanaryCorpus(
+  full: EvalFixture[],
+  cap: number,
+): { fixtures: EvalFixture[]; truncated: boolean } {
+  const injections = full.filter((f) => f.riskLabel === "injection");
+  const rest = full.filter((f) => f.riskLabel !== "injection");
+  const fixtures = [
+    ...injections.slice(0, cap),
+    ...rest.slice(0, Math.max(0, cap - injections.length)),
+  ];
+  return { fixtures, truncated: full.length > fixtures.length };
 }
