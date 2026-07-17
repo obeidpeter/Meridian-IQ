@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.21.0
+ * OpenAPI spec version: 0.22.0
  */
 import * as zod from 'zod';
 
@@ -697,6 +697,55 @@ export const ExportReceivablesCsvQueryParams = zod.object({
 })
 
 export const ExportReceivablesCsvResponse = zod.unknown()
+
+
+/**
+ * @summary Firm-level monthly VAT filing pack — per-client output VAT for a closed Lagos month
+ */
+export const getVatPackQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const GetVatPackQueryParams = zod.object({
+  "month": zod.coerce.string().regex(getVatPackQueryMonthRegExp).optional().describe('A closed Lagos month\'s first day (YYYY-MM-01); defaults to the newest closed month.')
+})
+
+export const GetVatPackResponse = zod.object({
+  "monthStart": zod.string(),
+  "monthLabel": zod.string(),
+  "months": zod.array(zod.string()),
+  "rows": zod.array(zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "acceptedCount": zod.number(),
+  "acceptedTotal": zod.string(),
+  "acceptedVat": zod.string(),
+  "creditCount": zod.number(),
+  "creditVat": zod.string(),
+  "netVat": zod.string()
+})),
+  "totals": zod.object({
+  "acceptedCount": zod.number(),
+  "acceptedTotal": zod.string(),
+  "acceptedVat": zod.string(),
+  "creditCount": zod.number(),
+  "creditVat": zod.string(),
+  "netVat": zod.string()
+}),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Download the monthly VAT filing pack as CSV
+ */
+export const exportVatPackCsvQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const ExportVatPackCsvQueryParams = zod.object({
+  "month": zod.coerce.string().regex(exportVatPackCsvQueryMonthRegExp).optional()
+})
+
+export const ExportVatPackCsvResponse = zod.unknown()
 
 
 /**
@@ -4728,7 +4777,9 @@ export const DraftStatementFormatWithClerkResponse = zod.object({
 export const GetClerkUsageResponse = zod.object({
   "monthStart": zod.coerce.date(),
   "usedTokens": zod.number(),
-  "budgetTokens": zod.number()
+  "budgetTokens": zod.number(),
+  "projectedTokens": zod.number(),
+  "paceBand": zod.enum(['ok', 'warning', 'critical'])
 })
 
 

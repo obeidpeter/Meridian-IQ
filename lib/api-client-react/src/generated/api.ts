@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.21.0
+ * OpenAPI spec version: 0.22.0
  */
 import {
   useMutation,
@@ -104,6 +104,7 @@ import type {
   ExplainFailureInput,
   ExportInvoicesCsvParams,
   ExportReceivablesCsvParams,
+  ExportVatPackCsvParams,
   FailureExplanation,
   FeatureFlag,
   FeatureFlagOverrideInput,
@@ -122,6 +123,7 @@ import type {
   GetDashboardSummaryParams,
   GetPublicThemeParams,
   GetReceivablesSummaryParams,
+  GetVatPackParams,
   HealthStatus,
   IdentifierCheck,
   Invitation,
@@ -209,6 +211,7 @@ import type {
   User,
   UserInput,
   ValidationResult,
+  VatPack,
   VatRiskInput,
   VatRiskReport
 } from './api.schemas';
@@ -2684,6 +2687,174 @@ export function useExportReceivablesCsv<TData = Awaited<ReturnType<typeof export
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportReceivablesCsvQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetVatPackUrl = (params?: GetVatPackParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/vat-pack?${stringifiedParams}` : `/api/vat-pack`
+}
+
+/**
+ * @summary Firm-level monthly VAT filing pack — per-client output VAT for a closed Lagos month
+ */
+export const getVatPack = async (params?: GetVatPackParams, options?: RequestInit): Promise<VatPack> => {
+
+  return customFetch<VatPack>(getGetVatPackUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVatPackQueryKey = (params?: GetVatPackParams,) => {
+    return [
+    `/api/vat-pack`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetVatPackQueryOptions = <TData = Awaited<ReturnType<typeof getVatPack>>, TError = ErrorType<BadRequestResponse>>(params?: GetVatPackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatPack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVatPackQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVatPack>>> = ({ signal }) => getVatPack(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVatPack>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVatPackQueryResult = NonNullable<Awaited<ReturnType<typeof getVatPack>>>
+export type GetVatPackQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Firm-level monthly VAT filing pack — per-client output VAT for a closed Lagos month
+ */
+
+export function useGetVatPack<TData = Awaited<ReturnType<typeof getVatPack>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetVatPackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatPack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVatPackQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportVatPackCsvUrl = (params?: ExportVatPackCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/vat-pack/export?${stringifiedParams}` : `/api/vat-pack/export`
+}
+
+/**
+ * @summary Download the monthly VAT filing pack as CSV
+ */
+export const exportVatPackCsv = async (params?: ExportVatPackCsvParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportVatPackCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportVatPackCsvQueryKey = (params?: ExportVatPackCsvParams,) => {
+    return [
+    `/api/vat-pack/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportVatPackCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportVatPackCsv>>, TError = ErrorType<BadRequestResponse>>(params?: ExportVatPackCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportVatPackCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportVatPackCsvQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportVatPackCsv>>> = ({ signal }) => exportVatPackCsv(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportVatPackCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportVatPackCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportVatPackCsv>>>
+export type ExportVatPackCsvQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Download the monthly VAT filing pack as CSV
+ */
+
+export function useExportVatPackCsv<TData = Awaited<ReturnType<typeof exportVatPackCsv>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ExportVatPackCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportVatPackCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportVatPackCsvQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -53,6 +53,8 @@ import {
   CreateSettlementResponse,
   GetInvoiceStatusLightParams,
   GetInvoiceStatusLightResponse,
+  GetVatPackQueryParams,
+  GetVatPackResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { computeStatusLight } from "../modules/clerk/status-light";
@@ -68,6 +70,10 @@ import {
   type Principal,
 } from "../modules/auth/rbac";
 import { bulkSubmit } from "../modules/invoice/bulk-submit";
+import {
+  closedLagosMonths,
+  computeVatPack,
+} from "../modules/clerk/vat-pack";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { likePattern } from "../lib/sql";
 import {
@@ -239,6 +245,70 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
     `invoices-${new Date().toISOString().slice(0, 10)}.csv`,
     csv,
   );
+});
+
+// Monthly VAT filing pack (exhaust idea #2): per-client output VAT for a
+// closed Lagos month, deterministic and computed on demand — the firm-level
+// view of the per-client statement facts. Firm principals only (a client_user
+// must never see sibling clients' VAT figures).
+async function resolveVatPack(principal: Principal, rawQuery: unknown) {
+  assertCan(principal, "console.portfolio.read");
+  const firmId = requireFirmScope(principal);
+  const query = parseOrThrow(GetVatPackQueryParams, rawQuery);
+  const months = closedLagosMonths();
+  const month = query.month ?? months[0];
+  if (!months.includes(month)) {
+    throw new DomainError(
+      "BAD_MONTH",
+      "month must be one of the last 12 closed Lagos months (YYYY-MM-01)",
+      400,
+    );
+  }
+  return computeVatPack(firmId, month);
+}
+
+router.get("/vat-pack", async (req, res): Promise<void> => {
+  const pack = await resolveVatPack(req.principal, req.query);
+  res.json(GetVatPackResponse.parse(pack));
+});
+
+router.get("/vat-pack/export", async (req, res): Promise<void> => {
+  // resolveVatPack parses the (identical) query schema; no second parse.
+  const pack = await resolveVatPack(req.principal, req.query);
+  const csv = toCsv(
+    [
+      "client",
+      "acceptedInvoices",
+      "acceptedTotal",
+      "outputVat",
+      "creditNotes",
+      "creditVat",
+      "netOutputVat",
+    ],
+    [
+      ...pack.rows.map((r) => [
+        r.clientName,
+        String(r.acceptedCount),
+        r.acceptedTotal,
+        r.acceptedVat,
+        String(r.creditCount),
+        r.creditVat,
+        r.netVat,
+      ]),
+      [
+        "TOTAL",
+        String(pack.totals.acceptedCount),
+        pack.totals.acceptedTotal,
+        pack.totals.acceptedVat,
+        String(pack.totals.creditCount),
+        pack.totals.creditVat,
+        pack.totals.netVat,
+      ],
+      // The disclosure travels WITH the file a partner hands around.
+      [pack.note, "", "", "", "", "", ""],
+    ],
+  );
+  sendCsvAttachment(res, `vat-pack-${pack.monthStart.slice(0, 7)}.csv`, csv);
 });
 
 // Bulk validate & submit: same capability, party-access and consent gates as

@@ -57,6 +57,7 @@ import {
 } from "../modules/auth/rbac";
 import {
   assertFirmClerkBudget,
+  budgetPace,
   firmClerkUsage,
 } from "../modules/clerk/budget";
 import {
@@ -494,7 +495,10 @@ router.get("/clerk/usage", async (req, res): Promise<void> => {
     res.status(400).json({ error: "A firm scope is required for Clerk usage" });
     return;
   }
-  res.json(GetClerkUsageResponse.parse(await firmClerkUsage(tenant)));
+  const usage = await firmClerkUsage(tenant);
+  // Budget pace (idea #7): the same numbers the 429 gate uses, projected to
+  // month end so the usage meters can warn before the cliff.
+  res.json(GetClerkUsageResponse.parse({ ...usage, ...budgetPace(usage) }));
 });
 
 export default router;
