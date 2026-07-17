@@ -173,7 +173,7 @@ export function buildTemplateDigest(facts: DigestFacts): {
   }
   if (facts.unbilledCount > 0) {
     bullets.push(
-      `${plural(facts.unbilledCount, "regular invoice")} ${facts.unbilledCount === 1 ? "looks" : "look"} unraised across ${plural(facts.unbilledClients, "client")} — a monthly billing habit with nothing issued this cycle.`,
+      `${plural(facts.unbilledCount, "regular invoice")} ${facts.unbilledCount === 1 ? "looks" : "look"} unraised across ${plural(facts.unbilledClients, "client")} — ${facts.unbilledCount === 1 ? "a monthly billing habit" : "monthly billing habits"} with nothing issued this cycle.`,
     );
   }
   const urgent = facts.overdueCount + facts.failedCount;

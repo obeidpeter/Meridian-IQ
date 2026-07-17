@@ -36,7 +36,8 @@ const MEDIAN_GAP_MIN_DAYS = 21;
 const MEDIAN_GAP_MAX_DAYS = 45;
 const AMOUNT_TOLERANCE = 0.25; // within ±25% of the median amount
 const AMOUNT_CLUSTER_SHARE = 0.6; // …for at least 60% of the invoices
-const LOOKBACK_DAYS = 365;
+// Shared with unbilled-income.ts so both surfaces mine the same year.
+export const LOOKBACK_DAYS = 365;
 const MAX_SUGGESTIONS = 5;
 
 export interface RecurringSuggestion {

@@ -316,6 +316,9 @@ export function ClerkWorkspace() {
     // getListClerkCasesQueryKey({}) prefix-matches every paged/filtered
     // variant of the list, so all cached pages go stale together.
     queryClient.invalidateQueries({ queryKey: getListClerkCasesQueryKey({}) });
+    // The batch group headers count decided cases, so a decision must also
+    // refresh the batches list or "reviewed R of C" lags behind the pills.
+    queryClient.invalidateQueries({ queryKey: getListClerkBatchesQueryKey() });
     if (selectedId) {
       queryClient.invalidateQueries({
         queryKey: getGetClerkCaseQueryKey(selectedId),
@@ -966,8 +969,6 @@ export function ClerkWorkspace() {
                       });
                       if (g.batchId === null) return rows;
                       const batch = batchById.get(g.batchId);
-                      const total = batch?.createdCases ?? g.cases.length;
-                      const reviewed = batch?.reviewedCases ?? 0;
                       return (
                         <div
                           key={`batch-${g.batchId}`}
@@ -978,8 +979,16 @@ export function ClerkWorkspace() {
                             <span className="font-medium text-foreground">
                               {batch?.name?.trim() || "Batch intake"}
                             </span>
-                            {" · "}
-                            {reviewed} of {total} reviewed
+                            {/* Counts only when the batch row resolved — a
+                                batch beyond the newest-50 list must not
+                                assert "0 reviewed". */}
+                            {batch && (
+                              <>
+                                {" · "}
+                                {batch.reviewedCases} of {batch.createdCases}{" "}
+                                reviewed
+                              </>
+                            )}
                           </p>
                           {rows}
                         </div>

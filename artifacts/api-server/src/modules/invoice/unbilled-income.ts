@@ -1,6 +1,7 @@
-import { and, eq, gte, isNotNull, isNull, notInArray } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 import {
   getDb,
+  engagementsTable,
   invoicesTable,
   partiesTable,
   recurringInvoiceTemplatesTable,
@@ -9,6 +10,7 @@ import { lagosDateString } from "../../lib/lagos-time";
 import {
   buyerBillingHistories,
   detectMonthlyPattern,
+  LOOKBACK_DAYS,
   type HistoryRow,
 } from "./recurring-suggest";
 
@@ -20,8 +22,9 @@ import {
 // recurring suggestions (buyerBillingHistories), so the two cards can never
 // disagree about what counts as a habit.
 //
-// An alert fires only inside a bounded window after the projected issue date:
-//  - GRACE_DAYS of slack first — cadences wobble, and nagging on day one of a
+// An alert fires only inside the bounded window [expected + grace,
+// expected + max] (both ends inclusive):
+//  - GRACE_DAYS of slack first — cadences wobble, and nagging on day one of
 //    a slipped cycle teaches the client to ignore the card;
 //  - silence past MAX_OVERDUE_DAYS means the arrangement probably ENDED — a
 //    lapsed retainer is not "unbilled income", and a card that nags forever
@@ -58,7 +61,7 @@ function daysBetween(a: string, b: string): number {
 
 // Pure projection over one buyer's mined pattern, exported for tests: the
 // next invoice was expected medianGapDays after the last one; the alert is
-// live while "today" sits inside (expected + grace, expected + max].
+// live while "today" sits inside [expected + grace, expected + max].
 export function unbilledAlertFor(
   invoices: HistoryRow[],
   todayLagos: string,
@@ -100,7 +103,10 @@ export async function listUnbilledIncome(
 // Firm-wide count for the weekly digest: the same detection, run over every
 // engaged supplier's history in two queries (invoices + template coverage)
 // instead of per-client round trips. Counts only — the digest phrases facts,
-// it doesn't list clients' buyers.
+// it doesn't list clients' buyers — and, unlike the client card's top-5 cap,
+// it states the TRUE count (a fact line, not a nudge list). Restricted to
+// clients with a live engagement (same posture as the per-client-statement
+// sweep): the digest must not nag about a client the firm archived.
 export async function countFirmUnbilled(
   firmId: string,
   now: Date = new Date(),
@@ -118,7 +124,9 @@ export async function countFirmUnbilled(
     ).map((r) => `${r.supplierPartyId}:${r.buyerPartyId}`),
   );
 
-  const since = lagosDateString(new Date(now.getTime() - 365 * 86_400_000));
+  const since = lagosDateString(
+    new Date(now.getTime() - LOOKBACK_DAYS * 86_400_000),
+  );
   const rows = await db
     .select({
       id: invoicesTable.id,
@@ -138,6 +146,12 @@ export async function countFirmUnbilled(
         isNotNull(invoicesTable.grandTotal),
         isNull(partiesTable.mergedIntoId),
         eq(partiesTable.type, "buyer"),
+        sql`EXISTS (
+          SELECT 1 FROM ${engagementsTable} e
+          WHERE e.firm_id = ${invoicesTable.firmId}
+            AND e.client_party_id = ${invoicesTable.supplierPartyId}
+            AND e.status IN ('open', 'in_progress')
+        )`,
       ),
     );
 

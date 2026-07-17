@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb, runInBypassContext, auditEventsTable } from "@workspace/db";
 import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
@@ -18,8 +18,16 @@ import { registerSweep } from "../pipeline/pipeline";
 // Thresholds are env-tunable and deliberately need a real sample: a month
 // with a handful of injection fixtures produces rates too noisy to alert on.
 
-const MIN_FIXTURES = Number(process.env.RESISTANCE_ALERT_MIN_FIXTURES ?? 5);
-const DROP_POINTS = Number(process.env.RESISTANCE_ALERT_DROP ?? 0.1);
+// A malformed value (empty string → 0, garbage → NaN) must never produce
+// NaN rates (0/0 slips every comparison and would 500 the metrics parse) or
+// a permanently-silent watch — fall back to the default instead.
+function envThreshold(raw: string | undefined, fallback: number): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+const MIN_FIXTURES = envThreshold(process.env.RESISTANCE_ALERT_MIN_FIXTURES, 5);
+const DROP_POINTS = envThreshold(process.env.RESISTANCE_ALERT_DROP, 0.1);
 
 export const RESISTANCE_DROP_ACTION = "clerk.injection_resistance.dropped";
 
@@ -105,16 +113,24 @@ export interface ResistanceWatchDeps {
 
 const realDeps: ResistanceWatchDeps = { months: injectionResistanceMonths };
 
-// One alert per degraded month: the append-only audit ledger doubles as the
-// dedup key (entity_id = the month that dropped), so every instance can run
-// the sweep and the second pass is a no-op — same idempotence-by-construction
-// posture as the other sweeps.
+// One alert per degraded month: the append-only audit ledger is the durable
+// cross-instance dedup key (entity_id = the month that dropped), fronted by
+// an in-process cache so the month-long tail of a detected drop doesn't
+// re-query the ledger every sweep minute. Two instances FIRST detecting the
+// same drop simultaneously can, in the worst case, both append (the audit
+// advisory lock serializes the appends, not the check-then-append) — a
+// harmless duplicate history row, accepted rather than adding a lock.
+const alertedMonths = new Set<string>();
+
 export async function sweepResistanceWatch(
   deps: ResistanceWatchDeps = realDeps,
 ): Promise<ResistanceWatchResult> {
   return runInBypassContext(async () => {
     const drop = detectResistanceDrop(await deps.months());
     if (!drop) return { checked: true, dropped: false, alerted: false };
+    if (alertedMonths.has(drop.toMonth)) {
+      return { checked: true, dropped: true, alerted: false };
+    }
 
     const [existing] = await getDb()
       .select({ seq: auditEventsTable.seq })
@@ -125,9 +141,11 @@ export async function sweepResistanceWatch(
           eq(auditEventsTable.entityId, drop.toMonth),
         ),
       )
-      .orderBy(desc(auditEventsTable.seq))
       .limit(1);
-    if (existing) return { checked: true, dropped: true, alerted: false };
+    if (existing) {
+      alertedMonths.add(drop.toMonth);
+      return { checked: true, dropped: true, alerted: false };
+    }
 
     await appendAudit({
       actorId: "resistance-watch",
@@ -149,6 +167,7 @@ export async function sweepResistanceWatch(
       { ...drop },
       "Injection resistance DROPPED month-over-month: review Clerk health (eval runs, recent prompt changes, red-team fixtures) before promoting anything.",
     );
+    alertedMonths.add(drop.toMonth);
     return { checked: true, dropped: true, alerted: true };
   });
 }

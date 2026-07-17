@@ -1,8 +1,10 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import {
   getDb,
+  engagementsTable,
   firmsTable,
   partiesTable,
   invoicesTable,
@@ -18,7 +20,7 @@ import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Unbilled-income detection (round-8 idea #1). Pinned invariants:
 //  - the projection is pure: expected = last issue + median gap, alert only
-//  inside the bounded (grace, max] window — never before the habit is
+//  inside the bounded [grace, max] window — never before the habit is
 //  actually late, never forever after an arrangement ends;
 //  - the mining shares the recurring-suggestion thresholds and template
 //  exclusions, so the two cards can never disagree about what a habit is;
@@ -101,6 +103,14 @@ before(async () => {
     ],
     createdByUserId: userId,
   });
+  // The firm-wide digest count only sees clients with a LIVE engagement.
+  await db.insert(engagementsTable).values({
+    firmId,
+    clientPartyId: clientId,
+    type: "retainer",
+    status: "open",
+    title: `UB Engagement ${SALT}`,
+  });
 });
 
 test("unbilledAlertFor projects the next date and respects the window", () => {
@@ -120,6 +130,8 @@ test("unbilledAlertFor projects the next date and respects the window", () => {
   assert.equal(hit.lastIssueDate, "2026-03-11");
   assert.equal(hit.count, 3);
 
+  // The grace boundary is inclusive: overdue day 5 is the first alert day.
+  assert.ok(unbilledAlertFor(habit, "2026-04-15"));
   // Inside the grace window: cadences wobble, stay quiet.
   assert.equal(unbilledAlertFor(habit, "2026-04-12"), null);
   // Not yet due at all.
@@ -159,4 +171,22 @@ test("the firm-wide digest count sees the same alerts", async () => {
   const empty = await countFirmUnbilled(randomUUID());
   assert.equal(empty.alerts, 0);
   assert.equal(empty.clients, 0);
+});
+
+test("an archived engagement drops the client from the digest count", async () => {
+  await getDb()
+    .update(engagementsTable)
+    .set({ status: "archived" })
+    .where(eq(engagementsTable.firmId, firmId));
+  try {
+    const counts = await countFirmUnbilled(firmId);
+    assert.equal(counts.alerts, 0, "no live engagement, no digest nagging");
+    // The client's OWN card is unaffected — it mirrors the suggestions.
+    assert.equal((await listUnbilledIncome(firmId, clientId)).length, 1);
+  } finally {
+    await getDb()
+      .update(engagementsTable)
+      .set({ status: "open" })
+      .where(eq(engagementsTable.firmId, firmId));
+  }
 });
