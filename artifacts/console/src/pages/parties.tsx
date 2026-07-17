@@ -60,13 +60,21 @@ export function normalizeName(name: string): string {
   // Order-insensitive token key (mirrors the server's alias-memory
   // normalization): "Adaeze Foods" and "Foods Adaeze Ltd" are the same
   // business entered twice; suffix words and word order carry no identity.
-  return name
+  // Digit-bearing tokens always count ("Zone 1" vs "Zone 2" are different
+  // businesses). A name whose meaningful key is too weak (acronyms like
+  // "A.B. Ltd", single short tokens like "A.A. Oil") falls back to exact
+  // order-preserved concatenation — grouping only true spelling twins
+  // instead of silently vanishing or colliding on the one shared word.
+  const raw = name
     .toLowerCase()
     .replace(/\b(ltd|limited|plc|inc|co|company|group|enterprises|enterprise|ventures|and|the|of)\b/g, " ")
     .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 3)
-    .sort()
-    .join(" ");
+    .filter(Boolean);
+  const meaningful = [
+    ...new Set(raw.filter((t) => t.length >= 3 || /\d/.test(t))),
+  ];
+  if (meaningful.length >= 2) return meaningful.sort().join(" ");
+  return raw.join("");
 }
 
 interface DupGroup {

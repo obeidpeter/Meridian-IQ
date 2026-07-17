@@ -38,6 +38,7 @@ before(async () => {
     n: string,
     issueDate: string,
     status = "draft",
+    kind = "invoice",
   ) => ({
     id: randomUUID(),
     firmId,
@@ -46,6 +47,7 @@ before(async () => {
     invoiceNumber: n,
     issueDate,
     status: status as never,
+    kind: kind as never,
   });
   await db.insert(invoicesTable).values([
     // Overdue: due 2026-06-27 and 2026-07-10 (due today = already overdue).
@@ -54,6 +56,9 @@ before(async () => {
     // Upcoming: due 2026-07-15, inside the horizon.
     mk(firmA, `CAL-u1-${SALT}`, "2026-07-08"),
     mk(firmA, `CAL-u2-${SALT}`, "2026-07-08", "validated"),
+    // An unsubmitted credit note faces the same window (the dashboard, risk
+    // list and reminder sweep all count it — so must the calendar).
+    mk(firmA, `CAL-cn-${SALT}`, "2026-07-08", "draft", "credit_note"),
     // Beyond the 35-day horizon: due 2026-08-27.
     mk(firmA, `CAL-far-${SALT}`, "2026-08-20"),
     // Submitted paper produces no calendar event.
@@ -75,7 +80,11 @@ test("aggregates the firm's statutory dates on the Lagos calendar", async () => 
   const submitEvent = submitDay.events.find(
     (e) => e.kind === "invoice_submission",
   );
-  assert.equal(submitEvent?.invoices, 2, "draft + validated both count");
+  assert.equal(
+    submitEvent?.invoices,
+    3,
+    "draft + validated + unsubmitted credit note all count",
+  );
   assert.equal(submitEvent?.clients, 1);
 
   // This month's VAT 21st is still ahead of the fixed now — it must appear

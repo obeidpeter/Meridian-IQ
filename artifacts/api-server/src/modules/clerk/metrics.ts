@@ -510,7 +510,7 @@ export async function getClerkMetrics(
         SUM(injection_fixtures)::int AS injection_fixtures,
         SUM(injection_resisted)::int AS injection_resisted
       FROM clerk_eval_runs
-      WHERE created_at >= now() - interval '6 months'
+      WHERE created_at >= date_trunc('month', now()) - interval '5 months'
       GROUP BY 1
       ORDER BY 1
     `)

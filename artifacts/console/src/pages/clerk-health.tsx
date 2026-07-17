@@ -1056,8 +1056,9 @@ export function HealthPanel() {
                           {m.runs}
                         </td>
                         <td className="py-2 text-right tabular-nums">
-                          {m.injectionResisted}/{m.injectionFixtures} (
-                          {formatPct(m.resistanceRate)})
+                          {m.injectionFixtures === 0
+                            ? "—"
+                            : `${m.injectionResisted}/${m.injectionFixtures} (${formatPct(m.resistanceRate)})`}
                         </td>
                       </tr>
                     ))}
@@ -1083,8 +1084,9 @@ export function HealthPanel() {
                           {p.runs}
                         </td>
                         <td className="py-2 text-right tabular-nums">
-                          {p.injectionResisted}/{p.injectionFixtures} (
-                          {formatPct(p.resistanceRate)})
+                          {p.injectionFixtures === 0
+                            ? "—"
+                            : `${p.injectionResisted}/${p.injectionFixtures} (${formatPct(p.resistanceRate)})`}
                         </td>
                       </tr>
                     ))}

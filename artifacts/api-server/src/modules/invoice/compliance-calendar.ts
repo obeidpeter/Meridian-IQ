@@ -48,6 +48,10 @@ export async function computeComplianceCalendar(
   // The submit-by DATE is issue_date + WINDOW: the statutory instant is Lagos
   // midnight at the START of that date (compliance-window.ts), so an invoice
   // whose due date is today or earlier is already overdue.
+  // No `kind` filter: the dashboard's deadline card, the portfolio risk
+  // aggregates and the reminder sweep all give unsubmitted credit notes and
+  // corrections submission deadlines too — the calendar must count exactly
+  // what they count or the portfolio page contradicts itself.
   const rows = (
     await getDb().execute<{
       due: string;
@@ -55,12 +59,11 @@ export async function computeComplianceCalendar(
       clients: number;
     }>(sql`
       SELECT
-        (issue_date + make_interval(days => ${SUBMISSION_WINDOW_DAYS}))::date::text AS due,
+        to_char((issue_date + make_interval(days => ${SUBMISSION_WINDOW_DAYS}))::date, 'YYYY-MM-DD') AS due,
         COUNT(*)::int AS invoices,
         COUNT(DISTINCT supplier_party_id)::int AS clients
       FROM invoices
       WHERE firm_id = ${firmId}
-        AND kind = 'invoice'
         AND status IN ('draft', 'validated')
       GROUP BY 1
       ORDER BY 1
@@ -98,9 +101,8 @@ export async function computeComplianceCalendar(
       SELECT COUNT(DISTINCT supplier_party_id)::int AS clients
       FROM invoices
       WHERE firm_id = ${firmId}
-        AND kind = 'invoice'
         AND status IN ('draft', 'validated')
-        AND (issue_date + make_interval(days => ${SUBMISSION_WINDOW_DAYS}))::date::text <= ${today}
+        AND (issue_date + make_interval(days => ${SUBMISSION_WINDOW_DAYS}))::date <= ${today}::date
     `)
   ).rows;
 
