@@ -105,14 +105,14 @@ export async function draftQuarterlyCoverNote(
     source: "template",
     disclosure: review.note,
   };
-  // A quarter with no accepted activity, no credits and no rejections has
-  // nothing to phrase — a quiet quarter never calls the model (digest
-  // posture). The credit term matches the vat-note quiet check: a
-  // credits-only quarter (credit notes accepted after quarter close) is
-  // activity, not quiet (round-13 review L4).
+  // A quarter with no accepted activity, no credit notes and no rejections
+  // has nothing to phrase — a quiet quarter never calls the model (digest
+  // posture). The credit term is the vat-note quiet check EXACTLY
+  // (creditCount, not creditVat — a zero-VAT credit note is still
+  // activity; round-13 review L4, refined by round-14 L5).
   if (
     review.vatTotals.acceptedCount === 0 &&
-    Number(review.vatTotals.creditVat) === 0 &&
+    review.vatTotals.creditCount === 0 &&
     review.submissions.accepted === 0 &&
     review.rejectionTotal === 0
   ) {

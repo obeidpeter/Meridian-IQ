@@ -8,6 +8,7 @@
 
 export type QuarterlyReviewVatTotals = {
   acceptedCount: number;
+  creditCount: number;
   acceptedVat: string;
   creditVat: string;
   netVat: string;

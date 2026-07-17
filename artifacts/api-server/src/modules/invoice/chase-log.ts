@@ -36,14 +36,17 @@ export async function chaseHistory(invoiceId: string): Promise<ChaseHistory> {
   const [row] = await getDb()
     .select({
       count: sql<number>`count(*)::int`,
-      lastAt: sql<string | null>`max(${chaseLogTable.createdAt})::text`,
+      // Left as a timestamptz so the driver hands back a Date — both this
+      // and recordChase then emit strict ISO, which every consumer (and
+      // Safari's Date parser) accepts (round-14 review L4).
+      lastAt: sql<Date | null>`max(${chaseLogTable.createdAt})`,
     })
     .from(chaseLogTable)
     .where(eq(chaseLogTable.invoiceId, invoiceId));
   return {
     invoiceId,
     count: Number(row?.count ?? 0),
-    lastAt: row?.lastAt ?? null,
+    lastAt: row?.lastAt ? new Date(row.lastAt).toISOString() : null,
   };
 }
 
@@ -81,17 +84,24 @@ export async function recordChase(
     );
   }
 
-  const before = await chaseHistory(invoiceId);
-  const stage = before.count + 1;
+  // The stage is computed INSIDE the insert (MAX+1 in one statement), so
+  // the read-then-write gap of two concurrent copies is a single statement
+  // wide — and MAX keeps later stages monotonic even if a duplicate ever
+  // lands (round-14 review L1; a duplicate label is cosmetic, the ladder
+  // and digest key off row count).
   const [inserted] = await getDb()
     .insert(chaseLogTable)
     .values({
       firmId: invoice.firmId,
       invoiceId,
-      stage,
+      stage: sql`(SELECT COALESCE(MAX(stage), 0) + 1 FROM chase_log WHERE invoice_id = ${invoiceId})` as unknown as number,
       loggedByUserId: principal.userId,
     })
-    .returning({ createdAt: chaseLogTable.createdAt });
+    .returning({
+      createdAt: chaseLogTable.createdAt,
+      stage: chaseLogTable.stage,
+    });
+  const stage = Number(inserted?.stage ?? 1);
   return {
     invoiceId,
     count: stage,

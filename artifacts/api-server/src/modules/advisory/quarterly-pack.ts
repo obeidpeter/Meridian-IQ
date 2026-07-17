@@ -41,6 +41,7 @@ export interface QuarterlyReview {
   months: QuarterlyReviewMonth[];
   vatTotals: {
     acceptedCount: number;
+    creditCount: number;
     acceptedVat: string;
     creditVat: string;
     netVat: string;
@@ -113,8 +114,10 @@ export async function computeQuarterlyReview(
   // VAT per month: the SAME computation the monthly pack runs, so the two
   // surfaces cannot disagree; the quarter totals are the sum of its months.
   const months: QuarterlyReviewMonth[] = [];
+  let creditCount = 0;
   for (const monthStart of quarterMonths(quarterStart)) {
     const pack = await computeVatPack(firmId, monthStart);
+    creditCount += pack.totals.creditCount;
     months.push({
       monthStart,
       monthLabel: pack.monthLabel,
@@ -126,6 +129,7 @@ export async function computeQuarterlyReview(
   }
   const vatTotals = {
     acceptedCount: months.reduce((s, m) => s + m.acceptedCount, 0),
+    creditCount,
     acceptedVat: money(months.reduce((s, m) => s + Number(m.acceptedVat), 0)),
     creditVat: money(months.reduce((s, m) => s + Number(m.creditVat), 0)),
     netVat: money(months.reduce((s, m) => s + Number(m.netVat), 0)),

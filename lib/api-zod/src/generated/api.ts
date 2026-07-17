@@ -876,6 +876,7 @@ export const GetQuarterlyReviewResponse = zod.object({
 })),
   "vatTotals": zod.object({
   "acceptedCount": zod.number(),
+  "creditCount": zod.number(),
   "acceptedVat": zod.string(),
   "creditVat": zod.string(),
   "netVat": zod.string()

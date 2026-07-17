@@ -58,14 +58,16 @@ before(async () => {
     status: "settled" as never,
   });
 
-  const mkStatement = async (clientPartyId: string) => {
+  // RECONCILED: the matcher has run — the only state the detector reads
+  // (a still-committed statement's lines are not yet evidence of anything).
+  const mkStatement = async (clientPartyId: string, status = "reconciled") => {
     const id = randomUUID();
     await db.insert(bankStatementsTable).values({
       id,
       firmId,
       clientPartyId,
       formatKey: "gtb_csv",
-      status: "committed" as never,
+      status: status as never,
     });
     return id;
   };
@@ -136,6 +138,11 @@ before(async () => {
   // A sibling client's unmatched credit: SEC-03 wall.
   const siblingStmt = await mkStatement(siblingId);
   await mkLine(siblingStmt, 1, { amount: "8000.00" });
+
+  // A still-COMMITTED statement (matcher hasn't run): its lines are not yet
+  // evidence and must not appear (round-14 review H1 regression).
+  const committedStmt = await mkStatement(clientId, "committed");
+  await mkLine(committedStmt, 1, { amount: "7777.00" });
 });
 
 test("only unexplained, in-window, parsed credits count — largest first", async () => {
@@ -149,6 +156,10 @@ test("only unexplained, in-window, parsed credits count — largest first", asyn
   assert.ok(
     !credits.rows.some((r) => r.lineId === matchedLineId),
     "an accepted match explains the line",
+  );
+  assert.ok(
+    !credits.rows.some((r) => r.amount === "7777.00"),
+    "a still-committed statement's lines are not yet evidence",
   );
   assert.match(credits.note, /never an accusation|legitimate reasons/);
 

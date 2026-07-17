@@ -5035,9 +5035,11 @@ components:
                 type: string
         vatTotals:
           type: object
-          required: [acceptedCount, acceptedVat, creditVat, netVat]
+          required: [acceptedCount, creditCount, acceptedVat, creditVat, netVat]
           properties:
             acceptedCount:
+              type: integer
+            creditCount:
               type: integer
             acceptedVat:
               type: string

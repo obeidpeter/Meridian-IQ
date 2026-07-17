@@ -143,7 +143,13 @@ export const settlementEventsTable = pgTable("settlement_events", {
   actorId: text("actor_id"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   createdAt: createdAt(),
-}, (t) => [index("settlement_events_invoice_idx").on(t.invoiceId)]);
+}, (t) => [
+  index("settlement_events_invoice_idx").on(t.invoiceId),
+  // The unmatched-credit detector anti-joins by statement line on every
+  // card load and digest sweep — same only-grows reasoning as the
+  // submission_attempts indexes above (round-14 review L3).
+  index("settlement_events_statement_line_idx").on(t.statementLineId),
+]);
 
 // Append-only projection of every invoice status transition (CORE-02). Replaying
 // these rows reconstructs an invoice's status at any timestamp; combined with the

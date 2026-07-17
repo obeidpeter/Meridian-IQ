@@ -17,6 +17,7 @@ import {
   alertPreferencesTable,
   consentRecordsTable,
   passwordResetsTable,
+  chaseLogTable,
 } from "@workspace/db";
 import { makeRunSalt } from "./test-helpers/fixtures.ts";
 
@@ -131,6 +132,10 @@ before(async () => {
       { firmId: firmA, title: `RLS case A ${SALT}` },
       { firmId: firmB, title: `RLS case B ${SALT}` },
     ]);
+    await db.insert(chaseLogTable).values([
+      { firmId: firmA, invoiceId: invoiceA, stage: 1, loggedByUserId: userA },
+      { firmId: firmB, invoiceId: invoiceB, stage: 1, loggedByUserId: userA },
+    ]);
     await db
       .insert(alertPreferencesTable)
       .values([{ clientPartyId: partyA }, { clientPartyId: partyB }])
@@ -181,6 +186,12 @@ test("firm-keyed tables: a firm context sees only its own rows", async () => {
     assert.ok(
       cases.length > 0 && cases.every((c) => c.firmId === firmA),
       "operator_cases: only own-firm rows",
+    );
+
+    const chases = await db.select().from(chaseLogTable);
+    assert.ok(
+      chases.length > 0 && chases.every((c) => c.firmId === firmA),
+      "chase_log: only own-firm rows (migration 0018)",
     );
 
     const members = await db.select().from(membershipsTable);
@@ -237,6 +248,17 @@ test("WITH CHECK: a firm context cannot write rows for another firm", async () =
         .values({ firmId: firmB, title: `RLS xfirm case ${SALT}` }),
     ),
     rejectsWithRls("cross-firm operator_case insert"),
+  );
+  await assert.rejects(
+    asFirm(firmA, () =>
+      getDb().insert(chaseLogTable).values({
+        firmId: firmB,
+        invoiceId: invoiceB,
+        stage: 9,
+        loggedByUserId: userA,
+      }),
+    ),
+    rejectsWithRls("cross-firm chase_log insert"),
   );
   await assert.rejects(
     asFirm(firmA, () =>

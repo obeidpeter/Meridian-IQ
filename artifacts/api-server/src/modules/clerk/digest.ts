@@ -36,7 +36,9 @@ const DIGEST_LOCK_ID = 731_843;
 // generated firms drop out of the missing-digest query.
 const DIGEST_BATCH = 20;
 
-const DIGEST_PROMPT_VERSION = "digest.v1";
+// v2 (round 14): the user facts gained the unmatched-credit and 2+-reminder
+// lines, so the model path can never lag the template path (review M1).
+const DIGEST_PROMPT_VERSION = "digest.v2";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -283,6 +285,8 @@ export async function generateFirmDigest(
       `- Regular monthly invoices that look unraised this cycle: ${facts.unbilledCount} (across ${facts.unbilledClients} client(s))`,
       `- Payments expected in the coming week (customers' own rhythms): ${facts.expectedWeekCount} invoice(s), NGN ${facts.expectedWeekTotalNgn}`,
       `- Receivables worth chasing (past due date AND the customer's usual rhythm): ${facts.chaseWorthyCount}`,
+      `- Bank credits matching no invoice on the platform: ${facts.unmatchedCreditCount} (across ${facts.unmatchedCreditClients} client(s))`,
+      `- Invoices with 2+ payment reminders sent and still unpaid: ${facts.chasedTwiceCount}`,
       `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
     ].join("\n");
     const result = await gateway.infer<z.infer<typeof digestOutput>>({

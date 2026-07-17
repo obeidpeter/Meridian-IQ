@@ -358,8 +358,10 @@ nagging), surfaced as an SME dashboard card and a fact line in the weekly
 digest (`countFirmUnbilled`); the **unmatched-credit detector**
 (`modules/invoice/unmatched-credits.ts`, `GET /unmatched-credits`, zero
 model calls, nothing stored) is unbilled-income's compliance mirror — money
-that came IN with no invoice behind it: parsed credit lines on committed
-statements in a trailing 90-day window with NO live match proposal
+that came IN with no invoice behind it: parsed credit lines on RECONCILED
+statements (the matcher has run and had its say — a still-committed
+statement's lines are not yet evidence) in a trailing 90-day window with NO
+live match proposal
 (proposed or accepted) and NO settlement event, one shared predicate
 fragment for the client card, its uncapped totals and the firm digest count
 (`countFirmUnmatchedCredits`) — framed as an advisory (a transfer or loan

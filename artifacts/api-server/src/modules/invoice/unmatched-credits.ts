@@ -11,7 +11,9 @@ import { lagosDateString } from "../../lib/lagos-time";
 //
 // Definitions, pinned:
 //  - a candidate is a PARSED credit line with a value date inside the
-//    trailing window;
+//    trailing window, on a RECONCILED statement — the matcher has run and
+//    had its say (a still-committed statement's lines all look unmatched
+//    only because nothing has tried to match them yet; round-14 review H1);
 //  - "unmatched" means the reconciliation exhaust offers NO explanation:
 //    no live match proposal (proposed or accepted — a pending proposal
 //    means the matcher found a candidate invoice, i.e. the reconciliation
@@ -58,7 +60,7 @@ function unmatchedCondition(
 ) {
   return sql`s.firm_id = ${firmId}
     ${clientPartyId ? sql`AND s.client_party_id = ${clientPartyId}` : sql``}
-    AND s.status = 'committed'
+    AND s.status = 'reconciled'
     AND l.parse_status = 'parsed'
     AND l.direction = 'credit'
     AND l.amount IS NOT NULL
