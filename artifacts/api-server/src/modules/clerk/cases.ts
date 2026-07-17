@@ -2,10 +2,12 @@ import { Buffer } from "node:buffer";
 import { and, desc, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
 import {
   getDb,
+  runInBypassContext,
   clerkCasesTable,
   engagementsTable,
   invoicesTable,
   firmsTable,
+  membershipsTable,
   type ClerkCase,
   type ExtractionField,
   type ExtractionLine,
@@ -249,6 +251,10 @@ async function runExtraction(
   gateway: ClerkGateway,
   firmId: string | null = null,
   exemplar: ExtractionExemplar | null = null,
+  // SEC-03: the capturing client's own party for a client_user capture, so the
+  // register-history checks never leak a sibling client's ledger. Null for
+  // firm/operator captures (full firm-wide view).
+  capturingClientPartyId: string | null = null,
 ): Promise<ClerkCase> {
   // The exemplar variant carries its own prompt version so ledger cohorts
   // can compare corrected-rates with and without supplier memory.
@@ -289,7 +295,11 @@ async function runExtraction(
     // preflight list the console already renders.
     const preflight = [
       ...preflightChecks(extraction),
-      ...(await registerPreflightChecks(extraction, firmId)),
+      ...(await registerPreflightChecks(
+        extraction,
+        firmId,
+        capturingClientPartyId,
+      )),
     ];
     const [updated] = await inClerkScope(firmId, () =>
       getDb()
@@ -338,6 +348,30 @@ export interface CaseContext {
   // not sufficient between sibling clients (SEC-03), and a fixture is client
   // document content.
   clientScoped?: boolean;
+  // The capturing client_user's OWN party (SEC-03): register-history preflight
+  // checks are scoped to it so a client can never read a sibling's ledger.
+  clientPartyId?: string | null;
+}
+
+// The client party a case's CREATOR is confined to, or null when the creator
+// is not a client_user. Used to scope register-history preflight on retry to
+// whoever will ultimately read the case (SEC-03) — regardless of who (an
+// operator) triggers the retry. Also the async-batch processor's scope source.
+export async function creatorClientParty(
+  userId: string | null,
+): Promise<string | null> {
+  if (!userId) return null;
+  const rows = await runInBypassContext(() =>
+    getDb()
+      .select({
+        role: membershipsTable.role,
+        clientPartyId: membershipsTable.clientPartyId,
+      })
+      .from(membershipsTable)
+      .where(eq(membershipsTable.userId, userId)),
+  );
+  const clientMembership = rows.find((r) => r.role === "client_user");
+  return clientMembership?.clientPartyId ?? null;
 }
 
 export async function retryExtraction(
@@ -386,6 +420,9 @@ export async function retryExtraction(
     gateway,
     existing.firmId,
     exemplar,
+    // Scope by the case's OWNER, not the (operator) retrier: the client_user
+    // who created the case is the one who reads its preflight (SEC-03).
+    await creatorClientParty(existing.createdBy),
   );
   await appendAudit({
     actorId,
@@ -579,6 +616,7 @@ export async function createExtractionCase(
     gateway,
     ctx.firmId ?? null,
     exemplar,
+    ctx.clientPartyId ?? null,
   );
 
   await appendAudit({

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.20.0
+ * OpenAPI spec version: 0.21.0
  */
 import {
   useMutation,
@@ -144,6 +144,7 @@ import type {
   ListInvoicesParams,
   ListOperatorCasesParams,
   ListPartiesParams,
+  ListRecurringSuggestionsParams,
   ListStatementsParams,
   LoginInput,
   MatchAssist,
@@ -180,6 +181,7 @@ import type {
   RecurringInvoiceTemplate,
   RecurringInvoiceTemplateInput,
   RecurringInvoiceTemplateUpdateInput,
+  RecurringSuggestion,
   ResetPasswordInput,
   ResolveCaseInput,
   RevenueShareStatement,
@@ -5251,6 +5253,90 @@ export const useCreateRecurringInvoice = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateRecurringInvoiceMutationOptions(options));
     }
+
+export const getListRecurringSuggestionsUrl = (params?: ListRecurringSuggestionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/recurring-suggestions?${stringifiedParams}` : `/api/recurring-suggestions`
+}
+
+/**
+ * @summary Deterministic "make this recurring?" suggestions mined from the client's own invoice history
+ */
+export const listRecurringSuggestions = async (params?: ListRecurringSuggestionsParams, options?: RequestInit): Promise<RecurringSuggestion[]> => {
+
+  return customFetch<RecurringSuggestion[]>(getListRecurringSuggestionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRecurringSuggestionsQueryKey = (params?: ListRecurringSuggestionsParams,) => {
+    return [
+    `/api/recurring-suggestions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListRecurringSuggestionsQueryOptions = <TData = Awaited<ReturnType<typeof listRecurringSuggestions>>, TError = ErrorType<unknown>>(params?: ListRecurringSuggestionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecurringSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRecurringSuggestionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRecurringSuggestions>>> = ({ signal }) => listRecurringSuggestions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRecurringSuggestions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRecurringSuggestionsQueryResult = NonNullable<Awaited<ReturnType<typeof listRecurringSuggestions>>>
+export type ListRecurringSuggestionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Deterministic "make this recurring?" suggestions mined from the client's own invoice history
+ */
+
+export function useListRecurringSuggestions<TData = Awaited<ReturnType<typeof listRecurringSuggestions>>, TError = ErrorType<unknown>>(
+ params?: ListRecurringSuggestionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecurringSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRecurringSuggestionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getUpdateRecurringInvoiceUrl = (id: string,) => {
 

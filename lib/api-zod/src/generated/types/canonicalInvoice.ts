@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.20.0
+ * OpenAPI spec version: 0.21.0
  */
 import type { CanonicalLine } from './canonicalLine';
 import type { CanonicalParty } from './canonicalParty';

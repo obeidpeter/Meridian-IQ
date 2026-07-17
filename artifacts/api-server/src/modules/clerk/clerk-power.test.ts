@@ -92,10 +92,16 @@ function extractionWith(
   };
 }
 
+// Dates are RELATIVE so the clean fixture stays genuinely clean: a hardcoded
+// issue date drifts stale and eventually trips the register-preflight
+// overdue-on-arrival advisory (history-based anomaly flags, idea #1).
+const daysFromNow = (n: number): string =>
+  new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+
 const CLEAN_VALUES: Record<string, string | null> = {
   invoiceNumber: "INV-100",
-  issueDate: "2026-07-01",
-  dueDate: "2026-07-15",
+  issueDate: daysFromNow(-1),
+  dueDate: daysFromNow(13),
   currency: "NGN",
   buyerName: "Northstar Ltd",
   subtotal: "1000.00",
@@ -132,7 +138,7 @@ test("preflightChecks flags missing and malformed header fields", () => {
 
 test("preflightChecks flags a due date before the issue date", () => {
   const issues = preflightChecks(
-    extractionWith({ ...CLEAN_VALUES, dueDate: "2026-06-30" }, [CLEAN_LINE]),
+    extractionWith({ ...CLEAN_VALUES, dueDate: daysFromNow(-2) }, [CLEAN_LINE]),
   );
   assert.equal(issues.length, 1);
   assert.equal(issues[0].field, "dueDate");

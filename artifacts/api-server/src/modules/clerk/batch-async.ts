@@ -11,7 +11,11 @@ import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
 import { assertFirmClerkBudget } from "./budget";
 import { segmentDocument, type BatchSegment } from "./batch";
-import { createExtractionCase, resolveTextSource } from "./cases";
+import {
+  createExtractionCase,
+  creatorClientParty,
+  resolveTextSource,
+} from "./cases";
 import {
   assertClerkEnabled,
   CLERK_FLAG_KEY,
@@ -241,6 +245,9 @@ export async function processBatch(
   }
 
   // ---- Stage 2: one slice of extractions, cursor-resumed ----
+  // Scope register-history preflight to the batch's OWNER (SEC-03): a
+  // client_user's batch must never surface a sibling client's ledger.
+  const clientPartyId = await creatorClientParty(batch.createdBy);
   let cursor = batch.processedSegments;
   let created = batch.createdCases;
   let skipped = batch.skippedDuplicates;
@@ -279,8 +286,9 @@ export async function processBatch(
         undefined,
         // The batch row does not record the creator's role, so supplier
         // memory stays conservatively client-scoped (creator's own cases) —
-        // a staff-created batch just gets a smaller exemplar pool.
-        { firmId: batch.firmId, clientScoped: true },
+        // a staff-created batch just gets a smaller exemplar pool. The
+        // resolved client party (null for staff) scopes history preflight.
+        { firmId: batch.firmId, clientScoped: true, clientPartyId },
       );
       created += 1;
     } catch (err) {

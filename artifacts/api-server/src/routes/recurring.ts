@@ -6,6 +6,8 @@ import {
   UpdateRecurringInvoiceParams,
   UpdateRecurringInvoiceBody,
   UpdateRecurringInvoiceResponse,
+  ListRecurringSuggestionsQueryParams,
+  ListRecurringSuggestionsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
@@ -16,12 +18,14 @@ import {
   requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
+import { DomainError } from "../modules/errors";
 import {
   createTemplate,
   getTemplate,
   listTemplates,
   setTemplateActive,
 } from "../modules/invoice/recurring";
+import { listRecurringSuggestions } from "../modules/invoice/recurring-suggest";
 
 const router: IRouter = Router();
 
@@ -35,6 +39,23 @@ router.get("/recurring-invoices", async (req, res): Promise<void> => {
     clientPartyScope(req.principal),
   );
   res.json(ListRecurringInvoicesResponse.parse(rows));
+});
+
+// Deterministic "make this recurring?" suggestions (exhaust idea #3): mined
+// on demand from the client's own invoice history, nothing stored, no model.
+// Same SEC-03 resolution as client statements: a client_user is pinned to its
+// own party; a firm principal names the client.
+router.get("/recurring-suggestions", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(ListRecurringSuggestionsQueryParams, req.query);
+  const firmId = requireFirmScope(req.principal);
+  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
+  if (!target) {
+    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
+  }
+  assertClientPartyScope(req.principal, target);
+  const suggestions = await listRecurringSuggestions(firmId, target);
+  res.json(ListRecurringSuggestionsResponse.parse(suggestions));
 });
 
 router.post("/recurring-invoices", async (req, res): Promise<void> => {

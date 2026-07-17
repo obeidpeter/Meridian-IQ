@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.20.0
+ * OpenAPI spec version: 0.21.0
  */
 export interface HealthStatus {
   status: string;
@@ -833,6 +833,15 @@ export interface RecurringInvoiceTemplate {
   lastInvoiceId?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RecurringSuggestion {
+  buyerPartyId: string;
+  buyerName: string;
+  count: number;
+  medianAmount: string;
+  lastIssueDate: string;
+  lines: InvoiceLineInput[];
 }
 
 export interface CancelInvoiceInput {
@@ -2948,6 +2957,16 @@ export type ClerkMetricsCorrectionsItem = {
   overrideRate: number;
 };
 
+export type ClerkMetricsSupplierAccuracyItem = {
+  supplierName: string;
+  /** @nullable */
+  firmName: string | null;
+  cases: number;
+  fieldsCompared: number;
+  overridden: number;
+  overrideRate: number;
+};
+
 export type ClerkMetricsAsk = {
   total: number;
   answered: number;
@@ -2963,6 +2982,7 @@ export interface ClerkMetrics {
   cost: ClerkMetricsCost;
   economics: ClerkMetricsEconomics;
   corrections: ClerkMetricsCorrectionsItem[];
+  supplierAccuracy: ClerkMetricsSupplierAccuracyItem[];
   ask: ClerkMetricsAsk;
 }
 
@@ -3425,6 +3445,10 @@ q?: string;
 
 export type ExportReceivablesCsvParams = {
 clientPartyId: string;
+};
+
+export type ListRecurringSuggestionsParams = {
+clientPartyId?: string;
 };
 
 export type GetDashboardSummaryParams = {

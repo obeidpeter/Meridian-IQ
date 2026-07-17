@@ -153,7 +153,11 @@ router.post("/clerk/cases", async (req, res): Promise<void> => {
     req.principal.userId,
     gateway,
     undefined,
-    { firmId: tenant, clientScoped: req.principal.role === "client_user" },
+    {
+      firmId: tenant,
+      clientScoped: req.principal.role === "client_user",
+      clientPartyId: clientPartyScope(req.principal),
+    },
   );
   res.status(201).json(CreateClerkCaseResponse.parse(row));
 });
@@ -172,6 +176,7 @@ router.post("/clerk/cases/batch", async (req, res): Promise<void> => {
   const result = await createBatchCases(parsed, req.principal.userId, gateway, {
     firmId: tenant,
     clientScoped: req.principal.role === "client_user",
+    clientPartyId: clientPartyScope(req.principal),
   });
   res.status(201).json(CreateClerkCaseBatchResponse.parse(result));
 });

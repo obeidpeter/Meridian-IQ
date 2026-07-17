@@ -4,12 +4,15 @@ import {
   useGetMe,
   useListParties,
   useListRecurringInvoices,
+  useListRecurringSuggestions,
   useCreateRecurringInvoice,
   useUpdateRecurringInvoice,
   getListRecurringInvoicesQueryKey,
+  getListRecurringSuggestionsQueryKey,
   type InvoiceLineInput,
   type Party,
   type RecurringInvoiceTemplate,
+  type RecurringSuggestion,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -85,16 +88,19 @@ function NewRecurringDialog({
   onOpenChange,
   buyers,
   supplierPartyId,
+  initial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   buyers: Party[];
   supplierPartyId: string;
+  /** Prefill from a suggestion; the parent re-keys the dialog per seed. */
+  initial?: TemplateForm;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const create = useCreateRecurringInvoice();
-  const [form, setForm] = useState<TemplateForm>(emptyForm);
+  const [form, setForm] = useState<TemplateForm>(initial ?? emptyForm());
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) setForm(emptyForm());
@@ -108,7 +114,11 @@ function NewRecurringDialog({
 
   const isValid =
     !!form.name.trim() &&
-    !!form.buyerPartyId &&
+    // The buyer must be one the picker actually offers — a seed can carry a
+    // party the Select can't display (defence in depth with the server's own
+    // merged-away/type filter), and submitting it would create a template
+    // against a party the user never sees.
+    buyers.some((b) => b.id === form.buyerPartyId) &&
     !!form.startDate &&
     form.lines.length > 0 &&
     form.lines.every(
@@ -138,6 +148,10 @@ function NewRecurringDialog({
       // false "could not create" error after the save already succeeded.
       queryClient.invalidateQueries({
         queryKey: getListRecurringInvoicesQueryKey(),
+      });
+      // A new template covers its buyer, so its suggestion disappears.
+      queryClient.invalidateQueries({
+        queryKey: getListRecurringSuggestionsQueryKey(),
       });
       toast({
         title: "Recurring invoice created",
@@ -332,6 +346,47 @@ export function Recurring() {
   const [dialogOpen, setDialogOpen] = useState(false);
   // Only the clicked row's button shows the pending state.
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  // Prefill from a clicked suggestion; the counter re-keys (re-mounts) the
+  // dialog so a new seed always wins over stale form state.
+  const [seed, setSeed] = useState<TemplateForm | undefined>(undefined);
+  const [seedKey, setSeedKey] = useState(0);
+
+  // Deterministic "make this recurring?" suggestions — mined server-side from
+  // this client's own invoices, no model call. Progressive enhancement: any
+  // error simply means no section.
+  const { data: suggestions } = useListRecurringSuggestions(
+    { clientPartyId: me?.clientPartyId || "" },
+    {
+      query: {
+        enabled: !!me?.clientPartyId,
+        queryKey: getListRecurringSuggestionsQueryKey({
+          clientPartyId: me?.clientPartyId || "",
+        }),
+        retry: false,
+      },
+    },
+  );
+
+  const openFromSuggestion = (s: RecurringSuggestion) => {
+    setSeed({
+      name: `Monthly — ${s.buyerName}`.slice(0, 120),
+      buyerPartyId: s.buyerPartyId,
+      cadence: "monthly",
+      startDate: todayIsoDate(),
+      lines:
+        s.lines.length > 0
+          ? s.lines.map((l) => ({
+              description: l.description,
+              quantity: l.quantity,
+              unitPrice: l.unitPrice,
+              // Normalise to the VAT select's canonical fraction strings.
+              vatRate: String(Number(l.vatRate)),
+            }))
+          : [emptyLine()],
+    });
+    setSeedKey((k) => k + 1);
+    setDialogOpen(true);
+  };
 
   const buyers = useMemo(
     () =>
@@ -398,11 +453,47 @@ export function Recurring() {
       <RequireClientScope thing="recurring invoice list">
         {me?.clientPartyId && (
           <NewRecurringDialog
+            key={seedKey}
             open={dialogOpen}
-            onOpenChange={setDialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) setSeed(undefined);
+            }}
             buyers={buyers}
             supplierPartyId={me.clientPartyId}
+            initial={seed}
           />
+        )}
+
+        {(suggestions ?? []).length > 0 && (
+          <div className="space-y-3" data-testid="recurring-suggestions">
+            <p className="text-sm font-medium">
+              Looks like you bill these customers about monthly
+            </p>
+            {(suggestions ?? []).map((s) => (
+              <Card key={s.buyerPartyId} data-testid={`row-suggestion-${s.buyerPartyId}`}>
+                <CardContent className="flex flex-wrap items-center justify-between p-4 gap-3">
+                  <div className="min-w-0">
+                    <span className="font-semibold truncate">{s.buyerName}</span>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {s.count} invoices in the last year · about{" "}
+                      {formatNaira(Number(s.medianAmount))} each · last{" "}
+                      {formatDate(s.lastIssueDate)}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openFromSuggestion(s)}
+                    data-testid={`button-suggest-${s.buyerPartyId}`}
+                  >
+                    <Repeat className="w-4 h-4 mr-1" aria-hidden="true" /> Set
+                    up recurring
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
 
         {isLoading ? (

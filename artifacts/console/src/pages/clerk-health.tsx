@@ -644,6 +644,78 @@ export function HealthPanel() {
               )}
             </CardContent>
           </Card>
+
+          <Card data-testid="section-supplier-accuracy">
+            <CardHeader>
+              <CardTitle className="text-base">Supplier accuracy</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Whose documents Clerk reads worst — override rates from the
+                corrections exhaust, grouped by the approved invoice&apos;s
+                register supplier. The list of clients worth nudging toward
+                cleaner invoices.
+              </p>
+              {metrics.supplierAccuracy.length === 0 ? (
+                <p
+                  className="text-sm text-muted-foreground"
+                  data-testid="text-supplier-accuracy-empty"
+                >
+                  No corrected approvals in this window yet.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table
+                    className="w-full text-sm"
+                    data-testid="table-supplier-accuracy"
+                  >
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-3 font-medium">Supplier</th>
+                        <th className="py-2 pr-3 font-medium">Firm</th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Cases
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Fields
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Overridden
+                        </th>
+                        <th className="py-2 font-medium text-right">
+                          Override rate
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {metrics.supplierAccuracy.map((s, i) => (
+                        <tr key={i} data-testid={`row-supplier-accuracy-${i}`}>
+                          <td className="py-2 pr-3">{s.supplierName}</td>
+                          <td className="py-2 pr-3 text-muted-foreground">
+                            {s.firmName ?? "—"}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {s.cases}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {s.fieldsCompared}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {s.overridden}
+                          </td>
+                          <td
+                            className={`py-2 text-right tabular-nums ${overrideRateClass(s.overrideRate)}`}
+                          >
+                            {formatPct(s.overrideRate)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
 

@@ -73,6 +73,19 @@ export interface ClerkMetrics {
     overridden: number;
     overrideRate: number;
   }[];
+  // Per-supplier accuracy (exhaust idea #9): the corrections exhaust joined to
+  // the approved invoice's supplier identity — which suppliers' documents
+  // Clerk reads worst. The list a firm uses to nudge clients toward cleaner
+  // invoices, and the evidence for where supplier-memory exemplars earn their
+  // keep. Pure SQL, zero model calls.
+  supplierAccuracy: {
+    supplierName: string;
+    firmName: string | null;
+    cases: number;
+    fieldsCompared: number;
+    overridden: number;
+    overrideRate: number;
+  }[];
   ask: {
     total: number;
     answered: number;
@@ -348,6 +361,39 @@ export async function getClerkMetrics(
         )
       : null;
 
+  // Per-supplier accuracy: one row per supplier party whose approved cases
+  // carry a corrections diff in the window, worst offenders (most overridden
+  // fields) first. The supplier is the APPROVED invoice's register party —
+  // the same join eval-growth stamps onto fixtures — so the numbers name real
+  // register identities, never extracted strings.
+  const supplierRows = (
+    await db.execute(sql`
+      SELECT
+        p.legal_name AS supplier_name,
+        f.name AS firm_name,
+        COUNT(DISTINCT c.id)::int AS cases,
+        COUNT(*)::int AS fields_compared,
+        COUNT(*) FILTER (WHERE (cor ->> 'changed')::boolean)::int AS overridden
+      FROM clerk_cases c
+      JOIN invoices i ON i.id = c.created_invoice_id
+      JOIN parties p ON p.id = i.supplier_party_id
+      LEFT JOIN firms f ON f.id = c.firm_id
+      CROSS JOIN LATERAL jsonb_array_elements(c.corrections) AS cor
+      WHERE c.created_at >= ${since}
+        AND c.kind = 'extraction'
+        AND c.corrections IS NOT NULL
+      GROUP BY p.id, p.legal_name, f.name
+      ORDER BY 5 DESC, 4 DESC
+      LIMIT 20
+    `)
+  ).rows as {
+    supplier_name: string;
+    firm_name: string | null;
+    cases: number;
+    fields_compared: number;
+    overridden: number;
+  }[];
+
   // Unit economics: token spend per purpose inside the window. USD estimates
   // reuse the same env rates as the headline figure (null when unconfigured).
   const purposeRows = (
@@ -512,6 +558,14 @@ export async function getClerkMetrics(
       total: c.total,
       overridden: c.overridden,
       overrideRate: rate(c.overridden, c.total),
+    })),
+    supplierAccuracy: supplierRows.map((s) => ({
+      supplierName: s.supplier_name,
+      firmName: s.firm_name,
+      cases: s.cases,
+      fieldsCompared: s.fields_compared,
+      overridden: s.overridden,
+      overrideRate: rate(s.overridden, s.fields_compared),
     })),
     ask: {
       total: askTotal,

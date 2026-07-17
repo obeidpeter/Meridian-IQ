@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import {
   identityIssues,
+  issueDateIssues,
   registerPreflightChecks,
 } from "./register-preflight.ts";
 import {
@@ -226,6 +227,156 @@ test("register checks fire end-to-end for in-sphere identities", async () => {
     false,
     "7.5% matches the supplier's history — no VAT complaint",
   );
+});
+
+// ---- History-based anomaly flags (exhaust idea #1) --------------------------
+
+test("issueDateIssues: overdue-on-arrival and future dates are advisory; fresh dates silent", () => {
+  const TODAY = "2026-07-16";
+  const stale = issueDateIssues(extraction({ issueDate: "2026-07-01" }), TODAY);
+  assert.equal(stale.length, 1);
+  assert.equal(stale[0].field, "issueDate");
+  assert.equal(stale[0].severity, "advisory");
+  assert.ok(stale[0].message.includes("already past"));
+
+  const future = issueDateIssues(extraction({ issueDate: "2026-07-20" }), TODAY);
+  assert.equal(future.length, 1);
+  assert.ok(future[0].message.includes("in the future"));
+
+  // Tomorrow is clock-skew slack, yesterday is normal, garbage is silent.
+  assert.equal(issueDateIssues(extraction({ issueDate: "2026-07-17" }), TODAY).length, 0);
+  assert.equal(issueDateIssues(extraction({ issueDate: "2026-07-14" }), TODAY).length, 0);
+  assert.equal(issueDateIssues(extraction({ issueDate: "June 2026" }), TODAY).length, 0);
+  assert.equal(issueDateIssues(extraction({ buyerName: "X" }), TODAY).length, 0);
+
+  // Operator captures (no firm) get date sanity too — it needs no register.
+  return registerPreflightChecks(
+    extraction({ issueDate: "2026-01-01" }),
+    null,
+  ).then((issues) => {
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0].field, "issueDate");
+  });
+});
+
+test("a duplicate invoice number for the same supplier is a full issue", async () => {
+  const issues = await registerPreflightChecks(
+    extraction({
+      supplierName: SUPPLIER_NAME,
+      invoiceNumber: `reg-${SALT}-0`, // case-insensitive match on REG-…-0
+    }),
+    firmA,
+  );
+  const dup = issues.find((i) => i.field === "invoiceNumber");
+  assert.ok(dup, "the existing invoice number is caught");
+  assert.equal(dup.severity, undefined, "a duplicate number costs the fast lane");
+  assert.ok(dup.message.includes("duplicate"));
+  assert.ok(dup.message.includes("submitted"), "names the existing status");
+});
+
+test("same date + same total under a NEW number is an advisory duplicate hint", async () => {
+  const issues = await registerPreflightChecks(
+    extraction({
+      supplierName: SUPPLIER_NAME,
+      invoiceNumber: `FRESH-${SALT}`,
+      issueDate: "2026-06-01",
+      grandTotal: "1075.00",
+    }),
+    firmA,
+  );
+  const dup = issues.find(
+    (i) => i.field === "invoiceNumber" && i.severity === "advisory",
+  );
+  assert.ok(dup, "same-date same-total is suspicious but only advisory");
+  assert.ok(dup.message.includes("different number"));
+});
+
+test("SEC-03: a client capture never leaks a SIBLING supplier's history", async () => {
+  // The document names the in-sphere supplier, but the capturing client is a
+  // DIFFERENT party — history checks (duplicate number, outlier, VAT) that
+  // would disclose the supplier's ledger must all stay silent.
+  const siblingParty = randomUUID();
+  const asSibling = await registerPreflightChecks(
+    extraction({
+      supplierName: SUPPLIER_NAME,
+      invoiceNumber: `reg-${SALT}-0`, // an existing number for that supplier
+      grandTotal: "50000.00", // an outlier vs the 1,075 median
+      subtotal: "1000.00",
+      vatTotal: "0.00", // a VAT deviation
+    }),
+    firmA,
+    siblingParty,
+  );
+  assert.equal(
+    asSibling.some((i) => i.field === "invoiceNumber"),
+    false,
+    "no duplicate-number disclosure to a sibling",
+  );
+  assert.equal(
+    asSibling.some((i) => i.field === "grandTotal"),
+    false,
+    "no amount-outlier disclosure to a sibling",
+  );
+  assert.equal(
+    asSibling.some((i) => i.field === "vatTotal"),
+    false,
+    "no VAT-history disclosure to a sibling",
+  );
+
+  // The SAME capture by the supplier itself (its own party) sees its history.
+  const asOwn = await registerPreflightChecks(
+    extraction({
+      supplierName: SUPPLIER_NAME,
+      invoiceNumber: `reg-${SALT}-0`,
+      grandTotal: "50000.00",
+      subtotal: "1000.00",
+      vatTotal: "0.00",
+    }),
+    firmA,
+    supplierId,
+  );
+  assert.ok(
+    asOwn.some((i) => i.field === "invoiceNumber"),
+    "a client sees its OWN duplicate",
+  );
+  assert.ok(asOwn.some((i) => i.field === "grandTotal"));
+  assert.ok(asOwn.some((i) => i.field === "vatTotal"));
+
+  // A firm/operator capture (null scope) keeps the full firm-wide view.
+  const asFirm = await registerPreflightChecks(
+    extraction({
+      supplierName: SUPPLIER_NAME,
+      invoiceNumber: `reg-${SALT}-0`,
+    }),
+    firmA,
+  );
+  assert.ok(asFirm.some((i) => i.field === "invoiceNumber"));
+});
+
+test("a total far outside the supplier's usual range is an advisory outlier", async () => {
+  const issues = await registerPreflightChecks(
+    extraction({
+      supplierName: SUPPLIER_NAME,
+      invoiceNumber: `OUT-${SALT}`,
+      grandTotal: "50000.00", // history median is 1075
+    }),
+    firmA,
+  );
+  const outlier = issues.find((i) => i.field === "grandTotal");
+  assert.ok(outlier, "50k against a 1,075 median is flagged");
+  assert.equal(outlier.severity, "advisory");
+  assert.ok(outlier.message.includes("usual range"));
+
+  // A plausible amount stays silent; so does an unknown supplier (no history).
+  const normal = await registerPreflightChecks(
+    extraction({
+      supplierName: SUPPLIER_NAME,
+      invoiceNumber: `OK-${SALT}`,
+      grandTotal: "1200.00",
+    }),
+    firmA,
+  );
+  assert.equal(normal.some((i) => i.field === "grandTotal"), false);
 });
 
 test("unusual VAT treatment for a known supplier is flagged; thin history is not", async () => {
