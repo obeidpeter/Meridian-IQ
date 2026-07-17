@@ -12,4 +12,7 @@ export type VatPackRowsItem = {
   acceptedCount: number;
   acceptedTotal: string;
   acceptedVat: string;
+  creditCount: number;
+  creditVat: string;
+  netVat: string;
 };

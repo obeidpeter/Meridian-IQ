@@ -132,7 +132,9 @@ function VatPackCard() {
                   <th className="py-2 pr-3 font-medium">Client</th>
                   <th className="py-2 pr-3 font-medium text-right">Accepted</th>
                   <th className="py-2 pr-3 font-medium text-right">Total</th>
-                  <th className="py-2 font-medium text-right">Output VAT</th>
+                  <th className="py-2 pr-3 font-medium text-right">Output VAT</th>
+                  <th className="py-2 pr-3 font-medium text-right">Credits</th>
+                  <th className="py-2 font-medium text-right">Net VAT</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -145,8 +147,14 @@ function VatPackCard() {
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {formatNaira(r.acceptedTotal)}
                     </td>
-                    <td className="py-2 text-right tabular-nums">
+                    <td className="py-2 pr-3 text-right tabular-nums">
                       {formatNaira(r.acceptedVat)}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {r.creditCount > 0 ? `−${formatNaira(r.creditVat)}` : "—"}
+                    </td>
+                    <td className="py-2 text-right tabular-nums font-medium">
+                      {formatNaira(r.netVat)}
                     </td>
                   </tr>
                 ))}
@@ -158,8 +166,16 @@ function VatPackCard() {
                   <td className="py-2 pr-3 text-right tabular-nums">
                     {formatNaira(pack.totals.acceptedTotal)}
                   </td>
-                  <td className="py-2 text-right tabular-nums">
+                  <td className="py-2 pr-3 text-right tabular-nums">
                     {formatNaira(pack.totals.acceptedVat)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {pack.totals.creditCount > 0
+                      ? `−${formatNaira(pack.totals.creditVat)}`
+                      : "—"}
+                  </td>
+                  <td className="py-2 text-right tabular-nums">
+                    {formatNaira(pack.totals.netVat)}
                   </td>
                 </tr>
               </tbody>

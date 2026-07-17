@@ -10,4 +10,7 @@ export type VatPackTotals = {
   acceptedCount: number;
   acceptedTotal: string;
   acceptedVat: string;
+  creditCount: number;
+  creditVat: string;
+  netVat: string;
 };

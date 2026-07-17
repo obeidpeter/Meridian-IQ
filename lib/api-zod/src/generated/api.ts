@@ -718,12 +718,18 @@ export const GetVatPackResponse = zod.object({
   "clientName": zod.string(),
   "acceptedCount": zod.number(),
   "acceptedTotal": zod.string(),
-  "acceptedVat": zod.string()
+  "acceptedVat": zod.string(),
+  "creditCount": zod.number(),
+  "creditVat": zod.string(),
+  "netVat": zod.string()
 })),
   "totals": zod.object({
   "acceptedCount": zod.number(),
   "acceptedTotal": zod.string(),
-  "acceptedVat": zod.string()
+  "acceptedVat": zod.string(),
+  "creditCount": zod.number(),
+  "creditVat": zod.string(),
+  "netVat": zod.string()
 }),
   "note": zod.string()
 })

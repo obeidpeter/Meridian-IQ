@@ -55,7 +55,6 @@ import {
   GetInvoiceStatusLightResponse,
   GetVatPackQueryParams,
   GetVatPackResponse,
-  ExportVatPackCsvQueryParams,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { computeStatusLight } from "../modules/clerk/status-light";
@@ -274,23 +273,39 @@ router.get("/vat-pack", async (req, res): Promise<void> => {
 });
 
 router.get("/vat-pack/export", async (req, res): Promise<void> => {
-  parseOrThrow(ExportVatPackCsvQueryParams, req.query);
+  // resolveVatPack parses the (identical) query schema; no second parse.
   const pack = await resolveVatPack(req.principal, req.query);
   const csv = toCsv(
-    ["client", "acceptedInvoices", "acceptedTotal", "outputVat"],
+    [
+      "client",
+      "acceptedInvoices",
+      "acceptedTotal",
+      "outputVat",
+      "creditNotes",
+      "creditVat",
+      "netOutputVat",
+    ],
     [
       ...pack.rows.map((r) => [
         r.clientName,
         String(r.acceptedCount),
         r.acceptedTotal,
         r.acceptedVat,
+        String(r.creditCount),
+        r.creditVat,
+        r.netVat,
       ]),
       [
         "TOTAL",
         String(pack.totals.acceptedCount),
         pack.totals.acceptedTotal,
         pack.totals.acceptedVat,
+        String(pack.totals.creditCount),
+        pack.totals.creditVat,
+        pack.totals.netVat,
       ],
+      // The disclosure travels WITH the file a partner hands around.
+      [pack.note, "", "", "", "", "", ""],
     ],
   );
   sendCsvAttachment(res, `vat-pack-${pack.monthStart.slice(0, 7)}.csv`, csv);

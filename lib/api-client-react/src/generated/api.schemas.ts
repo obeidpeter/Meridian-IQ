@@ -850,12 +850,18 @@ export type VatPackRowsItem = {
   acceptedCount: number;
   acceptedTotal: string;
   acceptedVat: string;
+  creditCount: number;
+  creditVat: string;
+  netVat: string;
 };
 
 export type VatPackTotals = {
   acceptedCount: number;
   acceptedTotal: string;
   acceptedVat: string;
+  creditCount: number;
+  creditVat: string;
+  netVat: string;
 };
 
 export interface VatPack {

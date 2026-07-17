@@ -2823,7 +2823,7 @@ export const getExportVatPackCsvQueryKey = (params?: ExportVatPackCsvParams,) =>
     }
 
 
-export const getExportVatPackCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportVatPackCsv>>, TError = ErrorType<unknown>>(params?: ExportVatPackCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportVatPackCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getExportVatPackCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportVatPackCsv>>, TError = ErrorType<BadRequestResponse>>(params?: ExportVatPackCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportVatPackCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -2842,14 +2842,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type ExportVatPackCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportVatPackCsv>>>
-export type ExportVatPackCsvQueryError = ErrorType<unknown>
+export type ExportVatPackCsvQueryError = ErrorType<BadRequestResponse>
 
 
 /**
  * @summary Download the monthly VAT filing pack as CSV
  */
 
-export function useExportVatPackCsv<TData = Awaited<ReturnType<typeof exportVatPackCsv>>, TError = ErrorType<unknown>>(
+export function useExportVatPackCsv<TData = Awaited<ReturnType<typeof exportVatPackCsv>>, TError = ErrorType<BadRequestResponse>>(
  params?: ExportVatPackCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportVatPackCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {

@@ -706,6 +706,8 @@ paths:
             text/csv:
               schema:
                 type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /invoices/bulk-submit:
     post:
       operationId: bulkSubmitInvoices
@@ -4284,12 +4286,23 @@ components:
           type: array
           items:
             type: string
+        # Issue-month basis, rails-accepted documents only, credit notes
+        # netted, cancelled excluded — see `note` for the full disclosure.
         rows:
           type: array
           items:
             type: object
             required:
-              [clientPartyId, clientName, acceptedCount, acceptedTotal, acceptedVat]
+              [
+                clientPartyId,
+                clientName,
+                acceptedCount,
+                acceptedTotal,
+                acceptedVat,
+                creditCount,
+                creditVat,
+                netVat,
+              ]
             properties:
               clientPartyId:
                 type: string
@@ -4302,15 +4315,28 @@ components:
                 type: string
               acceptedVat:
                 type: string
+              creditCount:
+                type: integer
+              creditVat:
+                type: string
+              netVat:
+                type: string
         totals:
           type: object
-          required: [acceptedCount, acceptedTotal, acceptedVat]
+          required:
+            [acceptedCount, acceptedTotal, acceptedVat, creditCount, creditVat, netVat]
           properties:
             acceptedCount:
               type: integer
             acceptedTotal:
               type: string
             acceptedVat:
+              type: string
+            creditCount:
+              type: integer
+            creditVat:
+              type: string
+            netVat:
               type: string
         note:
           type: string

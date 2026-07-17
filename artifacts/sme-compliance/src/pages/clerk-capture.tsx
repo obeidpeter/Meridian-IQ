@@ -97,6 +97,15 @@ function UsageMeter() {
           Allowance used up — Clerk submissions will be declined until next
           month.
         </p>
+      ) : !usage.paceBand && pct >= 90 ? (
+        // Version skew (new bundle, pre-0.22.0 server): paceBand is absent, so
+        // keep the old client-side threshold rather than losing the warning.
+        <p
+          className="mt-1 text-xs text-right text-destructive"
+          data-testid="text-usage-warning"
+        >
+          Nearly used up — submissions may be declined until next month.
+        </p>
       ) : usage.paceBand === "warning" ? (
         // Budget pace (idea #7): the server projects month-end spend at the
         // current burn rate, so the heads-up can fire well before the cliff.
