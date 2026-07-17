@@ -276,6 +276,14 @@ test("the sweep purges raw content from old settled cases but keeps evidence", a
   assert.equal(settledRow.sourceText, null, "raw content gone");
   assert.ok(settledRow.sourceHash, "hash retained (duplicate guard evidence)");
   assert.ok(settledRow.extraction, "extraction retained");
+  // The purge must not bump updated_at: for a decided case that column IS
+  // the decision timestamp (metrics.avgDecisionMinutes, adoption report) —
+  // housekeeping must never masquerade as review time.
+  assert.ok(
+    settledRow.updatedAt.getTime() <
+      Date.now() - 39 * 24 * 60 * 60 * 1000,
+    "purge preserves the decision clock (updated_at untouched)",
+  );
 
   const [escalatedRow] = await db
     .select()

@@ -13,9 +13,9 @@ import {
 // observed rhythm (issue + median days-to-pay) where behaviour exists,
 // otherwise the stated due date, otherwise issue + default terms.
 //
-//  - The OUTLOOK rolls the projections up into week buckets — "expected in
-//    the next 30 days" — with money already past its expected date in its
-//    own bucket (late money is not future inflow).
+//  - The OUTLOOK rolls the projections up into four consecutive week
+//    buckets, with money already past its expected date in its own bucket
+//    (late money is not future inflow).
 //  - The CHASE LIST ranks the invoices past their expected date, most
 //    beyond first — "late for THEM", not merely old — capped to a Monday
 //    -morning list, each row linking to the invoice's chaser button.
@@ -195,13 +195,23 @@ export function bucketProjections(
   return groups;
 }
 
-// Pure ranking, exported for tests: only invoices past their expected date,
-// most beyond first (amount tie-break: biggest money first).
+// Pure ranking, exported for tests: only invoices past their expected date
+// AND past their stated due date where one exists — a buyer may habitually
+// pay faster than the agreed terms, and telling a client to chase an invoice
+// that is not yet contractually due is a relationship own-goal (the round-9
+// chaser draft would also contradict the row by saying "falls due on ...").
+// Ranking stays "late for THEM": most days beyond expectation first, amount
+// as tie-break. Within the caller's primary currency only — raw magnitudes
+// across currencies are not comparable.
 export function rankChaseRows(
   projections: ReceivableProjection[],
+  today: string,
 ): ChaseRow[] {
   return projections
-    .filter((p) => p.daysBeyondExpected > 0)
+    .filter(
+      (p) =>
+        p.daysBeyondExpected > 0 && (p.dueDate === null || p.dueDate < today),
+    )
     .sort(
       (a, b) =>
         b.daysBeyondExpected - a.daysBeyondExpected ||
@@ -252,7 +262,7 @@ async function outstandingRows(
         AND i.firm_id = ${firmId}
         AND i.supplier_party_id = ${clientPartyId}
       ORDER BY i.issue_date ASC
-      LIMIT 5000
+      LIMIT 50000
     `)
   ).rows;
   return rows.map((r) => ({
@@ -300,5 +310,18 @@ export async function listChaseRows(
   clientPartyId: string,
   now: Date = new Date(),
 ): Promise<ChaseRow[]> {
-  return rankChaseRows(await projections(firmId, clientPartyId, now));
+  const all = await projections(firmId, clientPartyId, now);
+  // Primary currency = the biggest outstanding total, matching the outlook
+  // card's first-group convention; cross-currency magnitudes don't rank.
+  const totals = new Map<string, number>();
+  for (const p of all) {
+    const amount = Number(p.grandTotal);
+    if (!Number.isFinite(amount)) continue;
+    totals.set(p.currency, (totals.get(p.currency) ?? 0) + amount);
+  }
+  const primary = [...totals.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return rankChaseRows(
+    primary ? all.filter((p) => p.currency === primary) : all,
+    lagosDateString(now),
+  );
 }

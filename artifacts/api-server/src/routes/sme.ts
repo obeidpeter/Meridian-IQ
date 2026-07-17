@@ -330,11 +330,11 @@ router.get("/dashboard/receivables", async (req, res): Promise<void> => {
 
 // Cash-flow outlook (round-10 idea #1): outstanding receivables projected to
 // their expected settlement dates (buyer rhythm > due date > default terms)
-// and rolled into week buckets. Deterministic, nothing stored. Same access
-// posture as the receivables summary. The firm scope for the projection is
-// the tenant firm; a cross-tenant principal must not reach this (behaviour
-// mining is per-firm), so no-tenant callers are rejected by the module's
-// firm filter returning nothing rather than leaking across firms.
+// and rolled into week buckets. Deterministic, nothing stored. Party access
+// like the receivables summary, but DELIBERATELY stricter on tenancy:
+// requireFirmScope 403s cross-tenant staff (behaviour mining is keyed on a
+// real firmId; operators have the console rollup instead), where
+// /dashboard/receivables lets them read the aging.
 router.get("/dashboard/cashflow", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(GetCashflowOutlookQueryParams, req.query);

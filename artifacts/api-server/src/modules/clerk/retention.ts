@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { getDb, clerkBatchesTable, clerkCasesTable } from "@workspace/db";
+import { getDb, clerkBatchesTable } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 
 // Content retention sweep (OPEN-8 minimisation posture). Raw uploaded invoice
@@ -25,17 +25,26 @@ export async function sweepExpiredCaseContent(): Promise<number> {
   const days = Number(process.env.CLERK_CONTENT_RETENTION_DAYS ?? 30);
   if (!Number.isFinite(days) || days < 1) return 0;
 
-  const rows = await getDb()
-    .update(clerkCasesTable)
-    .set({ sourceText: null, sourceImageB64: null, sourceScanPagesB64: null })
-    .where(
-      sql`${clerkCasesTable.status} IN ('approved', 'rejected', 'failed')
-        AND ${clerkCasesTable.updatedAt} < now() - make_interval(days => ${days})
-        AND (${clerkCasesTable.sourceText} IS NOT NULL
-          OR ${clerkCasesTable.sourceImageB64} IS NOT NULL
-          OR ${clerkCasesTable.sourceScanPagesB64} IS NOT NULL)`,
-    )
-    .returning({ id: clerkCasesTable.id, status: clerkCasesTable.status });
+  // Raw SQL, deliberately NOT the ORM update: drizzle's $onUpdate would bump
+  // updated_at to the purge time, and updated_at IS the decision timestamp
+  // for a decided case — metrics.avgDecisionMinutes and the adoption
+  // report's review-turnaround both read it. A purge is housekeeping, not a
+  // decision; it must leave the decision clock untouched. (Re-matching is
+  // impossible afterwards because the content columns are NULL.)
+  const rows = (
+    await getDb().execute<{ id: string; status: string }>(sql`
+      UPDATE clerk_cases
+      SET source_text = NULL,
+          source_image_b64 = NULL,
+          source_scan_pages_b64 = NULL
+      WHERE status IN ('approved', 'rejected', 'failed')
+        AND updated_at < now() - make_interval(days => ${days})
+        AND (source_text IS NOT NULL
+          OR source_image_b64 IS NOT NULL
+          OR source_scan_pages_b64 IS NOT NULL)
+      RETURNING id, status
+    `)
+  ).rows;
 
   for (const row of rows) {
     await appendAudit({

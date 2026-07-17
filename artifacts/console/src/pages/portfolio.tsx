@@ -396,7 +396,7 @@ function ClerkAdoptionCard() {
                 <th className="py-2 pr-3 font-medium text-right">
                   Review time
                 </th>
-                <th className="py-2 font-medium text-right">Last capture</th>
+                <th className="py-2 font-medium text-right">Last approved</th>
               </tr>
             </thead>
             <tbody className="divide-y">

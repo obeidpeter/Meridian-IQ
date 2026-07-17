@@ -541,13 +541,19 @@ function ChaseListCard({ clientPartyId }: { clientPartyId: string }) {
             <div className="min-w-0">
               <p className="font-semibold truncate">{r.buyerName}</p>
               <p className="text-xs text-muted-foreground">
-                {r.invoiceNumber} · {formatNaira(r.grandTotal)} ·{" "}
-                {r.daysBeyondExpected}d{" "}
+                {r.invoiceNumber} ·{" "}
+                {r.currency === "NGN"
+                  ? formatNaira(r.grandTotal)
+                  : `${r.currency} ${r.grandTotal}`}{" "}
+                · {r.daysBeyondExpected}d{" "}
                 {r.basis === "rhythm"
                   ? "beyond their usual"
                   : r.basis === "dueDate"
                     ? "past due"
                     : "past standard terms"}
+                {r.basis === "rhythm" && r.dueDate
+                  ? ` · was due ${formatDate(r.dueDate)}`
+                  : ""}
               </p>
             </div>
             <Button asChild size="sm" variant="secondary">

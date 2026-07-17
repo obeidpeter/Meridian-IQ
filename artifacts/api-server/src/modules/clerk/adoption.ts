@@ -46,14 +46,28 @@ export async function computeAdoptionReport(
   windowDays: number = ADOPTION_DEFAULT_WINDOW_DAYS,
 ): Promise<AdoptionReport> {
   const db = getDb();
+  // Firm-wide totals are computed here, unbounded — the per-client query
+  // below is LIMIT-capped, and a capped subpopulation must never masquerade
+  // as a firm-wide rate.
   const totalsRows = (
     await db.execute<{
       extraction_cases: number;
       approved_cases: number;
+      fields: number;
+      kept: number;
     }>(sql`
       SELECT
         COUNT(*)::int AS extraction_cases,
-        COUNT(*) FILTER (WHERE status = 'approved')::int AS approved_cases
+        COUNT(*) FILTER (WHERE status = 'approved')::int AS approved_cases,
+        COALESCE(SUM(jsonb_array_length(corrections)) FILTER (
+          WHERE status = 'approved' AND corrections IS NOT NULL
+        ), 0)::int AS fields,
+        COALESCE(SUM((
+          SELECT COUNT(*) FROM jsonb_array_elements(corrections) x
+          WHERE NOT (x->>'changed')::boolean
+        )) FILTER (
+          WHERE status = 'approved' AND corrections IS NOT NULL
+        ), 0)::int AS kept
       FROM clerk_cases
       WHERE kind = 'extraction'
         AND firm_id = ${firmId}
@@ -83,10 +97,13 @@ export async function computeAdoptionReport(
           WHERE NOT (x->>'changed')::boolean
         )) FILTER (WHERE c.corrections IS NOT NULL), 0)::int AS kept,
         -- Same turnaround expression as metrics.avgDecisionMinutes:
-        -- updated_at is the decision write on a decided case.
+        -- updated_at is the decision write on a decided case. The content
+        -- retention sweep deliberately preserves updated_at (raw SQL, see
+        -- retention.ts) so a purge can never masquerade as review time.
         AVG(EXTRACT(EPOCH FROM (c.updated_at - c.created_at)) / 60.0)
           AS avg_minutes,
-        MAX(c.updated_at)::text AS last_approved
+        to_char(MAX(c.updated_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+          AS last_approved
       FROM clerk_cases c
       JOIN invoices i ON i.id = c.created_invoice_id
       JOIN parties p ON p.id = i.supplier_party_id
@@ -102,8 +119,8 @@ export async function computeAdoptionReport(
 
   const extractionCases = Number(totalsRows[0]?.extraction_cases ?? 0);
   const approvedCases = Number(totalsRows[0]?.approved_cases ?? 0);
-  const totalFields = clientRows.reduce((s, r) => s + Number(r.fields), 0);
-  const totalKept = clientRows.reduce((s, r) => s + Number(r.kept), 0);
+  const totalFields = Number(totalsRows[0]?.fields ?? 0);
+  const totalKept = Number(totalsRows[0]?.kept ?? 0);
 
   return {
     windowDays,

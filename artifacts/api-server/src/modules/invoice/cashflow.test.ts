@@ -125,16 +125,34 @@ test("bucketProjections and rankChaseRows split late from future", () => {
 
   // Chase list: only past-expectation rows, most beyond first, money breaks
   // ties, capped.
-  const ranked = rankChaseRows([
-    proj({ daysBeyondExpected: 3 }),
-    proj({ daysBeyondExpected: 9 }),
-    proj({ daysBeyondExpected: 9, grandTotal: "900.00" }),
-    proj({ daysBeyondExpected: -2 }),
-  ]);
+  const ranked = rankChaseRows(
+    [
+      proj({ daysBeyondExpected: 3 }),
+      proj({ daysBeyondExpected: 9 }),
+      proj({ daysBeyondExpected: 9, grandTotal: "900.00" }),
+      proj({ daysBeyondExpected: -2 }),
+    ],
+    "2026-06-25",
+  );
   assert.equal(ranked.length, 3);
   assert.equal(ranked[0].grandTotal, "900.00");
   assert.equal(ranked[1].daysBeyondExpected, 9);
   assert.equal(ranked[2].daysBeyondExpected, 3);
+
+  // An invoice beyond the buyer's rhythm but NOT yet contractually due must
+  // never be chased — the due date gates, whatever the rhythm says.
+  const notYetDue = {
+    ...proj({ daysBeyondExpected: 11 }),
+    basis: "rhythm" as const,
+    dueDate: "2026-07-30",
+  };
+  assert.equal(rankChaseRows([notYetDue], "2026-06-25").length, 0);
+  // Past BOTH dates: chased.
+  assert.equal(
+    rankChaseRows([{ ...notYetDue, dueDate: "2026-06-20" }], "2026-06-25")
+      .length,
+    1,
+  );
 });
 
 before(async () => {
