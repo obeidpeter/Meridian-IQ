@@ -13,6 +13,10 @@ import {
   GetDashboardSummaryQueryParams,
   GetDashboardSummaryResponse,
   GetReceivablesSummaryQueryParams,
+  GetCashflowOutlookQueryParams,
+  GetCashflowOutlookResponse,
+  GetChaseListQueryParams,
+  GetChaseListResponse,
   GetReceivablesSummaryResponse,
   ExportReceivablesCsvQueryParams,
   ImportInvoicesBody,
@@ -51,6 +55,10 @@ import {
   getReceivablesSummary,
   listOutstandingReceivables,
 } from "../modules/invoice/receivables";
+import {
+  computeCashflowOutlook,
+  listChaseRows,
+} from "../modules/invoice/cashflow";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { isFeatureEnabled } from "../modules/flags/flags";
 import { openBatchesFor } from "../modules/b2c/service";
@@ -318,6 +326,35 @@ router.get("/dashboard/receivables", async (req, res): Promise<void> => {
   const tenant = tenantFirmId(req.principal);
   const summary = await getReceivablesSummary(clientPartyId, tenant);
   res.json(GetReceivablesSummaryResponse.parse(summary));
+});
+
+// Cash-flow outlook (round-10 idea #1): outstanding receivables projected to
+// their expected settlement dates (buyer rhythm > due date > default terms)
+// and rolled into week buckets. Deterministic, nothing stored. Same access
+// posture as the receivables summary. The firm scope for the projection is
+// the tenant firm; a cross-tenant principal must not reach this (behaviour
+// mining is per-firm), so no-tenant callers are rejected by the module's
+// firm filter returning nothing rather than leaking across firms.
+router.get("/dashboard/cashflow", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetCashflowOutlookQueryParams, req.query);
+  const clientPartyId = query.clientPartyId;
+  await assertPartyAccess(req.principal, clientPartyId);
+  const firmId = requireFirmScope(req.principal);
+  const outlook = await computeCashflowOutlook(firmId, clientPartyId);
+  res.json(GetCashflowOutlookResponse.parse(outlook));
+});
+
+// Chase list (round-10 idea #2): the same projections, ranked by days beyond
+// each buyer's OWN expected date — "late for them", not merely old.
+router.get("/dashboard/chase-list", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetChaseListQueryParams, req.query);
+  const clientPartyId = query.clientPartyId;
+  await assertPartyAccess(req.principal, clientPartyId);
+  const firmId = requireFirmScope(req.principal);
+  const rows = await listChaseRows(firmId, clientPartyId);
+  res.json(GetChaseListResponse.parse(rows));
 });
 
 // CSV download of the per-invoice rows behind the aging summary — the file a

@@ -55,6 +55,7 @@ import {
   ResolveOperatorCaseBody,
   ResolveOperatorCaseResponse,
   GetFirmReceivablesResponse,
+  GetClerkAdoptionReportResponse,
   DraftEscalationReplyParams,
   DraftEscalationReplyResponse,
   ReplyToEscalationParams,
@@ -75,6 +76,7 @@ import {
   sendEscalationReply,
 } from "../modules/desk/draft-reply";
 import { computeRejectionPatterns } from "../modules/desk/rejection-patterns";
+import { computeAdoptionReport } from "../modules/clerk/adoption";
 import { computeComplianceCalendar } from "../modules/invoice/compliance-calendar";
 import { getClerkGateway } from "../modules/clerk/provider";
 import { getFirmReceivables } from "../modules/invoice/receivables";
@@ -230,6 +232,16 @@ router.get("/console/receivables", async (req, res): Promise<void> => {
   const firmId = firmScope(req.principal);
   const rollup = await getFirmReceivables(firmId);
   res.json(GetFirmReceivablesResponse.parse(rollup));
+});
+
+// Clerk adoption & impact (round-10 idea #3): per-client capture volume,
+// kept-rate and review turnaround from the firm's own cases — the renewal
+// numbers. Pure SQL, zero model calls.
+router.get("/console/clerk-adoption", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const firmId = firmScope(req.principal);
+  const report = await computeAdoptionReport(firmId);
+  res.json(GetClerkAdoptionReportResponse.parse(report));
 });
 
 // One aggregate row per client, computed in Postgres. This route used to load

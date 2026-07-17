@@ -38,7 +38,9 @@ export interface ReceivablesSummary {
   }[];
 }
 
-const OUTSTANDING = sql`i.kind = 'invoice'
+// Exported for the cash-flow outlook / chase list, which must share this
+// exact outstanding definition (alias `i` for invoices at every use site).
+export const OUTSTANDING = sql`i.kind = 'invoice'
   AND i.status IN ('submitted', 'stamped', 'confirmed')`;
 
 // The single definition of a receivable's reference date: age is measured
