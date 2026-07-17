@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.26.0
+ * OpenAPI spec version: 0.27.0
  */
 export interface HealthStatus {
   status: string;
@@ -3096,6 +3096,20 @@ export type ClerkMetricsAsk = {
   refusalRate: number;
 };
 
+export type ClerkMetricsPlatformSpend = {
+  month: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  firmFundedTokens: number;
+  platformFundedTokens: number;
+  /** @nullable */
+  estimatedUsd: number | null;
+  projectedTokens: number;
+  /** @nullable */
+  projectedUsd: number | null;
+};
+
 export type ClerkMetricsInjectionTrendMonthsItem = {
   month: string;
   runs: number;
@@ -3127,6 +3141,7 @@ export interface ClerkMetrics {
   corrections: ClerkMetricsCorrectionsItem[];
   supplierAccuracy: ClerkMetricsSupplierAccuracyItem[];
   ask: ClerkMetricsAsk;
+  platformSpend: ClerkMetricsPlatformSpend;
   injectionTrend: ClerkMetricsInjectionTrend;
 }
 

@@ -1024,6 +1024,56 @@ export function HealthPanel() {
         </CardContent>
       </Card>
 
+      {metrics && (
+        <Card data-testid="section-platform-spend">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Platform spend — {metrics.platformSpend.month}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatTile
+                label="Tokens month-to-date"
+                value={metrics.platformSpend.totalTokens.toLocaleString()}
+                testId="stat-spend-total"
+              />
+              <StatTile
+                label="Projected this month"
+                value={metrics.platformSpend.projectedTokens.toLocaleString()}
+                testId="stat-spend-projected"
+              />
+              <StatTile
+                label="Est. cost"
+                value={
+                  metrics.platformSpend.estimatedUsd != null
+                    ? `$${metrics.platformSpend.estimatedUsd.toFixed(2)}`
+                    : "—"
+                }
+                testId="stat-spend-usd"
+              />
+              <StatTile
+                label="Projected cost"
+                value={
+                  metrics.platformSpend.projectedUsd != null
+                    ? `$${metrics.platformSpend.projectedUsd.toFixed(2)}`
+                    : "—"
+                }
+                testId="stat-spend-projected-usd"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {metrics.platformSpend.firmFundedTokens.toLocaleString()} tokens
+              firm-funded ·{" "}
+              {metrics.platformSpend.platformFundedTokens.toLocaleString()}{" "}
+              platform-funded (desk tooling, evals). Ledger totals on the same
+              UTC month boundary the per-firm budgets use; cost estimates need
+              CLERK_COST_PER_1M_INPUT_USD / _OUTPUT_USD set.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {metrics && metrics.injectionTrend.months.length > 0 && (
         <Card data-testid="section-injection-trend">
           <CardHeader>

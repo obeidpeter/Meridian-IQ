@@ -42,14 +42,19 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.26.0`).
+contract change (it is currently `0.27.0`).
 
 ## Clerk AI (the part with guardrails)
 
 Clerk never files anything: extraction proposes, a human disposes, approval
 creates a DRAFT invoice. Every model call flows through
 `modules/clerk/gateway.ts` (kill switch `clerk_ai`, append-only inference
-ledger, schema-validated output, fail closed). Client-facing surfaces
+ledger, schema-validated output, fail closed). The production provider
+supports **per-purpose model tiers** (opt-in `CLERK_MODEL_TIERS` env, e.g.
+`segment_batch=<cheap-model>`; unset = one model for everything): the
+ledger records the model that ACTUALLY served each call, and eval purposes
+follow the `extract_invoice` tier unless explicitly overridden so evals
+measure what production runs. Client-facing surfaces
 (`clerk.capture` on all firm roles, `clerk.ask` on firm_admin/staff) are pinned
 to their firm by route filters plus migration 0009's firm-keyed RLS, and are
 capped by a per-firm monthly TOKEN budget (`modules/clerk/budget.ts`; tier
@@ -203,7 +208,9 @@ and a per-supplier accuracy table (`metrics.supplierAccuracy`, below), plus
 an **injection-resistance trend** (`metrics.injectionTrend`, pure SQL over
 the stored eval runs): monthly resistance buckets and the per-prompt-version
 split — whether a promoted prompt actually held the line the canary
-predicted.
+predicted — and a **platform spend meter** (`metrics.platformSpend`):
+month-to-date ledger totals split firm-funded vs platform-funded with a
+linear pace projection on the same UTC boundary as the per-firm budgets.
 The eval harness also carries a **prompt canary**
 (`modules/clerk/prompt-canary.ts`, `POST /clerk/eval/canary` + `GET
 /clerk/eval/prompt`, `clerk.use`, spends 2× a corpus pass): the corpus runs
@@ -226,7 +233,10 @@ new text document against the firm's OWN approved fixtures (TIN/name-token
 containment, newest first, same-firm join — never cross-firm) and rides the
 match along as a fenced one-shot with its own ledger prompt version
 (`extract.v1+ex1`, `extraction.exemplarCaseId` for audit; eval replay never
-uses exemplars); **party alias memory** (`modules/clerk/alias.ts`,
+uses exemplars), with **exemplar hygiene**: a candidate whose descendant
+approvals (matched via `exemplarCaseId`) got most fields overridden (3+
+cases, ≥50% override) is demoted to the next candidate — the exhaust
+auditing the exhaust, zero model calls; **party alias memory** (`modules/clerk/alias.ts`,
 `party_name_aliases` + firm-keyed RLS migration 0017, zero model calls) learns
 NAMES where supplier memory learns documents: every approval records the
 extracted supplier/buyer name → confirmed-party pairing under a normalized

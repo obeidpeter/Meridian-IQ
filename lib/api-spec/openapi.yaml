@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.26.0
+  version: 0.27.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -7300,6 +7300,7 @@ components:
           supplierAccuracy,
           ask,
           injectionTrend,
+          platformSpend,
         ]
       properties:
         windowDays:
@@ -7504,6 +7505,42 @@ components:
               type: integer
             refusalRate:
               type: number
+        # Platform month-to-date spend from the ledger (pure SQL): the number
+        # the provider invoice arrives against, with a linear month-pace
+        # projection on the same UTC boundary as the per-firm budget.
+        platformSpend:
+          type: object
+          required:
+            [
+              month,
+              promptTokens,
+              completionTokens,
+              totalTokens,
+              firmFundedTokens,
+              platformFundedTokens,
+              estimatedUsd,
+              projectedTokens,
+              projectedUsd,
+            ]
+          properties:
+            month:
+              type: string
+            promptTokens:
+              type: integer
+            completionTokens:
+              type: integer
+            totalTokens:
+              type: integer
+            firmFundedTokens:
+              type: integer
+            platformFundedTokens:
+              type: integer
+            estimatedUsd:
+              type: ["number", "null"]
+            projectedTokens:
+              type: integer
+            projectedUsd:
+              type: ["number", "null"]
         # Injection-resistance trend from the stored eval runs (pure SQL):
         # monthly drift plus the per-prompt-version split.
         injectionTrend:

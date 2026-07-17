@@ -92,6 +92,22 @@ export interface ClerkMetrics {
     refused: number;
     refusalRate: number;
   };
+  // Platform spend meter (round-7 idea #3): the whole platform's
+  // month-to-date token consumption from the ledger — budget pace is
+  // per-firm; this is the number the provider invoice arrives against.
+  // Pure ledger SQL; the projection is the same linear month-pace rule as
+  // budgetPace (UTC month, matching the budget boundary).
+  platformSpend: {
+    month: string; // "YYYY-MM" (UTC)
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    firmFundedTokens: number;
+    platformFundedTokens: number;
+    estimatedUsd: number | null;
+    projectedTokens: number;
+    projectedUsd: number | null;
+  };
   // Injection-resistance trend (round-6 idea #8): resistance over time from
   // the stored eval runs — pure SQL over clerk_eval_runs, zero model calls.
   // Monthly buckets show drift; the per-prompt-version split shows whether a
@@ -501,6 +517,63 @@ export async function getClerkMetrics(
   }[];
   const calibration = computeCalibration(calibrationRows);
 
+  // Platform month-to-date spend, split by who funds the call (firm_id set
+  // = firm-funded; null = platform-funded desk/eval tooling). The month
+  // boundary is the SAME UTC month-start Date the budget uses, passed as a
+  // parameter so the two can never diverge.
+  const spendNow = new Date();
+  const spendMonthStart = new Date(
+    Date.UTC(spendNow.getUTCFullYear(), spendNow.getUTCMonth(), 1),
+  );
+  const [spendRow] = (
+    await db.execute<{
+      prompt_tokens: string;
+      completion_tokens: string;
+      firm_tokens: string;
+      platform_tokens: string;
+    }>(sql`
+      SELECT
+        COALESCE(SUM(prompt_tokens), 0)::text AS prompt_tokens,
+        COALESCE(SUM(completion_tokens), 0)::text AS completion_tokens,
+        COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0))
+          FILTER (WHERE firm_id IS NOT NULL), 0)::text AS firm_tokens,
+        COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0))
+          FILTER (WHERE firm_id IS NULL), 0)::text AS platform_tokens
+      FROM clerk_inference_calls
+      WHERE created_at >= ${spendMonthStart}
+    `)
+  ).rows;
+  const spendPrompt = Number(spendRow?.prompt_tokens ?? 0);
+  const spendCompletion = Number(spendRow?.completion_tokens ?? 0);
+  const spendTotal = spendPrompt + spendCompletion;
+  // Same linear month-pace rule as budgetPace, on the same UTC boundary.
+  const nowMs = spendNow.getTime();
+  const monthStartMs = spendMonthStart.getTime();
+  const monthEndMs = Date.UTC(
+    spendNow.getUTCFullYear(),
+    spendNow.getUTCMonth() + 1,
+    1,
+  );
+  const monthElapsed = Math.min(
+    1,
+    Math.max(0, (nowMs - monthStartMs) / (monthEndMs - monthStartMs)),
+  );
+  const projectedTokens =
+    monthElapsed > 0 ? Math.round(spendTotal / monthElapsed) : spendTotal;
+  const spendUsd =
+    Number.isFinite(inputRate) && Number.isFinite(outputRate)
+      ? Number(
+          (
+            (spendPrompt / 1_000_000) * inputRate +
+            (spendCompletion / 1_000_000) * outputRate
+          ).toFixed(4),
+        )
+      : null;
+  const projectedUsd =
+    spendUsd !== null && monthElapsed > 0
+      ? Number((spendUsd / monthElapsed).toFixed(4))
+      : null;
+
   // Trailing six months of eval runs, plus the all-time per-prompt-version
   // split — runs with no injection fixtures are excluded from the rate.
   const trendMonthRows = (
@@ -629,6 +702,17 @@ export async function getClerkMetrics(
       answered,
       refused: askTotal - answered,
       refusalRate: rate(askTotal - answered, askTotal),
+    },
+    platformSpend: {
+      month: spendNow.toISOString().slice(0, 7),
+      promptTokens: spendPrompt,
+      completionTokens: spendCompletion,
+      totalTokens: spendTotal,
+      firmFundedTokens: Number(spendRow?.firm_tokens ?? 0),
+      platformFundedTokens: Number(spendRow?.platform_tokens ?? 0),
+      estimatedUsd: spendUsd,
+      projectedTokens,
+      projectedUsd,
     },
     injectionTrend: {
       months: trendMonthRows.map((m) => ({
