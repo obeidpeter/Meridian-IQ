@@ -203,15 +203,22 @@ export function bucketProjections(
 // Ranking stays "late for THEM": most days beyond expectation first, amount
 // as tie-break. Within the caller's primary currency only — raw magnitudes
 // across currencies are not comparable.
+// The single chase-eligibility predicate — the ranker, the firm summary's
+// count and the Ask Clerk per-client count all share it, so a display cap or
+// currency filter can never leak into a number presented as definitive.
+export function isChaseEligible(
+  p: ReceivableProjection,
+  today: string,
+): boolean {
+  return p.daysBeyondExpected > 0 && (p.dueDate === null || p.dueDate < today);
+}
+
 export function rankChaseRows(
   projections: ReceivableProjection[],
   today: string,
 ): ChaseRow[] {
   return projections
-    .filter(
-      (p) =>
-        p.daysBeyondExpected > 0 && (p.dueDate === null || p.dueDate < today),
-    )
+    .filter((p) => isChaseEligible(p, today))
     .sort(
       (a, b) =>
         b.daysBeyondExpected - a.daysBeyondExpected ||
@@ -354,6 +361,10 @@ export interface FirmMoneySummary {
   // Top chase rows across clients, ranked by days beyond expectation (a
   // currency-free measure), for surfaces that name names.
   topChase: FirmChaseRow[];
+  // True when the firm has MORE clients with outstanding receivables than
+  // the summary cap covers — detected (fetch cap+1), never silent, so the
+  // digest and Ask can hedge their "across your clients" phrasing.
+  truncated: boolean;
 }
 
 export async function firmMoneySummary(
@@ -361,7 +372,9 @@ export async function firmMoneySummary(
   now: Date = new Date(),
 ): Promise<FirmMoneySummary> {
   const today = lagosDateString(now);
-  const clients = (
+  // cap + 1 so truncation is DETECTED, never silent (same posture as
+  // ask.ts's client-option list).
+  const clientRows = (
     await getDb().execute<{ supplier_party_id: string; client_name: string }>(
       sql`
         SELECT i.supplier_party_id, p.legal_name AS client_name
@@ -370,10 +383,12 @@ export async function firmMoneySummary(
         WHERE ${OUTSTANDING} AND i.firm_id = ${firmId}
         GROUP BY 1, 2
         ORDER BY SUM(i.grand_total) DESC
-        LIMIT ${MAX_SUMMARY_CLIENTS}
+        LIMIT ${MAX_SUMMARY_CLIENTS + 1}
       `,
     )
   ).rows;
+  const truncated = clientRows.length > MAX_SUMMARY_CLIENTS;
+  const clients = clientRows.slice(0, MAX_SUMMARY_CLIENTS);
 
   let expectedWeekCount = 0;
   let expectedWeekTotal = 0;
@@ -389,9 +404,9 @@ export async function firmMoneySummary(
     for (const p of projections) {
       if (p.daysBeyondExpected > 0) {
         overdueExpectedCount += 1;
-        // Chase-eligible mirrors rankChaseRows' filter exactly; counted here
-        // because the ranker caps per client and a count must not.
-        if (p.dueDate === null || p.dueDate < today) chaseCount += 1;
+        // The shared predicate; counted here because the ranker caps per
+        // client and a count must not.
+        if (isChaseEligible(p, today)) chaseCount += 1;
       } else if (p.daysBeyondExpected > -7) {
         expectedWeekCount += 1;
         const amount = Number(p.grandTotal);
@@ -413,5 +428,6 @@ export async function firmMoneySummary(
     overdueExpectedCount,
     chaseCount,
     topChase: topChase.slice(0, MAX_CHASE_ROWS),
+    truncated,
   };
 }

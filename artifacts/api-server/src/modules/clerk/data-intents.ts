@@ -4,9 +4,12 @@ import { lagosParts } from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import {
   firmMoneySummary,
+  isChaseEligible,
   listChaseRows,
   receivableProjections,
 } from "../invoice/cashflow";
+import { OUTSTANDING } from "../invoice/receivables";
+import { lagosDateString } from "../../lib/lagos-time";
 import { firmClerkUsage } from "./budget";
 
 // Grounded firm-data Q&A (Clerk idea #6). Ask Clerk gains a SECOND closed
@@ -318,13 +321,12 @@ export const DATA_INTENTS: readonly DataIntent[] = [
       "outstanding receivables — who owes money right now (issued invoices not yet paid)",
     accepts: { client: true },
     async run(firmId, params) {
-      const agg = await invoiceAggregate(
-        firmId,
-        sql`i.status IN ('submitted', 'stamped', 'confirmed')`,
-        params,
-      );
-      // Who owes: top debtor names by outstanding value, same OUTSTANDING
-      // definition as the receivables card.
+      // The exported OUTSTANDING fragment in BOTH queries — one spelling of
+      // the receivables definition, so this intent and the receivables card
+      // cannot drift apart under future edits.
+      const agg = await invoiceAggregate(firmId, sql`${OUTSTANDING}`, params);
+      // Who owes: top debtors keyed by PARTY (two parties sharing a legal
+      // name stay two debtors, matching the receivables card's grouping).
       const clientFilter = params?.clientPartyId
         ? sql` AND i.supplier_party_id = ${params.clientPartyId}`
         : sql``;
@@ -334,9 +336,8 @@ export const DATA_INTENTS: readonly DataIntent[] = [
             SUM(i.grand_total)::numeric(18,2)::text AS owed
           FROM invoices i
           JOIN parties p ON p.id = i.buyer_party_id
-          WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}${clientFilter}
-            AND i.status IN ('submitted', 'stamped', 'confirmed')
-          GROUP BY 1
+          WHERE ${OUTSTANDING} AND i.firm_id = ${firmId}${clientFilter}
+          GROUP BY i.buyer_party_id, p.legal_name
           ORDER BY SUM(i.grand_total) DESC
           LIMIT 3
         `)
@@ -411,11 +412,14 @@ export const DATA_INTENTS: readonly DataIntent[] = [
         };
       }
       const summary = await firmMoneySummary(firmId);
+      const scope = summary.truncated
+        ? "across your largest client books"
+        : "across your clients";
       return {
         text:
           summary.expectedWeekCount === 0
-            ? `No payments are expected across your clients in the coming week${summary.overdueExpectedCount > 0 ? `, and ${plural(summary.overdueExpectedCount, "invoice")} ${isAre(summary.overdueExpectedCount)} already past the expected payment date` : ""}.`
-            : `${plural(summary.expectedWeekCount, "invoice")} totalling NGN ${summary.expectedWeekTotalNgn} ${isAre(summary.expectedWeekCount)} expected to be paid across your clients in the coming week, based on each customer's own payment rhythm${summary.overdueExpectedCount > 0 ? `; ${plural(summary.overdueExpectedCount, "invoice")} ${isAre(summary.overdueExpectedCount)} already past the expected date` : ""}.`,
+            ? `No payments are expected ${scope} in the coming week${summary.overdueExpectedCount > 0 ? `, and ${plural(summary.overdueExpectedCount, "invoice")} ${isAre(summary.overdueExpectedCount)} already past the expected payment date` : ""}.`
+            : `${plural(summary.expectedWeekCount, "invoice")} totalling NGN ${summary.expectedWeekTotalNgn} ${isAre(summary.expectedWeekCount)} expected to be paid ${scope} in the coming week, based on each customer's own payment rhythm${summary.overdueExpectedCount > 0 ? `; ${plural(summary.overdueExpectedCount, "invoice")} ${isAre(summary.overdueExpectedCount)} already past the expected date` : ""}.`,
         facts: [
           countFact(
             "expected_week",
@@ -455,21 +459,36 @@ export const DATA_INTENTS: readonly DataIntent[] = [
           )
           .join("; ");
       if (params?.clientPartyId) {
+        // The COUNT comes from the uncapped, all-currency projections via
+        // the shared eligibility predicate — the display list (primary
+        // currency, capped) only supplies the named rows, so the number
+        // presented as definitive never inherits a display cap.
+        const projections = await receivableProjections(
+          firmId,
+          params.clientPartyId,
+        );
+        const today = lagosDateString();
+        const eligible = projections.filter((p) =>
+          isChaseEligible(p, today),
+        ).length;
         const rows = await listChaseRows(firmId, params.clientPartyId);
         return {
           text:
-            rows.length === 0
+            eligible === 0
               ? `Nothing${forClient(params)} is currently worth chasing — no invoice is past both its due date and the customer's usual payment rhythm.`
-              : `${plural(rows.length, "invoice")}${forClient(params)} ${isAre(rows.length)} worth chasing: ${nameRows(rows)}. Open an invoice to draft a payment reminder.`,
-          facts: [countFact("chase_count", "Worth chasing", rows.length)],
+              : `${plural(eligible, "invoice")}${forClient(params)} ${isAre(eligible)} worth chasing: ${nameRows(rows)}. Open an invoice to draft a payment reminder.`,
+          facts: [countFact("chase_count", "Worth chasing", eligible)],
         };
       }
       const summary = await firmMoneySummary(firmId);
+      const scope = summary.truncated
+        ? "across your largest client books"
+        : "across your clients";
       return {
         text:
           summary.chaseCount === 0
-            ? "Nothing across your clients is currently worth chasing — no invoice is past both its due date and the customer's usual payment rhythm."
-            : `${plural(summary.chaseCount, "invoice")} across your clients ${isAre(summary.chaseCount)} worth chasing: ${nameRows(
+            ? `Nothing ${scope} is currently worth chasing — no invoice is past both its due date and the customer's usual payment rhythm.`
+            : `${plural(summary.chaseCount, "invoice")} ${scope} ${isAre(summary.chaseCount)} worth chasing: ${nameRows(
                 summary.topChase.map((r) => ({
                   ...r,
                   buyerName: `${r.buyerName} (${r.clientName})`,

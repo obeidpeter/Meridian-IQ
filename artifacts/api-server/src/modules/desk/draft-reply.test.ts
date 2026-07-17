@@ -13,7 +13,11 @@ import {
   submissionAttemptsTable,
   clerkInferenceCallsTable,
 } from "@workspace/db";
-import { draftEscalationReply, sendEscalationReply } from "./draft-reply.ts";
+import {
+  copiesExampleSpecifics,
+  draftEscalationReply,
+  sendEscalationReply,
+} from "./draft-reply.ts";
 import { CLERK_FLAG_KEY } from "../clerk/gateway.ts";
 import { setFlag } from "../flags/flags.ts";
 import type { CompletionRequest } from "../clerk/gateway.ts";
@@ -238,9 +242,13 @@ test("reply memory: same-firm same-code sent replies ride along fenced", async (
   });
 
   const calls: CompletionRequest[] = [];
+  // The fake reply deliberately copies NOTHING from the example — a salted
+  // reply here would (correctly) trip the copy guard and mask the memory.
   const gw = fakeGateway((req) => {
     calls.push(req);
-    return JSON.stringify({ reply: `Styled ${SALT}` });
+    return JSON.stringify({
+      reply: "We reviewed this and will follow up shortly.",
+    });
   });
   const first = await draftEscalationReply(escalationId, gw);
   assert.equal(first.viaExample, false, "another firm's reply never borrowed");
@@ -278,4 +286,50 @@ test("reply memory: same-firm same-code sent replies ride along fenced", async (
       .limit(1),
   );
   assert.equal(ledger.promptVersion, "draft-reply.v1+ex1");
+
+  // The deterministic backstop: a draft that verbatim-copies the example's
+  // specifics is discarded in favour of the template.
+  const copying = await draftEscalationReply(
+    escalationId,
+    fakeGateway(() =>
+      JSON.stringify({ reply: `As before: Past reply ${SALT}` }),
+    ),
+  );
+  assert.equal(copying.source, "template");
+  assert.equal(copying.viaExample, false);
+});
+
+test("copiesExampleSpecifics: identifiers and long runs trip, style does not", () => {
+  const example =
+    "Thank you for raising invoice INV-2201 for NGN 450000.00. The TIN mismatch on attempt 2 has been corrected and we will resubmit shortly.";
+  // Copying the other client's invoice number trips.
+  assert.equal(
+    copiesExampleSpecifics("Your invoice INV-2201 is being handled.", example, "TIN_MISMATCH"),
+    true,
+  );
+  // The shared catalogue code never trips (both cases legitimately name it).
+  assert.equal(
+    copiesExampleSpecifics(
+      "The code TIN-04510 was returned; we are on it.",
+      "Earlier we saw TIN-04510 too.",
+      "TIN-04510",
+    ),
+    false,
+  );
+  // A 40+ character verbatim run trips even without identifiers.
+  const prose =
+    "we have reviewed the submission history and spoken to the rail operator about the rejection";
+  assert.equal(
+    copiesExampleSpecifics(`Dear client, ${prose}.`, `Note: ${prose}!`, null),
+    true,
+  );
+  // Following tone and structure without copying stays clean.
+  assert.equal(
+    copiesExampleSpecifics(
+      "Thanks for flagging this — the TIN issue is fixed and we will resubmit today.",
+      example,
+      null,
+    ),
+    false,
+  );
 });

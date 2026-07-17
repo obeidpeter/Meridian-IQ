@@ -277,6 +277,7 @@ test("firmMoneySummary rolls the same projections up across clients", async () =
   assert.equal(summary.topChase.length, 1);
   assert.equal(summary.topChase[0].invoiceId, lateInvoiceId);
   assert.equal(summary.topChase[0].clientName, `CF Client ${SALT}`);
+  assert.equal(summary.truncated, false, "one client — nothing shed");
 
   // Firm isolation is absolute.
   const empty = await firmMoneySummary(randomUUID());

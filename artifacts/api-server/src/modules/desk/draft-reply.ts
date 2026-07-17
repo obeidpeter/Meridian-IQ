@@ -63,6 +63,34 @@ export interface EscalationReplyDraft {
 
 const MAX_REPLY_CHARS = 2000;
 
+// Deterministic post-check on exemplar-styled drafts (the one place a model
+// prompt carries ANOTHER client's case content): if the draft verbatim-
+// copies an identifier-shaped token from the example (contains a digit,
+// 5+ chars — invoice numbers, amounts, dates) or lifts a long run of its
+// text, the styled draft is discarded and the template answers instead. The
+// current escalation's own error code legitimately appears on both sides
+// and is excluded. Pure and exported for tests.
+export function copiesExampleSpecifics(
+  draft: string,
+  example: string,
+  currentErrorCode: string | null,
+): boolean {
+  const tokens = example.match(/[A-Z0-9][A-Z0-9/-]{4,}/gi) ?? [];
+  for (const token of tokens) {
+    if (!/\d/.test(token)) continue;
+    if (currentErrorCode && token.toUpperCase() === currentErrorCode.toUpperCase()) {
+      continue;
+    }
+    if (draft.toUpperCase().includes(token.toUpperCase())) return true;
+  }
+  // A 40-char verbatim run is prose copied, not style followed. Stride 10
+  // still catches any shared run of 49+ characters.
+  for (let i = 0; i + 40 <= example.length; i += 10) {
+    if (draft.includes(example.slice(i, i + 40))) return true;
+  }
+  return false;
+}
+
 async function loadEscalation(escalationId: string): Promise<Escalation> {
   const [row] = await getDb()
     .select()
@@ -194,6 +222,11 @@ export async function draftEscalationReply(
     inputForHash: user,
   });
   if (!result.ok) return fallback;
+  // The style-only rule has a deterministic backstop: a draft that copies
+  // the example's specifics is discarded in favour of the template.
+  if (example && copiesExampleSpecifics(result.data.reply, example, errorCode)) {
+    return fallback;
+  }
   return {
     draft: result.data.reply,
     source: "clerk",
