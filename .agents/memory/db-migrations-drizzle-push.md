@@ -44,6 +44,12 @@ trust the generated types, e.g. `.length` on undefined). Always restart the
 api-server workflow after a merge touches it.
 
 ## drizzle-kit push gotchas (v0.31.x)
+- **Every push DROPS the guardrail RLS policies** (v0.31 diffs RLS state and
+  the policies are deliberately not in the Drizzle schema). ALWAYS run
+  `pnpm --filter db run migrate` immediately after ANY push, or
+  rls-isolation.test.ts fails with "another firm's invoice visible" and the
+  dev DB is genuinely unprotected. CI and boot are safe (they migrate after
+  push); this bites only ad-hoc local pushes.
 - Adding a UNIQUE constraint to a **non-empty** table triggers an interactive
   "Do you want to truncate <table>?" prompt (Select, default index 0 = "No, add
   without truncating"). `--force` does NOT skip this prompt; it still needs a
