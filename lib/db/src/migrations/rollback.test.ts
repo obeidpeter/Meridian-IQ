@@ -236,6 +236,11 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("party_name_aliases")],
     afterRollback: [not(clerkTenant("party_name_aliases"))],
   },
+  {
+    version: 18, // chase-log guardrails
+    atTop: [clerkTenant("chase_log")],
+    afterRollback: [not(clerkTenant("chase_log"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

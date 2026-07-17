@@ -67,6 +67,12 @@ import {
   ListLineItemSuggestionsResponse,
   ListPaymentBehaviourQueryParams,
   ListPaymentBehaviourResponse,
+  GetUnmatchedCreditsQueryParams,
+  GetUnmatchedCreditsResponse,
+  GetProjectionAccuracyQueryParams,
+  GetProjectionAccuracyResponse,
+  RecordChaseReminderParams,
+  RecordChaseReminderResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { computeStatusLight } from "../modules/clerk/status-light";
@@ -96,6 +102,9 @@ import { draftQuarterlyCoverNote } from "../modules/advisory/quarterly-note";
 import { getClerkGateway } from "../modules/clerk/provider";
 import { listLineItemSuggestions } from "../modules/invoice/line-items";
 import { listPaymentBehaviour } from "../modules/invoice/payment-behaviour";
+import { listUnmatchedCredits } from "../modules/invoice/unmatched-credits";
+import { computeProjectionAccuracy } from "../modules/invoice/projection-accuracy";
+import { recordChase } from "../modules/invoice/chase-log";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { likePattern } from "../lib/sql";
 import {
@@ -457,6 +466,52 @@ router.get("/payment-behaviour", async (req, res): Promise<void> => {
   const behaviour = await listPaymentBehaviour(firmId, target);
   res.json(ListPaymentBehaviourResponse.parse(behaviour));
 });
+
+// Unmatched-credit detector (round-14 idea #1): bank credits with no invoice
+// behind them — the compliance mirror of unbilled income. Mined on demand
+// from the client's own committed statements, nothing stored, no model.
+// Same SEC-03 resolution as the miners above.
+router.get("/unmatched-credits", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetUnmatchedCreditsQueryParams, req.query);
+  const firmId = requireFirmScope(req.principal);
+  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
+  if (!target) {
+    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
+  }
+  assertClientPartyScope(req.principal, target);
+  const credits = await listUnmatchedCredits(firmId, target);
+  res.json(GetUnmatchedCreditsResponse.parse(credits));
+});
+
+// Projection accuracy (round-14 idea #2): every observed settlement replayed
+// against the cash-flow projection rule — the forecast auditing itself.
+// Nothing stored, no model. Same SEC-03 resolution as payment-behaviour.
+router.get("/projection-accuracy", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetProjectionAccuracyQueryParams, req.query);
+  const firmId = requireFirmScope(req.principal);
+  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
+  if (!target) {
+    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
+  }
+  assertClientPartyScope(req.principal, target);
+  const accuracy = await computeProjectionAccuracy(firmId, target);
+  res.json(GetProjectionAccuracyResponse.parse(accuracy));
+});
+
+// Chase ladder (round-14 idea #3): record that a payment reminder was SENT —
+// the UI logs on copy, never on draft. The module enforces the same
+// tenant + SEC-03 + still-outstanding gates as the chaser draft itself.
+router.post(
+  "/invoices/:invoiceId/chase-log",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.write");
+    const params = parseOrThrow(RecordChaseReminderParams, req.params);
+    const summary = await recordChase(params.invoiceId, req.principal);
+    res.status(201).json(RecordChaseReminderResponse.parse(summary));
+  },
+);
 
 // Bulk validate & submit: same capability, party-access and consent gates as
 // a single submit — the batch only adds iteration. Selection is server-side

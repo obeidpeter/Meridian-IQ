@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.33.0
+ * OpenAPI spec version: 0.34.0
  */
 import {
   useMutation,
@@ -52,6 +52,7 @@ import type {
   CatalogueCoverageReport,
   CatalogueEntryDraft,
   ChangePasswordInput,
+  ChaseLogSummary,
   ChaseRow,
   ClaimDecisionInput,
   ClaimDraftInput,
@@ -138,9 +139,11 @@ import type {
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
   GetMergeImpactParams,
+  GetProjectionAccuracyParams,
   GetPublicThemeParams,
   GetQuarterlyReviewParams,
   GetReceivablesSummaryParams,
+  GetUnmatchedCreditsParams,
   GetVatPackParams,
   GetVatSettlementCheckParams,
   HealthStatus,
@@ -197,6 +200,7 @@ import type {
   PaymentFlagInput,
   PortfolioSummary,
   PriceReview,
+  ProjectionAccuracy,
   PromptCanaryReport,
   ProspectInput,
   ProspectUpdate,
@@ -241,6 +245,7 @@ import type {
   UnbilledIncomeAlert,
   UnearnedIncome,
   UnmappedErrorCode,
+  UnmatchedCredits,
   User,
   UserInput,
   ValidationResult,
@@ -3461,6 +3466,244 @@ export function useListPaymentBehaviour<TData = Awaited<ReturnType<typeof listPa
 
 
 
+
+export const getGetUnmatchedCreditsUrl = (params?: GetUnmatchedCreditsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/unmatched-credits?${stringifiedParams}` : `/api/unmatched-credits`
+}
+
+/**
+ * @summary Bank credits with no invoice behind them — potential off-platform sales (deterministic advisory; nothing stored, no model)
+ */
+export const getUnmatchedCredits = async (params?: GetUnmatchedCreditsParams, options?: RequestInit): Promise<UnmatchedCredits> => {
+
+  return customFetch<UnmatchedCredits>(getGetUnmatchedCreditsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUnmatchedCreditsQueryKey = (params?: GetUnmatchedCreditsParams,) => {
+    return [
+    `/api/unmatched-credits`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetUnmatchedCreditsQueryOptions = <TData = Awaited<ReturnType<typeof getUnmatchedCredits>>, TError = ErrorType<BadRequestResponse>>(params?: GetUnmatchedCreditsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedCredits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUnmatchedCreditsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUnmatchedCredits>>> = ({ signal }) => getUnmatchedCredits(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedCredits>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUnmatchedCreditsQueryResult = NonNullable<Awaited<ReturnType<typeof getUnmatchedCredits>>>
+export type GetUnmatchedCreditsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Bank credits with no invoice behind them — potential off-platform sales (deterministic advisory; nothing stored, no model)
+ */
+
+export function useGetUnmatchedCredits<TData = Awaited<ReturnType<typeof getUnmatchedCredits>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetUnmatchedCreditsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedCredits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUnmatchedCreditsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetProjectionAccuracyUrl = (params?: GetProjectionAccuracyParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/projection-accuracy?${stringifiedParams}` : `/api/projection-accuracy`
+}
+
+/**
+ * @summary Cash-flow projection rule replayed against every observed settlement — the forecast auditing itself (deterministic; nothing stored, no model)
+ */
+export const getProjectionAccuracy = async (params?: GetProjectionAccuracyParams, options?: RequestInit): Promise<ProjectionAccuracy> => {
+
+  return customFetch<ProjectionAccuracy>(getGetProjectionAccuracyUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectionAccuracyQueryKey = (params?: GetProjectionAccuracyParams,) => {
+    return [
+    `/api/projection-accuracy`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetProjectionAccuracyQueryOptions = <TData = Awaited<ReturnType<typeof getProjectionAccuracy>>, TError = ErrorType<BadRequestResponse>>(params?: GetProjectionAccuracyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectionAccuracy>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectionAccuracyQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectionAccuracy>>> = ({ signal }) => getProjectionAccuracy(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectionAccuracy>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectionAccuracyQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectionAccuracy>>>
+export type GetProjectionAccuracyQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Cash-flow projection rule replayed against every observed settlement — the forecast auditing itself (deterministic; nothing stored, no model)
+ */
+
+export function useGetProjectionAccuracy<TData = Awaited<ReturnType<typeof getProjectionAccuracy>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetProjectionAccuracyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectionAccuracy>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectionAccuracyQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRecordChaseReminderUrl = (invoiceId: string,) => {
+
+
+
+
+  return `/api/invoices/${invoiceId}/chase-log`
+}
+
+/**
+ * @summary Record that a payment reminder was SENT for this invoice (logged on copy — the platform itself sends nothing)
+ */
+export const recordChaseReminder = async (invoiceId: string, options?: RequestInit): Promise<ChaseLogSummary> => {
+
+  return customFetch<ChaseLogSummary>(getRecordChaseReminderUrl(invoiceId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRecordChaseReminderMutationOptions = <TError = ErrorType<NotFoundResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordChaseReminder>>, TError,{invoiceId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordChaseReminder>>, TError,{invoiceId: string}, TContext> => {
+
+const mutationKey = ['recordChaseReminder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordChaseReminder>>, {invoiceId: string}> = (props) => {
+          const {invoiceId} = props ?? {};
+
+          return  recordChaseReminder(invoiceId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordChaseReminderMutationResult = NonNullable<Awaited<ReturnType<typeof recordChaseReminder>>>
+
+    export type RecordChaseReminderMutationError = ErrorType<NotFoundResponse | Error>
+
+    /**
+ * @summary Record that a payment reminder was SENT for this invoice (logged on copy — the platform itself sends nothing)
+ */
+export const useRecordChaseReminder = <TError = ErrorType<NotFoundResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordChaseReminder>>, TError,{invoiceId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordChaseReminder>>,
+        TError,
+        {invoiceId: string},
+        TContext
+      > => {
+      return useMutation(getRecordChaseReminderMutationOptions(options));
+    }
 
 export const getGetRejectionPatternsUrl = () => {
 

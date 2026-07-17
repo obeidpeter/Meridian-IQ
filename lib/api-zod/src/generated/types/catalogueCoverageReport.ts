@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.33.0
+ * OpenAPI spec version: 0.34.0
  */
 import type { CatalogueCoverageReportOpenUnmappedItem } from './catalogueCoverageReportOpenUnmappedItem';
 import type { CatalogueCoverageReportRecentMappingsItem } from './catalogueCoverageReportRecentMappingsItem';
@@ -12,7 +12,7 @@ import type { CatalogueCoverageReportSla } from './catalogueCoverageReportSla';
 export interface CatalogueCoverageReport {
   windowDays: number;
   slaWindowDays: number;
-  rejectedAttempts: number;
+  codedRejections: number;
   mappedAttempts: number;
   mappedShare: number | null;
   uncodedRejections: number;

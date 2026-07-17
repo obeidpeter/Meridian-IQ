@@ -48,7 +48,14 @@ export interface VatSettlementCheck {
   outstandingTotal: string;
   creditedCount: number;
   creditedTotal: string;
-  // settledTotal / acceptedTotal (4dp); null when the month had no value.
+  // The partition's runtime guard (round-13 review M2): accepted invoices in
+  // a status OUTSIDE the three buckets (unreachable through normal flows,
+  // but an unconditional pipeline write or a manual fix can produce it) —
+  // surfaced instead of silently corrupting the share's denominator.
+  otherCount: number;
+  otherTotal: string;
+  // settledTotal / acceptedTotal (4dp); null when the month had no value OR
+  // the month mixes currencies (a share of unlike units is not a number).
   settledShare: number | null;
   // Largest unobserved money first (capped; truncation is declared).
   unsettled: UnsettledInvoiceRow[];
@@ -86,6 +93,9 @@ export async function computeVatSettlementCheck(
       outstanding_total: string;
       credited_n: number;
       credited_total: string;
+      other_n: number;
+      other_total: string;
+      currency_n: number;
     }>(sql`
       SELECT
         COUNT(*)::int AS n,
@@ -95,7 +105,14 @@ export async function computeVatSettlementCheck(
         COUNT(*) FILTER (WHERE ${OUTSTANDING})::int AS outstanding_n,
         COALESCE(SUM(i.grand_total) FILTER (WHERE ${OUTSTANDING}), 0)::numeric(18,2)::text AS outstanding_total,
         COUNT(*) FILTER (WHERE i.status = 'credited')::int AS credited_n,
-        COALESCE(SUM(i.grand_total) FILTER (WHERE i.status = 'credited'), 0)::numeric(18,2)::text AS credited_total
+        COALESCE(SUM(i.grand_total) FILTER (WHERE i.status = 'credited'), 0)::numeric(18,2)::text AS credited_total,
+        COUNT(*) FILTER (
+          WHERE i.status NOT IN ('settled', 'submitted', 'stamped', 'confirmed', 'credited')
+        )::int AS other_n,
+        COALESCE(SUM(i.grand_total) FILTER (
+          WHERE i.status NOT IN ('settled', 'submitted', 'stamped', 'confirmed', 'credited')
+        ), 0)::numeric(18,2)::text AS other_total,
+        COUNT(DISTINCT i.currency)::int AS currency_n
       FROM invoices i
       WHERE ${packMonthInvoices(firmId, monthStart)}
     `)
@@ -137,6 +154,8 @@ export async function computeVatSettlementCheck(
 
   const acceptedTotal = String(agg?.total ?? "0.00");
   const settledTotal = String(agg?.settled_total ?? "0.00");
+  const otherCount = Number(agg?.other_n ?? 0);
+  const mixedCurrencies = Number(agg?.currency_n ?? 0) > 1;
   const label = monthLabel(monthStart);
   return {
     monthStart,
@@ -150,8 +169,10 @@ export async function computeVatSettlementCheck(
     outstandingTotal: String(agg?.outstanding_total ?? "0.00"),
     creditedCount: Number(agg?.credited_n ?? 0),
     creditedTotal: String(agg?.credited_total ?? "0.00"),
+    otherCount,
+    otherTotal: String(agg?.other_total ?? "0.00"),
     settledShare:
-      Number(acceptedTotal) > 0
+      Number(acceptedTotal) > 0 && !mixedCurrencies
         ? Math.round((Number(settledTotal) / Number(acceptedTotal)) * 10000) / 10000
         : null,
     unsettled: unsettledRows.slice(0, MAX_UNSETTLED_ROWS).map((r) => ({
@@ -169,6 +190,13 @@ export async function computeVatSettlementCheck(
     note:
       `Settlement view of ${label}'s accepted invoices (the VAT pack's population, invoices only). ` +
       `"Settled" means the platform observed payment via reconciliation or a buyer flag — an unsettled invoice is UNOBSERVED, not necessarily unpaid, and payment terms may not even have elapsed. ` +
-      `This is an assurance aid for the filing conversation, not a demand list. Totals follow the pack's basis and are not split by currency. Generated ${lagosDateString()}.`,
+      `This is an assurance aid for the filing conversation, not a demand list. Totals follow the pack's basis and are not split by currency` +
+      (mixedCurrencies
+        ? ` — this month mixes currencies, so no settled share is computed`
+        : "") +
+      (otherCount > 0
+        ? `. ${otherCount} accepted invoice(s) sit in an unexpected lifecycle state and are counted under "other" — review them directly`
+        : "") +
+      `. Generated ${lagosDateString()}.`,
   };
 }

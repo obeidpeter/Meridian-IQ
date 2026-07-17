@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.33.0
+ * OpenAPI spec version: 0.34.0
  */
 
 export type SubmissionAttemptRail = typeof SubmissionAttemptRail[keyof typeof SubmissionAttemptRail];

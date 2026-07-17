@@ -12,6 +12,7 @@ import {
   useUpdateInvoice,
   useExplainInvoiceFailure,
   useDraftPaymentChaser,
+  useRecordChaseReminder,
   useListPaymentBehaviour,
   getListPaymentBehaviourQueryKey,
   useEscalateInvoice,
@@ -508,6 +509,11 @@ function EscalationsCard({ escalations }: { escalations: Escalation[] }) {
 function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
   const [copied, setCopied] = useState(false);
   const draft = useDraftPaymentChaser();
+  // Chase ladder (round-14 idea #3): copying the draft records it as a SENT
+  // reminder, so the NEXT draft escalates its tone. Logged on copy only —
+  // drafting alone records nothing.
+  const logReminder = useRecordChaseReminder();
+  const [loggedStage, setLoggedStage] = useState<number | null>(null);
   const { data: behaviour } = useListPaymentBehaviour(
     { clientPartyId: invoice.supplierPartyId },
     {
@@ -532,6 +538,14 @@ function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
       );
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      // Best-effort ladder log: a failure here never blocks the copy. Only
+      // the first copy of a given draft logs (loggedStage guards repeats).
+      if (loggedStage !== draft.data.stage) {
+        logReminder.mutate(
+          { invoiceId: invoice.id },
+          { onSuccess: (s) => setLoggedStage(s.stage) },
+        );
+      }
     } catch {
       // Clipboard denied: the text stays on screen to copy by hand.
     }
@@ -563,7 +577,20 @@ function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
               >
                 {draft.data.source === "clerk" ? "Clerk-phrased" : "Template"}
               </span>
+              <span className={pillClasses("slate")} data-testid="chaser-stage">
+                Reminder #{draft.data.stage}
+              </span>
             </div>
+            {draft.data.previousReminders.count > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {draft.data.previousReminders.count} earlier reminder
+                {draft.data.previousReminders.count === 1 ? "" : "s"} logged
+                {draft.data.previousReminders.lastAt
+                  ? ` — last on ${formatDate(draft.data.previousReminders.lastAt)}`
+                  : ""}
+                .
+              </p>
+            )}
             <p className="whitespace-pre-wrap text-muted-foreground">
               {draft.data.body}
             </p>

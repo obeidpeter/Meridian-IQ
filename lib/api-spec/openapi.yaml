@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.33.0
+  version: 0.34.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -865,6 +865,77 @@ paths:
                   $ref: "#/components/schemas/BuyerPaymentBehaviour"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /unmatched-credits:
+    get:
+      operationId: getUnmatchedCredits
+      tags: [invoices]
+      summary: Bank credits with no invoice behind them — potential off-platform sales (deterministic advisory; nothing stored, no model)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Unmatched credits in the trailing window, largest first (capped; totals uncapped)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnmatchedCredits"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /projection-accuracy:
+    get:
+      operationId: getProjectionAccuracy
+      tags: [invoices]
+      summary: Cash-flow projection rule replayed against every observed settlement — the forecast auditing itself (deterministic; nothing stored, no model)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Signed projection error overall and per buyer (leave-one-out rhythm evaluation)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectionAccuracy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /invoices/{invoiceId}/chase-log:
+    post:
+      operationId: recordChaseReminder
+      tags: [invoices]
+      summary: Record that a payment reminder was SENT for this invoice (logged on copy — the platform itself sends nothing)
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "201":
+          description: The updated reminder history (stage = the reminder number just logged)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChaseLogSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: The invoice is not an outstanding receivable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /rejection-patterns:
     get:
       operationId: getRejectionPatterns
@@ -4828,6 +4899,8 @@ components:
           outstandingTotal,
           creditedCount,
           creditedTotal,
+          otherCount,
+          otherTotal,
           settledShare,
           unsettled,
           unsettledTruncated,
@@ -4860,7 +4933,15 @@ components:
           type: integer
         creditedTotal:
           type: string
-        # settledTotal / acceptedTotal (4dp); null when the month had no value.
+        # Partition guard: accepted invoices in a lifecycle state outside the
+        # three buckets (unreachable through normal flows) — surfaced, never
+        # silently absorbed into the share's denominator.
+        otherCount:
+          type: integer
+        otherTotal:
+          type: string
+        # settledTotal / acceptedTotal (4dp); null when the month had no
+        # value or mixes currencies (a share of unlike units is not a number).
         settledShare:
           type: number
           nullable: true
@@ -4954,9 +5035,11 @@ components:
                 type: string
         vatTotals:
           type: object
-          required: [acceptedCount, acceptedVat, creditVat, netVat]
+          required: [acceptedCount, creditCount, acceptedVat, creditVat, netVat]
           properties:
             acceptedCount:
+              type: integer
+            creditCount:
               type: integer
             acceptedVat:
               type: string
@@ -5049,7 +5132,7 @@ components:
         [
           windowDays,
           slaWindowDays,
-          rejectedAttempts,
+          codedRejections,
           mappedAttempts,
           mappedShare,
           uncodedRejections,
@@ -5065,9 +5148,10 @@ components:
           type: integer
         slaWindowDays:
           type: integer
-        # Coded rejected attempts in the window, and how many carry a code
-        # the catalogue maps TODAY (current-state coverage).
-        rejectedAttempts:
+        # CODED rejected attempts in the window (uncoded rejections sit in
+        # their own bucket — they can never be mapped), and how many carry a
+        # code the catalogue maps TODAY (current-state coverage).
+        codedRejections:
           type: integer
         mappedAttempts:
           type: integer
@@ -9164,7 +9248,17 @@ components:
           format: uuid
     PaymentChaserDraft:
       type: object
-      required: [invoiceId, invoiceNumber, buyerName, subject, body, source]
+      required:
+        [
+          invoiceId,
+          invoiceNumber,
+          buyerName,
+          subject,
+          body,
+          source,
+          stage,
+          previousReminders,
+        ]
       properties:
         invoiceId:
           type: string
@@ -9182,6 +9276,150 @@ components:
         source:
           type: string
           enum: [clerk, template]
+        # Chase ladder (round-14): the reminder number this draft IS (logged
+        # reminders + 1) and what came before it. Tone escalates with the
+        # stage — never into threats.
+        stage:
+          type: integer
+        previousReminders:
+          type: object
+          required: [count, lastAt]
+          properties:
+            count:
+              type: integer
+            lastAt:
+              type: string
+              nullable: true
+    ChaseLogSummary:
+      type: object
+      required: [invoiceId, count, lastAt, stage]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        count:
+          type: integer
+        lastAt:
+          type: string
+          nullable: true
+        # The reminder number the log row just recorded.
+        stage:
+          type: integer
+    UnmatchedCredits:
+      type: object
+      required:
+        [asOf, windowDays, count, totalAmount, rows, truncated, note]
+      properties:
+        asOf:
+          type: string
+        windowDays:
+          type: integer
+        # Uncapped window totals — the capped row list never deflates them.
+        count:
+          type: integer
+        totalAmount:
+          type: string
+        rows:
+          type: array
+          items:
+            type: object
+            required:
+              [lineId, statementId, valueDate, amount, narration, counterpartyRef]
+            properties:
+              lineId:
+                type: string
+                format: uuid
+              statementId:
+                type: string
+                format: uuid
+              valueDate:
+                type: string
+              amount:
+                type: string
+              narration:
+                type: string
+                nullable: true
+              counterpartyRef:
+                type: string
+                nullable: true
+        truncated:
+          type: boolean
+        # The advisory framing — money can arrive without an invoice for many
+        # legitimate reasons; this is a prompt to check, never an accusation.
+        note:
+          type: string
+    ProjectionAccuracy:
+      type: object
+      required:
+        [
+          asOf,
+          withinDays,
+          settlements,
+          medianErrorDays,
+          medianAbsErrorDays,
+          withinShare,
+          basisSplit,
+          buyers,
+          note,
+        ]
+      properties:
+        asOf:
+          type: string
+        withinDays:
+          type: integer
+        settlements:
+          type: integer
+        # Signed: positive = money arrived LATER than projected. Nulls when
+        # no settlements have been observed.
+        medianErrorDays:
+          type: number
+          nullable: true
+        medianAbsErrorDays:
+          type: number
+          nullable: true
+        withinShare:
+          type: number
+          nullable: true
+        # Which tier of the projection rule predicted each settlement.
+        basisSplit:
+          type: object
+          required: [rhythm, dueDate, defaultTerms]
+          properties:
+            rhythm:
+              type: integer
+            dueDate:
+              type: integer
+            defaultTerms:
+              type: integer
+        buyers:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                buyerPartyId,
+                buyerName,
+                settlements,
+                medianErrorDays,
+                medianAbsErrorDays,
+                withinShare,
+              ]
+            properties:
+              buyerPartyId:
+                type: string
+                format: uuid
+              buyerName:
+                type: string
+              settlements:
+                type: integer
+              medianErrorDays:
+                type: number
+              medianAbsErrorDays:
+                type: number
+              withinShare:
+                type: number
+        note:
+          type: string
     ClerkTierReport:
       type: object
       required: [windowDays, totalTokens, baseModel, rows]

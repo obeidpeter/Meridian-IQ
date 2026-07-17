@@ -13,6 +13,7 @@ import {
   buyerPaymentBehaviour,
   type BuyerPaymentBehaviour,
 } from "../invoice/payment-behaviour";
+import { chaseHistory } from "../invoice/chase-log";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
 import { isFeatureEnabled } from "../flags/flags";
 
@@ -30,14 +31,18 @@ import { isFeatureEnabled } from "../flags/flags";
 // The behaviour hint turns "you are late" into "this one is outside your
 // usual rhythm" — a materially softer, more effective letter.
 
-const CHASER_PROMPT_VERSION = "chaser.v1";
+// v2 (round-14 idea #3): the chase ladder. The facts now carry which
+// reminder number this is; tone escalates with the stage but NEVER into
+// threats — the ceiling is a direct request for a payment date.
+const CHASER_PROMPT_VERSION = "chaser.v2";
 const CHASER_SYSTEM = [
   "You write a short, polite payment reminder from a Nigerian small business to one of its customers.",
   "Use ONLY the facts provided. Never add, change or estimate an amount, date, invoice number, bank detail or payment method that is not in them.",
   "Never threaten, never mention interest, penalties or legal action.",
+  "The facts say which reminder number this is. For the first, be warm and light. For the second, be politely firm and reference the earlier reminder. For the third onward, be direct: note the previous reminders and ask them to confirm a payment date — still courteous, never threatening.",
   "If the facts include the customer's usual payment timing, you may reference it gently.",
   "End by asking them to disregard the note if payment is already on its way.",
-  "Tone: warm, professional, direct. 3 to 6 sentences. No placeholders.",
+  "Tone: professional, direct. 3 to 6 sentences. No placeholders.",
   'Return JSON: {"subject": string, "body": string}.',
 ].join("\n");
 
@@ -63,6 +68,10 @@ export interface PaymentChaserDraft {
   subject: string;
   body: string;
   source: "clerk" | "template";
+  // Ladder position (round-14 idea #3): the reminder number this draft IS
+  // (logged reminders + 1) and what came before it.
+  stage: number;
+  previousReminders: { count: number; lastAt: string | null };
 }
 
 // The receivables definition, mirrored from receivables.ts: issued to the
@@ -78,6 +87,10 @@ interface ChaserFactsInput {
   dueDate: string | null;
   today: string;
   behaviour: BuyerPaymentBehaviour | null;
+  // The ladder position: 1-based reminder number this draft is, plus when
+  // the previous logged reminder went out (null when none).
+  stage: number;
+  lastReminderAt: string | null;
 }
 
 function daysBetween(a: string, b: string): number {
@@ -112,10 +125,21 @@ export function chaserFacts(input: ChaserFactsInput): string {
       }`,
     );
   }
+  lines.push(
+    input.stage <= 1
+      ? `This is the first reminder for this invoice`
+      : `This is reminder number ${input.stage} for this invoice${
+          input.lastReminderAt
+            ? `; the previous reminder was sent on ${input.lastReminderAt.slice(0, 10)}`
+            : ""
+        }`,
+  );
   return lines.join("\n");
 }
 
-// The deterministic fallback — always a complete, sendable reminder.
+// The deterministic fallback — always a complete, sendable reminder, with
+// the ladder stage deciding the register (never the content of any threat:
+// the ceiling is asking for a payment date).
 export function templateChaser(input: ChaserFactsInput): {
   subject: string;
   body: string;
@@ -131,14 +155,40 @@ export function templateChaser(input: ChaserFactsInput): {
   const rhythm = input.behaviour
     ? ` Your payments usually reach us within about ${input.behaviour.medianDaysToPay} day(s) of invoicing, so this one may simply have slipped through.`
     : "";
+  const disregard = `\n\nIf payment is already on its way, please disregard this note — and thank you.`;
+  if (input.stage <= 1) {
+    return {
+      subject: `Payment reminder: invoice ${input.invoiceNumber}`,
+      body:
+        `Dear ${input.buyerName},\n\n` +
+        `This is a friendly reminder that invoice ${input.invoiceNumber} for ` +
+        `${input.currency} ${input.grandTotal}, issued on ${input.issueDate}, is still outstanding.${overdue}${rhythm} ` +
+        `We would appreciate payment at your earliest convenience.` +
+        disregard,
+    };
+  }
+  const previously = input.lastReminderAt
+    ? ` following our reminder of ${input.lastReminderAt.slice(0, 10)}`
+    : ` following our earlier reminder`;
+  if (input.stage === 2) {
+    return {
+      subject: `Second reminder: invoice ${input.invoiceNumber}`,
+      body:
+        `Dear ${input.buyerName},\n\n` +
+        `We are writing again${previously}: invoice ${input.invoiceNumber} for ` +
+        `${input.currency} ${input.grandTotal}, issued on ${input.issueDate}, remains outstanding.${overdue} ` +
+        `We would be grateful if you could arrange payment, or let us know when to expect it.` +
+        disregard,
+    };
+  }
   return {
-    subject: `Payment reminder: invoice ${input.invoiceNumber}`,
+    subject: `Follow-up: invoice ${input.invoiceNumber} remains unpaid`,
     body:
       `Dear ${input.buyerName},\n\n` +
-      `This is a friendly reminder that invoice ${input.invoiceNumber} for ` +
-      `${input.currency} ${input.grandTotal}, issued on ${input.issueDate}, is still outstanding.${overdue}${rhythm} ` +
-      `We would appreciate payment at your earliest convenience.\n\n` +
-      `If payment is already on its way, please disregard this note — and thank you.`,
+      `Despite our previous reminders${input.lastReminderAt ? ` (most recently on ${input.lastReminderAt.slice(0, 10)})` : ""}, invoice ${input.invoiceNumber} for ` +
+      `${input.currency} ${input.grandTotal}, issued on ${input.issueDate}, is still unpaid.${overdue} ` +
+      `Please confirm a date by which we can expect payment, or contact us if something is holding it up.` +
+      disregard,
   };
 }
 
@@ -199,6 +249,14 @@ export async function draftPaymentChaser(
       invoice.buyerPartyId,
     ).catch(() => null);
   }
+  // Ladder position (round-14 idea #3): a history-read failure degrades to
+  // a first reminder rather than blocking the letter.
+  const history = await chaseHistory(invoiceId).catch(() => ({
+    invoiceId,
+    count: 0,
+    lastAt: null,
+  }));
+  const stage = history.count + 1;
 
   const input: ChaserFactsInput = {
     invoiceNumber: invoice.invoiceNumber,
@@ -209,6 +267,8 @@ export async function draftPaymentChaser(
     dueDate: invoice.dueDate,
     today: lagosDateString(),
     behaviour,
+    stage,
+    lastReminderAt: history.lastAt,
   };
   const template = templateChaser(input);
   const fallback: PaymentChaserDraft = {
@@ -218,6 +278,8 @@ export async function draftPaymentChaser(
     subject: template.subject,
     body: template.body,
     source: "template",
+    stage,
+    previousReminders: { count: history.count, lastAt: history.lastAt },
   };
   if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
 

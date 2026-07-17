@@ -116,6 +116,8 @@ test("chaserFacts and templateChaser phrase only stored figures", () => {
       medianDaysToPay: 12,
       lastSettledDate: "2026-05-01",
     },
+    stage: 1,
+    lastReminderAt: null,
   };
   const facts = chaserFacts(input);
   assert.match(facts, /Invoice number: INV-9/);
@@ -123,6 +125,7 @@ test("chaserFacts and templateChaser phrase only stored figures", () => {
   assert.match(facts, /10 day\(s\) past due/);
   assert.match(facts, /about 12 day\(s\) after invoicing/);
   assert.match(facts, /12 day\(s\) beyond that/); // 24 days since issue - 12 median
+  assert.match(facts, /first reminder/);
 
   const template = templateChaser(input);
   assert.match(template.subject, /INV-9/);
@@ -135,6 +138,37 @@ test("chaserFacts and templateChaser phrase only stored figures", () => {
   const bare = templateChaser({ ...input, dueDate: null, behaviour: null });
   assert.match(bare.body, /issued on 2026-06-01, is still outstanding/);
   assert.doesNotMatch(bare.body, /usually reach us/);
+});
+
+test("the ladder escalates register with the stage — never into threats", () => {
+  const base = {
+    invoiceNumber: "INV-9",
+    buyerName: "Acme",
+    currency: "NGN",
+    grandTotal: "1000.00",
+    issueDate: "2026-06-01",
+    dueDate: "2026-06-15",
+    today: "2026-06-25",
+    behaviour: null,
+    stage: 2,
+    lastReminderAt: "2026-06-18T09:00:00Z",
+  };
+  const second = templateChaser(base);
+  assert.match(second.subject, /Second reminder/);
+  assert.match(second.body, /our reminder of 2026-06-18/);
+  assert.match(second.body, /disregard/);
+  assert.match(
+    chaserFacts(base),
+    /reminder number 2.*previous reminder was sent on 2026-06-18/,
+  );
+
+  const third = templateChaser({ ...base, stage: 3 });
+  assert.match(third.subject, /remains unpaid/);
+  assert.match(third.body, /confirm a date/);
+  // The escalation ceiling: never legal/penalty language in any template.
+  for (const t of [second, third]) {
+    assert.doesNotMatch(t.body, /legal|penalt|interest/i);
+  }
 });
 
 test("only an outstanding receivable can be chased; tenancy is enforced", async () => {

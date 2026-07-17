@@ -34,7 +34,7 @@ export interface BuyerPaymentBehaviour {
   lastSettledDate: string;
 }
 
-function median(values: number[]): number {
+export function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1
@@ -88,12 +88,26 @@ export function summarizeBehaviour(
   return out.slice(0, MAX_BUYERS);
 }
 
-// One client's per-buyer payment behaviour from its own accepted matches.
-export async function listPaymentBehaviour(
+// One observed settlement from the human-confirmed exhaust: an accepted
+// match tying an invoice to a bank credit with a value date.
+export interface SettlementEvidenceRow {
+  buyerPartyId: string;
+  buyerName: string;
+  issueDate: string;
+  dueDate: string | null;
+  valueDate: string;
+  daysToPay: number;
+}
+
+// The single evidence query behind BOTH the behaviour miner and the
+// projection-accuracy report (round-14 idea #2) — one predicate set so the
+// two surfaces can never disagree about what counts as an observed
+// settlement.
+export async function acceptedSettlementRows(
   firmId: string,
   clientPartyId: string,
   now: Date = new Date(),
-): Promise<BuyerPaymentBehaviour[]> {
+): Promise<SettlementEvidenceRow[]> {
   const since = lagosDateString(
     new Date(now.getTime() - LOOKBACK_DAYS * 86_400_000),
   );
@@ -101,12 +115,16 @@ export async function listPaymentBehaviour(
     await getDb().execute<{
       buyer_party_id: string;
       buyer_name: string;
+      issue_date: string;
+      due_date: string | null;
       days_to_pay: number;
       value_date: string;
     }>(sql`
       SELECT
         i.buyer_party_id,
         p.legal_name AS buyer_name,
+        i.issue_date::text AS issue_date,
+        i.due_date::text AS due_date,
         (l.value_date - i.issue_date)::int AS days_to_pay,
         l.value_date::text AS value_date
       FROM match_proposals m
@@ -123,14 +141,23 @@ export async function listPaymentBehaviour(
         AND l.value_date >= ${since}
     `)
   ).rows;
-  return summarizeBehaviour(
-    rows.map((r) => ({
-      buyerPartyId: r.buyer_party_id,
-      buyerName: r.buyer_name,
-      daysToPay: Number(r.days_to_pay),
-      valueDate: r.value_date,
-    })),
-  );
+  return rows.map((r) => ({
+    buyerPartyId: r.buyer_party_id,
+    buyerName: r.buyer_name,
+    issueDate: r.issue_date,
+    dueDate: r.due_date,
+    valueDate: r.value_date,
+    daysToPay: Number(r.days_to_pay),
+  }));
+}
+
+// One client's per-buyer payment behaviour from its own accepted matches.
+export async function listPaymentBehaviour(
+  firmId: string,
+  clientPartyId: string,
+  now: Date = new Date(),
+): Promise<BuyerPaymentBehaviour[]> {
+  return summarizeBehaviour(await acceptedSettlementRows(firmId, clientPartyId, now));
 }
 
 // One buyer's behaviour, for surfaces anchored to a single invoice (the

@@ -335,7 +335,7 @@ function CatalogueCoverageCard({ enabled }: { enabled: boolean }) {
               {pct(coverage.mappedShare)}
             </p>
             <p className="text-xs text-muted-foreground">
-              {coverage.mappedAttempts} of {coverage.rejectedAttempts} coded
+              {coverage.mappedAttempts} of {coverage.codedRejections} coded
               attempts
             </p>
           </div>

@@ -44,7 +44,19 @@ export const submissionAttemptsTable = pgTable("submission_attempts", {
 // The firm-keyed RLS policy probes invoices per candidate row (EXISTS), which
 // makes an unindexed scan pay twice — same reasoning for the two sibling
 // child tables below.
-}, (t) => [index("submission_attempts_invoice_idx").on(t.invoiceId)]);
+}, (t) => [
+  index("submission_attempts_invoice_idx").on(t.invoiceId),
+  // The catalogue coverage report (desk/catalogue-coverage.ts) walks this
+  // table by code (per-code first sighting, per-catalogue-entry SLA lateral)
+  // and by rejection window — both would otherwise be sequential scans of a
+  // table that only grows (round-13 review M1).
+  index("submission_attempts_error_code_idx").on(
+    t.errorCode,
+    t.status,
+    t.createdAt,
+  ),
+  index("submission_attempts_status_created_idx").on(t.status, t.createdAt),
+]);
 
 // A validated invoice carries an IRN, CSID and QR code (C1). Append-only.
 export const stampRecordsTable = pgTable("stamp_records", {
@@ -131,7 +143,13 @@ export const settlementEventsTable = pgTable("settlement_events", {
   actorId: text("actor_id"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   createdAt: createdAt(),
-}, (t) => [index("settlement_events_invoice_idx").on(t.invoiceId)]);
+}, (t) => [
+  index("settlement_events_invoice_idx").on(t.invoiceId),
+  // The unmatched-credit detector anti-joins by statement line on every
+  // card load and digest sweep — same only-grows reasoning as the
+  // submission_attempts indexes above (round-14 review L3).
+  index("settlement_events_statement_line_idx").on(t.statementLineId),
+]);
 
 // Append-only projection of every invoice status transition (CORE-02). Replaying
 // these rows reconstructs an invoice's status at any timestamp; combined with the
