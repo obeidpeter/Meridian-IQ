@@ -53,10 +53,10 @@ before(async () => {
 });
 
 test("tierRecommendation covers every branch deterministically", () => {
-  const base = { purpose: "segment_batch", calls: 200, validRate: 1, tiered: false };
+  const base = { purpose: "segment_batch", judged: 200, validRate: 1, tiered: false };
   assert.equal(tierRecommendation(base).recommendation, "candidate");
   assert.equal(
-    tierRecommendation({ ...base, calls: TIER_MIN_CALLS - 1 }).recommendation,
+    tierRecommendation({ ...base, judged: TIER_MIN_CALLS - 1 }).recommendation,
     "insufficient_data",
   );
   assert.equal(
@@ -78,6 +78,24 @@ test("tierRecommendation covers every branch deterministically", () => {
   assert.equal(
     tierRecommendation({ ...base, tiered: true, validRate: 0.9 }).recommendation,
     "revert",
+  );
+  // A tiered STAKES purpose never earns a reassuring "tiered" from validity
+  // alone — validity is exactly the signal this module declares insufficient
+  // for extraction, even when it is holding.
+  assert.equal(
+    tierRecommendation({
+      ...base,
+      purpose: "extract_invoice",
+      tiered: true,
+      validRate: 1,
+    }).recommendation,
+    "revert",
+  );
+  // A window of nothing but killed calls is zero evidence, not 100% valid:
+  // judged is the floor, so it lands in insufficient_data.
+  assert.equal(
+    tierRecommendation({ ...base, judged: 0 }).recommendation,
+    "insufficient_data",
   );
 });
 

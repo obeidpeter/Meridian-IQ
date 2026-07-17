@@ -5,6 +5,7 @@ import { DomainError } from "../errors";
 import {
   assertClientPartyScope,
   assertSameTenant,
+  tenantFirmId,
   type Principal,
 } from "../auth/rbac";
 import { lagosDateString } from "../../lib/lagos-time";
@@ -228,11 +229,12 @@ export async function draftPaymentChaser(
     const result = await gateway.infer<z.infer<typeof chaserOutput>>({
       purpose: "draft_chaser",
       caseId: null,
-      // Firm-funded like the other client-facing phrasings. Deliberately NO
-      // route budget pre-check: the gateway backstop turns an exhausted
-      // allowance into a typed failure, which answers with the template —
-      // never a 429.
-      firmId: invoice.firmId,
+      // Funded by the CALLER's firm (explainer parity): firm/client
+      // principals bill their own allowance; an operator's chaser is
+      // platform-funded, not drawn from the firm. Deliberately NO route
+      // budget pre-check: the gateway backstop turns an exhausted allowance
+      // into a typed failure, which answers with the template — never a 429.
+      firmId: tenantFirmId(principal),
       promptVersion: CHASER_PROMPT_VERSION,
       system: CHASER_SYSTEM,
       user: facts,

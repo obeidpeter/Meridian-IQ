@@ -1097,7 +1097,8 @@ export function HealthPanel() {
               joined with the tier map in force (base model{" "}
               <span className="font-mono">{tierReport.baseModel}</span>).
               Recommendations are deterministic; act on them via
-              CLERK_MODEL_TIERS and validate with a prompt canary first.
+              CLERK_MODEL_TIERS (takes effect on server restart) and validate
+              with a prompt canary first.
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm" data-testid="table-tier-report">

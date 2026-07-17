@@ -58,18 +58,36 @@ export interface TierReport {
 }
 
 // The deterministic rule, exported for tests. killed calls are excluded from
-// the validity denominator — the kill switch says nothing about the model.
+// the validity denominator AND from the volume floor — the kill switch says
+// nothing about the model, so a window of nothing but killed calls is zero
+// evidence, not "100% valid". Stakes purposes are judged BEFORE the tiered
+// branch: validity is exactly the signal this module declares insufficient
+// for extraction, so a tiered stakes purpose must never earn a reassuring
+// "holding — leave as is" from it.
 export function tierRecommendation(input: {
   purpose: string;
-  calls: number;
+  judged: number; // ok + invalid + error calls in the window
   validRate: number;
   tiered: boolean;
 }): { recommendation: TierRecommendation; reason: string } {
-  if (input.calls < TIER_MIN_CALLS) {
+  if (input.judged < TIER_MIN_CALLS) {
     return {
       recommendation: "insufficient_data",
-      reason: `Fewer than ${TIER_MIN_CALLS} calls in the window — not enough evidence to judge.`,
+      reason: `Fewer than ${TIER_MIN_CALLS} judged (ok/invalid/error) calls in the window — not enough evidence to judge.`,
     };
+  }
+  if (STAKES_PURPOSES.has(input.purpose)) {
+    return input.tiered
+      ? {
+          recommendation: "revert",
+          reason:
+            "Extraction (and the evals that measure it) must not run on a tier judged by validity alone — validate with the eval corpus or revert to the default model.",
+        }
+      : {
+          recommendation: "keep",
+          reason:
+            "Correction stakes: extraction (and the evals that measure it) stays on the default model.",
+        };
   }
   if (input.tiered) {
     return input.validRate >= TIER_VALID_THRESHOLD
@@ -82,13 +100,6 @@ export function tierRecommendation(input: {
           reason:
             "The configured tier is not holding schema validity — consider reverting to the default model.",
         };
-  }
-  if (STAKES_PURPOSES.has(input.purpose)) {
-    return {
-      recommendation: "keep",
-      reason:
-        "Correction stakes: extraction (and the evals that measure it) stays on the default model.",
-    };
   }
   return input.validRate >= TIER_VALID_THRESHOLD
     ? {
@@ -134,6 +145,11 @@ export async function computeTierReport(): Promise<TierReport> {
     ).rows;
   });
 
+  // NOTE: the provider parses CLERK_MODEL_TIERS once at first gateway build
+  // and caches it for the process lifetime; this report re-reads env per
+  // request. The two agree everywhere env changes come with a restart (the
+  // deployment model) — an env mutated mid-process shows here before it
+  // routes live calls.
   const tiers = parseModelTiers(process.env.CLERK_MODEL_TIERS);
   const totalTokens = rows.reduce((sum, r) => sum + Number(r.total_tokens), 0);
 
@@ -153,7 +169,7 @@ export async function computeTierReport(): Promise<TierReport> {
       const tiered = currentModel !== CLERK_MODEL;
       const rec = tierRecommendation({
         purpose: r.purpose,
-        calls,
+        judged,
         validRate,
         tiered,
       });

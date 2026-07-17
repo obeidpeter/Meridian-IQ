@@ -78,8 +78,13 @@ export function summarizeBehaviour(
       lastSettledDate: entry.last,
     });
   }
-  // Best-evidenced buyers first; cap keeps the payload a hint, not a dump.
-  out.sort((a, b) => b.settledCount - a.settledCount);
+  // Best-evidenced buyers first (id tie-break keeps equal counts stable
+  // across calls); cap keeps the payload a hint, not a dump.
+  out.sort(
+    (a, b) =>
+      b.settledCount - a.settledCount ||
+      a.buyerPartyId.localeCompare(b.buyerPartyId),
+  );
   return out.slice(0, MAX_BUYERS);
 }
 
