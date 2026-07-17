@@ -323,6 +323,9 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     receivablesOver60Count: 0,
     unbilledCount: 0,
     unbilledClients: 0,
+    expectedWeekCount: 0,
+    expectedWeekTotalNgn: "0.00",
+    chaseWorthyCount: 0,
   });
   assert.match(quiet.headline, /on track/);
   assert.equal(quiet.bullets.length, 1);
@@ -335,11 +338,19 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     receivablesOver60Count: 4,
     unbilledCount: 2,
     unbilledClients: 1,
+    expectedWeekCount: 2,
+    expectedWeekTotalNgn: "150000.00",
+    chaseWorthyCount: 1,
   });
   assert.equal(busy.headline, "3 invoices need attention this week.");
-  assert.equal(busy.bullets.length, 6);
+  assert.equal(busy.bullets.length, 8);
   assert.match(busy.bullets[0], /2 invoices are past the 7-day submission window/);
   assert.match(busy.bullets[5], /2 regular invoices look unraised across 1 client/);
+  assert.match(
+    busy.bullets[6],
+    /2 invoices \(NGN 150000\.00\) are expected to be paid in the coming week/,
+  );
+  assert.match(busy.bullets[7], /1 receivable looks worth chasing/);
 });
 
 test("digestWeekStart anchors to Monday 00:00 UTC", () => {

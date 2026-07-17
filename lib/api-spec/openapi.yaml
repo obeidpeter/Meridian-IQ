@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.30.0
+  version: 0.31.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -8369,7 +8369,7 @@ components:
               type: number
     EscalationReplyDraft:
       type: object
-      required: [draft, source, errorCode]
+      required: [draft, source, errorCode, viaExample]
       properties:
         draft:
           type: string
@@ -8379,6 +8379,10 @@ components:
           enum: [clerk, template]
         errorCode:
           type: ["string", "null"]
+        # True when a previously-sent same-code reply rode along as the
+        # style example (reply memory, round 11).
+        viaExample:
+          type: boolean
     ReplyToEscalationInput:
       type: object
       required: [reply]

@@ -530,3 +530,59 @@ test("a fabricated month or client key never validates — the case escalates", 
   assert.equal(kase.status, "escalated");
   assert.equal(kase.answer?.answered, false);
 });
+
+test("money intents: outstanding, expected inflows and chase list", async () => {
+  // Outstanding = submitted/stamped/confirmed: ACC (500) + ACO (750) +
+  // REC (1000), all owed by DI Party A.
+  const outstanding = await lookup("data.outstanding_receivables");
+  assert.ok(outstanding);
+  assert.match(
+    outstanding.text,
+    /3 invoices are outstanding, NGN 2250\.00 in total/,
+  );
+  assert.ok(outstanding.text.includes(`DI Party A ${SALT}`), "names debtors");
+  assert.equal(outstanding.facts.find((f) => f.key === "count")?.value, "3");
+  assert.equal(
+    outstanding.facts.find((f) => f.key === "total_value")?.value,
+    "2250.00",
+  );
+
+  // No behaviour is mined here, so projections run on due date / terms: the
+  // two old outstanding invoices are past expectation, nothing lands in the
+  // coming week.
+  const inflows = await lookup("data.expected_inflows");
+  assert.ok(inflows);
+  assert.match(
+    inflows.text,
+    /No payments are expected across your clients in the coming week/,
+  );
+  assert.match(inflows.text, /2 invoices are already past the expected/);
+  assert.equal(
+    inflows.facts.find((f) => f.key === "past_expected")?.value,
+    "2",
+  );
+
+  // Chase-worthy = past expectation AND past due (or no due date): both old
+  // invoices qualify; the aged receivable (90d beyond) ranks first.
+  const chase = await lookup("data.chase_list");
+  assert.ok(chase);
+  assert.match(chase.text, /2 invoices across your clients are worth chasing/);
+  assert.ok(chase.text.includes(RECEIVABLE_NUM));
+  assert.match(chase.text, /90d beyond expectation/);
+
+  // Client scoping: DI Party Z has only a draft — nothing outstanding.
+  const scoped = await inClerkScope(firmA, () =>
+    runDataIntent("data.outstanding_receivables", firmA, {
+      clientPartyId: partyA2,
+      clientName: `DI Party Z ${SALT}`,
+    }),
+  );
+  assert.ok(scoped);
+  assert.match(scoped.text, new RegExp(`Nothing is outstanding for DI Party Z ${SALT}`));
+
+  // Firm isolation: firm B's only invoice is a draft — and firm A's rows
+  // must never bleed into its answer.
+  const foreign = await lookup("data.outstanding_receivables", firmB);
+  assert.ok(foreign);
+  assert.match(foreign.text, /Nothing is outstanding/);
+});

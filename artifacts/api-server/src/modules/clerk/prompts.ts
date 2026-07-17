@@ -177,7 +177,9 @@ export const EXTRACT_JSON_SCHEMA: Record<string, unknown> = {
 // Ask Clerk intent classification (C1)
 // ---------------------------------------------------------------------------
 
-export const INTENT_PROMPT_VERSION = "intent.v3";
+// v4: the money data intents (outstanding receivables, expected inflows,
+// chase list) joined the closed catalogue.
+export const INTENT_PROMPT_VERSION = "intent.v4";
 
 export const INTENT_SYSTEM = `You classify a compliance question against a FIXED list of keys.
 There are two kinds of keys:

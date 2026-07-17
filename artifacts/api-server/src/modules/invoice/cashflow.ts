@@ -203,15 +203,22 @@ export function bucketProjections(
 // Ranking stays "late for THEM": most days beyond expectation first, amount
 // as tie-break. Within the caller's primary currency only — raw magnitudes
 // across currencies are not comparable.
+// The single chase-eligibility predicate — the ranker, the firm summary's
+// count and the Ask Clerk per-client count all share it, so a display cap or
+// currency filter can never leak into a number presented as definitive.
+export function isChaseEligible(
+  p: ReceivableProjection,
+  today: string,
+): boolean {
+  return p.daysBeyondExpected > 0 && (p.dueDate === null || p.dueDate < today);
+}
+
 export function rankChaseRows(
   projections: ReceivableProjection[],
   today: string,
 ): ChaseRow[] {
   return projections
-    .filter(
-      (p) =>
-        p.daysBeyondExpected > 0 && (p.dueDate === null || p.dueDate < today),
-    )
+    .filter((p) => isChaseEligible(p, today))
     .sort(
       (a, b) =>
         b.daysBeyondExpected - a.daysBeyondExpected ||
@@ -277,10 +284,12 @@ async function outstandingRows(
   }));
 }
 
-async function projections(
+// One client's projected receivables — the shared input for the outlook, the
+// chase list, the Ask Clerk money intents and the digest's firm summary.
+export async function receivableProjections(
   firmId: string,
   clientPartyId: string,
-  now: Date,
+  now: Date = new Date(),
 ): Promise<ReceivableProjection[]> {
   const [rows, behaviour] = await Promise.all([
     outstandingRows(firmId, clientPartyId),
@@ -301,7 +310,7 @@ export async function computeCashflowOutlook(
   const today = lagosDateString(now);
   return {
     asOf: today,
-    groups: bucketProjections(await projections(firmId, clientPartyId, now), today),
+    groups: bucketProjections(await receivableProjections(firmId, clientPartyId, now), today),
   };
 }
 
@@ -310,7 +319,7 @@ export async function listChaseRows(
   clientPartyId: string,
   now: Date = new Date(),
 ): Promise<ChaseRow[]> {
-  const all = await projections(firmId, clientPartyId, now);
+  const all = await receivableProjections(firmId, clientPartyId, now);
   // Primary currency = the biggest outstanding total, matching the outlook
   // card's first-group convention; cross-currency magnitudes don't rank.
   const totals = new Map<string, number>();
@@ -324,4 +333,101 @@ export async function listChaseRows(
     primary ? all.filter((p) => p.currency === primary) : all,
     lagosDateString(now),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Firm-level money summary (round-11): the same projections rolled up across
+// every client with outstanding receivables — the digest's money facts and
+// Ask Clerk's firm-wide money intents. Counts are currency-safe; the NGN
+// total follows the data-intent convention (grand_total summed, NGN-first
+// platform). Clients are capped by outstanding value, biggest books first;
+// the cap is far above any SME firm's client count.
+// ---------------------------------------------------------------------------
+
+const MAX_SUMMARY_CLIENTS = 50;
+
+export interface FirmChaseRow extends ChaseRow {
+  clientName: string;
+}
+
+export interface FirmMoneySummary {
+  // Projections due inside the next 7 days (not yet past expectation).
+  expectedWeekCount: number;
+  expectedWeekTotalNgn: string;
+  // Past their expected date (whatever the basis) — late money.
+  overdueExpectedCount: number;
+  // Past BOTH expectation and due date — the chase-eligible set.
+  chaseCount: number;
+  // Top chase rows across clients, ranked by days beyond expectation (a
+  // currency-free measure), for surfaces that name names.
+  topChase: FirmChaseRow[];
+  // True when the firm has MORE clients with outstanding receivables than
+  // the summary cap covers — detected (fetch cap+1), never silent, so the
+  // digest and Ask can hedge their "across your clients" phrasing.
+  truncated: boolean;
+}
+
+export async function firmMoneySummary(
+  firmId: string,
+  now: Date = new Date(),
+): Promise<FirmMoneySummary> {
+  const today = lagosDateString(now);
+  // cap + 1 so truncation is DETECTED, never silent (same posture as
+  // ask.ts's client-option list).
+  const clientRows = (
+    await getDb().execute<{ supplier_party_id: string; client_name: string }>(
+      sql`
+        SELECT i.supplier_party_id, p.legal_name AS client_name
+        FROM invoices i
+        JOIN parties p ON p.id = i.supplier_party_id
+        WHERE ${OUTSTANDING} AND i.firm_id = ${firmId}
+        GROUP BY 1, 2
+        ORDER BY SUM(i.grand_total) DESC
+        LIMIT ${MAX_SUMMARY_CLIENTS + 1}
+      `,
+    )
+  ).rows;
+  const truncated = clientRows.length > MAX_SUMMARY_CLIENTS;
+  const clients = clientRows.slice(0, MAX_SUMMARY_CLIENTS);
+
+  let expectedWeekCount = 0;
+  let expectedWeekTotal = 0;
+  let overdueExpectedCount = 0;
+  let chaseCount = 0;
+  const topChase: FirmChaseRow[] = [];
+  for (const client of clients) {
+    const projections = await receivableProjections(
+      firmId,
+      client.supplier_party_id,
+      now,
+    );
+    for (const p of projections) {
+      if (p.daysBeyondExpected > 0) {
+        overdueExpectedCount += 1;
+        // The shared predicate; counted here because the ranker caps per
+        // client and a count must not.
+        if (isChaseEligible(p, today)) chaseCount += 1;
+      } else if (p.daysBeyondExpected > -7) {
+        expectedWeekCount += 1;
+        const amount = Number(p.grandTotal);
+        if (Number.isFinite(amount)) expectedWeekTotal += amount;
+      }
+    }
+    for (const row of rankChaseRows(projections, today)) {
+      topChase.push({ ...row, clientName: client.client_name });
+    }
+  }
+  topChase.sort(
+    (a, b) =>
+      b.daysBeyondExpected - a.daysBeyondExpected ||
+      Number(b.grandTotal) - Number(a.grandTotal),
+  );
+  return {
+    expectedWeekCount,
+    expectedWeekTotalNgn: expectedWeekTotal.toFixed(2),
+    overdueExpectedCount,
+    chaseCount,
+    topChase: topChase.slice(0, MAX_CHASE_ROWS),
+    truncated,
+  };
 }

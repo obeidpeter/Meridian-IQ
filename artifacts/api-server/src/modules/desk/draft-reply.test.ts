@@ -1,17 +1,23 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   getDb,
+  runInBypassContext,
   firmsTable,
   partiesTable,
   invoicesTable,
   escalationsTable,
   errorCatalogueTable,
   submissionAttemptsTable,
+  clerkInferenceCallsTable,
 } from "@workspace/db";
-import { draftEscalationReply, sendEscalationReply } from "./draft-reply.ts";
+import {
+  copiesExampleSpecifics,
+  draftEscalationReply,
+  sendEscalationReply,
+} from "./draft-reply.ts";
 import { CLERK_FLAG_KEY } from "../clerk/gateway.ts";
 import { setFlag } from "../flags/flags.ts";
 import type { CompletionRequest } from "../clerk/gateway.ts";
@@ -199,5 +205,131 @@ test("send: an empty or oversized reply is refused", async () => {
     sendEscalationReply(escalationId, "x".repeat(2001), actorId),
     (err: Error & { code?: string; status?: number }) =>
       err.code === "BAD_REPLY" && err.status === 400,
+  );
+});
+
+test("reply memory: same-firm same-code sent replies ride along fenced", async () => {
+  // A same-code sent reply belonging to ANOTHER firm must never be borrowed.
+  const foreignFirm = randomUUID();
+  const foreignParty = randomUUID();
+  const foreignInvoice = randomUUID();
+  const db = getDb();
+  await db
+    .insert(firmsTable)
+    .values({ id: foreignFirm, name: `Reply Foreign ${SALT}` });
+  await db.insert(partiesTable).values({
+    id: foreignParty,
+    type: "client_business",
+    legalName: `Reply Foreign Party ${SALT}`,
+  });
+  await db.insert(invoicesTable).values({
+    id: foreignInvoice,
+    firmId: foreignFirm,
+    supplierPartyId: foreignParty,
+    buyerPartyId: foreignParty,
+    invoiceNumber: `REPLY-F-${SALT}`,
+    issueDate: "2026-07-01",
+  });
+  await db.insert(escalationsTable).values({
+    invoiceId: foreignInvoice,
+    firmId: foreignFirm,
+    clientPartyId: foreignParty,
+    reason: `foreign ${SALT}`,
+    errorCode: CODE,
+    operatorReply: `FOREIGN reply ${SALT}`,
+    repliedAt: new Date(),
+    status: "resolved",
+  });
+
+  const calls: CompletionRequest[] = [];
+  // The fake reply deliberately copies NOTHING from the example — a salted
+  // reply here would (correctly) trip the copy guard and mask the memory.
+  const gw = fakeGateway((req) => {
+    calls.push(req);
+    return JSON.stringify({
+      reply: "We reviewed this and will follow up shortly.",
+    });
+  });
+  const first = await draftEscalationReply(escalationId, gw);
+  assert.equal(first.viaExample, false, "another firm's reply never borrowed");
+  assert.ok(!(calls[0].user as string).includes("PAST_REPLY"));
+
+  // A same-firm sent reply for the same code: rides along fenced, the system
+  // prompt gains the style-only guardrails, and the ledger records the
+  // variant prompt version so the exemplar's effect stays measurable.
+  await db.insert(escalationsTable).values({
+    invoiceId,
+    firmId,
+    clientPartyId: partyId,
+    reason: `past escalation ${SALT}`,
+    errorCode: CODE,
+    operatorReply: `Past reply ${SALT}`,
+    repliedAt: new Date(),
+    status: "resolved",
+  });
+  const second = await draftEscalationReply(escalationId, gw);
+  assert.equal(second.viaExample, true);
+  assert.equal(second.source, "clerk");
+  const user = calls[1].user as string;
+  assert.ok(user.includes("-----BEGIN PAST_REPLY-----"), "example fenced");
+  assert.ok(user.includes(`Past reply ${SALT}`));
+  assert.ok(
+    calls[1].system.includes("STYLE example"),
+    "style-only guardrail in the system prompt",
+  );
+  const [ledger] = await runInBypassContext(() =>
+    getDb()
+      .select({ promptVersion: clerkInferenceCallsTable.promptVersion })
+      .from(clerkInferenceCallsTable)
+      .where(eq(clerkInferenceCallsTable.purpose, "draft_reply"))
+      .orderBy(desc(clerkInferenceCallsTable.createdAt))
+      .limit(1),
+  );
+  assert.equal(ledger.promptVersion, "draft-reply.v1+ex1");
+
+  // The deterministic backstop: a draft that verbatim-copies the example's
+  // specifics is discarded in favour of the template.
+  const copying = await draftEscalationReply(
+    escalationId,
+    fakeGateway(() =>
+      JSON.stringify({ reply: `As before: Past reply ${SALT}` }),
+    ),
+  );
+  assert.equal(copying.source, "template");
+  assert.equal(copying.viaExample, false);
+});
+
+test("copiesExampleSpecifics: identifiers and long runs trip, style does not", () => {
+  const example =
+    "Thank you for raising invoice INV-2201 for NGN 450000.00. The TIN mismatch on attempt 2 has been corrected and we will resubmit shortly.";
+  // Copying the other client's invoice number trips.
+  assert.equal(
+    copiesExampleSpecifics("Your invoice INV-2201 is being handled.", example, "TIN_MISMATCH"),
+    true,
+  );
+  // The shared catalogue code never trips (both cases legitimately name it).
+  assert.equal(
+    copiesExampleSpecifics(
+      "The code TIN-04510 was returned; we are on it.",
+      "Earlier we saw TIN-04510 too.",
+      "TIN-04510",
+    ),
+    false,
+  );
+  // A 40+ character verbatim run trips even without identifiers.
+  const prose =
+    "we have reviewed the submission history and spoken to the rail operator about the rejection";
+  assert.equal(
+    copiesExampleSpecifics(`Dear client, ${prose}.`, `Note: ${prose}!`, null),
+    true,
+  );
+  // Following tone and structure without copying stays clean.
+  assert.equal(
+    copiesExampleSpecifics(
+      "Thanks for flagging this — the TIN issue is fixed and we will resubmit today.",
+      example,
+      null,
+    ),
+    false,
   );
 });
