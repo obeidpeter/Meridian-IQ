@@ -78,10 +78,16 @@ function AskContent() {
   const { toast } = useToast();
   const [question, setQuestion] = useState("");
   const [disabledBanner, setDisabledBanner] = useState(false);
+  // Multi-turn (round 12): follow-ups carry the previous question's scope;
+  // the server re-verifies the id belongs to this firm before using it.
+  const [previousCaseId, setPreviousCaseId] = useState<string | null>(null);
 
   const ask = useAskClerk({
     mutation: {
-      onSuccess: () => setDisabledBanner(false),
+      onSuccess: (row) => {
+        setDisabledBanner(false);
+        setPreviousCaseId(row.id);
+      },
       onError: (e) =>
         handleClerkGatewayError(e, {
           onDisabled: () => setDisabledBanner(true),
@@ -128,7 +134,14 @@ function AskContent() {
                 escalated rather than guessed.
               </p>
               <Button
-                onClick={() => ask.mutate({ data: { question } })}
+                onClick={() =>
+                  ask.mutate({
+                    data: {
+                      question,
+                      ...(previousCaseId ? { previousCaseId } : {}),
+                    },
+                  })
+                }
                 disabled={question.trim().length < 3 || ask.isPending}
                 data-testid="button-ask"
               >

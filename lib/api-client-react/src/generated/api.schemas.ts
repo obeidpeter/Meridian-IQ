@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.31.0
+ * OpenAPI spec version: 0.32.0
  */
 export interface HealthStatus {
   status: string;
@@ -1433,6 +1433,66 @@ export interface ChaseRow {
   expectedDate: string;
   basis: ChaseRowBasis;
   daysBeyondExpected: number;
+}
+
+export type OperatorBriefOpenCasesByPriorityItem = {
+  priority: string;
+  count: number;
+};
+
+export type OperatorBriefOpenCases = {
+  byPriority: OperatorBriefOpenCasesByPriorityItem[];
+  /** @nullable */
+  oldestTitle: string | null;
+  /** @nullable */
+  oldestOpenedAt: string | null;
+};
+
+export type OperatorBriefUnansweredEscalations = {
+  count: number;
+  /** @nullable */
+  oldestReason: string | null;
+  /** @nullable */
+  oldestRaisedAt: string | null;
+};
+
+export type OperatorBriefStuckBatches = {
+  count: number;
+  /** @nullable */
+  oldestQueuedAt: string | null;
+};
+
+export interface OperatorBrief {
+  asOf: string;
+  openCases: OperatorBriefOpenCases;
+  unansweredEscalations: OperatorBriefUnansweredEscalations;
+  stuckBatches: OperatorBriefStuckBatches;
+  unmappedCodeCases: number;
+  clerkEnabled: boolean;
+  resistanceAlert: boolean;
+  decidedYesterday: number;
+}
+
+export interface PartyMergeSide {
+  partyId: string;
+  /** @nullable */
+  legalName: string | null;
+  /** @nullable */
+  tin: string | null;
+  merged: boolean;
+  invoicesAsSupplier: number;
+  invoicesAsBuyer: number;
+  engagements: number;
+  memberships: number;
+  recurringTemplates: number;
+  aliases: number;
+  bankStatements: number;
+  escalations: number;
+}
+
+export interface MergeImpact {
+  survivor: PartyMergeSide | null;
+  duplicate: PartyMergeSide | null;
 }
 
 export type ClerkAdoptionReportTotals = {
@@ -3060,6 +3120,7 @@ export interface AskClerkInput {
      * @maxLength 2000
      */
   question: string;
+  previousCaseId?: string;
 }
 
 export type StatusLightLight = typeof StatusLightLight[keyof typeof StatusLightLight];
@@ -3867,6 +3928,11 @@ export type ListPartiesParams = {
  * @maxLength 120
  */
 q?: string;
+};
+
+export type GetMergeImpactParams = {
+survivorId: string;
+duplicateId: string;
 };
 
 export type ListInvoicesParams = {

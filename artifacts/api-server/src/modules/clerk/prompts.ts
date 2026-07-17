@@ -179,7 +179,9 @@ export const EXTRACT_JSON_SCHEMA: Record<string, unknown> = {
 
 // v4: the money data intents (outstanding receivables, expected inflows,
 // chase list) joined the closed catalogue.
-export const INTENT_PROMPT_VERSION = "intent.v4";
+// v5: multi-turn — a previous question's platform-recorded intent/parameter
+// keys may accompany the closed lists as follow-up context.
+export const INTENT_PROMPT_VERSION = "intent.v5";
 
 export const INTENT_SYSTEM = `You classify a compliance question against a FIXED list of keys.
 There are two kinds of keys:
@@ -195,6 +197,7 @@ Rules:
 - category is the transaction category the question is about, or "unknown" if it does not say.
 - month: when the question names a calendar month or period AND a month list is provided, the matching month key; otherwise "none". Never guess a month the question does not name.
 - client: when the question names one of the listed clients AND a client list is provided, that client's key; otherwise "none". Never match a name that is not clearly one of the listed clients.
+- A "Previous question context" line, when present, is platform-recorded and trusted: use it ONLY to resolve a follow-up ("and for June?", "same for that client?") to the same data key with updated parameter keys, carrying over parameters the follow-up does not change. A question that stands on its own overrides the context entirely.
 - Output JSON only, matching the provided schema.`;
 
 export const INTENT_CATEGORIES = ["b2b", "b2g", "b2c", "unknown"] as const;

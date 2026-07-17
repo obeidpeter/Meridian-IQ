@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.31.0
+ * OpenAPI spec version: 0.32.0
  */
 
 export * from './acceptInvitationInput';
@@ -251,6 +251,7 @@ export * from './getChaseListParams';
 export * from './getClerkMetricsParams';
 export * from './getComplianceCalendarParams';
 export * from './getDashboardSummaryParams';
+export * from './getMergeImpactParams';
 export * from './getPublicThemeParams';
 export * from './getReceivablesSummaryParams';
 export * from './getVatPackParams';
@@ -320,6 +321,7 @@ export * from './me';
 export * from './membership';
 export * from './membershipInput';
 export * from './membershipInputRole';
+export * from './mergeImpact';
 export * from './message';
 export * from './messageChannel';
 export * from './messageDeliveryInput';
@@ -329,6 +331,11 @@ export * from './messageStatus';
 export * from './notFoundResponse';
 export * from './onboardingProspect';
 export * from './onboardingProspectStage';
+export * from './operatorBrief';
+export * from './operatorBriefOpenCases';
+export * from './operatorBriefOpenCasesByPriorityItem';
+export * from './operatorBriefStuckBatches';
+export * from './operatorBriefUnansweredEscalations';
 export * from './operatorCaseView';
 export * from './operatorCaseViewPriority';
 export * from './operatorCaseViewStatus';
@@ -343,6 +350,7 @@ export * from './partyGraph';
 export * from './partyInput';
 export * from './partyInputType';
 export * from './partyMergeInput';
+export * from './partyMergeSide';
 export * from './partyType';
 export * from './partyUpdateInput';
 export * from './passwordReset';

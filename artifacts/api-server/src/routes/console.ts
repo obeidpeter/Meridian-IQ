@@ -56,6 +56,7 @@ import {
   ResolveOperatorCaseResponse,
   GetFirmReceivablesResponse,
   GetClerkAdoptionReportResponse,
+  GetOperatorBriefResponse,
   DraftEscalationReplyParams,
   DraftEscalationReplyResponse,
   ReplyToEscalationParams,
@@ -77,6 +78,7 @@ import {
 } from "../modules/desk/draft-reply";
 import { computeRejectionPatterns } from "../modules/desk/rejection-patterns";
 import { computeAdoptionReport } from "../modules/clerk/adoption";
+import { computeOperatorBrief } from "../modules/desk/daily-brief";
 import { computeComplianceCalendar } from "../modules/invoice/compliance-calendar";
 import { getClerkGateway } from "../modules/clerk/provider";
 import { getFirmReceivables } from "../modules/invoice/receivables";
@@ -232,6 +234,15 @@ router.get("/console/receivables", async (req, res): Promise<void> => {
   const firmId = firmScope(req.principal);
   const rollup = await getFirmReceivables(firmId);
   res.json(GetFirmReceivablesResponse.parse(rollup));
+});
+
+// Operator daily brief (round-12 idea #1): the desk's "what needs me first"
+// in one deterministic summary — queues, stuck work, platform state,
+// yesterday's throughput. Pure SQL, zero model calls, operator surface.
+router.get("/console/operator-brief", async (req, res): Promise<void> => {
+  assertCan(req.principal, "operator.queue.act");
+  const brief = await computeOperatorBrief();
+  res.json(GetOperatorBriefResponse.parse(brief));
 });
 
 // Clerk adoption & impact (round-10 idea #3): per-client capture volume,

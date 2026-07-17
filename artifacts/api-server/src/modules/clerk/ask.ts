@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   getDb,
   clerkCasesTable,
@@ -63,7 +63,12 @@ export async function askClerk(
   gateway: ClerkGateway,
   // Firm attribution for firm-facing Ask Clerk (expansion A): scopes the
   // question case to the asker's firm and charges the call to its budget.
-  ctx: { firmId?: string | null } = {},
+  // previousCaseId (round-12 idea #3, multi-turn): the asker's prior
+  // question case in this thread — loaded under the SAME firm scope, and
+  // only its platform-recorded intent + resolved parameter KEYS reach the
+  // classifier as context, so "and for June?" can follow on. Conversation
+  // state lives entirely in data the app already stores.
+  ctx: { firmId?: string | null; previousCaseId?: string | null } = {},
 ): Promise<ClerkCase> {
   await assertClerkEnabled();
 
@@ -166,6 +171,53 @@ export async function askClerk(
     .map((c, i) => ({ key: `c${i + 1}`, ...c }));
   const clientByKey = new Map(clientOptions.map((c) => [c.key, c]));
 
+  // Multi-turn context (round-12 idea #3): the previous question case's
+  // PLATFORM-RECORDED intent and resolved parameters, translated back into
+  // keys from THIS request's closed lists. Loaded under the same firm scope
+  // with an explicit firm filter, so a foreign or fabricated id yields no
+  // context; a previous client no longer in the offered list contributes no
+  // client key (never a raw id or name). Only data-intent answers carry
+  // context — claim answers need none.
+  let previousContext: string[] = [];
+  if (ctx.previousCaseId && ctx.firmId && dataIntents.length > 0) {
+    const [prev] = await inClerkScope(ctx.firmId, () =>
+      getDb()
+        .select({
+          answer: clerkCasesTable.answer,
+          firmId: clerkCasesTable.firmId,
+          kind: clerkCasesTable.kind,
+        })
+        .from(clerkCasesTable)
+        .where(
+          and(
+            eq(clerkCasesTable.id, ctx.previousCaseId!),
+            eq(clerkCasesTable.firmId, ctx.firmId!),
+            eq(clerkCasesTable.kind, "question"),
+          ),
+        )
+        .limit(1),
+    );
+    const prevIntent = prev?.answer?.dataIntent;
+    if (prevIntent && keys.includes(prevIntent)) {
+      // The stored dataParams carry the resolved display LABELS (month label,
+      // client legal name) — map them back to THIS request's option keys; a
+      // label no longer in the offered lists contributes nothing.
+      const prevParams = prev?.answer?.dataParams;
+      const prevMonthKey = prevParams?.month
+        ? (months.find((m) => m.label === prevParams.month)?.key ?? null)
+        : null;
+      const prevClientKey = prevParams?.client
+        ? (clientOptions.find((c) => c.name === prevParams.client)?.key ??
+          null)
+        : null;
+      previousContext = [
+        "",
+        `Previous question context (platform-recorded): the asker's previous question used data key ${prevIntent}${prevMonthKey ? `, month ${prevMonthKey}` : ""}${prevClientKey ? `, client ${prevClientKey}` : ""}.`,
+        'If THIS question is a follow-up that changes only the month or client (e.g. "and for June?", "what about <another client>?"), answer with the SAME data key and the new parameter keys, carrying over any parameter the question does not change. If it is a new question, ignore this context.',
+      ];
+    }
+  }
+
   const registerIndex = active
     .map((c) => `- ${c.claimKey}: ${c.title}`)
     .join("\n");
@@ -201,6 +253,7 @@ export async function askClerk(
             : []),
         ]
       : []),
+    ...previousContext,
     "",
     fenceUntrusted("question", "QUESTION", question),
   ].join("\n");

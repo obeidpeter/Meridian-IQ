@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.31.0
+ * OpenAPI spec version: 0.32.0
  */
 import * as zod from 'zod';
 
@@ -397,6 +397,46 @@ export const UpdatePartyResponse = zod.object({
   "schemaVersion": zod.number().optional(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary What each side of a proposed party merge carries (deterministic counts)
+ */
+export const GetMergeImpactQueryParams = zod.object({
+  "survivorId": zod.coerce.string().uuid(),
+  "duplicateId": zod.coerce.string().uuid()
+})
+
+export const GetMergeImpactResponse = zod.object({
+  "survivor": zod.union([zod.object({
+  "partyId": zod.string(),
+  "legalName": zod.string().nullable(),
+  "tin": zod.string().nullable(),
+  "merged": zod.boolean(),
+  "invoicesAsSupplier": zod.number(),
+  "invoicesAsBuyer": zod.number(),
+  "engagements": zod.number(),
+  "memberships": zod.number(),
+  "recurringTemplates": zod.number(),
+  "aliases": zod.number(),
+  "bankStatements": zod.number(),
+  "escalations": zod.number()
+}),zod.null()]),
+  "duplicate": zod.union([zod.object({
+  "partyId": zod.string(),
+  "legalName": zod.string().nullable(),
+  "tin": zod.string().nullable(),
+  "merged": zod.boolean(),
+  "invoicesAsSupplier": zod.number(),
+  "invoicesAsBuyer": zod.number(),
+  "engagements": zod.number(),
+  "memberships": zod.number(),
+  "recurringTemplates": zod.number(),
+  "aliases": zod.number(),
+  "bankStatements": zod.number(),
+  "escalations": zod.number()
+}),zod.null()])
 })
 
 
@@ -2240,6 +2280,35 @@ export const GetFirmReceivablesResponse = zod.object({
   "invoiceCount": zod.number(),
   "oldestDueDate": zod.string().nullable()
 }))
+})
+
+
+/**
+ * @summary The desk's deterministic daily brief — queues, stuck work, platform state, yesterday's throughput
+ */
+export const GetOperatorBriefResponse = zod.object({
+  "asOf": zod.string(),
+  "openCases": zod.object({
+  "byPriority": zod.array(zod.object({
+  "priority": zod.string(),
+  "count": zod.number()
+})),
+  "oldestTitle": zod.string().nullable(),
+  "oldestOpenedAt": zod.string().nullable()
+}),
+  "unansweredEscalations": zod.object({
+  "count": zod.number(),
+  "oldestReason": zod.string().nullable(),
+  "oldestRaisedAt": zod.string().nullable()
+}),
+  "stuckBatches": zod.object({
+  "count": zod.number(),
+  "oldestQueuedAt": zod.string().nullable()
+}),
+  "unmappedCodeCases": zod.number(),
+  "clerkEnabled": zod.boolean(),
+  "resistanceAlert": zod.boolean(),
+  "decidedYesterday": zod.number()
 })
 
 
@@ -4171,7 +4240,8 @@ export const askClerkBodyQuestionMax = 2000;
 
 
 export const AskClerkBody = zod.object({
-  "question": zod.string().min(askClerkBodyQuestionMin).max(askClerkBodyQuestionMax)
+  "question": zod.string().min(askClerkBodyQuestionMin).max(askClerkBodyQuestionMax),
+  "previousCaseId": zod.string().uuid().optional()
 })
 
 export const AskClerkResponse = zod.object({

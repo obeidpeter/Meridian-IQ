@@ -165,7 +165,22 @@ gate, console portfolio card, deterministic) is the month-ahead view of the
 SAME statutory clocks each client's dashboard shows — submission-window
 dates and VAT 21sts from the same constants and Lagos expressions,
 aggregated across the firm in one SQL pass, so the two surfaces cannot
-disagree;
+disagree; the **operator daily brief** (`modules/desk/daily-brief.ts`,
+`GET /console/operator-brief`, `operator.queue.act`, operator-queue card,
+pure SQL, zero model calls) is the platform-wide morning triage view —
+open/in-progress operator cases by priority with the oldest named,
+unanswered escalations, queued/processing async batches, unmapped-code
+cases, yesterday's decided-extraction count (Lagos day on `updated_at`,
+the decision clock), plus the Clerk kill-switch state and the SAME
+resistance-drop verdict as the health banner (`detectResistanceDrop` over
+`injectionResistanceMonths`, so brief and banner cannot disagree); the
+**merge impact preview** (`modules/party/merge-impact.ts`,
+`GET /parties/merge-impact`, `party.merge`, pure SQL) counts each side's
+direct FK references (invoices as supplier/buyer, engagements, logins,
+recurring templates, aliases, statements, escalations) before an
+irreversible party merge — the console merge dialog shows a "Carries:"
+line per candidate so the operator picks the survivor with the evidence
+in hand;
 **claims
 drafting** (`modules/clerk/draft-claim.ts`, operator `claims.write`) creates a
 DRAFT register entry that still walks the full maker-checker flow; **catalogue
@@ -223,7 +238,17 @@ a lookup can't honour REFUSES, never silently answers unfiltered) inside
 `inClerkScope(firmId)` plus an explicit firm filter, and assembles the answer
 deterministically (`answer.dataIntent` marks these, `answer.dataParams` names
 the resolved scope). Predicates mirror digest/compliance-window (Lagos
-calendar), so Ask can never disagree with the dashboards. Clerk health (console) includes a
+calendar), so Ask can never disagree with the dashboards. Ask is also
+**multi-turn** (round 12): the web clients thread the previous answered
+case's id (`AskClerkInput.previousCaseId`); the server loads that case
+inside `inClerkScope` with an explicit firm + kind filter, and only if it
+was a data answer maps its stored display labels (`answer.dataParams` holds
+the month LABEL and client NAME, never ids) back to THIS request's option
+keys — the context line the model sees carries data-intent keys and
+`m*`/`c*` option keys only, so a follow-up ("and for June?") can inherit
+scope while the closed-catalogue machinery stays exactly as strict
+(`intent.v5`; a label no longer offered contributes nothing; a cross-firm
+or non-question id is silently ignored). Clerk health (console) includes a
 confidence-calibration table (`computeCalibration` in
 `modules/clerk/metrics.ts`): kept-rate vs model confidence per band, from the
 corrections exhaust, plus **unit economics** (`metrics.economics`, pure ledger

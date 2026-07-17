@@ -586,3 +586,76 @@ test("money intents: outstanding, expected inflows and chase list", async () => 
   assert.ok(foreign);
   assert.match(foreign.text, /Nothing is outstanding/);
 });
+
+test("multi-turn: a previous data answer threads follow-up context by keys only", async () => {
+  // First turn: a client-scoped overdue lookup, classified normally.
+  const firstGateway = fakeGateway(() =>
+    JSON.stringify({
+      claimKey: "data.overdue_submissions",
+      category: "unknown",
+      month: "none",
+      client: "c1", // partyA — sorts first in the offered list
+    }),
+  );
+  const first = await askClerk(
+    `What is overdue for DI Party A? ${SALT}`,
+    askerId,
+    firstGateway,
+    { firmId: firmA },
+  );
+  assert.equal(first.answer?.dataIntent, "data.overdue_submissions");
+
+  // Follow-up: the classifier sees the previous intent + parameter KEYS —
+  // never a raw party id or name — and can carry the client over.
+  const prompts: string[] = [];
+  const followGateway = fakeGateway((req) => {
+    prompts.push(req.user as string);
+    return JSON.stringify({
+      claimKey: "data.unsubmitted_invoices",
+      category: "unknown",
+      month: "none",
+      client: "c1",
+    });
+  });
+  const followUp = await askClerk(
+    `And what is still unsubmitted? ${SALT}`,
+    askerId,
+    followGateway,
+    { firmId: firmA, previousCaseId: first.id },
+  );
+  assert.equal(followUp.answer?.dataIntent, "data.unsubmitted_invoices");
+  assert.ok(
+    prompts[0].includes("Previous question context"),
+    "context line present",
+  );
+  assert.ok(
+    prompts[0].includes("data.overdue_submissions"),
+    "previous intent named",
+  );
+  assert.ok(prompts[0].includes("client c1"), "client carried as an opaque key");
+  assert.ok(
+    !prompts[0].includes(partyA),
+    "raw party ids never reach the prompt",
+  );
+
+  // A foreign firm's case id contributes NO context (firm filter), and a
+  // fabricated id contributes none either.
+  const cleanPrompts: string[] = [];
+  const cleanGateway = fakeGateway((req) => {
+    cleanPrompts.push(req.user as string);
+    return JSON.stringify({
+      claimKey: "data.overdue_submissions",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    });
+  });
+  await askClerk(`Overdue again? ${SALT}`, askerId, cleanGateway, {
+    firmId: firmB,
+    previousCaseId: first.id, // firm A's case — must be invisible to firm B
+  });
+  assert.ok(
+    !cleanPrompts[0].includes("Previous question context"),
+    "cross-firm context never leaks",
+  );
+});

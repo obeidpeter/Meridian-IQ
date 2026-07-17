@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.31.0
+ * OpenAPI spec version: 0.32.0
  */
 import {
   useMutation,
@@ -135,6 +135,7 @@ import type {
   GetClerkMetricsParams,
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
+  GetMergeImpactParams,
   GetPublicThemeParams,
   GetReceivablesSummaryParams,
   GetVatPackParams,
@@ -173,11 +174,13 @@ import type {
   Me,
   Membership,
   MembershipInput,
+  MergeImpact,
   Message,
   MessageDeliveryInput,
   MessageInput,
   NotFoundResponse,
   OnboardingProspect,
+  OperatorBrief,
   OperatorCaseView,
   OperatorQueueStats,
   OutboxEvent,
@@ -1671,6 +1674,90 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getUpdatePartyMutationOptions(options));
     }
+
+export const getGetMergeImpactUrl = (params: GetMergeImpactParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/parties/merge-impact?${stringifiedParams}` : `/api/parties/merge-impact`
+}
+
+/**
+ * @summary What each side of a proposed party merge carries (deterministic counts)
+ */
+export const getMergeImpact = async (params: GetMergeImpactParams, options?: RequestInit): Promise<MergeImpact> => {
+
+  return customFetch<MergeImpact>(getGetMergeImpactUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMergeImpactQueryKey = (params?: GetMergeImpactParams,) => {
+    return [
+    `/api/parties/merge-impact`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMergeImpactQueryOptions = <TData = Awaited<ReturnType<typeof getMergeImpact>>, TError = ErrorType<unknown>>(params: GetMergeImpactParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMergeImpact>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMergeImpactQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMergeImpact>>> = ({ signal }) => getMergeImpact(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMergeImpact>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMergeImpactQueryResult = NonNullable<Awaited<ReturnType<typeof getMergeImpact>>>
+export type GetMergeImpactQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary What each side of a proposed party merge carries (deterministic counts)
+ */
+
+export function useGetMergeImpact<TData = Awaited<ReturnType<typeof getMergeImpact>>, TError = ErrorType<unknown>>(
+ params: GetMergeImpactParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMergeImpact>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMergeImpactQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getMergePartiesUrl = () => {
 
@@ -7541,6 +7628,83 @@ export function useGetFirmReceivables<TData = Awaited<ReturnType<typeof getFirmR
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetFirmReceivablesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOperatorBriefUrl = () => {
+
+
+
+
+  return `/api/console/operator-brief`
+}
+
+/**
+ * @summary The desk's deterministic daily brief — queues, stuck work, platform state, yesterday's throughput
+ */
+export const getOperatorBrief = async ( options?: RequestInit): Promise<OperatorBrief> => {
+
+  return customFetch<OperatorBrief>(getGetOperatorBriefUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOperatorBriefQueryKey = () => {
+    return [
+    `/api/console/operator-brief`
+    ] as const;
+    }
+
+
+export const getGetOperatorBriefQueryOptions = <TData = Awaited<ReturnType<typeof getOperatorBrief>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperatorBrief>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOperatorBriefQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOperatorBrief>>> = ({ signal }) => getOperatorBrief({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOperatorBrief>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOperatorBriefQueryResult = NonNullable<Awaited<ReturnType<typeof getOperatorBrief>>>
+export type GetOperatorBriefQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The desk's deterministic daily brief — queues, stuck work, platform state, yesterday's throughput
+ */
+
+export function useGetOperatorBrief<TData = Awaited<ReturnType<typeof getOperatorBrief>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperatorBrief>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOperatorBriefQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

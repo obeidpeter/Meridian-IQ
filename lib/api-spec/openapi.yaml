@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.31.0
+  version: 0.32.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -385,6 +385,31 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /parties/merge-impact:
+    get:
+      operationId: getMergeImpact
+      tags: [parties]
+      summary: What each side of a proposed party merge carries (deterministic counts)
+      parameters:
+        - name: survivorId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: duplicateId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Per-side reference counts; a side is null when the party does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MergeImpact"
   /parties/merge:
     post:
       operationId: mergeParties
@@ -1796,6 +1821,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FirmReceivables"
+  /console/operator-brief:
+    get:
+      operationId: getOperatorBrief
+      tags: [console]
+      summary: The desk's deterministic daily brief — queues, stuck work, platform state, yesterday's throughput
+      responses:
+        "200":
+          description: Platform-wide operator summary (pure SQL, computed on demand)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorBrief"
   /console/clerk-adoption:
     get:
       operationId: getClerkAdoptionReport
@@ -5509,6 +5546,121 @@ components:
           enum: [rhythm, dueDate, terms]
         daysBeyondExpected:
           type: integer
+    OperatorBrief:
+      type: object
+      required:
+        [
+          asOf,
+          openCases,
+          unansweredEscalations,
+          stuckBatches,
+          unmappedCodeCases,
+          clerkEnabled,
+          resistanceAlert,
+          decidedYesterday,
+        ]
+      properties:
+        asOf:
+          type: string
+        openCases:
+          type: object
+          required: [byPriority, oldestTitle, oldestOpenedAt]
+          properties:
+            byPriority:
+              type: array
+              items:
+                type: object
+                required: [priority, count]
+                properties:
+                  priority:
+                    type: string
+                  count:
+                    type: integer
+            oldestTitle:
+              type: ["string", "null"]
+            oldestOpenedAt:
+              type: ["string", "null"]
+        unansweredEscalations:
+          type: object
+          required: [count, oldestReason, oldestRaisedAt]
+          properties:
+            count:
+              type: integer
+            oldestReason:
+              type: ["string", "null"]
+            oldestRaisedAt:
+              type: ["string", "null"]
+        stuckBatches:
+          type: object
+          required: [count, oldestQueuedAt]
+          properties:
+            count:
+              type: integer
+            oldestQueuedAt:
+              type: ["string", "null"]
+        unmappedCodeCases:
+          type: integer
+        clerkEnabled:
+          type: boolean
+        resistanceAlert:
+          type: boolean
+        # Extraction cases decided on the previous Lagos day.
+        decidedYesterday:
+          type: integer
+    PartyMergeSide:
+      type: object
+      required:
+        [
+          partyId,
+          legalName,
+          tin,
+          merged,
+          invoicesAsSupplier,
+          invoicesAsBuyer,
+          engagements,
+          memberships,
+          recurringTemplates,
+          aliases,
+          bankStatements,
+          escalations,
+        ]
+      properties:
+        partyId:
+          type: string
+        legalName:
+          type: ["string", "null"]
+        tin:
+          type: ["string", "null"]
+        merged:
+          type: boolean
+        invoicesAsSupplier:
+          type: integer
+        invoicesAsBuyer:
+          type: integer
+        engagements:
+          type: integer
+        memberships:
+          type: integer
+        recurringTemplates:
+          type: integer
+        aliases:
+          type: integer
+        bankStatements:
+          type: integer
+        escalations:
+          type: integer
+    MergeImpact:
+      type: object
+      required: [survivor, duplicate]
+      properties:
+        survivor:
+          anyOf:
+            - $ref: "#/components/schemas/PartyMergeSide"
+            - type: "null"
+        duplicate:
+          anyOf:
+            - $ref: "#/components/schemas/PartyMergeSide"
+            - type: "null"
     ClerkAdoptionReport:
       type: object
       required: [windowDays, totals, clients]
@@ -7593,6 +7745,12 @@ components:
           type: string
           minLength: 3
           maxLength: 2000
+        # Multi-turn (round 12): the asker's previous question case in this
+        # thread. The server re-verifies firm ownership before any of its
+        # platform-recorded context reaches the classifier.
+        previousCaseId:
+          type: string
+          format: uuid
     StatusLight:
       type: object
       required: [light, reasons, recommendedAction]
