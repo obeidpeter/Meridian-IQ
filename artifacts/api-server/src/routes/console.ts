@@ -32,6 +32,7 @@ import {
   UpdateProspectBody,
   UpdateProspectResponse,
   GetUnearnedIncomeResponse,
+  GetRejectionPatternsResponse,
   ListTiersResponse,
   UpdateTierParams,
   UpdateTierBody,
@@ -72,6 +73,7 @@ import {
   draftEscalationReply,
   sendEscalationReply,
 } from "../modules/desk/draft-reply";
+import { computeRejectionPatterns } from "../modules/desk/rejection-patterns";
 import { getClerkGateway } from "../modules/clerk/provider";
 import { getFirmReceivables } from "../modules/invoice/receivables";
 import {
@@ -633,6 +635,18 @@ router.get("/console/unearned-income", async (req, res): Promise<void> => {
     prospects: rows,
   };
   res.json(GetUnearnedIncomeResponse.parse(view));
+});
+
+// Rejection-pattern report (round-4 idea #3): the firm's recurring rejection
+// causes over a trailing window, catalogue-grounded — pure SQL, zero model
+// calls, nothing stored. The desk sees rejections one case at a time; this
+// is the aggregate view that says "this firm hit the same code eleven times
+// across four clients".
+router.get("/rejection-patterns", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const firmId = firmScope(req.principal);
+  const report = await computeRejectionPatterns(firmId);
+  res.json(GetRejectionPatternsResponse.parse(report));
 });
 
 // --- Tiers & subscription ---------------------------------------------------

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.23.0`).
+contract change (it is currently `0.24.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -117,7 +117,18 @@ not a sibling wall) and the SME dashboard shows the client their own card;
 the **monthly VAT filing pack** (`modules/clerk/vat-pack.ts`, `GET /vat-pack`
 + CSV export, `console.portfolio.read` + firm scope, console portfolio card)
 is the firm-level view of the same accepted-in-month facts — deterministic
-end to end, computed on demand, nothing stored;
+end to end, computed on demand, nothing stored; its **filing cover note**
+(`modules/clerk/vat-note.ts`, `POST /vat-pack/cover-note`, same gate,
+firm-funded) phrases the pack's computed facts into a note the partner edits
+and owns — digest posture with NO route budget pre-check (kill switch,
+missing provider, exhausted budget, invalid output, quiet month all answer
+with the deterministic template, and a quiet month never calls the model);
+the **rejection-pattern report** (`modules/desk/rejection-patterns.ts`,
+`GET /rejection-patterns`, `console.portfolio.read`, console portfolio card,
+pure SQL) aggregates the firm's own rejected submission attempts into
+recurring catalogue-grounded causes over a trailing window plus the
+equal-length window before it, unmapped codes included — the aggregate view
+the one-case-at-a-time desk never sees;
 **claims
 drafting** (`modules/clerk/draft-claim.ts`, operator `claims.write`) creates a
 DRAFT register entry that still walks the full maker-checker flow; **catalogue
@@ -212,7 +223,13 @@ for operator captures), with register TINs only ever masked in issue text;
 calls, nothing stored) mine a client's own invoices for monthly billing
 patterns (3+ invoices, monthly median gap, clustered amounts, buyers already
 covered by ANY template excluded) and prefill the existing template dialog —
-the client disposes; **per-supplier accuracy** (`metrics.supplierAccuracy`,
+the client disposes; **line-item memory** (`modules/invoice/line-items.ts`,
+`GET /line-item-suggestions`, zero model calls, nothing stored) mines the
+client's own invoice lines into an item catalogue (order-insensitive item
+key, 2+ occurrences, median unit price, MODAL VAT rate, newest description)
+that feeds the SME draft form's "frequent items" chips and a capture
+pre-flight advisory when a line's unit price is far (×4) off that item's own
+history (3+ lines) — same SEC-03 sibling gate as the other history checks; **per-supplier accuracy** (`metrics.supplierAccuracy`,
 pure SQL) joins the corrections exhaust to the approved invoice's register
 supplier so the health page names whose documents Clerk reads worst; and the
 console weights review-queue effort and shows per-field "historically

@@ -69,6 +69,9 @@ export type ClerkPurpose =
   // Drafted escalation replies (exhaust idea #5): phrases catalogue fix +
   // attempt history into a reply the operator edits and sends.
   | "draft_reply"
+  // VAT filing cover note (round-4 idea #6): phrases the deterministic VAT
+  // pack's computed facts; template fallback, nothing stored.
+  | "draft_vat_note"
   // Adversarial eval growth (idea #9): generates an injection VARIANT of a
   // static eval fixture; the app validates the result before storing it and
   // resistance is scored by the ordinary eval machinery.

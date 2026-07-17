@@ -403,3 +403,74 @@ test("unusual VAT treatment for a known supplier is flagged; thin history is not
   );
   assert.equal(unknown.some((i) => i.field === "vatTotal"), false);
 });
+
+test("line-item price deviation flags on the supplier's own habit, gated by SEC-03", async () => {
+  // Give the supplier a 3-invoice habit for one item at ~10,000/unit.
+  const db = getDb();
+  const { invoiceLinesTable } = await import("@workspace/db");
+  for (let i = 0; i < 3; i++) {
+    const id = randomUUID();
+    await db.insert(invoicesTable).values({
+      id,
+      firmId: firmA,
+      supplierPartyId: supplierId,
+      buyerPartyId: buyerId,
+      invoiceNumber: `REG-LI-${SALT}-${i}`,
+      status: "submitted" as const,
+      issueDate: "2026-06-15",
+    });
+    await db.insert(invoiceLinesTable).values({
+      invoiceId: id,
+      lineNo: 1,
+      description: `Diesel supply ${SALT}`,
+      quantity: "1",
+      unitPrice: "10000",
+      vatRate: "0.075",
+      lineExtension: "10000",
+    });
+  }
+  const withLines: ClerkExtraction = {
+    ...extraction({ supplierName: SUPPLIER_NAME }),
+    lines: [
+      {
+        description: `Diesel supply ${SALT}`,
+        quantity: "1",
+        unitPrice: "95,000", // 9.5× the item's usual price (printed with comma)
+        vatRate: "0.075",
+        confidence: 0.9,
+      },
+      {
+        description: `Diesel supply ${SALT}`,
+        quantity: "1",
+        unitPrice: "11000", // in band — silent
+        vatRate: "0.075",
+        confidence: 0.9,
+      },
+    ],
+    promptVersion: "extract.v1",
+    model: "fake",
+  };
+
+  const issues = await registerPreflightChecks(withLines, firmA);
+  const priceIssue = issues.find(
+    (i) => i.field === "lines" && i.message.includes("unit price"),
+  );
+  assert.ok(priceIssue, "the deviant line is flagged");
+  assert.equal(priceIssue.severity, "advisory");
+  assert.ok(priceIssue.message.includes("Line 1"));
+  assert.ok(priceIssue.message.includes("10000"), "quotes the usual price");
+  assert.equal(
+    issues.filter((i) => i.field === "lines" && i.message.includes("unit price"))
+      .length,
+    1,
+    "the in-band line stays silent",
+  );
+
+  // SEC-03: a sibling client's capture resolving to THIS supplier gets no
+  // line-history messages — same gate as the other history checks.
+  const sibling = await registerPreflightChecks(withLines, firmA, buyerId);
+  assert.equal(
+    sibling.some((i) => i.field === "lines" && i.message.includes("unit price")),
+    false,
+  );
+});

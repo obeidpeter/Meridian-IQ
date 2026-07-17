@@ -11,6 +11,10 @@ import {
 import { logger } from "../../lib/logger";
 import { lagosDateString } from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
+import {
+  linePriceIssues,
+  listLineItemSuggestions,
+} from "../invoice/line-items";
 import { firmPartySphereCondition } from "../party/party";
 
 // Register-history pre-flight (exhaust idea #6). The pure pre-flight checks
@@ -309,6 +313,14 @@ export async function registerPreflightChecks(
         capturingClientPartyId,
       )),
     );
+    issues.push(
+      ...(await lineItemHistoryIssues(
+        extraction,
+        firmId,
+        candidates,
+        capturingClientPartyId,
+      )),
+    );
     return issues;
   } catch (err) {
     logger.warn({ err, firmId }, "register preflight failed; skipping checks");
@@ -427,6 +439,33 @@ async function supplierHistoryIssues(
     });
   }
   return issues;
+}
+
+// Line-item price deviation (exhaust idea #1, round 4): a line whose unit
+// price is far outside this supplier's OWN history for that item — the
+// per-line version of the amount-outlier check, and the shape OCR errors
+// actually take (one slipped digit on one line). Advisory always; same
+// SEC-03 sibling-isolation rule as the other history checks.
+async function lineItemHistoryIssues(
+  extraction: ClerkExtraction,
+  firmId: string,
+  candidates: SphereParty[],
+  capturingClientPartyId: string | null,
+): Promise<PreflightIssue[]> {
+  if (extraction.lines.length === 0) return [];
+  const supplier = resolveSupplier(extraction, candidates);
+  if (!supplier) return [];
+  if (capturingClientPartyId && supplier.id !== capturingClientPartyId) {
+    return [];
+  }
+  const items = await runInBypassContext(() =>
+    listLineItemSuggestions(firmId, supplier.id),
+  );
+  return linePriceIssues(extraction.lines, items).map((issue) => ({
+    field: "lines",
+    severity: "advisory" as const,
+    message: issue.message,
+  }));
 }
 
 // Unusual VAT treatment: the document's effective rate (vatTotal/subtotal)

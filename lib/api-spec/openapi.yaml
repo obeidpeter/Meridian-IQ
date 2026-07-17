@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.23.0
+  version: 0.24.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -708,6 +708,61 @@ paths:
                 type: string
         "400":
           $ref: "#/components/responses/BadRequest"
+  /vat-pack/cover-note:
+    post:
+      operationId: draftVatPackCoverNote
+      tags: [invoices]
+      summary: Draft a cover note phrasing the VAT pack's computed facts (template fallback; nothing stored — the partner edits and owns it)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftVatCoverNoteInput"
+      responses:
+        "200":
+          description: The drafted note plus the pack's basis disclosure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VatPackCoverNote"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /line-item-suggestions:
+    get:
+      operationId: listLineItemSuggestions
+      tags: [invoices]
+      summary: A client's frequent line items mined from its own invoices (deterministic — nothing stored, no model)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Frequent items, strongest habit first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LineItemSuggestion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /rejection-patterns:
+    get:
+      operationId: getRejectionPatterns
+      tags: [console]
+      summary: The firm's recurring rejection causes over a trailing window, catalogue-grounded (pure SQL)
+      responses:
+        "200":
+          description: Recurring rejection causes with a prior-window trend basis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RejectionPatternReport"
   /invoices/bulk-submit:
     post:
       operationId: bulkSubmitInvoices
@@ -4427,6 +4482,84 @@ components:
               type: string
         note:
           type: string
+    DraftVatCoverNoteInput:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}-01$'
+    VatPackCoverNote:
+      type: object
+      required: [monthStart, monthLabel, note, source, disclosure]
+      properties:
+        monthStart:
+          type: string
+        monthLabel:
+          type: string
+        # The drafted text — the partner edits and owns it; nothing is stored.
+        note:
+          type: string
+        source:
+          type: string
+          enum: [clerk, template]
+        # The pack's basis note, so the caveats travel with the text.
+        disclosure:
+          type: string
+    LineItemSuggestion:
+      type: object
+      required: [key, description, count, medianUnitPrice, vatRate, lastUsed]
+      properties:
+        # Normalized item identity (order/case/punctuation-insensitive).
+        key:
+          type: string
+        # The most recently used literal description.
+        description:
+          type: string
+        count:
+          type: integer
+        medianUnitPrice:
+          type: string
+        vatRate:
+          type: string
+        lastUsed:
+          type: string
+    RejectionPatternReport:
+      type: object
+      required: [windowDays, totalRejections, previousTotal, rows]
+      properties:
+        windowDays:
+          type: integer
+        totalRejections:
+          type: integer
+        previousTotal:
+          type: integer
+        rows:
+          type: array
+          items:
+            type: object
+            required:
+              [errorCode, count, invoiceCount, clientCount, previousCount, lastSeen]
+            properties:
+              errorCode:
+                type: string
+              category:
+                type: ["string", "null"]
+              cause:
+                type: ["string", "null"]
+              fix:
+                type: ["string", "null"]
+              retriable:
+                type: ["boolean", "null"]
+              count:
+                type: integer
+              invoiceCount:
+                type: integer
+              clientCount:
+                type: integer
+              previousCount:
+                type: integer
+              lastSeen:
+                type: string
     CancelInvoiceInput:
       type: object
       required: [reason]

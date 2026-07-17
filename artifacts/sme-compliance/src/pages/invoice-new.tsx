@@ -6,8 +6,10 @@ import {
   useCreateInvoice,
   useDraftInvoiceWithClerk,
   useListErrorCatalogue,
+  useListLineItemSuggestions,
   getListInvoicesQueryKey,
   type InvoiceLineInput,
+  type LineItemSuggestion,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -102,6 +104,31 @@ export function InvoiceNew() {
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+
+  // Frequent items (line-item memory): mined server-side from this client's
+  // own invoices. Clicking a chip appends a prefilled line — a suggestion the
+  // user edits like any other; nothing is created until they save.
+  const { data: frequentItems } = useListLineItemSuggestions();
+  const addFrequentItem = (item: LineItemSuggestion) => {
+    const line = {
+      description: item.description,
+      quantity: "1",
+      unitPrice: item.medianUnitPrice,
+      // The form offers the two lawful choices; anything else defaults to
+      // standard for the user to see (same rule as the Clerk draft path).
+      vatRate: Number(item.vatRate) === 0 ? "0" : VAT_STANDARD,
+    };
+    setDraft((d) => {
+      // Fill the trailing empty line if there is one; append otherwise.
+      const last = d.lines[d.lines.length - 1];
+      const lastIsEmpty =
+        last && !last.description.trim() && !Number(last.unitPrice);
+      return {
+        ...d,
+        lines: lastIsEmpty ? [...d.lines.slice(0, -1), line] : [...d.lines, line],
+      };
+    });
+  };
 
   const buyers = useMemo(
     () => (parties || []).filter((p) => p.type === "buyer"),
@@ -479,6 +506,29 @@ export function InvoiceNew() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
+              {(frequentItems ?? []).length > 0 && (
+                <div className="space-y-1.5" data-testid="frequent-items">
+                  <p className="text-xs text-muted-foreground">
+                    Frequent items — from your own invoices; click to add a
+                    prefilled line, then check the price.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(frequentItems ?? []).slice(0, 8).map((item) => (
+                      <Button
+                        key={item.key}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => addFrequentItem(item)}
+                        data-testid={`frequent-item-${item.key}`}
+                      >
+                        {item.description} · {formatNaira(item.medianUnitPrice)}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {draft.lines.map((l, i) => (
                 <LineItemRow
                   key={i}
