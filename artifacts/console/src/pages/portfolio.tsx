@@ -253,9 +253,17 @@ function VatPackCard() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  navigator.clipboard?.writeText(noteText);
-                  toast({ title: "Copied" });
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(noteText);
+                    toast({ title: "Copied" });
+                  } catch {
+                    toast({
+                      title: "Could not copy",
+                      description: "Select the text and copy it manually.",
+                      variant: "destructive",
+                    });
+                  }
                 }}
                 data-testid="button-copy-cover-note"
               >

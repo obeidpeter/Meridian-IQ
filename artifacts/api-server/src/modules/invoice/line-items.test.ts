@@ -107,6 +107,25 @@ before(async () => {
     status: "cancelled",
     lines: [{ description: `Monthly retainer ${SALT}`, unitPrice: "999999", vatRate: "0.075" }],
   });
+  // An item whose history is part rails-proven, part draft: the wide net
+  // (suggestions) sees all three; the liveOnly baseline (pre-flight) must
+  // ignore the draft — a mis-extracted draft price cannot seed the check.
+  await mk({
+    n: `LI-af1-${SALT}`,
+    issueDate: daysAgo(50),
+    lines: [{ description: `Audit fee ${SALT}`, unitPrice: "40000", vatRate: "0.075" }],
+  });
+  await mk({
+    n: `LI-af2-${SALT}`,
+    issueDate: daysAgo(25),
+    lines: [{ description: `Audit fee ${SALT}`, unitPrice: "42000", vatRate: "0.075" }],
+  });
+  await mk({
+    n: `LI-af3-${SALT}`,
+    issueDate: daysAgo(5),
+    status: "draft",
+    lines: [{ description: `Audit fee ${SALT}`, unitPrice: "400000", vatRate: "0.075" }],
+  });
   // Client B (same firm): its habit must not leak into client A's catalogue.
   await mk({
     supplier: clientB,
@@ -139,7 +158,7 @@ test("aggregateLineItems: habits only, newest description, median price, modal r
   assert.equal(items.length, 1, "the one-off is not a habit");
   assert.equal(items[0].description, "HOSTING WEB", "newest literal wins");
   assert.equal(items[0].count, 2);
-  assert.equal(items[0].medianUnitPrice, "200");
+  assert.equal(items[0].medianUnitPrice, "200.00", "two decimals, no float noise");
   assert.equal(items[0].vatRate, "0.075", "mode, not an average");
 });
 
@@ -181,7 +200,7 @@ test("listLineItemSuggestions: own habits only — no dead paper, no siblings, n
   const retainer = items.find((i) => i.key === itemKey(`Monthly retainer ${SALT}`));
   assert.ok(retainer, "the retainer habit is found across drifted descriptions");
   assert.equal(retainer.count, 3, "the cancelled invoice's line is excluded");
-  assert.equal(retainer.medianUnitPrice, "105000");
+  assert.equal(retainer.medianUnitPrice, "105000.00");
   assert.equal(retainer.vatRate, "0.075");
   assert.equal(retainer.description, `MONTHLY RETAINER ${SALT}`, "newest literal");
   assert.equal(
@@ -200,4 +219,15 @@ test("listLineItemSuggestions: own habits only — no dead paper, no siblings, n
     undefined,
     "the firm filter holds",
   );
+});
+
+test("liveOnly narrows the baseline to rails-proven documents", async () => {
+  const wide = await listLineItemSuggestions(firmA, clientA);
+  const wideFee = wide.find((i) => i.key === itemKey(`Audit fee ${SALT}`));
+  assert.equal(wideFee?.count, 3, "suggestions see the draft too");
+
+  const live = await listLineItemSuggestions(firmA, clientA, { liveOnly: true });
+  const liveFee = live.find((i) => i.key === itemKey(`Audit fee ${SALT}`));
+  assert.equal(liveFee?.count, 2, "the draft cannot seed the baseline");
+  assert.equal(liveFee?.medianUnitPrice, "41000.00");
 });

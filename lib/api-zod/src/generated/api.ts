@@ -771,7 +771,7 @@ export const DraftVatPackCoverNoteResponse = zod.object({
  * @summary A client's frequent line items mined from its own invoices (deterministic — nothing stored, no model)
  */
 export const ListLineItemSuggestionsQueryParams = zod.object({
-  "clientPartyId": zod.coerce.string().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
 
 export const ListLineItemSuggestionsResponseItem = zod.object({

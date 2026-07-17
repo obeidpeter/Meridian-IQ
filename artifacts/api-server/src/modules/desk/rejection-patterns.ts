@@ -40,9 +40,14 @@ export interface RejectionPatternReport {
 export async function computeRejectionPatterns(
   firmId: string,
 ): Promise<RejectionPatternReport> {
+  // GROUPING SETS (the vat-pack pattern): the window totals come from the
+  // SAME SQL pass as the per-code rows, so the card's "N in the window"
+  // stays honest even when more codes exist than the row cap keeps —
+  // summing the capped rows would deflate the totals exactly when the firm
+  // is in the most trouble.
   const rows = (
     await getDb().execute<{
-      error_code: string;
+      error_code: string | null;
       category: string | null;
       cause: string | null;
       fix: string | null;
@@ -51,7 +56,8 @@ export async function computeRejectionPatterns(
       invoice_n: number;
       client_n: number;
       prev_n: number;
-      last_seen: string;
+      last_seen: string | null;
+      is_total: number;
     }>(sql`
       SELECT
         COALESCE(sa.error_code, 'UNMAPPED') AS error_code,
@@ -71,22 +77,25 @@ export async function computeRejectionPatterns(
         COUNT(*) FILTER (
           WHERE sa.created_at < now() - make_interval(days => ${WINDOW_DAYS})
         )::int AS prev_n,
-        MAX(sa.created_at)::text AS last_seen
+        MAX(sa.created_at)::text AS last_seen,
+        GROUPING(COALESCE(sa.error_code, 'UNMAPPED'))::int AS is_total
       FROM submission_attempts sa
       JOIN invoices i ON i.id = sa.invoice_id
       LEFT JOIN error_catalogue ec ON ec.code = sa.error_code
       WHERE i.firm_id = ${firmId}
         AND sa.status = 'rejected'
         AND sa.created_at >= now() - make_interval(days => ${WINDOW_DAYS * 2})
-      GROUP BY COALESCE(sa.error_code, 'UNMAPPED')
-      ORDER BY n DESC, prev_n DESC
-      LIMIT ${MAX_ROWS}
+      GROUP BY GROUPING SETS ((COALESCE(sa.error_code, 'UNMAPPED')), ())
+      ORDER BY GROUPING(COALESCE(sa.error_code, 'UNMAPPED')) DESC, n DESC, prev_n DESC
+      LIMIT ${MAX_ROWS + 1}
     `)
   ).rows;
 
+  const totalRow = rows.find((r) => Number(r.is_total) === 1);
   const mapped: RejectionPatternRow[] = rows
+    .filter((r) => Number(r.is_total) === 0 && r.error_code !== null)
     .map((r) => ({
-      errorCode: r.error_code,
+      errorCode: r.error_code!,
       category: r.category,
       cause: r.cause,
       fix: r.fix,
@@ -95,17 +104,13 @@ export async function computeRejectionPatterns(
       invoiceCount: Number(r.invoice_n),
       clientCount: Number(r.client_n),
       previousCount: Number(r.prev_n),
-      lastSeen: r.last_seen,
-    }))
-    // A code seen only in the PRIOR window still matters (it shows a fixed
-    // problem), but only when something remains to compare against; rows with
-    // zero in both windows cannot exist by the WHERE above.
-    .filter((r) => r.count > 0 || r.previousCount > 0);
+      lastSeen: r.last_seen ?? "",
+    }));
 
   return {
     windowDays: WINDOW_DAYS,
-    totalRejections: mapped.reduce((sum, r) => sum + r.count, 0),
-    previousTotal: mapped.reduce((sum, r) => sum + r.previousCount, 0),
+    totalRejections: Number(totalRow?.n ?? 0),
+    previousTotal: Number(totalRow?.prev_n ?? 0),
     rows: mapped,
   };
 }

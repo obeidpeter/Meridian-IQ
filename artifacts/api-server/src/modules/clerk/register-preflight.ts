@@ -458,8 +458,11 @@ async function lineItemHistoryIssues(
   if (capturingClientPartyId && supplier.id !== capturingClientPartyId) {
     return [];
   }
+  // liveOnly: only rails-proven documents define an item's "usual" price —
+  // a mis-extracted draft must not seed the check built to catch the next
+  // mis-extraction (same reasoning as HISTORY_STATUSES above).
   const items = await runInBypassContext(() =>
-    listLineItemSuggestions(firmId, supplier.id),
+    listLineItemSuggestions(firmId, supplier.id, { liveOnly: true }),
   );
   return linePriceIssues(extraction.lines, items).map((issue) => ({
     field: "lines",
