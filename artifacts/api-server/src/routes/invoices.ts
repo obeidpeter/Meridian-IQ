@@ -59,6 +59,8 @@ import {
   DraftVatPackCoverNoteResponse,
   ListLineItemSuggestionsQueryParams,
   ListLineItemSuggestionsResponse,
+  ListPaymentBehaviourQueryParams,
+  ListPaymentBehaviourResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { computeStatusLight } from "../modules/clerk/status-light";
@@ -81,6 +83,7 @@ import {
 import { draftVatCoverNote } from "../modules/clerk/vat-note";
 import { getClerkGateway } from "../modules/clerk/provider";
 import { listLineItemSuggestions } from "../modules/invoice/line-items";
+import { listPaymentBehaviour } from "../modules/invoice/payment-behaviour";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { likePattern } from "../lib/sql";
 import {
@@ -357,6 +360,22 @@ router.get("/line-item-suggestions", async (req, res): Promise<void> => {
   assertClientPartyScope(req.principal, target);
   const items = await listLineItemSuggestions(firmId, target);
   res.json(ListLineItemSuggestionsResponse.parse(items));
+});
+
+// Buyer payment behaviour (round-9 idea #1): per-buyer days-to-pay medians
+// mined on demand from the client's own accepted reconciliation matches.
+// Nothing stored, no model. Same SEC-03 resolution as the miners above.
+router.get("/payment-behaviour", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(ListPaymentBehaviourQueryParams, req.query);
+  const firmId = requireFirmScope(req.principal);
+  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
+  if (!target) {
+    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
+  }
+  assertClientPartyScope(req.principal, target);
+  const behaviour = await listPaymentBehaviour(firmId, target);
+  res.json(ListPaymentBehaviourResponse.parse(behaviour));
 });
 
 // Bulk validate & submit: same capability, party-access and consent gates as

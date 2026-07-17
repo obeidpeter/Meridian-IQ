@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.28.0
+ * OpenAPI spec version: 0.29.0
  */
 import * as zod from 'zod';
 
@@ -783,6 +783,23 @@ export const ListLineItemSuggestionsResponseItem = zod.object({
   "lastUsed": zod.string()
 })
 export const ListLineItemSuggestionsResponse = zod.array(ListLineItemSuggestionsResponseItem)
+
+
+/**
+ * @summary Per-buyer days-to-pay medians mined from the client's own accepted reconciliation matches (deterministic — nothing stored, no model)
+ */
+export const ListPaymentBehaviourQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const ListPaymentBehaviourResponseItem = zod.object({
+  "buyerPartyId": zod.string().uuid(),
+  "buyerName": zod.string(),
+  "settledCount": zod.number(),
+  "medianDaysToPay": zod.number(),
+  "lastSettledDate": zod.string()
+})
+export const ListPaymentBehaviourResponse = zod.array(ListPaymentBehaviourResponseItem)
 
 
 /**
@@ -4775,6 +4792,48 @@ export const ExplainInvoiceFailureResponse = zod.object({
   "explanation": zod.string(),
   "nextSteps": zod.array(zod.string()),
   "source": zod.enum(['clerk', 'catalogue'])
+})
+
+
+/**
+ * @summary A payment-reminder draft for one outstanding receivable, grounded in stored facts (template fallback, nothing stored)
+ */
+export const DraftPaymentChaserBody = zod.object({
+  "invoiceId": zod.string().uuid()
+})
+
+export const DraftPaymentChaserResponse = zod.object({
+  "invoiceId": zod.string(),
+  "invoiceNumber": zod.string(),
+  "buyerName": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "source": zod.enum(['clerk', 'template'])
+})
+
+
+/**
+ * @summary Per-purpose model-tier evidence and deterministic recommendations from the inference ledger (pure SQL)
+ */
+export const GetClerkTierReportResponse = zod.object({
+  "windowDays": zod.number(),
+  "totalTokens": zod.number(),
+  "baseModel": zod.string(),
+  "rows": zod.array(zod.object({
+  "purpose": zod.string(),
+  "calls": zod.number(),
+  "totalTokens": zod.number(),
+  "spendShare": zod.number(),
+  "okCount": zod.number(),
+  "invalidCount": zod.number(),
+  "errorCount": zod.number(),
+  "killedCount": zod.number(),
+  "validRate": zod.number(),
+  "currentModel": zod.string(),
+  "tiered": zod.boolean(),
+  "recommendation": zod.enum(['candidate', 'keep', 'tiered', 'revert', 'insufficient_data']),
+  "reason": zod.string()
+}))
 })
 
 

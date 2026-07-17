@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.28.0`).
+contract change (it is currently `0.29.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -54,7 +54,15 @@ supports **per-purpose model tiers** (opt-in `CLERK_MODEL_TIERS` env, e.g.
 `segment_batch=<cheap-model>`; unset = one model for everything): the
 ledger records the model that ACTUALLY served each call, and eval purposes
 follow the `extract_invoice` tier unless explicitly overridden so evals
-measure what production runs. Client-facing surfaces
+measure what production runs; the **tier-suggestion report**
+(`modules/clerk/tier-report.ts`, `GET /clerk/tier-report`, `clerk.use`,
+console health card, pure ledger SQL) is the evidence for using it — per
+purpose over a trailing 90 days: volume, token share, the validity taxonomy
+(killed excluded from the denominator), the model ACTUALLY in force via the
+same `parseModelTiers`/`modelForPurpose`, and a deterministic recommendation
+(candidate/keep/tiered/revert/insufficient_data; extraction and its evals
+never tier on validity alone) the operator acts on in env config, canary
+first. Client-facing surfaces
 (`clerk.capture` on all firm roles, `clerk.ask` on firm_admin/staff) are pinned
 to their firm by route filters plus migration 0009's firm-keyed RLS, and are
 capped by a per-firm monthly TOKEN budget (`modules/clerk/budget.ts`; tier
@@ -273,7 +281,20 @@ DIDN'T go out — sharing `buyerBillingHistories` with the suggestions so the
 two cards can never disagree about what a habit is, alerting only inside a
 bounded window (grace 5 days, lapsed after 45 — an ended arrangement stops
 nagging), surfaced as an SME dashboard card and a fact line in the weekly
-digest (`countFirmUnbilled`); **line-item memory** (`modules/invoice/line-items.ts`,
+digest (`countFirmUnbilled`); **buyer payment-behaviour memory**
+(`modules/invoice/payment-behaviour.ts`, `GET /payment-behaviour`, zero model
+calls, nothing stored) mines per-buyer days-to-pay medians from the client's
+own ACCEPTED reconciliation matches (credit lines with a value date only —
+the human-confirmed exhaust, 3+ settlements required, negatives dropped):
+"usually pays ~Nd" chips on the receivables debtors and the invoice detail,
+and the grounding for the **payment-chaser draft**
+(`modules/clerk/draft-chaser.ts`, `POST /clerk/draft-chaser`, `clerk.capture`
++ module-enforced tenant/SEC-03 like the explainer) — digest posture: the
+model phrases ONE outstanding receivable's stored facts (eligibility is the
+receivables definition exactly, so a settled invoice can never be chased)
+plus the buyer's payment rhythm into a reminder the client copies into their
+OWN email; template fallback always answers, nothing stored, nothing sent by
+the platform; **line-item memory** (`modules/invoice/line-items.ts`,
 `GET /line-item-suggestions`, zero model calls, nothing stored) mines the
 client's own invoice lines into an item catalogue (order-insensitive item
 key, 2+ occurrences, median unit price, MODAL VAT rate, newest description)

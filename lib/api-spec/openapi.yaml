@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.28.0
+  version: 0.29.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -750,6 +750,30 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/LineItemSuggestion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /payment-behaviour:
+    get:
+      operationId: listPaymentBehaviour
+      tags: [invoices]
+      summary: Per-buyer days-to-pay medians mined from the client's own accepted reconciliation matches (deterministic — nothing stored, no model)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Buyers with observed payment behaviour, best-evidenced first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BuyerPaymentBehaviour"
         "400":
           $ref: "#/components/responses/BadRequest"
   /rejection-patterns:
@@ -3177,6 +3201,42 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /clerk/draft-chaser:
+    post:
+      operationId: draftPaymentChaser
+      tags: [clerk]
+      summary: A payment-reminder draft for one outstanding receivable, grounded in stored facts (template fallback, nothing stored)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftPaymentChaserInput"
+      responses:
+        "200":
+          description: A sendable reminder (Clerk-phrased when available, deterministic template otherwise)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentChaserDraft"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: The invoice is not an outstanding receivable
+
+  /clerk/tier-report:
+    get:
+      operationId: getClerkTierReport
+      tags: [clerk]
+      summary: Per-purpose model-tier evidence and deterministic recommendations from the inference ledger (pure SQL)
+      responses:
+        "200":
+          description: Spend, validity and tier recommendations per purpose over the trailing window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkTierReport"
+
   /clerk/reconciliation-assist:
     post:
       operationId: assistMatchProposals
@@ -4622,6 +4682,24 @@ components:
         vatRate:
           type: string
         lastUsed:
+          type: string
+    BuyerPaymentBehaviour:
+      type: object
+      required:
+        [buyerPartyId, buyerName, settledCount, medianDaysToPay, lastSettledDate]
+      properties:
+        buyerPartyId:
+          type: string
+          format: uuid
+        buyerName:
+          type: string
+        # Accepted reconciliation matches behind the median (3+ required).
+        settledCount:
+          type: integer
+        # Median days from invoice issue to the matched statement credit.
+        medianDaysToPay:
+          type: integer
+        lastSettledDate:
           type: string
     ComplianceCalendar:
       type: object
@@ -8328,6 +8406,92 @@ components:
         source:
           type: string
           enum: [clerk, catalogue]
+    DraftPaymentChaserInput:
+      type: object
+      required: [invoiceId]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+    PaymentChaserDraft:
+      type: object
+      required: [invoiceId, invoiceNumber, buyerName, subject, body, source]
+      properties:
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        buyerName:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        # 'clerk' when the model phrased it; 'template' when the deterministic
+        # reminder was returned (kill switch, budget, invalid output — the
+        # letter is still complete and sendable).
+        source:
+          type: string
+          enum: [clerk, template]
+    ClerkTierReport:
+      type: object
+      required: [windowDays, totalTokens, baseModel, rows]
+      properties:
+        windowDays:
+          type: integer
+        totalTokens:
+          type: integer
+        baseModel:
+          type: string
+        rows:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                purpose,
+                calls,
+                totalTokens,
+                spendShare,
+                okCount,
+                invalidCount,
+                errorCount,
+                killedCount,
+                validRate,
+                currentModel,
+                tiered,
+                recommendation,
+                reason,
+              ]
+            properties:
+              purpose:
+                type: string
+              calls:
+                type: integer
+              totalTokens:
+                type: integer
+              spendShare:
+                type: number
+              okCount:
+                type: integer
+              invalidCount:
+                type: integer
+              errorCount:
+                type: integer
+              # Kill-switch rejections — excluded from validRate's denominator.
+              killedCount:
+                type: integer
+              validRate:
+                type: number
+              currentModel:
+                type: string
+              tiered:
+                type: boolean
+              recommendation:
+                type: string
+                enum: [candidate, keep, tiered, revert, insufficient_data]
+              reason:
+                type: string
 
     ClerkUsage:
       type: object

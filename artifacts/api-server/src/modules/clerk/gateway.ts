@@ -121,7 +121,11 @@ export type ClerkPurpose =
   // Advisory narrative drafting (advisory/narrative.ts): phrases the
   // platform-computed assessment/VAT-risk facts; template fallback, never
   // stored — the firm partner edits and owns the letter.
-  | "draft_narrative";
+  | "draft_narrative"
+  // Payment-chaser drafting (draft-chaser.ts): phrases one outstanding
+  // receivable's stored facts (plus the buyer's mined payment rhythm) into a
+  // reminder the client copies and sends; template fallback, never stored.
+  | "draft_chaser";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;

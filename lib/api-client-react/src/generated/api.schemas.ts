@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.28.0
+ * OpenAPI spec version: 0.29.0
  */
 export interface HealthStatus {
   status: string;
@@ -912,6 +912,14 @@ export interface LineItemSuggestion {
   medianUnitPrice: string;
   vatRate: string;
   lastUsed: string;
+}
+
+export interface BuyerPaymentBehaviour {
+  buyerPartyId: string;
+  buyerName: string;
+  settledCount: number;
+  medianDaysToPay: number;
+  lastSettledDate: string;
 }
 
 export type ComplianceCalendarOverdue = {
@@ -3665,6 +3673,61 @@ export interface FailureExplanation {
   source: FailureExplanationSource;
 }
 
+export interface DraftPaymentChaserInput {
+  invoiceId: string;
+}
+
+export type PaymentChaserDraftSource = typeof PaymentChaserDraftSource[keyof typeof PaymentChaserDraftSource];
+
+
+export const PaymentChaserDraftSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface PaymentChaserDraft {
+  invoiceId: string;
+  invoiceNumber: string;
+  buyerName: string;
+  subject: string;
+  body: string;
+  source: PaymentChaserDraftSource;
+}
+
+export type ClerkTierReportRowsItemRecommendation = typeof ClerkTierReportRowsItemRecommendation[keyof typeof ClerkTierReportRowsItemRecommendation];
+
+
+export const ClerkTierReportRowsItemRecommendation = {
+  candidate: 'candidate',
+  keep: 'keep',
+  tiered: 'tiered',
+  revert: 'revert',
+  insufficient_data: 'insufficient_data',
+} as const;
+
+export type ClerkTierReportRowsItem = {
+  purpose: string;
+  calls: number;
+  totalTokens: number;
+  spendShare: number;
+  okCount: number;
+  invalidCount: number;
+  errorCount: number;
+  killedCount: number;
+  validRate: number;
+  currentModel: string;
+  tiered: boolean;
+  recommendation: ClerkTierReportRowsItemRecommendation;
+  reason: string;
+};
+
+export interface ClerkTierReport {
+  windowDays: number;
+  totalTokens: number;
+  baseModel: string;
+  rows: ClerkTierReportRowsItem[];
+}
+
 export type ClerkUsagePaceBand = typeof ClerkUsagePaceBand[keyof typeof ClerkUsagePaceBand];
 
 
@@ -3779,6 +3842,13 @@ month?: string;
 };
 
 export type ListLineItemSuggestionsParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
+export type ListPaymentBehaviourParams = {
 /**
  * Required for firm principals; a client_user is pinned to its own party.
  */

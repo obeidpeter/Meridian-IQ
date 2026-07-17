@@ -27,6 +27,9 @@ import {
   GetClerkUsageResponse,
   ExplainInvoiceFailureBody,
   ExplainInvoiceFailureResponse,
+  DraftPaymentChaserBody,
+  DraftPaymentChaserResponse,
+  GetClerkTierReportResponse,
   CreateClerkCaseBatchBody,
   CreateClerkCaseBatchResponse,
   GetClerkDigestResponse,
@@ -93,6 +96,8 @@ import { draftCatalogueEntryWithClerk } from "../modules/clerk/draft-catalogue";
 import { draftClaimWithClerk } from "../modules/clerk/draft-claim";
 import { draftInvoiceWithClerk } from "../modules/clerk/draft-invoice";
 import { explainInvoiceFailure } from "../modules/clerk/explain";
+import { draftPaymentChaser } from "../modules/clerk/draft-chaser";
+import { computeTierReport } from "../modules/clerk/tier-report";
 import { assistMatch } from "../modules/clerk/reconcile-assist";
 import { requireFlag } from "../modules/flags/flags";
 import { getClerkMetrics } from "../modules/clerk/metrics";
@@ -319,6 +324,33 @@ router.post("/clerk/explain-failure", async (req, res): Promise<void> => {
     gateway,
   );
   res.json(ExplainInvoiceFailureResponse.parse(explanation));
+});
+
+// Payment-chaser draft (round-9 idea #2): phrases one outstanding
+// receivable's stored facts into a reminder the client copies and sends.
+// Digest posture — the template always answers (no budget pre-check, no
+// gateway requirement), so this can never 429 or 502 for a model reason.
+// Same gate as the explainer: the client whose receivable it is may use it;
+// the module enforces tenant + SEC-03 party scope.
+router.post("/clerk/draft-chaser", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.capture");
+  const parsed = parseOrThrow(DraftPaymentChaserBody, req.body);
+  const gateway = await getClerkGateway().catch(() => null);
+  const draft = await draftPaymentChaser(
+    parsed.invoiceId,
+    req.principal,
+    gateway,
+  );
+  res.json(DraftPaymentChaserResponse.parse(draft));
+});
+
+// Tier-suggestion report (round-9 idea #3): pure ledger SQL joined with the
+// tier map in force — the evidence for (and against) CLERK_MODEL_TIERS
+// changes. Operator surface, zero model calls.
+router.get("/clerk/tier-report", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const report = await computeTierReport();
+  res.json(GetClerkTierReportResponse.parse(report));
 });
 
 // ---- Async batch intake (idea #8) ----

@@ -10,7 +10,8 @@ import { createGateway } from "./gateway";
 // its own module (and loaded lazily) so importing the gateway in tests never
 // requires the AI integration env vars.
 
-const CLERK_MODEL = process.env.CLERK_MODEL ?? "gpt-5.4";
+// Exported for the tier report, which shows which model serves each purpose.
+export const CLERK_MODEL = process.env.CLERK_MODEL ?? "gpt-5.4";
 
 // Per-purpose model tiers (round-7 idea #1), OPT-IN via env — unset keeps
 // today's single-model behaviour. Segmentation, triage and intent
