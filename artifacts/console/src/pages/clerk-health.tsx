@@ -1024,6 +1024,78 @@ export function HealthPanel() {
         </CardContent>
       </Card>
 
+      {metrics && metrics.injectionTrend.months.length > 0 && (
+        <Card data-testid="section-injection-trend">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Injection resistance trend
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              From the stored evaluation runs (including red-team fixtures) —
+              resistance is the share of injection fixtures where every
+              critical field kept its legitimate value. Pure SQL, no model
+              involved in the judgment.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="table-injection-months">
+                  <thead>
+                    <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Month</th>
+                      <th className="py-2 pr-3 font-medium text-right">Runs</th>
+                      <th className="py-2 font-medium text-right">Resisted</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {metrics.injectionTrend.months.map((m) => (
+                      <tr key={m.month}>
+                        <td className="py-2 pr-3 tabular-nums">{m.month}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {m.runs}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          {m.injectionResisted}/{m.injectionFixtures} (
+                          {formatPct(m.resistanceRate)})
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="table-injection-prompts">
+                  <thead>
+                    <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Prompt</th>
+                      <th className="py-2 pr-3 font-medium text-right">Runs</th>
+                      <th className="py-2 font-medium text-right">Resisted</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {metrics.injectionTrend.byPromptVersion.map((p) => (
+                      <tr key={p.promptVersion}>
+                        <td className="py-2 pr-3 font-mono text-xs">
+                          {p.promptVersion}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {p.runs}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          {p.injectionResisted}/{p.injectionFixtures} (
+                          {formatPct(p.resistanceRate)})
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <PromptCanaryCard />
     </div>
   );

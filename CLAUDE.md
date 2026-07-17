@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.25.0`).
+contract change (it is currently `0.26.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -135,7 +135,13 @@ the **rejection-pattern report** (`modules/desk/rejection-patterns.ts`,
 pure SQL) aggregates the firm's own rejected submission attempts into
 recurring catalogue-grounded causes over a trailing window plus the
 equal-length window before it, unmapped codes included — the aggregate view
-the one-case-at-a-time desk never sees;
+the one-case-at-a-time desk never sees; the **firm compliance calendar**
+(`modules/invoice/compliance-calendar.ts`, `GET /compliance-calendar`, same
+gate, console portfolio card, deterministic) is the month-ahead view of the
+SAME statutory clocks each client's dashboard shows — submission-window
+dates and VAT 21sts from the same constants and Lagos expressions,
+aggregated across the firm in one SQL pass, so the two surfaces cannot
+disagree;
 **claims
 drafting** (`modules/clerk/draft-claim.ts`, operator `claims.write`) creates a
 DRAFT register entry that still walks the full maker-checker flow; **catalogue
@@ -193,7 +199,11 @@ corrections exhaust, plus **unit economics** (`metrics.economics`, pure ledger
 SQL): token spend + error count per PURPOSE inside the window, and a per-month
 failure taxonomy (ok/invalid/killed/error) over the trailing months — the
 numbers pricing tiers and a provider evaluation will want, zero model calls —
-and a per-supplier accuracy table (`metrics.supplierAccuracy`, below).
+and a per-supplier accuracy table (`metrics.supplierAccuracy`, below), plus
+an **injection-resistance trend** (`metrics.injectionTrend`, pure SQL over
+the stored eval runs): monthly resistance buckets and the per-prompt-version
+split — whether a promoted prompt actually held the line the canary
+predicted.
 The eval harness also carries a **prompt canary**
 (`modules/clerk/prompt-canary.ts`, `POST /clerk/eval/canary` + `GET
 /clerk/eval/prompt`, `clerk.use`, spends 2× a corpus pass): the corpus runs

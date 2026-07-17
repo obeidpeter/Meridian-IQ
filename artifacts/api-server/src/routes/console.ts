@@ -33,6 +33,7 @@ import {
   UpdateProspectResponse,
   GetUnearnedIncomeResponse,
   GetRejectionPatternsResponse,
+  GetFirmComplianceCalendarResponse,
   ListTiersResponse,
   UpdateTierParams,
   UpdateTierBody,
@@ -74,6 +75,7 @@ import {
   sendEscalationReply,
 } from "../modules/desk/draft-reply";
 import { computeRejectionPatterns } from "../modules/desk/rejection-patterns";
+import { computeComplianceCalendar } from "../modules/invoice/compliance-calendar";
 import { getClerkGateway } from "../modules/clerk/provider";
 import { getFirmReceivables } from "../modules/invoice/receivables";
 import {
@@ -647,6 +649,17 @@ router.get("/rejection-patterns", async (req, res): Promise<void> => {
   const firmId = firmScope(req.principal);
   const report = await computeRejectionPatterns(firmId);
   res.json(GetRejectionPatternsResponse.parse(report));
+});
+
+// Firm-level compliance calendar (round-6 idea #5): the month-ahead view of
+// the same statutory clocks each client's dashboard shows — same constants,
+// same Lagos-calendar expressions, aggregated across the firm in one SQL
+// pass. Deterministic, nothing stored.
+router.get("/compliance-calendar", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const firmId = firmScope(req.principal);
+  const calendar = await computeComplianceCalendar(firmId);
+  res.json(GetFirmComplianceCalendarResponse.parse(calendar));
 });
 
 // --- Tiers & subscription ---------------------------------------------------

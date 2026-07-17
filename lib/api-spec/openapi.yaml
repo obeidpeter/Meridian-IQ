@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.25.0
+  version: 0.26.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -764,6 +764,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RejectionPatternReport"
+  /compliance-calendar:
+    get:
+      operationId: getFirmComplianceCalendar
+      tags: [console]
+      summary: The firm's month-ahead statutory calendar — submission windows and VAT dates aggregated across clients (deterministic)
+      responses:
+        "200":
+          description: Upcoming statutory dates plus the overdue backlog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCalendar"
   /invoices/bulk-submit:
     post:
       operationId: bulkSubmitInvoices
@@ -4556,6 +4568,43 @@ components:
           type: string
         lastUsed:
           type: string
+    ComplianceCalendar:
+      type: object
+      required: [horizonDays, overdue, days]
+      properties:
+        horizonDays:
+          type: integer
+        overdue:
+          type: object
+          required: [invoices, clients]
+          properties:
+            invoices:
+              type: integer
+            clients:
+              type: integer
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, events]
+            properties:
+              date:
+                type: string
+              events:
+                type: array
+                items:
+                  type: object
+                  required: [kind, label]
+                  properties:
+                    kind:
+                      type: string
+                      enum: [invoice_submission, vat_return]
+                    label:
+                      type: string
+                    invoices:
+                      type: integer
+                    clients:
+                      type: integer
     RejectionPatternReport:
       type: object
       required: [windowDays, totalRejections, previousTotal, rows]
@@ -7250,6 +7299,7 @@ components:
           corrections,
           supplierAccuracy,
           ask,
+          injectionTrend,
         ]
       properties:
         windowDays:
@@ -7454,6 +7504,46 @@ components:
               type: integer
             refusalRate:
               type: number
+        # Injection-resistance trend from the stored eval runs (pure SQL):
+        # monthly drift plus the per-prompt-version split.
+        injectionTrend:
+          type: object
+          required: [months, byPromptVersion]
+          properties:
+            months:
+              type: array
+              items:
+                type: object
+                required:
+                  [month, runs, injectionFixtures, injectionResisted, resistanceRate]
+                properties:
+                  month:
+                    type: string
+                  runs:
+                    type: integer
+                  injectionFixtures:
+                    type: integer
+                  injectionResisted:
+                    type: integer
+                  resistanceRate:
+                    type: number
+            byPromptVersion:
+              type: array
+              items:
+                type: object
+                required:
+                  [promptVersion, runs, injectionFixtures, injectionResisted, resistanceRate]
+                properties:
+                  promptVersion:
+                    type: string
+                  runs:
+                    type: integer
+                  injectionFixtures:
+                    type: integer
+                  injectionResisted:
+                    type: integer
+                  resistanceRate:
+                    type: number
     ClerkCorrection:
       type: object
       required: [field, extracted, final, changed]

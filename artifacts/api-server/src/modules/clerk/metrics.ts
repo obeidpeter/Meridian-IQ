@@ -92,6 +92,26 @@ export interface ClerkMetrics {
     refused: number;
     refusalRate: number;
   };
+  // Injection-resistance trend (round-6 idea #8): resistance over time from
+  // the stored eval runs — pure SQL over clerk_eval_runs, zero model calls.
+  // Monthly buckets show drift; the per-prompt-version split shows whether a
+  // promoted prompt actually held the line the canary predicted.
+  injectionTrend: {
+    months: {
+      month: string; // "YYYY-MM" (UTC)
+      runs: number;
+      injectionFixtures: number;
+      injectionResisted: number;
+      resistanceRate: number;
+    }[];
+    byPromptVersion: {
+      promptVersion: string;
+      runs: number;
+      injectionFixtures: number;
+      injectionResisted: number;
+      resistanceRate: number;
+    }[];
+  };
   // Confidence calibration from the corrections exhaust (idea #5): for each
   // confidence band, how often the operator KEPT the model's value unchanged.
   // Well-calibrated extraction shows keptRate tracking meanConfidence; a band
@@ -481,6 +501,43 @@ export async function getClerkMetrics(
   }[];
   const calibration = computeCalibration(calibrationRows);
 
+  // Trailing six months of eval runs, plus the all-time per-prompt-version
+  // split — runs with no injection fixtures are excluded from the rate.
+  const trendMonthRows = (
+    await db.execute(sql`
+      SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') AS month,
+        COUNT(*)::int AS runs,
+        SUM(injection_fixtures)::int AS injection_fixtures,
+        SUM(injection_resisted)::int AS injection_resisted
+      FROM clerk_eval_runs
+      WHERE created_at >= now() - interval '6 months'
+      GROUP BY 1
+      ORDER BY 1
+    `)
+  ).rows as {
+    month: string;
+    runs: number;
+    injection_fixtures: number;
+    injection_resisted: number;
+  }[];
+  const trendPromptRows = (
+    await db.execute(sql`
+      SELECT prompt_version,
+        COUNT(*)::int AS runs,
+        SUM(injection_fixtures)::int AS injection_fixtures,
+        SUM(injection_resisted)::int AS injection_resisted
+      FROM clerk_eval_runs
+      GROUP BY 1
+      ORDER BY MAX(created_at) DESC
+      LIMIT 10
+    `)
+  ).rows as {
+    prompt_version: string;
+    runs: number;
+    injection_fixtures: number;
+    injection_resisted: number;
+  }[];
+
   return {
     windowDays,
     cases: {
@@ -572,6 +629,28 @@ export async function getClerkMetrics(
       answered,
       refused: askTotal - answered,
       refusalRate: rate(askTotal - answered, askTotal),
+    },
+    injectionTrend: {
+      months: trendMonthRows.map((m) => ({
+        month: m.month,
+        runs: Number(m.runs),
+        injectionFixtures: Number(m.injection_fixtures),
+        injectionResisted: Number(m.injection_resisted),
+        resistanceRate: rate(
+          Number(m.injection_resisted),
+          Number(m.injection_fixtures),
+        ),
+      })),
+      byPromptVersion: trendPromptRows.map((p) => ({
+        promptVersion: p.prompt_version,
+        runs: Number(p.runs),
+        injectionFixtures: Number(p.injection_fixtures),
+        injectionResisted: Number(p.injection_resisted),
+        resistanceRate: rate(
+          Number(p.injection_resisted),
+          Number(p.injection_fixtures),
+        ),
+      })),
     },
     ...(calibration ? { calibration } : {}),
   };
