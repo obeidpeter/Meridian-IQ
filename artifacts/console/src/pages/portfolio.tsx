@@ -1,13 +1,23 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import {
   getGetFirmReceivablesQueryKey,
+  getGetVatPackQueryKey,
   useGetFirmReceivables,
   useGetMe,
   useGetPortfolio,
+  useGetVatPack,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
@@ -19,6 +29,7 @@ import {
   ChevronRight,
   Upload,
   GitBranch,
+  Download,
 } from "lucide-react";
 import {
   formatNaira,
@@ -39,6 +50,126 @@ function formatMoney(value: string, currency: string): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n)} ${currency}`;
+}
+
+// "2026-06-01" -> "June 2026" for the VAT pack month picker.
+const PACK_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+function packMonthLabel(monthStart: string): string {
+  const [y, m] = monthStart.split("-");
+  return `${PACK_MONTHS[Number(m) - 1] ?? m} ${y}`;
+}
+
+// Monthly VAT filing pack (exhaust idea #2): per-client output VAT for a
+// closed Lagos month, deterministic end to end — the numbers mirror the
+// per-client statements. Renders only on success (a 403 for roles without
+// the portfolio capability simply hides the card).
+function VatPackCard() {
+  const [month, setMonth] = useState<string | undefined>(undefined);
+  const params = month ? { month } : undefined;
+  const { data: pack, isSuccess } = useGetVatPack(params, {
+    query: { queryKey: getGetVatPackQueryKey(params), retry: false },
+  });
+  if (!isSuccess || !pack) return null;
+  const exportHref = `/api/vat-pack/export?month=${encodeURIComponent(pack.monthStart)}`;
+  return (
+    <Card
+      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid="card-vat-pack"
+    >
+      <CardHeader>
+        <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
+          <span>VAT filing pack</span>
+          <span className="flex items-center gap-2">
+            <Select value={pack.monthStart} onValueChange={setMonth}>
+              <SelectTrigger
+                className="h-8 w-44 text-xs"
+                data-testid="select-vat-pack-month"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pack.months.map((m) => (
+                  <SelectItem key={m} value={m}>
+                    {packMonthLabel(m)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.assign(exportHref)}
+              data-testid="button-vat-pack-csv"
+            >
+              <Download className="w-4 h-4 mr-1" aria-hidden="true" /> CSV
+            </Button>
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {pack.rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground" data-testid="text-vat-pack-empty">
+            No invoices were accepted by the rails in {pack.monthLabel}.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="table-vat-pack">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Client</th>
+                  <th className="py-2 pr-3 font-medium text-right">Accepted</th>
+                  <th className="py-2 pr-3 font-medium text-right">Total</th>
+                  <th className="py-2 font-medium text-right">Output VAT</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {pack.rows.map((r) => (
+                  <tr key={r.clientPartyId} data-testid={`row-vat-${r.clientPartyId}`}>
+                    <td className="py-2 pr-3">{r.clientName}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {r.acceptedCount}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">
+                      {formatNaira(r.acceptedTotal)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      {formatNaira(r.acceptedVat)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="font-semibold">
+                  <td className="py-2 pr-3">Total</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {pack.totals.acceptedCount}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {formatNaira(pack.totals.acceptedTotal)}
+                  </td>
+                  <td className="py-2 text-right tabular-nums">
+                    {formatNaira(pack.totals.acceptedVat)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">{pack.note}</p>
+      </CardContent>
+    </Card>
+  );
 }
 
 // Firm-level receivables: one row per client per currency, worst-first from
@@ -413,6 +544,8 @@ export function Portfolio() {
       </Card>
 
       <ClerkWeeklyDigestCard />
+
+      <VatPackCard />
 
       <ReceivablesCard />
     </div>

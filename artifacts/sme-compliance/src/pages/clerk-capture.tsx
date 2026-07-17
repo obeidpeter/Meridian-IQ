@@ -89,14 +89,26 @@ function UsageMeter() {
           style={{ width: `${pct}%` }}
         />
       </div>
-      {pct >= 90 && (
+      {usage.paceBand === "critical" ? (
         <p
           className="mt-1 text-xs text-right text-destructive"
           data-testid="text-usage-warning"
         >
-          Nearly used up — submissions may be declined until next month.
+          Allowance used up — Clerk submissions will be declined until next
+          month.
         </p>
-      )}
+      ) : usage.paceBand === "warning" ? (
+        // Budget pace (idea #7): the server projects month-end spend at the
+        // current burn rate, so the heads-up can fire well before the cliff.
+        <p
+          className="mt-1 text-xs text-right text-amber-700 dark:text-amber-400"
+          data-testid="text-usage-warning"
+        >
+          {pct >= 80
+            ? "Nearly used up — submissions may be declined before month end."
+            : "On pace to run out before month end at the current rate."}
+        </p>
+      ) : null}
     </div>
   );
 }

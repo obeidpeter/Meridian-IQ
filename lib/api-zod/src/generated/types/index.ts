@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.21.0
+ * OpenAPI spec version: 0.22.0
  */
 
 export * from './acceptInvitationInput';
@@ -112,6 +112,7 @@ export * from './clerkMetricsSupplierAccuracyItem';
 export * from './clerkPartySuggestion';
 export * from './clerkPartySuggestions';
 export * from './clerkUsage';
+export * from './clerkUsagePaceBand';
 export * from './clientImportInput';
 export * from './clientImportResult';
 export * from './clientImportRow';
@@ -189,6 +190,7 @@ export * from './escalationStatus';
 export * from './explainFailureInput';
 export * from './exportInvoicesCsvParams';
 export * from './exportReceivablesCsvParams';
+export * from './exportVatPackCsvParams';
 export * from './failureExplanation';
 export * from './failureExplanationSource';
 export * from './featureFlag';
@@ -216,6 +218,7 @@ export * from './getComplianceCalendarParams';
 export * from './getDashboardSummaryParams';
 export * from './getPublicThemeParams';
 export * from './getReceivablesSummaryParams';
+export * from './getVatPackParams';
 export * from './graphEdge';
 export * from './graphNode';
 export * from './graphNodeKind';
@@ -381,6 +384,9 @@ export * from './unmappedErrorCode';
 export * from './user';
 export * from './userInput';
 export * from './validationResult';
+export * from './vatPack';
+export * from './vatPackRowsItem';
+export * from './vatPackTotals';
 export * from './vatRiskInput';
 export * from './vatRiskLedgerRow';
 export * from './vatRiskReport';

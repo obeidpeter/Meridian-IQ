@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.21.0
+ * OpenAPI spec version: 0.22.0
  */
 export interface HealthStatus {
   status: string;
@@ -842,6 +842,29 @@ export interface RecurringSuggestion {
   medianAmount: string;
   lastIssueDate: string;
   lines: InvoiceLineInput[];
+}
+
+export type VatPackRowsItem = {
+  clientPartyId: string;
+  clientName: string;
+  acceptedCount: number;
+  acceptedTotal: string;
+  acceptedVat: string;
+};
+
+export type VatPackTotals = {
+  acceptedCount: number;
+  acceptedTotal: string;
+  acceptedVat: string;
+};
+
+export interface VatPack {
+  monthStart: string;
+  monthLabel: string;
+  months: string[];
+  rows: VatPackRowsItem[];
+  totals: VatPackTotals;
+  note: string;
 }
 
 export interface CancelInvoiceInput {
@@ -3360,10 +3383,21 @@ export interface FailureExplanation {
   source: FailureExplanationSource;
 }
 
+export type ClerkUsagePaceBand = typeof ClerkUsagePaceBand[keyof typeof ClerkUsagePaceBand];
+
+
+export const ClerkUsagePaceBand = {
+  ok: 'ok',
+  warning: 'warning',
+  critical: 'critical',
+} as const;
+
 export interface ClerkUsage {
   monthStart: string;
   usedTokens: number;
   budgetTokens: number;
+  projectedTokens: number;
+  paceBand: ClerkUsagePaceBand;
 }
 
 export interface ClerkEvalRun {
@@ -3445,6 +3479,21 @@ q?: string;
 
 export type ExportReceivablesCsvParams = {
 clientPartyId: string;
+};
+
+export type GetVatPackParams = {
+/**
+ * A closed Lagos month's first day (YYYY-MM-01); defaults to the newest closed month.
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
+};
+
+export type ExportVatPackCsvParams = {
+/**
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
 };
 
 export type ListRecurringSuggestionsParams = {

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.21.0`).
+contract change (it is currently `0.22.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -56,7 +56,9 @@ capped by a per-firm monthly TOKEN budget (`modules/clerk/budget.ts`; tier
 override `billing_tiers.clerk_monthly_tokens`, default
 `CLERK_FIRM_MONTHLY_TOKENS` env, ledger is the spend counter — routes check
 the budget BEFORE touching the provider so 429s are clean, and the gateway
-enforces it again as a backstop no call site can forget). The gateway writes
+enforces it again as a backstop no call site can forget; `GET /clerk/usage`
+also carries a month-end pace projection — `budgetPace`, same UTC month
+boundary as enforcement — so the usage meters warn before the cliff). The gateway writes
 the inference ledger on the RAW pool so spend accounting survives any request
 rollback; consequence: a caseId passed to `infer()` must reference an already
 COMMITTED case row. The model-calling routes (capture, batch, ask, eval-run)
@@ -112,6 +114,10 @@ facts in SQL, model only phrases, quiet months never call the model, template
 fallback always answers; its read route (`GET /clerk/client-statements`,
 `clerk.capture`) pins a `client_user` to its OWN party (SEC-03; firm RLS is
 not a sibling wall) and the SME dashboard shows the client their own card;
+the **monthly VAT filing pack** (`modules/clerk/vat-pack.ts`, `GET /vat-pack`
++ CSV export, `console.portfolio.read` + firm scope, console portfolio card)
+is the firm-level view of the same accepted-in-month facts — deterministic
+end to end, computed on demand, nothing stored;
 **claims
 drafting** (`modules/clerk/draft-claim.ts`, operator `claims.write`) creates a
 DRAFT register entry that still walks the full maker-checker flow; **catalogue

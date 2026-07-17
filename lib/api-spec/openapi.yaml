@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.21.0
+  version: 0.22.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -658,6 +658,47 @@ paths:
           required: true
           schema:
             type: string
+      responses:
+        "200":
+          description: CSV file (Content-Disposition attachment)
+          content:
+            text/csv:
+              schema:
+                type: string
+  /vat-pack:
+    get:
+      operationId: getVatPack
+      tags: [invoices]
+      summary: Firm-level monthly VAT filing pack — per-client output VAT for a closed Lagos month
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: A closed Lagos month's first day (YYYY-MM-01); defaults to the newest closed month.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: Per-client VAT table with firm totals (deterministic — no model involvement)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VatPack"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /vat-pack/export:
+    get:
+      operationId: exportVatPackCsv
+      tags: [invoices]
+      summary: Download the monthly VAT filing pack as CSV
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
       responses:
         "200":
           description: CSV file (Content-Disposition attachment)
@@ -4230,6 +4271,49 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InvoiceLineInput"
+    VatPack:
+      type: object
+      required: [monthStart, monthLabel, months, rows, totals, note]
+      properties:
+        monthStart:
+          type: string
+        monthLabel:
+          type: string
+        # The closed Lagos months a pack may be requested for (newest first).
+        months:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            type: object
+            required:
+              [clientPartyId, clientName, acceptedCount, acceptedTotal, acceptedVat]
+            properties:
+              clientPartyId:
+                type: string
+                format: uuid
+              clientName:
+                type: string
+              acceptedCount:
+                type: integer
+              acceptedTotal:
+                type: string
+              acceptedVat:
+                type: string
+        totals:
+          type: object
+          required: [acceptedCount, acceptedTotal, acceptedVat]
+          properties:
+            acceptedCount:
+              type: integer
+            acceptedTotal:
+              type: string
+            acceptedVat:
+              type: string
+        note:
+          type: string
     CancelInvoiceInput:
       type: object
       required: [reason]
@@ -7586,7 +7670,7 @@ components:
 
     ClerkUsage:
       type: object
-      required: [monthStart, usedTokens, budgetTokens]
+      required: [monthStart, usedTokens, budgetTokens, projectedTokens, paceBand]
       properties:
         monthStart:
           type: string
@@ -7595,6 +7679,15 @@ components:
           type: integer
         budgetTokens:
           type: integer
+        # Budget pace (idea #7): month-end projection at the current burn rate
+        # and its band, computed over the SAME UTC month boundary the 429
+        # enforcement uses. "warning" = 80% used or projected past the
+        # allowance (after a quarter of the month); "critical" = spent.
+        projectedTokens:
+          type: integer
+        paceBand:
+          type: string
+          enum: [ok, warning, critical]
 
     ClerkEvalRun:
       type: object
