@@ -1,5 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
+  detectResistanceDrop,
+  injectionResistanceMonths,
+} from "./resistance-watch";
+import {
   getDb,
   type ClerkCorrection,
   type ClerkExtraction,
@@ -127,6 +131,17 @@ export interface ClerkMetrics {
       injectionResisted: number;
       resistanceRate: number;
     }[];
+  };
+  // Resistance-drop alert (round-8 idea #2): present when the newest measured
+  // month's injection resistance fell materially below the previous one —
+  // same pure rule as the sweep that writes the audit alert
+  // (modules/clerk/resistance-watch.ts), so banner and alert always agree.
+  resistanceAlert?: {
+    fromMonth: string;
+    toMonth: string;
+    fromRate: number;
+    toRate: number;
+    injectionFixtures: number;
   };
   // Confidence calibration from the corrections exhaust (idea #5): for each
   // confidence band, how often the operator KEPT the model's value unchanged.
@@ -574,25 +589,13 @@ export async function getClerkMetrics(
       ? Number((spendUsd / monthElapsed).toFixed(4))
       : null;
 
-  // Trailing six months of eval runs, plus the all-time per-prompt-version
-  // split — runs with no injection fixtures are excluded from the rate.
-  const trendMonthRows = (
-    await db.execute(sql`
-      SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') AS month,
-        COUNT(*)::int AS runs,
-        SUM(injection_fixtures)::int AS injection_fixtures,
-        SUM(injection_resisted)::int AS injection_resisted
-      FROM clerk_eval_runs
-      WHERE created_at >= date_trunc('month', now()) - interval '5 months'
-      GROUP BY 1
-      ORDER BY 1
-    `)
-  ).rows as {
-    month: string;
-    runs: number;
-    injection_fixtures: number;
-    injection_resisted: number;
-  }[];
+  // Trailing six months of eval runs (shared with the resistance-drop sweep
+  // so the alert and the chart read the same buckets), plus the all-time
+  // per-prompt-version split — runs with no injection fixtures are excluded
+  // from the rate.
+  const trendMonths = await injectionResistanceMonths();
+  // Same rule as the sweep's alert — the banner and the audit event agree.
+  const resistanceAlert = detectResistanceDrop(trendMonths);
   const trendPromptRows = (
     await db.execute(sql`
       SELECT prompt_version,
@@ -715,15 +718,12 @@ export async function getClerkMetrics(
       projectedUsd,
     },
     injectionTrend: {
-      months: trendMonthRows.map((m) => ({
+      months: trendMonths.map((m) => ({
         month: m.month,
-        runs: Number(m.runs),
-        injectionFixtures: Number(m.injection_fixtures),
-        injectionResisted: Number(m.injection_resisted),
-        resistanceRate: rate(
-          Number(m.injection_resisted),
-          Number(m.injection_fixtures),
-        ),
+        runs: m.runs,
+        injectionFixtures: m.injectionFixtures,
+        injectionResisted: m.injectionResisted,
+        resistanceRate: rate(m.injectionResisted, m.injectionFixtures),
       })),
       byPromptVersion: trendPromptRows.map((p) => ({
         promptVersion: p.prompt_version,
@@ -736,6 +736,7 @@ export async function getClerkMetrics(
         ),
       })),
     },
+    ...(resistanceAlert ? { resistanceAlert } : {}),
     ...(calibration ? { calibration } : {}),
   };
 }

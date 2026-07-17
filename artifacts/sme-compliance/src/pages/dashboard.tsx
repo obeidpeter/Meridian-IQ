@@ -8,6 +8,8 @@ import {
   getGetDashboardSummaryQueryKey,
   useGetReceivablesSummary,
   getGetReceivablesSummaryQueryKey,
+  useListUnbilledIncome,
+  getListUnbilledIncomeQueryKey,
 } from "@workspace/api-client-react";
 import type { ReceivablesBucket, ReceivablesSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -339,6 +341,65 @@ function ClientStatementCard({ clientPartyId }: { clientPartyId: string }) {
   );
 }
 
+// Unbilled-income nudges (round-8 idea #1): buyers this client bills every
+// month where the usual billing day has passed with nothing issued. Mined
+// deterministically server-side from the client's own history — nothing
+// stored, no model. Renders only when there is something to say.
+function UnbilledIncomeCard({ clientPartyId }: { clientPartyId: string }) {
+  const { data: alerts, isSuccess } = useListUnbilledIncome(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getListUnbilledIncomeQueryKey({ clientPartyId }),
+        retry: false,
+      },
+    },
+  );
+  if (!isSuccess || !alerts || alerts.length === 0) return null;
+  return (
+    <Card data-testid="unbilled-income">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wallet className="w-5 h-5" aria-hidden="true" /> Money you usually
+          bill
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Based on your own invoice history, these regular invoices look
+          unraised this cycle.
+        </p>
+        <div className="space-y-2">
+          {alerts.map((a) => (
+            <div
+              key={a.buyerPartyId}
+              className="flex items-center justify-between gap-3 rounded-lg border p-3"
+              data-testid={`unbilled-${a.buyerPartyId}`}
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold truncate">{a.buyerName}</p>
+                <p className="text-xs text-muted-foreground">
+                  Usually about {formatNaira(a.medianAmount)} every ~
+                  {a.medianGapDays} days · last invoiced{" "}
+                  {formatDate(a.lastIssueDate)}
+                </p>
+              </div>
+              <Button asChild size="sm" variant="secondary">
+                <Link href="/invoices/new">Draft invoice</Link>
+              </Button>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground pt-3 border-t">
+          Worked out from your own invoices — if an arrangement ended, you can
+          ignore this.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
@@ -553,6 +614,10 @@ export function Dashboard() {
 
               {canSeeStatement && me?.clientPartyId && (
                 <ClientStatementCard clientPartyId={me.clientPartyId} />
+              )}
+
+              {me?.clientPartyId && (
+                <UnbilledIncomeCard clientPartyId={me.clientPartyId} />
               )}
             </div>
           </>

@@ -270,3 +270,34 @@ export function fieldLabel(field: string): string {
   const spaced = field.replace(/([A-Z])/g, " $1").toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
+
+// Batch-aware queue grouping (round-8 idea #3): cases that came out of the
+// same async bundle coalesce into one group at the position of their
+// best-ranked member, so the fast-lane/effort ordering still decides WHERE a
+// bundle surfaces while its segments stay together. Unbatched cases pass
+// through untouched — a queue with no bundles renders exactly as before.
+export interface QueueGroup {
+  batchId: string | null; // null = a single unbatched case
+  cases: ClerkCase[];
+}
+
+export function groupQueueByBatch(sorted: ClerkCase[]): QueueGroup[] {
+  const groups: QueueGroup[] = [];
+  const byBatch = new Map<string, QueueGroup>();
+  for (const c of sorted) {
+    const batchId = c.batchId ?? null;
+    if (!batchId) {
+      groups.push({ batchId: null, cases: [c] });
+      continue;
+    }
+    const existing = byBatch.get(batchId);
+    if (existing) {
+      existing.cases.push(c);
+    } else {
+      const group: QueueGroup = { batchId, cases: [c] };
+      byBatch.set(batchId, group);
+      groups.push(group);
+    }
+  }
+  return groups;
+}

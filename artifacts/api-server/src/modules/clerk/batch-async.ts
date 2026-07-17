@@ -1,7 +1,8 @@
-import { and, asc, eq, lt, or } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import {
   getDb,
   clerkBatchesTable,
+  clerkCasesTable,
   type ClerkBatch,
 } from "@workspace/db";
 import { DomainError } from "../errors";
@@ -361,7 +362,8 @@ export async function processBatch(
         // memory stays conservatively client-scoped (creator's own cases) —
         // a staff-created batch just gets a smaller exemplar pool. The
         // resolved client party (null for staff) scopes history preflight.
-        { firmId: batch.firmId, clientScoped: true, clientPartyId },
+        // batchId links the case back for review-queue grouping.
+        { firmId: batch.firmId, clientScoped: true, clientPartyId, batchId },
       );
       created += 1;
     } catch (err) {
@@ -428,6 +430,29 @@ export async function processBatch(
     after: { segments: totalCount, created, skippedDuplicates: skipped },
   });
   return "terminal";
+}
+
+// Decided-case counts per batch (round-8 idea #3): the review queue shows
+// "reviewed R of C" per bundle. Decided = the operator ruled (approved or
+// rejected); failed extractions await a retry, not a review.
+export async function reviewedCounts(
+  batchIds: string[],
+): Promise<Map<string, number>> {
+  if (batchIds.length === 0) return new Map();
+  const rows = await getDb()
+    .select({
+      batchId: clerkCasesTable.batchId,
+      reviewed: sql<number>`count(*)::int`,
+    })
+    .from(clerkCasesTable)
+    .where(
+      and(
+        inArray(clerkCasesTable.batchId, batchIds),
+        inArray(clerkCasesTable.status, ["approved", "rejected"]),
+      ),
+    )
+    .groupBy(clerkCasesTable.batchId);
+  return new Map(rows.map((r) => [r.batchId as string, Number(r.reviewed)]));
 }
 
 // Fire-and-forget kick from the route: processes slice after slice in this

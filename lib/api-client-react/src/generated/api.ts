@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.27.0
+ * OpenAPI spec version: 0.28.0
  */
 import {
   useMutation,
@@ -156,6 +156,7 @@ import type {
   ListPartiesParams,
   ListRecurringSuggestionsParams,
   ListStatementsParams,
+  ListUnbilledIncomeParams,
   LoginInput,
   MatchAssist,
   MatchDecisionResult,
@@ -218,6 +219,7 @@ import type {
   TinCheckInput,
   UblDocument,
   UnauthorizedResponse,
+  UnbilledIncomeAlert,
   UnearnedIncome,
   UnmappedErrorCode,
   User,
@@ -5818,6 +5820,90 @@ export function useListRecurringSuggestions<TData = Awaited<ReturnType<typeof li
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListRecurringSuggestionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListUnbilledIncomeUrl = (params?: ListUnbilledIncomeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/unbilled-income?${stringifiedParams}` : `/api/unbilled-income`
+}
+
+/**
+ * @summary Expected-but-absent invoices mined deterministically from the client's own monthly billing patterns
+ */
+export const listUnbilledIncome = async (params?: ListUnbilledIncomeParams, options?: RequestInit): Promise<UnbilledIncomeAlert[]> => {
+
+  return customFetch<UnbilledIncomeAlert[]>(getListUnbilledIncomeUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListUnbilledIncomeQueryKey = (params?: ListUnbilledIncomeParams,) => {
+    return [
+    `/api/unbilled-income`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListUnbilledIncomeQueryOptions = <TData = Awaited<ReturnType<typeof listUnbilledIncome>>, TError = ErrorType<unknown>>(params?: ListUnbilledIncomeParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnbilledIncome>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListUnbilledIncomeQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listUnbilledIncome>>> = ({ signal }) => listUnbilledIncome(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listUnbilledIncome>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListUnbilledIncomeQueryResult = NonNullable<Awaited<ReturnType<typeof listUnbilledIncome>>>
+export type ListUnbilledIncomeQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Expected-but-absent invoices mined deterministically from the client's own monthly billing patterns
+ */
+
+export function useListUnbilledIncome<TData = Awaited<ReturnType<typeof listUnbilledIncome>>, TError = ErrorType<unknown>>(
+ params?: ListUnbilledIncomeParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUnbilledIncome>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListUnbilledIncomeQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

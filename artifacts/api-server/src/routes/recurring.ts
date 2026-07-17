@@ -8,6 +8,8 @@ import {
   UpdateRecurringInvoiceResponse,
   ListRecurringSuggestionsQueryParams,
   ListRecurringSuggestionsResponse,
+  ListUnbilledIncomeQueryParams,
+  ListUnbilledIncomeResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
@@ -26,6 +28,7 @@ import {
   setTemplateActive,
 } from "../modules/invoice/recurring";
 import { listRecurringSuggestions } from "../modules/invoice/recurring-suggest";
+import { listUnbilledIncome } from "../modules/invoice/unbilled-income";
 
 const router: IRouter = Router();
 
@@ -56,6 +59,23 @@ router.get("/recurring-suggestions", async (req, res): Promise<void> => {
   assertClientPartyScope(req.principal, target);
   const suggestions = await listRecurringSuggestions(firmId, target);
   res.json(ListRecurringSuggestionsResponse.parse(suggestions));
+});
+
+// Unbilled-income alerts (round-8 idea #1): the same deterministic miner as
+// the recurring suggestions, pointed at the month the invoice DIDN'T go out.
+// Mined on demand, nothing stored, no model. Same SEC-03 resolution: a
+// client_user is pinned to its own party; a firm principal names the client.
+router.get("/unbilled-income", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(ListUnbilledIncomeQueryParams, req.query);
+  const firmId = requireFirmScope(req.principal);
+  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
+  if (!target) {
+    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
+  }
+  assertClientPartyScope(req.principal, target);
+  const alerts = await listUnbilledIncome(firmId, target);
+  res.json(ListUnbilledIncomeResponse.parse(alerts));
 });
 
 router.post("/recurring-invoices", async (req, res): Promise<void> => {

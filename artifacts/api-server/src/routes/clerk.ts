@@ -82,6 +82,7 @@ import { createBatchCases } from "../modules/clerk/batch";
 import {
   createClerkBatch,
   kickBatchProcessing,
+  reviewedCounts,
 } from "../modules/clerk/batch-async";
 import { draftFormatMappingWithClerk } from "../modules/clerk/draft-format";
 import { draftClientImportWithClerk } from "../modules/clerk/draft-client-import";
@@ -340,6 +341,7 @@ const stripBatch = (b: ClerkBatch) => ({
   updatedAt: b.updatedAt,
 });
 
+
 router.post("/clerk/batches", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
   const parsed = parseOrThrow(CreateClerkBatchBody, req.body);
@@ -351,7 +353,9 @@ router.post("/clerk/batches", async (req, res): Promise<void> => {
     firmId: tenant,
   });
   kickBatchProcessing(batch.id);
-  res.status(202).json(CreateClerkBatchResponse.parse(stripBatch(batch)));
+  res.status(202).json(
+    CreateClerkBatchResponse.parse({ ...stripBatch(batch), reviewedCases: 0 }),
+  );
 });
 
 router.get("/clerk/batches", async (req, res): Promise<void> => {
@@ -368,7 +372,15 @@ router.get("/clerk/batches", async (req, res): Promise<void> => {
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(clerkBatchesTable.createdAt))
     .limit(50);
-  res.json(ListClerkBatchesResponse.parse(rows.map(stripBatch)));
+  const reviewed = await reviewedCounts(rows.map((r) => r.id));
+  res.json(
+    ListClerkBatchesResponse.parse(
+      rows.map((r) => ({
+        ...stripBatch(r),
+        reviewedCases: reviewed.get(r.id) ?? 0,
+      })),
+    ),
+  );
 });
 
 router.get("/clerk/batches/:id", async (req, res): Promise<void> => {
@@ -391,7 +403,13 @@ router.get("/clerk/batches/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Batch not found" });
     return;
   }
-  res.json(GetClerkBatchResponse.parse(stripBatch(row)));
+  const reviewed = await reviewedCounts([row.id]);
+  res.json(
+    GetClerkBatchResponse.parse({
+      ...stripBatch(row),
+      reviewedCases: reviewed.get(row.id) ?? 0,
+    }),
+  );
 });
 
 // Statement-format bootstrap (idea #9): Clerk proposes a column mapping from

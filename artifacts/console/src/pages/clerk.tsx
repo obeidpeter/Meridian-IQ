@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   useListClerkCases,
+  useListClerkBatches,
   useGetClerkCase,
   useCreateClerkCase,
   useCreateClerkCaseBatch,
@@ -15,6 +16,7 @@ import {
   useListFirms,
   useListParties,
   getListClerkCasesQueryKey,
+  getListClerkBatchesQueryKey,
   getGetClerkCaseQueryKey,
   getGetClerkMetricsQueryKey,
   getGetClerkPartySuggestionsQueryKey,
@@ -63,6 +65,7 @@ import {
   fieldWeights,
   fileIsPdf,
   fileToBase64,
+  groupQueueByBatch,
   intakeKind,
   isReadyToApprove,
   relativeTime,
@@ -569,6 +572,26 @@ export function ClerkWorkspace() {
     [sortedCases],
   );
 
+  // Batch-aware grouping (round-8 idea #3): a bundle's segments stay together
+  // under one header with per-batch progress; unbatched cases are untouched.
+  const queueGroups = useMemo(
+    () => groupQueueByBatch(sortedCases),
+    [sortedCases],
+  );
+  const hasBatchGroups = queueGroups.some((g) => g.batchId !== null);
+  const { data: queueBatches } = useListClerkBatches({
+    query: {
+      queryKey: getListClerkBatchesQueryKey(),
+      enabled: hasBatchGroups,
+      staleTime: 60_000,
+      retry: false,
+    },
+  });
+  const batchById = useMemo(
+    () => new Map((queueBatches ?? []).map((b) => [b.id, b])),
+    [queueBatches],
+  );
+
   const approveDisabled =
     !form ||
     !form.firmId ||
@@ -884,7 +907,8 @@ export function ClerkWorkspace() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {sortedCases.map((c) => {
+                    {queueGroups.map((g) => {
+                      const rows = g.cases.map((c) => {
                       const kind = intakeKind(c.sourceType);
                       const Icon = kind.icon;
                       const status = QUEUE_STATUS[c.status];
@@ -938,6 +962,27 @@ export function ClerkWorkspace() {
                             </span>
                           </span>
                         </button>
+                      );
+                      });
+                      if (g.batchId === null) return rows;
+                      const batch = batchById.get(g.batchId);
+                      const total = batch?.createdCases ?? g.cases.length;
+                      const reviewed = batch?.reviewedCases ?? 0;
+                      return (
+                        <div
+                          key={`batch-${g.batchId}`}
+                          className="space-y-2 rounded-xl border border-dashed border-border p-2"
+                          data-testid={`group-batch-${g.batchId}`}
+                        >
+                          <p className="px-1 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              {batch?.name?.trim() || "Batch intake"}
+                            </span>
+                            {" · "}
+                            {reviewed} of {total} reviewed
+                          </p>
+                          {rows}
+                        </div>
                       );
                     })}
                   </div>

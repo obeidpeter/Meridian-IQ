@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.27.0`).
+contract change (it is currently `0.28.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -211,6 +211,14 @@ split — whether a promoted prompt actually held the line the canary
 predicted — and a **platform spend meter** (`metrics.platformSpend`):
 month-to-date ledger totals split firm-funded vs platform-funded with a
 linear pace projection on the same UTC boundary as the per-firm budgets.
+The trend also has teeth: the **resistance-drop alert**
+(`modules/clerk/resistance-watch.ts`, sweep, zero model calls) runs the SAME
+monthly buckets as the chart (`injectionResistanceMonths`, shared with
+metrics so banner and alert can never disagree) and raises a durable alert —
+one audit event per degraded month (the append-only ledger is the dedup key)
+plus an error log — when a measured month's resistance falls ≥10 points below
+the previous one (≥5 injection fixtures both sides, env-tunable);
+`metrics.resistanceAlert` drives a red banner on the health page.
 The eval harness also carries a **prompt canary**
 (`modules/clerk/prompt-canary.ts`, `POST /clerk/eval/canary` + `GET
 /clerk/eval/prompt`, `clerk.use`, spends 2× a corpus pass): the corpus runs
@@ -258,7 +266,14 @@ for operator captures), with register TINs only ever masked in issue text;
 calls, nothing stored) mine a client's own invoices for monthly billing
 patterns (3+ invoices, monthly median gap, clustered amounts, buyers already
 covered by ANY template excluded) and prefill the existing template dialog —
-the client disposes; **line-item memory** (`modules/invoice/line-items.ts`,
+the client disposes; **unbilled-income detection**
+(`modules/invoice/unbilled-income.ts`, `GET /unbilled-income`, zero model
+calls, nothing stored) is the same miner pointed at the month the invoice
+DIDN'T go out — sharing `buyerBillingHistories` with the suggestions so the
+two cards can never disagree about what a habit is, alerting only inside a
+bounded window (grace 5 days, lapsed after 45 — an ended arrangement stops
+nagging), surfaced as an SME dashboard card and a fact line in the weekly
+digest (`countFirmUnbilled`); **line-item memory** (`modules/invoice/line-items.ts`,
 `GET /line-item-suggestions`, zero model calls, nothing stored) mines the
 client's own invoice lines into an item catalogue (order-insensitive item
 key, 2+ occurrences, median unit price, MODAL VAT rate, newest description)
@@ -269,7 +284,14 @@ pure SQL) joins the corrections exhaust to the approved invoice's register
 supplier so the health page names whose documents Clerk reads worst; and the
 console weights review-queue effort and shows per-field "historically
 corrected" hints from `metrics.corrections` (`fieldWeights`/`correctionHint`
-in clerk-shared — never auto-accept, ordering and hints only).
+in clerk-shared — never auto-accept, ordering and hints only). The queue is
+also **batch-aware**: every async-batch case records its `batchId`
+(clerk_cases column, covered by the same firm-keyed RLS), a bundle's segments
+coalesce into one group at their best-ranked member's position
+(`groupQueueByBatch` in clerk-shared — an unbatched queue renders exactly as
+before), and the group header shows "reviewed R of C" from the batch
+endpoints' `reviewedCases` (decided = approved/rejected; `reviewedCounts` in
+batch-async.ts).
 
 ## Data layer & multi-tenant isolation (the part to get right)
 
@@ -343,7 +365,7 @@ refresh, push receipts, login-attempt / password-reset cleanup, outbox +
 stamp-verification retention, unmapped-code cases, and the
 Clerk watchdog / expired-claims / expired-case-content / eval-growth /
 weekly-digest / per-client-statement / red-team-growth / escalation-triage /
-async-batch sweeps). Register new periodic work with `registerSweep(fn)`.
+async-batch / resistance-watch sweeps). Register new periodic work with `registerSweep(fn)`.
 Alert fan-out (`modules/messaging/fan-out.ts`) is consent-gated: no layer-1
 grant, no alert (CORE-03). Statutory day boundaries — submission windows, VAT
 due dates, "overdue today" — use the LAGOS calendar via

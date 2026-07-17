@@ -13,6 +13,7 @@ import {
 import {
   createClerkBatch,
   processBatch,
+  reviewedCounts,
   sweepClerkBatches,
 } from "./batch-async.ts";
 import { setFlag } from "../flags/flags.ts";
@@ -123,6 +124,21 @@ test("processBatch walks every segment through capture and lands done", async ()
     .from(clerkCasesTable)
     .where(eq(clerkCasesTable.firmId, firmId));
   assert.ok(cases.length >= 2);
+
+  // Every created case records the batch it came out of (round-8 idea #3),
+  // and the per-batch review progress counts only DECIDED cases.
+  const linked = await getDb()
+    .select({ id: clerkCasesTable.id })
+    .from(clerkCasesTable)
+    .where(eq(clerkCasesTable.batchId, batch.id));
+  assert.equal(linked.length, 2, "both segments link back to the batch");
+  assert.equal((await reviewedCounts([batch.id])).get(batch.id), undefined);
+  await getDb()
+    .update(clerkCasesTable)
+    .set({ status: "approved" })
+    .where(eq(clerkCasesTable.id, linked[0].id));
+  assert.equal((await reviewedCounts([batch.id])).get(batch.id), 1);
+  assert.equal((await reviewedCounts([])).size, 0);
 
   // Re-running is a no-op: the claim CAS rejects a terminal batch.
   const rerun = await processBatch(
