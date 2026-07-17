@@ -58,9 +58,12 @@ async function loadEscalation(escalationId: string): Promise<Escalation> {
   return row;
 }
 
+// gateway may be null when the provider integration is unavailable — the
+// deterministic template still answers (routes pass null on gateway
+// construction failure, mirroring the narrative/reconcile-assist routes).
 export async function draftEscalationReply(
   escalationId: string,
-  gateway: ClerkGateway,
+  gateway: ClerkGateway | null,
 ): Promise<EscalationReplyDraft> {
   const escalation = await loadEscalation(escalationId);
 
@@ -115,7 +118,7 @@ export async function draftEscalationReply(
     errorCode,
   };
 
-  if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
+  if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
 
   const user = [
     `Catalogue cause: ${cause}`,
@@ -138,7 +141,9 @@ export async function draftEscalationReply(
     schemaName: "escalation_reply",
     jsonSchema: replyJsonSchema,
     validator: replyOutput,
-    inputForHash: `${escalationId}:${errorCode ?? "none"}`,
+    // Hash the real composed prompt (facts + fenced message) so the ledger's
+    // inputRef distinguishes re-drafts after the grounding facts changed.
+    inputForHash: user,
   });
   if (!result.ok) return fallback;
   return { draft: result.data.reply, source: "clerk", errorCode };
@@ -176,6 +181,9 @@ export async function sendEscalationReply(
     action: "escalation.reply",
     entityType: "escalation",
     entityId: escalationId,
+    // A re-send overwrites the stored reply; the audit trail keeps the prior
+    // text so nothing an operator sent is ever unrecoverable.
+    before: { status: existing.status, operatorReply: existing.operatorReply },
     after: { replied: true, status: updated.status },
   });
   return updated;

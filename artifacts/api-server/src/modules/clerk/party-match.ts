@@ -188,6 +188,14 @@ export async function applyAlias(
   if (!partyId) return scored;
   const candidate = candidates.find((c) => c.id === partyId);
   if (!candidate) return scored;
+  // A TIN hit identifies a party nearly uniquely (the module's own weighting
+  // doctrine) — a remembered NAME must never outrank an exact-TIN match for a
+  // DIFFERENT party. Names collide (word-order normalization, sibling
+  // businesses, poisonable document text); TINs do not. The scored order
+  // stands and the memory stays silent.
+  if (scored.some((s) => s.tinScore === 1 && s.partyId !== partyId)) {
+    return scored;
+  }
   const aliasSuggestion: PartySuggestion = {
     partyId: candidate.id,
     legalName: candidate.legalName,

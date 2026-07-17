@@ -1254,7 +1254,10 @@ router.post(
   async (req, res): Promise<void> => {
     assertCan(req.principal, "operator.queue.act");
     const params = parseOrThrow(DraftEscalationReplyParams, req.params);
-    const gateway = await getClerkGateway();
+    // Template posture end to end: an unconfigured provider integration must
+    // yield the deterministic template, not a 500 (same guard as the
+    // narrative and reconcile-assist routes).
+    const gateway = await getClerkGateway().catch(() => null);
     const draft = await draftEscalationReply(params.id, gateway);
     res.json(DraftEscalationReplyResponse.parse(draft));
   },

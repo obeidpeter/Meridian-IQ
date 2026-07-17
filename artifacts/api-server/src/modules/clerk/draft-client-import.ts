@@ -127,16 +127,6 @@ export async function draftClientImportWithClerk(
       422,
     );
   }
-  // Header names that actually appear in the scan window; the app, not the
-  // model, decides which columns exist.
-  const knownHeaders = new Set(
-    table
-      .slice(0, HEADER_SCAN_ROWS)
-      .flat()
-      .map(normalizeHeaderName)
-      .filter((h) => h.length > 0),
-  );
-
   const result = await gateway.infer<DraftImportOutput>({
     purpose: "draft_client_import",
     // Firm-scoped work (clients.import is a firm_admin capability): the call
@@ -159,38 +149,42 @@ export async function draftClientImportWithClerk(
     );
   }
 
-  // Fail-closed re-verification: a proposed column that is not literally in
-  // the sample is dropped; a missing legalName column = no draft at all.
-  const verify = (name: string | null): string | null =>
-    name && knownHeaders.has(normalizeHeaderName(name)) ? name : null;
-  const legalName = verify(result.data.legalName);
-  if (!legalName) {
-    throw new DomainError(
-      "CLERK_DRAFT_FAILED",
-      "Clerk named columns that do not exist in the file. Use the template columns instead.",
-      502,
-    );
-  }
-  const columns: ClientImportColumnMapping = {
-    legalName,
-    tin: verify(result.data.tin),
-    cacNumber: verify(result.data.cacNumber),
-    email: verify(result.data.email),
-    street: verify(result.data.street),
-    city: verify(result.data.city),
-    engagementTitle: verify(result.data.engagementTitle),
+  // Fail-closed re-verification, in two steps the app owns end to end.
+  //
+  // Step 1 — locate the header row: the scan-window row where the MOST of
+  // the model's proposed column names resolve to exactly one cell. Requiring
+  // the best overall match (rather than the first row containing legalName)
+  // means a preamble label that happens to repeat the legalName header text
+  // cannot hijack the mapping away from the real header row.
+  const proposed = [
+    result.data.legalName,
+    result.data.tin,
+    result.data.cacNumber,
+    result.data.email,
+    result.data.street,
+    result.data.city,
+    result.data.engagementTitle,
+  ].filter((n): n is string => n !== null);
+  const uniqueIndexIn = (row: string[], name: string): number => {
+    const key = normalizeHeaderName(name);
+    const hits = row
+      .map((cell, i) => (normalizeHeaderName(cell) === key ? i : -1))
+      .filter((i) => i !== -1);
+    // Zero hits: the proposal is not in this row. Two-plus hits: ambiguous —
+    // resolving to "the first one" could silently read the wrong column, so
+    // it does not count as present.
+    return hits.length === 1 ? hits[0] : -1;
   };
-
-  // The checker: locate the header row (the first scan-window row containing
-  // the verified legalName header) and run the DETERMINISTIC mapper over
-  // everything after it. The rows the firm admin reviews are exactly these.
-  const headerIndex = table
-    .slice(0, HEADER_SCAN_ROWS)
-    .findIndex((row) =>
-      row.some(
-        (cell) => normalizeHeaderName(cell) === normalizeHeaderName(legalName),
-      ),
-    );
+  let headerIndex = -1;
+  let headerScore = 0;
+  table.slice(0, HEADER_SCAN_ROWS).forEach((row, i) => {
+    if (uniqueIndexIn(row, result.data.legalName) === -1) return;
+    const score = proposed.filter((n) => uniqueIndexIn(row, n) !== -1).length;
+    if (score > headerScore) {
+      headerScore = score;
+      headerIndex = i;
+    }
+  });
   if (headerIndex === -1) {
     throw new DomainError(
       "CLERK_DRAFT_FAILED",
@@ -198,9 +192,25 @@ export async function draftClientImportWithClerk(
       502,
     );
   }
-  const header = table[headerIndex].map(normalizeHeaderName);
+  const headerRow = table[headerIndex];
+
+  // Step 2 — every proposed column must resolve to exactly one cell of THAT
+  // header row (not merely appear somewhere in the scan window, where a data
+  // cell could vouch for it). Optional columns that don't resolve are
+  // dropped; legalName not resolving is no draft at all (guaranteed above).
+  const verify = (name: string | null): string | null =>
+    name !== null && uniqueIndexIn(headerRow, name) !== -1 ? name : null;
+  const columns: ClientImportColumnMapping = {
+    legalName: result.data.legalName,
+    tin: verify(result.data.tin),
+    cacNumber: verify(result.data.cacNumber),
+    email: verify(result.data.email),
+    street: verify(result.data.street),
+    city: verify(result.data.city),
+    engagementTitle: verify(result.data.engagementTitle),
+  };
   const columnIndex = (name: string | null): number =>
-    name === null ? -1 : header.indexOf(normalizeHeaderName(name));
+    name === null ? -1 : uniqueIndexIn(headerRow, name);
   const idx = {
     legalName: columnIndex(columns.legalName),
     tin: columnIndex(columns.tin),

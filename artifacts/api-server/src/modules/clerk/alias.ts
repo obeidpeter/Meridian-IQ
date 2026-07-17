@@ -1,5 +1,5 @@
-import { and, eq } from "drizzle-orm";
-import { db, getDb, partyNameAliasesTable } from "@workspace/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { db, getDb, partiesTable, partyNameAliasesTable } from "@workspace/db";
 import { logger } from "../../lib/logger";
 
 // Buyer/supplier alias memory (exhaust idea #6). Supplier memory learns
@@ -49,31 +49,40 @@ export function aliasKey(name: string | null | undefined): string | null {
 export interface AliasEntry {
   // What the document said.
   extractedName: string | null;
-  // The register party a human confirmed.
+  // The register party a human confirmed. Its register name is loaded here —
+  // an alias identical to it teaches nothing (ordinary matching already finds
+  // it) and is skipped.
   partyId: string;
-  // That party's register name — an alias identical to it teaches nothing
-  // (ordinary matching already finds it) and is skipped.
-  partyLegalName: string;
 }
 
 // Record the extracted-name → confirmed-party pairings from one approval.
-// Best-effort by design: log and continue on any failure. The write goes on
-// the RAW pool (root client), never the ambient request transaction — a
-// swallowed statement error would still poison an ambient transaction and
-// fail the approval at commit, which "best-effort exhaust" must never do.
+// Best-effort by design: log and continue on any failure. EVERYTHING —
+// including the register-name reads — runs on the RAW pool (root client),
+// never the ambient request transaction: a statement error inside an ambient
+// transaction poisons it even when the JS error is caught, which would fail
+// the approval at commit — exactly what "best-effort exhaust" must never do.
 // The caller invokes this only after the approval's compare-and-set has
-// already succeeded, so a raw write cannot record an alias for a losing
-// concurrent decision.
+// already succeeded (and assertPartyInFirm validated the ids), so a raw
+// write cannot record an alias for a losing concurrent decision.
 export async function recordPartyAliases(
   firmId: string | null,
   entries: AliasEntry[],
 ): Promise<void> {
   if (!firmId) return;
   try {
+    const partyIds = [...new Set(entries.map((e) => e.partyId))];
+    if (partyIds.length === 0) return;
+    const parties = await db
+      .select({ id: partiesTable.id, legalName: partiesTable.legalName })
+      .from(partiesTable)
+      .where(inArray(partiesTable.id, partyIds));
+    const legalName = new Map(parties.map((p) => [p.id, p.legalName]));
     for (const entry of entries) {
       const key = aliasKey(entry.extractedName);
       if (!key) continue;
-      if (key === aliasKey(entry.partyLegalName)) continue;
+      const registerName = legalName.get(entry.partyId);
+      if (!registerName) continue;
+      if (key === aliasKey(registerName)) continue;
       await db
         .insert(partyNameAliasesTable)
         .values({ firmId, partyId: entry.partyId, alias: key })
