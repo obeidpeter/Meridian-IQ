@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.23.0
+ * OpenAPI spec version: 0.24.0
  */
 import * as zod from 'zod';
 
@@ -746,6 +746,65 @@ export const ExportVatPackCsvQueryParams = zod.object({
 })
 
 export const ExportVatPackCsvResponse = zod.unknown()
+
+
+/**
+ * @summary Draft a cover note phrasing the VAT pack's computed facts (template fallback; nothing stored — the partner edits and owns it)
+ */
+export const draftVatPackCoverNoteBodyMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const DraftVatPackCoverNoteBody = zod.object({
+  "month": zod.string().regex(draftVatPackCoverNoteBodyMonthRegExp).optional()
+})
+
+export const DraftVatPackCoverNoteResponse = zod.object({
+  "monthStart": zod.string(),
+  "monthLabel": zod.string(),
+  "note": zod.string(),
+  "source": zod.enum(['clerk', 'template']),
+  "disclosure": zod.string()
+})
+
+
+/**
+ * @summary A client's frequent line items mined from its own invoices (deterministic — nothing stored, no model)
+ */
+export const ListLineItemSuggestionsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const ListLineItemSuggestionsResponseItem = zod.object({
+  "key": zod.string(),
+  "description": zod.string(),
+  "count": zod.number(),
+  "medianUnitPrice": zod.string(),
+  "vatRate": zod.string(),
+  "lastUsed": zod.string()
+})
+export const ListLineItemSuggestionsResponse = zod.array(ListLineItemSuggestionsResponseItem)
+
+
+/**
+ * @summary The firm's recurring rejection causes over a trailing window, catalogue-grounded (pure SQL)
+ */
+export const GetRejectionPatternsResponse = zod.object({
+  "windowDays": zod.number(),
+  "totalRejections": zod.number(),
+  "previousTotal": zod.number(),
+  "rows": zod.array(zod.object({
+  "errorCode": zod.string(),
+  "category": zod.string().nullish(),
+  "cause": zod.string().nullish(),
+  "fix": zod.string().nullish(),
+  "retriable": zod.boolean().nullish(),
+  "count": zod.number(),
+  "invoiceCount": zod.number(),
+  "clientCount": zod.number(),
+  "previousCount": zod.number(),
+  "lastSeen": zod.string()
+}))
+})
 
 
 /**

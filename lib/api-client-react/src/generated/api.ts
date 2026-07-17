@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.23.0
+ * OpenAPI spec version: 0.24.0
  */
 import {
   useMutation,
@@ -90,6 +90,7 @@ import type {
   DraftClientImportInput,
   DraftInvoiceWithClerkInput,
   DraftStatementFormatInput,
+  DraftVatCoverNoteInput,
   Engagement,
   EngagementInput,
   EngagementNarrative,
@@ -138,6 +139,7 @@ import type {
   InvoiceImportResult,
   InvoiceInput,
   InvoiceUpdateInput,
+  LineItemSuggestion,
   ListB2cReportsParams,
   ListBankStatementsParams,
   ListBuyerInvoicesParams,
@@ -147,6 +149,7 @@ import type {
   ListClientStatementsParams,
   ListErpConnectionsParams,
   ListInvoicesParams,
+  ListLineItemSuggestionsParams,
   ListOperatorCasesParams,
   ListPartiesParams,
   ListRecurringSuggestionsParams,
@@ -187,6 +190,7 @@ import type {
   RecurringInvoiceTemplateInput,
   RecurringInvoiceTemplateUpdateInput,
   RecurringSuggestion,
+  RejectionPatternReport,
   ReplyToEscalationInput,
   ResetPasswordInput,
   ResolveCaseInput,
@@ -216,6 +220,7 @@ import type {
   UserInput,
   ValidationResult,
   VatPack,
+  VatPackCoverNote,
   VatRiskInput,
   VatRiskReport
 } from './api.schemas';
@@ -2859,6 +2864,237 @@ export function useExportVatPackCsv<TData = Awaited<ReturnType<typeof exportVatP
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportVatPackCsvQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDraftVatPackCoverNoteUrl = () => {
+
+
+
+
+  return `/api/vat-pack/cover-note`
+}
+
+/**
+ * @summary Draft a cover note phrasing the VAT pack's computed facts (template fallback; nothing stored — the partner edits and owns it)
+ */
+export const draftVatPackCoverNote = async (draftVatCoverNoteInput?: DraftVatCoverNoteInput, options?: RequestInit): Promise<VatPackCoverNote> => {
+
+  return customFetch<VatPackCoverNote>(getDraftVatPackCoverNoteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftVatCoverNoteInput)
+  }
+);}
+
+
+
+
+export const getDraftVatPackCoverNoteMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftVatPackCoverNote>>, TError,{data?: BodyType<DraftVatCoverNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftVatPackCoverNote>>, TError,{data?: BodyType<DraftVatCoverNoteInput>}, TContext> => {
+
+const mutationKey = ['draftVatPackCoverNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftVatPackCoverNote>>, {data?: BodyType<DraftVatCoverNoteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  draftVatPackCoverNote(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftVatPackCoverNoteMutationResult = NonNullable<Awaited<ReturnType<typeof draftVatPackCoverNote>>>
+    export type DraftVatPackCoverNoteMutationBody = BodyType<DraftVatCoverNoteInput> | undefined
+    export type DraftVatPackCoverNoteMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Draft a cover note phrasing the VAT pack's computed facts (template fallback; nothing stored — the partner edits and owns it)
+ */
+export const useDraftVatPackCoverNote = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftVatPackCoverNote>>, TError,{data?: BodyType<DraftVatCoverNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftVatPackCoverNote>>,
+        TError,
+        {data?: BodyType<DraftVatCoverNoteInput>},
+        TContext
+      > => {
+      return useMutation(getDraftVatPackCoverNoteMutationOptions(options));
+    }
+
+export const getListLineItemSuggestionsUrl = (params?: ListLineItemSuggestionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/line-item-suggestions?${stringifiedParams}` : `/api/line-item-suggestions`
+}
+
+/**
+ * @summary A client's frequent line items mined from its own invoices (deterministic — nothing stored, no model)
+ */
+export const listLineItemSuggestions = async (params?: ListLineItemSuggestionsParams, options?: RequestInit): Promise<LineItemSuggestion[]> => {
+
+  return customFetch<LineItemSuggestion[]>(getListLineItemSuggestionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLineItemSuggestionsQueryKey = (params?: ListLineItemSuggestionsParams,) => {
+    return [
+    `/api/line-item-suggestions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListLineItemSuggestionsQueryOptions = <TData = Awaited<ReturnType<typeof listLineItemSuggestions>>, TError = ErrorType<BadRequestResponse>>(params?: ListLineItemSuggestionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLineItemSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLineItemSuggestionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLineItemSuggestions>>> = ({ signal }) => listLineItemSuggestions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLineItemSuggestions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLineItemSuggestionsQueryResult = NonNullable<Awaited<ReturnType<typeof listLineItemSuggestions>>>
+export type ListLineItemSuggestionsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary A client's frequent line items mined from its own invoices (deterministic — nothing stored, no model)
+ */
+
+export function useListLineItemSuggestions<TData = Awaited<ReturnType<typeof listLineItemSuggestions>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ListLineItemSuggestionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLineItemSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLineItemSuggestionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetRejectionPatternsUrl = () => {
+
+
+
+
+  return `/api/rejection-patterns`
+}
+
+/**
+ * @summary The firm's recurring rejection causes over a trailing window, catalogue-grounded (pure SQL)
+ */
+export const getRejectionPatterns = async ( options?: RequestInit): Promise<RejectionPatternReport> => {
+
+  return customFetch<RejectionPatternReport>(getGetRejectionPatternsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRejectionPatternsQueryKey = () => {
+    return [
+    `/api/rejection-patterns`
+    ] as const;
+    }
+
+
+export const getGetRejectionPatternsQueryOptions = <TData = Awaited<ReturnType<typeof getRejectionPatterns>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRejectionPatterns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRejectionPatternsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRejectionPatterns>>> = ({ signal }) => getRejectionPatterns({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRejectionPatterns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRejectionPatternsQueryResult = NonNullable<Awaited<ReturnType<typeof getRejectionPatterns>>>
+export type GetRejectionPatternsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm's recurring rejection causes over a trailing window, catalogue-grounded (pure SQL)
+ */
+
+export function useGetRejectionPatterns<TData = Awaited<ReturnType<typeof getRejectionPatterns>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRejectionPatterns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRejectionPatternsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

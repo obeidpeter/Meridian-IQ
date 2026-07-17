@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.23.0
+ * OpenAPI spec version: 0.24.0
  */
 
 export * from './acceptInvitationInput';
@@ -161,6 +161,7 @@ export * from './draftClaimWithClerkInput';
 export * from './draftClientImportInput';
 export * from './draftInvoiceWithClerkInput';
 export * from './draftStatementFormatInput';
+export * from './draftVatCoverNoteInput';
 export * from './engagement';
 export * from './engagementFindings';
 export * from './engagementInput';
@@ -253,6 +254,7 @@ export * from './invoiceLine';
 export * from './invoiceLineInput';
 export * from './invoiceStatus';
 export * from './invoiceUpdateInput';
+export * from './lineItemSuggestion';
 export * from './listB2cReportsParams';
 export * from './listB2cReportsStatus';
 export * from './listBankStatementsParams';
@@ -266,6 +268,7 @@ export * from './listClerkEvalRunsParams';
 export * from './listClientStatementsParams';
 export * from './listErpConnectionsParams';
 export * from './listInvoicesParams';
+export * from './listLineItemSuggestionsParams';
 export * from './listOperatorCasesParams';
 export * from './listOperatorCasesStatus';
 export * from './listPartiesParams';
@@ -347,6 +350,8 @@ export * from './recurringInvoiceTemplateInput';
 export * from './recurringInvoiceTemplateInputCadence';
 export * from './recurringInvoiceTemplateUpdateInput';
 export * from './recurringSuggestion';
+export * from './rejectionPatternReport';
+export * from './rejectionPatternReportRowsItem';
 export * from './remediationItem';
 export * from './replyToEscalationInput';
 export * from './resetPasswordInput';
@@ -392,6 +397,8 @@ export * from './user';
 export * from './userInput';
 export * from './validationResult';
 export * from './vatPack';
+export * from './vatPackCoverNote';
+export * from './vatPackCoverNoteSource';
 export * from './vatPackRowsItem';
 export * from './vatPackTotals';
 export * from './vatRiskInput';

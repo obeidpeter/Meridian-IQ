@@ -3,13 +3,18 @@ import { Link } from "wouter";
 import {
   getGetFirmReceivablesQueryKey,
   getGetVatPackQueryKey,
+  getGetRejectionPatternsQueryKey,
   useGetFirmReceivables,
   useGetMe,
   useGetPortfolio,
   useGetVatPack,
+  useGetRejectionPatterns,
+  useDraftVatPackCoverNote,
+  type VatPackCoverNote,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -30,7 +35,13 @@ import {
   Upload,
   GitBranch,
   Download,
+  Sparkles,
+  Copy,
+  TrendingUp,
+  TrendingDown,
+  Minus,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import {
   formatNaira,
   formatDate,
@@ -77,11 +88,32 @@ function packMonthLabel(monthStart: string): string {
 // per-client statements. Renders only on success (a 403 for roles without
 // the portfolio capability simply hides the card).
 function VatPackCard() {
+  const { toast } = useToast();
   const [month, setMonth] = useState<string | undefined>(undefined);
   const params = month ? { month } : undefined;
   const { data: pack, isSuccess } = useGetVatPack(params, {
     query: { queryKey: getGetVatPackQueryKey(params), retry: false },
   });
+
+  // Cover note (round-4 idea #6): phrases the pack's own numbers; the
+  // partner edits and owns the text — nothing is stored server-side.
+  const coverNote = useDraftVatPackCoverNote();
+  const [note, setNote] = useState<VatPackCoverNote | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const draftNote = (monthStart: string) => {
+    coverNote.mutate(
+      { data: { month: monthStart } },
+      {
+        onSuccess: (res) => {
+          setNote(res);
+          setNoteText(res.note);
+        },
+        onError: () =>
+          toast({ title: "Could not draft the note", variant: "destructive" }),
+      },
+    );
+  };
+
   if (!isSuccess || !pack) return null;
   const exportHref = `/api/vat-pack/export?month=${encodeURIComponent(pack.monthStart)}`;
   return (
@@ -93,7 +125,13 @@ function VatPackCard() {
         <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
           <span>VAT filing pack</span>
           <span className="flex items-center gap-2">
-            <Select value={pack.monthStart} onValueChange={setMonth}>
+            <Select
+              value={pack.monthStart}
+              onValueChange={(m) => {
+                setMonth(m);
+                setNote(null);
+              }}
+            >
               <SelectTrigger
                 className="h-8 w-44 text-xs"
                 data-testid="select-vat-pack-month"
@@ -115,6 +153,16 @@ function VatPackCard() {
               data-testid="button-vat-pack-csv"
             >
               <Download className="w-4 h-4 mr-1" aria-hidden="true" /> CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={coverNote.isPending}
+              onClick={() => draftNote(pack.monthStart)}
+              data-testid="button-vat-cover-note"
+            >
+              <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" />
+              {coverNote.isPending ? "Drafting…" : "Cover note"}
             </Button>
           </span>
         </CardTitle>
@@ -183,6 +231,133 @@ function VatPackCard() {
           </div>
         )}
         <p className="text-xs text-muted-foreground">{pack.note}</p>
+        {note && (
+          <div
+            className="rounded-md border p-3 space-y-2"
+            data-testid="vat-cover-note"
+          >
+            <p className="text-xs font-medium text-muted-foreground">
+              Cover note for {note.monthLabel} —{" "}
+              {note.source === "clerk"
+                ? "Clerk phrased the pack's own numbers; edit before sending."
+                : "template text (Clerk unavailable); edit before sending."}{" "}
+              Nothing is stored — copy it into your email.
+            </p>
+            <Textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              className="min-h-[110px] text-sm"
+              data-testid="input-vat-cover-note"
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard?.writeText(noteText);
+                  toast({ title: "Copied" });
+                }}
+                data-testid="button-copy-cover-note"
+              >
+                <Copy className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" /> Copy
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setNote(null)}
+                data-testid="button-discard-cover-note"
+              >
+                Discard
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Rejection-pattern report (round-4 idea #3): the firm's recurring rejection
+// causes, catalogue-grounded, with a prior-window trend. Renders only on
+// success and only when there is something to show — a quiet firm sees no
+// card, not an empty table.
+function RejectionPatternsCard() {
+  const { data: report, isSuccess } = useGetRejectionPatterns({
+    query: { queryKey: getGetRejectionPatternsQueryKey(), retry: false },
+  });
+  if (!isSuccess || !report) return null;
+  if (report.rows.length === 0) return null;
+  const trend = (count: number, previous: number) =>
+    count > previous ? (
+      <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+        <TrendingUp className="w-3.5 h-3.5" aria-hidden="true" />
+        {count - previous > 0 ? `+${count - previous}` : ""}
+      </span>
+    ) : count < previous ? (
+      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+        <TrendingDown className="w-3.5 h-3.5" aria-hidden="true" />−
+        {previous - count}
+      </span>
+    ) : (
+      <Minus className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
+    );
+  return (
+    <Card
+      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid="card-rejection-patterns"
+    >
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FileWarning className="w-4 h-4 text-primary" aria-hidden="true" />
+          Recurring rejection causes
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-rejection-patterns">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">Code</th>
+                <th className="py-2 pr-3 font-medium text-right">
+                  Last {report.windowDays}d
+                </th>
+                <th className="py-2 pr-3 font-medium text-right">Trend</th>
+                <th className="py-2 pr-3 font-medium text-right">Clients</th>
+                <th className="py-2 font-medium">Fix</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {report.rows.slice(0, 8).map((r) => (
+                <tr key={r.errorCode} data-testid={`row-rejection-${r.errorCode}`}>
+                  <td className="py-2 pr-3">
+                    <span className="font-mono text-xs">{r.errorCode}</span>
+                    {r.category && (
+                      <span className="ml-1.5 text-xs text-muted-foreground">
+                        {r.category}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{r.count}</td>
+                  <td className="py-2 pr-3 text-right">
+                    {trend(r.count, r.previousCount)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {r.clientCount}
+                  </td>
+                  <td className="py-2 text-xs text-muted-foreground max-w-[22rem]">
+                    {r.fix ?? "Not in the catalogue yet — draft an entry from the catalogue page."}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Rejected submission attempts in the last {report.windowDays} days (
+          {report.totalRejections}) against the {report.windowDays} before (
+          {report.previousTotal}). Computed from your own submission history —
+          no AI involved.
+        </p>
       </CardContent>
     </Card>
   );
@@ -562,6 +737,8 @@ export function Portfolio() {
       <ClerkWeeklyDigestCard />
 
       <VatPackCard />
+
+      <RejectionPatternsCard />
 
       <ReceivablesCard />
     </div>

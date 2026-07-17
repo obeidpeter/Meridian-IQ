@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.23.0
+ * OpenAPI spec version: 0.24.0
  */
 export interface HealthStatus {
   status: string;
@@ -871,6 +871,60 @@ export interface VatPack {
   rows: VatPackRowsItem[];
   totals: VatPackTotals;
   note: string;
+}
+
+export interface DraftVatCoverNoteInput {
+  /** @pattern ^\d{4}-\d{2}-01$ */
+  month?: string;
+}
+
+export type VatPackCoverNoteSource = typeof VatPackCoverNoteSource[keyof typeof VatPackCoverNoteSource];
+
+
+export const VatPackCoverNoteSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface VatPackCoverNote {
+  monthStart: string;
+  monthLabel: string;
+  note: string;
+  source: VatPackCoverNoteSource;
+  disclosure: string;
+}
+
+export interface LineItemSuggestion {
+  key: string;
+  description: string;
+  count: number;
+  medianUnitPrice: string;
+  vatRate: string;
+  lastUsed: string;
+}
+
+export type RejectionPatternReportRowsItem = {
+  errorCode: string;
+  /** @nullable */
+  category?: string | null;
+  /** @nullable */
+  cause?: string | null;
+  /** @nullable */
+  fix?: string | null;
+  /** @nullable */
+  retriable?: boolean | null;
+  count: number;
+  invoiceCount: number;
+  clientCount: number;
+  previousCount: number;
+  lastSeen: string;
+};
+
+export interface RejectionPatternReport {
+  windowDays: number;
+  totalRejections: number;
+  previousTotal: number;
+  rows: RejectionPatternReportRowsItem[];
 }
 
 export interface CancelInvoiceInput {
@@ -3569,6 +3623,13 @@ export type ExportVatPackCsvParams = {
  * @pattern ^\d{4}-\d{2}-01$
  */
 month?: string;
+};
+
+export type ListLineItemSuggestionsParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
 };
 
 export type ListRecurringSuggestionsParams = {

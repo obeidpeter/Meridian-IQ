@@ -55,6 +55,10 @@ import {
   GetInvoiceStatusLightResponse,
   GetVatPackQueryParams,
   GetVatPackResponse,
+  DraftVatPackCoverNoteBody,
+  DraftVatPackCoverNoteResponse,
+  ListLineItemSuggestionsQueryParams,
+  ListLineItemSuggestionsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { computeStatusLight } from "../modules/clerk/status-light";
@@ -74,6 +78,9 @@ import {
   closedLagosMonths,
   computeVatPack,
 } from "../modules/clerk/vat-pack";
+import { draftVatCoverNote } from "../modules/clerk/vat-note";
+import { getClerkGateway } from "../modules/clerk/provider";
+import { listLineItemSuggestions } from "../modules/invoice/line-items";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { likePattern } from "../lib/sql";
 import {
@@ -309,6 +316,47 @@ router.get("/vat-pack/export", async (req, res): Promise<void> => {
     ],
   );
   sendCsvAttachment(res, `vat-pack-${pack.monthStart.slice(0, 7)}.csv`, csv);
+});
+
+// VAT filing cover note (round-4 idea #6): phrases the pack's computed facts
+// into a note the partner edits and owns. Digest posture end to end — kill
+// switch, missing provider, exhausted budget or invalid output all answer
+// with the deterministic template (never an error), so there is no route
+// budget pre-check: the gateway backstop turns an exhausted allowance into
+// the fallback, exactly like the failure explainer.
+router.post("/vat-pack/cover-note", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const firmId = requireFirmScope(req.principal);
+  const body = parseOrThrow(DraftVatPackCoverNoteBody, req.body ?? {});
+  const months = closedLagosMonths();
+  const month = body.month ?? months[0];
+  if (!months.includes(month)) {
+    throw new DomainError(
+      "BAD_MONTH",
+      "month must be one of the last 12 closed Lagos months (YYYY-MM-01)",
+      400,
+    );
+  }
+  const gateway = await getClerkGateway().catch(() => null);
+  const note = await draftVatCoverNote(firmId, month, gateway);
+  res.json(DraftVatPackCoverNoteResponse.parse(note));
+});
+
+// Frequent line items (round-4 idea #1): mined on demand from the client's
+// own invoices, nothing stored, no model. Same SEC-03 resolution as the
+// recurring suggestions: a client_user is pinned to its own party; a firm
+// principal names the client.
+router.get("/line-item-suggestions", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(ListLineItemSuggestionsQueryParams, req.query);
+  const firmId = requireFirmScope(req.principal);
+  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
+  if (!target) {
+    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
+  }
+  assertClientPartyScope(req.principal, target);
+  const items = await listLineItemSuggestions(firmId, target);
+  res.json(ListLineItemSuggestionsResponse.parse(items));
 });
 
 // Bulk validate & submit: same capability, party-access and consent gates as
