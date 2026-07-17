@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.33.0
+ * OpenAPI spec version: 0.34.0
  */
 
 export * from './acceptInvitationInput';
@@ -67,6 +67,7 @@ export * from './catalogueCoverageReportRecentMappingsItem';
 export * from './catalogueCoverageReportSla';
 export * from './catalogueEntryDraft';
 export * from './changePasswordInput';
+export * from './chaseLogSummary';
 export * from './chaseRow';
 export * from './chaseRowBasis';
 export * from './claimApplicability';
@@ -257,9 +258,11 @@ export * from './getClerkMetricsParams';
 export * from './getComplianceCalendarParams';
 export * from './getDashboardSummaryParams';
 export * from './getMergeImpactParams';
+export * from './getProjectionAccuracyParams';
 export * from './getPublicThemeParams';
 export * from './getQuarterlyReviewParams';
 export * from './getReceivablesSummaryParams';
+export * from './getUnmatchedCreditsParams';
 export * from './getVatPackParams';
 export * from './getVatSettlementCheckParams';
 export * from './graphEdge';
@@ -364,11 +367,15 @@ export * from './passwordReset';
 export * from './passwordResetStatus';
 export * from './passwordResetWithToken';
 export * from './paymentChaserDraft';
+export * from './paymentChaserDraftPreviousReminders';
 export * from './paymentChaserDraftSource';
 export * from './paymentFlagInput';
 export * from './paymentFlagInputPaymentStatus';
 export * from './portfolioSummary';
 export * from './priceReview';
+export * from './projectionAccuracy';
+export * from './projectionAccuracyBasisSplit';
+export * from './projectionAccuracyBuyersItem';
 export * from './promptCanaryReport';
 export * from './promptCanaryReportFixturesItem';
 export * from './promptCanaryReportVerdict';
@@ -456,6 +463,8 @@ export * from './unbilledIncomeAlert';
 export * from './unearnedIncome';
 export * from './unearnedProspect';
 export * from './unmappedErrorCode';
+export * from './unmatchedCredits';
+export * from './unmatchedCreditsRowsItem';
 export * from './user';
 export * from './userInput';
 export * from './validationResult';

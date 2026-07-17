@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.33.0
+ * OpenAPI spec version: 0.34.0
  */
 export interface HealthStatus {
   status: string;
@@ -913,6 +913,8 @@ export interface VatSettlementCheck {
   outstandingTotal: string;
   creditedCount: number;
   creditedTotal: string;
+  otherCount: number;
+  otherTotal: string;
   settledShare: number | null;
   unsettled: VatSettlementCheckUnsettledItem[];
   unsettledTruncated: boolean;
@@ -1024,7 +1026,7 @@ export type CatalogueCoverageReportRecentMappingsItem = {
 export interface CatalogueCoverageReport {
   windowDays: number;
   slaWindowDays: number;
-  rejectedAttempts: number;
+  codedRejections: number;
   mappedAttempts: number;
   mappedShare: number | null;
   uncodedRejections: number;
@@ -3968,6 +3970,11 @@ export const PaymentChaserDraftSource = {
   template: 'template',
 } as const;
 
+export type PaymentChaserDraftPreviousReminders = {
+  count: number;
+  lastAt: string | null;
+};
+
 export interface PaymentChaserDraft {
   invoiceId: string;
   invoiceNumber: string;
@@ -3975,6 +3982,61 @@ export interface PaymentChaserDraft {
   subject: string;
   body: string;
   source: PaymentChaserDraftSource;
+  stage: number;
+  previousReminders: PaymentChaserDraftPreviousReminders;
+}
+
+export interface ChaseLogSummary {
+  invoiceId: string;
+  count: number;
+  lastAt: string | null;
+  stage: number;
+}
+
+export type UnmatchedCreditsRowsItem = {
+  lineId: string;
+  statementId: string;
+  valueDate: string;
+  amount: string;
+  narration: string | null;
+  counterpartyRef: string | null;
+};
+
+export interface UnmatchedCredits {
+  asOf: string;
+  windowDays: number;
+  count: number;
+  totalAmount: string;
+  rows: UnmatchedCreditsRowsItem[];
+  truncated: boolean;
+  note: string;
+}
+
+export type ProjectionAccuracyBasisSplit = {
+  rhythm: number;
+  dueDate: number;
+  defaultTerms: number;
+};
+
+export type ProjectionAccuracyBuyersItem = {
+  buyerPartyId: string;
+  buyerName: string;
+  settlements: number;
+  medianErrorDays: number;
+  medianAbsErrorDays: number;
+  withinShare: number;
+};
+
+export interface ProjectionAccuracy {
+  asOf: string;
+  withinDays: number;
+  settlements: number;
+  medianErrorDays: number | null;
+  medianAbsErrorDays: number | null;
+  withinShare: number | null;
+  basisSplit: ProjectionAccuracyBasisSplit;
+  buyers: ProjectionAccuracyBuyersItem[];
+  note: string;
 }
 
 export type ClerkTierReportRowsItemRecommendation = typeof ClerkTierReportRowsItemRecommendation[keyof typeof ClerkTierReportRowsItemRecommendation];
@@ -4153,6 +4215,20 @@ clientPartyId?: string;
 };
 
 export type ListPaymentBehaviourParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
+export type GetUnmatchedCreditsParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
+export type GetProjectionAccuracyParams = {
 /**
  * Required for firm principals; a client_user is pinned to its own party.
  */

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
+import { UNMAPPED_TITLE_PREFIX } from "./sweeps";
 
 // Catalogue coverage report (round-13 idea #5). INT-02 promises that
 // unmapped rail errors "alert operators and enter the catalogue within one
@@ -39,8 +40,9 @@ export interface RecentMappingRow {
 export interface CatalogueCoverageReport {
   windowDays: number;
   slaWindowDays: number;
-  // Rejected attempts in the window that carried an error code…
-  rejectedAttempts: number;
+  // Rejected attempts in the window that carried an error code (uncoded
+  // rejections sit in their own bucket below — they can never be mapped)…
+  codedRejections: number;
   // …of which this many carry a code the catalogue maps today.
   mappedAttempts: number;
   mappedShare: number | null;
@@ -106,13 +108,17 @@ export async function computeCatalogueCoverage(): Promise<CatalogueCoverageRepor
       SELECT
         sa.error_code AS code,
         COUNT(*)::int AS occurrences,
+        -- All-time first REJECTED sighting: the same sighting definition the
+        -- SLA judges by, and the sort key below — so "oldest debt first"
+        -- means the debt's true age, not its age within the window.
         (SELECT MIN(s2.created_at) FROM submission_attempts s2
-          WHERE s2.error_code = sa.error_code)::text AS first_seen,
+          WHERE s2.error_code = sa.error_code
+            AND s2.status = 'rejected')::text AS first_seen,
         MAX(sa.created_at)::text AS last_seen,
         EXISTS (
           SELECT 1 FROM operator_cases oc
           WHERE oc.error_code = sa.error_code
-            AND oc.title LIKE 'Unmapped code %'
+            AND oc.title LIKE ${`${UNMAPPED_TITLE_PREFIX}%`}
             AND oc.status IN ('open', 'in_progress')
         ) AS open_case
       FROM submission_attempts sa
@@ -121,7 +127,9 @@ export async function computeCatalogueCoverage(): Promise<CatalogueCoverageRepor
         AND sa.error_code IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM error_catalogue ec WHERE ec.code = sa.error_code)
       GROUP BY sa.error_code
-      ORDER BY MIN(sa.created_at) ASC
+      ORDER BY (SELECT MIN(s2.created_at) FROM submission_attempts s2
+          WHERE s2.error_code = sa.error_code
+            AND s2.status = 'rejected') ASC
       LIMIT ${MAX_UNMAPPED_ROWS + 1}
     `)
   ).rows;
@@ -178,7 +186,7 @@ export async function computeCatalogueCoverage(): Promise<CatalogueCoverageRepor
   return {
     windowDays: WINDOW_DAYS,
     slaWindowDays: SLA_WINDOW_DAYS,
-    rejectedAttempts: coded,
+    codedRejections: coded,
     mappedAttempts: Number(agg?.mapped ?? 0),
     mappedShare:
       coded > 0 ? Math.round((Number(agg?.mapped ?? 0) / coded) * 10000) / 10000 : null,

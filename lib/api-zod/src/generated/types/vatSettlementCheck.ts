@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.33.0
+ * OpenAPI spec version: 0.34.0
  */
 import type { VatSettlementCheckUnsettledItem } from './vatSettlementCheckUnsettledItem';
 
@@ -19,6 +19,8 @@ export interface VatSettlementCheck {
   outstandingTotal: string;
   creditedCount: number;
   creditedTotal: string;
+  otherCount: number;
+  otherTotal: string;
   settledShare: number | null;
   unsettled: VatSettlementCheckUnsettledItem[];
   unsettledTruncated: boolean;

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.31.0`).
+contract change (it is currently `0.34.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -127,7 +127,8 @@ fallback, never stored, the partner owns the letter); the **weekly digest**
 firm-keyed RLS via migration 0011) computes every fact in SQL — including
 the round-11 money facts from `firmMoneySummary` (payments expected in the
 coming week per each buyer's rhythm, and the chase-worthy count past BOTH
-due date and rhythm) — and lets the
+due date and rhythm) and the round-14 facts (firm-wide unmatched credits,
+and outstanding invoices with 2+ logged reminders) — and lets the
 model phrase them, falling back to deterministic template text; the
 **per-client monthly statement** (`modules/clerk/client-statement.ts`, opt-in
 `clerk_client_statements` flag, sweep-generated for the newest CLOSED Lagos
@@ -354,11 +355,21 @@ DIDN'T go out — sharing `buyerBillingHistories` with the suggestions so the
 two cards can never disagree about what a habit is, alerting only inside a
 bounded window (grace 5 days, lapsed after 45 — an ended arrangement stops
 nagging), surfaced as an SME dashboard card and a fact line in the weekly
-digest (`countFirmUnbilled`); **buyer payment-behaviour memory**
+digest (`countFirmUnbilled`); the **unmatched-credit detector**
+(`modules/invoice/unmatched-credits.ts`, `GET /unmatched-credits`, zero
+model calls, nothing stored) is unbilled-income's compliance mirror — money
+that came IN with no invoice behind it: parsed credit lines on committed
+statements in a trailing 90-day window with NO live match proposal
+(proposed or accepted) and NO settlement event, one shared predicate
+fragment for the client card, its uncapped totals and the firm digest count
+(`countFirmUnmatchedCredits`) — framed as an advisory (a transfer or loan
+also looks like this), never an accusation, with a "raise the invoice" CTA;
+**buyer payment-behaviour memory**
 (`modules/invoice/payment-behaviour.ts`, `GET /payment-behaviour`, zero model
 calls, nothing stored) mines per-buyer days-to-pay medians from the client's
 own ACCEPTED reconciliation matches (credit lines with a value date only —
-the human-confirmed exhaust, 3+ settlements required, negatives dropped):
+the human-confirmed exhaust via the shared `acceptedSettlementRows`
+evidence query, 3+ settlements required, negatives dropped):
 "usually pays ~Nd" chips on the receivables debtors and the invoice detail,
 the projection engine for the **cash-flow outlook + chase list**
 (`modules/invoice/cashflow.ts`, `GET /dashboard/cashflow` +
@@ -375,7 +386,22 @@ model phrases ONE outstanding receivable's stored facts (eligibility is the
 receivables definition exactly, so a settled invoice can never be chased)
 plus the buyer's payment rhythm into a reminder the client copies into their
 OWN email; template fallback always answers, nothing stored, nothing sent by
-the platform; **line-item memory** (`modules/invoice/line-items.ts`,
+the platform. The chaser is also a **ladder** (round 14): `chase_log`
+(firm-keyed RLS migration 0018) records one row per reminder the client
+actually SENT — the UI logs on COPY (`POST /invoices/{id}/chase-log`,
+`invoice.write` + the same tenant/SEC-03/still-outstanding gates), never on
+draft — and the draft reads the count to escalate register with the stage
+(`chaser.v2`: warm → politely firm → confirm-a-payment-date; NEVER threats,
+in the system prompt and every template), with the digest counting
+outstanding invoices at 2+ reminders (`countFirmChasedTwice`). The
+projection engine also audits itself: **projection accuracy**
+(`modules/invoice/projection-accuracy.ts`, `GET /projection-accuracy`, zero
+model calls, nothing stored) replays the SAME three-tier rule against every
+observed settlement — rhythm evaluated LEAVE-ONE-OUT (a payment never
+predicts itself, 3+ other settlements required), else due-date terms, else
+30 days — reporting signed median error, a ±7-day share and a per-buyer
+table, surfaced as a confidence line under the SME outlook card (5+
+settlements); **line-item memory** (`modules/invoice/line-items.ts`,
 `GET /line-item-suggestions`, zero model calls, nothing stored) mines the
 client's own invoice lines into an item catalogue (order-insensitive item
 key, 2+ occurrences, median unit price, MODAL VAT rate, newest description)

@@ -96,7 +96,7 @@ test("coverage, unmapped debt and the mapping SLA all see the seeded codes", asy
 
   // Window aggregate (lower bounds on the shared pool): both seeded rejected
   // attempts are coded and in-window, and B's code is mapped today.
-  assert.ok(report.rejectedAttempts >= 2);
+  assert.ok(report.codedRejections >= 2);
   assert.ok(report.mappedAttempts >= 1);
   assert.ok(
     report.mappedShare === null ||

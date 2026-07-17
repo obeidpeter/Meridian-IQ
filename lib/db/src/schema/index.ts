@@ -16,3 +16,4 @@ export * from "./b2c.ts";
 export * from "./certification.ts";
 export * from "./connectors.ts";
 export * from "./clerk.ts";
+export * from "./chase.ts";

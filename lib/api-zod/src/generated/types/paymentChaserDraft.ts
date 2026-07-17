@@ -3,8 +3,9 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.33.0
+ * OpenAPI spec version: 0.34.0
  */
+import type { PaymentChaserDraftPreviousReminders } from './paymentChaserDraftPreviousReminders';
 import type { PaymentChaserDraftSource } from './paymentChaserDraftSource';
 
 export interface PaymentChaserDraft {
@@ -14,4 +15,6 @@ export interface PaymentChaserDraft {
   subject: string;
   body: string;
   source: PaymentChaserDraftSource;
+  stage: number;
+  previousReminders: PaymentChaserDraftPreviousReminders;
 }

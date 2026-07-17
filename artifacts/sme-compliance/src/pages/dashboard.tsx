@@ -16,6 +16,10 @@ import {
   getGetCashflowOutlookQueryKey,
   useGetChaseList,
   getGetChaseListQueryKey,
+  useGetUnmatchedCredits,
+  getGetUnmatchedCreditsQueryKey,
+  useGetProjectionAccuracy,
+  getGetProjectionAccuracyQueryKey,
 } from "@workspace/api-client-react";
 import type { ReceivablesBucket, ReceivablesSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -436,11 +440,94 @@ function UnbilledIncomeCard({ clientPartyId }: { clientPartyId: string }) {
   );
 }
 
+// Unmatched credits (round-14 idea #1): bank credits with no invoice behind
+// them — the compliance mirror of the unbilled card above. If any of these
+// is a sale, an e-invoice should exist for it. Deterministic advisory,
+// renders only when something needs looking at.
+function UnmatchedCreditsCard({ clientPartyId }: { clientPartyId: string }) {
+  const { data: credits, isSuccess } = useGetUnmatchedCredits(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetUnmatchedCreditsQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  if (!isSuccess || !credits || credits.count === 0) return null;
+  return (
+    <Card data-testid="unmatched-credits">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wallet className="w-5 h-5" aria-hidden="true" /> Money in with no
+          invoice
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          {credits.count} bank credit{credits.count === 1 ? "" : "s"} totalling{" "}
+          {formatNaira(credits.totalAmount)} from the last{" "}
+          {credits.windowDays} days match no invoice on the platform.
+        </p>
+        <div className="space-y-2">
+          {credits.rows.slice(0, 5).map((r) => (
+            <div
+              key={r.lineId}
+              className="flex items-center justify-between gap-3 rounded-lg border p-3"
+              data-testid={`unmatched-credit-${r.lineId}`}
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold truncate">
+                  {r.counterpartyRef || r.narration || "Unnamed credit"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Received {formatDate(r.valueDate)}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium tabular-nums text-sm">
+                  {formatNaira(r.amount)}
+                </span>
+                <Button asChild size="sm" variant="secondary">
+                  <Link href="/invoices/new">Raise invoice</Link>
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+        {(credits.truncated || credits.rows.length > 5) && (
+          <p className="text-xs text-muted-foreground">
+            Showing the largest — reconcile your statements to see the rest.
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground pt-3 border-t">
+          {credits.note}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Cash-flow outlook (round-10 idea #1): expected inflows by week, projected
 // server-side from each buyer's own payment rhythm (falling back to due
 // dates / standard terms). Deterministic, renders only when there is money
 // outstanding.
 function CashflowCard({ clientPartyId }: { clientPartyId: string }) {
+  // Projection accuracy (round-14 idea #2): the forecast auditing itself —
+  // a confidence line under the outlook when enough settlements exist.
+  const { data: accuracy } = useGetProjectionAccuracy(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetProjectionAccuracyQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
   const { data: outlook, isSuccess } = useGetCashflowOutlook(
     { clientPartyId },
     {
@@ -502,6 +589,17 @@ function CashflowCard({ clientPartyId }: { clientPartyId: string }) {
           Projected from each customer&apos;s own payment history where we
           have one, otherwise due dates. {group.currency} only
           {outlook.groups.length > 1 ? " (other currencies not shown)" : ""}.
+          {accuracy &&
+            accuracy.settlements >= 5 &&
+            accuracy.medianAbsErrorDays != null && (
+              <span data-testid="projection-accuracy">
+                {" "}
+                Past projections have landed within about ±
+                {Math.round(accuracy.medianAbsErrorDays)} day
+                {Math.round(accuracy.medianAbsErrorDays) === 1 ? "" : "s"} of
+                actual payment ({accuracy.settlements} matched payments).
+              </span>
+            )}
         </p>
       </CardContent>
     </Card>
@@ -788,6 +886,10 @@ export function Dashboard() {
 
               {me?.clientPartyId && (
                 <UnbilledIncomeCard clientPartyId={me.clientPartyId} />
+              )}
+
+              {me?.clientPartyId && (
+                <UnmatchedCreditsCard clientPartyId={me.clientPartyId} />
               )}
 
               {me?.clientPartyId && (

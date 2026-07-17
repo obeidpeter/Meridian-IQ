@@ -13,6 +13,8 @@ import { logger } from "../../lib/logger";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import { countFirmUnbilled } from "../invoice/unbilled-income";
 import { firmMoneySummary } from "../invoice/cashflow";
+import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
+import { countFirmChasedTwice } from "../invoice/chase-log";
 import { assertFirmClerkBudget } from "./budget";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
 import { getClerkGateway } from "./provider";
@@ -75,6 +77,13 @@ export interface DigestFacts {
   expectedWeekCount: number;
   expectedWeekTotalNgn: string;
   chaseWorthyCount: number;
+  // Round-14 money facts: bank credits with no invoice behind them (the
+  // unmatched-credit detector's firm-wide count — potential off-platform
+  // sales), and outstanding invoices that already took 2+ logged reminders
+  // (the chase ladder's "polite nudging is not moving this" set).
+  unmatchedCreditCount: number;
+  unmatchedCreditClients: number;
+  chasedTwiceCount: number;
 }
 
 // Monday 00:00 UTC of the week containing `now` — the digest's identity key.
@@ -129,6 +138,8 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const r = rows[0];
   const unbilled = await countFirmUnbilled(firmId);
   const money = await firmMoneySummary(firmId);
+  const unmatched = await countFirmUnmatchedCredits(firmId);
+  const chasedTwice = await countFirmChasedTwice(firmId);
   return {
     unsubmittedCount: Number(r?.unsubmitted ?? 0),
     dueSoonCount: Number(r?.due_soon ?? 0),
@@ -140,6 +151,9 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     expectedWeekCount: money.expectedWeekCount,
     expectedWeekTotalNgn: money.expectedWeekTotalNgn,
     chaseWorthyCount: money.chaseCount,
+    unmatchedCreditCount: unmatched.credits,
+    unmatchedCreditClients: unmatched.clients,
+    chasedTwiceCount: chasedTwice,
   };
 }
 
@@ -196,6 +210,16 @@ export function buildTemplateDigest(facts: DigestFacts): {
   if (facts.chaseWorthyCount > 0) {
     bullets.push(
       `${plural(facts.chaseWorthyCount, "receivable")} ${facts.chaseWorthyCount === 1 ? "looks" : "look"} worth chasing — past both the due date and the customer's usual payment rhythm.`,
+    );
+  }
+  if (facts.unmatchedCreditCount > 0) {
+    bullets.push(
+      `${plural(facts.unmatchedCreditCount, "bank credit")} across ${plural(facts.unmatchedCreditClients, "client")} match${facts.unmatchedCreditCount === 1 ? "es" : ""} no invoice on the platform — if any is a sale, an e-invoice should exist for it.`,
+    );
+  }
+  if (facts.chasedTwiceCount > 0) {
+    bullets.push(
+      `${plural(facts.chasedTwiceCount, "invoice")} ${facts.chasedTwiceCount === 1 ? "has" : "have"} taken 2 or more payment reminders and ${isAre(facts.chasedTwiceCount)} still unpaid.`,
     );
   }
   const urgent = facts.overdueCount + facts.failedCount;

@@ -44,7 +44,19 @@ export const submissionAttemptsTable = pgTable("submission_attempts", {
 // The firm-keyed RLS policy probes invoices per candidate row (EXISTS), which
 // makes an unindexed scan pay twice — same reasoning for the two sibling
 // child tables below.
-}, (t) => [index("submission_attempts_invoice_idx").on(t.invoiceId)]);
+}, (t) => [
+  index("submission_attempts_invoice_idx").on(t.invoiceId),
+  // The catalogue coverage report (desk/catalogue-coverage.ts) walks this
+  // table by code (per-code first sighting, per-catalogue-entry SLA lateral)
+  // and by rejection window — both would otherwise be sequential scans of a
+  // table that only grows (round-13 review M1).
+  index("submission_attempts_error_code_idx").on(
+    t.errorCode,
+    t.status,
+    t.createdAt,
+  ),
+  index("submission_attempts_status_created_idx").on(t.status, t.createdAt),
+]);
 
 // A validated invoice carries an IRN, CSID and QR code (C1). Append-only.
 export const stampRecordsTable = pgTable("stamp_records", {

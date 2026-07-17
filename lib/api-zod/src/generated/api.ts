@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.33.0
+ * OpenAPI spec version: 0.34.0
  */
 import * as zod from 'zod';
 
@@ -833,6 +833,8 @@ export const GetVatSettlementCheckResponse = zod.object({
   "outstandingTotal": zod.string(),
   "creditedCount": zod.number(),
   "creditedTotal": zod.string(),
+  "otherCount": zod.number(),
+  "otherTotal": zod.string(),
   "settledShare": zod.number().nullable(),
   "unsettled": zod.array(zod.object({
   "invoiceId": zod.string().uuid(),
@@ -957,6 +959,77 @@ export const ListPaymentBehaviourResponseItem = zod.object({
   "lastSettledDate": zod.string()
 })
 export const ListPaymentBehaviourResponse = zod.array(ListPaymentBehaviourResponseItem)
+
+
+/**
+ * @summary Bank credits with no invoice behind them — potential off-platform sales (deterministic advisory; nothing stored, no model)
+ */
+export const GetUnmatchedCreditsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetUnmatchedCreditsResponse = zod.object({
+  "asOf": zod.string(),
+  "windowDays": zod.number(),
+  "count": zod.number(),
+  "totalAmount": zod.string(),
+  "rows": zod.array(zod.object({
+  "lineId": zod.string().uuid(),
+  "statementId": zod.string().uuid(),
+  "valueDate": zod.string(),
+  "amount": zod.string(),
+  "narration": zod.string().nullable(),
+  "counterpartyRef": zod.string().nullable()
+})),
+  "truncated": zod.boolean(),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Cash-flow projection rule replayed against every observed settlement — the forecast auditing itself (deterministic; nothing stored, no model)
+ */
+export const GetProjectionAccuracyQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetProjectionAccuracyResponse = zod.object({
+  "asOf": zod.string(),
+  "withinDays": zod.number(),
+  "settlements": zod.number(),
+  "medianErrorDays": zod.number().nullable(),
+  "medianAbsErrorDays": zod.number().nullable(),
+  "withinShare": zod.number().nullable(),
+  "basisSplit": zod.object({
+  "rhythm": zod.number(),
+  "dueDate": zod.number(),
+  "defaultTerms": zod.number()
+}),
+  "buyers": zod.array(zod.object({
+  "buyerPartyId": zod.string().uuid(),
+  "buyerName": zod.string(),
+  "settlements": zod.number(),
+  "medianErrorDays": zod.number(),
+  "medianAbsErrorDays": zod.number(),
+  "withinShare": zod.number()
+})),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Record that a payment reminder was SENT for this invoice (logged on copy — the platform itself sends nothing)
+ */
+export const RecordChaseReminderParams = zod.object({
+  "invoiceId": zod.coerce.string().uuid()
+})
+
+export const RecordChaseReminderResponse = zod.object({
+  "invoiceId": zod.string().uuid(),
+  "count": zod.number(),
+  "lastAt": zod.string().nullable(),
+  "stage": zod.number()
+})
 
 
 /**
@@ -1613,7 +1686,7 @@ export const ListUnmappedErrorCodesResponse = zod.array(ListUnmappedErrorCodesRe
 export const GetCatalogueCoverageResponse = zod.object({
   "windowDays": zod.number(),
   "slaWindowDays": zod.number(),
-  "rejectedAttempts": zod.number(),
+  "codedRejections": zod.number(),
   "mappedAttempts": zod.number(),
   "mappedShare": zod.number().nullable(),
   "uncodedRejections": zod.number(),
@@ -5109,7 +5182,12 @@ export const DraftPaymentChaserResponse = zod.object({
   "buyerName": zod.string(),
   "subject": zod.string(),
   "body": zod.string(),
-  "source": zod.enum(['clerk', 'template'])
+  "source": zod.enum(['clerk', 'template']),
+  "stage": zod.number(),
+  "previousReminders": zod.object({
+  "count": zod.number(),
+  "lastAt": zod.string().nullable()
+})
 })
 
 
