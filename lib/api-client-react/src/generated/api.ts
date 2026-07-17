@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.24.0
+ * OpenAPI spec version: 0.25.0
  */
 import {
   useMutation,
@@ -109,6 +109,7 @@ import type {
   ExportInvoicesCsvParams,
   ExportReceivablesCsvParams,
   ExportVatPackCsvParams,
+  ExtractionPromptInfo,
   FailureExplanation,
   FeatureFlag,
   FeatureFlagOverrideInput,
@@ -177,6 +178,7 @@ import type {
   PaymentFlagInput,
   PortfolioSummary,
   PriceReview,
+  PromptCanaryReport,
   ProspectInput,
   ProspectUpdate,
   PushDevice,
@@ -196,6 +198,7 @@ import type {
   ResolveCaseInput,
   RevenueShareStatement,
   RunAssessmentInput,
+  RunPromptCanaryInput,
   ScoreboardRow,
   SettlementEvent,
   SettlementInput,
@@ -12003,6 +12006,153 @@ export const useRunClerkEval = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRunClerkEvalMutationOptions(options));
+    }
+
+export const getGetExtractionPromptUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/prompt`
+}
+
+/**
+ * @summary The incumbent extraction system prompt and version (start a canary candidate from what actually runs)
+ */
+export const getExtractionPrompt = async ( options?: RequestInit): Promise<ExtractionPromptInfo> => {
+
+  return customFetch<ExtractionPromptInfo>(getGetExtractionPromptUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetExtractionPromptQueryKey = () => {
+    return [
+    `/api/clerk/eval/prompt`
+    ] as const;
+    }
+
+
+export const getGetExtractionPromptQueryOptions = <TData = Awaited<ReturnType<typeof getExtractionPrompt>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getExtractionPrompt>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetExtractionPromptQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getExtractionPrompt>>> = ({ signal }) => getExtractionPrompt({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getExtractionPrompt>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetExtractionPromptQueryResult = NonNullable<Awaited<ReturnType<typeof getExtractionPrompt>>>
+export type GetExtractionPromptQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The incumbent extraction system prompt and version (start a canary candidate from what actually runs)
+ */
+
+export function useGetExtractionPrompt<TData = Awaited<ReturnType<typeof getExtractionPrompt>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getExtractionPrompt>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetExtractionPromptQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRunPromptCanaryUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/canary`
+}
+
+/**
+ * @summary Run the eval corpus under a candidate system prompt and the incumbent side by side; deterministic diff and verdict, nothing stored
+ */
+export const runPromptCanary = async (runPromptCanaryInput: RunPromptCanaryInput, options?: RequestInit): Promise<PromptCanaryReport> => {
+
+  return customFetch<PromptCanaryReport>(getRunPromptCanaryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(runPromptCanaryInput)
+  }
+);}
+
+
+
+
+export const getRunPromptCanaryMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runPromptCanary>>, TError,{data: BodyType<RunPromptCanaryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runPromptCanary>>, TError,{data: BodyType<RunPromptCanaryInput>}, TContext> => {
+
+const mutationKey = ['runPromptCanary'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runPromptCanary>>, {data: BodyType<RunPromptCanaryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runPromptCanary(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunPromptCanaryMutationResult = NonNullable<Awaited<ReturnType<typeof runPromptCanary>>>
+    export type RunPromptCanaryMutationBody = BodyType<RunPromptCanaryInput>
+    export type RunPromptCanaryMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Run the eval corpus under a candidate system prompt and the incumbent side by side; deterministic diff and verdict, nothing stored
+ */
+export const useRunPromptCanary = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runPromptCanary>>, TError,{data: BodyType<RunPromptCanaryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runPromptCanary>>,
+        TError,
+        {data: BodyType<RunPromptCanaryInput>},
+        TContext
+      > => {
+      return useMutation(getRunPromptCanaryMutationOptions(options));
     }
 
 export const getListClerkEvalRunsUrl = (params?: ListClerkEvalRunsParams,) => {

@@ -528,11 +528,22 @@ export const clerkBatchesTable = pgTable(
     // cleared the moment segmentation succeeds (the segments then carry the
     // content) and at terminal states; the retention sweep purges stragglers.
     sourceText: text("source_text"),
+    // Scanned-bundle intake (round-5 idea #1): 'text' bundles carry
+    // sourceText/segments; 'scan' bundles carry the original PDF bytes plus
+    // page-range segments. The PDF persists until the batch is terminal
+    // (extraction re-rasterizes per slice, so resume/reclaim work from any
+    // process) and is cleared with the same discipline as sourceText.
+    sourceKind: text("source_kind").notNull().default("text"),
+    sourcePdfB64: text("source_pdf_b64"),
     // The segment texts, persisted ONCE at segmentation time so that resume,
     // reclaim and slicing never re-segment (model nondeterminism would shift
     // boundaries and defeat the duplicate guard). processedSegments is the
     // cursor into this array. Cleared at terminal states.
     segments: jsonb("segments").$type<{ label: string | null; text: string }[]>(),
+    // Page-range segments for 'scan' bundles, persisted once like segments.
+    scanSegments: jsonb("scan_segments").$type<
+      { label: string | null; startPage: number; endPage: number }[]
+    >(),
     status: clerkBatchStatusEnum("status").notNull().default("queued"),
     // Null until segmentation has run.
     totalSegments: integer("total_segments"),

@@ -14,8 +14,17 @@ import { segmentDocument, type BatchSegment } from "./batch";
 import {
   createExtractionCase,
   creatorClientParty,
+  decodeBase64Checked,
+  extractPdfText,
   resolveTextSource,
 } from "./cases";
+import {
+  probeBundle,
+  rasterizeBundlePages,
+  rasterizeBundleThumbs,
+  segmentScanBundle,
+  type ScanSegment,
+} from "./scan-batch";
 import {
   assertClerkEnabled,
   CLERK_FLAG_KEY,
@@ -67,18 +76,37 @@ export interface CreateBatchInput {
 
 // Queue one bundle. Runs on a NO_CONTEXT route: the insert commits in its own
 // firm-scoped transaction so the processor (other connections) can see it
-// immediately.
+// immediately. A PDF with no text layer is a SCANNED bundle (round-5 idea
+// #1): the original bytes are stored for the processor to rasterize — no
+// model call and no full render in the request; the probe only validates the
+// page cap and that the first page renders.
 export async function createClerkBatch(
   input: CreateBatchInput,
   actorId: string,
   ctx: { firmId?: string | null } = {},
 ): Promise<ClerkBatch> {
   await assertClerkEnabled();
-  const fullText = await resolveTextSource(
-    input.sourceType,
-    input,
-    "Upload the invoices one at a time as images instead.",
-  );
+  let fullText: string | null = null;
+  let sourcePdfB64: string | null = null;
+  let sourceKind: "text" | "scan" = "text";
+  let pages = 0;
+  if (input.sourceType === "pdf" && input.pdfBase64) {
+    const buf = decodeBase64Checked(input.pdfBase64, "PDF");
+    const text = (await extractPdfText(buf)).trim();
+    if (text) {
+      fullText = text;
+    } else {
+      sourceKind = "scan";
+      pages = await probeBundle(buf);
+      sourcePdfB64 = buf.toString("base64");
+    }
+  } else {
+    fullText = await resolveTextSource(
+      input.sourceType,
+      input,
+      "Upload the invoices one at a time as images instead.",
+    );
+  }
   const firmId = ctx.firmId ?? null;
   const batch = await inClerkScope(firmId, async () => {
     const [row] = await getDb()
@@ -88,6 +116,8 @@ export async function createClerkBatch(
         createdBy: actorId,
         name: input.name?.trim() || "Batch intake",
         sourceText: fullText,
+        sourceKind,
+        sourcePdfB64,
         status: "queued",
       })
       .returning();
@@ -97,7 +127,14 @@ export async function createClerkBatch(
       action: "clerk.batch.queue",
       entityType: "clerk_batch",
       entityId: row.id,
-      after: { sourceType: input.sourceType, chars: fullText.length },
+      after:
+        sourceKind === "scan"
+          ? { sourceType: input.sourceType, kind: sourceKind, pages }
+          : {
+              sourceType: input.sourceType,
+              kind: sourceKind,
+              chars: fullText?.length ?? 0,
+            },
     });
     return row;
   });
@@ -194,6 +231,8 @@ export async function processBatch(
         failReason: reason,
         sourceText: null,
         segments: null,
+        sourcePdfB64: null,
+        scanSegments: null,
         claimedAt: null,
         ...counters,
       });
@@ -202,10 +241,15 @@ export async function processBatch(
   };
 
   // ---- Stage 1: segmentation (once per batch, persisted) ----
+  // Text bundles segment the document text; scan bundles rasterize
+  // thumbnails and ask for page ranges (validated fail-closed). Either way
+  // the split persists ONCE and the cursor resumes into it.
+  const isScan = batch.sourceKind === "scan";
   let segments: BatchSegment[] | null = batch.segments;
-  if (!segments) {
-    if (!batch.sourceText?.trim()) {
-      return fail("The batch has no document text to process.");
+  let scanSegments: ScanSegment[] | null = batch.scanSegments;
+  if (isScan ? !scanSegments : !segments) {
+    if (isScan ? !batch.sourcePdfB64 : !batch.sourceText?.trim()) {
+      return fail("The batch has no document content to process.");
     }
     // Budget pre-check BEFORE the segmentation call: an exhausted allowance
     // parks the batch (it self-heals next month; the retention sweep is the
@@ -218,12 +262,18 @@ export async function processBatch(
       }
     }
     try {
-      segments = await segmentDocument(
-        batch.sourceText,
-        MAX_ASYNC_BATCH_SEGMENTS,
-        gateway,
-        batch.firmId,
-      );
+      if (isScan) {
+        const buf = Buffer.from(batch.sourcePdfB64!, "base64");
+        const thumbs = await rasterizeBundleThumbs(buf);
+        scanSegments = await segmentScanBundle(thumbs, gateway, batch.firmId);
+      } else {
+        segments = await segmentDocument(
+          batch.sourceText!,
+          MAX_ASYNC_BATCH_SEGMENTS,
+          gateway,
+          batch.firmId,
+        );
+      }
     } catch (err) {
       // Kill switch mid-flight parks work instead of destroying it.
       if (err instanceof DomainError && err.code === "CLERK_DISABLED") {
@@ -235,16 +285,46 @@ export async function processBatch(
           : "Segmentation failed unexpectedly.";
       return fail(message);
     }
-    // The segments now carry the content; the raw document is dropped here.
-    stamp = await fencedPatch(batchId, stamp, {
-      segments,
-      totalSegments: segments.length,
-      sourceText: null,
-    });
+    // Text: the segments carry the content, the raw document drops here.
+    // Scan: the PDF must SURVIVE — extraction re-rasterizes from it, so any
+    // process can resume; it clears at terminal states instead.
+    stamp = await fencedPatch(
+      batchId,
+      stamp,
+      isScan
+        ? { scanSegments, totalSegments: scanSegments!.length }
+        : { segments, totalSegments: segments!.length, sourceText: null },
+    );
     if (!stamp) return "noop";
   }
 
   // ---- Stage 2: one slice of extractions, cursor-resumed ----
+  const totalCount = isScan ? scanSegments!.length : segments!.length;
+  // Scan slices re-rasterize the full pages ONCE, lazily, from the stored
+  // PDF — resumable from any process, and a slice that only skips
+  // duplicates never pays for a render.
+  let fullPages: string[] | null = null;
+  const segmentCaseInput = async (at: number) => {
+    const label = isScan ? scanSegments![at].label : segments![at].label;
+    const name =
+      label?.trim() ||
+      `${batch.name ?? "Batch intake"} (${at + 1}/${totalCount})`;
+    if (!isScan) {
+      return { sourceType: "text" as const, name, text: segments![at].text };
+    }
+    if (!fullPages) {
+      fullPages = await rasterizeBundlePages(
+        Buffer.from(batch.sourcePdfB64!, "base64"),
+      );
+    }
+    const range = scanSegments![at];
+    return {
+      sourceType: "pdf" as const,
+      name,
+      scanPagesB64: fullPages.slice(range.startPage - 1, range.endPage),
+    };
+  };
+
   // Scope register-history preflight to the batch's OWNER (SEC-03): a
   // client_user's batch must never surface a sibling client's ledger.
   const clientPartyId = await creatorClientParty(batch.createdBy);
@@ -252,8 +332,7 @@ export async function processBatch(
   let created = batch.createdCases;
   let skipped = batch.skippedDuplicates;
   let inSlice = 0;
-  while (cursor < segments.length && inSlice < SEGMENTS_PER_SLICE) {
-    const segment = segments[cursor];
+  while (cursor < totalCount && inSlice < SEGMENTS_PER_SLICE) {
     // Same budget semantics as the sync batch: a firm that runs dry mid-batch
     // keeps what was already created; the counters make the shortfall visible.
     if (batch.firmId) {
@@ -274,13 +353,7 @@ export async function processBatch(
     }
     try {
       await createExtractionCase(
-        {
-          sourceType: "text",
-          name:
-            segment.label?.trim() ||
-            `${batch.name ?? "Batch intake"} (${cursor + 1}/${segments.length})`,
-          text: segment.text,
-        },
+        await segmentCaseInput(cursor),
         batch.createdBy,
         gateway,
         undefined,
@@ -322,7 +395,7 @@ export async function processBatch(
     if (!stamp) return "noop"; // fence lost: someone else owns the batch now
   }
 
-  if (cursor < segments.length) {
+  if (cursor < totalCount) {
     // Slice budget spent; park with progress so the next call (or sweep
     // pass) continues from the cursor without re-segmenting.
     await fencedPatch(batchId, stamp, {
@@ -342,6 +415,8 @@ export async function processBatch(
     skippedDuplicates: skipped,
     sourceText: null,
     segments: null,
+    sourcePdfB64: null,
+    scanSegments: null,
     claimedAt: null,
   });
   await appendAudit({
@@ -350,7 +425,7 @@ export async function processBatch(
     action: "clerk.batch.processed",
     entityType: "clerk_batch",
     entityId: batch.id,
-    after: { segments: segments.length, created, skippedDuplicates: skipped },
+    after: { segments: totalCount, created, skippedDuplicates: skipped },
   });
   return "terminal";
 }
@@ -377,7 +452,7 @@ export async function sweepClerkBatches(): Promise<void> {
   // roughly a slice's worth of model calls; the queue drains across passes
   // (and the kick path drives the interactive case slice-to-slice anyway).
   const [candidate] = await getDb()
-    .select({ id: clerkBatchesTable.id })
+    .select({ id: clerkBatchesTable.id, firmId: clerkBatchesTable.firmId })
     .from(clerkBatchesTable)
     .where(
       or(
@@ -391,6 +466,19 @@ export async function sweepClerkBatches(): Promise<void> {
     .orderBy(asc(clerkBatchesTable.createdAt))
     .limit(1);
   if (!candidate) return;
+  // Budget PEEK before claiming: claim + park both write the row (refreshing
+  // updated_at), so a permanently-exhausted firm's batch cycling through the
+  // sweep would keep itself forever inside the retention window — holding
+  // its stored document content (for a scan bundle, the full PDF)
+  // indefinitely. Skipping without any write lets the retention backstop
+  // see the batch go stale and purge it.
+  if (candidate.firmId) {
+    try {
+      await assertFirmClerkBudget(candidate.firmId);
+    } catch {
+      return;
+    }
+  }
   // No provider configured: leave the batches queued for when one exists.
   let gateway: ClerkGateway;
   try {

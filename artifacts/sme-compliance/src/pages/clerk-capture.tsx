@@ -504,7 +504,10 @@ function CaptureContent() {
                 data-testid="batch-toggle"
               />
               <Label htmlFor="batch-toggle" className="font-normal">
-                This contains multiple invoices
+                This contains multiple invoices{" "}
+                <span className="text-muted-foreground">
+                  (scanned bundles up to 24 pages supported)
+                </span>
               </Label>
             </div>
           )}

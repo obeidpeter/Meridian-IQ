@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.24.0
+ * OpenAPI spec version: 0.25.0
  */
 import * as zod from 'zod';
 
@@ -4430,6 +4430,62 @@ export const RunClerkEvalResponse = zod.object({
 
 
 /**
+ * @summary The incumbent extraction system prompt and version (start a canary candidate from what actually runs)
+ */
+export const GetExtractionPromptResponse = zod.object({
+  "promptVersion": zod.string(),
+  "system": zod.string()
+})
+
+
+/**
+ * @summary Run the eval corpus under a candidate system prompt and the incumbent side by side; deterministic diff and verdict, nothing stored
+ */
+export const runPromptCanaryBodyCandidateSystemMin = 100;
+export const runPromptCanaryBodyCandidateSystemMax = 20000;
+
+
+
+export const RunPromptCanaryBody = zod.object({
+  "candidateSystem": zod.string().min(runPromptCanaryBodyCandidateSystemMin).max(runPromptCanaryBodyCandidateSystemMax)
+})
+
+export const RunPromptCanaryResponse = zod.object({
+  "fixtureCount": zod.number(),
+  "truncated": zod.boolean(),
+  "incumbent": zod.object({
+  "promptVersion": zod.string(),
+  "fieldsCompared": zod.number(),
+  "fieldsCorrect": zod.number(),
+  "accuracy": zod.number().nullable(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "failures": zod.number()
+}),
+  "candidate": zod.object({
+  "promptVersion": zod.string(),
+  "fieldsCompared": zod.number(),
+  "fieldsCorrect": zod.number(),
+  "accuracy": zod.number().nullable(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "failures": zod.number()
+}),
+  "fixtures": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "riskLabel": zod.string(),
+  "incumbentCorrect": zod.number(),
+  "candidateCorrect": zod.number(),
+  "fieldsCompared": zod.number(),
+  "regressed": zod.boolean()
+})),
+  "verdict": zod.enum(['improvement', 'comparable', 'regression']),
+  "verdictReason": zod.string()
+})
+
+
+/**
  * @summary Past evaluation runs, newest first
  */
 export const listClerkEvalRunsQueryLimitMax = 100;
@@ -4751,6 +4807,7 @@ export const CreateClerkBatchResponse = zod.object({
   "id": zod.string(),
   "firmId": zod.string().nullish(),
   "name": zod.string().nullish(),
+  "kind": zod.enum(['text', 'scan']).optional(),
   "status": zod.enum(['queued', 'processing', 'done', 'failed']),
   "totalSegments": zod.number().nullish(),
   "processedSegments": zod.number(),
@@ -4769,6 +4826,7 @@ export const ListClerkBatchesResponseItem = zod.object({
   "id": zod.string(),
   "firmId": zod.string().nullish(),
   "name": zod.string().nullish(),
+  "kind": zod.enum(['text', 'scan']).optional(),
   "status": zod.enum(['queued', 'processing', 'done', 'failed']),
   "totalSegments": zod.number().nullish(),
   "processedSegments": zod.number(),
@@ -4792,6 +4850,7 @@ export const GetClerkBatchResponse = zod.object({
   "id": zod.string(),
   "firmId": zod.string().nullish(),
   "name": zod.string().nullish(),
+  "kind": zod.enum(['text', 'scan']).optional(),
   "status": zod.enum(['queued', 'processing', 'done', 'failed']),
   "totalSegments": zod.number().nullish(),
   "processedSegments": zod.number(),

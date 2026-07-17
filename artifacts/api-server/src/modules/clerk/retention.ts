@@ -65,12 +65,16 @@ export async function sweepExpiredCaseContent(): Promise<number> {
         "The bundle sat unprocessed past the retention window and its content was purged. Upload it again when Clerk is available.",
       sourceText: null,
       segments: null,
+      sourcePdfB64: null,
+      scanSegments: null,
     })
     .where(
       sql`${clerkBatchesTable.status} IN ('queued', 'processing')
         AND ${clerkBatchesTable.updatedAt} < now() - make_interval(days => ${days})
         AND (${clerkBatchesTable.sourceText} IS NOT NULL
-          OR ${clerkBatchesTable.segments} IS NOT NULL)`,
+          OR ${clerkBatchesTable.segments} IS NOT NULL
+          OR ${clerkBatchesTable.sourcePdfB64} IS NOT NULL
+          OR ${clerkBatchesTable.scanSegments} IS NOT NULL)`,
     )
     .returning({ id: clerkBatchesTable.id });
   for (const row of staleBatches) {

@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.24.0`).
+contract change (it is currently `0.25.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -92,8 +92,15 @@ boundaries — every segment then walks the normal capture path; **async batch**
 0014) queues a month-end bundle (cap 50) with NO model call in the request —
 an immediate in-process kick plus the sweep (claim CAS, 10-min reclaim)
 process it with the digest split-pattern, per-segment progress counters the
-UI polls, source text cleared at terminal states, kill switch parks work
-instead of consuming it; **custom statement formats**
+UI polls, source content cleared at terminal states, kill switch parks work
+instead of consuming it; a textless PDF queued as a batch is a **scanned
+bundle** (`modules/clerk/scan-batch.ts`, cap 24 pages): the original PDF
+bytes persist on the row until terminal (any process can resume by
+re-rasterizing), one `segment_scan` vision call over small page THUMBNAILS
+proposes page ranges, `validateScanSegments` fails closed unless the ranges
+cover every page exactly once in order, and each validated segment walks the
+ordinary vision-extraction case path with its full-resolution page slice
+(per-segment duplicate hash on the page bytes); **custom statement formats**
 (`modules/statements/custom-formats.ts`, operator `catalogue.write`, global
 reference data like the error catalogue) store column-name mappings consumed
 by the same parser seam — saving REQUIRES the mapping to parse its own
@@ -187,6 +194,14 @@ SQL): token spend + error count per PURPOSE inside the window, and a per-month
 failure taxonomy (ok/invalid/killed/error) over the trailing months — the
 numbers pricing tiers and a provider evaluation will want, zero model calls —
 and a per-supplier accuracy table (`metrics.supplierAccuracy`, below).
+The eval harness also carries a **prompt canary**
+(`modules/clerk/prompt-canary.ts`, `POST /clerk/eval/canary` + `GET
+/clerk/eval/prompt`, `clerk.use`, spends 2× a corpus pass): the corpus runs
+under a CANDIDATE system prompt and the incumbent side by side (purpose
+`eval_canary`, capped at 40 fixtures), scored by the same `scoreFixture`
+machinery, with a deterministic verdict — injection resistance may never
+drop, accuracy is judged outside a 2% noise band — returned, never stored
+(promotion is a code change the operator makes with the evidence in hand).
 The eval harness also grows an active red team: **adversarial eval growth**
 (`modules/clerk/red-team.ts`, opt-in `clerk_red_team` flag, spends tokens) has
 the model GENERATE a prompt-injection payload against a legitimate static
