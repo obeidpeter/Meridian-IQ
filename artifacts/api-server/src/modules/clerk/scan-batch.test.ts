@@ -48,13 +48,13 @@ trailer << /Size ${3 + pages} /Root 1 0 R >>
 
 // Pages carrying only GRAPHICS (filled rectangles, no text layer), distinct
 // per page AND per run: blank pages would all render identically, and the
-// per-segment duplicate hash keys on the page bytes — identical segments
-// would dedupe against each other and against earlier runs.
+// per-segment duplicate hash keys on the page bytes. Run identity is drawn
+// as one rectangle PER SALT CHARACTER (width = charcode) — the previous
+// single mod-40 offset saturated on the shared test database after ~40
+// accumulated runs, and segments began deduping against earlier runs'
+// cases (platform-scoped probe under the operator context).
 function drawnPdf(pages: number, tag: string): string {
-  const offset = [...`${tag}-${SALT}`].reduce(
-    (a, c) => (a + c.charCodeAt(0)) % 40,
-    0,
-  );
+  const salt = `${tag}-${SALT}`;
   const kids: string[] = [];
   const objs: string[] = [];
   let objNo = 3;
@@ -62,7 +62,13 @@ function drawnPdf(pages: number, tag: string): string {
     const pageNo = objNo++;
     const contentNo = objNo++;
     kids.push(`${pageNo} 0 R`);
-    const stream = `0 0 0 rg ${10 + offset + i * 9} ${15 + i * 6} ${25 + i * 4} 12 re f`;
+    const saltRects = [...salt]
+      .map(
+        (c, j) =>
+          `${4 + (j % 30) * 6} ${88 - Math.floor(j / 30) * 5 - i * 4} ${1 + (c.charCodeAt(0) % 5)} 3 re f`,
+      )
+      .join(" ");
+    const stream = `0 0 0 rg ${saltRects} ${10 + i * 9} ${15 + i * 6} ${25 + i * 4} 12 re f`;
     objs.push(
       `${pageNo} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents ${contentNo} 0 R >> endobj`,
     );
