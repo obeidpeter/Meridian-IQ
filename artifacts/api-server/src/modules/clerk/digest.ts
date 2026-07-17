@@ -12,6 +12,7 @@ import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import { countFirmUnbilled } from "../invoice/unbilled-income";
+import { firmMoneySummary } from "../invoice/cashflow";
 import { assertFirmClerkBudget } from "./budget";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
 import { getClerkGateway } from "./provider";
@@ -67,6 +68,13 @@ export interface DigestFacts {
   // (unbilled-income.ts — same miner as the recurring/unbilled cards).
   unbilledCount: number;
   unbilledClients: number;
+  // Money facts (round-11 idea #3), from the same firm summary the Ask Clerk
+  // money intents use (cashflow.ts firmMoneySummary): payments expected in
+  // the coming week per each buyer's own rhythm, and invoices past BOTH
+  // their due date and that rhythm — the chase-worthy set.
+  expectedWeekCount: number;
+  expectedWeekTotalNgn: string;
+  chaseWorthyCount: number;
 }
 
 // Monday 00:00 UTC of the week containing `now` — the digest's identity key.
@@ -120,6 +128,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   ).rows;
   const r = rows[0];
   const unbilled = await countFirmUnbilled(firmId);
+  const money = await firmMoneySummary(firmId);
   return {
     unsubmittedCount: Number(r?.unsubmitted ?? 0),
     dueSoonCount: Number(r?.due_soon ?? 0),
@@ -128,6 +137,9 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     receivablesOver60Count: Number(r?.recv_over_60 ?? 0),
     unbilledCount: unbilled.alerts,
     unbilledClients: unbilled.clients,
+    expectedWeekCount: money.expectedWeekCount,
+    expectedWeekTotalNgn: money.expectedWeekTotalNgn,
+    chaseWorthyCount: money.chaseCount,
   };
 }
 
@@ -174,6 +186,16 @@ export function buildTemplateDigest(facts: DigestFacts): {
   if (facts.unbilledCount > 0) {
     bullets.push(
       `${plural(facts.unbilledCount, "regular invoice")} ${facts.unbilledCount === 1 ? "looks" : "look"} unraised across ${plural(facts.unbilledClients, "client")} — ${facts.unbilledCount === 1 ? "a monthly billing habit" : "monthly billing habits"} with nothing issued this cycle.`,
+    );
+  }
+  if (facts.expectedWeekCount > 0) {
+    bullets.push(
+      `${plural(facts.expectedWeekCount, "invoice")} (NGN ${facts.expectedWeekTotalNgn}) ${isAre(facts.expectedWeekCount)} expected to be paid in the coming week, based on each customer's own payment rhythm.`,
+    );
+  }
+  if (facts.chaseWorthyCount > 0) {
+    bullets.push(
+      `${plural(facts.chaseWorthyCount, "receivable")} ${facts.chaseWorthyCount === 1 ? "looks" : "look"} worth chasing — past both the due date and the customer's usual payment rhythm.`,
     );
   }
   const urgent = facts.overdueCount + facts.failedCount;
@@ -235,6 +257,8 @@ export async function generateFirmDigest(
       `- Unsubmitted invoices in total (draft or validated): ${facts.unsubmittedCount}`,
       `- Receivables older than 60 days: ${facts.receivablesOver60Count}`,
       `- Regular monthly invoices that look unraised this cycle: ${facts.unbilledCount} (across ${facts.unbilledClients} client(s))`,
+      `- Payments expected in the coming week (customers' own rhythms): ${facts.expectedWeekCount} invoice(s), NGN ${facts.expectedWeekTotalNgn}`,
+      `- Receivables worth chasing (past due date AND the customer's usual rhythm): ${facts.chaseWorthyCount}`,
       `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
     ].join("\n");
     const result = await gateway.infer<z.infer<typeof digestOutput>>({

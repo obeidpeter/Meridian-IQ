@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.30.0
+ * OpenAPI spec version: 0.31.0
  */
 import * as zod from 'zod';
 
@@ -5145,7 +5145,8 @@ export const DraftEscalationReplyParams = zod.object({
 export const DraftEscalationReplyResponse = zod.object({
   "draft": zod.string(),
   "source": zod.enum(['clerk', 'template']),
-  "errorCode": zod.string().nullable()
+  "errorCode": zod.string().nullable(),
+  "viaExample": zod.boolean()
 })
 
 

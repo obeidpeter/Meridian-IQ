@@ -1,15 +1,17 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   getDb,
+  runInBypassContext,
   firmsTable,
   partiesTable,
   invoicesTable,
   escalationsTable,
   errorCatalogueTable,
   submissionAttemptsTable,
+  clerkInferenceCallsTable,
 } from "@workspace/db";
 import { draftEscalationReply, sendEscalationReply } from "./draft-reply.ts";
 import { CLERK_FLAG_KEY } from "../clerk/gateway.ts";
@@ -200,4 +202,80 @@ test("send: an empty or oversized reply is refused", async () => {
     (err: Error & { code?: string; status?: number }) =>
       err.code === "BAD_REPLY" && err.status === 400,
   );
+});
+
+test("reply memory: same-firm same-code sent replies ride along fenced", async () => {
+  // A same-code sent reply belonging to ANOTHER firm must never be borrowed.
+  const foreignFirm = randomUUID();
+  const foreignParty = randomUUID();
+  const foreignInvoice = randomUUID();
+  const db = getDb();
+  await db
+    .insert(firmsTable)
+    .values({ id: foreignFirm, name: `Reply Foreign ${SALT}` });
+  await db.insert(partiesTable).values({
+    id: foreignParty,
+    type: "client_business",
+    legalName: `Reply Foreign Party ${SALT}`,
+  });
+  await db.insert(invoicesTable).values({
+    id: foreignInvoice,
+    firmId: foreignFirm,
+    supplierPartyId: foreignParty,
+    buyerPartyId: foreignParty,
+    invoiceNumber: `REPLY-F-${SALT}`,
+    issueDate: "2026-07-01",
+  });
+  await db.insert(escalationsTable).values({
+    invoiceId: foreignInvoice,
+    firmId: foreignFirm,
+    clientPartyId: foreignParty,
+    reason: `foreign ${SALT}`,
+    errorCode: CODE,
+    operatorReply: `FOREIGN reply ${SALT}`,
+    repliedAt: new Date(),
+    status: "resolved",
+  });
+
+  const calls: CompletionRequest[] = [];
+  const gw = fakeGateway((req) => {
+    calls.push(req);
+    return JSON.stringify({ reply: `Styled ${SALT}` });
+  });
+  const first = await draftEscalationReply(escalationId, gw);
+  assert.equal(first.viaExample, false, "another firm's reply never borrowed");
+  assert.ok(!(calls[0].user as string).includes("PAST_REPLY"));
+
+  // A same-firm sent reply for the same code: rides along fenced, the system
+  // prompt gains the style-only guardrails, and the ledger records the
+  // variant prompt version so the exemplar's effect stays measurable.
+  await db.insert(escalationsTable).values({
+    invoiceId,
+    firmId,
+    clientPartyId: partyId,
+    reason: `past escalation ${SALT}`,
+    errorCode: CODE,
+    operatorReply: `Past reply ${SALT}`,
+    repliedAt: new Date(),
+    status: "resolved",
+  });
+  const second = await draftEscalationReply(escalationId, gw);
+  assert.equal(second.viaExample, true);
+  assert.equal(second.source, "clerk");
+  const user = calls[1].user as string;
+  assert.ok(user.includes("-----BEGIN PAST_REPLY-----"), "example fenced");
+  assert.ok(user.includes(`Past reply ${SALT}`));
+  assert.ok(
+    calls[1].system.includes("STYLE example"),
+    "style-only guardrail in the system prompt",
+  );
+  const [ledger] = await runInBypassContext(() =>
+    getDb()
+      .select({ promptVersion: clerkInferenceCallsTable.promptVersion })
+      .from(clerkInferenceCallsTable)
+      .where(eq(clerkInferenceCallsTable.purpose, "draft_reply"))
+      .orderBy(desc(clerkInferenceCallsTable.createdAt))
+      .limit(1),
+  );
+  assert.equal(ledger.promptVersion, "draft-reply.v1+ex1");
 });

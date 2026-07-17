@@ -58,6 +58,7 @@ function EscalationItem({
   const sendReply = useReplyToEscalation();
   const [reply, setReply] = useState<string | null>(null);
   const [draftSource, setDraftSource] = useState<string | null>(null);
+  const [viaExample, setViaExample] = useState(false);
 
   const handleDraft = () => {
     draftReply.mutate(
@@ -66,6 +67,7 @@ function EscalationItem({
         onSuccess: (res) => {
           setReply(res.draft);
           setDraftSource(res.source);
+          setViaExample(res.viaExample);
         },
         onError: () =>
           toast({ title: "Could not draft a reply", variant: "destructive" }),
@@ -82,6 +84,7 @@ function EscalationItem({
           toast({ title: "Reply sent to the client" });
           setReply(null);
           setDraftSource(null);
+          setViaExample(false);
           onReplied();
         },
         onError: () =>
@@ -118,7 +121,7 @@ function EscalationItem({
           {draftSource && (
             <p className="text-xs text-muted-foreground">
               {draftSource === "clerk"
-                ? "Clerk drafted this from the error playbook and attempt history — edit before sending."
+                ? `Clerk drafted this from the error playbook and attempt history${viaExample ? ", styled on a reply this desk previously sent for the same code" : ""} — edit before sending.`
                 : "Template draft (Clerk unavailable) — edit before sending."}
             </p>
           )}
@@ -145,6 +148,7 @@ function EscalationItem({
               onClick={() => {
                 setReply(null);
                 setDraftSource(null);
+                setViaExample(false);
               }}
               data-testid={`button-discard-reply-${escalation.id}`}
             >

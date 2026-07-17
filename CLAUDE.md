@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.30.0`).
+contract change (it is currently `0.31.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -124,7 +124,10 @@ sample with header names re-verified against what actually exists;
 stored findings into a client letter body — digest posture (template
 fallback, never stored, the partner owns the letter); the **weekly digest**
 (`modules/clerk/digest.ts`, opt-in `clerk_digest` flag, sweep-generated,
-firm-keyed RLS via migration 0011) computes every fact in SQL and lets the
+firm-keyed RLS via migration 0011) computes every fact in SQL — including
+the round-11 money facts from `firmMoneySummary` (payments expected in the
+coming week per each buyer's rhythm, and the chase-worthy count past BOTH
+due date and rhythm) — and lets the
 model phrase them, falling back to deterministic template text; the
 **per-client monthly statement** (`modules/clerk/client-statement.ts`, opt-in
 `clerk_client_statements` flag, sweep-generated for the newest CLOSED Lagos
@@ -200,10 +203,17 @@ grounded in the catalogue cause/fix + the invoice's real attempt history (the
 client's message only inside the fence), template fallback always answers,
 and `sendEscalationReply` is the ONLY writer of `escalations.operator_reply`
 (acknowledges an open escalation; the SME invoice detail shows the client the
-reply). **Grounded firm-data Q&A**
+reply); **reply memory** (round 11) deterministically retrieves the firm's
+own newest SENT reply for the same catalogue code and rides it along as a
+fenced STYLE example (never cross-firm, specifics forbidden by the system
+prompt, variant ledger version `draft-reply.v1+ex1`, `viaExample` in the
+response). **Grounded firm-data Q&A**
 (`modules/clerk/data-intents.ts`): Ask Clerk carries a second closed catalogue
 next to the claims register — data intents ("what's overdue?", "what did we
-submit this month?"), offered in the intent enum only to firm-scoped askers.
+submit this month?", and the round-11 money intents "who owes us?" /
+"what's expected this week?" / "who's worth chasing?" backed by the
+receivables/cashflow modules), offered in the intent enum only to
+firm-scoped askers.
 The model still only classifies; the app runs the matching FIXED,
 fully-parameterized query (runtime inputs: the principal-resolved firmId plus
 optional month/client parameters the model can only pick from CLOSED app-built

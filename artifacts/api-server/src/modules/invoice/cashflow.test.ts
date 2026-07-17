@@ -13,6 +13,7 @@ import {
 import {
   bucketProjections,
   computeCashflowOutlook,
+  firmMoneySummary,
   listChaseRows,
   projectReceivables,
   rankChaseRows,
@@ -263,4 +264,25 @@ test("outlook and chase list agree end to end", async () => {
     (await computeCashflowOutlook(firmId, randomUUID())).groups.length,
     0,
   );
+});
+
+test("firmMoneySummary rolls the same projections up across clients", async () => {
+  const summary = await firmMoneySummary(firmId);
+  // The beyond-rhythm invoice is late money and chase-eligible (no due
+  // date); the future-due invoice sits 10 days out — week 2, not the coming
+  // week — so nothing lands in expectedWeek.
+  assert.equal(summary.overdueExpectedCount, 1);
+  assert.equal(summary.chaseCount, 1);
+  assert.equal(summary.expectedWeekCount, 0);
+  assert.equal(summary.topChase.length, 1);
+  assert.equal(summary.topChase[0].invoiceId, lateInvoiceId);
+  assert.equal(summary.topChase[0].clientName, `CF Client ${SALT}`);
+
+  // Firm isolation is absolute.
+  const empty = await firmMoneySummary(randomUUID());
+  assert.equal(
+    empty.expectedWeekCount + empty.overdueExpectedCount + empty.chaseCount,
+    0,
+  );
+  assert.equal(empty.topChase.length, 0);
 });
