@@ -6,7 +6,9 @@ import {
   fmtTokens,
   fmtUsd,
   casesTileDetail,
+  modelCanaryRowClass,
   overrideRateClass,
+  shapeExample,
 } from "./clerk-health";
 
 describe("overrideRateClass", () => {
@@ -76,6 +78,27 @@ describe("fmtUsd", () => {
   test("formats USD with 2–4 fraction digits (locale is pinned to en-US)", () => {
     expect(fmtUsd(1.5)).toContain("1.50");
     expect(fmtUsd(0.0001)).toContain("0.0001");
+  });
+});
+
+describe("shapeExample", () => {
+  test("renders the correction as extracted → final", () => {
+    expect(shapeExample("12000", "12,000.00")).toBe("12000 → 12,000.00");
+  });
+
+  test("substitutes the em-dash sentinel for a missing side", () => {
+    // A filled blank (nothing extracted) and a blanked hallucination
+    // (nothing kept) both stay renderable.
+    expect(shapeExample(null, "NG-TIN-1")).toBe("— → NG-TIN-1");
+    expect(shapeExample("NG-TIN-1", null)).toBe("NG-TIN-1 → —");
+    expect(shapeExample(null, null)).toBe("— → —");
+  });
+});
+
+describe("modelCanaryRowClass", () => {
+  test("reddens regressed fixture rows and leaves the rest plain", () => {
+    expect(modelCanaryRowClass(true)).toContain("red");
+    expect(modelCanaryRowClass(false)).toBe("");
   });
 });
 

@@ -363,8 +363,9 @@ hand-written pair. The exhaust also feeds the product directly:
 new text document against the firm's OWN approved fixtures (TIN/name-token
 containment, newest first, same-firm join — never cross-firm) and rides the
 match along as a fenced one-shot with its own ledger prompt version
-(`extract.v1+ex1`, `extraction.exemplarCaseId` for audit; eval replay never
-uses exemplars), with **exemplar hygiene**: a candidate whose descendant
+(`extract.v1+ex1`, `extraction.exemplarCaseId` for audit — the console
+review pane's "supplier memory" badge navigates to that exemplar case;
+eval replay never uses exemplars), with **exemplar hygiene**: a candidate whose descendant
 approvals (matched via `exemplarCaseId`) got most fields overridden (3+
 cases, ≥50% override) is demoted to the next candidate — the exhaust
 auditing the exhaust, zero model calls; **party alias memory** (`modules/clerk/alias.ts`,

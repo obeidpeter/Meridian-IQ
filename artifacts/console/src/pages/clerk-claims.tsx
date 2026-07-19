@@ -6,9 +6,12 @@ import {
   useSubmitClaim,
   useDecideClaim,
   useDraftClaimWithClerk,
+  useGetClerkClaimGaps,
   getListClaimsQueryKey,
+  getGetClerkClaimGapsQueryKey,
 } from "@workspace/api-client-react";
 import type {
+  ClaimGapReport,
   ClaimRecord,
   ClaimDecisionInputAction,
   ProtectedFact,
@@ -153,6 +156,15 @@ function factsPayload(facts: ProtectedFact[]): ProtectedFact[] {
     value: f.value.trim(),
     unit: f.unit?.trim() ? f.unit.trim() : undefined,
   }));
+}
+
+// The claim-gaps headline, phrased as one sentence so the card reads the same
+// whether the register covered everything or left questions unanswered.
+export function claimGapSummary(report: ClaimGapReport): string {
+  if (report.refusedTotal === 0) {
+    return `No refused questions in the last ${report.windowDays} days — the register covered everything Ask Clerk was asked.`;
+  }
+  return `${report.refusedTotal} of ${report.totalQuestions} question(s) refused in the last ${report.windowDays} days.`;
 }
 
 function FactsEditor({
@@ -467,6 +479,17 @@ export function ClerkClaims() {
   const [disabledBanner, setDisabledBanner] = useState(false);
 
   const { data: claims, isLoading, error, refetch } = useListClaims();
+
+  // Register gaps (pure ledger SQL, no model call): the real client questions
+  // Ask Clerk refused because no active claim covered them. Renders only on
+  // success, like the other decision-support cards.
+  const { data: gaps } = useGetClerkClaimGaps(undefined, {
+    query: {
+      queryKey: getGetClerkClaimGapsQueryKey(),
+      staleTime: 5 * 60_000,
+      retry: false,
+    },
+  });
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -1008,6 +1031,78 @@ export function ClerkClaims() {
           )}
         </CardContent>
       </Card>
+
+      {/* Register gaps: which real questions the approved register could not
+          answer — the evidence for what to draft next. Read-only; drafting
+          stays a human act through the panels above. */}
+      {gaps && (
+        <Card data-testid="card-claim-gaps">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Register gaps — refused questions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Real client questions Ask Clerk refused because no active claim
+              covered them. Each one is a candidate for the next draft — use
+              “Draft with Clerk” or “New claim version” above; nothing is
+              created automatically.
+            </p>
+            {gaps.refusedTotal === 0 ? (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="text-claim-gaps-empty"
+              >
+                {claimGapSummary(gaps)}
+              </p>
+            ) : (
+              <>
+                <p className="text-sm" data-testid="text-claim-gaps-summary">
+                  {claimGapSummary(gaps)}
+                </p>
+                <div
+                  className="flex flex-wrap gap-2"
+                  data-testid="claim-gaps-reasons"
+                >
+                  {gaps.byReason.map((r) => (
+                    <span
+                      key={r.code}
+                      className={pillClasses("amber")}
+                      data-testid={`pill-gap-reason-${r.code}`}
+                    >
+                      {r.code.replace(/_/g, " ")}
+                      <span className="tabular-nums font-semibold">
+                        {r.count}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                {gaps.uncovered.length > 0 && (
+                  <div
+                    className="border rounded-md divide-y"
+                    data-testid="claim-gaps-uncovered"
+                  >
+                    {gaps.uncovered.map((q, i) => (
+                      <div
+                        key={i}
+                        className="px-3 py-2 text-sm"
+                        data-testid={`row-gap-question-${i}`}
+                      >
+                        <p>“{q.question}”</p>
+                        <p className="text-xs text-muted-foreground">
+                          {q.firmName ? `${q.firmName} · ` : ""}
+                          {formatDate(q.createdAt)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Approve / reject / suspend — the note travels with the audit trail. */}
       <Dialog
