@@ -16,8 +16,8 @@ import { assertClerkEnabled, type ClerkGateway } from "./gateway";
 import { inClerkScope } from "./scope";
 import { getActiveClaims } from "./claims";
 import {
-  getDataIntent,
   lagosMonthOptions,
+  CLIENT_SAFE_DATA_INTENTS,
   DATA_INTENTS,
   type DataIntentParams,
 } from "./data-intents";
@@ -68,7 +68,18 @@ export async function askClerk(
   // only its platform-recorded intent + resolved parameter KEYS reach the
   // classifier as context, so "and for June?" can follow on. Conversation
   // state lives entirely in data the app already stores.
-  ctx: { firmId?: string | null; previousCaseId?: string | null } = {},
+  // clientScoped/clientPartyId (SEC-03): the client_user posture, resolved
+  // from the PRINCIPAL by the route. A client asker is offered only the
+  // client-safe data intents, its client option list is exactly its own
+  // party, every lookup is FORCED to that party regardless of what the
+  // model picked, and multi-turn context only threads its OWN cases —
+  // firm-keyed RLS is not a sibling wall.
+  ctx: {
+    firmId?: string | null;
+    previousCaseId?: string | null;
+    clientScoped?: boolean;
+    clientPartyId?: string | null;
+  } = {},
 ): Promise<ClerkCase> {
   await assertClerkEnabled();
 
@@ -125,7 +136,17 @@ export async function askClerk(
   const active = await getActiveClaims();
   // Data intents are firm-record lookups, so they are only offered to a
   // firm-scoped asker; an operator without a tenant keeps register-only Ask.
-  const dataIntents = ctx.firmId ? DATA_INTENTS : [];
+  // A client_user (SEC-03) gets only the client-safe subset — every lookup
+  // it can name is pinned to its own party below — and, fail closed, no data
+  // intents at all if the principal somehow carries no client party.
+  const clientScoped = ctx.clientScoped === true;
+  const dataIntents = !ctx.firmId
+    ? []
+    : clientScoped
+      ? ctx.clientPartyId
+        ? CLIENT_SAFE_DATA_INTENTS
+        : []
+      : DATA_INTENTS;
   if (active.length === 0 && dataIntents.length === 0) {
     return refuse(
       "The register has no active claims yet, so this question has been escalated to an operator.",
@@ -142,7 +163,8 @@ export async function askClerk(
   // Closed parameter options (idea #4), offered only alongside data intents:
   // the last twelve Lagos months, and the firm's own client parties under
   // OPAQUE keys the app maps back — the model can only ever pick an entry
-  // the app itself built.
+  // the app itself built. A client asker's list is EXACTLY ONE entry: its
+  // own party (SEC-03) — the model can only ever pick the caller itself.
   const months = dataIntents.length > 0 ? lagosMonthOptions() : [];
   const monthByKey = new Map(months.map((m) => [m.key, m]));
   const CLIENT_OPTION_CAP = 40;
@@ -159,7 +181,14 @@ export async function askClerk(
               engagementsTable,
               eq(engagementsTable.clientPartyId, partiesTable.id),
             )
-            .where(eq(engagementsTable.firmId, ctx.firmId!))
+            .where(
+              clientScoped
+                ? and(
+                    eq(engagementsTable.firmId, ctx.firmId!),
+                    eq(partiesTable.id, ctx.clientPartyId!),
+                  )
+                : eq(engagementsTable.firmId, ctx.firmId!),
+            )
             .orderBy(partiesTable.legalName)
             // One past the cap so truncation is DETECTED, never silent.
             .limit(CLIENT_OPTION_CAP + 1),
@@ -193,6 +222,12 @@ export async function askClerk(
             eq(clerkCasesTable.id, ctx.previousCaseId!),
             eq(clerkCasesTable.firmId, ctx.firmId!),
             eq(clerkCasesTable.kind, "question"),
+            // SEC-03: firm-keyed RLS shares the firm across sibling clients,
+            // so a client asker's thread must ALSO be its own — a sibling's
+            // case id contributes no context, exactly like a cross-firm id.
+            ...(clientScoped
+              ? [eq(clerkCasesTable.createdBy, actorId)]
+              : []),
           ),
         )
         .limit(1),
@@ -291,13 +326,17 @@ export async function askClerk(
   }
 
   // Data-intent branch (idea #6), taken only when data keys were actually
-  // OFFERED (firm-scoped asker): for those askers the catalogue is checked
-  // first, so the platform-defined meaning of a "data.*" key wins over an
-  // identically named claim. A firm-less asker's enum never contained data
-  // keys, so a "data.*" pick there can only be a register claim — it falls
-  // through to the claims path and answers normally.
+  // OFFERED (firm-scoped asker): resolution runs against the intents THIS
+  // asker was offered, so the platform-defined meaning of a "data.*" key
+  // wins over an identically named claim — and a client asker can never run
+  // an intent outside its client-safe subset (SEC-03), even via a colliding
+  // claim key. A firm-less asker's enum never contained data keys, so a
+  // "data.*" pick there can only be a register claim — it falls through to
+  // the claims path and answers normally.
   const firmId = ctx.firmId;
-  const dataIntent = firmId ? getDataIntent(result.data.claimKey) : undefined;
+  const dataIntent = firmId
+    ? dataIntents.find((i) => i.key === result.data.claimKey)
+    : undefined;
   if (dataIntent && firmId) {
     // Parameter resolution (idea #4): the model picked closed keys; the app
     // maps them back through ITS OWN option lists. An unknown key, or a
@@ -335,6 +374,15 @@ export async function askClerk(
       }
       params.clientPartyId = client.id;
       params.clientName = client.name;
+    }
+    // SEC-03: a client asker's scope comes from the PRINCIPAL, never from
+    // the model. Whatever the classifier picked (the only offered client
+    // option is the caller's own party anyway), the lookup is FORCED to
+    // that party before it runs.
+    if (clientScoped && ctx.clientPartyId) {
+      params.clientPartyId = ctx.clientPartyId;
+      const own = clientOptions.find((c) => c.id === ctx.clientPartyId);
+      if (own) params.clientName = own.name;
     }
 
     let outcome;

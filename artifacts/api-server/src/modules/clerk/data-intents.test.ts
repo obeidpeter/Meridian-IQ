@@ -13,6 +13,7 @@ import {
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window.ts";
 import { askClerk } from "./ask.ts";
 import {
+  CLIENT_SAFE_DATA_INTENTS,
   DATA_INTENTS,
   DATA_INTENT_PREFIX,
   RECEIVABLE_AGE_DAYS,
@@ -45,6 +46,10 @@ const partyA = randomUUID();
 const partyA2 = randomUUID();
 const partyB = randomUUID();
 const askerId = randomUUID();
+// Client-facing Ask (SEC-03): a client_user pinned to partyA2, and a second
+// staff user for the cross-user multi-turn assertions.
+const clientAskerId = randomUUID();
+const secondStaffId = randomUUID();
 
 // Exact Lagos calendar dates (WAT is fixed UTC+1, no DST), so the statutory
 // window predicates are tested without day-boundary flakiness.
@@ -99,7 +104,11 @@ before(async () => {
   ]);
   await db
     .insert(usersTable)
-    .values({ id: askerId, email: `di-asker-${SALT}@test.example` })
+    .values([
+      { id: askerId, email: `di-asker-${SALT}@test.example` },
+      { id: clientAskerId, email: `di-client-${SALT}@test.example` },
+      { id: secondStaffId, email: `di-staff2-${SALT}@test.example` },
+    ])
     .onConflictDoNothing();
 
   type InvoiceSeed = typeof invoicesTable.$inferInsert;
@@ -700,5 +709,219 @@ test("multi-turn: a current-month scope survives the label round-trip", async ()
   assert.ok(
     prompts[0].includes(`month ${currentMonthKey}`),
     `current-month key carried into the context (prompt: ${prompts[0].slice(0, 400)})`,
+  );
+});
+
+// ---- Client-facing Ask (SEC-03 subset) --------------------------------------
+
+test("the client-safe subset is an allowlist that excludes every firm-wide intent", () => {
+  const safeKeys = CLIENT_SAFE_DATA_INTENTS.map((i) => i.key);
+  for (const excluded of [
+    "data.outstanding_receivables",
+    "data.expected_inflows",
+    "data.chase_list",
+    "data.clerk_allowance",
+  ]) {
+    assert.ok(
+      !safeKeys.includes(excluded),
+      `${excluded} embeds firm-wide content and must never be offered to a client`,
+    );
+  }
+  // Everything offered accepts a client filter — the forced own-party pin in
+  // ask.ts must be honourable by every intent a client can name.
+  for (const intent of CLIENT_SAFE_DATA_INTENTS) {
+    assert.equal(
+      intent.accepts.client,
+      true,
+      `${intent.key} must accept a client filter to be client-safe`,
+    );
+  }
+});
+
+test("client-scoped Ask offers only the caller's own party and pins the lookup to it", async () => {
+  const calls: CompletionRequest[] = [];
+  const gateway = fakeGateway((req) => {
+    calls.push(req);
+    // The model deliberately picks NO client — the app must still pin the
+    // lookup to the caller's own party (the scope comes from the principal).
+    return JSON.stringify({
+      claimKey: "data.overdue_submissions",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    });
+  });
+  const kase = await askClerk(`What is overdue? ${SALT}`, clientAskerId, gateway, {
+    firmId: firmA,
+    clientScoped: true,
+    clientPartyId: partyA2,
+  });
+  assert.equal(kase.status, "approved");
+  assert.equal(kase.answer?.answered, true);
+  assert.equal(kase.answer?.dataIntent, "data.overdue_submissions");
+  // The answer names ONLY the caller's own party — the forced scope.
+  assert.deepEqual(kase.answer?.dataParams, { client: `DI Party Z ${SALT}` });
+  assert.ok(
+    kase.answer?.proposition?.includes(CLIENT2_OVERDUE_NUM),
+    "the caller's own overdue invoice is named",
+  );
+  assert.ok(
+    !kase.answer?.proposition?.includes(OVERDUE_NUM),
+    "a sibling client's invoices must never appear (SEC-03)",
+  );
+
+  // The closed enums offered to the classifier: exactly one client option
+  // (the caller), and no excluded intent key anywhere.
+  assert.equal(calls.length, 1);
+  const props = calls[0].jsonSchema.properties as {
+    claimKey: { enum: string[] };
+    client: { enum: string[] };
+  };
+  assert.deepEqual(
+    props.client.enum,
+    ["c1", "none"],
+    "the client option list is EXACTLY the caller's own party",
+  );
+  assert.ok(props.claimKey.enum.includes("data.overdue_submissions"));
+  for (const excluded of [
+    "data.outstanding_receivables",
+    "data.expected_inflows",
+    "data.chase_list",
+    "data.clerk_allowance",
+  ]) {
+    assert.ok(
+      !props.claimKey.enum.includes(excluded),
+      `${excluded} must not be offered to a client asker`,
+    );
+  }
+  const prompt = calls[0].user as string;
+  assert.ok(prompt.includes(`c1: DI Party Z ${SALT}`));
+  assert.ok(
+    !prompt.includes(`DI Party A ${SALT}`),
+    "sibling client names must never reach a client asker's prompt",
+  );
+});
+
+test("an intent excluded from the client subset refuses — never a firm-wide answer", async () => {
+  const gateway = fakeGateway(() =>
+    // The model names a firm-wide intent the client enum never offered: the
+    // closed validator discards it and the ordinary refusal machinery
+    // answers.
+    JSON.stringify({
+      claimKey: "data.chase_list",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    }),
+  );
+  const kase = await askClerk(
+    `Who is worth chasing? ${SALT}`,
+    clientAskerId,
+    gateway,
+    { firmId: firmA, clientScoped: true, clientPartyId: partyA2 },
+  );
+  assert.equal(kase.status, "escalated");
+  assert.equal(kase.answer?.answered, false);
+  assert.ok(kase.answer?.refusalReason, "a refusal, never firm-wide data");
+});
+
+test("multi-turn for a client threads only its OWN cases; firm staff keep firm-wide threading", async () => {
+  // A data-answered case created by a STAFF user in the same firm.
+  const staffGateway = fakeGateway(() =>
+    JSON.stringify({
+      claimKey: "data.overdue_submissions",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    }),
+  );
+  const staffCase = await askClerk(
+    `Staff overdue? ${SALT}`,
+    askerId,
+    staffGateway,
+    { firmId: firmA },
+  );
+  assert.equal(staffCase.answer?.dataIntent, "data.overdue_submissions");
+
+  // A client follow-up naming the staff case: same firm, but not the same
+  // user — the firm filter alone is not a sibling wall (SEC-03), so the
+  // context line must be absent.
+  const clientPrompts: string[] = [];
+  const clientGateway = fakeGateway((req) => {
+    clientPrompts.push(req.user as string);
+    return JSON.stringify({
+      claimKey: "data.unsubmitted_invoices",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    });
+  });
+  await askClerk(`And unsubmitted? ${SALT}`, clientAskerId, clientGateway, {
+    firmId: firmA,
+    clientScoped: true,
+    clientPartyId: partyA2,
+    previousCaseId: staffCase.id,
+  });
+  assert.ok(
+    !clientPrompts[0].includes("Previous question context"),
+    "another user's case threads no context for a client (SEC-03)",
+  );
+
+  // The client's OWN previous case still threads.
+  const ownFirstGateway = fakeGateway(() =>
+    JSON.stringify({
+      claimKey: "data.failed_submissions",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    }),
+  );
+  const ownCase = await askClerk(
+    `What failed? ${SALT}`,
+    clientAskerId,
+    ownFirstGateway,
+    { firmId: firmA, clientScoped: true, clientPartyId: partyA2 },
+  );
+  const ownPrompts: string[] = [];
+  const ownFollowGateway = fakeGateway((req) => {
+    ownPrompts.push(req.user as string);
+    return JSON.stringify({
+      claimKey: "data.unsubmitted_invoices",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    });
+  });
+  await askClerk(`And unsubmitted too? ${SALT}`, clientAskerId, ownFollowGateway, {
+    firmId: firmA,
+    clientScoped: true,
+    clientPartyId: partyA2,
+    previousCaseId: ownCase.id,
+  });
+  assert.ok(
+    ownPrompts[0].includes("Previous question context"),
+    "the client's own thread still carries context",
+  );
+  assert.ok(ownPrompts[0].includes("data.failed_submissions"));
+
+  // Firm staff are NOT sub-tenant scoped: a different staff user threading
+  // the first staff user's case keeps its context (unchanged behaviour).
+  const staff2Prompts: string[] = [];
+  const staff2Gateway = fakeGateway((req) => {
+    staff2Prompts.push(req.user as string);
+    return JSON.stringify({
+      claimKey: "data.unsubmitted_invoices",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    });
+  });
+  await askClerk(`And unsubmitted, colleague? ${SALT}`, secondStaffId, staff2Gateway, {
+    firmId: firmA,
+    previousCaseId: staffCase.id,
+  });
+  assert.ok(
+    staff2Prompts[0].includes("Previous question context"),
+    "firm staff threading stays firm-wide",
   );
 });
