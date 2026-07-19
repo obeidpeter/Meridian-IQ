@@ -15,7 +15,10 @@ import { recipientRefFor } from "../messaging/recipient-ref";
 // or client details. Delivery is recorded in the messages ledger under the
 // "push" channel with an opaque recipient reference.
 
-export type PushTemplateKey = "deadline_reminder" | "b2c_window_alert";
+export type PushTemplateKey =
+  | "deadline_reminder"
+  | "b2c_window_alert"
+  | "client_statement_ready";
 
 const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   deadline_reminder: {
@@ -25,6 +28,10 @@ const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   b2c_window_alert: {
     title: "MeridianIQ",
     body: "A B2C reporting window is about to close. Open the app for details.",
+  },
+  client_statement_ready: {
+    title: "MeridianIQ",
+    body: "Your monthly statement is ready. Open the app to view it.",
   },
 };
 
