@@ -18,6 +18,7 @@
 - [Deploy hang diagnostic](deploy-hang-diagnostic.md) — Publish "port never opened" + silent stdout = startup HANG on a blocking DB/net op before listen(); open the port first, add connect timeouts.
 - [RLS SET ROLE in prod](rls-set-role-prod.md) — "permission denied to set role meridian_app" 500s prod only: dev superuser hides a missing PG16 membership SET option; app self-heals with GRANT ... WITH SET at boot.
 - [Git ops in this workspace](git-ops-sandbox.md) — bash blocks .git writes (stale locks!); code_execution sandbox does fetch/merge but has no secrets; push runs in bash with GH_PUSH_TOKEN (lock error cosmetic).
+- [Git pane sync recovery](git-pane-sync-recovery.md) — Git-pane syncs skip post-merge.sh; always pnpm install + restart affected workflows, else Vite/Metro "Failed to resolve import".
 - [Mobile auth + orval hooks](mobile-auth-and-orval-hooks.md) — login token only with X-Meridian-Client header; generated hooks need explicit queryKey; serialize toggle-driven PUTs.
 - [Expo web preview CORS](expo-web-cors.md) — credentialed calls from the Expo dev origin need an explicit CORS allowlist + credentials:true; wildcard cors() shows OPTIONS-but-never-POST.
 - [Android push real device](android-push-real-device.md) — Expo Go Android can't receive push (SDK 53+, dev build needed); Android 8+ needs a notification channel or alerts are dropped.
