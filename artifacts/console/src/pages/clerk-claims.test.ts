@@ -1,6 +1,6 @@
 import { test, expect, describe } from "vitest";
 import type { ClaimGapReport } from "@workspace/api-client-react";
-import { claimGapSummary } from "./clerk-claims";
+import { claimGapSummary, seededDraftState } from "./clerk-claims";
 
 // The claim-gaps card's headline sentence: refusals against the window when
 // the register left questions unanswered, an all-clear otherwise.
@@ -36,5 +36,27 @@ describe("claimGapSummary", () => {
     expect(
       claimGapSummary(report({ refusedTotal: 0, totalQuestions: 0 })),
     ).toContain("No refused questions");
+  });
+});
+
+// Gap-to-claim wiring: "Draft claim from this" seeds the Draft-with-Clerk
+// panel. Only a seed — drafting still takes the operator's click and the
+// draft still walks maker-checker.
+describe("seededDraftState", () => {
+  test("opens the panel with the question VERBATIM — never rephrased, trimmed or prefixed", () => {
+    const question = "  What is the VAT rate on exported services? ";
+    expect(seededDraftState(question)).toEqual({
+      draftOpen: true,
+      draftText: question,
+      draftError: null,
+      draftSuccess: null,
+    });
+  });
+
+  test("clears any stale error or success from an earlier drafting attempt", () => {
+    const seed = seededDraftState("Is B2C reporting monthly?");
+    expect(seed.draftError).toBeNull();
+    expect(seed.draftSuccess).toBeNull();
+    expect(seed.draftOpen).toBe(true);
   });
 });

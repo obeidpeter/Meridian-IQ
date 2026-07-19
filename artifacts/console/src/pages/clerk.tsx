@@ -6,10 +6,12 @@ import {
   useCreateClerkCase,
   useCreateClerkCaseBatch,
   useDecideClerkCase,
+  useBulkApproveClerkCases,
   useClaimClerkCase,
   useReleaseClerkCase,
   useRetryClerkCase,
   useGetClerkPartySuggestions,
+  getClerkPartySuggestions,
   useGetClerkMetrics,
   useGetMe,
   useListFeatureFlags,
@@ -23,13 +25,15 @@ import {
 } from "@workspace/api-client-react";
 import type {
   BatchClerkCasesResult,
+  ClerkBulkApproveReport,
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseDecisionInputCategory,
+  ClerkPartySuggestions,
   InvoiceLineInput,
   ListClerkCasesParams,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,6 +42,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -58,9 +70,13 @@ import { formatDateTime, pillClasses } from "@/lib/format";
 import { PartySuggestionChips } from "@/pages/clerk-party-suggestions";
 import type { ApproveForm } from "@/pages/clerk-shared";
 import {
+  approveDecisionFromForm,
   approveFormFromCase,
+  bulkApproveFormFromCase,
+  bulkApproveSummary,
   clerkDisabledToast,
   correctionHint,
+  fastLaneCaseSummary,
   fieldLabel,
   fieldWeights,
   fileIsPdf,
@@ -74,7 +90,6 @@ import {
   shortActor,
   STATUS_TONE,
   truncateSnippet,
-  vatFractionFromPercent,
   vatPercentInvalid,
   voiceDuration,
 } from "@/pages/clerk-shared";
@@ -104,6 +119,11 @@ const CATEGORIES: ClerkCaseDecisionInputCategory[] = ["b2b", "b2g", "b2c"];
 // returns a bounded, newest-first slice instead of the full legacy list. A
 // full page means there may be more — "Load more" appends the next one.
 const PAGE_SIZE = 50;
+
+// The bulk-approve endpoint accepts at most 50 items per request (the
+// contract's maxItems), so the fast-lane action sends at most one batch of
+// the best-ranked ready cases.
+const BULK_APPROVE_MAX = 50;
 
 function ConfidenceBadge({ confidence }: { confidence: number }) {
   const pct = Math.round(confidence * 100);
@@ -570,10 +590,100 @@ export function ClerkWorkspace() {
         .sort((a, b) => reviewEffort(a, weights) - reviewEffort(b, weights)),
     ];
   }, [cases, weights]);
-  const readyCount = useMemo(
-    () => sortedCases.filter(isReadyToApprove).length,
+  const readyCases = useMemo(
+    () => sortedCases.filter(isReadyToApprove),
     [sortedCases],
   );
+  const readyCount = readyCases.length;
+
+  // Fast-lane bulk approval (operator throughput): approve every loaded
+  // "Ready" case in one confirmed action. The server re-checks eligibility
+  // per case and applies each decision through the SAME decideCase machinery
+  // a single approval runs — a skipped case is left exactly as it was, and
+  // every approval still stops at a DRAFT invoice. Capped at the endpoint's
+  // 50-item batch limit.
+  const bulkCandidates = useMemo(
+    () => readyCases.slice(0, BULK_APPROVE_MAX),
+    [readyCases],
+  );
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkReport, setBulkReport] = useState<ClerkBulkApproveReport | null>(
+    null,
+  );
+  // Supplier/number labels snapshotted when the batch is sent, so the
+  // outcomes view can still name a case after the queue refetch drops it.
+  const [bulkLabels, setBulkLabels] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+
+  // Party identities for the bulk decisions: the top register suggestion per
+  // slot — the SAME auto-pre-selection the single review pane makes before
+  // the operator touches anything. Fetched only while the dialog is open; a
+  // failed lookup leaves that case's slots empty and the server then skips
+  // the row with a named reason.
+  const bulkIds = useMemo(() => bulkCandidates.map((c) => c.id), [bulkCandidates]);
+  const { data: bulkSuggestions, isLoading: bulkSuggestionsLoading } = useQuery(
+    {
+      queryKey: ["clerk-bulk-party-suggestions", bulkIds],
+      queryFn: async () => {
+        const entries = await Promise.all(
+          bulkIds.map(async (id) => {
+            try {
+              return [id, await getClerkPartySuggestions(id)] as const;
+            } catch {
+              return [id, undefined] as const;
+            }
+          }),
+        );
+        return new Map<string, ClerkPartySuggestions | undefined>(entries);
+      },
+      enabled: bulkOpen && bulkIds.length >= 2,
+      staleTime: 60_000,
+      retry: false,
+    },
+  );
+
+  const bulkApprove = useBulkApproveClerkCases({
+    mutation: {
+      onSuccess: (report) => {
+        setBulkReport(report);
+        setDisabledBanner(false);
+        invalidateCases();
+      },
+      onError: (e) =>
+        handleGatewayError(e, "Could not bulk-approve the fast lane."),
+    },
+  });
+
+  const confirmBulkApprove = () => {
+    setBulkLabels(
+      new Map(
+        bulkCandidates.map((c) => {
+          const s = fastLaneCaseSummary(c);
+          return [c.id, `${s.supplier} · ${s.invoiceNumber}`];
+        }),
+      ),
+    );
+    bulkApprove.mutate({
+      data: {
+        items: bulkCandidates.map((c) => ({
+          caseId: c.id,
+          // The SAME builder the single-approve button calls, fed by the
+          // same prefill (extraction values + top party suggestions + the
+          // case's own firm).
+          decision: approveDecisionFromForm(
+            bulkApproveFormFromCase(c, bulkSuggestions?.get(c.id)),
+            "",
+          ),
+        })),
+      },
+    });
+  };
+
+  const closeBulkDialog = () => {
+    setBulkOpen(false);
+    setBulkReport(null);
+  };
 
   // Batch-aware grouping (round-8 idea #3): a bundle's segments stay together
   // under one header with per-batch progress; unbatched cases are untouched.
@@ -714,6 +824,21 @@ export function ClerkWorkspace() {
                 </Button>
               </CardHeader>
               <CardContent className="space-y-3">
+                {/* Queue-level fast-lane approval: only when there is a lane
+                    to bulk (2+ ready cases loaded). Everything it can do, the
+                    dialog restates: fast-lane cases only, drafts only. */}
+                {readyCount >= 2 && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setBulkOpen(true)}
+                    data-testid="button-bulk-approve"
+                  >
+                    <ShieldCheck className="w-4 h-4 mr-1" aria-hidden="true" />
+                    Approve fast lane ({bulkCandidates.length})
+                  </Button>
+                )}
                 {captureOpen && (
                   <div className="border rounded-md p-3 space-y-2">
                     <Label htmlFor="capture-file">
@@ -1539,22 +1664,9 @@ export function ClerkWorkspace() {
                             onClick={() =>
                               decideCase.mutate({
                                 id: selected.id,
-                                data: {
-                                  action: "approve",
-                                  firmId: form.firmId,
-                                  supplierPartyId: form.supplierPartyId,
-                                  buyerPartyId: form.buyerPartyId,
-                                  invoiceNumber: form.invoiceNumber.trim(),
-                                  issueDate: form.issueDate,
-                                  dueDate: form.dueDate || null,
-                                  currency: form.currency,
-                                  category: form.category,
-                                  lines: form.lines.map((l) => ({
-                                    ...l,
-                                    vatRate: vatFractionFromPercent(l.vatRate),
-                                  })),
-                                  reason: reason || null,
-                                },
+                                // The shared builder — the fast-lane bulk
+                                // items are built by this same function.
+                                data: approveDecisionFromForm(form, reason),
                               })
                             }
                             disabled={approveDisabled || decideCase.isPending}
@@ -1596,6 +1708,147 @@ export function ClerkWorkspace() {
               </CardContent>
             </Card>
           </div>
+
+      {/* Fast-lane bulk approval. The dialog is explicit about scope: only
+          fast-lane cases (clean extraction, clear pre-flight, confident
+          critical fields) are touched, every approval creates a DRAFT
+          invoice only, and the server re-checks each case — anything that no
+          longer qualifies is skipped and left exactly as it was. */}
+      <Dialog
+        open={bulkOpen}
+        onOpenChange={(o) => {
+          if (!o) closeBulkDialog();
+          else setBulkOpen(true);
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {/* Once the report is in, the queue has refetched and the
+                  candidate list may be empty — pin the count to the batch
+                  that actually ran. */}
+              Approve the fast lane (
+              {bulkReport ? bulkReport.results.length : bulkCandidates.length})
+            </DialogTitle>
+            <DialogDescription>
+              This only touches fast-lane cases — extraction succeeded,
+              pre-flight found nothing blocking and every critical field is
+              confident. Each approval creates a DRAFT invoice only; nothing
+              is submitted. The server re-checks every case and skips any
+              that no longer qualify, leaving them exactly as they were.
+            </DialogDescription>
+          </DialogHeader>
+          {bulkReport ? (
+            (() => {
+              const summary = bulkApproveSummary(bulkReport);
+              return (
+                <div className="space-y-3" data-testid="bulk-approve-report">
+                  <p
+                    className="text-sm font-medium text-emerald-700 dark:text-emerald-400"
+                    data-testid="text-bulk-approved-count"
+                  >
+                    {summary.approved} case
+                    {summary.approved === 1 ? "" : "s"} approved as draft
+                    invoices.
+                  </p>
+                  {summary.skipped.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        Skipped — left exactly as they were:
+                      </p>
+                      <ul
+                        className="space-y-1 text-xs text-muted-foreground"
+                        data-testid="bulk-skipped-list"
+                      >
+                        {summary.skipped.map((r) => (
+                          <li
+                            key={r.caseId}
+                            data-testid={`row-bulk-skipped-${r.caseId}`}
+                          >
+                            <span className="font-medium text-foreground">
+                              {bulkLabels.get(r.caseId) ?? r.caseId}
+                            </span>
+                            : {r.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button
+                      onClick={closeBulkDialog}
+                      data-testid="button-close-bulk-approve"
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </div>
+              );
+            })()
+          ) : (
+            <>
+              <div
+                className="border rounded-md divide-y text-sm"
+                data-testid="bulk-approve-rows"
+              >
+                {bulkCandidates.map((c) => {
+                  const s = fastLaneCaseSummary(c);
+                  const prefill = bulkApproveFormFromCase(
+                    c,
+                    bulkSuggestions?.get(c.id),
+                  );
+                  const unresolved =
+                    !prefill.firmId ||
+                    !prefill.supplierPartyId ||
+                    !prefill.buyerPartyId;
+                  return (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-3 px-3 py-2"
+                      data-testid={`row-bulk-case-${c.id}`}
+                    >
+                      <span className="flex-1 min-w-0 truncate font-medium">
+                        {s.supplier}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {s.invoiceNumber}
+                      </span>
+                      <span className="tabular-nums">{s.amount}</span>
+                      {!bulkSuggestionsLoading && unresolved && (
+                        <span
+                          className={pillClasses("amber")}
+                          title="No firm or register match resolved — the server will skip this case; approve it from the single-case review instead."
+                          data-testid={`pill-bulk-unresolved-${c.id}`}
+                        >
+                          will be skipped
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  onClick={closeBulkDialog}
+                  data-testid="button-cancel-bulk-approve"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={confirmBulkApprove}
+                  disabled={bulkApprove.isPending || bulkSuggestionsLoading}
+                  data-testid="button-confirm-bulk-approve"
+                >
+                  {bulkApprove.isPending
+                    ? "Approving…"
+                    : `Approve ${bulkCandidates.length} as drafts`}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

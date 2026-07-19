@@ -8,6 +8,7 @@ import {
   casesTileDetail,
   modelCanaryRowClass,
   overrideRateClass,
+  qualityAlertText,
   shapeExample,
 } from "./clerk-health";
 
@@ -92,6 +93,35 @@ describe("shapeExample", () => {
     expect(shapeExample(null, "NG-TIN-1")).toBe("— → NG-TIN-1");
     expect(shapeExample("NG-TIN-1", null)).toBe("NG-TIN-1 → —");
     expect(shapeExample(null, null)).toBe("— → —");
+  });
+});
+
+describe("qualityAlertText", () => {
+  test("phrases the drop as rate (month) to rate (month) over the sample", () => {
+    expect(
+      qualityAlertText({
+        fromMonth: "2026-05",
+        toMonth: "2026-06",
+        fromRate: 0.93,
+        toRate: 0.81,
+        fields: 240,
+      }),
+    ).toBe(
+      "Extraction kept-rate dropped from 93.0% (2026-05) to 81.0% (2026-06) over 240 fields — review recent corrections.",
+    );
+  });
+
+  test("rates are fractions on the wire, formatted as percents like the resistance banner", () => {
+    const out = qualityAlertText({
+      fromMonth: "2026-01",
+      toMonth: "2026-02",
+      fromRate: 1,
+      toRate: 0.875,
+      fields: 8,
+    });
+    expect(out).toContain("100.0%");
+    expect(out).toContain("87.5%");
+    expect(out).toContain("over 8 fields");
   });
 });
 
