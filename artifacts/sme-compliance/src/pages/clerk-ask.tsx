@@ -10,14 +10,33 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CapabilityGate } from "@/components/capability-gate";
 import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
 import { PageHeader } from "@/components/page-header";
+import { SuggestedQuestions } from "@/components/suggested-questions";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
-import { handleClerkGatewayError } from "@/lib/clerk";
+import { dataAnswerScope, handleClerkGatewayError } from "@/lib/clerk";
 import { ShieldCheck } from "lucide-react";
 
-// Register-grounded Q&A for firm principals only (clerk.ask — client_users
-// never see this page). Every answer cites an approved claim from the
-// compliance register; anything not covered is refused, never improvised.
+// Register-grounded Q&A behind clerk.ask. Firm principals ask across their
+// portfolio; since contract 0.36.0 a client_user can ask too, pinned
+// server-side to their own business (SEC-03) — the same page serves both,
+// and on older servers the capability simply never appears, so the nav and
+// gate hide it cleanly. Every answer cites an approved claim from the
+// compliance register or a fixed lookup over the asker's own records;
+// anything not covered is refused, never improvised.
+
+// AskClerkInput bounds — mirrored client-side so the button and the
+// textarea's maxLength agree with what the server will accept.
+const QUESTION_MIN = 3;
+const QUESTION_MAX = 2000;
+
+// Pre-phrased to land in the grounded data intents, so a first click answers
+// from the asker's own records instead of a register refusal.
+const SUGGESTED_QUESTIONS = [
+  "What's overdue?",
+  "What did we submit this month?",
+  "What invoices haven't gone out?",
+  "Who owes us?",
+];
 
 function AnswerCard({ answer }: { answer: ClerkAnswer }) {
   if (!answer.answered) {
@@ -52,16 +71,16 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
         )}
         <p className="text-xs text-muted-foreground">
           {answer.dataIntent ? (
-            <>
-              Source: {answer.citation} · live lookup{" "}
-              <code>{answer.dataIntent}</code>
-              {answer.dataParams && (
-                <>
-                  {" · scope: "}
-                  {Object.values(answer.dataParams).join(" · ")}
-                </>
-              )}
-            </>
+            // Data-grounded answer: computed live from the asker's own
+            // records, scoped to the labels the server resolved (a month, a
+            // client) — dataParams carries display labels, never ids.
+            <span data-testid="text-answer-from-records">
+              From your records
+              {dataAnswerScope(answer.dataParams)
+                ? ` (${dataAnswerScope(answer.dataParams)})`
+                : ""}{" "}
+              · {answer.citation}
+            </span>
           ) : (
             <>
               Source: {answer.citation} · approved claim{" "}
@@ -93,6 +112,9 @@ function AskContent() {
           setPreviousCaseId(row.id);
         }
       },
+      // 503 (kill switch) raises the banner; 429 (monthly allowance) and
+      // everything else toast with the server's own words — the same split
+      // the capture page uses.
       onError: (e) =>
         handleClerkGatewayError(e, {
           onDisabled: () => setDisabledBanner(true),
@@ -102,11 +124,29 @@ function AskContent() {
     },
   });
 
+  // One submit path for the Ask button and the suggested chips. A chip
+  // passes its own text because setState hasn't landed yet when it fires.
+  const submitQuestion = (raw: string) => {
+    const q = raw.trim();
+    if (q.length < QUESTION_MIN || q.length > QUESTION_MAX || ask.isPending) {
+      return;
+    }
+    ask.mutate({
+      data: {
+        question: q,
+        // Multi-turn: thread the previous data answer so "and for June?"
+        // inherits its scope. The server re-verifies the id is this firm's
+        // own answered question before using it.
+        ...(previousCaseId ? { previousCaseId } : {}),
+      },
+    });
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Ask Clerk"
-        description="Answers come from the approved compliance register or live lookups over your firm's own records — nothing is improvised."
+        description="Answers come from the approved compliance register or live lookups over your own records — nothing is improvised."
       />
 
       {disabledBanner && (
@@ -117,7 +157,7 @@ function AskContent() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Ask about Nigerian tax rules — or your firm's own numbers
+              Ask about Nigerian tax rules — or your own numbers
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -130,24 +170,28 @@ function AskContent() {
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="What VAT rate applies to a consulting invoice? What is overdue this week?"
               rows={3}
+              maxLength={QUESTION_MAX}
               data-testid="input-ask-question"
+            />
+            <SuggestedQuestions
+              questions={SUGGESTED_QUESTIONS}
+              disabled={ask.isPending}
+              onPick={(q) => {
+                setQuestion(q);
+                submitQuestion(q);
+              }}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
                 Rules come from the approved register; numbers are computed
-                live from your firm's records. Anything else is refused and
+                live from your own records. Anything else is refused and
                 escalated rather than guessed.
               </p>
               <Button
-                onClick={() =>
-                  ask.mutate({
-                    data: {
-                      question,
-                      ...(previousCaseId ? { previousCaseId } : {}),
-                    },
-                  })
+                onClick={() => submitQuestion(question)}
+                disabled={
+                  question.trim().length < QUESTION_MIN || ask.isPending
                 }
-                disabled={question.trim().length < 3 || ask.isPending}
                 data-testid="button-ask"
               >
                 {ask.isPending ? "Checking the register…" : "Ask"}
