@@ -247,7 +247,7 @@ export async function getOrRefreshExposure(
 // Worker sweep (pipeline interval): refresh a snapshot for every buyer party
 // with at least one invoice whose latest snapshot is older than the window.
 // A no-op while buyer_rails is dark (PL-02).
-export async function refreshBuyerExposures(): Promise<number> {
+async function refreshBuyerExposures(): Promise<number> {
   return runInBypassContext(async () => {
     if (!(await isFeatureEnabled("buyer_rails", null))) return 0;
     const buyers = await getDb()

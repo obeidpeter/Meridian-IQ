@@ -19,7 +19,7 @@ import { registerSweep } from "../pipeline/pipeline";
 // one constant so the sweep and the brief can never disagree on the format.
 export const UNMAPPED_TITLE_PREFIX = "Unmapped code ";
 
-export async function sweepUnmappedCodes(): Promise<void> {
+async function sweepUnmappedCodes(): Promise<void> {
   // Run inside a bypass transaction (CON-M2). Without an ambient context every
   // getDb() call falls back to the raw pool and autocommits independently, so
   // the dedup SELECT and the INSERT below had no snapshot consistency and no

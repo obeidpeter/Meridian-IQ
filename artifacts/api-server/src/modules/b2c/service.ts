@@ -11,6 +11,7 @@ import {
 import { DomainError } from "../errors.ts";
 import { appendAudit } from "../audit/audit";
 import { fanOutAlert } from "../messaging/fan-out";
+import { pointerEntityRef } from "../messaging/recipient-ref";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
 
@@ -139,7 +140,7 @@ async function firePreBreachAlerts(now: Date): Promise<number> {
         .where(eq(alertPreferencesTable.clientPartyId, batch.clientPartyId))
         .limit(1);
       // Same PII-free entity ref on every channel so sends correlate.
-      const entityId = `batch-${batch.id.replace(/[^a-z]/gi, "").slice(0, 6)}`;
+      const entityId = pointerEntityRef("batch", batch.id);
       await fanOutAlert({
         prefs,
         clientPartyId: batch.clientPartyId,
@@ -193,7 +194,7 @@ async function markBreaches(now: Date): Promise<number> {
 // One sweep pass; called on an interval by the pipeline worker. Bypass context:
 // the sweep is trusted internal work spanning tenants. While the b2c_reporting
 // flag is dark the sweep is a no-op (PL-02: dark features do nothing).
-export async function sweepB2c(): Promise<{
+async function sweepB2c(): Promise<{
   collected: number;
   alerted: number;
   breached: number;

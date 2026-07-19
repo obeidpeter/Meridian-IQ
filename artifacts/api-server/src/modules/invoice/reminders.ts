@@ -13,6 +13,7 @@ import {
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { fanOutAlert } from "../messaging/fan-out";
+import { pointerEntityRef } from "../messaging/recipient-ref";
 import { lagosDateString } from "../../lib/lagos-time";
 import {
   SUBMISSION_WINDOW_DAYS,
@@ -37,11 +38,6 @@ export const STALE_OVERDUE_DAYS = 60;
 const BATCH_LIMIT = 100;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-// Pointer-only entity reference (SEC-12): letters from the uuid, no digits.
-function pointerFor(invoiceId: string): string {
-  return `inv-${invoiceId.replace(/[^a-z]/gi, "").slice(0, 6)}`;
-}
 
 // Returns the number of slots CLAIMED this pass (sends may be fewer: opt-outs,
 // dark flag and stale invoices claim silently). Zero means the book is fully
@@ -133,7 +129,7 @@ async function sweepInner(now: Date): Promise<number> {
       firmId: inv.firmId,
       templateKey: "deadline_reminder",
       entityType: "invoice",
-      entityId: pointerFor(inv.id),
+      entityId: pointerEntityRef("inv", inv.id),
       // Historical default preserved: with no prefs row, deadline reminders
       // do NOT send SMS (unlike the B2C pre-breach alert).
       smsDefaultWhenNoPrefs: false,

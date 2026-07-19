@@ -16,7 +16,7 @@ import { isPresentableAsEligible } from "../invoice/lifecycle";
 // One adapter interface over two accredited access-point rails (INT-01, C3).
 // The rails are simulated (no real MBS/APP reachable) but exercise the full
 // contract: idempotent submission, stamp issuance, verification, failover and a
-// circuit breaker (INT-09). A sandbox harness injects faults for testing (INT-02).
+// circuit breaker (INT-09).
 
 export const RAILS: Rail[] = ["rail_primary", "rail_secondary"];
 
@@ -31,22 +31,6 @@ export interface StampResult {
   raw: Record<string, unknown>;
 }
 
-// ---- Sandbox harness: fault injection ----
-type RailMode = "ok" | "timeout" | "unavailable" | `reject:${string}`;
-const railModes = new Map<Rail, RailMode>();
-const perInvoiceModes = new Map<string, RailMode>();
-
-export function setRailMode(rail: Rail, mode: RailMode): void {
-  railModes.set(rail, mode);
-}
-export function setInvoiceMode(invoiceNumber: string, mode: RailMode): void {
-  perInvoiceModes.set(invoiceNumber, mode);
-}
-export function resetSandbox(): void {
-  railModes.clear();
-  perInvoiceModes.clear();
-}
-
 const RAIL_SECRET: Record<Rail, string> = {
   rail_primary: "sandbox-rail-primary-secret",
   rail_secondary: "sandbox-rail-secondary-secret",
@@ -59,26 +43,6 @@ function callRail(
   inv: CanonicalInvoice,
   idempotencyKey: string,
 ): StampResult {
-  const mode = perInvoiceModes.get(inv.invoiceNumber) ?? railModes.get(rail) ?? "ok";
-  if (mode === "timeout") {
-    return { status: "error", rail, errorCode: "RAIL_TIMEOUT", raw: { mode } };
-  }
-  if (mode === "unavailable") {
-    return {
-      status: "error",
-      rail,
-      errorCode: "RAIL_UNAVAILABLE",
-      raw: { mode },
-    };
-  }
-  if (mode.startsWith("reject:")) {
-    return {
-      status: "rejected",
-      rail,
-      errorCode: mode.slice("reject:".length),
-      raw: { mode },
-    };
-  }
   const digest = createHash("sha256")
     .update(canonicalJson(inv))
     .digest("hex");

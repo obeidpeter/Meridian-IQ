@@ -55,7 +55,7 @@ export const ERROR_CATALOGUE: Record<string, CatalogueEntry> = {
   },
 };
 
-export function lookupError(code: string): CatalogueEntry {
+function lookupError(code: string): CatalogueEntry {
   return ERROR_CATALOGUE[code] ?? ERROR_CATALOGUE.UNKNOWN;
 }
 

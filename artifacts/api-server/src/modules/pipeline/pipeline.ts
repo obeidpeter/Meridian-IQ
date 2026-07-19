@@ -318,7 +318,7 @@ async function claimnext(): Promise<OutboxEvent | null> {
   return list[0] ?? null;
 }
 
-export async function processOne(): Promise<boolean> {
+async function processOne(): Promise<boolean> {
   // The whole claim -> handle -> outbox-status-update runs in one bypass
   // transaction (CON-01/SEC-02): the worker has no request principal, so it must
   // bypass tenant RLS, and a single transaction makes each event's domain writes
@@ -511,7 +511,7 @@ export async function reconcile(): Promise<number> {
 // NEVER deletes a stamp: stamps are immutable post-submission. Instead it names
 // the canonical (earliest) stamp and records the superseded ones in an audit
 // event, so every reader resolves deterministically to the same canonical stamp.
-export async function reconcileDuplicateStamps(): Promise<number> {
+async function reconcileDuplicateStamps(): Promise<number> {
   return runInBypassContext(async () => {
     const dupes = await getDb().execute<{ invoice_id: string }>(sql`
       SELECT invoice_id FROM stamp_records
