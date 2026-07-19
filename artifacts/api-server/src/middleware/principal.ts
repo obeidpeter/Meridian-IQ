@@ -55,6 +55,11 @@ const PUBLIC_PATHS = new Set([
   // Password-reset redeem: same posture (IDN-02) — the caller's session is
   // exactly what was lost, so the single-use token is the credential.
   "/api/auth/reset-password",
+  // Inbound email webhook (routes/inbound.ts): a machine caller with no
+  // session — the INBOUND_EMAIL_TOKEN shared secret IS the credential, like
+  // accept-invite's token. The route itself fails closed (404) when the
+  // secret is unconfigured.
+  "/api/inbound/email",
 ]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";

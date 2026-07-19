@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import { runRequestContext } from "@workspace/db";
 import router from "./routes";
+import inboundRouter from "./routes/inbound";
 import { logger } from "./lib/logger";
 import { resolvePrincipal, requireCsrfHeader } from "./middleware/principal";
 import { errorHandler } from "./middleware/error";
@@ -54,6 +55,12 @@ const NO_CONTEXT_ROUTES = new Set([
   // A canary is 2× a corpus pass of model calls — far past the 30s cap.
   "POST /api/clerk/eval/canary",
   "POST /api/clerk/eval/model-canary",
+  // Inbound email webhook (routes/inbound.ts): the handler responds 202 and
+  // then runs sender resolution + extraction in a detached promise whose DB
+  // stages commit in their own short transactions (clerk scope.ts) — nothing
+  // should buffer in tenantContext, and the detached model calls must not
+  // inherit (or outlive) a per-request transaction.
+  "POST /api/inbound/email",
 ]);
 
 // Hard cap on how long a request may hold its transaction open. A handler that
@@ -337,6 +344,11 @@ if (process.env.CLERK_SECRET_KEY) {
 }
 app.use(resolvePrincipal);
 app.use(tenantContext);
+// Machine webhook rail (not in the OpenAPI contract): mounted directly here
+// rather than through routes/index.ts so the contract-facing router stays
+// exactly the generated surface. Shares the /api prefix so the PUBLIC_PATHS /
+// NO_CONTEXT_ROUTES entries above match on req.path.
+app.use("/api", inboundRouter);
 app.use("/api", router);
 
 app.use(errorHandler);
