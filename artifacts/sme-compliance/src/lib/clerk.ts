@@ -87,6 +87,52 @@ export function usagePct(used: number, budget: number): number {
   return Math.min(100, Math.max(0, Math.round((used / budget) * 100)));
 }
 
+/** One per-purpose spend row from GET /clerk/usage's byPurpose array. */
+export type UsagePurposeRow = { purpose: string; tokens: number };
+
+/** Purpose rows shown under the meter before folding into "+N more". */
+export const USAGE_BREAKDOWN_MAX_ROWS = 4;
+
+/**
+ * Rows for the per-purpose breakdown under the usage meter: zero, negative
+ * and non-finite spends drop out, the rest sort by tokens descending (ties
+ * alphabetical so the order is stable across refetches), and anything past
+ * the cap folds into `overflow` for a "+N more" line. A missing array
+ * (version skew: new bundle, pre-0.35.0 server) yields the same empty shape
+ * as no spend, so the meter renders exactly as before.
+ */
+export function usageBreakdown(
+  byPurpose: UsagePurposeRow[] | undefined,
+  maxRows: number = USAGE_BREAKDOWN_MAX_ROWS,
+): { rows: UsagePurposeRow[]; overflow: number } {
+  const spent = (byPurpose ?? []).filter(
+    (r) => Number.isFinite(r.tokens) && r.tokens > 0,
+  );
+  spent.sort(
+    (a, b) => b.tokens - a.tokens || a.purpose.localeCompare(b.purpose),
+  );
+  return {
+    rows: spent.slice(0, maxRows),
+    overflow: Math.max(0, spent.length - maxRows),
+  };
+}
+
+// Compact token counts for the breakdown rows ("12.4K"); built once at module
+// load like the shared Intl formatters in @workspace/format.
+const TOKEN_COUNT_FORMAT = new Intl.NumberFormat("en-NG", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+/**
+ * Compact token count: 12_400 → "12.4K". Pair with the exact figure in the
+ * element's `title`, per the formatCompactNaira convention. Non-finite input
+ * renders the shared "—" placeholder rather than NaN.
+ */
+export function formatTokens(tokens: number): string {
+  return Number.isFinite(tokens) ? TOKEN_COUNT_FORMAT.format(tokens) : "—";
+}
+
 // ---- Extraction display ----------------------------------------------------
 
 /** "invoiceNumber" -> "Invoice number" for the extracted key-value rows. */
