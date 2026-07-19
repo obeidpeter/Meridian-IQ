@@ -182,6 +182,12 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "reconciliation.read",
     "b2c.read",
     "clerk.capture",
+    // Ask Clerk for clients (SEC-03 subset): ask.ts offers a client asker
+    // only the client-safe data intents and pins every lookup to the caller's
+    // OWN party (from the principal, never model output). Firm-internal
+    // surfaces that share this capability must refuse client_user explicitly
+    // (see GET /clerk/digest) — the capability was widened for Ask, not them.
+    "clerk.ask",
   ],
   operator: [
     "invoice.read",

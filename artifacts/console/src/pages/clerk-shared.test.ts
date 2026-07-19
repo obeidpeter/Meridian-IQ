@@ -5,7 +5,11 @@ import type {
   ClerkExtractionLine,
 } from "@workspace/api-client-react";
 import {
+  approveDecisionFromForm,
   approveFormFromCase,
+  bulkApproveFormFromCase,
+  bulkApproveSummary,
+  fastLaneCaseSummary,
   isReadyToApprove,
   vatFractionFromPercent,
   vatPercentFromRaw,
@@ -14,6 +18,7 @@ import {
   fieldWeights,
   groupQueueByBatch,
   reviewEffort,
+  type ApproveForm,
 } from "./clerk-shared";
 
 function field(patch: Partial<ClerkExtractionField>): ClerkExtractionField {
@@ -328,6 +333,185 @@ describe("approveFormFromCase", () => {
       unitPrice: "0",
       vatRate: "",
     });
+  });
+});
+
+describe("approveDecisionFromForm", () => {
+  const form: ApproveForm = {
+    firmId: "firm-1",
+    supplierPartyId: "sup-1",
+    buyerPartyId: "buy-1",
+    invoiceNumber: "  INV-042  ",
+    issueDate: "2026-06-30",
+    dueDate: "",
+    currency: "NGN",
+    category: "b2b",
+    lines: [
+      { description: "Consulting", quantity: "2", unitPrice: "5000", vatRate: "7.5" },
+    ],
+  };
+
+  test("builds the approve payload exactly as the single-approve button did", () => {
+    expect(approveDecisionFromForm(form, "")).toEqual({
+      action: "approve",
+      firmId: "firm-1",
+      supplierPartyId: "sup-1",
+      buyerPartyId: "buy-1",
+      invoiceNumber: "INV-042", // trimmed
+      issueDate: "2026-06-30",
+      dueDate: null, // empty -> null
+      currency: "NGN",
+      category: "b2b",
+      lines: [
+        {
+          description: "Consulting",
+          quantity: "2",
+          unitPrice: "5000",
+          vatRate: "0.075", // percent -> fraction, the API's shape
+        },
+      ],
+      reason: null, // empty reason -> null
+    });
+  });
+
+  test("a present due date and reason ride along verbatim", () => {
+    const out = approveDecisionFromForm(
+      { ...form, dueDate: "2026-07-30" },
+      "looks right",
+    );
+    expect(out.dueDate).toBe("2026-07-30");
+    expect(out.reason).toBe("looks right");
+  });
+});
+
+describe("bulkApproveFormFromCase", () => {
+  const suggestions = {
+    supplier: [
+      {
+        partyId: "sup-top",
+        legalName: "Top Supplier",
+        tin: null,
+        type: "sme",
+        confidence: 0.9,
+        tinScore: 1,
+        nameScore: 0.8,
+      },
+    ],
+    buyer: [
+      {
+        partyId: "buy-top",
+        legalName: "Top Buyer",
+        tin: null,
+        type: "corporate",
+        confidence: 0.8,
+        tinScore: 0,
+        nameScore: 0.9,
+      },
+    ],
+  };
+
+  test("fills firm from the case and parties from the top suggestions", () => {
+    const form = bulkApproveFormFromCase(
+      makeCase({ firmId: "firm-9" }),
+      suggestions,
+    );
+    expect(form.firmId).toBe("firm-9");
+    expect(form.supplierPartyId).toBe("sup-top");
+    expect(form.buyerPartyId).toBe("buy-top");
+    // The extraction seed is untouched — same base as the single review pane.
+    expect(form.invoiceNumber).toBe("INV-001");
+  });
+
+  test("missing firm or suggestions leave the slots empty for the server to name", () => {
+    const form = bulkApproveFormFromCase(makeCase({}));
+    expect(form.firmId).toBe("");
+    expect(form.supplierPartyId).toBe("");
+    expect(form.buyerPartyId).toBe("");
+    const half = bulkApproveFormFromCase(makeCase({}), {
+      supplier: suggestions.supplier,
+      buyer: [],
+    });
+    expect(half.supplierPartyId).toBe("sup-top");
+    expect(half.buyerPartyId).toBe("");
+  });
+});
+
+describe("fastLaneCaseSummary", () => {
+  test("summarises supplier, number and amount from the extracted fields", () => {
+    const summary = fastLaneCaseSummary(
+      makeCase({
+        extraction: {
+          fields: [
+            field({ field: "supplierName", value: "Acme Ltd" }),
+            field({ field: "invoiceNumber", value: "INV-7" }),
+            field({ field: "grandTotal", value: "1075.00" }),
+            field({ field: "currency", value: "NGN" }),
+          ],
+          lines: [],
+          promptVersion: "v1",
+          model: "test-model",
+        },
+      }),
+    );
+    expect(summary).toEqual({
+      supplier: "Acme Ltd",
+      invoiceNumber: "INV-7",
+      amount: "1075.00 NGN",
+    });
+  });
+
+  test("falls back to the source name, em-dashes and a bare total", () => {
+    const summary = fastLaneCaseSummary(
+      makeCase({
+        sourceName: "scan.pdf",
+        extraction: {
+          fields: [field({ field: "grandTotal", value: "10.00" })],
+          lines: [],
+          promptVersion: "v1",
+          model: "test-model",
+        },
+      }),
+    );
+    expect(summary.supplier).toBe("scan.pdf");
+    expect(summary.invoiceNumber).toBe("—");
+    expect(summary.amount).toBe("10.00"); // no currency extracted
+    expect(
+      fastLaneCaseSummary(makeCase({ extraction: undefined })).amount,
+    ).toBe("—");
+    expect(
+      fastLaneCaseSummary(
+        makeCase({ sourceName: undefined, extraction: undefined }),
+      ).supplier,
+    ).toBe("Unknown supplier");
+  });
+});
+
+describe("bulkApproveSummary", () => {
+  test("counts approvals and names every skipped case with its reason", () => {
+    expect(
+      bulkApproveSummary({
+        results: [
+          { caseId: "a", outcome: "approved", reason: null },
+          { caseId: "b", outcome: "skipped", reason: "already decided" },
+          { caseId: "c", outcome: "approved" },
+          { caseId: "d", outcome: "skipped", reason: null },
+        ],
+      }),
+    ).toEqual({
+      approved: 2,
+      skipped: [
+        { caseId: "b", reason: "already decided" },
+        { caseId: "d", reason: "skipped" }, // a null reason still renders
+      ],
+    });
+  });
+
+  test("an all-approved report has no skipped rows", () => {
+    expect(
+      bulkApproveSummary({
+        results: [{ caseId: "a", outcome: "approved", reason: null }],
+      }),
+    ).toEqual({ approved: 1, skipped: [] });
   });
 });
 

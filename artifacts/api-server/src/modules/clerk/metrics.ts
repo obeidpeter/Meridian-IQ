@@ -3,6 +3,7 @@ import {
   detectResistanceDrop,
   injectionResistanceMonths,
 } from "./resistance-watch";
+import { detectQualityDrop, keptRateMonths } from "./quality-watch";
 import {
   getDb,
   type ClerkCorrection,
@@ -155,6 +156,26 @@ export interface ClerkMetrics {
     fromRate: number;
     toRate: number;
     injectionFixtures: number;
+  };
+  // Kept-rate drift: monthly kept-rate buckets from the corrections exhaust
+  // (fields the operator left unchanged / fields compared) — the accuracy
+  // sibling of the injection trend. Shared with the quality-watch sweep
+  // (modules/clerk/quality-watch.ts) so chart and alert read one source.
+  // Absent when the exhaust holds no measured months.
+  keptRateTrend?: {
+    month: string; // "YYYY-MM" (UTC)
+    fields: number;
+    keptRate: number;
+  }[];
+  // Present when the newest measured month's kept-rate fell materially below
+  // the previous one — the same pure rule as the sweep that writes the audit
+  // alert, so banner and alert always agree.
+  qualityAlert?: {
+    fromMonth: string;
+    toMonth: string;
+    fromRate: number;
+    toRate: number;
+    fields: number;
   };
   // Confidence calibration from the corrections exhaust (idea #5): for each
   // confidence band, how often the operator KEPT the model's value unchanged.
@@ -756,6 +777,11 @@ export async function getClerkMetrics(
   const trendMonths = await injectionResistanceMonths();
   // Same rule as the sweep's alert — the banner and the audit event agree.
   const resistanceAlert = detectResistanceDrop(trendMonths);
+  // Kept-rate drift buckets, shared with the quality-watch sweep exactly as
+  // the injection trend is shared with the resistance watch — one source, so
+  // the chart and the alert can never disagree.
+  const keptRateTrend = await keptRateMonths();
+  const qualityAlert = detectQualityDrop(keptRateTrend);
   const trendPromptRows = (
     await db.execute(sql`
       SELECT prompt_version,
@@ -897,6 +923,8 @@ export async function getClerkMetrics(
       })),
     },
     ...(resistanceAlert ? { resistanceAlert } : {}),
+    ...(keptRateTrend.length > 0 ? { keptRateTrend } : {}),
+    ...(qualityAlert ? { qualityAlert } : {}),
     ...(calibration ? { calibration } : {}),
     ...(correctionShapes.length > 0 ? { correctionShapes } : {}),
   };

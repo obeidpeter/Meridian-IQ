@@ -44,6 +44,16 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email", "push"],
     description: "A monthly compliance statement is ready to view.",
   },
+  // Weekly firm digest delivery to OPTED-IN firm staff (see
+  // staff_notification_preferences; not the CORE-03 client-alert model).
+  // Pointer only (SEC-12): the message names no counts or amounts — the staff
+  // member opens the console to read the digest itself. Email + push only:
+  // those are the two channels the preference row offers.
+  firm_digest_ready: {
+    key: "firm_digest_ready",
+    channels: ["email", "push"],
+    description: "The firm's weekly Clerk digest is ready to view.",
+  },
 };
 
 // Channel failover order when a provider fails. Push is terminal: if the Expo

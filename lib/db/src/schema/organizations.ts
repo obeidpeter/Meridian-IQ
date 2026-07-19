@@ -4,6 +4,7 @@ import {
   text,
   jsonb,
   integer,
+  boolean,
   timestamp,
   index,
   pgEnum,
@@ -141,5 +142,35 @@ export const invitationsTable = pgTable(
 );
 
 export type Invitation = typeof invitationsTable.$inferSelect;
+
+// Per-staff-member notification preferences (self-service; one row per user,
+// written only by the /staff/notification-preferences routes with the userId
+// taken from the principal). OPT-IN: every switch defaults OFF — a firm
+// member receives nothing until they turn a digest and at least one channel
+// on themselves, which is why digest delivery needs no party consent gate
+// (this is not the CORE-03 client-alert model). firmId names the tenant the
+// digest belongs to (firm-keyed RLS, migration 0019); email is the delivery
+// address the member chose, nullable and never copied into message rows
+// (pointer-only discipline, SEC-12).
+export const staffNotificationPreferencesTable = pgTable(
+  "staff_notification_preferences",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => usersTable.id),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    digestEnabled: boolean("digest_enabled").notNull().default(false),
+    emailEnabled: boolean("email_enabled").notNull().default(false),
+    pushEnabled: boolean("push_enabled").notNull().default(false),
+    email: text("email"),
+    updatedAt: updatedAt(),
+  },
+  // The digest delivery pass resolves a firm's opted-in staff in one scan.
+  (t) => [index("staff_notification_prefs_firm_idx").on(t.firmId)],
+);
+export type StaffNotificationPreferencesRow =
+  typeof staffNotificationPreferencesTable.$inferSelect;
 
 export type Role = (typeof roleEnum.enumValues)[number];

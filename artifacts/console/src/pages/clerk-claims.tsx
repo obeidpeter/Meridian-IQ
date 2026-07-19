@@ -158,6 +158,26 @@ function factsPayload(facts: ProtectedFact[]): ProtectedFact[] {
   }));
 }
 
+// Gap-to-claim wiring: an uncovered question seeds the "Draft with Clerk"
+// panel — the question text VERBATIM as the source text (never rephrased or
+// prefixed; the operator adds the statutory context), panel open, any stale
+// error/success from an earlier drafting attempt cleared. Only a seed:
+// drafting still takes the operator's click, and the drafted record still
+// walks the full maker-checker flow.
+export function seededDraftState(question: string): {
+  draftOpen: true;
+  draftText: string;
+  draftError: null;
+  draftSuccess: null;
+} {
+  return {
+    draftOpen: true,
+    draftText: question,
+    draftError: null,
+    draftSuccess: null,
+  };
+}
+
 // The claim-gaps headline, phrased as one sentence so the card reads the same
 // whether the register covered everything or left questions unanswered.
 export function claimGapSummary(report: ClaimGapReport): string {
@@ -510,6 +530,20 @@ export function ClerkClaims() {
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: getListClaimsQueryKey() });
+
+  // "Draft claim from this" on an uncovered gap row: prefill the existing
+  // Draft-with-Clerk panel with the refused question verbatim. Nothing is
+  // created here — the operator reviews the seeded text, clicks draft, and
+  // the result is an ordinary draft under maker-checker.
+  const draftFromGap = (question: string) => {
+    const seed = seededDraftState(question);
+    setDraftOpen(seed.draftOpen);
+    setDraftText(seed.draftText);
+    setDraftError(seed.draftError);
+    setDraftSuccess(seed.draftSuccess);
+    // The panel renders above the register table; bring it into view.
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // 503 = the clerk_ai kill switch is off (CLERK_DISABLED); 403 = maker-checker
   // refused the decision (CLAIM_SELF_APPROVAL) — relay the server's own words.
@@ -1045,8 +1079,9 @@ export function ClerkClaims() {
           <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
               Real client questions Ask Clerk refused because no active claim
-              covered them. Each one is a candidate for the next draft — use
-              “Draft with Clerk” or “New claim version” above; nothing is
+              covered them. Each one is a candidate for the next draft —
+              “Draft claim from this” seeds the Draft-with-Clerk panel with
+              the question, or use “New claim version” above; nothing is
               created automatically.
             </p>
             {gaps.refusedTotal === 0 ? (
@@ -1086,14 +1121,29 @@ export function ClerkClaims() {
                     {gaps.uncovered.map((q, i) => (
                       <div
                         key={i}
-                        className="px-3 py-2 text-sm"
+                        className="flex items-start justify-between gap-3 px-3 py-2 text-sm"
                         data-testid={`row-gap-question-${i}`}
                       >
-                        <p>“{q.question}”</p>
-                        <p className="text-xs text-muted-foreground">
-                          {q.firmName ? `${q.firmName} · ` : ""}
-                          {formatDate(q.createdAt)}
-                        </p>
+                        <div className="min-w-0">
+                          <p>“{q.question}”</p>
+                          <p className="text-xs text-muted-foreground">
+                            {q.firmName ? `${q.firmName} · ` : ""}
+                            {formatDate(q.createdAt)}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => draftFromGap(q.question)}
+                          data-testid={`button-draft-from-gap-${i}`}
+                        >
+                          <Sparkles
+                            className="w-3.5 h-3.5 mr-1"
+                            aria-hidden="true"
+                          />
+                          Draft claim from this
+                        </Button>
                       </div>
                     ))}
                   </div>

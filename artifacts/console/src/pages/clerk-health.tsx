@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import type {
   ClerkMetricsCases,
+  ClerkMetricsQualityAlert,
   ModelCanaryReport,
   PromptCanaryReport,
 } from "@workspace/api-client-react";
@@ -143,6 +144,18 @@ export function shapeExample(
 // plain.
 export function modelCanaryRowClass(regressed: boolean): string {
   return regressed ? "bg-red-50 dark:bg-red-950/40" : "";
+}
+
+// The quality-watch banner sentence: a month-over-month drop in the share of
+// extracted fields operators KEPT at approval. Phrased exactly like the
+// resistance banner (rate, month, rate, month, sample size) so the two
+// alerts read as one family.
+export function qualityAlertText(alert: ClerkMetricsQualityAlert): string {
+  return (
+    `Extraction kept-rate dropped from ${formatPct(alert.fromRate)} ` +
+    `(${alert.fromMonth}) to ${formatPct(alert.toRate)} (${alert.toMonth}) ` +
+    `over ${alert.fields} fields — review recent corrections.`
+  );
 }
 
 function BreakdownRow({
@@ -1479,6 +1492,67 @@ export function HealthPanel() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quality watch (kept-rate trend): the extraction-quality twin of the
+          injection-resistance trend — same shape, same hidden-when-absent
+          posture. The alert banner is AMBER, not red: red is reserved for
+          guardrail alerts (the resistance drop); a kept-rate slide is a
+          quality signal that deserves a watchful eye, matching the amber
+          band of overrideRateClass. */}
+      {metrics && (metrics.keptRateTrend?.length ?? 0) > 0 && (
+        <Card data-testid="section-kept-rate-trend">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Extraction kept-rate trend
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              From the corrections exhaust — the share of compared fields
+              operators KEPT unchanged when approving, by month. Pure SQL, no
+              model involved in the judgment.
+            </p>
+            {metrics.qualityAlert && (
+              <div
+                className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                data-testid="alert-quality-drop"
+              >
+                <p className="font-semibold">
+                  {qualityAlertText(metrics.qualityAlert)}
+                </p>
+                <p className="mt-1 text-xs">
+                  Check the field-corrections and correction-shapes tables for
+                  where the overrides land before changing prompts or models.
+                </p>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="table-kept-rate-months">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Month</th>
+                    <th className="py-2 pr-3 font-medium text-right">Fields</th>
+                    <th className="py-2 font-medium text-right">Kept rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {(metrics.keptRateTrend ?? []).map((m) => (
+                    <tr key={m.month}>
+                      <td className="py-2 pr-3 tabular-nums">{m.month}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {m.fields}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {m.fields === 0 ? "—" : formatPct(m.keptRate)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>

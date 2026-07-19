@@ -73,6 +73,22 @@ export function handleClerkGatewayError(
   });
 }
 
+// ---- Ask Clerk -------------------------------------------------------------
+
+/**
+ * Scope suffix for a data-grounded Ask answer's "from your records" note:
+ * the resolved display labels the server pinned the lookup to (a month
+ * label, a client name — never ids), joined for one source line. Empty
+ * string when the lookup ran unscoped, so callers can skip the clause.
+ */
+export function dataAnswerScope(
+  dataParams: Record<string, string> | undefined,
+): string {
+  return Object.values(dataParams ?? {})
+    .filter((v) => v.trim().length > 0)
+    .join(" · ");
+}
+
 // ---- Usage meter -----------------------------------------------------------
 
 /**

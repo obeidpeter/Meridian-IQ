@@ -6,11 +6,13 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ClerkDisabledBanner } from "./clerk-disabled-banner";
 import { ClerkUsageBreakdown } from "./clerk-usage-breakdown";
 import { FilePickerButton } from "./file-picker-button";
+import { RejectionRiskCard } from "./rejection-risk-card";
 import { RowStatusIcon } from "./row-status-icon";
 import { SkeletonList } from "./skeleton-list";
+import { SuggestedQuestions } from "./suggested-questions";
 import { BuyerSelectOptions } from "./buyer-select-options";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "./ui/select";
-import type { Party } from "@workspace/api-client-react";
+import type { Party, RejectionRiskReport } from "@workspace/api-client-react";
 
 // RTL's auto-cleanup needs framework globals, which stay off here.
 afterEach(cleanup);
@@ -124,6 +126,114 @@ describe("FilePickerButton", () => {
     fireEvent.change(input, { target: { files: [file] } });
     expect(onFile).toHaveBeenCalledWith(file);
     expect(input.value).toBe("");
+  });
+});
+
+describe("RejectionRiskCard", () => {
+  const report: RejectionRiskReport = {
+    windowDays: 30,
+    totalRejections: 5,
+    signals: [
+      {
+        errorCode: "TIN-MISMATCH",
+        scope: "supplier",
+        count: 3,
+        lastSeen: "2026-07-12",
+        category: "identity",
+        cause: "The supplier TIN did not match the FIRS register.",
+        fix: "Confirm the TIN on the supplier's registration certificate.",
+        retriable: true,
+      },
+      {
+        errorCode: "VAT-RATE",
+        scope: "firm",
+        count: 2,
+        lastSeen: "2026-07-01",
+        category: null,
+        cause: null,
+        fix: null,
+        retriable: null,
+      },
+    ],
+  };
+
+  test("renders each signal with its code, scope chip, frequency and catalogue text", () => {
+    render(<RejectionRiskCard report={report} />);
+    const card = screen.getByTestId("card-rejection-risk");
+    expect(card.textContent).toContain(
+      "worth checking before you submit",
+    );
+    const supplierRow = screen.getByTestId("row-risk-TIN-MISMATCH-supplier");
+    expect(supplierRow.textContent).toContain("TIN-MISMATCH");
+    expect(supplierRow.textContent).toContain("this supplier");
+    expect(supplierRow.textContent).toContain(
+      "Seen 3 times · last on 12 Jul 2026",
+    );
+    expect(supplierRow.textContent).toContain(
+      "The supplier TIN did not match the FIRS register.",
+    );
+    expect(supplierRow.textContent).toContain(
+      "Fix: Confirm the TIN on the supplier's registration certificate.",
+    );
+    // A signal without catalogue text renders only its header line.
+    const firmRow = screen.getByTestId("row-risk-VAT-RATE-firm");
+    expect(firmRow.textContent).toContain("your firm");
+    expect(firmRow.textContent).toContain("Seen 2 times · last on 01 Jul 2026");
+    expect(firmRow.textContent).not.toContain("Fix:");
+  });
+
+  test("keeps the advisory footing: window named, never a block", () => {
+    render(<RejectionRiskCard report={report} />);
+    const card = screen.getByTestId("card-rejection-risk");
+    expect(card.textContent).toContain("last 30 days");
+    expect(card.textContent).toContain("never blocks you from submitting");
+  });
+
+  test("renders nothing at all for a quiet window", () => {
+    const { container } = render(
+      <RejectionRiskCard
+        report={{ windowDays: 30, totalRejections: 0, signals: [] }}
+      />,
+    );
+    expect(container.firstElementChild).toBeNull();
+  });
+});
+
+describe("SuggestedQuestions", () => {
+  test("renders every chip and forwards the picked question", () => {
+    const onPick = vi.fn();
+    render(
+      <SuggestedQuestions
+        questions={["What's overdue?", "Who owes us?"]}
+        onPick={onPick}
+      />,
+    );
+    const chips = screen.getByTestId("chips-suggested-questions");
+    expect(chips.children).toHaveLength(2);
+    fireEvent.click(screen.getByText("Who owes us?"));
+    expect(onPick).toHaveBeenCalledWith("Who owes us?");
+  });
+
+  test("disables the chips while a question is in flight", () => {
+    const onPick = vi.fn();
+    render(
+      <SuggestedQuestions
+        questions={["What's overdue?"]}
+        disabled
+        onPick={onPick}
+      />,
+    );
+    const chip = screen.getByText("What's overdue?");
+    expect((chip as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(chip);
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
+  test("renders nothing when there are no suggestions", () => {
+    const { container } = render(
+      <SuggestedQuestions questions={[]} onPick={() => {}} />,
+    );
+    expect(container.firstElementChild).toBeNull();
   });
 });
 

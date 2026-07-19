@@ -26,8 +26,11 @@ import { firmClerkUsage } from "./budget";
 //  - Every lookup runs inside the caller's own firm scope (ask.ts wraps the
 //    call in inClerkScope(firmId), the same RLS posture as the request) AND
 //    filters firm_id explicitly, mirroring the route-filter belt-and-braces.
-//  - clerk.ask is a firm_admin/firm_staff/operator capability, so firm-wide
-//    numbers never reach a client_user through this surface (SEC-03).
+//  - clerk.ask is also held by client_user, but a client asker is only ever
+//    OFFERED the CLIENT_SAFE_DATA_INTENTS subset below, and ask.ts FORCES
+//    params.clientPartyId to the caller's own party (from the principal,
+//    never model output) — so firm-wide numbers never reach a client_user
+//    through this surface (SEC-03).
 //  - Statuses and reference dates mirror digest.ts / compliance-window.ts —
 //    including the Lagos-calendar "today" — so Ask Clerk can never disagree
 //    with the dashboards or the weekly digest.
@@ -534,6 +537,39 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     },
   },
 ];
+
+// Client-facing Ask (SEC-03). clerk.ask is open to client_users, but the
+// firm's numbers are not: a client asker is only ever OFFERED intents whose
+// ENTIRE answer survives a forced own-party filter — ask.ts pins
+// params.clientPartyId to the principal's own party before any of these run,
+// so every one of them reduces to invoiceAggregate over the caller's own
+// invoices. ALLOWLIST by construction: a future intent stays invisible to
+// clients until it is vetted and added here. Excluded intents, each with the
+// firm-wide content its answer embeds:
+//  - data.outstanding_receivables: embeds a top-debtor ranking (its
+//    firm-wide branch ranks the whole client book);
+//  - data.expected_inflows: its firm-wide branch phrases firmMoneySummary
+//    across every client's receivables;
+//  - data.chase_list: its firm-wide branch names OTHER clients and their
+//    buyers in the chase rows;
+//  - data.clerk_allowance: the FIRM's monthly token budget and spend —
+//    firm-internal billing, not a client's own records.
+// A client question that wants an excluded intent hits the ordinary refusal
+// machinery (the closed enum never offered the key) — never a firm-wide
+// answer.
+const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
+  "data.overdue_submissions",
+  "data.due_soon_submissions",
+  "data.failed_submissions",
+  "data.unsubmitted_invoices",
+  "data.submitted_this_month",
+  // Pure invoiceAggregate with the client predicate, exactly like the five
+  // above — no firm-wide content anywhere in its answer.
+  "data.aged_receivables",
+]);
+
+export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =
+  DATA_INTENTS.filter((i) => CLIENT_SAFE_INTENT_KEYS.has(i.key));
 
 // The closed month options offered to the classifier: the current Lagos
 // month plus the eleven before it. Keys are "YYYY-MM"; the app resolves a

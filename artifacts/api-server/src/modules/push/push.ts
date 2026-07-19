@@ -7,7 +7,7 @@ import {
   pushDevicesTable,
   pushTicketsTable,
 } from "@workspace/db";
-import { recipientRefFor } from "../messaging/recipient-ref";
+import { pointerEntityRef, recipientRefFor } from "../messaging/recipient-ref";
 
 // Expo push-notification delivery for the mobile companion app (SME-05/08).
 // Same strict data boundary as the messaging gateway (PL-04, SEC-12): push
@@ -18,7 +18,8 @@ import { recipientRefFor } from "../messaging/recipient-ref";
 export type PushTemplateKey =
   | "deadline_reminder"
   | "b2c_window_alert"
-  | "client_statement_ready";
+  | "client_statement_ready"
+  | "firm_digest_ready";
 
 const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   deadline_reminder: {
@@ -32,6 +33,10 @@ const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   client_statement_ready: {
     title: "MeridianIQ",
     body: "Your monthly statement is ready. Open the app to view it.",
+  },
+  firm_digest_ready: {
+    title: "MeridianIQ",
+    body: "Your firm's weekly Clerk digest is ready.",
   },
 };
 
@@ -188,6 +193,18 @@ async function devicesForClientParty(
     .where(or(...conds));
 }
 
+// Devices registered by ONE user — the user-keyed sibling of
+// devicesForClientParty, for notifications a firm member opted into
+// personally (the weekly digest) rather than alerts about a client party.
+async function devicesForUser(
+  userId: string,
+): Promise<{ expoPushToken: string }[]> {
+  return getDb()
+    .select({ expoPushToken: pushDevicesTable.expoPushToken })
+    .from(pushDevicesTable)
+    .where(eq(pushDevicesTable.userId, userId));
+}
+
 export async function sendPushAlert(opts: {
   clientPartyId: string;
   firmId: string | null;
@@ -195,7 +212,37 @@ export async function sendPushAlert(opts: {
   entityType?: string;
   entityId?: string;
 }): Promise<PushSendOutcome> {
-  const devices = await devicesForClientParty(opts.clientPartyId, opts.firmId);
+  return dispatchPush(
+    await devicesForClientParty(opts.clientPartyId, opts.firmId),
+    recipientRefFor(opts.clientPartyId),
+    opts,
+  );
+}
+
+// Push to one user's own devices (staff digest delivery). The ledger row's
+// recipientRef is the same opaque user pointer the email send uses
+// (pointer-only discipline, SEC-12), so the two channels correlate.
+export async function sendPushToUser(opts: {
+  userId: string;
+  templateKey: PushTemplateKey;
+  entityType?: string;
+  entityId?: string;
+}): Promise<PushSendOutcome> {
+  return dispatchPush(
+    await devicesForUser(opts.userId),
+    pointerEntityRef("usr", opts.userId),
+    opts,
+  );
+}
+
+// Shared transport + receipt + ledger path for both recipient shapes: the
+// notification copy, token pruning and the messages-ledger record are
+// identical whoever the devices belong to.
+async function dispatchPush(
+  devices: { expoPushToken: string }[],
+  recipientRef: string,
+  opts: { templateKey: PushTemplateKey; entityType?: string; entityId?: string },
+): Promise<PushSendOutcome> {
   if (devices.length === 0) {
     return {
       status: "skipped",
@@ -205,7 +252,6 @@ export async function sendPushAlert(opts: {
   }
 
   const copy = PUSH_COPY[opts.templateKey];
-  const recipientRef = recipientRefFor(opts.clientPartyId);
   let ok = false;
   let detail: string | null = null;
   let tickets: PushTicket[] = [];

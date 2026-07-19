@@ -241,6 +241,11 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("chase_log")],
     afterRollback: [not(clerkTenant("chase_log"))],
   },
+  {
+    version: 19, // staff notification-preference guardrails
+    atTop: [pol("staff_notification_preferences")],
+    afterRollback: [not(pol("staff_notification_preferences"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

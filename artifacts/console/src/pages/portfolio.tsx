@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
+import { StaffNotificationPrefsCard } from "@/components/staff-notification-prefs-card";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
 import {
@@ -1238,6 +1239,11 @@ export function Portfolio() {
       </Card>
 
       <ClerkWeeklyDigestCard />
+
+      {/* Digest delivery is what these preferences control, so they live
+          beside the digest itself. Firm members only — the card self-gates
+          on role, mirroring the server's 403 for everyone else. */}
+      <StaffNotificationPrefsCard />
 
       <ComplianceCalendarCard />
 

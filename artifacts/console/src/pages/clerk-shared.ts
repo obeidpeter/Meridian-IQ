@@ -4,8 +4,11 @@
 // payloads. No hooks and no JSX live here, so the module is directly
 // unit-testable (clerk-shared.test.ts).
 import type {
+  ClerkBulkApproveReport,
   ClerkCase,
+  ClerkCaseDecisionInput,
   ClerkCaseDecisionInputCategory,
+  ClerkPartySuggestions,
   InvoiceLineInput,
 } from "@workspace/api-client-react";
 import type { LucideIcon } from "lucide-react";
@@ -242,6 +245,89 @@ export function approveFormFromCase(kase: ClerkCase): ApproveForm {
       vatRate: vatPercentFromRaw(l.vatRate),
     })),
   };
+}
+
+// The one approve-decision builder: turns the review pane's ApproveForm into
+// the wire payload (trimmed invoice number, empty due date -> null, VAT
+// percent -> fraction, empty reason -> null). The single-approve button and
+// the fast-lane bulk items both call THIS function, so the two paths can
+// never drift apart on how a confirmed form becomes a decision.
+export function approveDecisionFromForm(
+  form: ApproveForm,
+  reason: string,
+): ClerkCaseDecisionInput {
+  return {
+    action: "approve",
+    firmId: form.firmId,
+    supplierPartyId: form.supplierPartyId,
+    buyerPartyId: form.buyerPartyId,
+    invoiceNumber: form.invoiceNumber.trim(),
+    issueDate: form.issueDate,
+    dueDate: form.dueDate || null,
+    currency: form.currency,
+    category: form.category,
+    lines: form.lines.map((l) => ({
+      ...l,
+      vatRate: vatFractionFromPercent(l.vatRate),
+    })),
+    reason: reason || null,
+  };
+}
+
+// The bulk flow's prefill: the SAME approveFormFromCase seed the single
+// review pane opens with, plus the two auto-selections the single flow makes
+// before the operator touches anything — the case's own firm (the only firm
+// the server will accept for a firm-attributed case; an operator capture has
+// none and the server then skips the row with a named reason) and the top
+// party suggestion per slot (exactly the pre-selection effect in clerk.tsx).
+// Slots that stay empty ride along as-is: the server's DECISION_INCOMPLETE
+// check names them in the per-row skip reason, and the case is left exactly
+// as it was for the single-case path.
+export function bulkApproveFormFromCase(
+  kase: ClerkCase,
+  suggestions?: ClerkPartySuggestions,
+): ApproveForm {
+  const form = approveFormFromCase(kase);
+  return {
+    ...form,
+    firmId: form.firmId || (kase.firmId ?? ""),
+    supplierPartyId:
+      form.supplierPartyId || (suggestions?.supplier[0]?.partyId ?? ""),
+    buyerPartyId: form.buyerPartyId || (suggestions?.buyer[0]?.partyId ?? ""),
+  };
+}
+
+// One line per case in the bulk-approve confirmation dialog: who billed,
+// which invoice, how much — enough for the operator to recognise each case
+// before approving the lot.
+export interface FastLaneCaseSummary {
+  supplier: string;
+  invoiceNumber: string;
+  amount: string;
+}
+
+export function fastLaneCaseSummary(kase: ClerkCase): FastLaneCaseSummary {
+  const supplier = fieldValue(kase, "supplierName");
+  const number = fieldValue(kase, "invoiceNumber");
+  const total = fieldValue(kase, "grandTotal");
+  const currency = fieldValue(kase, "currency");
+  return {
+    supplier: supplier || kase.sourceName || "Unknown supplier",
+    invoiceNumber: number || "—",
+    amount: total ? (currency ? `${total} ${currency}` : total) : "—",
+  };
+}
+
+// The bulk report, folded for display: how many drafts were created plus one
+// named reason per skipped case (a skipped case was left exactly as it was).
+export function bulkApproveSummary(report: ClerkBulkApproveReport): {
+  approved: number;
+  skipped: { caseId: string; reason: string }[];
+} {
+  const skipped = report.results
+    .filter((r) => r.outcome === "skipped")
+    .map((r) => ({ caseId: r.caseId, reason: r.reason ?? "skipped" }));
+  return { approved: report.results.length - skipped.length, skipped };
 }
 
 // How each capture source presents in the intake queue and detail header.

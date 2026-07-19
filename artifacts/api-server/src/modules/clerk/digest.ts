@@ -5,9 +5,13 @@ import {
   runInBypassContext,
   clerkDigestsTable,
   firmsTable,
+  staffNotificationPreferencesTable,
   type ClerkDigestRow,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
+import { sendMessage } from "../messaging/messaging";
+import { pointerEntityRef } from "../messaging/recipient-ref";
+import { sendPushToUser } from "../push/push";
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
@@ -35,6 +39,9 @@ const DIGEST_LOCK_ID = 731_843;
 // Firms per sweep pass; the loop naturally resumes where it left off because
 // generated firms drop out of the missing-digest query.
 const DIGEST_BATCH = 20;
+// Undelivered digests offered per delivery pass; claimed rows drop out of
+// the scan, so a backlog drains across passes instead of pinning one.
+const DELIVERY_BATCH = 50;
 
 // v2 (round 14): the user facts gained the unmatched-credit and 2+-reminder
 // lines, so the model path can never lag the template path (review M1).
@@ -328,6 +335,105 @@ export async function generateFirmDigest(
   return winner;
 }
 
+// Offer generated digests to the firm's OPTED-IN staff, mirroring
+// deliverClientStatements: bypass transaction, oldest-first delivered_at IS
+// NULL scan, claim-first compare-and-set as the atomic once-only gate, dark
+// messaging_notifications flag claims silently (PL-02 — turning the flag on
+// later must not blast a backlog of old digests). Two deliberate differences
+// from the statement fan-out:
+//  - recipients come from staff_notification_preferences (digestEnabled plus
+//    at least one channel on); NO recipients claims silently, because opt-in
+//    means quiet is the correct outcome, not a failure;
+//  - there is NO party consent gate: the recipient is a firm member who
+//    opted in to their own firm's digest themselves — this is not the
+//    CORE-03 client-alert model, and no client party's consent governs it.
+// Payloads stay pointer-only (SEC-12): the user pointer as recipientRef and
+// a dig-<letters> digest pointer as entityId — never the member's email
+// address (the address lives only on the preference row; the simulated
+// messaging provider addresses nothing today, matching every existing send).
+// Returns the number of rows CLAIMED this pass; zero means the backlog is
+// drained, so callers can loop until then.
+export async function deliverFirmDigests(limit = DELIVERY_BATCH): Promise<number> {
+  return runInBypassContext(async () => {
+    // Oldest first: a backlog wider than one pass drains in generation order.
+    const pending = await getDb()
+      .select()
+      .from(clerkDigestsTable)
+      .where(isNull(clerkDigestsTable.deliveredAt))
+      .orderBy(clerkDigestsTable.createdAt)
+      .limit(limit);
+    if (pending.length === 0) return 0;
+
+    const messagingOn = await isFeatureEnabled("messaging_notifications", null);
+    let claimed = 0;
+    for (const row of pending) {
+      // Claim the row first: the compare-and-set on delivered_at is the
+      // atomic once-only gate. The whole pass runs in one bypass
+      // transaction, so a mid-pass crash rolls back claims AND message rows
+      // together — a digest is never half-delivered.
+      const claim = await getDb()
+        .update(clerkDigestsTable)
+        .set({ deliveredAt: new Date() })
+        .where(
+          and(
+            eq(clerkDigestsTable.id, row.id),
+            isNull(clerkDigestsTable.deliveredAt),
+          ),
+        )
+        .returning({ id: clerkDigestsTable.id });
+      if (claim.length === 0) continue; // another instance won this row
+      claimed++;
+
+      // The claim is written even while messaging is dark (PL-02).
+      if (!messagingOn) continue;
+
+      // Opted-in staff with at least one live channel. Nobody opted in →
+      // the claim above already retired the row; send nothing.
+      const recipients = (
+        await getDb()
+          .select()
+          .from(staffNotificationPreferencesTable)
+          .where(
+            and(
+              eq(staffNotificationPreferencesTable.firmId, row.firmId),
+              eq(staffNotificationPreferencesTable.digestEnabled, true),
+            ),
+          )
+      ).filter((r) => (r.emailEnabled && r.email !== null) || r.pushEnabled);
+
+      const entityId = pointerEntityRef("dig", row.id);
+      for (const recipient of recipients) {
+        if (recipient.emailEnabled && recipient.email) {
+          try {
+            await sendMessage({
+              channel: "email",
+              recipientRef: pointerEntityRef("usr", recipient.userId),
+              templateKey: "firm_digest_ready",
+              entityType: "clerk_digest",
+              entityId,
+            });
+          } catch {
+            // Channel failures are recorded in the messages ledger.
+          }
+        }
+        if (recipient.pushEnabled) {
+          try {
+            await sendPushToUser({
+              userId: recipient.userId,
+              templateKey: "firm_digest_ready",
+              entityType: "clerk_digest",
+              entityId,
+            });
+          } catch {
+            // Push failures are likewise recorded by the push module.
+          }
+        }
+      }
+    }
+    return claimed;
+  });
+}
+
 // Latest digest for a firm (the route's read path; RLS-scoped by 0011).
 export async function latestDigestForFirm(
   firmId: string,
@@ -344,52 +450,66 @@ export async function latestDigestForFirm(
 registerSweep(async function sweepClerkDigests(): Promise<void> {
   // Opt-in: generating digests for every firm can spend firm tokens, so the
   // flag must be turned on deliberately (off/missing = no digests at all).
-  if (!(await isFeatureEnabled(DIGEST_FLAG_KEY))) return;
-  // Candidate selection is a SHORT bypass transaction; generation — which
-  // makes one model call per firm — runs OUTSIDE it. Holding one transaction
-  // (and the advisory lock, and a pooled connection) across up to 20 provider
-  // calls made a slow provider stall the entire shared sweep loop, delaying
-  // the minute-sensitive statutory alerts behind it. The lock now only
-  // de-duplicates candidate selection within a pass; cross-instance
-  // idempotency rests where it always did — the (firm_id, week_start) unique
-  // key — so a rare concurrent pass wastes at most one phrasing call per firm
-  // and never stores a duplicate.
-  const firms = await runInBypassContext(async () => {
-    const [{ locked }] = (
-      await getDb().execute<{ locked: boolean }>(
-        sql`SELECT pg_try_advisory_xact_lock(${DIGEST_LOCK_ID}) AS locked`,
-      )
-    ).rows;
-    if (!locked) return [];
+  if (await isFeatureEnabled(DIGEST_FLAG_KEY)) {
+    // Candidate selection is a SHORT bypass transaction; generation — which
+    // makes one model call per firm — runs OUTSIDE it. Holding one transaction
+    // (and the advisory lock, and a pooled connection) across up to 20 provider
+    // calls made a slow provider stall the entire shared sweep loop, delaying
+    // the minute-sensitive statutory alerts behind it. The lock now only
+    // de-duplicates candidate selection within a pass; cross-instance
+    // idempotency rests where it always did — the (firm_id, week_start) unique
+    // key — so a rare concurrent pass wastes at most one phrasing call per firm
+    // and never stores a duplicate.
+    const firms = await runInBypassContext(async () => {
+      const [{ locked }] = (
+        await getDb().execute<{ locked: boolean }>(
+          sql`SELECT pg_try_advisory_xact_lock(${DIGEST_LOCK_ID}) AS locked`,
+        )
+      ).rows;
+      if (!locked) return [];
 
-    const weekStart = digestWeekStart();
-    return getDb()
-      .select({ id: firmsTable.id })
-      .from(firmsTable)
-      .leftJoin(
-        clerkDigestsTable,
-        and(
-          eq(clerkDigestsTable.firmId, firmsTable.id),
-          eq(clerkDigestsTable.weekStart, weekStart),
-        ),
-      )
-      .where(isNull(clerkDigestsTable.id))
-      .limit(DIGEST_BATCH);
-  });
-  if (firms.length === 0) return;
+      const weekStart = digestWeekStart();
+      return getDb()
+        .select({ id: firmsTable.id })
+        .from(firmsTable)
+        .leftJoin(
+          clerkDigestsTable,
+          and(
+            eq(clerkDigestsTable.firmId, firmsTable.id),
+            eq(clerkDigestsTable.weekStart, weekStart),
+          ),
+        )
+        .where(isNull(clerkDigestsTable.id))
+        .limit(DIGEST_BATCH);
+    });
+    if (firms.length > 0) {
+      // No provider configured (or kill switch off) still produces digests —
+      // just from the template path.
+      let gateway: ClerkGateway | null = null;
+      try {
+        gateway = await getClerkGateway();
+      } catch {
+        gateway = null;
+      }
+      let generated = 0;
+      for (const firm of firms) {
+        await generateFirmDigest(firm.id, gateway);
+        generated += 1;
+      }
+      logger.info({ generated }, "clerk digest sweep: weekly digests generated");
+    }
+  }
 
-  // No provider configured (or kill switch off) still produces digests —
-  // just from the template path.
-  let gateway: ClerkGateway | null = null;
-  try {
-    gateway = await getClerkGateway();
-  } catch {
-    gateway = null;
+  // Delivery runs every pass — even while the generation flag is dark — so
+  // digests generated before delivery existed (and stragglers from a bounded
+  // pass) are still offered to opted-in staff. The delivered_at
+  // compare-and-set keeps this idempotent across instances without the
+  // generation lock.
+  const delivered = await deliverFirmDigests();
+  if (delivered > 0) {
+    logger.info(
+      { delivered },
+      "clerk digest sweep: digests offered to staff notification channels",
+    );
   }
-  let generated = 0;
-  for (const firm of firms) {
-    await generateFirmDigest(firm.id, gateway);
-    generated += 1;
-  }
-  logger.info({ generated }, "clerk digest sweep: weekly digests generated");
 });

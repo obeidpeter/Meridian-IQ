@@ -11,6 +11,7 @@ import type {
 } from "@workspace/api-client-react";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
 import { Stack } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -40,14 +41,15 @@ import {
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage, hasStatus } from "@/lib/api-error";
-import { clerkStatusMeta, fieldLabel, pickSourceType } from "@/lib/clerk-capture";
+import {
+  buildCameraCaseInput,
+  clerkStatusMeta,
+  fieldLabel,
+  MAX_FILE_BYTES,
+  pickSourceType,
+} from "@/lib/clerk-capture";
 import { timeAgo } from "@/lib/format";
 import { useSession } from "@/lib/session";
-
-// The API server caps JSON bodies at 8 MB and base64 inflates a file by ~4/3,
-// so anything over ~5 MB raw would bounce with an opaque 413. Catch it locally
-// with a friendlier message instead.
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 // How each capture source presents in the submissions list — the mobile
 // cousin of the console's INTAKE_KIND map, using Feather glyphs.
@@ -73,7 +75,9 @@ export default function ClerkCaptureScreen() {
   const canCapture = !!me?.capabilities?.includes("clerk.capture");
 
   const [text, setText] = useState("");
-  const [working, setWorking] = useState(false);
+  // Which local capture flow (camera or file pick) is mid-flight — tracked as
+  // a discriminant so only the tapped button shows its spinner.
+  const [working, setWorking] = useState<"camera" | "document" | null>(null);
   const [banner, setBanner] = useState<{
     tone: "success" | "error";
     message: string;
@@ -105,7 +109,7 @@ export default function ClerkCaptureScreen() {
   const cases = casesQuery.data ?? [];
 
   const createMut = useCreateClerkCase();
-  const busy = working || createMut.isPending;
+  const busy = working !== null || createMut.isPending;
 
   // Manual state rather than `isRefetching`: the pending-case poll would
   // otherwise flash the pull-to-refresh spinner on every background refetch.
@@ -173,10 +177,62 @@ export default function ClerkCaptureScreen() {
     }
   };
 
+  // "Snap it": photograph the paper invoice on the spot and send it up the
+  // exact same image-case path a picked photo file takes.
+  const takePhoto = async () => {
+    setBanner(null);
+    setDuplicate(null);
+    setWorking("camera");
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        // Same idiom as the voice card's microphone ask: explain in a banner,
+        // never a dead-end silent failure.
+        setBanner({
+          tone: "error",
+          message: "Camera access is needed to photograph an invoice.",
+        });
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        // The shot goes to a vision model, where legibility matters more than
+        // resolution: quality 0.7 keeps a full-page photo readable while
+        // staying comfortably under the 5 MB payload guard. No editing UI —
+        // cropping is friction and the model tolerates margins.
+        allowsEditing: false,
+        quality: 0.7,
+        // Ask the picker for the JPEG's base64 directly instead of a second
+        // read of the file from disk.
+        base64: true,
+      });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset) return;
+      // The picker should hand back base64 inline (requested above); fall
+      // back to reading the captured file if a platform omits it.
+      const base64 = asset.base64 ?? (await new File(asset.uri).base64());
+      const built = buildCameraCaseInput(base64, new Date());
+      if (!built.ok) {
+        setBanner({ tone: "error", message: built.message });
+        return;
+      }
+      await submit(built.input);
+    } catch {
+      setBanner({
+        tone: "error",
+        message:
+          "We couldn't take that photo. Try again, or pick a saved file instead.",
+      });
+    } finally {
+      setWorking(null);
+    }
+  };
+
   const pickDocument = async () => {
     setBanner(null);
     setDuplicate(null);
-    setWorking(true);
+    setWorking("document");
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ["application/pdf", "image/*"],
@@ -209,7 +265,7 @@ export default function ClerkCaptureScreen() {
           "We couldn't read that file. Pick a PDF or a photo of the invoice, or paste its text below.",
       });
     } finally {
-      setWorking(false);
+      setWorking(null);
     }
   };
 
@@ -291,15 +347,28 @@ export default function ClerkCaptureScreen() {
               <AppText variant="heading">Capture an invoice</AppText>
               <Card style={{ gap: 12 }}>
                 {Platform.OS !== "web" ? (
-                  <AppButton
-                    label="Pick a document"
-                    icon="upload"
-                    variant="secondary"
-                    onPress={() => void pickDocument()}
-                    disabled={busy}
-                    loading={working}
-                    testID="button-pick-document"
-                  />
+                  <>
+                    {/* The camera is the headline capture path — snap the
+                        paper invoice where it sits — so it leads the card as
+                        the primary action. */}
+                    <AppButton
+                      label="Take a photo"
+                      icon="camera"
+                      onPress={() => void takePhoto()}
+                      disabled={busy}
+                      loading={working === "camera"}
+                      testID="button-take-photo"
+                    />
+                    <AppButton
+                      label="Pick a document"
+                      icon="upload"
+                      variant="secondary"
+                      onPress={() => void pickDocument()}
+                      disabled={busy}
+                      loading={working === "document"}
+                      testID="button-pick-document"
+                    />
+                  </>
                 ) : null}
                 <TextField
                   label="Or paste the invoice text"
@@ -338,7 +407,7 @@ export default function ClerkCaptureScreen() {
                 <EmptyState
                   icon="inbox"
                   title="Nothing sent yet"
-                  message="Send a document or paste text above — your submissions and their review status appear here."
+                  message="Take a photo, send a document, or paste text above — your submissions and their review status appear here."
                 />
               ) : (
                 cases.map((kase) => (

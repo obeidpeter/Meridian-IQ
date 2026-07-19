@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.35.0`).
+contract change (it is currently `0.36.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -84,7 +84,15 @@ stage commits in its own short firm-scoped transaction
 (`modules/clerk/scope.ts`, same RLS posture) so a multi-second provider call
 never pins a pooled connection or hits the 30s transaction cap. Review/decide
 stays operator-only (`clerk.use`) and is compare-and-set on case status, so
-concurrent decisions can never double-apply. The learning loop (`modules/clerk/eval-growth.ts`)
+concurrent decisions can never double-apply; **fast-lane bulk approval**
+(`modules/clerk/bulk-approve.ts`, `POST /clerk/cases/bulk-approve`, same
+gate) is the bulk-submit idiom pointed at the queue — up to 50 approve
+decisions walk the EXISTING `decideCase` one by one, each in a savepoint,
+but only cases the server itself re-verifies as fast-lane (extracted,
+present preflight with no blocking issue, critical confidences ≥0.9 —
+mirroring the console's `isReadyToApprove`); everything else skips with
+its reason, approval still creates DRAFT invoices only, and the console
+queue's "Approve fast lane" action is its human-initiated consumer. The learning loop (`modules/clerk/eval-growth.ts`)
 turns corrected approvals into eval fixtures on the sweep loop; the nightly
 auto-eval is opt-in behind `clerk_auto_eval` (spends tokens). The failure
 explainer (`modules/clerk/explain.ts`) is catalogue-grounded — the model only
@@ -117,7 +125,19 @@ re-rasterizing), one `segment_scan` vision call over small page THUMBNAILS
 proposes page ranges, `validateScanSegments` fails closed unless the ranges
 cover every page exactly once in order, and each validated segment walks the
 ordinary vision-extraction case path with its full-resolution page slice
-(per-segment duplicate hash on the page bytes); **custom statement formats**
+(per-segment duplicate hash on the page bytes); the **inbound email rail**
+(`modules/inbound/email.ts`, `POST /api/inbound/email`, machine webhook
+deliberately OFF the OpenAPI contract) lets a client forward a supplier
+invoice by email: FAIL-CLOSED shared secret (`INBOUND_EMAIL_TOKEN` unset
+= rail dark, 404 — unlike the open-by-default metrics token, this rail
+creates tenant work and spends tokens), responses byte-identical for
+resolved and unresolved senders (202 then detached processing — no
+email-probe oracle), sender resolved deterministically via the unique
+login email → `client_user` membership → (firm, client party,
+createdBy), and each PDF/image attachment walks the ORDINARY capture
+path (budget pre-check, 5MB/type caps, duplicate guard absorbing
+provider redelivery) with masked-sender pointer-only audits;
+**custom statement formats**
 (`modules/statements/custom-formats.ts`, operator `catalogue.write`, global
 reference data like the error catalogue) store column-name mappings consumed
 by the same parser seam — saving REQUIRES the mapping to parse its own
@@ -133,7 +153,17 @@ the round-11 money facts from `firmMoneySummary` (payments expected in the
 coming week per each buyer's rhythm, and the chase-worthy count past BOTH
 due date and rhythm) and the round-14 facts (firm-wide unmatched credits,
 and outstanding invoices with 2+ logged reminders) — and lets the
-model phrase them, falling back to deterministic template text; the
+model phrase them, falling back to deterministic template text — and now
+DELIVERED: `clerk_digests.delivered_at` + `deliverFirmDigests` (every
+sweep pass, claim-first CAS, dark messaging claims silently) offer the
+digest to the firm's staff who opted in via
+**staff notification preferences** (`staff_notification_preferences`,
+user-keyed, defaults ALL OFF, migration 0019 firm-keyed RLS,
+self-service `GET/PUT /staff/notification-preferences` — userId always
+from the principal). No CORE-03 gate here on purpose: the recipient is a
+firm member who opted in themselves, not a client party; sends are
+pointer-only (`usr`/`dig` refs, `firm_digest_ready` template,
+email + push); the
 **per-client monthly statement** (`modules/clerk/client-statement.ts`, opt-in
 `clerk_client_statements` flag, sweep-generated for the newest CLOSED Lagos
 month for every OPEN/in-progress engaged client, firm-keyed RLS via migration
@@ -192,7 +222,15 @@ the **rejection-pattern report** (`modules/desk/rejection-patterns.ts`,
 pure SQL) aggregates the firm's own rejected submission attempts into
 recurring catalogue-grounded causes over a trailing window plus the
 equal-length window before it, unmapped codes included — the aggregate view
-the one-case-at-a-time desk never sees; the **catalogue coverage report**
+the one-case-at-a-time desk never sees; its draft-time sibling is
+**rejection risk** (`modules/invoice/rejection-risk.ts`,
+`GET /invoices/{id}/rejection-risk`, `invoice.read` + the invoice read's
+exact tenant/SEC-03 gates, deterministic, nothing stored): the firm's
+own rejected attempts over a trailing 90 days joined to THIS draft's
+supplier and buyer parties plus the firm's top codes (deduped),
+catalogue-grounded — signals name history, never predictions; the SME
+invoice detail shows the card on draft/validated invoices before
+submission; the **catalogue coverage report**
 (`modules/desk/catalogue-coverage.ts`, `GET /error-catalogue/coverage`,
 `catalogue.write`, catalogue-page card, pure SQL, platform-wide like the
 catalogue itself) is the INT-02 measurement — the share of rejection
@@ -290,7 +328,16 @@ keys — the context line the model sees carries data-intent keys and
 `m*`/`c*` option keys only, so a follow-up ("and for June?") can inherit
 scope while the closed-catalogue machinery stays exactly as strict
 (`intent.v5`; a label no longer offered contributes nothing; a cross-firm
-or non-question id is silently ignored). Ask's refusals are themselves
+or non-question id is silently ignored). Ask is also open to
+**client_users** (SEC-03-pinned): the offered data intents narrow to a
+vetted ALLOWLIST (`CLIENT_SAFE_DATA_INTENTS` — firm-wide money intents
+that name other clients' buyers, and the firm's own budget, are excluded
+and refuse), the client option list is exactly the caller's own party,
+the executed party filter is FORCED from the principal regardless of the
+model's pick, multi-turn threads only from the client's own previous
+case (`createdBy` check), and `GET /clerk/digest` explicitly refuses
+client_user now that the capability is shared — the SME app carries the
+client Ask surface. Ask's refusals are themselves
 mined: **claim-gap mining** (`modules/clerk/claim-gaps.ts`,
 `GET /clerk/claim-gaps`, `clerk.use`, pure SQL, console claims-page card)
 clusters a trailing window's refused Ask answers by a stable refusal-code
@@ -334,6 +381,15 @@ budget.ts charges) and flags a latest day both over an absolute floor
 other days (`SPEND_ALERT_MULTIPLIER`, ≥3-day baseline required) — one
 durable audit event per (firm, day), resistance-watch dedup posture, and a
 live `spendAlerts` count on the operator daily brief.
+Accuracy has the same teeth: the **kept-rate drift watch**
+(`modules/clerk/quality-watch.ts`, sweep, zero model calls) buckets the
+corrections exhaust into UTC months (the same single source calibration
+samples) and alerts when the newest measured month's kept-rate falls
+≥10 points below the previous (`QUALITY_ALERT_DROP_POINTS` /
+`QUALITY_ALERT_MIN_FIELDS`, ≥50-field months only) — one durable audit
+event per degraded month; `metrics.keptRateTrend` and
+`metrics.qualityAlert` come from the SAME shared buckets so the health
+chart, banner and alert can never disagree.
 The eval harness also carries a **prompt canary**
 (`modules/clerk/prompt-canary.ts`, `POST /clerk/eval/canary` + `GET
 /clerk/eval/prompt`, `clerk.use`, spends 2× a corpus pass): the corpus runs

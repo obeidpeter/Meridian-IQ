@@ -22,6 +22,8 @@ import {
   useCreateConfirmation,
   useListSettlements,
   useGetInvoiceStatusLight,
+  useGetInvoiceRejectionRisk,
+  getGetInvoiceRejectionRiskQueryKey,
   getGetInvoiceQueryKey,
   getListSubmissionAttemptsQueryKey,
   getGetInvoiceStampQueryKey,
@@ -69,6 +71,7 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled, errorStatus, serverErrorMessage } from "@/lib/errors";
 import { EmptyState } from "@/components/empty-state";
+import { RejectionRiskCard } from "@/components/rejection-risk-card";
 import { QueryError } from "@/components/query-error";
 import { DRAFT_KEY, type DraftState } from "@/pages/invoice-new";
 import { LineItemRow } from "@/components/line-item-row";
@@ -696,6 +699,20 @@ export function InvoiceDetail() {
         staleTime: 30_000,
       },
     });
+  // Draft-time rejection risk (contract 0.36.0): only fetched while the
+  // invoice can still be edited before its first submission — once it is on
+  // the rail the attempt history speaks for itself. Same posture as the
+  // status light: render on success only, any error means no card.
+  const riskEligible =
+    invoice?.status === "draft" || invoice?.status === "validated";
+  const { data: rejectionRisk } = useGetInvoiceRejectionRisk(id, {
+    query: {
+      enabled: !!id && riskEligible,
+      queryKey: getGetInvoiceRejectionRiskQueryKey(id),
+      retry: false,
+      staleTime: 30_000,
+    },
+  });
 
   const latestFailed = (attempts || [])
     .filter((a) => (a.status === "rejected" || a.status === "error") && a.errorCode)
@@ -1199,6 +1216,12 @@ export function InvoiceDetail() {
       />
 
       <ComplianceStatusCard statusLight={statusLight} isLoading={statusLightLoading} />
+
+      {/* Advisory only, gated on the same still-editable statuses as the
+          query so a cached report never outlives a submission. */}
+      {riskEligible && rejectionRisk && (
+        <RejectionRiskCard report={rejectionRisk} />
+      )}
 
       {stampedFamily && stamp && (
         <Card className="border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/40">

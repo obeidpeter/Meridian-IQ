@@ -53,6 +53,8 @@ import {
   CreateSettlementResponse,
   GetInvoiceStatusLightParams,
   GetInvoiceStatusLightResponse,
+  GetInvoiceRejectionRiskParams,
+  GetInvoiceRejectionRiskResponse,
   GetVatPackQueryParams,
   GetVatPackResponse,
   DraftVatPackCoverNoteBody,
@@ -104,6 +106,7 @@ import { listLineItemSuggestions } from "../modules/invoice/line-items";
 import { listPaymentBehaviour } from "../modules/invoice/payment-behaviour";
 import { listUnmatchedCredits } from "../modules/invoice/unmatched-credits";
 import { computeProjectionAccuracy } from "../modules/invoice/projection-accuracy";
+import { computeRejectionRisk } from "../modules/invoice/rejection-risk";
 import { recordChase } from "../modules/invoice/chase-log";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { likePattern } from "../lib/sql";
@@ -751,6 +754,20 @@ router.get("/invoices/:id/status-light", async (req, res): Promise<void> => {
     stamp: stamps[0] ?? null,
   });
   res.json(GetInvoiceStatusLightResponse.parse(light));
+});
+
+// Draft-time rejection risk: the firm's own recent rejection history joined
+// to this draft's supplier/buyer, catalogue-grounded — deterministic, nothing
+// stored, no AI, so it is safe for every invoice reader and needs no flag.
+// Same load/scope gate as GET /invoices/:id: 404 unknown, tenant + SEC-03
+// enforced by loadForTenant (a client_user may only read its own invoices'
+// risk, never a sibling's).
+router.get("/invoices/:id/rejection-risk", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const params = parseOrThrow(GetInvoiceRejectionRiskParams, req.params);
+  const { invoice } = await loadForTenant(req, params.id);
+  const report = await computeRejectionRisk(invoice);
+  res.json(GetInvoiceRejectionRiskResponse.parse(report));
 });
 
 // Buyer confirmations are a release-tagged (R1) feature: unreachable when dark.

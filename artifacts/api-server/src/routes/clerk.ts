@@ -59,6 +59,8 @@ import {
   GetClerkClaimGapsResponse,
   RunModelCanaryBody,
   RunModelCanaryResponse,
+  BulkApproveClerkCasesBody,
+  BulkApproveClerkCasesResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
@@ -86,6 +88,7 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, clerkBatchesTable, type ClerkBatch } from "@workspace/db";
 import { askClerk } from "../modules/clerk/ask";
+import { bulkApproveCases } from "../modules/clerk/bulk-approve";
 import { createBatchCases } from "../modules/clerk/batch";
 import {
   createClerkBatch,
@@ -215,6 +218,20 @@ router.post("/clerk/cases/:id/decision", async (req, res): Promise<void> => {
   res.json(DecideClerkCaseResponse.parse(row));
 });
 
+// Fast-lane bulk approval: a human-initiated batch of APPROVALS over cases
+// the server re-verifies as fast-lane eligible (extracted, clean pre-flight,
+// confident critical fields) — the per-case machinery (decideCase's CAS,
+// audit rows, draft-only invariant) runs unchanged per item; the batch adds
+// iteration and per-row outcomes only. Operator-gated like single decisions.
+// Bounded (50) DB-only work with NO model call, so it runs inside the
+// ordinary request transaction — deliberately NOT on NO_CONTEXT_ROUTES.
+router.post("/clerk/cases/bulk-approve", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const parsed = parseOrThrow(BulkApproveClerkCasesBody, req.body);
+  const report = await bulkApproveCases(parsed.items, req.principal.userId);
+  res.json(BulkApproveClerkCasesResponse.parse(report));
+});
+
 router.post("/clerk/cases/:id/claim", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
   const params = parseOrThrow(ClaimClerkCaseParams, req.params);
@@ -341,6 +358,11 @@ router.post("/clerk/ask", async (req, res): Promise<void> => {
     // Multi-turn (round 12): the asker's previous case in this thread; the
     // module re-verifies it belongs to this firm before any context is used.
     previousCaseId: parsed.previousCaseId ?? null,
+    // Client posture (SEC-03): a client_user is offered only the client-safe
+    // intent subset and every lookup is pinned to its own party by the
+    // module — the party comes from the principal, never from model output.
+    clientScoped: req.principal.role === "client_user",
+    clientPartyId: clientPartyScope(req.principal),
   });
   res.json(AskClerkResponse.parse(row));
 });
@@ -558,6 +580,17 @@ router.post("/clerk/client-import-draft", async (req, res): Promise<void> => {
 // only reads, so it never spends tokens.
 router.get("/clerk/digest", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.ask");
+  // The weekly digest is a FIRM-INTERNAL surface: its facts span the whole
+  // client book (chase counts, unmatched credits, firm money summary).
+  // clerk.ask was widened to client_user for Ask only, NOT for this — a
+  // client principal is refused explicitly (SEC-03), capability or not.
+  if (req.principal.role === "client_user") {
+    throw new DomainError(
+      "FORBIDDEN",
+      "The weekly digest is a firm-internal surface",
+      403,
+    );
+  }
   const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
   if (!tenant) {
     res.status(400).json({ error: "A firm scope is required for the digest" });

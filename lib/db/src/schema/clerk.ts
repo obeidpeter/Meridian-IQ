@@ -441,6 +441,13 @@ export const clerkDigestsTable = pgTable(
     headline: text("headline").notNull(),
     bullets: jsonb("bullets").$type<string[]>().notNull().default([]),
     source: clerkDigestSourceEnum("source").notNull(),
+    // Set when the digest was offered to the firm's opted-in staff channels
+    // (or deliberately skipped: no opted-in recipients claims silently —
+    // opt-in means quiet is correct). The claim-first UPDATE on this column
+    // is the delivery pass's once-only gate, mirroring
+    // clerk_client_statements.delivered_at — null means "not yet offered".
+    // The GET /clerk/digest response schema strips it (plain zod object).
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   // The sweep's idempotency anchor: at most one digest per firm per week.

@@ -3,12 +3,31 @@ import {
   batchSummary,
   captureStatusLabel,
   captureBadgeClasses,
+  dataAnswerScope,
   formatTokens,
   handleClerkGatewayError,
   usageBreakdown,
   usagePct,
   fieldLabel,
 } from "./clerk";
+
+describe("dataAnswerScope", () => {
+  test("joins the resolved display labels into one scope clause", () => {
+    expect(dataAnswerScope({ month: "June 2026" })).toBe("June 2026");
+    expect(
+      dataAnswerScope({ month: "June 2026", client: "Adaeze Textiles" }),
+    ).toBe("June 2026 · Adaeze Textiles");
+  });
+
+  test("yields an empty string for an unscoped lookup so the clause is skipped", () => {
+    expect(dataAnswerScope(undefined)).toBe("");
+    expect(dataAnswerScope({})).toBe("");
+    // Blank labels contribute nothing rather than a dangling separator.
+    expect(dataAnswerScope({ month: "  ", client: "Adaeze Textiles" })).toBe(
+      "Adaeze Textiles",
+    );
+  });
+});
 
 describe("captureStatusLabel", () => {
   test("labels every lifecycle status from the client's seat", () => {
