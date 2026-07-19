@@ -119,6 +119,7 @@ export * from './clerkMetricsCalibrationBucketsItem';
 export * from './clerkMetricsCases';
 export * from './clerkMetricsCasesByKind';
 export * from './clerkMetricsCasesByStatus';
+export * from './clerkMetricsCorrectionShapesItem';
 export * from './clerkMetricsCorrectionsItem';
 export * from './clerkMetricsCost';
 export * from './clerkMetricsEconomics';

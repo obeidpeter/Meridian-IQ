@@ -8480,6 +8480,28 @@ components:
                 type: integer
               overrideRate:
                 type: number
+        # Correction-shape mining: the same corrections exhaust classified by
+        # the SHAPE of each override (day/month flip, percent-vs-fraction VAT,
+        # power-of-ten scale, missed/hallucinated value, ...) — deterministic
+        # string/number analysis, zero model calls. Optional: absent when the
+        # window holds no changed corrections. Line fields aggregate under
+        # their normalized name (lines.3.vatRate -> lines.vatRate).
+        correctionShapes:
+          type: array
+          items:
+            type: object
+            required: [field, shape, count, exampleExtracted, exampleFinal]
+            properties:
+              field:
+                type: string
+              shape:
+                type: string
+              count:
+                type: integer
+              exampleExtracted:
+                type: ["string", "null"]
+              exampleFinal:
+                type: ["string", "null"]
         # Per-supplier override rates from the corrections exhaust (idea #9):
         # which suppliers' documents Clerk reads worst. Supplier identity is
         # the approved invoice's register party, never an extracted string.

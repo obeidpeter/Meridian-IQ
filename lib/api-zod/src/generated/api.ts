@@ -5578,6 +5578,13 @@ export const GetClerkMetricsResponse = zod.object({
   "overridden": zod.number(),
   "overrideRate": zod.number()
 })),
+  "correctionShapes": zod.array(zod.object({
+  "field": zod.string(),
+  "shape": zod.string(),
+  "count": zod.number(),
+  "exampleExtracted": zod.string().nullable(),
+  "exampleFinal": zod.string().nullable()
+})).optional(),
   "supplierAccuracy": zod.array(zod.object({
   "supplierName": zod.string(),
   "firmName": zod.string().nullable(),

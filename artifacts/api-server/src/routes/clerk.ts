@@ -55,6 +55,10 @@ import {
   GetExtractionPromptResponse,
   RunPromptCanaryBody,
   RunPromptCanaryResponse,
+  GetClerkClaimGapsQueryParams,
+  GetClerkClaimGapsResponse,
+  RunModelCanaryBody,
+  RunModelCanaryResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
@@ -68,6 +72,7 @@ import {
   assertFirmClerkBudget,
   budgetPace,
   firmClerkUsage,
+  firmClerkUsageByPurpose,
 } from "../modules/clerk/budget";
 import {
   claimCase,
@@ -109,6 +114,8 @@ import {
   withAccuracy,
 } from "../modules/clerk/eval";
 import { runPromptCanary } from "../modules/clerk/prompt-canary";
+import { runModelCanary } from "../modules/clerk/model-canary";
+import { computeClaimGaps } from "../modules/clerk/claim-gaps";
 import {
   EXTRACT_PROMPT_VERSION,
   EXTRACT_SYSTEM,
@@ -287,12 +294,40 @@ router.post("/clerk/eval/canary", async (req, res): Promise<void> => {
   res.json(RunPromptCanaryResponse.parse(report));
 });
 
+// Model canary: the same corpus and verdict rule, but the candidate is a
+// MODEL id run under the incumbent prompt — the provider-evaluation
+// counterpart to the prompt canary. Spends 2× a corpus pass; nothing stored
+// (promotion is an env-config change the operator makes with the evidence).
+router.post("/clerk/eval/model-canary", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const parsed = parseOrThrow(RunModelCanaryBody, req.body);
+  const gateway = await getClerkGateway();
+  const report = await runModelCanary(
+    req.principal.userId,
+    parsed.candidateModel,
+    gateway,
+  );
+  res.json(RunModelCanaryResponse.parse(report));
+});
+
 router.get("/clerk/metrics", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
   const query = GetClerkMetricsQueryParams.safeParse(req.query);
   const windowDays = query.success ? (query.data.windowDays ?? 30) : 30;
   const metrics = await getClerkMetrics(windowDays);
   res.json(GetClerkMetricsResponse.parse(metrics));
+});
+
+// Claim-gap mining: refused Ask Clerk questions clustered by their stored
+// refusal cause, plus the newest questions no approved claim covers — the
+// register's demand signal. Deterministic (pure SQL + string matching, zero
+// model calls); same operator gate and lenient window parse as the metrics.
+router.get("/clerk/claim-gaps", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const query = GetClerkClaimGapsQueryParams.safeParse(req.query);
+  const windowDays = query.success ? (query.data.windowDays ?? 90) : 90;
+  const report = await computeClaimGaps(windowDays);
+  res.json(GetClerkClaimGapsResponse.parse(report));
 });
 
 router.post("/clerk/ask", async (req, res): Promise<void> => {
@@ -608,9 +643,15 @@ router.get("/clerk/usage", async (req, res): Promise<void> => {
     return;
   }
   const usage = await firmClerkUsage(tenant);
+  // Per-purpose split of the same month window — which feature is spending
+  // the allowance. monthStart comes from the usage read so the two queries
+  // can never straddle a month boundary.
+  const byPurpose = await firmClerkUsageByPurpose(tenant, usage.monthStart);
   // Budget pace (idea #7): the same numbers the 429 gate uses, projected to
   // month end so the usage meters can warn before the cliff.
-  res.json(GetClerkUsageResponse.parse({ ...usage, ...budgetPace(usage) }));
+  res.json(
+    GetClerkUsageResponse.parse({ ...usage, ...budgetPace(usage), byPurpose }),
+  );
 });
 
 export default router;

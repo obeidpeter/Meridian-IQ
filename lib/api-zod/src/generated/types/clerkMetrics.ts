@@ -8,6 +8,7 @@
 import type { ClerkMetricsAsk } from './clerkMetricsAsk';
 import type { ClerkMetricsCalibration } from './clerkMetricsCalibration';
 import type { ClerkMetricsCases } from './clerkMetricsCases';
+import type { ClerkMetricsCorrectionShapesItem } from './clerkMetricsCorrectionShapesItem';
 import type { ClerkMetricsCorrectionsItem } from './clerkMetricsCorrectionsItem';
 import type { ClerkMetricsCost } from './clerkMetricsCost';
 import type { ClerkMetricsEconomics } from './clerkMetricsEconomics';
@@ -25,6 +26,7 @@ export interface ClerkMetrics {
   cost: ClerkMetricsCost;
   economics: ClerkMetricsEconomics;
   corrections: ClerkMetricsCorrectionsItem[];
+  correctionShapes?: ClerkMetricsCorrectionShapesItem[];
   supplierAccuracy: ClerkMetricsSupplierAccuracyItem[];
   ask: ClerkMetricsAsk;
   platformSpend: ClerkMetricsPlatformSpend;

@@ -3386,6 +3386,16 @@ export type ClerkMetricsCorrectionsItem = {
   overrideRate: number;
 };
 
+export type ClerkMetricsCorrectionShapesItem = {
+  field: string;
+  shape: string;
+  count: number;
+  /** @nullable */
+  exampleExtracted: string | null;
+  /** @nullable */
+  exampleFinal: string | null;
+};
+
 export type ClerkMetricsSupplierAccuracyItem = {
   supplierName: string;
   /** @nullable */
@@ -3454,6 +3464,7 @@ export interface ClerkMetrics {
   cost: ClerkMetricsCost;
   economics: ClerkMetricsEconomics;
   corrections: ClerkMetricsCorrectionsItem[];
+  correctionShapes?: ClerkMetricsCorrectionShapesItem[];
   supplierAccuracy: ClerkMetricsSupplierAccuracyItem[];
   ask: ClerkMetricsAsk;
   platformSpend: ClerkMetricsPlatformSpend;
