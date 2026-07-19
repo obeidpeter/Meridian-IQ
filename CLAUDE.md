@@ -16,7 +16,7 @@ artifacts/
   buyer-portal      Buyer Rails web app  ("/buyer")
   landing           Marketing site + login portal ("/")
   mobile            Expo / React Native companion
-  penalty-calculator, mockup-sandbox   (standalone tools)
+  penalty-calculator    (standalone public tool)
 lib/
   db                Drizzle schema, migrations, RLS context helpers
   api-spec          openapi.yaml — the CONTRACT — + codegen (orval)

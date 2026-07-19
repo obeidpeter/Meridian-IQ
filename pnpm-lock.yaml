@@ -1132,15 +1132,9 @@ importers:
 
   scripts:
     devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 25.9.4
       playwright:
         specifier: ^1.49.0
         version: 1.61.1
-      tsx:
-        specifier: 'catalog:'
-        version: 4.22.4
 
 packages:
 
