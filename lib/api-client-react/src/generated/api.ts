@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.34.0
+ * OpenAPI spec version: 0.35.0
  */
 import {
   useMutation,
@@ -56,6 +56,7 @@ import type {
   ChaseRow,
   ClaimDecisionInput,
   ClaimDraftInput,
+  ClaimGapReport,
   ClaimRecord,
   ClaimUpdateInput,
   ClerkAdoptionReport,
@@ -135,6 +136,7 @@ import type {
   GenerateStatementsInput,
   GetCashflowOutlookParams,
   GetChaseListParams,
+  GetClerkClaimGapsParams,
   GetClerkMetricsParams,
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
@@ -185,6 +187,7 @@ import type {
   Message,
   MessageDeliveryInput,
   MessageInput,
+  ModelCanaryReport,
   NotFoundResponse,
   OnboardingProspect,
   OperatorBrief,
@@ -223,6 +226,7 @@ import type {
   ResolveCaseInput,
   RevenueShareStatement,
   RunAssessmentInput,
+  RunModelCanaryInput,
   RunPromptCanaryInput,
   ScoreboardRow,
   SettlementEvent,
@@ -14864,4 +14868,158 @@ export function useGetClerkMetrics<TData = Awaited<ReturnType<typeof getClerkMet
 
 
 
+
+export const getGetClerkClaimGapsUrl = (params?: GetClerkClaimGapsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/claim-gaps?${stringifiedParams}` : `/api/clerk/claim-gaps`
+}
+
+/**
+ * @summary Refused Ask Clerk questions clustered by cause — the register's demand signal
+ */
+export const getClerkClaimGaps = async (params?: GetClerkClaimGapsParams, options?: RequestInit): Promise<ClaimGapReport> => {
+
+  return customFetch<ClaimGapReport>(getGetClerkClaimGapsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkClaimGapsQueryKey = (params?: GetClerkClaimGapsParams,) => {
+    return [
+    `/api/clerk/claim-gaps`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetClerkClaimGapsQueryOptions = <TData = Awaited<ReturnType<typeof getClerkClaimGaps>>, TError = ErrorType<unknown>>(params?: GetClerkClaimGapsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkClaimGaps>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkClaimGapsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkClaimGaps>>> = ({ signal }) => getClerkClaimGaps(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkClaimGaps>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkClaimGapsQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkClaimGaps>>>
+export type GetClerkClaimGapsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Refused Ask Clerk questions clustered by cause — the register's demand signal
+ */
+
+export function useGetClerkClaimGaps<TData = Awaited<ReturnType<typeof getClerkClaimGaps>>, TError = ErrorType<unknown>>(
+ params?: GetClerkClaimGapsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkClaimGaps>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkClaimGapsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRunModelCanaryUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/model-canary`
+}
+
+/**
+ * @summary Run the eval corpus under a CANDIDATE model side by side with the incumbent (spends tokens)
+ */
+export const runModelCanary = async (runModelCanaryInput: RunModelCanaryInput, options?: RequestInit): Promise<ModelCanaryReport> => {
+
+  return customFetch<ModelCanaryReport>(getRunModelCanaryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(runModelCanaryInput)
+  }
+);}
+
+
+
+
+export const getRunModelCanaryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runModelCanary>>, TError,{data: BodyType<RunModelCanaryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runModelCanary>>, TError,{data: BodyType<RunModelCanaryInput>}, TContext> => {
+
+const mutationKey = ['runModelCanary'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runModelCanary>>, {data: BodyType<RunModelCanaryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runModelCanary(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunModelCanaryMutationResult = NonNullable<Awaited<ReturnType<typeof runModelCanary>>>
+    export type RunModelCanaryMutationBody = BodyType<RunModelCanaryInput>
+    export type RunModelCanaryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Run the eval corpus under a CANDIDATE model side by side with the incumbent (spends tokens)
+ */
+export const useRunModelCanary = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runModelCanary>>, TError,{data: BodyType<RunModelCanaryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runModelCanary>>,
+        TError,
+        {data: BodyType<RunModelCanaryInput>},
+        TContext
+      > => {
+      return useMutation(getRunModelCanaryMutationOptions(options));
+    }
 

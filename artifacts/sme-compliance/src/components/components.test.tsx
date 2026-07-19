@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ClerkDisabledBanner } from "./clerk-disabled-banner";
+import { ClerkUsageBreakdown } from "./clerk-usage-breakdown";
 import { FilePickerButton } from "./file-picker-button";
 import { RowStatusIcon } from "./row-status-icon";
 import { SkeletonList } from "./skeleton-list";
@@ -20,6 +21,56 @@ describe("ClerkDisabledBanner", () => {
     const banner = screen.getByTestId("banner-clerk-disabled");
     expect(banner.textContent).toContain("Clerk is unavailable right now");
     expect(banner.textContent).toContain("Please try again later.");
+  });
+});
+
+describe("ClerkUsageBreakdown", () => {
+  test("lists humanized purposes by spend descending, hiding zero rows", () => {
+    render(
+      <ClerkUsageBreakdown
+        byPurpose={[
+          { purpose: "ask_clerk", tokens: 200 },
+          { purpose: "extract_invoice", tokens: 12_400 },
+          { purpose: "segment_batch", tokens: 0 },
+        ]}
+      />,
+    );
+    const list = screen.getByTestId("breakdown-clerk-usage");
+    const rows = Array.from(list.children).map((c) => c.textContent);
+    expect(rows).toEqual(["Extract invoice12.4K", "Ask clerk200"]);
+    // The exact figure stays reachable via the compact value's title.
+    expect(
+      screen
+        .getByTestId("row-usage-purpose-extract_invoice")
+        .querySelector("[title]")!
+        .getAttribute("title"),
+    ).toBe("12,400 tokens");
+    expect(screen.queryByTestId("text-usage-purpose-more")).toBeNull();
+  });
+
+  test("folds rows past the cap into a +N more line", () => {
+    render(
+      <ClerkUsageBreakdown
+        byPurpose={Array.from({ length: 6 }, (_, i) => ({
+          purpose: `purpose_${i}`,
+          tokens: 600 - i * 100,
+        }))}
+      />,
+    );
+    expect(
+      screen.getByTestId("breakdown-clerk-usage").children,
+    ).toHaveLength(5); // 4 rows + the fold line
+    expect(screen.getByTestId("text-usage-purpose-more").textContent).toBe(
+      "+2 more",
+    );
+  });
+
+  test("renders nothing when there has been no spend", () => {
+    const { container: empty } = render(<ClerkUsageBreakdown byPurpose={[]} />);
+    expect(empty.firstElementChild).toBeNull();
+    // Version skew: a pre-0.35.0 server doesn't send byPurpose at all.
+    const { container: absent } = render(<ClerkUsageBreakdown />);
+    expect(absent.firstElementChild).toBeNull();
   });
 });
 

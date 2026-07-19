@@ -45,6 +45,7 @@ import {
   usagePct,
 } from "@/lib/clerk";
 import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
+import { ClerkUsageBreakdown } from "@/components/clerk-usage-breakdown";
 import { SkeletonList } from "@/components/skeleton-list";
 import {
   AlertTriangle,
@@ -60,7 +61,9 @@ import {
 
 // Small allowance meter for the page header. The endpoint 400s for
 // principals without a firm allowance, and the meter is a nicety — any error
-// (or a still-loading query) simply renders nothing.
+// (or a still-loading query) simply renders nothing. Below the bar, the
+// per-purpose breakdown shows where this month's tokens actually went
+// (nothing extra when there's been no spend).
 function UsageMeter() {
   const { data: usage, isError } = useGetClerkUsage();
   if (isError || !usage) return null;
@@ -118,6 +121,7 @@ function UsageMeter() {
             : "On pace to run out before month end at the current rate."}
         </p>
       ) : null}
+      <ClerkUsageBreakdown byPurpose={usage.byPurpose} />
     </div>
   );
 }

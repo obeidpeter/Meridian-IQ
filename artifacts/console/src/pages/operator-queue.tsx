@@ -42,6 +42,14 @@ function formatDuration(seconds?: number | null): string {
   return `${m}m ${s}s`;
 }
 
+// The brief's spend line: >0 firm spend anomalies today is an
+// attention-needed warning (the audit ledger has the detail); zero renders
+// the same quiet all-clear the escalation line uses.
+export function spendAlertsLine(count: number): string {
+  if (count === 0) return "No firm spend anomalies today.";
+  return `${count} firm spend ${count === 1 ? "anomaly" : "anomalies"} today — check the audit log.`;
+}
+
 // One client escalation inside a case card: the reason, the operator's reply
 // once sent, and (for operators) a draft-and-send flow. The draft is grounded
 // server-side (catalogue fix + attempt history) and lands in an editable
@@ -472,6 +480,16 @@ export function OperatorQueue() {
                 ? `${brief.unmappedCodeCases} unmapped rejection code(s) need catalogue entries.`
                 : ""}{" "}
               {brief.decidedYesterday} case(s) were decided yesterday.
+            </p>
+            <p
+              className={
+                brief.spendAlerts > 0
+                  ? "font-medium text-amber-700 dark:text-amber-400"
+                  : "text-muted-foreground"
+              }
+              data-testid="brief-spend-alerts"
+            >
+              {spendAlertsLine(brief.spendAlerts)}
             </p>
             {(!brief.clerkEnabled || brief.resistanceAlert) && (
               <p className="text-sm font-medium text-red-600 dark:text-red-400">

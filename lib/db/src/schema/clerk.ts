@@ -483,6 +483,11 @@ export const clerkClientStatementsTable = pgTable(
     headline: text("headline").notNull(),
     bullets: jsonb("bullets").$type<string[]>().notNull().default([]),
     source: clerkDigestSourceEnum("source").notNull(),
+    // Set when the statement was offered to the client's alert channels (or
+    // deliberately skipped: quiet months claim silently). The claim-first
+    // UPDATE on this column is the delivery pass's once-only gate — null means
+    // "not yet offered", never "the client declined".
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [

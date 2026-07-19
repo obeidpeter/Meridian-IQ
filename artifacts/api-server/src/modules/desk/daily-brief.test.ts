@@ -123,4 +123,10 @@ test("the brief counts the seeded work as lower bounds with named oldest items",
   assert.ok(brief.decidedYesterday >= 1, "yesterday's decided case counted");
   assert.equal(typeof brief.clerkEnabled, "boolean");
   assert.equal(typeof brief.resistanceAlert, "boolean");
+  // Spend anomalies come from the live spend-watch detector: platform-wide
+  // ledger state, so a non-negative count is all that is stable here.
+  assert.ok(
+    Number.isInteger(brief.spendAlerts) && brief.spendAlerts >= 0,
+    "spendAlerts is a count from the shared detector",
+  );
 });

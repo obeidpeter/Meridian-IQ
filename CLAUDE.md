@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.34.0`).
+contract change (it is currently `0.35.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -71,7 +71,11 @@ override `billing_tiers.clerk_monthly_tokens`, default
 the budget BEFORE touching the provider so 429s are clean, and the gateway
 enforces it again as a backstop no call site can forget; `GET /clerk/usage`
 also carries a month-end pace projection — `budgetPace`, same UTC month
-boundary as enforcement — so the usage meters warn before the cliff). The gateway writes
+boundary as enforcement — so the usage meters warn before the cliff, and a
+required `byPurpose` split (`firmClerkUsageByPurpose`, same ledger/month
+predicate the budget charges, fed the same read's `monthStart` so the two
+can never straddle a boundary) so the meter shows WHERE the tokens went).
+The gateway writes
 the inference ledger on the RAW pool so spend accounting survives any request
 rollback; consequence: a caseId passed to `infer()` must reference an already
 COMMITTED case row. The model-calling routes (capture, batch, ask, eval-run)
@@ -138,6 +142,13 @@ facts in SQL, model only phrases, quiet months never call the model, template
 fallback always answers; its read route (`GET /clerk/client-statements`,
 `clerk.capture`) pins a `client_user` to its OWN party (SEC-03; firm RLS is
 not a sibling wall) and the SME dashboard shows the client their own card;
+generated statements are also OFFERED over the alert rails
+(`deliverClientStatements`, run every sweep pass): claim-first CAS on a
+nullable `delivered_at` so two instances can never double-send, quiet
+statements and a dark `messaging_notifications` flag claim silently, and
+the send is the ordinary party-scoped `fanOutAlert` — CORE-03 layer-1
+consent first-line, `client_statement_ready` template, pointer-only
+`stmt:<id>` reference (SEC-12), no SMS default;
 the **monthly VAT filing pack** (`modules/clerk/vat-pack.ts`, `GET /vat-pack`
 + CSV export, `console.portfolio.read` + firm scope, console portfolio card)
 is the firm-level view of the same accepted-in-month facts — deterministic
@@ -279,10 +290,24 @@ keys — the context line the model sees carries data-intent keys and
 `m*`/`c*` option keys only, so a follow-up ("and for June?") can inherit
 scope while the closed-catalogue machinery stays exactly as strict
 (`intent.v5`; a label no longer offered contributes nothing; a cross-firm
-or non-question id is silently ignored). Clerk health (console) includes a
+or non-question id is silently ignored). Ask's refusals are themselves
+mined: **claim-gap mining** (`modules/clerk/claim-gaps.ts`,
+`GET /clerk/claim-gaps`, `clerk.use`, pure SQL, console claims-page card)
+clusters a trailing window's refused Ask answers by a stable refusal-code
+mapping of the exact sentences ask.ts produces (unknown text folds to
+`other`; the no-matching-claim needle is one constant shared between the
+TS matcher and the SQL LIKE so they can never disagree) and lists the
+newest uncovered questions with their firm names — the evidence for what
+claims to draft next. Clerk health (console) includes a
 confidence-calibration table (`computeCalibration` in
 `modules/clerk/metrics.ts`): kept-rate vs model confidence per band, from the
-corrections exhaust, plus **unit economics** (`metrics.economics`, pure ledger
+corrections exhaust — and **correction-shape mining**
+(`metrics.correctionShapes`, optional, zero model calls): the same
+newest-500 exhaust classified by the SHAPE of each override
+(day/month flip, percent-vs-fraction VAT, power-of-ten scale,
+missed/hallucinated value; line fields folded under their normalized name)
+so the health page says what KIND of mistakes extraction makes, not just
+how many — plus **unit economics** (`metrics.economics`, pure ledger
 SQL): token spend + error count per PURPOSE inside the window, and a per-month
 failure taxonomy (ok/invalid/killed/error) over the trailing months — the
 numbers pricing tiers and a provider evaluation will want, zero model calls —
@@ -301,6 +326,14 @@ one audit event per degraded month (the append-only ledger is the dedup key)
 plus an error log — when a measured month's resistance falls ≥10 points below
 the previous one (≥5 injection fixtures both sides, env-tunable);
 `metrics.resistanceAlert` drives a red banner on the health page.
+The per-firm budgets have the same teeth: the **firm spend anomaly watch**
+(`modules/clerk/spend-watch.ts`, sweep, zero model calls) buckets
+firm-funded ledger tokens into UTC days (the same token expression
+budget.ts charges) and flags a latest day both over an absolute floor
+(`SPEND_ALERT_MIN_TOKENS`, default 100k) and 5× the median of the firm's
+other days (`SPEND_ALERT_MULTIPLIER`, ≥3-day baseline required) — one
+durable audit event per (firm, day), resistance-watch dedup posture, and a
+live `spendAlerts` count on the operator daily brief.
 The eval harness also carries a **prompt canary**
 (`modules/clerk/prompt-canary.ts`, `POST /clerk/eval/canary` + `GET
 /clerk/eval/prompt`, `clerk.use`, spends 2× a corpus pass): the corpus runs
@@ -308,7 +341,15 @@ under a CANDIDATE system prompt and the incumbent side by side (purpose
 `eval_canary`, capped at 40 fixtures), scored by the same `scoreFixture`
 machinery, with a deterministic verdict — injection resistance may never
 drop, accuracy is judged outside a 2% noise band — returned, never stored
-(promotion is a code change the operator makes with the evidence in hand).
+(promotion is a code change the operator makes with the evidence in hand);
+the **model canary** (`modules/clerk/model-canary.ts`,
+`POST /clerk/eval/model-canary`, same gate/cost/NO_CONTEXT posture) is the
+same harness pointed at a candidate MODEL id instead of a prompt —
+`buildGatewayForModel` in provider.ts runs the candidate side outside tier
+routing while keeping the kill switch/ledger/budget/schema validation, both
+sides run under the incumbent extraction prompt, the same verdict rule
+decides, and adoption is an env change (`CLERK_MODEL`/`CLERK_MODEL_TIERS`)
+the operator makes with the evidence in hand.
 The eval harness also grows an active red team: **adversarial eval growth**
 (`modules/clerk/red-team.ts`, opt-in `clerk_red_team` flag, spends tokens) has
 the model GENERATE a prompt-injection payload against a legitimate static
@@ -322,8 +363,9 @@ hand-written pair. The exhaust also feeds the product directly:
 new text document against the firm's OWN approved fixtures (TIN/name-token
 containment, newest first, same-firm join — never cross-firm) and rides the
 match along as a fenced one-shot with its own ledger prompt version
-(`extract.v1+ex1`, `extraction.exemplarCaseId` for audit; eval replay never
-uses exemplars), with **exemplar hygiene**: a candidate whose descendant
+(`extract.v1+ex1`, `extraction.exemplarCaseId` for audit — the console
+review pane's "supplier memory" badge navigates to that exemplar case;
+eval replay never uses exemplars), with **exemplar hygiene**: a candidate whose descendant
 approvals (matched via `exemplarCaseId`) got most fields overridden (3+
 cases, ≥50% override) is demoted to the next candidate — the exhaust
 auditing the exhaust, zero model calls; **party alias memory** (`modules/clerk/alias.ts`,

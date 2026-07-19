@@ -3,12 +3,15 @@ import { z } from "zod/v4";
 import {
   getDb,
   runInBypassContext,
+  alertPreferencesTable,
   clerkClientStatementsTable,
   engagementsTable,
   type ClerkClientStatementRow,
   type ClientStatementFacts,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
+import { fanOutAlert } from "../messaging/fan-out";
+import { pointerEntityRef } from "../messaging/recipient-ref";
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
 import { lagosParts } from "../../lib/lagos-time";
@@ -27,14 +30,18 @@ import { getClerkGateway } from "./provider";
 // Generation runs on the shared sweep loop behind the OPT-IN
 // clerk_client_statements flag (it can spend firm tokens); the unique
 // (firm_id, client_party_id, month_start) key makes the sweep idempotent
-// across instances and passes. Delivery to clients waits on the messaging
-// provider — the SME dashboard reads it immediately.
+// across instances and passes. Delivery rides the same sweep through the
+// shared consent-gated alert fan-out (claim-first on delivered_at) — the SME
+// dashboard reads the statement immediately either way.
 
 const STATEMENT_FLAG_KEY = "clerk_client_statements";
 const STATEMENT_LOCK_ID = 731_844;
 // (firm, client) pairs per sweep pass; generated pairs drop out of the
 // missing-statement candidate query, so the loop resumes where it left off.
 const STATEMENT_BATCH = 20;
+// Undelivered rows offered per delivery pass; claimed rows drop out of the
+// scan, so a backlog drains across passes instead of pinning one.
+const DELIVERY_BATCH = 50;
 
 const STATEMENT_PROMPT_VERSION = "client-statement.v1";
 const STATEMENT_SYSTEM = [
@@ -345,6 +352,74 @@ export async function listClientStatements(
     .limit(limit);
 }
 
+// Offer generated statements to the client's alert channels through the SAME
+// party-scoped fan-out as the deadline reminders: consent-gated (CORE-03 —
+// fanOutAlert sends NOTHING without a live layer-1 grant), pointer-only
+// payloads (SEC-12 — the message names no month, amounts or counts). Returns
+// the number of rows CLAIMED this pass (sends may be fewer: quiet months,
+// dark flag and consent refusals claim silently); zero means the backlog is
+// drained, so callers can loop until then.
+export async function deliverClientStatements(
+  limit = DELIVERY_BATCH,
+): Promise<number> {
+  return runInBypassContext(async () => {
+    // Oldest first: a backlog wider than one pass drains in generation order.
+    const pending = await getDb()
+      .select()
+      .from(clerkClientStatementsTable)
+      .where(isNull(clerkClientStatementsTable.deliveredAt))
+      .orderBy(clerkClientStatementsTable.createdAt)
+      .limit(limit);
+    if (pending.length === 0) return 0;
+
+    const messagingOn = await isFeatureEnabled("messaging_notifications", null);
+    let claimed = 0;
+    for (const row of pending) {
+      // Claim the row first: the compare-and-set on delivered_at is the
+      // atomic once-only gate (mirroring the deadline_reminder_sends ledger).
+      // The whole pass runs in one bypass transaction, so a mid-pass crash
+      // rolls back claims AND message rows together — a statement is never
+      // half-delivered across the claim and the message log.
+      const claim = await getDb()
+        .update(clerkClientStatementsTable)
+        .set({ deliveredAt: new Date() })
+        .where(
+          and(
+            eq(clerkClientStatementsTable.id, row.id),
+            isNull(clerkClientStatementsTable.deliveredAt),
+          ),
+        )
+        .returning({ id: clerkClientStatementsTable.id });
+      if (claim.length === 0) continue; // another instance won this row
+      claimed++;
+
+      // A quiet month is not worth a notification: mark it delivered (the
+      // claim above) so it stops rescanning forever, but send nothing.
+      if (statementIsQuiet(row.facts)) continue;
+      // The claim is written even while messaging is dark (PL-02): turning
+      // the flag on later must not blast a backlog of old statements.
+      if (!messagingOn) continue;
+
+      const [prefs] = await getDb()
+        .select()
+        .from(alertPreferencesTable)
+        .where(eq(alertPreferencesTable.clientPartyId, row.clientPartyId))
+        .limit(1);
+      await fanOutAlert({
+        prefs,
+        clientPartyId: row.clientPartyId,
+        firmId: row.firmId,
+        templateKey: "client_statement_ready",
+        entityType: "clerk_client_statement",
+        entityId: pointerEntityRef("stmt", row.id),
+        // Same default as deadline reminders: with no prefs row, SMS is off.
+        smsDefaultWhenNoPrefs: false,
+      });
+    }
+    return claimed;
+  });
+}
+
 registerSweep(async function sweepClientStatements(): Promise<void> {
   // Opt-in: statements for every engaged client can spend firm tokens, so
   // the flag must be turned on deliberately (off/missing = none at all).
@@ -392,28 +467,40 @@ registerSweep(async function sweepClientStatements(): Promise<void> {
       )
       .limit(STATEMENT_BATCH);
   });
-  if (pairs.length === 0) return;
-
-  // No provider configured (or kill switch off) still produces statements —
-  // just from the template path.
-  let gateway: ClerkGateway | null = null;
-  try {
-    gateway = await getClerkGateway();
-  } catch {
-    gateway = null;
-  }
-  let generated = 0;
-  for (const pair of pairs) {
-    await generateClientStatement(
-      pair.firmId,
-      pair.clientPartyId,
-      monthStart,
-      gateway,
+  if (pairs.length > 0) {
+    // No provider configured (or kill switch off) still produces statements —
+    // just from the template path.
+    let gateway: ClerkGateway | null = null;
+    try {
+      gateway = await getClerkGateway();
+    } catch {
+      gateway = null;
+    }
+    let generated = 0;
+    for (const pair of pairs) {
+      await generateClientStatement(
+        pair.firmId,
+        pair.clientPartyId,
+        monthStart,
+        gateway,
+      );
+      generated += 1;
+    }
+    logger.info(
+      { generated, monthStart },
+      "client statement sweep: monthly statements generated",
     );
-    generated += 1;
   }
-  logger.info(
-    { generated, monthStart },
-    "client statement sweep: monthly statements generated",
-  );
+
+  // Delivery runs every pass — even when nothing was generated — so rows
+  // generated before delivery existed (and stragglers from a bounded pass)
+  // are still offered. The delivered_at compare-and-set keeps this idempotent
+  // across instances without the generation lock.
+  const delivered = await deliverClientStatements();
+  if (delivered > 0) {
+    logger.info(
+      { delivered },
+      "client statement sweep: statements offered to alert channels",
+    );
+  }
 });

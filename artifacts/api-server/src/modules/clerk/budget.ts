@@ -1,4 +1,4 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import {
   getDb,
   billingTiersTable,
@@ -59,6 +59,31 @@ export async function firmClerkUsage(firmId: string): Promise<FirmClerkUsage> {
     usedTokens: Number(used?.tokens ?? 0),
     budgetTokens: tier?.clerkMonthlyTokens ?? DEFAULT_MONTHLY_TOKENS,
   };
+}
+
+// Month-to-date spend split by ledger purpose — WHICH feature is consuming
+// the allowance, for the usage meter's breakdown. Same ledger, same firm
+// filter and the same month window as firmClerkUsage (the caller passes that
+// call's monthStart so the two reads can never straddle a month boundary);
+// heaviest purpose first. The purpose totals sum to usedTokens by
+// construction — one table, one predicate, grouped.
+export async function firmClerkUsageByPurpose(
+  firmId: string,
+  monthStart: Date,
+): Promise<{ purpose: string; tokens: number }[]> {
+  const tokens = sql<number>`coalesce(sum(coalesce(${clerkInferenceCallsTable.promptTokens}, 0) + coalesce(${clerkInferenceCallsTable.completionTokens}, 0)), 0)`;
+  const rows = await getDb()
+    .select({ purpose: clerkInferenceCallsTable.purpose, tokens })
+    .from(clerkInferenceCallsTable)
+    .where(
+      and(
+        eq(clerkInferenceCallsTable.firmId, firmId),
+        gte(clerkInferenceCallsTable.createdAt, monthStart),
+      ),
+    )
+    .groupBy(clerkInferenceCallsTable.purpose)
+    .orderBy(desc(tokens), clerkInferenceCallsTable.purpose);
+  return rows.map((r) => ({ purpose: r.purpose, tokens: Number(r.tokens) }));
 }
 
 // Budget pace (exhaust idea #7): turn the 429 cliff into a heads-up. Pure and

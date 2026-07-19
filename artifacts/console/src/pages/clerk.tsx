@@ -1161,13 +1161,23 @@ export function ClerkWorkspace() {
                         <p className="text-xs font-medium text-muted-foreground uppercase mb-1.5 flex items-center gap-2">
                           Extracted fields — amber rows need checking
                           {selected.extraction.exemplarCaseId && (
-                            <span
-                              className="normal-case rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
-                              title="Extraction was guided by a previously approved invoice from the same supplier"
+                            /* Provenance is navigable: selecting the exemplar
+                               id drives the same by-id case fetch the queue
+                               uses, so it opens even when that case has
+                               scrolled off the loaded pages. */
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const id = selected.extraction?.exemplarCaseId;
+                                if (id) setSelectedId(id);
+                              }}
+                              className="normal-case rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-800 transition-colors hover:bg-violet-100 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-950/70"
+                              title="Extraction was guided by a previously approved invoice from the same supplier — open that case"
+                              aria-label="Open the exemplar case that guided this extraction"
                               data-testid="badge-exemplar"
                             >
                               supplier memory
-                            </span>
+                            </button>
                           )}
                         </p>
                         <div className="divide-y text-sm">

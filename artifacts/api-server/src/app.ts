@@ -53,6 +53,7 @@ const NO_CONTEXT_ROUTES = new Set([
   "POST /api/clerk/client-import-draft",
   // A canary is 2× a corpus pass of model calls — far past the 30s cap.
   "POST /api/clerk/eval/canary",
+  "POST /api/clerk/eval/model-canary",
 ]);
 
 // Hard cap on how long a request may hold its transaction open. A handler that

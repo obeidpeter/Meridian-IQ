@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.34.0
+ * OpenAPI spec version: 0.35.0
  */
 
 export * from './acceptInvitationInput';
@@ -74,6 +74,9 @@ export * from './claimApplicability';
 export * from './claimDecisionInput';
 export * from './claimDecisionInputAction';
 export * from './claimDraftInput';
+export * from './claimGapReport';
+export * from './claimGapReportByReasonItem';
+export * from './claimGapReportUncoveredItem';
 export * from './claimRecord';
 export * from './claimRecordState';
 export * from './claimUpdateInput';
@@ -116,6 +119,7 @@ export * from './clerkMetricsCalibrationBucketsItem';
 export * from './clerkMetricsCases';
 export * from './clerkMetricsCasesByKind';
 export * from './clerkMetricsCasesByStatus';
+export * from './clerkMetricsCorrectionShapesItem';
 export * from './clerkMetricsCorrectionsItem';
 export * from './clerkMetricsCost';
 export * from './clerkMetricsEconomics';
@@ -136,6 +140,7 @@ export * from './clerkTierReport';
 export * from './clerkTierReportRowsItem';
 export * from './clerkTierReportRowsItemRecommendation';
 export * from './clerkUsage';
+export * from './clerkUsageByPurposeItem';
 export * from './clerkUsagePaceBand';
 export * from './clientImportDraft';
 export * from './clientImportDraftColumns';
@@ -254,6 +259,7 @@ export * from './gateMetrics';
 export * from './generateStatementsInput';
 export * from './getCashflowOutlookParams';
 export * from './getChaseListParams';
+export * from './getClerkClaimGapsParams';
 export * from './getClerkMetricsParams';
 export * from './getComplianceCalendarParams';
 export * from './getDashboardSummaryParams';
@@ -338,6 +344,10 @@ export * from './messageDeliveryInput';
 export * from './messageInput';
 export * from './messageInputChannel';
 export * from './messageStatus';
+export * from './modelCanaryReport';
+export * from './modelCanaryReportFixturesItem';
+export * from './modelCanaryReportVerdict';
+export * from './modelCanarySide';
 export * from './notFoundResponse';
 export * from './onboardingProspect';
 export * from './onboardingProspectStage';
@@ -426,6 +436,7 @@ export * from './resetPasswordInput';
 export * from './resolveCaseInput';
 export * from './revenueShareStatement';
 export * from './runAssessmentInput';
+export * from './runModelCanaryInput';
 export * from './runPromptCanaryInput';
 export * from './scoreboardRow';
 export * from './settlementEvent';

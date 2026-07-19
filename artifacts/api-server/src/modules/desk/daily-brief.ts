@@ -6,6 +6,7 @@ import {
   detectResistanceDrop,
   injectionResistanceMonths,
 } from "../clerk/resistance-watch";
+import { detectSpendAnomalies, firmSpendDays } from "../clerk/spend-watch";
 import { UNMAPPED_TITLE_PREFIX } from "./sweeps";
 
 // Operator daily brief (round-12 idea #1). The firm side has the weekly
@@ -32,6 +33,9 @@ export interface OperatorBrief {
   // Platform state worth knowing before acting.
   clerkEnabled: boolean;
   resistanceAlert: boolean;
+  // Firms whose latest-day Clerk spend is anomalously above their own
+  // trailing baseline (same detector as the spend-watch sweep).
+  spendAlerts: number;
   // Yesterday's throughput (Lagos day) — the "did the desk keep up" number.
   decidedYesterday: number;
 }
@@ -108,6 +112,7 @@ export async function computeOperatorBrief(
   ).rows;
 
   const resistance = detectResistanceDrop(await injectionResistanceMonths());
+  const spendAnomalies = detectSpendAnomalies(await firmSpendDays());
 
   return {
     asOf: now.toISOString(),
@@ -131,6 +136,7 @@ export async function computeOperatorBrief(
     unmappedCodeCases: Number(unmappedRows[0]?.count ?? 0),
     clerkEnabled: await isFeatureEnabled(CLERK_FLAG_KEY),
     resistanceAlert: resistance !== null,
+    spendAlerts: spendAnomalies.length,
     decidedYesterday: Number(decidedRows[0]?.count ?? 0),
   };
 }

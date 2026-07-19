@@ -36,6 +36,14 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email", "push"],
     description: "A B2C reporting window is about to breach.",
   },
+  // Clerk idea #5 delivery: a per-client monthly statement was generated.
+  // Pointer only (SEC-12): the message names no month, amounts or counts —
+  // the client opens the app to read the statement itself.
+  client_statement_ready: {
+    key: "client_statement_ready",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "A monthly compliance statement is ready to view.",
+  },
 };
 
 // Channel failover order when a provider fails. Push is terminal: if the Expo

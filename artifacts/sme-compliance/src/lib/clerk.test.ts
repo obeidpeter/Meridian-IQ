@@ -3,7 +3,9 @@ import {
   batchSummary,
   captureStatusLabel,
   captureBadgeClasses,
+  formatTokens,
   handleClerkGatewayError,
+  usageBreakdown,
   usagePct,
   fieldLabel,
 } from "./clerk";
@@ -59,6 +61,76 @@ describe("usagePct", () => {
     expect(usagePct(500, Number.NaN)).toBe(0);
     expect(usagePct(500, Number.POSITIVE_INFINITY)).toBe(0);
     expect(usagePct(Number.NaN, 1_000)).toBe(0);
+  });
+});
+
+describe("usageBreakdown", () => {
+  test("sorts purposes by spend descending", () => {
+    expect(
+      usageBreakdown([
+        { purpose: "ask_clerk", tokens: 200 },
+        { purpose: "extract_invoice", tokens: 900 },
+        { purpose: "draft_invoice", tokens: 500 },
+      ]).rows,
+    ).toEqual([
+      { purpose: "extract_invoice", tokens: 900 },
+      { purpose: "draft_invoice", tokens: 500 },
+      { purpose: "ask_clerk", tokens: 200 },
+    ]);
+  });
+
+  test("breaks spend ties alphabetically so the order is stable", () => {
+    expect(
+      usageBreakdown([
+        { purpose: "transcribe_voice", tokens: 100 },
+        { purpose: "ask_clerk", tokens: 100 },
+      ]).rows.map((r) => r.purpose),
+    ).toEqual(["ask_clerk", "transcribe_voice"]);
+  });
+
+  test("hides zero, negative, and non-finite rows", () => {
+    const { rows, overflow } = usageBreakdown([
+      { purpose: "extract_invoice", tokens: 900 },
+      { purpose: "segment_batch", tokens: 0 },
+      { purpose: "ask_clerk", tokens: -5 },
+      { purpose: "draft_invoice", tokens: Number.NaN },
+    ]);
+    expect(rows).toEqual([{ purpose: "extract_invoice", tokens: 900 }]);
+    expect(overflow).toBe(0);
+  });
+
+  test("caps visible rows and folds the remainder into overflow", () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({
+      purpose: `purpose_${i}`,
+      tokens: 600 - i * 100,
+    }));
+    const { rows, overflow } = usageBreakdown(many);
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toEqual({ purpose: "purpose_0", tokens: 600 });
+    expect(overflow).toBe(2);
+    // Only rows with actual spend count toward the fold.
+    expect(
+      usageBreakdown([...many, { purpose: "quiet", tokens: 0 }]).overflow,
+    ).toBe(2);
+  });
+
+  test("yields the empty shape for a missing or empty array", () => {
+    // Version skew: a pre-0.35.0 server doesn't send byPurpose at all.
+    expect(usageBreakdown(undefined)).toEqual({ rows: [], overflow: 0 });
+    expect(usageBreakdown([])).toEqual({ rows: [], overflow: 0 });
+  });
+});
+
+describe("formatTokens", () => {
+  test("compacts large counts and leaves small ones whole", () => {
+    expect(formatTokens(950)).toBe("950");
+    expect(formatTokens(12_400)).toBe("12.4K");
+    expect(formatTokens(1_500_000)).toBe("1.5M");
+  });
+
+  test("falls back to the dash placeholder for non-finite input", () => {
+    expect(formatTokens(Number.NaN)).toBe("—");
+    expect(formatTokens(Number.POSITIVE_INFINITY)).toBe("—");
   });
 });
 

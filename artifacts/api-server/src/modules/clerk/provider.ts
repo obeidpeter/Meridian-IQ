@@ -56,17 +56,60 @@ export function modelForPurpose(
 
 let cached: ClerkGateway | null = null;
 
-async function buildProvider(): Promise<ClerkProvider> {
+// Lazy client load, shared by the production gateway and the model-canary
+// gateway: importing the integration only when a call is actually made keeps
+// the AI env vars out of every test that injects a fake gateway.
+async function loadOpenAI() {
   const { openai } = await import(
     "@workspace/integrations-openai-ai-server"
   );
+  return openai;
+}
+type OpenAIClient = Awaited<ReturnType<typeof loadOpenAI>>;
+
+// The one place a completion request actually leaves the platform. Both the
+// tier-routing production provider and the fixed-model canary provider call
+// this with the model they resolved.
+async function completeWith(
+  openai: OpenAIClient,
+  model: string,
+  req: CompletionRequest,
+): Promise<CompletionResult> {
+  const response = await openai.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: req.system },
+      // Untrusted document/question content travels ONLY in the user
+      // message; the system prompt is fixed and versioned.
+      { role: "user", content: req.user as never },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: req.schemaName,
+        strict: true,
+        schema: req.jsonSchema,
+      },
+    },
+    max_completion_tokens: 8192,
+  });
+  return {
+    content: response.choices[0]?.message?.content ?? "",
+    promptTokens: response.usage?.prompt_tokens ?? null,
+    completionTokens: response.usage?.completion_tokens ?? null,
+    model,
+  };
+}
+
+async function buildProvider(): Promise<ClerkProvider> {
+  const openai = await loadOpenAI();
   const tiers = parseModelTiers(process.env.CLERK_MODEL_TIERS);
   return {
     model: CLERK_MODEL,
     async complete(req: CompletionRequest): Promise<CompletionResult> {
       const model = modelForPurpose(req.purpose, tiers, CLERK_MODEL);
       try {
-        return await completeWith(model, req);
+        return await completeWith(openai, model, req);
       } catch (err) {
         // Attach the routed model to the failure so the gateway's ERROR
         // ledger rows cohort against the model that was actually called —
@@ -78,36 +121,6 @@ async function buildProvider(): Promise<ClerkProvider> {
       }
     },
   };
-
-  async function completeWith(
-    model: string,
-    req: CompletionRequest,
-  ): Promise<CompletionResult> {
-    const response = await openai.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: req.system },
-        // Untrusted document/question content travels ONLY in the user
-        // message; the system prompt is fixed and versioned.
-        { role: "user", content: req.user as never },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: req.schemaName,
-          strict: true,
-          schema: req.jsonSchema,
-        },
-      },
-      max_completion_tokens: 8192,
-    });
-    return {
-      content: response.choices[0]?.message?.content ?? "",
-      promptTokens: response.usage?.prompt_tokens ?? null,
-      completionTokens: response.usage?.completion_tokens ?? null,
-      model,
-    };
-  }
 }
 
 export async function getClerkGateway(): Promise<ClerkGateway> {
@@ -115,6 +128,23 @@ export async function getClerkGateway(): Promise<ClerkGateway> {
     cached = createGateway(await buildProvider());
   }
   return cached;
+}
+
+// Model canary (model-canary.ts): a gateway whose provider ALWAYS calls the
+// given model id, bypassing CLERK_MODEL_TIERS routing — the candidate side of
+// a model canary must run the exact model under evaluation whatever tiering
+// is in force. Wrapped in the ordinary gateway so the kill switch, ledger and
+// schema validation apply to every candidate call; the ledger's model column
+// carries the candidate id, so canary spend cohorts by served model. No
+// caching: canaries are rare operator actions, each naming its own model.
+export async function buildGatewayForModel(
+  model: string,
+): Promise<ClerkGateway> {
+  const openai = await loadOpenAI();
+  return createGateway({
+    model,
+    complete: (req: CompletionRequest) => completeWith(openai, model, req),
+  });
 }
 
 // Voice transcription (C1: English voice notes). Kept beside the completion

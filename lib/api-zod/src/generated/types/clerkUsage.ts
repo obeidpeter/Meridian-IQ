@@ -3,8 +3,9 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.34.0
+ * OpenAPI spec version: 0.35.0
  */
+import type { ClerkUsageByPurposeItem } from './clerkUsageByPurposeItem';
 import type { ClerkUsagePaceBand } from './clerkUsagePaceBand';
 
 export interface ClerkUsage {
@@ -13,4 +14,5 @@ export interface ClerkUsage {
   budgetTokens: number;
   projectedTokens: number;
   paceBand: ClerkUsagePaceBand;
+  byPurpose: ClerkUsageByPurposeItem[];
 }

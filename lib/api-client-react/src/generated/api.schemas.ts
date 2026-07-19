@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.34.0
+ * OpenAPI spec version: 0.35.0
  */
 export interface HealthStatus {
   status: string;
@@ -1613,6 +1613,7 @@ export type OperatorBriefStuckBatches = {
 };
 
 export interface OperatorBrief {
+  spendAlerts: number;
   asOf: string;
   openCases: OperatorBriefOpenCases;
   unansweredEscalations: OperatorBriefUnansweredEscalations;
@@ -3385,6 +3386,16 @@ export type ClerkMetricsCorrectionsItem = {
   overrideRate: number;
 };
 
+export type ClerkMetricsCorrectionShapesItem = {
+  field: string;
+  shape: string;
+  count: number;
+  /** @nullable */
+  exampleExtracted: string | null;
+  /** @nullable */
+  exampleFinal: string | null;
+};
+
 export type ClerkMetricsSupplierAccuracyItem = {
   supplierName: string;
   /** @nullable */
@@ -3453,6 +3464,7 @@ export interface ClerkMetrics {
   cost: ClerkMetricsCost;
   economics: ClerkMetricsEconomics;
   corrections: ClerkMetricsCorrectionsItem[];
+  correctionShapes?: ClerkMetricsCorrectionShapesItem[];
   supplierAccuracy: ClerkMetricsSupplierAccuracyItem[];
   ask: ClerkMetricsAsk;
   platformSpend: ClerkMetricsPlatformSpend;
@@ -3650,6 +3662,75 @@ export interface PromptCanaryReport {
   fixtures: PromptCanaryReportFixturesItem[];
   verdict: PromptCanaryReportVerdict;
   verdictReason: string;
+}
+
+export interface ModelCanarySide {
+  model: string;
+  fieldsCompared: number;
+  fieldsCorrect: number;
+  /** @nullable */
+  accuracy: number | null;
+  injectionFixtures: number;
+  injectionResisted: number;
+  failures: number;
+}
+
+export interface RunModelCanaryInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  candidateModel: string;
+}
+
+export type ModelCanaryReportFixturesItem = {
+  key: string;
+  label: string;
+  riskLabel: string;
+  incumbentCorrect: number;
+  candidateCorrect: number;
+  fieldsCompared: number;
+  regressed: boolean;
+};
+
+export type ModelCanaryReportVerdict = typeof ModelCanaryReportVerdict[keyof typeof ModelCanaryReportVerdict];
+
+
+export const ModelCanaryReportVerdict = {
+  improvement: 'improvement',
+  comparable: 'comparable',
+  regression: 'regression',
+} as const;
+
+export interface ModelCanaryReport {
+  fixtureCount: number;
+  truncated: boolean;
+  candidateModel: string;
+  incumbent: ModelCanarySide;
+  candidate: ModelCanarySide;
+  fixtures: ModelCanaryReportFixturesItem[];
+  verdict: ModelCanaryReportVerdict;
+  verdictReason: string;
+}
+
+export type ClaimGapReportByReasonItem = {
+  code: string;
+  count: number;
+};
+
+export type ClaimGapReportUncoveredItem = {
+  question: string;
+  /** @nullable */
+  firmName: string | null;
+  createdAt: string;
+};
+
+export interface ClaimGapReport {
+  windowDays: number;
+  totalQuestions: number;
+  refusedTotal: number;
+  byReason: ClaimGapReportByReasonItem[];
+  uncovered: ClaimGapReportUncoveredItem[];
 }
 
 export interface StatementColumnMap {
@@ -4083,12 +4164,18 @@ export const ClerkUsagePaceBand = {
   critical: 'critical',
 } as const;
 
+export type ClerkUsageByPurposeItem = {
+  purpose: string;
+  tokens: number;
+};
+
 export interface ClerkUsage {
   monthStart: string;
   usedTokens: number;
   budgetTokens: number;
   projectedTokens: number;
   paceBand: ClerkUsagePaceBand;
+  byPurpose: ClerkUsageByPurposeItem[];
 }
 
 export interface ClerkEvalRun {
@@ -4374,6 +4461,14 @@ clientPartyId?: string;
 };
 
 export type GetClerkMetricsParams = {
+/**
+ * @minimum 1
+ * @maximum 365
+ */
+windowDays?: number;
+};
+
+export type GetClerkClaimGapsParams = {
 /**
  * @minimum 1
  * @maximum 365

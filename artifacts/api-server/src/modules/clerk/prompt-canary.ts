@@ -65,7 +65,11 @@ export interface PromptCanaryReport {
   verdictReason: string;
 }
 
-async function runSide(
+// One fixture through one gateway under one system prompt. Shared with the
+// model canary (model-canary.ts), which runs BOTH sides under the incumbent
+// EXTRACT_SYSTEM but on different gateways — the gateway parameter is the
+// seam that makes that possible.
+export async function runSide(
   fixture: EvalFixture,
   system: string,
   promptVersion: string,
@@ -95,14 +99,14 @@ async function runSide(
   };
 }
 
-function aggregate(
-  promptVersion: string,
+// Label-free side aggregation, shared with the model canary: each canary
+// attaches its own cohort label (promptVersion here, model there).
+export function aggregate(
   results: Array<ReturnType<typeof scoreFixture>>,
-): CanarySide {
+): Omit<CanarySide, "promptVersion"> {
   const fieldsCompared = results.reduce((s, r) => s + r.fieldsCompared, 0);
   const fieldsCorrect = results.reduce((s, r) => s + r.fieldsCorrect, 0);
   return {
-    promptVersion,
     fieldsCompared,
     fieldsCorrect,
     accuracy:
@@ -122,9 +126,11 @@ function aggregate(
 //  3. Accuracy more than epsilon above, or strictly better resistance at
 //     comparable accuracy, is an improvement.
 //  4. Everything else is comparable — inside the noise band.
+// Shared verbatim with the model canary — one rule, two kinds of candidate —
+// so the input type is the label-free side both canaries produce.
 export function canaryVerdict(
-  incumbent: CanarySide,
-  candidate: CanarySide,
+  incumbent: Omit<CanarySide, "promptVersion">,
+  candidate: Omit<CanarySide, "promptVersion">,
 ): { verdict: PromptCanaryReport["verdict"]; verdictReason: string } {
   const incAcc = incumbent.accuracy ?? 0;
   const candAcc = candidate.accuracy ?? 0;
@@ -176,16 +182,7 @@ export async function runPromptCanary(
     );
   }
 
-  // Same corpus the nightly eval measures — static, corrections-grown and
-  // red-team — capped because every fixture runs TWICE, and stratified so
-  // the cap can never evict the adversarial evidence the verdict's first
-  // rule depends on.
-  const full = [
-    ...EVAL_FIXTURES,
-    ...(await loadGrownFixtures()),
-    ...(await loadRedTeamFixtures()),
-  ];
-  const { fixtures, truncated } = selectCanaryCorpus(full, MAX_CANARY_FIXTURES);
+  const { fixtures, truncated } = await loadCanaryCorpus();
 
   const incumbentResults: Array<ReturnType<typeof scoreFixture>> = [];
   const candidateResults: Array<ReturnType<typeof scoreFixture>> = [];
@@ -198,25 +195,17 @@ export async function runPromptCanary(
     );
   }
 
-  const incumbentSide = aggregate(EXTRACT_PROMPT_VERSION, incumbentResults);
-  const candidateSide = aggregate(CANARY_PROMPT_VERSION, candidateResults);
+  const incumbentSide: CanarySide = {
+    promptVersion: EXTRACT_PROMPT_VERSION,
+    ...aggregate(incumbentResults),
+  };
+  const candidateSide: CanarySide = {
+    promptVersion: CANARY_PROMPT_VERSION,
+    ...aggregate(candidateResults),
+  };
   const { verdict, verdictReason } = canaryVerdict(incumbentSide, candidateSide);
 
-  const diffs: CanaryFixtureDiff[] = fixtures.map((f, i) => {
-    const inc = incumbentResults[i];
-    const cand = candidateResults[i];
-    return {
-      key: f.key,
-      label: f.label,
-      riskLabel: f.riskLabel,
-      incumbentCorrect: inc.fieldsCorrect,
-      candidateCorrect: cand.fieldsCorrect,
-      fieldsCompared: Math.max(inc.fieldsCompared, cand.fieldsCompared),
-      regressed:
-        cand.fieldsCorrect < inc.fieldsCorrect ||
-        (inc.injectionResisted === true && cand.injectionResisted === false),
-    };
-  });
+  const diffs = computeFixtureDiffs(fixtures, incumbentResults, candidateResults);
 
   await appendAudit({
     actorId,
@@ -261,4 +250,45 @@ export function selectCanaryCorpus(
     ...rest.slice(0, Math.max(0, cap - injections.length)),
   ];
   return { fixtures, truncated: full.length > fixtures.length };
+}
+
+// Same corpus the nightly eval measures — static, corrections-grown and
+// red-team — capped because every fixture runs TWICE, and stratified so
+// the cap can never evict the adversarial evidence the verdict's first
+// rule depends on. Shared with the model canary.
+export async function loadCanaryCorpus(): Promise<{
+  fixtures: EvalFixture[];
+  truncated: boolean;
+}> {
+  const full = [
+    ...EVAL_FIXTURES,
+    ...(await loadGrownFixtures()),
+    ...(await loadRedTeamFixtures()),
+  ];
+  return selectCanaryCorpus(full, MAX_CANARY_FIXTURES);
+}
+
+// Per-fixture diff with the regressed flag, shared with the model canary:
+// a fixture regressed when the candidate scored strictly worse, or lost an
+// injection the incumbent resisted.
+export function computeFixtureDiffs(
+  fixtures: EvalFixture[],
+  incumbentResults: Array<ReturnType<typeof scoreFixture>>,
+  candidateResults: Array<ReturnType<typeof scoreFixture>>,
+): CanaryFixtureDiff[] {
+  return fixtures.map((f, i) => {
+    const inc = incumbentResults[i];
+    const cand = candidateResults[i];
+    return {
+      key: f.key,
+      label: f.label,
+      riskLabel: f.riskLabel,
+      incumbentCorrect: inc.fieldsCorrect,
+      candidateCorrect: cand.fieldsCorrect,
+      fieldsCompared: Math.max(inc.fieldsCompared, cand.fieldsCompared),
+      regressed:
+        cand.fieldsCorrect < inc.fieldsCorrect ||
+        (inc.injectionResisted === true && cand.injectionResisted === false),
+    };
+  });
 }

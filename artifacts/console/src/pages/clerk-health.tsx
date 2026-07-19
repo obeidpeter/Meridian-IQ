@@ -5,6 +5,7 @@ import {
   useListClerkEvalRuns,
   useGetExtractionPrompt,
   useRunPromptCanary,
+  useRunModelCanary,
   useGetClerkTierReport,
   getGetClerkMetricsQueryKey,
   getListClerkEvalRunsQueryKey,
@@ -13,11 +14,13 @@ import {
 } from "@workspace/api-client-react";
 import type {
   ClerkMetricsCases,
+  ModelCanaryReport,
   PromptCanaryReport,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -123,6 +126,23 @@ export function overrideRateClass(rate: number): string {
   if (rate > 0.25) return "text-red-600 dark:text-red-400 font-medium";
   if (rate > 0.1) return "text-amber-700 dark:text-amber-400 font-medium";
   return "";
+}
+
+// A correction-shape example renders as "extracted → final"; a missing side
+// (the operator filled a blank, or blanked a hallucination) shows the same
+// em-dash sentinel the eval mismatch rows use.
+export function shapeExample(
+  extracted: string | null,
+  final: string | null,
+): string {
+  return `${extracted ?? "—"} → ${final ?? "—"}`;
+}
+
+// Model-canary fixture rows: a regressed row (the candidate read the fixture
+// worse than the incumbent) gets the red treatment; everything else stays
+// plain.
+export function modelCanaryRowClass(regressed: boolean): string {
+  return regressed ? "bg-red-50 dark:bg-red-950/40" : "";
 }
 
 function BreakdownRow({
@@ -278,6 +298,165 @@ function PromptCanaryCard() {
                   .join("; ")}
               </div>
             )}
+            <p className="text-xs text-muted-foreground">
+              {report.fixtureCount} fixture(s)
+              {report.truncated ? " (corpus truncated to the canary cap)" : ""} ·
+              both sides ran the same corpus through the live gateway.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Model canary: the prompt canary's twin for models — run the eval corpus
+// under a CANDIDATE model and the incumbent side by side. Decision support
+// only — the verdict rule is deterministic and server-side, nothing is
+// stored, and switching models is an env change (CLERK_MODEL_TIERS) the
+// operator makes with this evidence in hand.
+function ModelCanaryCard() {
+  const { toast } = useToast();
+  const [candidate, setCandidate] = useState("");
+  const [report, setReport] = useState<ModelCanaryReport | null>(null);
+  const canary = useRunModelCanary({
+    mutation: {
+      onSuccess: (res) => setReport(res),
+      onError: (e) =>
+        toast({
+          title: "Model canary failed",
+          description:
+            serverErrorMessage(e) ?? "Could not run the model canary.",
+          variant: "destructive",
+        }),
+    },
+  });
+
+  const side = (label: string, s: ModelCanaryReport["incumbent"]) => (
+    <div
+      className="rounded-md border p-3 space-y-1 text-sm"
+      data-testid={`model-canary-${label}`}
+    >
+      <p className="text-xs font-medium text-muted-foreground uppercase">
+        {label} · <span className="normal-case font-mono">{s.model}</span>
+      </p>
+      <p>
+        Accuracy:{" "}
+        <span className="font-semibold tabular-nums">
+          {s.accuracy != null ? formatPct(s.accuracy) : "—"}
+        </span>{" "}
+        <span className="text-muted-foreground">
+          ({s.fieldsCorrect}/{s.fieldsCompared} fields)
+        </span>
+      </p>
+      <p>
+        Injection resisted:{" "}
+        <span className="font-semibold tabular-nums">
+          {s.injectionResisted}/{s.injectionFixtures}
+        </span>
+        {s.failures > 0 && (
+          <span className="text-muted-foreground"> · {s.failures} failed call(s)</span>
+        )}
+      </p>
+    </div>
+  );
+
+  return (
+    <Card data-testid="section-model-canary">
+      <CardHeader>
+        <CardTitle className="text-base">Model canary</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Test a candidate model against the incumbent over the same eval
+          corpus — twice the model calls of an evaluation run. The verdict is
+          deterministic: injection resistance may never drop, and accuracy is
+          judged outside a 2% noise band. Nothing is stored; adopting a model
+          is an env change (CLERK_MODEL_TIERS), canary first.
+        </p>
+        <Input
+          value={candidate}
+          onChange={(e) => {
+            setCandidate(e.target.value);
+            setReport(null);
+          }}
+          placeholder="Candidate model id…"
+          maxLength={120}
+          aria-label="Candidate model"
+          data-testid="input-model-candidate"
+        />
+        <Button
+          size="sm"
+          disabled={canary.isPending || candidate.trim().length === 0}
+          onClick={() =>
+            canary.mutate({ data: { candidateModel: candidate.trim() } })
+          }
+          data-testid="button-run-model-canary"
+        >
+          {canary.isPending ? "Running canary…" : "Run canary"}
+        </Button>
+        {report && (
+          <div className="space-y-3" data-testid="model-canary-report">
+            <div className="flex items-center gap-2">
+              <span className={pillClasses(VERDICT_TONE[report.verdict] ?? "slate")}>
+                {report.verdict}
+              </span>
+              <p className="text-sm">{report.verdictReason}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {side("incumbent", report.incumbent)}
+              {side("candidate", report.candidate)}
+            </div>
+            <div className="overflow-x-auto">
+              <table
+                className="w-full text-sm"
+                data-testid="table-model-canary-fixtures"
+              >
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Fixture</th>
+                    <th className="py-2 pr-3 font-medium">Risk</th>
+                    <th className="py-2 pr-3 font-medium text-right">
+                      Incumbent
+                    </th>
+                    <th className="py-2 font-medium text-right">Candidate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {report.fixtures.map((f) => (
+                    <tr
+                      key={f.key}
+                      className={modelCanaryRowClass(f.regressed)}
+                      data-testid={`row-model-fixture-${f.key}`}
+                    >
+                      <td className="py-2 pr-3">
+                        {f.label}
+                        {f.regressed && (
+                          <span className="ml-2 text-[10px] font-medium uppercase text-red-600 dark:text-red-400">
+                            regressed
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span
+                          className={pillClasses(
+                            EVAL_RISK_TONE[f.riskLabel] ?? "slate",
+                          )}
+                        >
+                          {f.riskLabel}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {f.incumbentCorrect}/{f.fieldsCompared}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {f.candidateCorrect}/{f.fieldsCompared}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="text-xs text-muted-foreground">
               {report.fixtureCount} fixture(s)
               {report.truncated ? " (corpus truncated to the canary cap)" : ""} ·
@@ -796,6 +975,59 @@ export function HealthPanel() {
             </CardContent>
           </Card>
 
+          {metrics.correctionShapes && metrics.correctionShapes.length > 0 && (
+            <Card data-testid="section-correction-shapes">
+              <CardHeader>
+                <CardTitle className="text-base">Correction shapes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  What KIND of mistake each override was — recurring
+                  correction patterns from the same exhaust, with an example
+                  of the change operators made.
+                </p>
+                <div className="overflow-x-auto">
+                  <table
+                    className="w-full text-sm"
+                    data-testid="table-correction-shapes"
+                  >
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-3 font-medium">Field</th>
+                        <th className="py-2 pr-3 font-medium">Shape</th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Count
+                        </th>
+                        <th className="py-2 font-medium">Example</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {metrics.correctionShapes.map((s) => (
+                        <tr
+                          key={`${s.field}-${s.shape}`}
+                          data-testid={`row-correction-shape-${s.field}-${s.shape}`}
+                        >
+                          <td className="py-2 pr-3">
+                            <code className="text-xs">{s.field}</code>
+                          </td>
+                          <td className="py-2 pr-3">
+                            {s.shape.replace(/_/g, " ")}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {s.count}
+                          </td>
+                          <td className="py-2 text-xs text-muted-foreground">
+                            {shapeExample(s.exampleExtracted, s.exampleFinal)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card data-testid="section-supplier-accuracy">
             <CardHeader>
               <CardTitle className="text-base">Supplier accuracy</CardTitle>
@@ -1253,6 +1485,7 @@ export function HealthPanel() {
       )}
 
       <PromptCanaryCard />
+      <ModelCanaryCard />
     </div>
   );
 }
