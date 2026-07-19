@@ -20,7 +20,6 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   RefreshControl,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -37,6 +36,7 @@ import {
   EmptyState,
   ErrorState,
   rowBetween,
+  ScreenScroll,
   Skeleton,
   stackHeaderOptions,
   webContentMax,
@@ -223,13 +223,11 @@ export default function InvoiceDetailScreen() {
           invoice ? invoice.invoiceNumber : "Invoice",
         )}
       />
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
+      <ScreenScroll
         contentContainerStyle={[
           styles.content,
           { paddingBottom: insets.bottom + 40 },
         ]}
-        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={detailQuery.isRefetching || attemptsQuery.isRefetching}
@@ -580,7 +578,7 @@ export default function InvoiceDetailScreen() {
             ) : null}
           </View>
         ) : null}
-      </ScrollView>
+      </ScreenScroll>
     </>
   );
 }

@@ -17,7 +17,6 @@ import React, { useCallback } from "react";
 import {
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -32,6 +31,7 @@ import {
   Divider,
   ErrorState,
   rowBetween,
+  ScreenScroll,
   Skeleton,
   StatTile,
   webContentMax,
@@ -106,13 +106,11 @@ export default function HomeScreen() {
   const canClerkCapture = !!me?.capabilities?.includes("clerk.capture");
 
   return (
-    <ScrollView
-      style={{ backgroundColor: colors.background }}
+    <ScreenScroll
       contentContainerStyle={[
         styles.content,
         { paddingBottom: insets.bottom + 100 },
       ]}
-      showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
           refreshing={query.isRefetching}
@@ -264,7 +262,7 @@ export default function HomeScreen() {
           </View>
         </View>
       ) : null}
-    </ScrollView>
+    </ScreenScroll>
   );
 }
 

@@ -27,6 +27,17 @@ function previousMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/**
+ * Spreadsheet-safe cell: quote-escape, and neutralize formula injection by
+ * prefixing cells that start with =, +, - or @ with a single quote — the
+ * client-side counterpart of api-server/src/lib/csv.ts (CWE-1236).
+ */
+function csvCell(v: unknown): string {
+  let s = String(v);
+  if (/^[=+\-@]/.test(s)) s = `'${s}`;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
 function toCsv(rows: RevenueShareStatement[]): string {
   const header = [
     "Firm",
@@ -57,7 +68,7 @@ function toCsv(rows: RevenueShareStatement[]): string {
       r.revenueShareAmount,
       r.generatedAt,
     ]
-      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+      .map(csvCell)
       .join(","),
   );
   return [header.join(","), ...lines].join("\n");

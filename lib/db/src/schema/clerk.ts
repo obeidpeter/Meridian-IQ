@@ -391,7 +391,6 @@ export const partyNameAliasesTable = pgTable(
   },
   (t) => [unique().on(t.firmId, t.alias)],
 );
-export type PartyNameAlias = typeof partyNameAliasesTable.$inferSelect;
 
 // ============ Clerk idea #9 — adversarial eval growth (red team) ============
 // Model-GENERATED injection attempts against Clerk's own extraction: a base
@@ -417,8 +416,6 @@ export const clerkRedTeamFixturesTable = pgTable("clerk_red_team_fixtures", {
   decoys: jsonb("decoys").$type<Record<string, string>>().notNull(),
   createdAt: createdAt(),
 });
-export type ClerkRedTeamFixtureRow =
-  typeof clerkRedTeamFixturesTable.$inferSelect;
 
 // ============ Clerk power D — weekly firm digest ============
 // One row per firm per ISO week. The FACTS in a digest are computed by SQL

@@ -30,5 +30,3 @@ export const chaseLogTable = pgTable(
     index("chase_log_firm_idx").on(t.firmId),
   ],
 );
-
-export type ChaseLogRow = typeof chaseLogTable.$inferSelect;

@@ -62,7 +62,7 @@ async function findOrCreateBuyer(
   return created.id;
 }
 
-export async function runSync(
+async function runSync(
   connectionId: string,
   existingRunId?: string,
 ): Promise<{

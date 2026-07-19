@@ -146,11 +146,13 @@ export function ClerkDisabledBanner({ children }: { children: ReactNode }) {
 export function ClerkPageHeader({
   eyebrow,
   title,
+  titleTestId,
   description,
   right,
 }: {
   eyebrow: string;
   title: string;
+  titleTestId?: string;
   description?: string;
   right?: ReactNode;
 }) {
@@ -160,7 +162,12 @@ export function ClerkPageHeader({
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
           {eyebrow}
         </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">{title}</h1>
+        <h1
+          className="mt-1 text-3xl font-bold tracking-tight"
+          data-testid={titleTestId}
+        >
+          {title}
+        </h1>
         {description ? (
           <p className="mt-1.5 text-sm text-muted-foreground max-w-xl">
             {description}

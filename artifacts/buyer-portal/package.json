@@ -37,6 +37,7 @@
     "@workspace/api-errors": "workspace:*",
     "@workspace/format": "workspace:*",
     "@workspace/web-config": "workspace:*",
+    "@workspace/web-ui": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "date-fns": "^3.6.0",

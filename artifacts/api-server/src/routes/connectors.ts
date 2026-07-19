@@ -17,6 +17,7 @@ import {
   assertCan,
   assertPartyAccess,
   assertSameTenant,
+  narrowToClientPartyScope,
   requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
@@ -48,7 +49,10 @@ router.get("/connectors", requireFlag("erp_connectors"), async (req, res): Promi
 router.get("/connections", requireFlag("erp_connectors"), async (req, res): Promise<void> => {
   assertCan(req.principal, "connector.read");
   const query = ListErpConnectionsQueryParams.safeParse(req.query);
-  const clientPartyId = query.success ? query.data.clientPartyId : undefined;
+  const clientPartyId = narrowToClientPartyScope(
+    req.principal,
+    query.success ? query.data.clientPartyId : undefined,
+  );
   const tenant = tenantFirmId(req.principal);
   const conditions = [];
   if (tenant) conditions.push(eq(erpConnectionsTable.firmId, tenant));
