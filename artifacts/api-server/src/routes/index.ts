@@ -27,6 +27,7 @@ import certificationRouter from "./certification";
 import connectorsRouter from "./connectors";
 import claimsRouter from "./claims";
 import clerkRouter from "./clerk";
+import staffRouter from "./staff";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 import "../modules/desk/triage";
@@ -37,6 +38,7 @@ import "../modules/clerk/client-statement";
 import "../modules/clerk/red-team";
 import "../modules/clerk/resistance-watch";
 import "../modules/clerk/spend-watch";
+import "../modules/clerk/quality-watch";
 import "../modules/push/register";
 import "../modules/invoice/register";
 
@@ -70,5 +72,6 @@ router.use(certificationRouter);
 router.use(connectorsRouter);
 router.use(claimsRouter);
 router.use(clerkRouter);
+router.use(staffRouter);
 
 export default router;
