@@ -268,6 +268,19 @@ function CaptureContent() {
       fallbackTitle: "Clerk couldn't take that",
     });
 
+  // Shared success plumbing for both the single and batch create paths.
+  // Deliberately leaves captureVoice alone (batch never accepts voice; the
+  // single path clears it in its own tail) and the per-path result state.
+  // Query invalidation is per-path too: the single path refetches at once,
+  // while the batch path defers it until the queued bundle lands (see the
+  // activeBatchStatus effect below).
+  const finishSubmission = () => {
+    setCaptureText("");
+    setCaptureFile(null);
+    setPendingDuplicate(null);
+    setDisabledBanner(false);
+  };
+
   const createCase = useCreateClerkCase({
     mutation: {
       onSuccess: (kase: ClerkCase) => {
@@ -275,12 +288,9 @@ function CaptureContent() {
           queryKey: getListClerkCasesQueryKey(),
         });
         queryClient.invalidateQueries({ queryKey: getGetClerkUsageQueryKey() });
+        finishSubmission();
         setSelectedId(kase.id);
-        setCaptureText("");
-        setCaptureFile(null);
         setCaptureVoice(null);
-        setPendingDuplicate(null);
-        setDisabledBanner(false);
         toast({
           title:
             kase.status === "failed" ? "Clerk couldn't read that" : "Sent to Clerk",
@@ -297,9 +307,7 @@ function CaptureContent() {
         if (errorStatus(e) === 409) {
           setPendingDuplicate({
             payload: variables.data,
-            message:
-              serverErrorMessage(e) ??
-              "You've already sent this exact document to Clerk.",
+            message: serverErrorMessage(e),
           });
           return;
         }
@@ -311,11 +319,8 @@ function CaptureContent() {
   const createBatch = useCreateClerkBatch({
     mutation: {
       onSuccess: (batch: ClerkBatchView) => {
+        finishSubmission();
         setActiveBatchId(batch.id);
-        setCaptureText("");
-        setCaptureFile(null);
-        setPendingDuplicate(null);
-        setDisabledBanner(false);
       },
       onError: (e) => handleClerkError(e),
     },
@@ -350,6 +355,15 @@ function CaptureContent() {
   // PDF's text layer), so the toggle hides for photo and voice sources.
   const batchEligible = captureVoice == null && (captureFile == null || isPdfFile);
 
+  // The pasted-text payload both the single and batch paths submit. The
+  // "as const" keeps sourceType a literal so it satisfies both create inputs
+  // outside mutate()'s contextual position.
+  const textPayload = () => ({
+    sourceType: "text" as const,
+    name: "pasted-text.txt",
+    text: captureText,
+  });
+
   const submitCapture = async () => {
     setActiveBatchId(null);
     if (batchMode && batchEligible && (captureFile || captureText.trim())) {
@@ -359,13 +373,7 @@ function CaptureContent() {
           data: { sourceType: "pdf", name: captureFile.name, pdfBase64: b64 },
         });
       } else {
-        createBatch.mutate({
-          data: {
-            sourceType: "text",
-            name: "pasted-text.txt",
-            text: captureText,
-          },
-        });
+        createBatch.mutate({ data: textPayload() });
       }
       return;
     }
@@ -389,13 +397,7 @@ function CaptureContent() {
         },
       });
     } else if (captureText.trim()) {
-      createCase.mutate({
-        data: {
-          sourceType: "text",
-          name: "pasted-text.txt",
-          text: captureText,
-        },
-      });
+      createCase.mutate({ data: textPayload() });
     }
   };
 
