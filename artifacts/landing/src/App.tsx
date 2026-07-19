@@ -18,6 +18,7 @@ import {
   getGetMeQueryKey,
 } from "@workspace/api-client-react";
 import type { Me } from "@workspace/api-client-react";
+import { pillClasses } from "@workspace/format";
 import {
   FileCheck2,
   Building2,
@@ -218,14 +219,6 @@ function roleListLabel(roles: Role[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-// Standard status-pill recipe (design language §8): base + tone.
-const PILL_BASE =
-  "inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border";
-const PILL_TEAL =
-  "bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-900";
-const PILL_SLATE =
-  "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800";
-
 // Fall back to a friendly generic per failure kind.
 function loginErrorMessage(err: unknown): string {
   const status = (err as { status?: number })?.status;
@@ -279,14 +272,14 @@ function AppCard({
             aria-hidden="true"
           />
         ) : isPublic ? (
-          <span className={`${PILL_BASE} ${PILL_SLATE}`}>Free</span>
+          <span className={pillClasses("slate")}>Free</span>
         ) : canOpen ? (
-          <span className={`${PILL_BASE} ${PILL_TEAL}`}>
+          <span className={pillClasses("teal")}>
             <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Available to
             you
           </span>
         ) : (
-          <span className={`${PILL_BASE} ${PILL_SLATE}`}>
+          <span className={pillClasses("slate")}>
             <Lock className="h-3 w-3" aria-hidden="true" />{" "}
             {role ? "Not for your role" : "Requires sign-in"}
           </span>

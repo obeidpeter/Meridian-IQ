@@ -6,7 +6,7 @@ export function FeatureUnavailable({ feature }: { feature: string }) {
     <Card data-testid="card-feature-unavailable">
       <CardContent className="pt-6">
         <div className="flex items-start gap-3">
-          <Lock className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
+          <Lock className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
           <div>
             <p className="font-medium">{feature} is not yet enabled</p>
             <p className="text-sm text-muted-foreground mt-1">

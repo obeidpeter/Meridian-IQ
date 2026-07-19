@@ -25,6 +25,9 @@
     },
     {
       "path": "../../lib/api-errors"
+    },
+    {
+      "path": "../../lib/web-ui"
     }
   ]
 }
