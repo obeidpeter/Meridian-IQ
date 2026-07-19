@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.34.0
+  version: 0.35.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -3750,6 +3750,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/ClerkMetrics"
 
+  /clerk/claim-gaps:
+    get:
+      operationId: getClerkClaimGaps
+      tags: [clerk]
+      summary: Refused Ask Clerk questions clustered by cause — the register's demand signal
+      parameters:
+        - name: windowDays
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+      responses:
+        "200":
+          description: Deterministic refusal-clustering report (pure SQL, zero model calls)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimGapReport"
+  /clerk/eval/model-canary:
+    post:
+      operationId: runModelCanary
+      tags: [clerk]
+      summary: Run the eval corpus under a CANDIDATE model side by side with the incumbent (spends tokens)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunModelCanaryInput"
+      responses:
+        "200":
+          description: Side-by-side scores and the deterministic verdict; nothing is stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelCanaryReport"
 components:
   parameters:
     IdParam:
@@ -6038,8 +6076,13 @@ components:
           clerkEnabled,
           resistanceAlert,
           decidedYesterday,
+          spendAlerts,
         ]
       properties:
+        # Firms whose latest-day Clerk spend is anomalously above their own
+        # trailing baseline (same detector as the spend-watch sweep).
+        spendAlerts:
+          type: integer
         asOf:
           type: string
         openCases:
@@ -8856,6 +8899,122 @@ components:
           enum: [improvement, comparable, regression]
         verdictReason:
           type: string
+    ModelCanarySide:
+      type: object
+      required:
+        [
+          model,
+          fieldsCompared,
+          fieldsCorrect,
+          accuracy,
+          injectionFixtures,
+          injectionResisted,
+          failures,
+        ]
+      properties:
+        model:
+          type: string
+        fieldsCompared:
+          type: integer
+        fieldsCorrect:
+          type: integer
+        accuracy:
+          type: ["number", "null"]
+        injectionFixtures:
+          type: integer
+        injectionResisted:
+          type: integer
+        failures:
+          type: integer
+    RunModelCanaryInput:
+      type: object
+      required: [candidateModel]
+      properties:
+        candidateModel:
+          type: string
+          minLength: 1
+          maxLength: 120
+    ModelCanaryReport:
+      type: object
+      required:
+        [fixtureCount, truncated, candidateModel, incumbent, candidate, fixtures, verdict, verdictReason]
+      properties:
+        fixtureCount:
+          type: integer
+        truncated:
+          type: boolean
+        candidateModel:
+          type: string
+        incumbent:
+          $ref: "#/components/schemas/ModelCanarySide"
+        candidate:
+          $ref: "#/components/schemas/ModelCanarySide"
+        fixtures:
+          type: array
+          items:
+            type: object
+            required:
+              [key, label, riskLabel, incumbentCorrect, candidateCorrect, fieldsCompared, regressed]
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              riskLabel:
+                type: string
+              incumbentCorrect:
+                type: integer
+              candidateCorrect:
+                type: integer
+              fieldsCompared:
+                type: integer
+              regressed:
+                type: boolean
+        # Same deterministic verdict rule as the prompt canary: injection
+        # resistance may never drop; accuracy inside the noise band is
+        # comparable. Promotion stays an operator env-config change.
+        verdict:
+          type: string
+          enum: [improvement, comparable, regression]
+        verdictReason:
+          type: string
+    ClaimGapReport:
+      type: object
+      required: [windowDays, totalQuestions, refusedTotal, byReason, uncovered]
+      properties:
+        windowDays:
+          type: integer
+        totalQuestions:
+          type: integer
+        refusedTotal:
+          type: integer
+        # Refusals grouped by their deterministic cause code (parsed from the
+        # fixed refusal sentences ask.ts produces).
+        byReason:
+          type: array
+          items:
+            type: object
+            required: [code, count]
+            properties:
+              code:
+                type: string
+              count:
+                type: integer
+        # The demand signal: newest questions refused for lack of a matching
+        # claim — what the register should grow to answer.
+        uncovered:
+          type: array
+          items:
+            type: object
+            required: [question, firmName, createdAt]
+            properties:
+              question:
+                type: string
+              firmName:
+                type: ["string", "null"]
+              createdAt:
+                type: string
+                format: date-time
     StatementColumnMap:
       type: object
       required: [date, narration]
@@ -9482,7 +9641,7 @@ components:
 
     ClerkUsage:
       type: object
-      required: [monthStart, usedTokens, budgetTokens, projectedTokens, paceBand]
+      required: [monthStart, usedTokens, budgetTokens, projectedTokens, paceBand, byPurpose]
       properties:
         monthStart:
           type: string
@@ -9500,6 +9659,19 @@ components:
         paceBand:
           type: string
           enum: [ok, warning, critical]
+        # Spend transparency: month-to-date tokens split by ledger purpose,
+        # largest first, so a firm nearing its cap can see WHICH Clerk
+        # feature is consuming the allowance.
+        byPurpose:
+          type: array
+          items:
+            type: object
+            required: [purpose, tokens]
+            properties:
+              purpose:
+                type: string
+              tokens:
+                type: integer
 
     ClerkEvalRun:
       type: object

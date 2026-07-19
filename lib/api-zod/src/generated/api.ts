@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.34.0
+ * OpenAPI spec version: 0.35.0
  */
 import * as zod from 'zod';
 
@@ -2514,6 +2514,7 @@ export const GetFirmReceivablesResponse = zod.object({
  * @summary The desk's deterministic daily brief — queues, stuck work, platform state, yesterday's throughput
  */
 export const GetOperatorBriefResponse = zod.object({
+  "spendAlerts": zod.number(),
   "asOf": zod.string(),
   "openCases": zod.object({
   "byPriority": zod.array(zod.object({
@@ -5490,7 +5491,11 @@ export const GetClerkUsageResponse = zod.object({
   "usedTokens": zod.number(),
   "budgetTokens": zod.number(),
   "projectedTokens": zod.number(),
-  "paceBand": zod.enum(['ok', 'warning', 'critical'])
+  "paceBand": zod.enum(['ok', 'warning', 'critical']),
+  "byPurpose": zod.array(zod.object({
+  "purpose": zod.string(),
+  "tokens": zod.number()
+}))
 })
 
 
@@ -5621,6 +5626,80 @@ export const GetClerkMetricsResponse = zod.object({
   "toRate": zod.number(),
   "injectionFixtures": zod.number()
 }).optional()
+})
+
+
+/**
+ * @summary Refused Ask Clerk questions clustered by cause — the register's demand signal
+ */
+export const getClerkClaimGapsQueryWindowDaysMax = 365;
+
+
+
+export const GetClerkClaimGapsQueryParams = zod.object({
+  "windowDays": zod.coerce.number().min(1).max(getClerkClaimGapsQueryWindowDaysMax).optional()
+})
+
+export const GetClerkClaimGapsResponse = zod.object({
+  "windowDays": zod.number(),
+  "totalQuestions": zod.number(),
+  "refusedTotal": zod.number(),
+  "byReason": zod.array(zod.object({
+  "code": zod.string(),
+  "count": zod.number()
+})),
+  "uncovered": zod.array(zod.object({
+  "question": zod.string(),
+  "firmName": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Run the eval corpus under a CANDIDATE model side by side with the incumbent (spends tokens)
+ */
+export const runModelCanaryBodyCandidateModelMax = 120;
+
+
+
+export const RunModelCanaryBody = zod.object({
+  "candidateModel": zod.string().min(1).max(runModelCanaryBodyCandidateModelMax)
+})
+
+export const RunModelCanaryResponse = zod.object({
+  "fixtureCount": zod.number(),
+  "truncated": zod.boolean(),
+  "candidateModel": zod.string(),
+  "incumbent": zod.object({
+  "model": zod.string(),
+  "fieldsCompared": zod.number(),
+  "fieldsCorrect": zod.number(),
+  "accuracy": zod.number().nullable(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "failures": zod.number()
+}),
+  "candidate": zod.object({
+  "model": zod.string(),
+  "fieldsCompared": zod.number(),
+  "fieldsCorrect": zod.number(),
+  "accuracy": zod.number().nullable(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "failures": zod.number()
+}),
+  "fixtures": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "riskLabel": zod.string(),
+  "incumbentCorrect": zod.number(),
+  "candidateCorrect": zod.number(),
+  "fieldsCompared": zod.number(),
+  "regressed": zod.boolean()
+})),
+  "verdict": zod.enum(['improvement', 'comparable', 'regression']),
+  "verdictReason": zod.string()
 })
 
 
