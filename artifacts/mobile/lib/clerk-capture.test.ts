@@ -1,9 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  base64ByteLength,
+  buildCameraCaseInput,
+  CAMERA_EMPTY_MESSAGE,
+  CAMERA_RETAKE_MESSAGE,
+  cameraPhotoName,
   CLERK_STATUS_META,
   clerkStatusMeta,
   fieldLabel,
+  MAX_FILE_BYTES,
   pickSourceType,
 } from "./clerk-capture.ts";
 
@@ -75,6 +81,70 @@ test("pickSourceType falls back to the extension for generic mimes", () => {
 test("pickSourceType defaults ambiguous picks to image", () => {
   assert.equal(pickSourceType("capture"), "image");
   assert.equal(pickSourceType("", "application/octet-stream"), "image");
+});
+
+// The camera path ("Snap it"): what the picker hands back must become the
+// exact same image-case submission a picked photo file produces, with the
+// oversize guard applied to the bytes the server would actually receive.
+
+test("base64ByteLength reports the decoded size, padded or not", () => {
+  assert.equal(base64ByteLength(""), 0);
+  assert.equal(base64ByteLength("   "), 0);
+  // "A" → "QQ==": 1 byte, two padding chars.
+  assert.equal(base64ByteLength(Buffer.from("A").toString("base64")), 1);
+  // Some Android encoders omit the padding.
+  assert.equal(base64ByteLength("QQ"), 1);
+  assert.equal(base64ByteLength(Buffer.from("AB").toString("base64")), 2);
+  assert.equal(base64ByteLength(Buffer.from("ABC").toString("base64")), 3);
+  const bytes = 12_345;
+  assert.equal(
+    base64ByteLength(Buffer.alloc(bytes).toString("base64")),
+    bytes,
+  );
+});
+
+test("cameraPhotoName is deterministic UTC for an injected timestamp", () => {
+  const at = new Date("2026-07-19T14:32:05.123Z");
+  assert.equal(cameraPhotoName(at), "photo-20260719-143205.jpg");
+  // Same instant, same name — no hidden clock or randomness.
+  assert.equal(cameraPhotoName(at), cameraPhotoName(new Date(at.getTime())));
+  assert.equal(
+    cameraPhotoName(new Date("2026-01-02T03:04:05Z")),
+    "photo-20260102-030405.jpg",
+  );
+});
+
+test("buildCameraCaseInput assembles the picked-photo submission shape", () => {
+  const b64 = Buffer.from("fake jpeg bytes").toString("base64");
+  const built = buildCameraCaseInput(b64, new Date("2026-07-19T09:00:00Z"));
+  assert.ok(built.ok);
+  assert.deepEqual(built.input, {
+    sourceType: "image",
+    name: "photo-20260719-090000.jpg",
+    contentType: "image/jpeg",
+    imageBase64: b64,
+  });
+});
+
+test("buildCameraCaseInput accepts exactly 5 MB and refuses one byte more", () => {
+  const at = new Date("2026-07-19T09:00:00Z");
+  const atLimit = buildCameraCaseInput(
+    Buffer.alloc(MAX_FILE_BYTES).toString("base64"),
+    at,
+  );
+  assert.equal(atLimit.ok, true);
+  const over = buildCameraCaseInput(
+    Buffer.alloc(MAX_FILE_BYTES + 1).toString("base64"),
+    at,
+  );
+  assert.equal(over.ok, false);
+  if (!over.ok) assert.equal(over.message, CAMERA_RETAKE_MESSAGE);
+});
+
+test("buildCameraCaseInput refuses an empty capture with its own copy", () => {
+  const refused = buildCameraCaseInput("", new Date());
+  assert.equal(refused.ok, false);
+  if (!refused.ok) assert.equal(refused.message, CAMERA_EMPTY_MESSAGE);
 });
 
 test("fieldLabel spaces camelCase and capitalizes the first word only", () => {
