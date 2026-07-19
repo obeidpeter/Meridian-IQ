@@ -560,10 +560,10 @@ export function ErrorState({
 }
 
 /**
- * The full-screen ScrollView shell shared by a list screen's loading/error/
- * empty branches: themed background, hidden scroll indicator, and the caller's
- * content-container padding. `refreshControl` is optional so branches that
- * omit pull-to-refresh keep that behavior.
+ * The full-screen ScrollView shell — for whole screens as well as a list
+ * screen's loading/error/empty branches: themed background, hidden scroll
+ * indicator, and the caller's content-container padding. `refreshControl` is
+ * optional so callers that omit pull-to-refresh keep that behavior.
  */
 export function ScreenScroll({
   contentContainerStyle,

@@ -12,7 +12,6 @@ import React, { useCallback, useRef, useState } from "react";
 import {
   Alert,
   Platform,
-  ScrollView,
   StyleSheet,
   Switch,
   View,
@@ -26,8 +25,10 @@ import {
   CardSkeleton,
   Divider,
   ErrorState,
+  ScreenScroll,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { apiErrorMessage } from "@/lib/api-error";
 import { acquireExpoPushToken, devicePlatform } from "@/lib/notifications";
 import { queryClient } from "@/lib/query";
 import { useSession } from "@/lib/session";
@@ -215,9 +216,10 @@ export default function SettingsScreen() {
           savePref("pushEnabled", false);
         }
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Push setup failed.";
-        Alert.alert("Push notifications", message);
+        Alert.alert(
+          "Push notifications",
+          apiErrorMessage(error, "Push setup failed."),
+        );
       } finally {
         setPushBusy(false);
       }
@@ -283,13 +285,11 @@ export default function SettingsScreen() {
   const version = Constants.expoConfig?.version ?? "1.0.0";
 
   return (
-    <ScrollView
-      style={{ backgroundColor: colors.background }}
+    <ScreenScroll
       contentContainerStyle={[
         styles.content,
         { paddingBottom: insets.bottom + 100 },
       ]}
-      showsVerticalScrollIndicator={false}
     >
       <AppText variant="overline" color={colors.mutedForeground} style={styles.sectionLabel}>
         Alert channels
@@ -420,7 +420,7 @@ export default function SettingsScreen() {
       >
         MeridianIQ Companion v{version}
       </AppText>
-    </ScrollView>
+    </ScreenScroll>
   );
 }
 

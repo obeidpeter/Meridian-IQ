@@ -123,7 +123,7 @@ export function serverErrorToast(
   });
 }
 
-export function fieldValue(kase: ClerkCase, field: string): string {
+function fieldValue(kase: ClerkCase, field: string): string {
   return (
     kase.extraction?.fields.find((f) => f.field === field)?.value ?? ""
   );

@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { QueryError } from "@/components/query-error";
-import { ClerkDisabledBanner } from "@/components/clerk-shell";
+import { ClerkDisabledBanner, ClerkPageHeader } from "@/components/clerk-shell";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
@@ -681,40 +681,31 @@ export function ClerkClaims() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-            Claims register
-          </p>
-          <h1
-            className="mt-1 text-3xl font-bold tracking-tight"
-            data-testid="text-page-title"
-          >
-            Approved facts
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1.5 max-w-xl">
-            Every binding fact Clerk states comes from an active record here.
-            Maker-checker: the author of a version can never approve it.
-          </p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button
-            variant="secondary"
-            onClick={() => setDraftOpen((o) => !o)}
-            data-testid="button-toggle-draft-with-clerk"
-          >
-            <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" /> Draft with
-            Clerk
-          </Button>
-          <Button
-            onClick={() => setCreateOpen((o) => !o)}
-            data-testid="button-new-claim"
-          >
-            <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New claim
-            version
-          </Button>
-        </div>
-      </div>
+      <ClerkPageHeader
+        eyebrow="Claims register"
+        title="Approved facts"
+        titleTestId="text-page-title"
+        description="Every binding fact Clerk states comes from an active record here. Maker-checker: the author of a version can never approve it."
+        right={
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="secondary"
+              onClick={() => setDraftOpen((o) => !o)}
+              data-testid="button-toggle-draft-with-clerk"
+            >
+              <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" /> Draft
+              with Clerk
+            </Button>
+            <Button
+              onClick={() => setCreateOpen((o) => !o)}
+              data-testid="button-new-claim"
+            >
+              <Plus className="w-4 h-4 mr-1" aria-hidden="true" /> New claim
+              version
+            </Button>
+          </div>
+        }
+      />
 
       {disabledBanner && (
         <ClerkDisabledBanner>

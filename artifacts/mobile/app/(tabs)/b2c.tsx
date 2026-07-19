@@ -34,7 +34,7 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
-import { isFeatureUnavailable } from "@/lib/api-error";
+import { apiErrorMessage, isFeatureUnavailable } from "@/lib/api-error";
 import { formatCurrency, formatDateTime, humanize } from "@/lib/format";
 import { useSession } from "@/lib/session";
 
@@ -127,9 +127,10 @@ export default function B2cBatchesScreen() {
         });
       } catch (e) {
         setSubmitError(
-          e instanceof Error && e.message
-            ? e.message
-            : "Could not mark this batch reported. Please try again.",
+          apiErrorMessage(
+            e,
+            "Could not mark this batch reported. Please try again.",
+          ),
         );
       } finally {
         setReportingId(null);
