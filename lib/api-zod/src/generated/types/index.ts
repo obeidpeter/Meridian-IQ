@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.35.0
+ * OpenAPI spec version: 0.36.0
  */
 
 export * from './acceptInvitationInput';
@@ -88,6 +88,11 @@ export * from './clerkAnswerDataParams';
 export * from './clerkBatchView';
 export * from './clerkBatchViewKind';
 export * from './clerkBatchViewStatus';
+export * from './clerkBulkApproveInput';
+export * from './clerkBulkApproveInputItemsItem';
+export * from './clerkBulkApproveReport';
+export * from './clerkBulkApproveReportResultsItem';
+export * from './clerkBulkApproveReportResultsItemOutcome';
 export * from './clerkCase';
 export * from './clerkCaseCreateInput';
 export * from './clerkCaseCreateInputSourceType';
@@ -131,7 +136,9 @@ export * from './clerkMetricsInferenceCohortsItem';
 export * from './clerkMetricsInjectionTrend';
 export * from './clerkMetricsInjectionTrendByPromptVersionItem';
 export * from './clerkMetricsInjectionTrendMonthsItem';
+export * from './clerkMetricsKeptRateTrendItem';
 export * from './clerkMetricsPlatformSpend';
+export * from './clerkMetricsQualityAlert';
 export * from './clerkMetricsResistanceAlert';
 export * from './clerkMetricsSupplierAccuracyItem';
 export * from './clerkPartySuggestion';
@@ -430,6 +437,9 @@ export * from './recurringInvoiceTemplateUpdateInput';
 export * from './recurringSuggestion';
 export * from './rejectionPatternReport';
 export * from './rejectionPatternReportRowsItem';
+export * from './rejectionRiskReport';
+export * from './rejectionRiskReportSignalsItem';
+export * from './rejectionRiskReportSignalsItemScope';
 export * from './remediationItem';
 export * from './replyToEscalationInput';
 export * from './resetPasswordInput';
@@ -444,6 +454,7 @@ export * from './settlementEventPaymentStatus';
 export * from './settlementEventSource';
 export * from './settlementInput';
 export * from './settlementInputSource';
+export * from './staffNotificationPreferences';
 export * from './stampRecord';
 export * from './stampRecordRail';
 export * from './stampVerifyInput';
@@ -476,6 +487,7 @@ export * from './unearnedProspect';
 export * from './unmappedErrorCode';
 export * from './unmatchedCredits';
 export * from './unmatchedCreditsRowsItem';
+export * from './updateStaffNotificationPreferencesInput';
 export * from './user';
 export * from './userInput';
 export * from './validationResult';

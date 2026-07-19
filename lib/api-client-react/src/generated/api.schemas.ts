@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.35.0
+ * OpenAPI spec version: 0.36.0
  */
 export interface HealthStatus {
   status: string;
@@ -1125,6 +1125,36 @@ export interface RejectionPatternReport {
   totalRejections: number;
   previousTotal: number;
   rows: RejectionPatternReportRowsItem[];
+}
+
+export type RejectionRiskReportSignalsItemScope = typeof RejectionRiskReportSignalsItemScope[keyof typeof RejectionRiskReportSignalsItemScope];
+
+
+export const RejectionRiskReportSignalsItemScope = {
+  supplier: 'supplier',
+  buyer: 'buyer',
+  firm: 'firm',
+} as const;
+
+export type RejectionRiskReportSignalsItem = {
+  errorCode: string;
+  scope: RejectionRiskReportSignalsItemScope;
+  count: number;
+  lastSeen: string;
+  /** @nullable */
+  category?: string | null;
+  /** @nullable */
+  cause?: string | null;
+  /** @nullable */
+  fix?: string | null;
+  /** @nullable */
+  retriable?: boolean | null;
+};
+
+export interface RejectionRiskReport {
+  windowDays: number;
+  totalRejections: number;
+  signals: RejectionRiskReportSignalsItem[];
 }
 
 export interface CancelInvoiceInput {
@@ -3267,6 +3297,38 @@ export interface ClerkCaseDecisionInput {
   lines?: InvoiceLineInput[];
 }
 
+export type ClerkBulkApproveInputItemsItem = {
+  caseId: string;
+  decision: ClerkCaseDecisionInput;
+};
+
+export interface ClerkBulkApproveInput {
+  /**
+     * @minItems 1
+     * @maxItems 50
+     */
+  items: ClerkBulkApproveInputItemsItem[];
+}
+
+export type ClerkBulkApproveReportResultsItemOutcome = typeof ClerkBulkApproveReportResultsItemOutcome[keyof typeof ClerkBulkApproveReportResultsItemOutcome];
+
+
+export const ClerkBulkApproveReportResultsItemOutcome = {
+  approved: 'approved',
+  skipped: 'skipped',
+} as const;
+
+export type ClerkBulkApproveReportResultsItem = {
+  caseId: string;
+  outcome: ClerkBulkApproveReportResultsItemOutcome;
+  /** @nullable */
+  reason?: string | null;
+};
+
+export interface ClerkBulkApproveReport {
+  results: ClerkBulkApproveReportResultsItem[];
+}
+
 export interface AskClerkInput {
   /**
      * @minLength 3
@@ -3456,6 +3518,20 @@ export type ClerkMetricsResistanceAlert = {
   injectionFixtures: number;
 };
 
+export type ClerkMetricsKeptRateTrendItem = {
+  month: string;
+  fields: number;
+  keptRate: number;
+};
+
+export type ClerkMetricsQualityAlert = {
+  fromMonth: string;
+  toMonth: string;
+  fromRate: number;
+  toRate: number;
+  fields: number;
+};
+
 export interface ClerkMetrics {
   windowDays: number;
   calibration?: ClerkMetricsCalibration;
@@ -3470,6 +3546,8 @@ export interface ClerkMetrics {
   platformSpend: ClerkMetricsPlatformSpend;
   injectionTrend: ClerkMetricsInjectionTrend;
   resistanceAlert?: ClerkMetricsResistanceAlert;
+  keptRateTrend?: ClerkMetricsKeptRateTrendItem[];
+  qualityAlert?: ClerkMetricsQualityAlert;
 }
 
 export interface ClerkPartySuggestion {
@@ -3968,6 +4046,22 @@ export interface ClerkDigest {
   headline: string;
   bullets: string[];
   source: ClerkDigestSource;
+}
+
+export interface StaffNotificationPreferences {
+  digestEnabled: boolean;
+  emailEnabled: boolean;
+  pushEnabled: boolean;
+  /** @nullable */
+  email: string | null;
+}
+
+export interface UpdateStaffNotificationPreferencesInput {
+  digestEnabled?: boolean;
+  emailEnabled?: boolean;
+  pushEnabled?: boolean;
+  /** @nullable */
+  email?: string | null;
 }
 
 export type ClerkClientStatementFacts = {

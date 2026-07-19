@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.35.0
+  version: 0.36.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -3134,6 +3134,26 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /clerk/cases/bulk-approve:
+    post:
+      operationId: bulkApproveClerkCases
+      tags: [clerk]
+      summary: Human-initiated bulk approval of fast-lane cases — per-case CAS, per-case eligibility, never automatic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkBulkApproveInput"
+      responses:
+        "200":
+          description: Per-case outcomes; a skipped case names why
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkBulkApproveReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /clerk/ask:
     post:
       operationId: askClerk
@@ -3174,6 +3194,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StatusLight"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /invoices/{id}/rejection-risk:
+    get:
+      operationId: getInvoiceRejectionRisk
+      tags: [invoices]
+      summary: Deterministic pre-submission risk — the firm's own recent rejection history joined to this draft's supplier/buyer (no AI involved)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Catalogue-grounded rejection signals; empty signals = no recent history implicates this draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RejectionRiskReport"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -3351,6 +3387,38 @@ paths:
                 $ref: "#/components/schemas/ClerkDigest"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /staff/notification-preferences:
+    get:
+      operationId: getStaffNotificationPreferences
+      tags: [clerk]
+      summary: The signed-in firm member's own notification preferences (opt-in; defaults all off)
+      responses:
+        "200":
+          description: The caller's preferences (defaults when never saved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffNotificationPreferences"
+    put:
+      operationId: updateStaffNotificationPreferences
+      tags: [clerk]
+      summary: Update the signed-in firm member's own notification preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStaffNotificationPreferencesInput"
+      responses:
+        "200":
+          description: Saved preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffNotificationPreferences"
+        "400":
+          $ref: "#/components/responses/BadRequest"
 
   /clerk/client-statements:
     get:
@@ -5382,6 +5450,41 @@ components:
                 type: integer
               lastSeen:
                 type: string
+    # Draft-time rejection risk: the firm's own recent rejected attempts
+    # joined to THIS draft's supplier and buyer parties (plus the firm's top
+    # codes), grounded in the error catalogue. Deterministic, nothing stored,
+    # zero model calls — signals name history, never predictions.
+    RejectionRiskReport:
+      type: object
+      required: [windowDays, totalRejections, signals]
+      properties:
+        windowDays:
+          type: integer
+        totalRejections:
+          type: integer
+        signals:
+          type: array
+          items:
+            type: object
+            required: [errorCode, scope, count, lastSeen]
+            properties:
+              errorCode:
+                type: string
+              scope:
+                type: string
+                enum: [supplier, buyer, firm]
+              count:
+                type: integer
+              lastSeen:
+                type: string
+              category:
+                type: ["string", "null"]
+              cause:
+                type: ["string", "null"]
+              fix:
+                type: ["string", "null"]
+              retriable:
+                type: ["boolean", "null"]
     CancelInvoiceInput:
       type: object
       required: [reason]
@@ -8269,6 +8372,40 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InvoiceLineInput"
+    ClerkBulkApproveInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required: [caseId, decision]
+            properties:
+              caseId:
+                type: string
+                format: uuid
+              decision:
+                $ref: "#/components/schemas/ClerkCaseDecisionInput"
+    ClerkBulkApproveReport:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [caseId, outcome]
+            properties:
+              caseId:
+                type: string
+              outcome:
+                type: string
+                enum: [approved, skipped]
+              reason:
+                type: ["string", "null"]
     AskClerkInput:
       type: object
       required: [question]
@@ -8628,6 +8765,39 @@ components:
             toRate:
               type: number
             injectionFixtures:
+              type: integer
+        # Kept-rate drift: monthly kept-rate buckets from the corrections
+        # exhaust (fields the operator left unchanged / fields compared) —
+        # the accuracy sibling of the injection trend. Optional: absent when
+        # the exhaust holds no measured months.
+        keptRateTrend:
+          type: array
+          items:
+            type: object
+            required: [month, fields, keptRate]
+            properties:
+              month:
+                type: string
+              fields:
+                type: integer
+              keptRate:
+                type: number
+        # Present when the newest measured month's kept-rate fell materially
+        # below the previous one — the same deterministic rule the
+        # quality-watch sweep alerts on, so banner and alert always agree.
+        qualityAlert:
+          type: object
+          required: [fromMonth, toMonth, fromRate, toRate, fields]
+          properties:
+            fromMonth:
+              type: string
+            toMonth:
+              type: string
+            fromRate:
+              type: number
+            toRate:
+              type: number
+            fields:
               type: integer
     ClerkCorrection:
       type: object
@@ -9315,6 +9485,33 @@ components:
         source:
           type: string
           enum: [clerk, template]
+    # Firm-member notification preferences: user-keyed and OPT-IN (defaults
+    # all off) — a member chooses their own channels; this is not the
+    # party-keyed client alert model and carries no CORE-03 consent question.
+    StaffNotificationPreferences:
+      type: object
+      required: [digestEnabled, emailEnabled, pushEnabled, email]
+      properties:
+        digestEnabled:
+          type: boolean
+        emailEnabled:
+          type: boolean
+        pushEnabled:
+          type: boolean
+        email:
+          type: ["string", "null"]
+    UpdateStaffNotificationPreferencesInput:
+      type: object
+      properties:
+        digestEnabled:
+          type: boolean
+        emailEnabled:
+          type: boolean
+        pushEnabled:
+          type: boolean
+        email:
+          type: ["string", "null"]
+          format: email
     ClerkClientStatement:
       type: object
       required: [clientPartyId, monthStart, headline, bullets, facts, source]

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.35.0
+ * OpenAPI spec version: 0.36.0
  */
 import * as zod from 'zod';
 
@@ -4460,6 +4460,47 @@ export const DecideClerkCaseResponse = zod.object({
 
 
 /**
+ * @summary Human-initiated bulk approval of fast-lane cases — per-case CAS, per-case eligibility, never automatic
+ */
+
+export const bulkApproveClerkCasesBodyItemsMax = 50;
+
+
+
+export const BulkApproveClerkCasesBody = zod.object({
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "decision": zod.object({
+  "action": zod.enum(['approve', 'reject', 'escalate']),
+  "reason": zod.string().nullish(),
+  "firmId": zod.string().optional(),
+  "supplierPartyId": zod.string().optional(),
+  "buyerPartyId": zod.string().optional(),
+  "invoiceNumber": zod.string().optional(),
+  "issueDate": zod.string().optional(),
+  "dueDate": zod.string().nullish(),
+  "currency": zod.string().optional(),
+  "category": zod.enum(['b2b', 'b2g', 'b2c']).optional(),
+  "lines": zod.array(zod.object({
+  "description": zod.string().min(1),
+  "quantity": zod.string(),
+  "unitPrice": zod.string(),
+  "vatRate": zod.string()
+})).optional()
+})
+})).min(1).max(bulkApproveClerkCasesBodyItemsMax)
+})
+
+export const BulkApproveClerkCasesResponse = zod.object({
+  "results": zod.array(zod.object({
+  "caseId": zod.string(),
+  "outcome": zod.enum(['approved', 'skipped']),
+  "reason": zod.string().nullish()
+}))
+})
+
+
+/**
  * @summary Grounded Q&A — approved claims or platform-computed firm-record lookups; refuses anything else
  */
 export const askClerkBodyQuestionMin = 3;
@@ -4558,6 +4599,29 @@ export const GetInvoiceStatusLightResponse = zod.object({
   "light": zod.enum(['green', 'amber', 'red']),
   "reasons": zod.array(zod.string()),
   "recommendedAction": zod.string()
+})
+
+
+/**
+ * @summary Deterministic pre-submission risk — the firm's own recent rejection history joined to this draft's supplier/buyer (no AI involved)
+ */
+export const GetInvoiceRejectionRiskParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetInvoiceRejectionRiskResponse = zod.object({
+  "windowDays": zod.number(),
+  "totalRejections": zod.number(),
+  "signals": zod.array(zod.object({
+  "errorCode": zod.string(),
+  "scope": zod.enum(['supplier', 'buyer', 'firm']),
+  "count": zod.number(),
+  "lastSeen": zod.string(),
+  "category": zod.string().nullish(),
+  "cause": zod.string().nullish(),
+  "fix": zod.string().nullish(),
+  "retriable": zod.boolean().nullish()
+}))
 })
 
 
@@ -5066,6 +5130,35 @@ export const GetClerkDigestResponse = zod.object({
   "headline": zod.string(),
   "bullets": zod.array(zod.string()),
   "source": zod.enum(['clerk', 'template'])
+})
+
+
+/**
+ * @summary The signed-in firm member's own notification preferences (opt-in; defaults all off)
+ */
+export const GetStaffNotificationPreferencesResponse = zod.object({
+  "digestEnabled": zod.boolean(),
+  "emailEnabled": zod.boolean(),
+  "pushEnabled": zod.boolean(),
+  "email": zod.string().nullable()
+})
+
+
+/**
+ * @summary Update the signed-in firm member's own notification preferences
+ */
+export const UpdateStaffNotificationPreferencesBody = zod.object({
+  "digestEnabled": zod.boolean().optional(),
+  "emailEnabled": zod.boolean().optional(),
+  "pushEnabled": zod.boolean().optional(),
+  "email": zod.string().email().nullish()
+})
+
+export const UpdateStaffNotificationPreferencesResponse = zod.object({
+  "digestEnabled": zod.boolean(),
+  "emailEnabled": zod.boolean(),
+  "pushEnabled": zod.boolean(),
+  "email": zod.string().nullable()
 })
 
 
@@ -5632,6 +5725,18 @@ export const GetClerkMetricsResponse = zod.object({
   "fromRate": zod.number(),
   "toRate": zod.number(),
   "injectionFixtures": zod.number()
+}).optional(),
+  "keptRateTrend": zod.array(zod.object({
+  "month": zod.string(),
+  "fields": zod.number(),
+  "keptRate": zod.number()
+})).optional(),
+  "qualityAlert": zod.object({
+  "fromMonth": zod.string(),
+  "toMonth": zod.string(),
+  "fromRate": zod.number(),
+  "toRate": zod.number(),
+  "fields": zod.number()
 }).optional()
 })
 

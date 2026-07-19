@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.35.0
+ * OpenAPI spec version: 0.36.0
  */
 import {
   useMutation,
@@ -61,6 +61,8 @@ import type {
   ClaimUpdateInput,
   ClerkAdoptionReport,
   ClerkBatchView,
+  ClerkBulkApproveInput,
+  ClerkBulkApproveReport,
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseDecisionInput,
@@ -221,6 +223,7 @@ import type {
   RecurringInvoiceTemplateUpdateInput,
   RecurringSuggestion,
   RejectionPatternReport,
+  RejectionRiskReport,
   ReplyToEscalationInput,
   ResetPasswordInput,
   ResolveCaseInput,
@@ -231,6 +234,7 @@ import type {
   ScoreboardRow,
   SettlementEvent,
   SettlementInput,
+  StaffNotificationPreferences,
   StampRecord,
   StampVerifyInput,
   StampVerifyResult,
@@ -250,6 +254,7 @@ import type {
   UnearnedIncome,
   UnmappedErrorCode,
   UnmatchedCredits,
+  UpdateStaffNotificationPreferencesInput,
   User,
   UserInput,
   ValidationResult,
@@ -12740,6 +12745,76 @@ export const useDecideClerkCase = <TError = ErrorType<BadRequestResponse | NotFo
       return useMutation(getDecideClerkCaseMutationOptions(options));
     }
 
+export const getBulkApproveClerkCasesUrl = () => {
+
+
+
+
+  return `/api/clerk/cases/bulk-approve`
+}
+
+/**
+ * @summary Human-initiated bulk approval of fast-lane cases — per-case CAS, per-case eligibility, never automatic
+ */
+export const bulkApproveClerkCases = async (clerkBulkApproveInput: ClerkBulkApproveInput, options?: RequestInit): Promise<ClerkBulkApproveReport> => {
+
+  return customFetch<ClerkBulkApproveReport>(getBulkApproveClerkCasesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clerkBulkApproveInput)
+  }
+);}
+
+
+
+
+export const getBulkApproveClerkCasesMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkApproveClerkCases>>, TError,{data: BodyType<ClerkBulkApproveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkApproveClerkCases>>, TError,{data: BodyType<ClerkBulkApproveInput>}, TContext> => {
+
+const mutationKey = ['bulkApproveClerkCases'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkApproveClerkCases>>, {data: BodyType<ClerkBulkApproveInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkApproveClerkCases(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkApproveClerkCasesMutationResult = NonNullable<Awaited<ReturnType<typeof bulkApproveClerkCases>>>
+    export type BulkApproveClerkCasesMutationBody = BodyType<ClerkBulkApproveInput>
+    export type BulkApproveClerkCasesMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Human-initiated bulk approval of fast-lane cases — per-case CAS, per-case eligibility, never automatic
+ */
+export const useBulkApproveClerkCases = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkApproveClerkCases>>, TError,{data: BodyType<ClerkBulkApproveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkApproveClerkCases>>,
+        TError,
+        {data: BodyType<ClerkBulkApproveInput>},
+        TContext
+      > => {
+      return useMutation(getBulkApproveClerkCasesMutationOptions(options));
+    }
+
 export const getAskClerkUrl = () => {
 
 
@@ -12875,6 +12950,83 @@ export function useGetInvoiceStatusLight<TData = Awaited<ReturnType<typeof getIn
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetInvoiceStatusLightQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetInvoiceRejectionRiskUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/rejection-risk`
+}
+
+/**
+ * @summary Deterministic pre-submission risk — the firm's own recent rejection history joined to this draft's supplier/buyer (no AI involved)
+ */
+export const getInvoiceRejectionRisk = async (id: string, options?: RequestInit): Promise<RejectionRiskReport> => {
+
+  return customFetch<RejectionRiskReport>(getGetInvoiceRejectionRiskUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInvoiceRejectionRiskQueryKey = (id: string,) => {
+    return [
+    `/api/invoices/${id}/rejection-risk`
+    ] as const;
+    }
+
+
+export const getGetInvoiceRejectionRiskQueryOptions = <TData = Awaited<ReturnType<typeof getInvoiceRejectionRisk>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceRejectionRisk>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInvoiceRejectionRiskQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvoiceRejectionRisk>>> = ({ signal }) => getInvoiceRejectionRisk(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInvoiceRejectionRisk>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInvoiceRejectionRiskQueryResult = NonNullable<Awaited<ReturnType<typeof getInvoiceRejectionRisk>>>
+export type GetInvoiceRejectionRiskQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Deterministic pre-submission risk — the firm's own recent rejection history joined to this draft's supplier/buyer (no AI involved)
+ */
+
+export function useGetInvoiceRejectionRisk<TData = Awaited<ReturnType<typeof getInvoiceRejectionRisk>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoiceRejectionRisk>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInvoiceRejectionRiskQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -13621,6 +13773,153 @@ export function useGetClerkDigest<TData = Awaited<ReturnType<typeof getClerkDige
 
 
 
+
+export const getGetStaffNotificationPreferencesUrl = () => {
+
+
+
+
+  return `/api/staff/notification-preferences`
+}
+
+/**
+ * @summary The signed-in firm member's own notification preferences (opt-in; defaults all off)
+ */
+export const getStaffNotificationPreferences = async ( options?: RequestInit): Promise<StaffNotificationPreferences> => {
+
+  return customFetch<StaffNotificationPreferences>(getGetStaffNotificationPreferencesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStaffNotificationPreferencesQueryKey = () => {
+    return [
+    `/api/staff/notification-preferences`
+    ] as const;
+    }
+
+
+export const getGetStaffNotificationPreferencesQueryOptions = <TData = Awaited<ReturnType<typeof getStaffNotificationPreferences>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStaffNotificationPreferences>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStaffNotificationPreferencesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStaffNotificationPreferences>>> = ({ signal }) => getStaffNotificationPreferences({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStaffNotificationPreferences>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStaffNotificationPreferencesQueryResult = NonNullable<Awaited<ReturnType<typeof getStaffNotificationPreferences>>>
+export type GetStaffNotificationPreferencesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The signed-in firm member's own notification preferences (opt-in; defaults all off)
+ */
+
+export function useGetStaffNotificationPreferences<TData = Awaited<ReturnType<typeof getStaffNotificationPreferences>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStaffNotificationPreferences>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStaffNotificationPreferencesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateStaffNotificationPreferencesUrl = () => {
+
+
+
+
+  return `/api/staff/notification-preferences`
+}
+
+/**
+ * @summary Update the signed-in firm member's own notification preferences
+ */
+export const updateStaffNotificationPreferences = async (updateStaffNotificationPreferencesInput: UpdateStaffNotificationPreferencesInput, options?: RequestInit): Promise<StaffNotificationPreferences> => {
+
+  return customFetch<StaffNotificationPreferences>(getUpdateStaffNotificationPreferencesUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateStaffNotificationPreferencesInput)
+  }
+);}
+
+
+
+
+export const getUpdateStaffNotificationPreferencesMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateStaffNotificationPreferences>>, TError,{data: BodyType<UpdateStaffNotificationPreferencesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateStaffNotificationPreferences>>, TError,{data: BodyType<UpdateStaffNotificationPreferencesInput>}, TContext> => {
+
+const mutationKey = ['updateStaffNotificationPreferences'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateStaffNotificationPreferences>>, {data: BodyType<UpdateStaffNotificationPreferencesInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateStaffNotificationPreferences(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateStaffNotificationPreferencesMutationResult = NonNullable<Awaited<ReturnType<typeof updateStaffNotificationPreferences>>>
+    export type UpdateStaffNotificationPreferencesMutationBody = BodyType<UpdateStaffNotificationPreferencesInput>
+    export type UpdateStaffNotificationPreferencesMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Update the signed-in firm member's own notification preferences
+ */
+export const useUpdateStaffNotificationPreferences = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateStaffNotificationPreferences>>, TError,{data: BodyType<UpdateStaffNotificationPreferencesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateStaffNotificationPreferences>>,
+        TError,
+        {data: BodyType<UpdateStaffNotificationPreferencesInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateStaffNotificationPreferencesMutationOptions(options));
+    }
 
 export const getListClientStatementsUrl = (params?: ListClientStatementsParams,) => {
   const normalizedParams = new URLSearchParams();
