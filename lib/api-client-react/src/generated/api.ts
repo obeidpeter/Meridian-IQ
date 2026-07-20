@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.38.0
+ * OpenAPI spec version: 0.39.0
  */
 import {
   useMutation,
@@ -36,6 +36,7 @@ import type {
   BankStatementLine,
   BatchClerkCasesInput,
   BatchClerkCasesResult,
+  BillingStatement,
   BillingTier,
   BulkAcceptInput,
   BulkAcceptResult,
@@ -123,6 +124,7 @@ import type {
   EvalFixtureReport,
   EvalFixtureSummary,
   ExplainFailureInput,
+  ExportBillingStatementCsvParams,
   ExportInvoicesCsvParams,
   ExportReceivablesCsvParams,
   ExportVatPackCsvParams,
@@ -132,6 +134,7 @@ import type {
   FeatureFlagOverrideInput,
   FeatureFlagUpdate,
   Firm,
+  FirmExportBundle,
   FirmInput,
   FirmMember,
   FirmReceivables,
@@ -140,6 +143,7 @@ import type {
   ForbiddenResponse,
   GateMetrics,
   GenerateStatementsInput,
+  GetBillingStatementParams,
   GetCashflowOutlookParams,
   GetChaseListParams,
   GetClerkClaimGapsParams,
@@ -176,6 +180,7 @@ import type {
   ListErpConnectionsParams,
   ListInvoicesParams,
   ListLineItemSuggestionsParams,
+  ListNotificationsParams,
   ListOperatorCasesParams,
   ListPartiesParams,
   ListPaymentBehaviourParams,
@@ -195,6 +200,7 @@ import type {
   MessageInput,
   ModelCanaryReport,
   NotFoundResponse,
+  NotificationFeed,
   OnboardingProspect,
   OperatorBrief,
   OperatorCaseView,
@@ -3357,6 +3363,335 @@ export function useExportVatPackCsv<TData = Awaited<ReturnType<typeof exportVatP
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getExportVatPackCsvQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBillingStatementUrl = (params?: GetBillingStatementParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/billing/statement?${stringifiedParams}` : `/api/billing/statement`
+}
+
+/**
+ * @summary Deterministic monthly platform-billing statement for the firm — tier, metered usage, computed fee (nothing stored)
+ */
+export const getBillingStatement = async (params?: GetBillingStatementParams, options?: RequestInit): Promise<BillingStatement> => {
+
+  return customFetch<BillingStatement>(getGetBillingStatementUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBillingStatementQueryKey = (params?: GetBillingStatementParams,) => {
+    return [
+    `/api/billing/statement`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetBillingStatementQueryOptions = <TData = Awaited<ReturnType<typeof getBillingStatement>>, TError = ErrorType<BadRequestResponse>>(params?: GetBillingStatementParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBillingStatement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBillingStatementQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBillingStatement>>> = ({ signal }) => getBillingStatement(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBillingStatement>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBillingStatementQueryResult = NonNullable<Awaited<ReturnType<typeof getBillingStatement>>>
+export type GetBillingStatementQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Deterministic monthly platform-billing statement for the firm — tier, metered usage, computed fee (nothing stored)
+ */
+
+export function useGetBillingStatement<TData = Awaited<ReturnType<typeof getBillingStatement>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetBillingStatementParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBillingStatement>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBillingStatementQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportBillingStatementCsvUrl = (params?: ExportBillingStatementCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/billing/statement/export?${stringifiedParams}` : `/api/billing/statement/export`
+}
+
+/**
+ * @summary Download the monthly billing statement as CSV
+ */
+export const exportBillingStatementCsv = async (params?: ExportBillingStatementCsvParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportBillingStatementCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportBillingStatementCsvQueryKey = (params?: ExportBillingStatementCsvParams,) => {
+    return [
+    `/api/billing/statement/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportBillingStatementCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportBillingStatementCsv>>, TError = ErrorType<BadRequestResponse>>(params?: ExportBillingStatementCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportBillingStatementCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportBillingStatementCsvQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportBillingStatementCsv>>> = ({ signal }) => exportBillingStatementCsv(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportBillingStatementCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportBillingStatementCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportBillingStatementCsv>>>
+export type ExportBillingStatementCsvQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Download the monthly billing statement as CSV
+ */
+
+export function useExportBillingStatementCsv<TData = Awaited<ReturnType<typeof exportBillingStatementCsv>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ExportBillingStatementCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportBillingStatementCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportBillingStatementCsvQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListNotificationsUrl = (params?: ListNotificationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/notifications?${stringifiedParams}` : `/api/notifications`
+}
+
+/**
+ * @summary The signed-in user's own notification feed, resolved from the pointer-only messages ledger
+ */
+export const listNotifications = async (params?: ListNotificationsParams, options?: RequestInit): Promise<NotificationFeed> => {
+
+  return customFetch<NotificationFeed>(getListNotificationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListNotificationsQueryKey = (params?: ListNotificationsParams,) => {
+    return [
+    `/api/notifications`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof listNotifications>>, TError = ErrorType<unknown>>(params?: ListNotificationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListNotificationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listNotifications>>> = ({ signal }) => listNotifications(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof listNotifications>>>
+export type ListNotificationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The signed-in user's own notification feed, resolved from the pointer-only messages ledger
+ */
+
+export function useListNotifications<TData = Awaited<ReturnType<typeof listNotifications>>, TError = ErrorType<unknown>>(
+ params?: ListNotificationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListNotificationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportFirmDataUrl = (id: string,) => {
+
+
+
+
+  return `/api/firms/${id}/export`
+}
+
+/**
+ * @summary Full-firm portability export (operator-gated) — invoices, parties, statements, consent trail, firm-scoped audit events
+ */
+export const exportFirmData = async (id: string, options?: RequestInit): Promise<FirmExportBundle> => {
+
+  return customFetch<FirmExportBundle>(getExportFirmDataUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportFirmDataQueryKey = (id: string,) => {
+    return [
+    `/api/firms/${id}/export`
+    ] as const;
+    }
+
+
+export const getExportFirmDataQueryOptions = <TData = Awaited<ReturnType<typeof exportFirmData>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportFirmData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportFirmDataQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportFirmData>>> = ({ signal }) => exportFirmData(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportFirmData>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportFirmDataQueryResult = NonNullable<Awaited<ReturnType<typeof exportFirmData>>>
+export type ExportFirmDataQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Full-firm portability export (operator-gated) — invoices, parties, statements, consent trail, firm-scoped audit events
+ */
+
+export function useExportFirmData<TData = Awaited<ReturnType<typeof exportFirmData>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportFirmData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportFirmDataQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -13319,6 +13654,83 @@ export function useGetInvoiceStatusLight<TData = Awaited<ReturnType<typeof getIn
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetInvoiceStatusLightQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetInvoicePdfUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/pdf`
+}
+
+/**
+ * @summary Branded invoice PDF — firm whitelabel theme, stamp reference and verify QR when stamped
+ */
+export const getInvoicePdf = async (id: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetInvoicePdfUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetInvoicePdfQueryKey = (id: string,) => {
+    return [
+    `/api/invoices/${id}/pdf`
+    ] as const;
+    }
+
+
+export const getGetInvoicePdfQueryOptions = <TData = Awaited<ReturnType<typeof getInvoicePdf>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoicePdf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetInvoicePdfQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvoicePdf>>> = ({ signal }) => getInvoicePdf(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getInvoicePdf>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetInvoicePdfQueryResult = NonNullable<Awaited<ReturnType<typeof getInvoicePdf>>>
+export type GetInvoicePdfQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Branded invoice PDF — firm whitelabel theme, stamp reference and verify QR when stamped
+ */
+
+export function useGetInvoicePdf<TData = Awaited<ReturnType<typeof getInvoicePdf>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getInvoicePdf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetInvoicePdfQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

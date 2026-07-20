@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.38.0
+ * OpenAPI spec version: 0.39.0
  */
 import * as zod from 'zod';
 
@@ -882,6 +882,108 @@ export const ExportVatPackCsvQueryParams = zod.object({
 })
 
 export const ExportVatPackCsvResponse = zod.unknown()
+
+
+/**
+ * @summary Deterministic monthly platform-billing statement for the firm — tier, metered usage, computed fee (nothing stored)
+ */
+export const getBillingStatementQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const GetBillingStatementQueryParams = zod.object({
+  "month": zod.coerce.string().regex(getBillingStatementQueryMonthRegExp).optional()
+})
+
+export const GetBillingStatementResponse = zod.object({
+  "monthStart": zod.string(),
+  "monthLabel": zod.string(),
+  "months": zod.array(zod.object({
+  "value": zod.string(),
+  "label": zod.string()
+})),
+  "tier": zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "monthlyPrice": zod.string(),
+  "includedInvoices": zod.number(),
+  "overagePrice": zod.string(),
+  "clerkMonthlyTokens": zod.number().nullable()
+}),
+  "usage": zod.object({
+  "acceptedInvoices": zod.number(),
+  "submissionAttempts": zod.number(),
+  "clerkTokens": zod.number(),
+  "clerkCalls": zod.number(),
+  "byPurpose": zod.array(zod.object({
+  "purpose": zod.string(),
+  "tokens": zod.number()
+}))
+}),
+  "fee": zod.object({
+  "base": zod.string(),
+  "overageInvoices": zod.number(),
+  "overage": zod.string(),
+  "total": zod.string()
+}),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Download the monthly billing statement as CSV
+ */
+export const exportBillingStatementCsvQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const ExportBillingStatementCsvQueryParams = zod.object({
+  "month": zod.coerce.string().regex(exportBillingStatementCsvQueryMonthRegExp).optional()
+})
+
+export const ExportBillingStatementCsvResponse = zod.unknown()
+
+
+/**
+ * @summary The signed-in user's own notification feed, resolved from the pointer-only messages ledger
+ */
+export const listNotificationsQueryLimitMax = 100;
+
+
+
+export const ListNotificationsQueryParams = zod.object({
+  "limit": zod.coerce.number().min(1).max(listNotificationsQueryLimitMax).optional()
+})
+
+export const ListNotificationsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "channel": zod.string(),
+  "templateKey": zod.string(),
+  "title": zod.string(),
+  "entityType": zod.string().nullish(),
+  "entityId": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
+ * @summary Full-firm portability export (operator-gated) — invoices, parties, statements, consent trail, firm-scoped audit events
+ */
+export const ExportFirmDataParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ExportFirmDataResponse = zod.object({
+  "firmId": zod.string(),
+  "exportedAt": zod.string(),
+  "sections": zod.record(zod.string(), zod.array(zod.record(zod.string(), zod.unknown()))),
+  "counts": zod.array(zod.object({
+  "section": zod.string(),
+  "rows": zod.number(),
+  "truncated": zod.boolean()
+})).optional()
+})
 
 
 /**
@@ -3220,9 +3322,11 @@ export const ResolveOperatorCaseResponse = zod.object({
 
 
 
+
 export const ImportBankStatementBody = zod.object({
   "clientPartyId": zod.string(),
-  "csv": zod.string().min(1),
+  "csv": zod.string().min(1).optional(),
+  "pdfBase64": zod.string().min(1).optional(),
   "formatKey": zod.string().optional(),
   "filename": zod.string().optional(),
   "commit": zod.boolean()
@@ -4692,6 +4796,16 @@ export const GetInvoiceStatusLightResponse = zod.object({
   "reasons": zod.array(zod.string()),
   "recommendedAction": zod.string()
 })
+
+
+/**
+ * @summary Branded invoice PDF — firm whitelabel theme, stamp reference and verify QR when stamped
+ */
+export const GetInvoicePdfParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetInvoicePdfResponse = zod.unknown()
 
 
 /**

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.38.0
+ * OpenAPI spec version: 0.39.0
  */
 export interface HealthStatus {
   status: string;
@@ -2598,7 +2598,9 @@ export interface BankStatementLine {
 export interface StatementImportInput {
   clientPartyId: string;
   /** @minLength 1 */
-  csv: string;
+  csv?: string;
+  /** @minLength 1 */
+  pdfBase64?: string;
   formatKey?: string;
   filename?: string;
   commit: boolean;
@@ -4102,6 +4104,85 @@ export interface StaffNotificationPreferences {
   emailVerifiedAt: string | null;
 }
 
+export type BillingStatementMonthsItem = {
+  value: string;
+  label: string;
+};
+
+export type BillingStatementTier = {
+  key: string;
+  name: string;
+  monthlyPrice: string;
+  includedInvoices: number;
+  overagePrice: string;
+  /** @nullable */
+  clerkMonthlyTokens: number | null;
+};
+
+export type BillingStatementUsageByPurposeItem = {
+  purpose: string;
+  tokens: number;
+};
+
+export type BillingStatementUsage = {
+  acceptedInvoices: number;
+  submissionAttempts: number;
+  clerkTokens: number;
+  clerkCalls: number;
+  byPurpose: BillingStatementUsageByPurposeItem[];
+};
+
+export type BillingStatementFee = {
+  base: string;
+  overageInvoices: number;
+  overage: string;
+  total: string;
+};
+
+export interface BillingStatement {
+  monthStart: string;
+  monthLabel: string;
+  months: BillingStatementMonthsItem[];
+  tier: BillingStatementTier;
+  usage: BillingStatementUsage;
+  fee: BillingStatementFee;
+  note: string;
+}
+
+export type NotificationFeedItemsItem = {
+  id: string;
+  channel: string;
+  templateKey: string;
+  title: string;
+  /** @nullable */
+  entityType?: string | null;
+  /** @nullable */
+  entityId?: string | null;
+  status: string;
+  createdAt: string;
+};
+
+export interface NotificationFeed {
+  items: NotificationFeedItemsItem[];
+}
+
+export type FirmExportBundleSectionsItem = { [key: string]: unknown };
+
+export type FirmExportBundleSections = {[key: string]: FirmExportBundleSectionsItem[]};
+
+export type FirmExportBundleCountsItem = {
+  section: string;
+  rows: number;
+  truncated: boolean;
+};
+
+export interface FirmExportBundle {
+  firmId: string;
+  exportedAt: string;
+  sections: FirmExportBundleSections;
+  counts?: FirmExportBundleCountsItem[];
+}
+
 export interface ConfirmStaffEmailInput {
   /**
      * @minLength 6
@@ -4517,6 +4598,28 @@ export type ExportVatPackCsvParams = {
  * @pattern ^\d{4}-\d{2}-01$
  */
 month?: string;
+};
+
+export type GetBillingStatementParams = {
+/**
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
+};
+
+export type ExportBillingStatementCsvParams = {
+/**
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
+};
+
+export type ListNotificationsParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
 };
 
 export type GetVatSettlementCheckParams = {
