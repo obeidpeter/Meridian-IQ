@@ -42,7 +42,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.36.0`).
+contract change (it is currently `0.37.0`).
 
 ## Clerk AI (the part with guardrails)
 
@@ -136,7 +136,20 @@ email-probe oracle), sender resolved deterministically via the unique
 login email → `client_user` membership → (firm, client party,
 createdBy), and each PDF/image attachment walks the ORDINARY capture
 path (budget pre-check, 5MB/type caps, duplicate guard absorbing
-provider redelivery) with masked-sender pointer-only audits;
+provider redelivery) with masked-sender pointer-only audits; the
+**inbound WhatsApp rail** (`modules/inbound/whatsapp.ts`,
+`POST /api/inbound/whatsapp`, same posture, `INBOUND_WHATSAPP_TOKEN`
+fail-closed) resolves the sender phone through the shared E.164
+normalizer (`src/lib/phone.ts`, Nigerian 0-prefix → +234) against stored
+alert-preference numbers and proceeds ONLY on an exactly-one party match
+(ambiguity refuses, never guesses) — media walks capture, ≥40-char
+text-only messages walk text capture, and both rails share the daily-cap
+/ semaphore / type-mapping machinery in `modules/inbound/shared.ts`;
+outbound sends flow through an injectable **MessageTransport**
+(`modules/messaging/messaging.ts`, push.ts's injection pattern — the
+simulator is the default, `MESSAGING_WEBHOOK_URL`/`_TOKEN` light a
+generic pointer-only JSON relay, and the receiving relay owns
+ref→address resolution so SEC-12 holds platform-side);
 **custom statement formats**
 (`modules/statements/custom-formats.ts`, operator `catalogue.write`, global
 reference data like the error catalogue) store column-name mappings consumed
@@ -583,6 +596,23 @@ batch-async.ts).
   inline provisioning); the admin self-serves the rest. Platform roles
   (operator, auditor, bank/buyer) deliberately stay on `identity.write`, never
   the invite flow.
+- **TOTP two-factor (opt-in).** Hand-rolled RFC 4226/6238 in
+  `modules/auth/totp.ts` (base32, HMAC-SHA1, ±1 step, replay blocked via
+  `users.totp_last_used_step`). An enrolled login returns `mfaRequired` + a
+  5-minute signed mfa token (structurally distinct from session tokens,
+  epoch-bound) instead of the cookie; the public `POST /auth/totp/challenge`
+  redeems token + code (or a sha256-stored recovery code, burned on use) for
+  the ordinary login tail. Setup/activate/disable are self-service on the
+  landing portal's security card; activate/disable bump `session_epoch`.
+  `TOTP_REQUIRED_ROLES` env (dark by default) hard-gates named roles once a
+  deployment has rolled enrolment out. The e2e harness mints real codes
+  (`scripts/src/e2e/totp.mjs`).
+- **Rate limiting.** `middleware/rate-limit.ts` sits between principal
+  resolution and `tenantContext` and counts on the `login_attempts` table via
+  the raw pool (a 429 can't erase its own evidence): GENERAL 600/min per
+  principal (IP fallback) and MODEL 60/min across every model-calling route;
+  `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_MODEL_PER_MIN` tune, 0 disables
+  a class; PUBLIC_PATHS exempt (they carry their own gates).
 
 ## Background work (the pipeline worker)
 
@@ -643,7 +673,7 @@ pnpm --filter @workspace/console run test
 pnpm --filter @workspace/buyer-portal run test
 pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-ui run test
 # web builds (each needs BASE_PATH + PORT), then the e2e journeys:
-pnpm --filter @workspace/scripts run e2e        # 38 checks vs real builds + DB
+pnpm --filter @workspace/scripts run e2e        # 47 checks vs real builds + DB
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of the above.
