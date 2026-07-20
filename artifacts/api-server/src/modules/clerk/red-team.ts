@@ -1,4 +1,4 @@
-import { desc, sql } from "drizzle-orm";
+import { desc, isNull, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   getDb,
@@ -41,8 +41,9 @@ const RED_TEAM_PROMPT_VERSION = "red-team.v1";
 const ATTACKABLE_RISK_LABELS = new Set(["clean", "skewed"]);
 // Generations per pass (each is one model call) and the standing corpus cap
 // (each stored fixture is one model call per eval run) — both bound cost.
+// The corpus cap is exported for the curation inventory (eval-curation.ts).
 const GENERATE_PER_PASS = 2;
-const RED_TEAM_CORPUS_CAP = 40;
+export const RED_TEAM_CORPUS_CAP = 40;
 const MIN_INJECTION_CHARS = 20;
 const MAX_INJECTION_CHARS = 2000;
 
@@ -185,9 +186,14 @@ export async function generateRedTeamFixture(
 export async function loadRedTeamFixtures(
   limit = RED_TEAM_CORPUS_CAP,
 ): Promise<EvalFixture[]> {
+  // Retired variants are excluded BEFORE the newest-N cap, mirroring
+  // loadGrownFixtures — retiring an attack frees its corpus slot. (The
+  // GENERATION cap below still counts retired rows: retiring does not
+  // authorise minting replacements, only stops paying for the retired one.)
   const rows = await getDb()
     .select()
     .from(clerkRedTeamFixturesTable)
+    .where(isNull(clerkRedTeamFixturesTable.retiredAt))
     .orderBy(desc(clerkRedTeamFixturesTable.createdAt))
     .limit(limit);
   rows.reverse(); // oldest-first, stable run order

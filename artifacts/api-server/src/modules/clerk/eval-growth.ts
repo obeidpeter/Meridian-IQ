@@ -67,15 +67,20 @@ export function fixtureFromCase(
 // approval, forever), and every fixture is one model call per eval run — an
 // uncapped corpus makes the nightly run's cost and duration grow without
 // limit. Recent corrections are also the ones most representative of the
-// current document mix.
-const GROWN_CORPUS_CAP = 200;
+// current document mix. Exported for the curation inventory
+// (eval-curation.ts), which must show exactly the corpus this loader runs.
+export const GROWN_CORPUS_CAP = 200;
 
 export async function loadGrownFixtures(
   limit = GROWN_CORPUS_CAP,
 ): Promise<EvalFixture[]> {
+  // Retired fixtures are excluded BEFORE the newest-N cap (a WHERE, not a
+  // post-filter), so retiring a fixture frees its corpus slot for the next
+  // most recent correction instead of silently shrinking the run.
   const rows = await getDb()
     .select()
     .from(clerkEvalFixturesTable)
+    .where(isNull(clerkEvalFixturesTable.retiredAt))
     .orderBy(desc(clerkEvalFixturesTable.createdAt))
     .limit(limit);
   rows.reverse(); // oldest-first, matching the previous stable run order
