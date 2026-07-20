@@ -13,6 +13,11 @@ import { PushDeviceInputPlatform } from "@workspace/api-client-react";
 const TEMPLATE_ROUTES: Record<string, Href> = {
   deadline_reminder: "/(tabs)/deadlines",
   b2c_window_alert: "/(tabs)/b2c",
+  // Digest/statement delivery pushes are pointer-only offers ("your weekly
+  // digest is ready"); the content itself lives on the Digests & statements
+  // screen for both audiences, so both templates land there.
+  firm_digest_ready: "/clerk-updates",
+  client_statement_ready: "/clerk-updates",
 };
 
 /**
