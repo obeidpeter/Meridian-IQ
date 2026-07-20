@@ -1,5 +1,9 @@
 import { test, expect, describe } from "vitest";
-import type { ClerkMetricsCases } from "@workspace/api-client-react";
+import type {
+  ClerkMetricsCases,
+  EvalFixtureReport,
+  EvalFixtureSummary,
+} from "@workspace/api-client-react";
 import {
   canaryPrefillNote,
   fmtEvalDuration,
@@ -11,6 +15,12 @@ import {
   overrideRateClass,
   qualityAlertText,
   shapeExample,
+  CORPUS_PREVIEW_ROWS,
+  corpusSummary,
+  fixtureAccuracy,
+  fixtureSourceLabel,
+  retireDisabledReason,
+  visibleFixtureCount,
 } from "./clerk-health";
 
 describe("overrideRateClass", () => {
@@ -178,5 +188,93 @@ describe("canaryPrefillNote", () => {
 
   test("silent while the prompt loads or once it has loaded", () => {
     expect(canaryPrefillNote(false)).toBeNull();
+  });
+});
+
+// ---- Eval corpus curation ---------------------------------------------------
+
+function fixture(over: Partial<EvalFixtureSummary> = {}): EvalFixtureSummary {
+  return {
+    key: "fx-1",
+    source: "static",
+    label: "Clean services invoice",
+    riskLabel: "clean",
+    retired: false,
+    ...over,
+  };
+}
+
+describe("fixtureSourceLabel", () => {
+  test("renders the wire value 'redteam' as prose 'red-team', others verbatim", () => {
+    expect(fixtureSourceLabel("redteam")).toBe("red-team");
+    expect(fixtureSourceLabel("static")).toBe("static");
+    expect(fixtureSourceLabel("grown")).toBe("grown");
+  });
+});
+
+describe("fixtureAccuracy", () => {
+  test("is correct/compared once history exists", () => {
+    expect(fixtureAccuracy({ fieldsCompared: 10, fieldsCorrect: 9 })).toBe(0.9);
+    expect(fixtureAccuracy({ fieldsCompared: 4, fieldsCorrect: 0 })).toBe(0);
+  });
+
+  test("null (the em-dash sentinel) with no compared fields — 0/0 is 'no history', not 0%", () => {
+    expect(fixtureAccuracy({})).toBeNull();
+    expect(fixtureAccuracy({ fieldsCompared: 0, fieldsCorrect: 0 })).toBeNull();
+    expect(fixtureAccuracy({ fieldsCompared: undefined })).toBeNull();
+  });
+
+  test("tolerates a missing fieldsCorrect (older server rows) as zero", () => {
+    expect(fixtureAccuracy({ fieldsCompared: 5 })).toBe(0);
+  });
+});
+
+describe("retireDisabledReason", () => {
+  test("static fixtures explain why they are read-only", () => {
+    expect(retireDisabledReason("static")).toMatch(/code change/);
+  });
+
+  test("grown and red-team fixtures are curatable — no reason", () => {
+    expect(retireDisabledReason("grown")).toBeNull();
+    expect(retireDisabledReason("redteam")).toBeNull();
+  });
+});
+
+describe("corpusSummary", () => {
+  const report = (fixtures: EvalFixtureSummary[], runsScanned = 7): EvalFixtureReport => ({
+    fixtures,
+    runsScanned,
+  });
+
+  test("counts each source, mentions retirement only when present", () => {
+    expect(
+      corpusSummary(
+        report([
+          fixture(),
+          fixture({ key: "fx-2", source: "grown" }),
+          fixture({ key: "fx-3", source: "redteam", retired: true }),
+        ]),
+      ),
+    ).toBe(
+      "3 fixture(s) — 1 static, 1 grown, 1 red-team · 1 retired · history from 7 stored run(s)",
+    );
+  });
+
+  test("a fully-live corpus omits the retired clause", () => {
+    expect(corpusSummary(report([fixture()], 0))).toBe(
+      "1 fixture(s) — 1 static, 0 grown, 0 red-team · history from 0 stored run(s)",
+    );
+  });
+});
+
+describe("visibleFixtureCount", () => {
+  test("previews the first rows of a long corpus until the operator expands", () => {
+    expect(visibleFixtureCount(200, false)).toBe(CORPUS_PREVIEW_ROWS);
+    expect(visibleFixtureCount(200, true)).toBe(200);
+  });
+
+  test("a short corpus never truncates", () => {
+    expect(visibleFixtureCount(6, false)).toBe(6);
+    expect(visibleFixtureCount(6, true)).toBe(6);
   });
 });

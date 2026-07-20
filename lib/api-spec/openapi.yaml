@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.36.0
+  version: 0.38.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -97,6 +97,92 @@ paths:
       responses:
         "204":
           description: Signed out
+  /auth/totp/challenge:
+    post:
+      operationId: totpChallenge
+      tags: [auth]
+      summary: Redeem a login mfaToken plus a TOTP or recovery code for the session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpChallengeInput"
+      responses:
+        "200":
+          description: Signed in; principal returned and session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /auth/totp/status:
+    get:
+      operationId: getTotpStatus
+      tags: [auth]
+      summary: Whether the signed-in user has TOTP enabled
+      responses:
+        "200":
+          description: Enrolment state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpStatus"
+  /auth/totp/setup:
+    post:
+      operationId: setupTotp
+      tags: [auth]
+      summary: Begin TOTP enrolment — returns the secret, otpauth URI and recovery codes (shown once)
+      responses:
+        "200":
+          description: Pending enrolment; activate with a valid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpSetup"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /auth/totp/activate:
+    post:
+      operationId: activateTotp
+      tags: [auth]
+      summary: Confirm enrolment with a valid code; revokes other sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpActivateInput"
+      responses:
+        "200":
+          description: TOTP enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/totp/disable:
+    post:
+      operationId: disableTotp
+      tags: [auth]
+      summary: Disable TOTP — requires the password and a current code; revokes other sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpDisableInput"
+      responses:
+        "200":
+          description: TOTP disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /auth/change-password:
     post:
       operationId: changePassword
@@ -3330,6 +3416,60 @@ paths:
                 $ref: "#/components/schemas/PromptCanaryReport"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /clerk/eval/fixtures:
+    get:
+      operationId: listEvalFixtures
+      tags: [clerk]
+      summary: The full eval corpus with per-fixture pass history reconstructed from stored runs
+      responses:
+        "200":
+          description: Corpus inventory — static, grown and red-team fixtures
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalFixtureReport"
+  /clerk/eval/fixtures/{key}/retire:
+    post:
+      operationId: retireEvalFixture
+      tags: [clerk]
+      summary: Retire a grown or red-team fixture from the corpus (static fixtures cannot be retired)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated fixture row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalFixtureSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clerk/eval/fixtures/{key}/restore:
+    post:
+      operationId: restoreEvalFixture
+      tags: [clerk]
+      summary: Restore a retired fixture to the corpus
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated fixture row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalFixtureSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /clerk/eval/runs:
     get:
       operationId: listClerkEvalRuns
@@ -3419,6 +3559,120 @@ paths:
                 $ref: "#/components/schemas/StaffNotificationPreferences"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /staff/notification-preferences/request-email-verification:
+    post:
+      operationId: requestStaffEmailVerification
+      tags: [clerk]
+      summary: Send a verification code to the saved email (requires the outbound relay; 503 while messaging is dark)
+      responses:
+        "202":
+          description: Code dispatched (or silently absorbed — no address oracle)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /staff/notification-preferences/confirm-email:
+    post:
+      operationId: confirmStaffEmail
+      tags: [clerk]
+      summary: Confirm the saved email with the received code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmStaffEmailInput"
+      responses:
+        "200":
+          description: Verified preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffNotificationPreferences"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /statement-connectors:
+    get:
+      operationId: listStatementConnectors
+      tags: [statements]
+      summary: Registry of available bank-feed connectors
+      responses:
+        "200":
+          description: Connector registry
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StatementConnectorInfo"
+  /statement-connections:
+    get:
+      operationId: listStatementConnections
+      tags: [statements]
+      summary: The firm's configured bank-feed connections
+      responses:
+        "200":
+          description: Connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StatementConnection"
+    post:
+      operationId: createStatementConnection
+      tags: [statements]
+      summary: Configure a bank-feed connection for a client party
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStatementConnectionInput"
+      responses:
+        "200":
+          description: Created connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementConnection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /statement-connections/{id}/sync:
+    post:
+      operationId: syncStatementConnection
+      tags: [statements]
+      summary: Pull new statement lines through the connector; they land via the ordinary ingest flow
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "202":
+          description: Sync queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementSyncRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /statement-connections/{id}/runs:
+    get:
+      operationId: listStatementSyncRuns
+      tags: [statements]
+      summary: Past sync runs for a connection, newest first
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StatementSyncRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /clerk/client-statements:
     get:
@@ -3955,6 +4209,66 @@ components:
         # token as the cookie; sent as `Authorization: Bearer <token>`.
         token:
           type: ["string", "null"]
+        # TOTP two-factor: when the account has TOTP enabled, /auth/login does
+        # NOT set the session cookie; it returns mfaRequired=true plus a
+        # short-lived signed mfaToken to redeem at /auth/totp/challenge.
+        mfaRequired:
+          type: boolean
+        mfaToken:
+          type: ["string", "null"]
+    TotpChallengeInput:
+      type: object
+      required: [mfaToken, code]
+      properties:
+        mfaToken:
+          type: string
+        # A 6-digit TOTP code, or a one-time recovery code.
+        code:
+          type: string
+          minLength: 6
+          maxLength: 32
+    TotpStatus:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        enabledAt:
+          type: ["string", "null"]
+        recoveryCodesRemaining:
+          type: ["integer", "null"]
+    TotpSetup:
+      type: object
+      required: [secret, otpauthUri, recoveryCodes]
+      properties:
+        # Base32 secret for manual entry; shown once, never retrievable again.
+        secret:
+          type: string
+        otpauthUri:
+          type: string
+        recoveryCodes:
+          type: array
+          items:
+            type: string
+    TotpActivateInput:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 6
+          maxLength: 8
+    TotpDisableInput:
+      type: object
+      required: [password, code]
+      properties:
+        password:
+          type: string
+          minLength: 1
+        code:
+          type: string
+          minLength: 6
+          maxLength: 32
     LoginInput:
       type: object
       required: [email, password]
@@ -9490,7 +9804,7 @@ components:
     # party-keyed client alert model and carries no CORE-03 consent question.
     StaffNotificationPreferences:
       type: object
-      required: [digestEnabled, emailEnabled, pushEnabled, email]
+      required: [digestEnabled, emailEnabled, pushEnabled, email, emailVerifiedAt]
       properties:
         digestEnabled:
           type: boolean
@@ -9499,6 +9813,130 @@ components:
         pushEnabled:
           type: boolean
         email:
+          type: ["string", "null"]
+        # Set once the saved address has been confirmed via the emailed code;
+        # cleared whenever the address changes. Email delivery only follows a
+        # verified address.
+        emailVerifiedAt:
+          type: ["string", "null"]
+    ConfirmStaffEmailInput:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 6
+          maxLength: 8
+    EvalFixtureSummary:
+      type: object
+      required: [key, source, label, riskLabel, retired]
+      properties:
+        key:
+          type: string
+        source:
+          type: string
+          enum: [static, grown, redteam]
+        label:
+          type: string
+        riskLabel:
+          type: string
+        retired:
+          type: boolean
+        retiredAt:
+          type: ["string", "null"]
+        createdAt:
+          type: ["string", "null"]
+        # Pass history reconstructed from stored eval runs (newest-first cap
+        # applied server-side): appearances, last outcome, cumulative accuracy.
+        runs:
+          type: integer
+        lastOutcome:
+          type: ["string", "null"]
+        fieldsCompared:
+          type: integer
+        fieldsCorrect:
+          type: integer
+        injectionFixtures:
+          type: integer
+        injectionResisted:
+          type: integer
+        lastMismatchedFields:
+          type: array
+          items:
+            type: string
+    EvalFixtureReport:
+      type: object
+      required: [fixtures, runsScanned]
+      properties:
+        fixtures:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvalFixtureSummary"
+        runsScanned:
+          type: integer
+    StatementConnectorInfo:
+      type: object
+      required: [key, name, description]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+    StatementConnection:
+      type: object
+      required: [id, connectorKey, clientPartyId, status, createdAt]
+      properties:
+        id:
+          type: string
+        connectorKey:
+          type: string
+        clientPartyId:
+          type: string
+        clientName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, disabled]
+        lastSyncAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+    CreateStatementConnectionInput:
+      type: object
+      required: [connectorKey, clientPartyId]
+      properties:
+        connectorKey:
+          type: string
+        clientPartyId:
+          type: string
+          format: uuid
+        # Connector-specific configuration (account reference etc.); validated
+        # by the connector's authenticate step before the row is created.
+        config:
+          type: object
+          additionalProperties: true
+    StatementSyncRun:
+      type: object
+      required: [id, connectionId, status, startedAt]
+      properties:
+        id:
+          type: string
+        connectionId:
+          type: string
+        status:
+          type: string
+          enum: [running, succeeded, failed]
+        linesPulled:
+          type: ["integer", "null"]
+        statementId:
+          type: ["string", "null"]
+        error:
+          type: ["string", "null"]
+        startedAt:
+          type: string
+        finishedAt:
           type: ["string", "null"]
     UpdateStaffNotificationPreferencesInput:
       type: object

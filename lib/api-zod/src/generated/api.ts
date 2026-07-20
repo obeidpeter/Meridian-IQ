@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.36.0
+ * OpenAPI spec version: 0.38.0
  */
 import * as zod from 'zod';
 
@@ -30,7 +30,9 @@ export const GetMeResponse = zod.object({
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
-  "token": zod.string().nullish()
+  "token": zod.string().nullish(),
+  "mfaRequired": zod.boolean().optional(),
+  "mfaToken": zod.string().nullish()
 })
 
 
@@ -57,7 +59,9 @@ export const LoginResponse = zod.object({
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
-  "token": zod.string().nullish()
+  "token": zod.string().nullish(),
+  "mfaRequired": zod.boolean().optional(),
+  "mfaToken": zod.string().nullish()
 })
 
 
@@ -65,6 +69,94 @@ export const LoginResponse = zod.object({
  * @summary Clear the session cookie
  */
 export const LogoutResponse = zod.void()
+
+
+/**
+ * @summary Redeem a login mfaToken plus a TOTP or recovery code for the session cookie
+ */
+export const totpChallengeBodyCodeMin = 6;
+export const totpChallengeBodyCodeMax = 32;
+
+
+
+export const TotpChallengeBody = zod.object({
+  "mfaToken": zod.string(),
+  "code": zod.string().min(totpChallengeBodyCodeMin).max(totpChallengeBodyCodeMax)
+})
+
+export const TotpChallengeResponse = zod.object({
+  "userId": zod.string(),
+  "role": zod.string(),
+  "email": zod.string().nullish(),
+  "fullName": zod.string().nullish(),
+  "firmId": zod.string().nullish(),
+  "clientPartyId": zod.string().nullish(),
+  "buyerPartyId": zod.string().nullish(),
+  "capabilities": zod.array(zod.string()),
+  "token": zod.string().nullish(),
+  "mfaRequired": zod.boolean().optional(),
+  "mfaToken": zod.string().nullish()
+})
+
+
+/**
+ * @summary Whether the signed-in user has TOTP enabled
+ */
+export const GetTotpStatusResponse = zod.object({
+  "enabled": zod.boolean(),
+  "enabledAt": zod.string().nullish(),
+  "recoveryCodesRemaining": zod.number().nullish()
+})
+
+
+/**
+ * @summary Begin TOTP enrolment — returns the secret, otpauth URI and recovery codes (shown once)
+ */
+export const SetupTotpResponse = zod.object({
+  "secret": zod.string(),
+  "otpauthUri": zod.string(),
+  "recoveryCodes": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Confirm enrolment with a valid code; revokes other sessions
+ */
+export const activateTotpBodyCodeMin = 6;
+export const activateTotpBodyCodeMax = 8;
+
+
+
+export const ActivateTotpBody = zod.object({
+  "code": zod.string().min(activateTotpBodyCodeMin).max(activateTotpBodyCodeMax)
+})
+
+export const ActivateTotpResponse = zod.object({
+  "enabled": zod.boolean(),
+  "enabledAt": zod.string().nullish(),
+  "recoveryCodesRemaining": zod.number().nullish()
+})
+
+
+/**
+ * @summary Disable TOTP — requires the password and a current code; revokes other sessions
+ */
+
+export const disableTotpBodyCodeMin = 6;
+export const disableTotpBodyCodeMax = 32;
+
+
+
+export const DisableTotpBody = zod.object({
+  "password": zod.string().min(1),
+  "code": zod.string().min(disableTotpBodyCodeMin).max(disableTotpBodyCodeMax)
+})
+
+export const DisableTotpResponse = zod.object({
+  "enabled": zod.boolean(),
+  "enabledAt": zod.string().nullish(),
+  "recoveryCodesRemaining": zod.number().nullish()
+})
 
 
 /**
@@ -4992,6 +5084,80 @@ export const RunPromptCanaryResponse = zod.object({
 
 
 /**
+ * @summary The full eval corpus with per-fixture pass history reconstructed from stored runs
+ */
+export const ListEvalFixturesResponse = zod.object({
+  "fixtures": zod.array(zod.object({
+  "key": zod.string(),
+  "source": zod.enum(['static', 'grown', 'redteam']),
+  "label": zod.string(),
+  "riskLabel": zod.string(),
+  "retired": zod.boolean(),
+  "retiredAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "runs": zod.number().optional(),
+  "lastOutcome": zod.string().nullish(),
+  "fieldsCompared": zod.number().optional(),
+  "fieldsCorrect": zod.number().optional(),
+  "injectionFixtures": zod.number().optional(),
+  "injectionResisted": zod.number().optional(),
+  "lastMismatchedFields": zod.array(zod.string()).optional()
+})),
+  "runsScanned": zod.number()
+})
+
+
+/**
+ * @summary Retire a grown or red-team fixture from the corpus (static fixtures cannot be retired)
+ */
+export const RetireEvalFixtureParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const RetireEvalFixtureResponse = zod.object({
+  "key": zod.string(),
+  "source": zod.enum(['static', 'grown', 'redteam']),
+  "label": zod.string(),
+  "riskLabel": zod.string(),
+  "retired": zod.boolean(),
+  "retiredAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "runs": zod.number().optional(),
+  "lastOutcome": zod.string().nullish(),
+  "fieldsCompared": zod.number().optional(),
+  "fieldsCorrect": zod.number().optional(),
+  "injectionFixtures": zod.number().optional(),
+  "injectionResisted": zod.number().optional(),
+  "lastMismatchedFields": zod.array(zod.string()).optional()
+})
+
+
+/**
+ * @summary Restore a retired fixture to the corpus
+ */
+export const RestoreEvalFixtureParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const RestoreEvalFixtureResponse = zod.object({
+  "key": zod.string(),
+  "source": zod.enum(['static', 'grown', 'redteam']),
+  "label": zod.string(),
+  "riskLabel": zod.string(),
+  "retired": zod.boolean(),
+  "retiredAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "runs": zod.number().optional(),
+  "lastOutcome": zod.string().nullish(),
+  "fieldsCompared": zod.number().optional(),
+  "fieldsCorrect": zod.number().optional(),
+  "injectionFixtures": zod.number().optional(),
+  "injectionResisted": zod.number().optional(),
+  "lastMismatchedFields": zod.array(zod.string()).optional()
+})
+
+
+/**
  * @summary Past evaluation runs, newest first
  */
 export const listClerkEvalRunsQueryLimitMax = 100;
@@ -5140,7 +5306,8 @@ export const GetStaffNotificationPreferencesResponse = zod.object({
   "digestEnabled": zod.boolean(),
   "emailEnabled": zod.boolean(),
   "pushEnabled": zod.boolean(),
-  "email": zod.string().nullable()
+  "email": zod.string().nullable(),
+  "emailVerifiedAt": zod.string().nullable()
 })
 
 
@@ -5158,8 +5325,121 @@ export const UpdateStaffNotificationPreferencesResponse = zod.object({
   "digestEnabled": zod.boolean(),
   "emailEnabled": zod.boolean(),
   "pushEnabled": zod.boolean(),
-  "email": zod.string().nullable()
+  "email": zod.string().nullable(),
+  "emailVerifiedAt": zod.string().nullable()
 })
+
+
+/**
+ * @summary Send a verification code to the saved email (requires the outbound relay; 503 while messaging is dark)
+ */
+export const RequestStaffEmailVerificationResponse = zod.void()
+
+
+/**
+ * @summary Confirm the saved email with the received code
+ */
+export const confirmStaffEmailBodyCodeMin = 6;
+export const confirmStaffEmailBodyCodeMax = 8;
+
+
+
+export const ConfirmStaffEmailBody = zod.object({
+  "code": zod.string().min(confirmStaffEmailBodyCodeMin).max(confirmStaffEmailBodyCodeMax)
+})
+
+export const ConfirmStaffEmailResponse = zod.object({
+  "digestEnabled": zod.boolean(),
+  "emailEnabled": zod.boolean(),
+  "pushEnabled": zod.boolean(),
+  "email": zod.string().nullable(),
+  "emailVerifiedAt": zod.string().nullable()
+})
+
+
+/**
+ * @summary Registry of available bank-feed connectors
+ */
+export const ListStatementConnectorsResponseItem = zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "description": zod.string()
+})
+export const ListStatementConnectorsResponse = zod.array(ListStatementConnectorsResponseItem)
+
+
+/**
+ * @summary The firm's configured bank-feed connections
+ */
+export const ListStatementConnectionsResponseItem = zod.object({
+  "id": zod.string(),
+  "connectorKey": zod.string(),
+  "clientPartyId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "status": zod.enum(['active', 'disabled']),
+  "lastSyncAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListStatementConnectionsResponse = zod.array(ListStatementConnectionsResponseItem)
+
+
+/**
+ * @summary Configure a bank-feed connection for a client party
+ */
+export const CreateStatementConnectionBody = zod.object({
+  "connectorKey": zod.string(),
+  "clientPartyId": zod.string().uuid(),
+  "config": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const CreateStatementConnectionResponse = zod.object({
+  "id": zod.string(),
+  "connectorKey": zod.string(),
+  "clientPartyId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "status": zod.enum(['active', 'disabled']),
+  "lastSyncAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Pull new statement lines through the connector; they land via the ordinary ingest flow
+ */
+export const SyncStatementConnectionParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const SyncStatementConnectionResponse = zod.object({
+  "id": zod.string(),
+  "connectionId": zod.string(),
+  "status": zod.enum(['running', 'succeeded', 'failed']),
+  "linesPulled": zod.number().nullish(),
+  "statementId": zod.string().nullish(),
+  "error": zod.string().nullish(),
+  "startedAt": zod.string(),
+  "finishedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Past sync runs for a connection, newest first
+ */
+export const ListStatementSyncRunsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListStatementSyncRunsResponseItem = zod.object({
+  "id": zod.string(),
+  "connectionId": zod.string(),
+  "status": zod.enum(['running', 'succeeded', 'failed']),
+  "linesPulled": zod.number().nullish(),
+  "statementId": zod.string().nullish(),
+  "error": zod.string().nullish(),
+  "startedAt": zod.string(),
+  "finishedAt": zod.string().nullish()
+})
+export const ListStatementSyncRunsResponse = zod.array(ListStatementSyncRunsResponseItem)
 
 
 /**

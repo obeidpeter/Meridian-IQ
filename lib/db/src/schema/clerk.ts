@@ -365,6 +365,10 @@ export const clerkEvalFixturesTable = pgTable("clerk_eval_fixtures", {
   // Null on fixtures grown before this existed (they simply never match).
   supplierName: text("supplier_name"),
   supplierTin: text("supplier_tin"),
+  // Corpus curation (round 15): a retired fixture stays as evidence (its runs
+  // remain interpretable) but is excluded from every corpus loader BEFORE the
+  // newest-N cap, so retirement frees a corpus slot. Null = in the corpus.
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -418,6 +422,10 @@ export const clerkRedTeamFixturesTable = pgTable("clerk_red_team_fixtures", {
   // What the planted instruction tried to force, for the operator reading a
   // failed run ("the model was told to report grandTotal 1.00").
   decoys: jsonb("decoys").$type<Record<string, string>>().notNull(),
+  // Corpus curation (round 15): same posture as clerk_eval_fixtures.retiredAt
+  // — a retired variant is excluded from the loaders before the cap, so a
+  // stale or low-value attack stops costing one model call per eval run.
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 

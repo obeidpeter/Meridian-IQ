@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.36.0
+ * OpenAPI spec version: 0.38.0
  */
 
 export interface Me {
@@ -22,4 +22,7 @@ export interface Me {
   capabilities: string[];
   /** @nullable */
   token?: string | null;
+  mfaRequired?: boolean;
+  /** @nullable */
+  mfaToken?: string | null;
 }

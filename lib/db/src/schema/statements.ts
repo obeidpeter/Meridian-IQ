@@ -172,6 +172,82 @@ export const buyerExposureSnapshotsTable = pgTable("buyer_exposure_snapshots", {
     .defaultNow(),
 });
 
+// ---- Bank-feed connections (Wave C) ------------------------------------------
+// A connection binds one client party's bank feed to a StatementFeedConnector
+// implementation (modules/statements/feed-contract.ts) — the open-banking seam
+// the parser abstraction always promised. Pulled lines NEVER land directly:
+// every sync renders the pull to CSV and walks the ordinary ingestStatement
+// path, so consent (CORE-03), parse invariants and the statement.reconcile
+// outbox apply identically to feeds and uploads. Modeled on the ERP connector
+// tables (connectors.ts): opaque cursor, per-run observability rows.
+
+export const statementConnectionStatusEnum = pgEnum(
+  "statement_connection_status",
+  ["active", "disabled"],
+);
+
+export const statementConnectionsTable = pgTable(
+  "statement_connections",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    // The client business whose bank account this feed reads.
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    // Which StatementFeedConnector serves this connection (e.g. "demobank").
+    // Resolved through the feed registry, never branched on.
+    connectorKey: text("connector_key").notNull(),
+    // Connector-specific auth/config, opaque to the core.
+    config: jsonb("config").$type<Record<string, unknown>>(),
+    // Incremental pull cursor, opaque to the core.
+    cursor: text("cursor"),
+    status: statementConnectionStatusEnum("status").notNull().default("active"),
+    lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  // The connections list is always a per-firm read.
+  (t) => [index("statement_connections_firm_idx").on(t.firmId)],
+);
+
+export const statementSyncRunStatusEnum = pgEnum("statement_sync_run_status", [
+  "running",
+  "succeeded",
+  "failed",
+]);
+
+export const statementSyncRunsTable = pgTable(
+  "statement_sync_runs",
+  {
+    id: id(),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => statementConnectionsTable.id, { onDelete: "cascade" }),
+    // Denormalized from the connection so firm-keyed RLS covers run rows too.
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    status: statementSyncRunStatusEnum("status").notNull().default("running"),
+    linesPulled: integer("lines_pulled"),
+    // The bank statement the pull committed through ingestStatement (null for
+    // an empty pull or a failed run).
+    statementId: uuid("statement_id").references(() => bankStatementsTable.id),
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  // The runs list reads newest-first per connection.
+  (t) => [
+    index("statement_sync_runs_connection_idx").on(t.connectionId, t.startedAt),
+  ],
+);
+
 export type BankStatement = typeof bankStatementsTable.$inferSelect;
 export type BankStatementLine = typeof bankStatementLinesTable.$inferSelect;
 export type MatchProposal = typeof matchProposalsTable.$inferSelect;
+export type StatementConnection = typeof statementConnectionsTable.$inferSelect;
+export type StatementSyncRun = typeof statementSyncRunsTable.$inferSelect;

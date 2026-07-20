@@ -105,9 +105,15 @@ export async function getSessionSecret(): Promise<string> {
 
 // ---- stateless session token: base64url(userId.expiryMs.epoch).signature ----
 
-function sign(payload: string, secret: string): string {
+// Shared with the mfa pending token (modules/auth/totp.ts): same HMAC and
+// persisted secret, but the two payload formats are mutually unparseable
+// (dots here, a colon-separated purposed payload there), so a signature valid
+// for one kind can never be redeemed as the other.
+export function signSessionPayload(payload: string, secret: string): string {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
+
+const sign = signSessionPayload;
 
 export async function issueSessionToken(
   userId: string,
@@ -166,6 +172,11 @@ export async function authenticate(
   email: string;
   fullName: string | null;
   sessionEpoch: number;
+  // Non-null when the account has completed TOTP enrolment: the login route
+  // must then withhold the session cookie and hand out an mfa pending token
+  // instead (modules/auth/totp.ts). Returned here so login needs no second
+  // user lookup after the credential check.
+  totpEnabledAt: Date | null;
 } | null> {
   const [user] = await getDb()
     .select({
@@ -174,6 +185,7 @@ export async function authenticate(
       fullName: usersTable.fullName,
       passwordHash: usersTable.passwordHash,
       sessionEpoch: usersTable.sessionEpoch,
+      totpEnabledAt: usersTable.totpEnabledAt,
     })
     .from(usersTable)
     .where(eq(usersTable.email, normalizeEmail(email)))
@@ -189,6 +201,7 @@ export async function authenticate(
     email: user.email,
     fullName: user.fullName,
     sessionEpoch: user.sessionEpoch,
+    totpEnabledAt: user.totpEnabledAt,
   };
 }
 

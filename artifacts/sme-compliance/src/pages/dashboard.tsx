@@ -125,17 +125,29 @@ function AgingBucketRow({
   );
 }
 
+// First-run nudge gate: the quiet "create your first invoice" link renders
+// ONLY when the client has no invoices AT ALL — an active book whose
+// receivables happen to be settled has earned silence, not a nag. Undefined
+// (summary still loading or failed) shows nothing rather than guessing.
+export function showFirstInvoiceCta(
+  totalInvoices: number | undefined,
+): boolean {
+  return totalInvoices === 0;
+}
+
 function ReceivablesCard({
   summary,
   isLoading,
   isError,
   clientPartyId,
+  totalInvoices,
   onRetry,
 }: {
   summary: ReceivablesSummary | undefined;
   isLoading: boolean;
   isError: boolean;
   clientPartyId: string;
+  totalInvoices: number | undefined;
   onRetry: () => void;
 }) {
   const primary = summary?.groups[0];
@@ -202,6 +214,19 @@ function ReceivablesCard({
             data-testid="text-receivables-empty"
           >
             No outstanding receivables.
+            {showFirstInvoiceCta(totalInvoices) && (
+              <>
+                {" "}
+                <Link
+                  href="/invoices/new"
+                  className="text-primary hover:underline"
+                  data-testid="link-first-invoice"
+                >
+                  Create your first invoice
+                </Link>{" "}
+                to start tracking what you&apos;re owed.
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -875,6 +900,7 @@ export function Dashboard() {
                 isLoading={receivablesLoading}
                 isError={receivablesError}
                 clientPartyId={me?.clientPartyId || ""}
+                totalInvoices={summary?.totalInvoices}
                 onRetry={() => refetchReceivables()}
               />
 

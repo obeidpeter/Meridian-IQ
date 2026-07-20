@@ -42,13 +42,19 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Returns the number of slots CLAIMED this pass (sends may be fewer: opt-outs,
 // dark flag and stale invoices claim silently). Zero means the book is fully
 // processed — callers can drain by looping until then.
+//
+// Sweep-only: must run OUTSIDE any request context, mirroring the digest
+// delivery shape (deliverFirmDigests). The candidate read, the prefs read and
+// the sends run on the ambient-free raw pool (autocommit — each message/push
+// insert is individually durable); only the per-row CLAIM opens a
+// transaction, and it COMMITS before any send leaves. Holding one bypass
+// transaction across the whole pass — claims, prefs reads AND the provider
+// sends — meant a mid-pass failure rolled back every claim and message row
+// while real-provider sends had already left the building, and sibling
+// instances blocked on the row locks for the duration.
 export async function sweepDeadlineReminders(
   now = new Date(),
 ): Promise<number> {
-  return runInBypassContext(() => sweepInner(now));
-}
-
-async function sweepInner(now: Date): Promise<number> {
   // SQL prefilter: daysUntil(issueDate + WINDOW, now) <= DUE_SOON_DAYS implies
   // issueDate < now - (WINDOW - DUE_SOON_DAYS) days. Date-only granularity may
   // admit a boundary row; the exact JS classification below settles it.
@@ -92,20 +98,24 @@ async function sweepInner(now: Date): Promise<number> {
     if (days > DUE_SOON_DAYS) continue; // boundary row still upcoming
     const kind = days < 0 ? ("overdue" as const) : ("due_soon" as const);
 
-    // Claim the (invoice, kind) slot first: the unique index makes this the
-    // atomic once-only gate. The whole pass runs in one bypass transaction,
-    // so a mid-pass crash rolls back claims AND message rows together — a
-    // reminder is never half-sent across the ledger and the message log.
-    const claim = await getDb()
-      .insert(deadlineReminderSendsTable)
-      .values({
-        invoiceId: inv.id,
-        clientPartyId: inv.supplierPartyId,
-        firmId: inv.firmId,
-        kind,
-      })
-      .onConflictDoNothing()
-      .returning({ id: deadlineReminderSendsTable.id });
+    // Claim the (invoice, kind) slot first, in its OWN short committed
+    // transaction: the unique index makes the insert the atomic cross-
+    // instance once-only gate, and committing it BEFORE any send leaves is
+    // the at-most-once trade — a claimed reminder whose sends then fail is
+    // NOT re-offered (better a missed nudge than a double alert; the
+    // dashboard still shows the invoice as due/overdue either way).
+    const claim = await runInBypassContext(() =>
+      getDb()
+        .insert(deadlineReminderSendsTable)
+        .values({
+          invoiceId: inv.id,
+          clientPartyId: inv.supplierPartyId,
+          firmId: inv.firmId,
+          kind,
+        })
+        .onConflictDoNothing()
+        .returning({ id: deadlineReminderSendsTable.id }),
+    );
     if (claim.length === 0) continue; // already reminded at this threshold
     claimed++;
 
@@ -123,6 +133,11 @@ async function sweepInner(now: Date): Promise<number> {
     // No prefs row means the table defaults apply: whatsapp/email/push on,
     // sms off, deadline alerts on.
     if (prefs && !prefs.deadlineAlerts) continue;
+    // Sends happen strictly AFTER the claim committed, outside any open
+    // transaction: each message/push write is an autocommit insert, so a
+    // failure here loses at most this reminder's remaining channels — never
+    // a committed claim (fanOutAlert absorbs per-channel failures; they land
+    // in the messages ledger).
     await fanOutAlert({
       prefs,
       clientPartyId: inv.supplierPartyId,

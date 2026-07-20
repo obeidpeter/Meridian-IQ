@@ -20,6 +20,11 @@ import {
   RunClerkEvalResponse,
   ListClerkEvalRunsQueryParams,
   ListClerkEvalRunsResponse,
+  ListEvalFixturesResponse,
+  RetireEvalFixtureParams,
+  RetireEvalFixtureResponse,
+  RestoreEvalFixtureParams,
+  RestoreEvalFixtureResponse,
   AskClerkBody,
   AskClerkResponse,
   GetClerkMetricsQueryParams,
@@ -116,6 +121,11 @@ import {
   runEvalCorpus,
   withAccuracy,
 } from "../modules/clerk/eval";
+import {
+  listEvalFixtures,
+  restoreFixture,
+  retireFixture,
+} from "../modules/clerk/eval-curation";
 import { runPromptCanary } from "../modules/clerk/prompt-canary";
 import { runModelCanary } from "../modules/clerk/model-canary";
 import { computeClaimGaps } from "../modules/clerk/claim-gaps";
@@ -290,6 +300,40 @@ router.get("/clerk/eval/runs", async (req, res): Promise<void> => {
   const runs = await listEvalRuns(limit);
   res.json(ListClerkEvalRunsResponse.parse(runs.map(withAccuracy)));
 });
+
+// Corpus curation (round 15): the inventory of every fixture the eval run
+// measures — static, corrections-grown and red-team — with per-fixture pass
+// history reconstructed from the stored runs (deterministic, zero model
+// calls, nothing new stored). Operator-gated like the runs it summarises.
+router.get("/clerk/eval/fixtures", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const report = await listEvalFixtures();
+  res.json(ListEvalFixturesResponse.parse(report));
+});
+
+// Retire/restore a grown or red-team fixture. The row survives (past runs
+// keep their meaning); the loaders exclude retired rows before their caps,
+// so retirement frees a corpus slot. Static fixtures 400 (the module
+// enforces it); an unknown key 404s. Audited per action.
+router.post(
+  "/clerk/eval/fixtures/:key/retire",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const params = parseOrThrow(RetireEvalFixtureParams, req.params);
+    const row = await retireFixture(params.key, req.principal.userId);
+    res.json(RetireEvalFixtureResponse.parse(row));
+  },
+);
+
+router.post(
+  "/clerk/eval/fixtures/:key/restore",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const params = parseOrThrow(RestoreEvalFixtureParams, req.params);
+    const row = await restoreFixture(params.key, req.principal.userId);
+    res.json(RestoreEvalFixtureResponse.parse(row));
+  },
+);
 
 // Prompt canary (round-5 idea #2). The incumbent extraction prompt, so the
 // operator can start a candidate from what actually runs today...

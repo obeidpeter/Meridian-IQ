@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.36.0
+ * OpenAPI spec version: 0.38.0
  */
 
 export type MessageStatus = typeof MessageStatus[keyof typeof MessageStatus];

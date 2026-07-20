@@ -410,7 +410,11 @@ export async function deliverFirmDigests(limit = DELIVERY_BATCH): Promise<number
     // self-service preference row — the join is what stops a departed
     // member's digests). Nobody left → the claim above already retired the
     // row; send nothing. selectDistinct: a user holding both staff roles in
-    // the firm must still be addressed once.
+    // the firm must still be addressed once. The EMAIL channel additionally
+    // requires the saved address to be VERIFIED (emailVerifiedAt — see
+    // routes/staff.ts): an unverified address must never influence where a
+    // digest notification lands. Push is unaffected — it targets the
+    // member's own registered devices, not a typed-in address.
     const recipients = (
       await getDb()
         .selectDistinct({
@@ -418,6 +422,7 @@ export async function deliverFirmDigests(limit = DELIVERY_BATCH): Promise<number
           emailEnabled: staffNotificationPreferencesTable.emailEnabled,
           pushEnabled: staffNotificationPreferencesTable.pushEnabled,
           email: staffNotificationPreferencesTable.email,
+          emailVerifiedAt: staffNotificationPreferencesTable.emailVerifiedAt,
         })
         .from(staffNotificationPreferencesTable)
         .innerJoin(
@@ -434,14 +439,22 @@ export async function deliverFirmDigests(limit = DELIVERY_BATCH): Promise<number
             eq(staffNotificationPreferencesTable.digestEnabled, true),
           ),
         )
-    ).filter((r) => (r.emailEnabled && r.email !== null) || r.pushEnabled);
+    ).filter(
+      (r) =>
+        (r.emailEnabled && r.email !== null && r.emailVerifiedAt !== null) ||
+        r.pushEnabled,
+    );
 
     // Sends happen AFTER the claim committed, outside any open transaction:
     // each message/push write is an autocommit insert, so a crash here loses
     // at most the remaining channels of one digest — never a committed claim.
     const entityId = pointerEntityRef("dig", row.id);
     for (const recipient of recipients) {
-      if (recipient.emailEnabled && recipient.email) {
+      if (
+        recipient.emailEnabled &&
+        recipient.email &&
+        recipient.emailVerifiedAt
+      ) {
         try {
           await sendMessage({
             channel: "email",

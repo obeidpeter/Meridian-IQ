@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.36.0
+ * OpenAPI spec version: 0.38.0
  */
 
 export * from './acceptInvitationInput';
@@ -173,6 +173,7 @@ export * from './confirmation';
 export * from './confirmationInput';
 export * from './confirmationInputState';
 export * from './confirmationState';
+export * from './confirmStaffEmailInput';
 export * from './conflictResponse';
 export * from './connectorInfo';
 export * from './consentDecision';
@@ -192,6 +193,8 @@ export * from './createClerkBatchInputSourceType';
 export * from './createInvitationInput';
 export * from './createInvitationInputRole';
 export * from './createPasswordResetInput';
+export * from './createStatementConnectionInput';
+export * from './createStatementConnectionInputConfig';
 export * from './createStatementFormatInput';
 export * from './createStatementFormatResult';
 export * from './creditNoteInput';
@@ -237,6 +240,9 @@ export * from './escalationInputContext';
 export * from './escalationReplyDraft';
 export * from './escalationReplyDraftSource';
 export * from './escalationStatus';
+export * from './evalFixtureReport';
+export * from './evalFixtureSummary';
+export * from './evalFixtureSummarySource';
 export * from './explainFailureInput';
 export * from './exportInvoicesCsvParams';
 export * from './exportReceivablesCsvParams';
@@ -460,6 +466,9 @@ export * from './stampRecordRail';
 export * from './stampVerifyInput';
 export * from './stampVerifyResult';
 export * from './statementColumnMap';
+export * from './statementConnection';
+export * from './statementConnectionStatus';
+export * from './statementConnectorInfo';
 export * from './statementFormatDraft';
 export * from './statementFormatView';
 export * from './statementImportInput';
@@ -467,6 +476,8 @@ export * from './statementImportResult';
 export * from './statementRowResult';
 export * from './statementRowResultDirection';
 export * from './statementRowResultParseStatus';
+export * from './statementSyncRun';
+export * from './statementSyncRunStatus';
 export * from './statusLight';
 export * from './statusLightLight';
 export * from './submissionAttempt';
@@ -479,6 +490,11 @@ export * from './subscriptionView';
 export * from './subscriptionViewStatus';
 export * from './tierUpdate';
 export * from './tinCheckInput';
+export * from './totpActivateInput';
+export * from './totpChallengeInput';
+export * from './totpDisableInput';
+export * from './totpSetup';
+export * from './totpStatus';
 export * from './ublDocument';
 export * from './unauthorizedResponse';
 export * from './unbilledIncomeAlert';

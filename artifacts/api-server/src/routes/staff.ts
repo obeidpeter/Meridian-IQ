@@ -1,13 +1,26 @@
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
-import { getDb, staffNotificationPreferencesTable } from "@workspace/db";
+import {
+  getDb,
+  staffNotificationPreferencesTable,
+  type StaffNotificationPreferencesRow,
+} from "@workspace/db";
 import {
   GetStaffNotificationPreferencesResponse,
   UpdateStaffNotificationPreferencesBody,
   UpdateStaffNotificationPreferencesResponse,
+  ConfirmStaffEmailBody,
+  ConfirmStaffEmailResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { isUuid } from "../lib/uuid";
+import { appendAudit } from "../modules/audit/audit";
+import {
+  clearActionFailures,
+  isActionThrottled,
+  recordActionFailure,
+} from "../modules/auth/throttle";
 import { requireFirmScope, type Principal } from "../modules/auth/rbac";
 import { DomainError } from "../modules/errors";
 
@@ -29,11 +42,12 @@ import { DomainError } from "../modules/errors";
 // 0019). The contract shape is unchanged; the firm is implied by the
 // caller's tenant, never named in the payload.
 //
-// WARNING: the `email` field is a free-text, unverified address. It only
-// gates whether the email channel fires; delivery itself is pointer-only
-// (usr/dig refs, SEC-12) and never uses this address as a destination. It
-// must NEVER become a send destination without a verification step (see the
-// schema comment in lib/db/src/schema/organizations.ts).
+// The `email` field is a free-text address the member typed in, and the
+// digest email channel only fires once it is VERIFIED (emailVerifiedAt set
+// by the confirm-email flow below): an attacker with a stolen staff session
+// must not be able to point a firm's digest notifications at an arbitrary
+// inbox. Changing or clearing the address clears the verification — a new
+// address always starts unverified.
 
 const router: IRouter = Router();
 
@@ -43,6 +57,31 @@ const DEFAULTS = {
   pushEnabled: false,
   email: null as string | null,
 };
+
+// Verification codes: 6 digits, sha256-only stored, short-lived.
+const VERIFY_CODE_TTL_MS = 15 * 60 * 1000;
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+// Constant-time hex-digest comparison (both operands are sha256 hex, so the
+// lengths always match; a length mismatch still returns false, never throws).
+function digestEquals(aHex: string, bHex: string): boolean {
+  const a = Buffer.from(aHex, "hex");
+  const b = Buffer.from(bHex, "hex");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function prefsBody(row: StaffNotificationPreferencesRow | undefined) {
+  return {
+    digestEnabled: row?.digestEnabled ?? DEFAULTS.digestEnabled,
+    emailEnabled: row?.emailEnabled ?? DEFAULTS.emailEnabled,
+    pushEnabled: row?.pushEnabled ?? DEFAULTS.pushEnabled,
+    email: row?.email ?? DEFAULTS.email,
+    emailVerifiedAt: row?.emailVerifiedAt?.toISOString() ?? null,
+  };
+}
 
 // Self-service gate: firm members only, bound to their firm. Returns the
 // caller's firmId.
@@ -57,31 +96,32 @@ function staffSelfScope(principal: Principal): string {
   return requireFirmScope(principal);
 }
 
+async function ownRow(
+  userId: string,
+  firmId: string,
+): Promise<StaffNotificationPreferencesRow | undefined> {
+  const [row] = await getDb()
+    .select()
+    .from(staffNotificationPreferencesTable)
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, userId),
+        eq(staffNotificationPreferencesTable.firmId, firmId),
+      ),
+    )
+    .limit(1);
+  return row;
+}
+
 router.get("/staff/notification-preferences", async (req, res): Promise<void> => {
   const firmId = staffSelfScope(req.principal);
   // The dev x-mock shim can carry a non-UUID userId ("dev-user"); such a
   // principal can own no row, so it reads the all-off defaults. The firm
   // filter keeps a multi-firm member's firms independent (composite key).
-  const [row] = isUuid(req.principal.userId)
-    ? await getDb()
-        .select()
-        .from(staffNotificationPreferencesTable)
-        .where(
-          and(
-            eq(staffNotificationPreferencesTable.userId, req.principal.userId),
-            eq(staffNotificationPreferencesTable.firmId, firmId),
-          ),
-        )
-        .limit(1)
-    : [];
-  res.json(
-    GetStaffNotificationPreferencesResponse.parse({
-      digestEnabled: row?.digestEnabled ?? DEFAULTS.digestEnabled,
-      emailEnabled: row?.emailEnabled ?? DEFAULTS.emailEnabled,
-      pushEnabled: row?.pushEnabled ?? DEFAULTS.pushEnabled,
-      email: row?.email ?? DEFAULTS.email,
-    }),
-  );
+  const row = isUuid(req.principal.userId)
+    ? await ownRow(req.principal.userId, firmId)
+    : undefined;
+  res.json(GetStaffNotificationPreferencesResponse.parse(prefsBody(row)));
 });
 
 router.put("/staff/notification-preferences", async (req, res): Promise<void> => {
@@ -97,16 +137,7 @@ router.put("/staff/notification-preferences", async (req, res): Promise<void> =>
   // Partial input merges onto the existing row for THIS firm (or the all-off
   // defaults): omitted switches keep their value; email distinguishes
   // omitted (undefined — keep) from explicit null (clear).
-  const [existing] = await getDb()
-    .select()
-    .from(staffNotificationPreferencesTable)
-    .where(
-      and(
-        eq(staffNotificationPreferencesTable.userId, req.principal.userId),
-        eq(staffNotificationPreferencesTable.firmId, firmId),
-      ),
-    )
-    .limit(1);
+  const existing = await ownRow(req.principal.userId, firmId);
   const next = {
     digestEnabled:
       parsed.digestEnabled ??
@@ -122,6 +153,18 @@ router.put("/staff/notification-preferences", async (req, res): Promise<void> =>
         : (existing?.email ?? DEFAULTS.email),
   };
 
+  // CHANGING the address (including clearing it) drops the verification and
+  // any pending code: verification attests to one exact address, never the
+  // next one. Re-saving the identical string keeps the verified state.
+  const emailChanged = next.email !== (existing?.email ?? null);
+  const verificationReset = emailChanged
+    ? {
+        emailVerifiedAt: null,
+        emailVerifyCodeHash: null,
+        emailVerifyExpiresAt: null,
+      }
+    : {};
+
   const [row] = await getDb()
     .insert(staffNotificationPreferencesTable)
     .values({ userId: req.principal.userId, firmId, ...next })
@@ -133,17 +176,174 @@ router.put("/staff/notification-preferences", async (req, res): Promise<void> =>
         staffNotificationPreferencesTable.userId,
         staffNotificationPreferencesTable.firmId,
       ],
-      set: { ...next, updatedAt: new Date() },
+      set: { ...next, ...verificationReset, updatedAt: new Date() },
     })
     .returning();
-  res.json(
-    UpdateStaffNotificationPreferencesResponse.parse({
-      digestEnabled: row.digestEnabled,
-      emailEnabled: row.emailEnabled,
-      pushEnabled: row.pushEnabled,
-      email: row.email,
-    }),
-  );
+  res.json(UpdateStaffNotificationPreferencesResponse.parse(prefsBody(row)));
 });
+
+// Dispatch a 6-digit verification code to the SAVED address. Only the code's
+// sha256 + a 15-minute expiry are stored; requests are throttled per user
+// (the same raw-pool counters as the credential checks, so the cap survives
+// any rollback) because every request can cost a relay send.
+router.post(
+  "/staff/notification-preferences/request-email-verification",
+  async (req, res): Promise<void> => {
+    const firmId = staffSelfScope(req.principal);
+    if (!isUuid(req.principal.userId)) {
+      res.status(400).json({
+        error: "Email verification requires a real user session",
+      });
+      return;
+    }
+    const throttleKey = `everify:${req.principal.userId}`;
+    const retryAfter = await isActionThrottled(throttleKey);
+    if (retryAfter !== null) {
+      res.setHeader("Retry-After", String(retryAfter));
+      res.status(429).json({
+        error: `Too many requests. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+      });
+      return;
+    }
+
+    const row = await ownRow(req.principal.userId, firmId);
+    if (!row?.email) {
+      res.status(400).json({ error: "Save an email address first" });
+      return;
+    }
+    // Every request counts against the cap (this throttles SENDS, not
+    // failures — there is no failure signal to count instead).
+    await recordActionFailure(throttleKey);
+
+    // The outbound relay is the messaging transport's webhook. When it is not
+    // configured the platform has no way to reach any inbox: respond 202 and
+    // send nothing — the response is deliberately identical to the dispatched
+    // case so this endpoint is not a relay-configuration oracle.
+    //
+    // ORCHESTRATOR TODO: modules/messaging/messaging.ts (outside this
+    // change's partition) reads the same env var in its default transport; a
+    // small exported relayConfigured() there would let this env read live
+    // with the transport instead of being duplicated here.
+    const relayUrl = process.env.MESSAGING_WEBHOOK_URL;
+    if (!relayUrl) {
+      res.status(202).end();
+      return;
+    }
+
+    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    await getDb()
+      .update(staffNotificationPreferencesTable)
+      .set({
+        emailVerifyCodeHash: sha256Hex(code),
+        emailVerifyExpiresAt: new Date(Date.now() + VERIFY_CODE_TTL_MS),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(staffNotificationPreferencesTable.userId, req.principal.userId),
+          eq(staffNotificationPreferencesTable.firmId, firmId),
+        ),
+      );
+
+    // DELIBERATE, DOCUMENTED SEC-12 EXCEPTION: the platform's messaging seam
+    // is pointer-only — sendMessage rejects anything that looks like a raw
+    // address, and the RELAY owns ref→address resolution on its side of the
+    // wire (see modules/messaging/messaging.ts). Verification is the one flow
+    // that cannot ride a pointer: its entire purpose is to prove ownership of
+    // an address the platform has not yet blessed, so no ref→address mapping
+    // exists for the relay to resolve. The raw {email, code} therefore
+    // crosses to the SAME relay endpoint (same URL, same x-op-token secret) —
+    // the address-handling boundary SEC-12 already trusts with every resolved
+    // address — under its own kind tag, and to nowhere else. A relay failure
+    // is absorbed: the response never reveals whether a send happened.
+    try {
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+      };
+      const token = process.env.MESSAGING_WEBHOOK_TOKEN;
+      if (token) headers["x-op-token"] = token;
+      await fetch(relayUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          kind: "staff_email_verify",
+          email: row.email,
+          code,
+        }),
+      });
+    } catch {
+      // No oracle: dispatch failures look exactly like successes.
+    }
+    res.status(202).end();
+  },
+);
+
+// Confirm the saved address with the received code. Guesses are throttled on
+// their own key (wrong/expired codes count; success clears), the comparison
+// is constant-time over sha256 digests, and success stamps emailVerifiedAt
+// and burns the code.
+router.post(
+  "/staff/notification-preferences/confirm-email",
+  async (req, res): Promise<void> => {
+    const firmId = staffSelfScope(req.principal);
+    const parsed = parseOrThrow(ConfirmStaffEmailBody, req.body);
+    if (!isUuid(req.principal.userId)) {
+      res.status(400).json({
+        error: "Email verification requires a real user session",
+      });
+      return;
+    }
+    const throttleKey = `everifyc:${req.principal.userId}`;
+    const retryAfter = await isActionThrottled(throttleKey);
+    if (retryAfter !== null) {
+      res.setHeader("Retry-After", String(retryAfter));
+      res.status(429).json({
+        error: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+      });
+      return;
+    }
+
+    const row = await ownRow(req.principal.userId, firmId);
+    const valid =
+      row?.emailVerifyCodeHash != null &&
+      row.emailVerifyExpiresAt != null &&
+      row.emailVerifyExpiresAt.getTime() > Date.now() &&
+      digestEquals(sha256Hex(parsed.code), row.emailVerifyCodeHash);
+    if (!valid) {
+      // Raw-pool counter: survives this 400's transaction rollback.
+      await recordActionFailure(throttleKey);
+      res.status(400).json({ error: "Invalid or expired code" });
+      return;
+    }
+    await clearActionFailures(throttleKey);
+
+    const now = new Date();
+    const [updated] = await getDb()
+      .update(staffNotificationPreferencesTable)
+      .set({
+        emailVerifiedAt: now,
+        emailVerifyCodeHash: null,
+        emailVerifyExpiresAt: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(staffNotificationPreferencesTable.userId, req.principal.userId),
+          eq(staffNotificationPreferencesTable.firmId, firmId),
+        ),
+      )
+      .returning();
+    // Pointer-only audit: the verified ADDRESS never enters the audit trail.
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId,
+      action: "staff.email.verified",
+      entityType: "staff_notification_preferences",
+      entityId: req.principal.userId,
+      after: { verified: true },
+    });
+    res.json(ConfirmStaffEmailResponse.parse(prefsBody(updated)));
+  },
+);
 
 export default router;

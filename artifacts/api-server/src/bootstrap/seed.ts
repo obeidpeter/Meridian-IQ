@@ -50,6 +50,7 @@ const FLAGS: {
   { key: "buyer_rails", enabled: false, releaseTag: "R2", description: "Buyer Rails v1: supplier verification, payment flags, scoreboard (BR-01..BR-05)" },
   { key: "white_label", enabled: false, releaseTag: "R2", description: "White-label theming, subdomains, bulk client import, certification (CON-05)" },
   { key: "erp_connectors", enabled: false, releaseTag: "R2", description: "ERP connector contract and first two connectors (PL-03, INT-06)" },
+  { key: "bank_feeds", enabled: false, releaseTag: "R2", description: "Bank-feed statement connectors: scheduled pulls landing through the ordinary ingest/reconcile path (INT-05 seam)" },
   { key: "credit_readiness", enabled: false, releaseTag: "R3", description: "Layer-3 credit readiness scoring" },
   { key: "bank_data_room", enabled: false, releaseTag: "R4", description: "Bank data room and financing origination" },
   // Clerk v0 kill switch (Task #40): flipping this off instantly disables every

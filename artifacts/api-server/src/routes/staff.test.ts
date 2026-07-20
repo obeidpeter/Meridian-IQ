@@ -1,7 +1,9 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { createHash, randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import {
   getDb,
   firmsTable,
@@ -10,6 +12,7 @@ import {
 } from "@workspace/db";
 import staffRouter from "./staff.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
+import { clearActionFailures } from "../modules/auth/throttle.ts";
 import {
   appFor,
   listen,
@@ -23,18 +26,25 @@ import { makeRunSalt } from "../test-helpers/fixtures.ts";
 // opt-in defaults (everything off), firm members only. The role gate is
 // explicit — firm_admin/firm_staff — because this is not a capability-matrix
 // surface: nothing here touches anyone else's data.
+//
+// Email verification (round 15): the saved address only lights the digest
+// email channel once verified — code dispatched through the outbound relay
+// (the deliberate SEC-12 exception), sha256-only stored, 15-minute expiry,
+// and any address change drops the verification.
 
 const SALT = makeRunSalt();
 const firmId = randomUUID();
 const firm2Id = randomUUID();
 const adminId = randomUUID();
 const staffId = randomUUID();
+const verifyId = randomUUID();
 
 type PrefsBody = {
   digestEnabled: boolean;
   emailEnabled: boolean;
   pushEnabled: boolean;
   email: string | null;
+  emailVerifiedAt: string | null;
 };
 
 function principalFor(
@@ -60,11 +70,16 @@ before(async () => {
   await db.insert(usersTable).values([
     { id: adminId, email: `staff-prefs-admin-${SALT}@test.example` },
     { id: staffId, email: `staff-prefs-staff-${SALT}@test.example` },
+    { id: verifyId, email: `staff-prefs-verify-${SALT}@test.example` },
   ]);
 });
 
 after(async () => {
   await closeAllServers();
+  delete process.env.MESSAGING_WEBHOOK_URL;
+  delete process.env.MESSAGING_WEBHOOK_TOKEN;
+  await clearActionFailures(`everify:${verifyId}`);
+  await clearActionFailures(`everifyc:${verifyId}`);
   const db = getDb();
   await db
     .delete(staffNotificationPreferencesTable)
@@ -74,9 +89,24 @@ after(async () => {
     .where(eq(staffNotificationPreferencesTable.firmId, firm2Id));
   await db.delete(usersTable).where(eq(usersTable.id, adminId));
   await db.delete(usersTable).where(eq(usersTable.id, staffId));
+  await db.delete(usersTable).where(eq(usersTable.id, verifyId));
   await db.delete(firmsTable).where(eq(firmsTable.id, firmId));
   await db.delete(firmsTable).where(eq(firmsTable.id, firm2Id));
 });
+
+async function verifyRow(userId: string) {
+  const [row] = await getDb()
+    .select()
+    .from(staffNotificationPreferencesTable)
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, userId),
+        eq(staffNotificationPreferencesTable.firmId, firmId),
+      ),
+    )
+    .limit(1);
+  return row;
+}
 
 test("GET returns the all-off defaults for a member who never saved", async () => {
   const base = await listen(appFor(principalFor("firm_admin", adminId), staffRouter));
@@ -88,6 +118,7 @@ test("GET returns the all-off defaults for a member who never saved", async () =
     emailEnabled: false,
     pushEnabled: false,
     email: null,
+    emailVerifiedAt: null,
   });
 });
 
@@ -111,6 +142,7 @@ test("PUT upserts the caller's own row and partial input merges", async () => {
     emailEnabled: true,
     pushEnabled: false, // untouched switch keeps its default
     email: `me-${SALT}@test.example`,
+    emailVerifiedAt: null,
   });
 
   // Partial update: only pushEnabled — everything else must survive.
@@ -126,6 +158,7 @@ test("PUT upserts the caller's own row and partial input merges", async () => {
     emailEnabled: true,
     pushEnabled: true,
     email: `me-${SALT}@test.example`,
+    emailVerifiedAt: null,
   });
 
   // GET reads the saved state back.
@@ -226,6 +259,7 @@ test("a multi-firm member saves preferences per firm independently (composite ke
     emailEnabled: true,
     pushEnabled: false, // firm A's pushEnabled must not bleed into firm B
     email: `firm-b-${SALT}@test.example`,
+    emailVerifiedAt: null,
   });
 
   // Each firm context reads back ITS OWN row.
@@ -237,6 +271,7 @@ test("a multi-firm member saves preferences per firm independently (composite ke
     emailEnabled: false,
     pushEnabled: true,
     email: null,
+    emailVerifiedAt: null,
   });
 
   // Two independent rows, one per firm, both pinned to the principal.
@@ -250,4 +285,249 @@ test("a multi-firm member saves preferences per firm independently (composite ke
   assert.equal(byFirm.get(firmId)!.pushEnabled, true);
   assert.equal(byFirm.get(firm2Id)!.pushEnabled, false);
   assert.equal(byFirm.get(firm2Id)!.email, `firm-b-${SALT}@test.example`);
+});
+
+// ---------------------------------------------------------------------------
+// Email verification
+// ---------------------------------------------------------------------------
+
+const sha256Hex = (v: string) => createHash("sha256").update(v).digest("hex");
+
+// Capture relay: a local HTTP server standing in for the messaging webhook.
+function startRelay(): Promise<{
+  url: string;
+  received: Array<{ body: Record<string, unknown>; opToken: string | null }>;
+  close: () => Promise<void>;
+}> {
+  const received: Array<{ body: Record<string, unknown>; opToken: string | null }> = [];
+  const server: Server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      received.push({
+        body: JSON.parse(raw) as Record<string, unknown>,
+        opToken: (req.headers["x-op-token"] as string | undefined) ?? null,
+      });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("{}");
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as AddressInfo;
+      resolve({
+        url: `http://127.0.0.1:${port}`,
+        received,
+        close: () =>
+          new Promise<void>((r, j) =>
+            server.close((err) => (err ? j(err) : r())),
+          ),
+      });
+    });
+  });
+}
+
+test("request-email-verification without a saved email is a 400", async () => {
+  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+  // No preference row at all yet.
+  const bare = await fetch(
+    `${base}/staff/notification-preferences/request-email-verification`,
+    { method: "POST" },
+  );
+  assert.equal(bare.status, 400);
+
+  // A row without an address is the same 400.
+  await fetch(`${base}/staff/notification-preferences`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ digestEnabled: true }),
+  });
+  const noEmail = await fetch(
+    `${base}/staff/notification-preferences/request-email-verification`,
+    { method: "POST" },
+  );
+  assert.equal(noEmail.status, 400);
+});
+
+test("a dark relay answers 202 but stores and sends nothing (no oracle)", async () => {
+  delete process.env.MESSAGING_WEBHOOK_URL;
+  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+  await fetch(`${base}/staff/notification-preferences`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ email: `verify-${SALT}@test.example` }),
+  });
+  const res = await fetch(
+    `${base}/staff/notification-preferences/request-email-verification`,
+    { method: "POST" },
+  );
+  assert.equal(res.status, 202, "identical response whether or not a relay exists");
+  const row = await verifyRow(verifyId);
+  assert.equal(row.emailVerifyCodeHash, null, "no code stored while dark");
+  assert.equal(row.emailVerifyExpiresAt, null);
+});
+
+test("request dispatches the raw {email, code} to the relay; confirm verifies", async () => {
+  const relay = await startRelay();
+  process.env.MESSAGING_WEBHOOK_URL = relay.url;
+  process.env.MESSAGING_WEBHOOK_TOKEN = `relay-secret-${SALT}`;
+  try {
+    const base = await listen(
+      appFor(principalFor("firm_staff", verifyId), staffRouter),
+    );
+    const res = await fetch(
+      `${base}/staff/notification-preferences/request-email-verification`,
+      { method: "POST" },
+    );
+    assert.equal(res.status, 202);
+
+    // The deliberate SEC-12 exception: the raw address+code cross to the
+    // relay (the address-handling boundary), under the shared secret.
+    assert.equal(relay.received.length, 1);
+    const dispatch = relay.received[0];
+    assert.equal(dispatch.opToken, `relay-secret-${SALT}`);
+    assert.equal(dispatch.body.kind, "staff_email_verify");
+    assert.equal(dispatch.body.email, `verify-${SALT}@test.example`);
+    const code = dispatch.body.code as string;
+    assert.match(code, /^\d{6}$/);
+
+    // Only the sha256 is stored, with a future expiry.
+    const pending = await verifyRow(verifyId);
+    assert.equal(pending.emailVerifyCodeHash, sha256Hex(code));
+    assert.ok(!JSON.stringify(pending).includes(code) || code === "", "raw code never stored");
+    assert.ok(pending.emailVerifyExpiresAt!.getTime() > Date.now());
+
+    // A wrong guess is a 400 and does not verify.
+    const wrongCode = code === "000000" ? "000001" : "000000";
+    const wrong = await fetch(
+      `${base}/staff/notification-preferences/confirm-email`,
+      {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ code: wrongCode }),
+      },
+    );
+    assert.equal(wrong.status, 400);
+    assert.equal((await verifyRow(verifyId)).emailVerifiedAt, null);
+
+    // The right code verifies, burns the code and stamps emailVerifiedAt.
+    const ok = await fetch(
+      `${base}/staff/notification-preferences/confirm-email`,
+      {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ code }),
+      },
+    );
+    assert.equal(ok.status, 200);
+    const body = (await ok.json()) as PrefsBody;
+    assert.ok(body.emailVerifiedAt, "response carries the verification stamp");
+    const verified = await verifyRow(verifyId);
+    assert.ok(verified.emailVerifiedAt);
+    assert.equal(verified.emailVerifyCodeHash, null, "code is single-use");
+    assert.equal(verified.emailVerifyExpiresAt, null);
+
+    // Replaying the burnt code fails.
+    const replay = await fetch(
+      `${base}/staff/notification-preferences/confirm-email`,
+      {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ code }),
+      },
+    );
+    assert.equal(replay.status, 400);
+  } finally {
+    delete process.env.MESSAGING_WEBHOOK_URL;
+    delete process.env.MESSAGING_WEBHOOK_TOKEN;
+    await relay.close();
+  }
+});
+
+test("an expired code is rejected", async () => {
+  // Plant a known, already-expired code directly.
+  await getDb()
+    .update(staffNotificationPreferencesTable)
+    .set({
+      emailVerifiedAt: null,
+      emailVerifyCodeHash: sha256Hex("123456"),
+      emailVerifyExpiresAt: new Date(Date.now() - 1_000),
+    })
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, verifyId),
+        eq(staffNotificationPreferencesTable.firmId, firmId),
+      ),
+    );
+  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+  const res = await fetch(
+    `${base}/staff/notification-preferences/confirm-email`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ code: "123456" }),
+    },
+  );
+  assert.equal(res.status, 400, "the right code after expiry is still rejected");
+  assert.equal((await verifyRow(verifyId)).emailVerifiedAt, null);
+});
+
+test("changing (or clearing) the email clears the verification; re-saving the same keeps it", async () => {
+  // Start verified with a pending-free state.
+  await getDb()
+    .update(staffNotificationPreferencesTable)
+    .set({
+      emailVerifiedAt: new Date(),
+      emailVerifyCodeHash: sha256Hex("999999"),
+      emailVerifyExpiresAt: new Date(Date.now() + 60_000),
+    })
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, verifyId),
+        eq(staffNotificationPreferencesTable.firmId, firmId),
+      ),
+    );
+  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+
+  // Re-saving the SAME address keeps the verified state.
+  const same = await fetch(`${base}/staff/notification-preferences`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ email: `verify-${SALT}@test.example` }),
+  });
+  assert.equal(same.status, 200);
+  assert.ok(((await same.json()) as PrefsBody).emailVerifiedAt);
+
+  // A DIFFERENT address drops verification AND any pending code.
+  const changed = await fetch(`${base}/staff/notification-preferences`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ email: `other-${SALT}@test.example` }),
+  });
+  assert.equal(changed.status, 200);
+  assert.equal(((await changed.json()) as PrefsBody).emailVerifiedAt, null);
+  let row = await verifyRow(verifyId);
+  assert.equal(row.emailVerifiedAt, null);
+  assert.equal(row.emailVerifyCodeHash, null);
+  assert.equal(row.emailVerifyExpiresAt, null);
+
+  // Clearing the address is a change too.
+  await getDb()
+    .update(staffNotificationPreferencesTable)
+    .set({ emailVerifiedAt: new Date() })
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, verifyId),
+        eq(staffNotificationPreferencesTable.firmId, firmId),
+      ),
+    );
+  const clearedRes = await fetch(`${base}/staff/notification-preferences`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ email: null }),
+  });
+  assert.equal(clearedRes.status, 200);
+  row = await verifyRow(verifyId);
+  assert.equal(row.email, null);
+  assert.equal(row.emailVerifiedAt, null);
 });

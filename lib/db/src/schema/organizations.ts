@@ -40,6 +40,20 @@ export const usersTable = pgTable("users", {
   // epoch) stop resolving to a principal — the compromise-remediation path that
   // a stateless HMAC token would otherwise leave open until its 7-day expiry.
   sessionEpoch: integer("session_epoch").notNull().default(0),
+  // TOTP two-factor (opt-in, modules/auth/totp.ts). The base32 secret is
+  // stored at setup time with totpEnabledAt NULL (pending enrolment — not yet
+  // enforced at login); activation with a valid code stamps totpEnabledAt.
+  // These are user-keyed columns on a table with no tenant key, so no RLS
+  // policy is involved — the login/challenge paths read them pre-tenant.
+  totpSecret: text("totp_secret"),
+  totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
+  // sha256 hex hashes of the one-time recovery codes (shown once at setup);
+  // a redeemed code is removed, so length = codes remaining.
+  totpRecoveryCodes: jsonb("totp_recovery_codes").$type<string[]>(),
+  // The last 30s step a TOTP code was accepted for (challenge/activate), so a
+  // sniffed code cannot be replayed within its own validity window (RFC 6238
+  // §5.2: a verified code must be accepted at most once).
+  totpLastUsedStep: integer("totp_last_used_step"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -155,12 +169,13 @@ export type Invitation = typeof invitationsTable.$inferSelect;
 // they turn a digest and at least one channel on themselves, which is why
 // digest delivery needs no party consent gate (this is not the CORE-03
 // client-alert model).
-// WARNING: `email` is a free-text, UNVERIFIED address the member typed in.
-// Today it is inert — digest delivery is pointer-only (SEC-12) and sends to
-// the membership identity, never to this column — and it must NEVER become a
-// send destination without an ownership-verification step first (an attacker
-// with a staff session could otherwise route a firm's digest pointers to an
-// arbitrary inbox).
+// WARNING: `email` is a free-text address the member typed in. Digest
+// delivery is pointer-only (SEC-12) and sends to the membership identity,
+// never to this column — and the email CHANNEL only fires once the member has
+// proven ownership (emailVerifiedAt below): an attacker with a staff session
+// must not be able to route a firm's digest pointers toward an arbitrary
+// inbox. The raw address crosses to the relay exactly once, during the
+// verification dispatch itself (the relay is the address-handling boundary).
 export const staffNotificationPreferencesTable = pgTable(
   "staff_notification_preferences",
   {
@@ -174,6 +189,17 @@ export const staffNotificationPreferencesTable = pgTable(
     emailEnabled: boolean("email_enabled").notNull().default(false),
     pushEnabled: boolean("push_enabled").notNull().default(false),
     email: text("email"),
+    // Ownership verification for `email` (round 15): the digest email channel
+    // only fires when emailVerifiedAt is set. Verification is a 6-digit code
+    // dispatched through the outbound relay and confirmed by the member; only
+    // the code's sha256 is stored, with a short expiry. Changing (or clearing)
+    // the email address clears all three fields — a new address starts
+    // unverified. See routes/staff.ts.
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    emailVerifyCodeHash: text("email_verify_code_hash"),
+    emailVerifyExpiresAt: timestamp("email_verify_expires_at", {
+      withTimezone: true,
+    }),
     updatedAt: updatedAt(),
   },
   (t) => [

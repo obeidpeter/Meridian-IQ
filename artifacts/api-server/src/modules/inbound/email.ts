@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, gte, sql } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
-  auditEventsTable,
   membershipsTable,
   usersTable,
 } from "@workspace/db";
@@ -11,10 +10,17 @@ import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
 import { normalizeEmail } from "../auth/session";
 import { assertFirmClerkBudget } from "../clerk/budget";
-import { createExtractionCase, type CreateCaseInput } from "../clerk/cases";
+import { createExtractionCase } from "../clerk/cases";
 import type { ClerkGateway } from "../clerk/gateway";
 import { getClerkGateway } from "../clerk/provider";
 import { DomainError } from "../errors";
+import {
+  attachmentSource,
+  dailyCapFromEnv,
+  inboundAttachmentsToday,
+  withInboundSlot,
+  type InboundAttachment,
+} from "./shared";
 
 // Inbound email intake (provider-agnostic): a client forwards an invoice to
 // the firm's intake address, the email provider's route POSTs it to
@@ -26,57 +32,11 @@ import { DomainError } from "../errors";
 // anything, and everything else is audit-logged and dropped without telling
 // the caller (see the anti-probe posture in the route).
 
-// Attachment types the rail accepts. Deliberately narrower than the capture
-// module's own image allowlist (no GIF): email scanners emit PDFs and
-// photos, and every type here maps 1:1 onto a capture sourceType.
-const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-const PDF_TYPE = "application/pdf";
-
-// Volume ceiling (defense in depth next to the token budget): at most this
-// many attachments per resolved firm per UTC day walk the capture path; the
-// rest audit-skip (still 202 — the anti-probe posture never changes the
-// response). Counted deterministically from the rail's own durable receipts
-// (the inbound.email.received audit rows), so the cap holds across restarts
-// and instances without new state. Read per call so operators (and tests)
-// can adjust without a restart.
-const DEFAULT_DAILY_CAP = 100;
-function dailyAttachmentCap(): number {
-  const raw = Number(process.env.INBOUND_EMAIL_DAILY_CAP);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_DAILY_CAP;
-}
-
-// In-process concurrency bound on the detached processor: each email can be
-// multi-second vision work, and the route fires processing after its 202 —
-// without a bound, a webhook burst runs every email at once. Excess emails
-// queue here (FIFO) instead of stacking provider calls.
-const MAX_CONCURRENT_EMAILS = 2;
-let activeEmails = 0;
-const emailWaiters: Array<() => void> = [];
-
-function acquireEmailSlot(): Promise<void> {
-  if (activeEmails < MAX_CONCURRENT_EMAILS) {
-    activeEmails += 1;
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    emailWaiters.push(() => {
-      activeEmails += 1;
-      resolve();
-    });
-  });
-}
-
-function releaseEmailSlot(): void {
-  activeEmails -= 1;
-  const next = emailWaiters.shift();
-  if (next) next();
-}
-
-export interface InboundAttachment {
-  filename: string;
-  contentType: string;
-  contentBase64: string;
-}
+// The attachment allowlist, the per-firm daily cap and the process-wide
+// concurrency bound live in ./shared.ts — the WhatsApp rail uses exactly the
+// same machinery. This rail's cap counts the inbound.email.received audit
+// receipts under INBOUND_EMAIL_DAILY_CAP.
+export type { InboundAttachment } from "./shared";
 
 export interface InboundEmailInput {
   sender: string;
@@ -151,79 +111,21 @@ export async function resolveInboundSender(
   });
 }
 
-// contentType → capture source. Parameters ("; charset=...") are stripped;
-// anything unmapped is skipped (audited), never an error back to the
-// provider.
-function attachmentSource(att: InboundAttachment): CreateCaseInput | null {
-  const contentType = att.contentType.split(";")[0].trim().toLowerCase();
-  if (contentType === PDF_TYPE) {
-    return {
-      sourceType: "pdf",
-      pdfBase64: att.contentBase64,
-      name: att.filename,
-      allowDuplicate: false,
-    };
-  }
-  if (IMAGE_TYPES.has(contentType)) {
-    return {
-      sourceType: "image",
-      imageBase64: att.contentBase64,
-      contentType,
-      name: att.filename,
-      allowDuplicate: false,
-    };
-  }
-  return null;
-}
-
-// Attachments already received for this firm today (UTC day), counted from
-// the rail's own durable pointer-only receipts: every processed email leaves
-// one inbound.email.received audit row whose caseIds + skipped arrays name
-// every attachment exactly once. Deterministic, cheap (one indexed-ish
-// aggregate over today's rows), and shared across instances/restarts because
-// the audit ledger is the state.
-async function inboundAttachmentsToday(firmId: string): Promise<number> {
-  const now = new Date();
-  const dayStart = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const [row] = await getDb()
-    .select({
-      count: sql<number>`coalesce(sum(
-        coalesce(jsonb_array_length(${auditEventsTable.after} -> 'caseIds'), 0)
-        + coalesce(jsonb_array_length(${auditEventsTable.after} -> 'skipped'), 0)
-      ), 0)`,
-    })
-    .from(auditEventsTable)
-    .where(
-      and(
-        eq(auditEventsTable.action, "inbound.email.received"),
-        eq(auditEventsTable.firmId, firmId),
-        gte(auditEventsTable.createdAt, dayStart),
-      ),
-    );
-  return Number(row?.count ?? 0);
-}
-
 // The whole post-response pipeline, exported so tests can await it directly;
 // the route calls it detached (.catch(logger.error)) AFTER responding 202.
 // Nothing in here may throw for a per-attachment problem: an exhausted
 // budget, a duplicate redelivery (providers redeliver on timeout) or an
 // oversized file is an audit-skip, and the remaining attachments still
 // process. The unresolvable-sender path is handled here too, so the route's
-// response can never depend on resolution. Bounded by the module-level
-// semaphore: at most MAX_CONCURRENT_EMAILS emails process at once, the rest
-// queue in-process (the caller's 202 already went out either way).
+// response can never depend on resolution. Bounded by the shared inbound
+// semaphore: at most two inbound messages (across BOTH rails) process at
+// once, the rest queue in-process (the caller's 202 already went out either
+// way).
 export async function processInboundEmail(
   input: InboundEmailInput,
   gateway?: ClerkGateway,
 ): Promise<InboundProcessResult> {
-  await acquireEmailSlot();
-  try {
-    return await processInboundEmailNow(input, gateway);
-  } finally {
-    releaseEmailSlot();
-  }
+  return withInboundSlot(() => processInboundEmailNow(input, gateway));
 }
 
 async function processInboundEmailNow(
@@ -250,8 +152,14 @@ async function processInboundEmailNow(
   // allowance audit-skip like any other per-attachment refusal — the sender
   // never sees a different response (anti-probe), and the skip reason lands
   // in the durable receipt.
-  const usedToday = await inboundAttachmentsToday(resolved.firmId);
-  let remaining = Math.max(0, dailyAttachmentCap() - usedToday);
+  const usedToday = await inboundAttachmentsToday(
+    "inbound.email.received",
+    resolved.firmId,
+  );
+  let remaining = Math.max(
+    0,
+    dailyCapFromEnv("INBOUND_EMAIL_DAILY_CAP") - usedToday,
+  );
 
   // Resolved lazily so an email whose attachments all skip (or all hit the
   // budget gate) never needs a provider to be configured at all.

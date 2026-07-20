@@ -50,6 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { ClerkDisabledBanner, ClerkPageHeader } from "@/components/clerk-shell";
 import { useToast } from "@/hooks/use-toast";
@@ -62,6 +63,7 @@ import {
 import { formatDate, pillClasses, type BadgeTone } from "@/lib/format";
 import { clerkDisabledToast, serverErrorToast } from "@/pages/clerk-shared";
 import {
+  BookOpenCheck,
   ChevronDown,
   ChevronRight,
   Pencil,
@@ -906,9 +908,35 @@ export function ClerkClaims() {
       <Card>
         <CardContent className="pt-6">
           {sorted.length === 0 ? (
-            <p className="text-sm text-muted-foreground" data-testid="text-empty">
-              No claims yet. Create a draft version to get started.
-            </p>
+            // First-run empty state: both drafting paths, right here. Either
+            // way the result is a plain draft — maker-checker still needs a
+            // second operator before Clerk can quote anything.
+            <EmptyState
+              icon={BookOpenCheck}
+              title="No claims in the register yet"
+              description="Clerk only ever answers from approved claims. Draft the first one — by hand, or let Clerk structure a statutory passage into a draft for you."
+              className="py-8"
+            >
+              <div className="flex flex-wrap justify-center gap-2 mt-1">
+                <Button
+                  size="sm"
+                  onClick={() => setCreateOpen(true)}
+                  data-testid="button-empty-new-claim"
+                >
+                  <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
+                  New claim version
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDraftOpen(true)}
+                  data-testid="button-empty-draft-with-clerk"
+                >
+                  <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" />
+                  Draft with Clerk
+                </Button>
+              </div>
+            </EmptyState>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

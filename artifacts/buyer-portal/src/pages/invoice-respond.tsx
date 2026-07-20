@@ -7,7 +7,6 @@ import {
   useGetMe,
   getListBuyerInvoicesQueryKey,
 } from "@workspace/api-client-react";
-import type { ConfirmationInputState } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,15 +54,19 @@ import {
   stampBadge,
   eligibleBadge,
 } from "@/lib/format";
-import { isFeatureDisabled, errorStatus } from "@/lib/errors";
+import { isFeatureDisabled } from "@/lib/errors";
+import {
+  RESPONSE_DESCRIPTIONS,
+  SUBMIT_LABELS,
+  errorDescription,
+  noteRequiredFor,
+  noteValidationError,
+  responseRecordedCopy,
+  type ResponseState,
+} from "@/lib/respond";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
-
-type ResponseState = Extract<
-  ConfirmationInputState,
-  "confirmed" | "queried" | "rejected"
->;
 
 const RESPONSE_OPTIONS: Array<{
   state: ResponseState;
@@ -94,27 +97,6 @@ const RESPONSE_OPTIONS: Array<{
   },
 ];
 
-const SUBMIT_LABELS: Record<ResponseState, string> = {
-  confirmed: "Confirm invoice",
-  queried: "Send query",
-  rejected: "Reject invoice",
-};
-
-/** Map raw mutation failures to human copy; fall back to the server message. */
-function errorDescription(error: unknown): string {
-  const status = errorStatus(error);
-  if (status === 401)
-    return "Your session has expired — sign in again from the portal.";
-  if (status === 403)
-    return "Your account doesn't have permission to do this.";
-  if (status === 409)
-    return "This invoice was already responded to — refresh to see the latest state.";
-  if (status !== undefined && status >= 500)
-    return "MeridianIQ had a problem recording this. Try again in a moment.";
-  const message = error instanceof Error ? error.message : undefined;
-  return message ?? "Something went wrong — try again.";
-}
-
 export function InvoiceRespond() {
   const params = useParams();
   const id = params.id as string;
@@ -126,8 +108,14 @@ export function InvoiceRespond() {
   const [response, setResponse] = useState<ResponseState | null>(null);
   const [method, setMethod] = useState("portal");
   const [note, setNote] = useState("");
-  const [noteError, setNoteError] = useState(false);
+  // The note-validation message on screen (null = no complaint yet). Only
+  // set on a submit attempt, cleared as soon as the input satisfies it.
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [noSetOff, setNoSetOff] = useState(false);
+  // Post-action confirmation: which response THIS visit just recorded. The
+  // refetched confirmationState alone can't distinguish "you responded just
+  // now" from "you responded last week", so keep the moment explicit.
+  const [submitted, setSubmitted] = useState<ResponseState | null>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
 
   const confirm = useCreateConfirmation();
@@ -227,7 +215,7 @@ export function InvoiceRespond() {
   }
 
   const awaitingResponse = invoice.confirmationState === "requested";
-  const noteRequired = response === "queried" || response === "rejected";
+  const noteRequired = noteRequiredFor(response);
   const stamp = stampBadge(invoice.stampValid);
   const eligible = eligibleBadge(invoice.eligible);
   const pendingFlag = flag.isPending
@@ -247,8 +235,9 @@ export function InvoiceRespond() {
       });
       return;
     }
-    if (noteRequired && note.trim() === "") {
-      setNoteError(true);
+    const validation = noteValidationError(response, note);
+    if (validation !== null) {
+      setNoteError(validation);
       noteRef.current?.focus();
       return;
     }
@@ -265,6 +254,7 @@ export function InvoiceRespond() {
       },
       {
         onSuccess: () => {
+          setSubmitted(response);
           toast({
             title: `Invoice ${confirmationLabel(response).toLowerCase()}`,
             description: "The supplier has been notified of your response.",
@@ -385,7 +375,32 @@ export function InvoiceRespond() {
         </CardContent>
       </Card>
 
-      {awaitingResponse ? (
+      {submitted !== null ? (
+        // Post-action confirmation: the response this visit just recorded,
+        // stated in full — what happened and what happens next.
+        <Card data-testid="card-response-recorded">
+          <CardContent className="py-10 flex flex-col items-center text-center gap-2">
+            <CheckCircle2
+              className="w-10 h-10 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            <p className="font-semibold" data-testid="text-response-recorded">
+              {responseRecordedCopy(submitted).title}
+            </p>
+            <p className="text-sm text-muted-foreground max-w-md">
+              {responseRecordedCopy(submitted).description}
+            </p>
+            <Button
+              asChild
+              variant="outline"
+              className="mt-2"
+              data-testid="button-recorded-back"
+            >
+              <Link href="/">Back to confirmations</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : awaitingResponse ? (
         <Card data-testid="card-respond">
           <CardHeader>
             <CardTitle>Respond to confirmation request</CardTitle>
@@ -396,7 +411,7 @@ export function InvoiceRespond() {
               value={response ?? ""}
               onValueChange={(v) => {
                 setResponse(v === "" ? null : (v as ResponseState));
-                setNoteError(false);
+                setNoteError(null);
               }}
               aria-label="Your response"
               className="grid grid-cols-3 gap-2 w-full"
@@ -416,6 +431,17 @@ export function InvoiceRespond() {
                 );
               })}
             </ToggleGroup>
+
+            {/* What the picked action DOES, before it is submitted — the
+                one-word toggle labels alone leave the outcome to guesswork. */}
+            {response !== null && (
+              <p
+                className="text-sm text-muted-foreground border rounded-md p-3 bg-muted/40"
+                data-testid="text-response-description"
+              >
+                {RESPONSE_DESCRIPTIONS[response]}
+              </p>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -443,12 +469,12 @@ export function InvoiceRespond() {
                 value={note}
                 onChange={(e) => {
                   setNote(e.target.value);
-                  if (e.target.value.trim() !== "") setNoteError(false);
+                  if (e.target.value.trim() !== "") setNoteError(null);
                 }}
-                aria-invalid={noteError}
-                aria-describedby={noteError ? "note-error" : undefined}
+                aria-invalid={noteError !== null}
+                aria-describedby={noteError !== null ? "note-error" : undefined}
                 className={
-                  noteError
+                  noteError !== null
                     ? "border-destructive focus-visible:ring-destructive"
                     : undefined
                 }
@@ -459,13 +485,19 @@ export function InvoiceRespond() {
                 }
                 data-testid="input-note"
               />
-              {noteError && (
+              {noteRequired && noteError === null && (
+                <p className="text-xs text-muted-foreground">
+                  Required — your note is what the supplier sees.
+                </p>
+              )}
+              {noteError !== null && (
                 <p
                   id="note-error"
                   role="alert"
                   className="text-sm text-destructive"
+                  data-testid="text-note-error"
                 >
-                  A note is required when querying or rejecting.
+                  {noteError}
                 </p>
               )}
             </div>

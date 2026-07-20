@@ -27,7 +27,10 @@ import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 //  consent gate (the recipient is a firm member, not a client);
 //  - a dark messaging_notifications flag claims silently (PL-02);
 //  - payloads are pointer-only (SEC-12): opaque user pointer as recipientRef,
-//  dig-<letters> as entityId, never the member's email address.
+//  dig-<letters> as entityId, never the member's email address;
+//  - the email channel requires a VERIFIED address (emailVerifiedAt — round
+//  15): an unverified address gets no email, while push — which targets the
+//  member's own registered devices, not a typed-in address — is unaffected.
 
 const SALT = makeRunSalt();
 const firmDeliver = randomUUID();
@@ -41,6 +44,8 @@ const noChannelStaff = randomUUID();
 const darkStaff = randomUUID();
 const activeStaff = randomUUID();
 const offboardedStaff = randomUUID();
+const unverifiedBothStaff = randomUUID();
+const unverifiedEmailOnlyStaff = randomUUID();
 
 const MESSAGING_FLAG = "messaging_notifications";
 let messagingFlagWasEnabled: boolean | null = null;
@@ -127,6 +132,8 @@ before(async () => {
     { id: darkStaff, email: `dd-dark-${SALT}@test.example` },
     { id: activeStaff, email: `dd-active-${SALT}@test.example` },
     { id: offboardedStaff, email: `dd-gone-${SALT}@test.example` },
+    { id: unverifiedBothStaff, email: `dd-unver-${SALT}@test.example` },
+    { id: unverifiedEmailOnlyStaff, email: `dd-unver2-${SALT}@test.example` },
   ]);
   // Delivery addresses only CURRENT staff: recipients join preferences
   // against a live firm_admin/firm_staff membership. offboardedStaff gets
@@ -138,9 +145,15 @@ before(async () => {
     { userId: noChannelStaff, firmId: firmOptOut, role: "firm_staff" },
     { userId: darkStaff, firmId: firmDark, role: "firm_staff" },
     { userId: activeStaff, firmId: firmOffboard, role: "firm_staff" },
+    { userId: unverifiedBothStaff, firmId: firmDeliver, role: "firm_staff" },
+    {
+      userId: unverifiedEmailOnlyStaff,
+      firmId: firmDeliver,
+      role: "firm_staff",
+    },
   ]);
   await db.insert(staffNotificationPreferencesTable).values([
-    // Opted in, email channel with an address on the preference row.
+    // Opted in, email channel with a VERIFIED address on the preference row.
     {
       userId: emailStaff,
       firmId: firmDeliver,
@@ -148,6 +161,7 @@ before(async () => {
       emailEnabled: true,
       pushEnabled: false,
       email: `inbox-${SALT}@test.example`,
+      emailVerifiedAt: new Date(),
     },
     // Opted in, push channel; a registered device below makes the send real.
     {
@@ -184,6 +198,7 @@ before(async () => {
       emailEnabled: true,
       pushEnabled: false,
       email: `dark-${SALT}@test.example`,
+      emailVerifiedAt: new Date(),
     },
     // Still-employed member of the offboarding firm — the control that proves
     // delivery ran for that firm's digest.
@@ -194,9 +209,11 @@ before(async () => {
       emailEnabled: true,
       pushEnabled: false,
       email: `active-${SALT}@test.example`,
+      emailVerifiedAt: new Date(),
     },
     // Opted in with a live channel but NO membership row (offboarded): the
-    // recipients join must drop this row entirely.
+    // recipients join must drop this row entirely. Verified on purpose, so
+    // the ONLY thing keeping it quiet is the membership join.
     {
       userId: offboardedStaff,
       firmId: firmOffboard,
@@ -204,14 +221,46 @@ before(async () => {
       emailEnabled: true,
       pushEnabled: true,
       email: `gone-${SALT}@test.example`,
+      emailVerifiedAt: new Date(),
+    },
+    // Opted in on BOTH channels with an UNVERIFIED address: the email
+    // channel must stay dark while push still fires (round 15).
+    {
+      userId: unverifiedBothStaff,
+      firmId: firmDeliver,
+      digestEnabled: true,
+      emailEnabled: true,
+      pushEnabled: true,
+      email: `unverified-${SALT}@test.example`,
+      emailVerifiedAt: null,
+    },
+    // Opted in on email ONLY with an unverified address: no live channel at
+    // all — dropped from the recipient set entirely.
+    {
+      userId: unverifiedEmailOnlyStaff,
+      firmId: firmDeliver,
+      digestEnabled: true,
+      emailEnabled: true,
+      pushEnabled: false,
+      email: `unverified2-${SALT}@test.example`,
+      emailVerifiedAt: null,
     },
   ]);
-  await db.insert(pushDevicesTable).values({
-    userId: pushStaff,
-    firmId: firmDeliver,
-    expoPushToken: `ExponentPushToken[dd-${SALT}]`,
-    platform: "ios",
-  });
+  await db.insert(pushDevicesTable).values([
+    {
+      userId: pushStaff,
+      firmId: firmDeliver,
+      expoPushToken: `ExponentPushToken[dd-${SALT}]`,
+      platform: "ios",
+    },
+    // The unverified member's registered device: push must still reach it.
+    {
+      userId: unverifiedBothStaff,
+      firmId: firmDeliver,
+      expoPushToken: `ExponentPushToken[dd-unver-${SALT}]`,
+      platform: "ios",
+    },
+  ]);
   // Every notification succeeds without touching the network.
   setPushTransport(async (notifications) => ({
     ok: true,
@@ -256,6 +305,21 @@ test("delivery: a digest is offered exactly once across two passes, pointer-only
   await drainDeliveries();
   assert.equal((await digestMessagesFor(emailStaff)).length, 1);
   assert.equal((await digestMessagesFor(pushStaff)).length, 1);
+});
+
+test("delivery: an unverified email gets no email; push is unaffected", async () => {
+  // The firmDeliver digest above already went out; these members were in its
+  // recipient scan. The unverified address must not have produced an email —
+  // but the same member's push channel (their own registered device, no
+  // typed-in address involved) fired normally.
+  const both = await digestMessagesFor(unverifiedBothStaff);
+  assert.deepEqual(
+    both.map((m) => m.channel),
+    ["push"],
+    "push only — the unverified email channel stayed dark",
+  );
+  // Email-only + unverified = no live channel at all.
+  assert.equal((await digestMessagesFor(unverifiedEmailOnlyStaff)).length, 0);
 });
 
 test("delivery: an offboarded member's stale preference row goes quiet", async () => {

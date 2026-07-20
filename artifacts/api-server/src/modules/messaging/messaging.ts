@@ -94,13 +94,95 @@ function assertPointerOnly(value: string, field: string): void {
   }
 }
 
-function simulateProviderSend(channel: MessageChannel): {
+// ---------------------------------------------------------------------------
+// Transport seam (mirrors push.ts's PushTransport): every delivery attempt
+// flows through ONE injectable function, so tests and future providers swap
+// the transport without touching the failover walk or the row semantics.
+//
+// DATA BOUNDARY (SEC-12): the recipientRef and entityRef a transport receives
+// are POINTERS, never addresses — assertPointerOnly has already rejected
+// anything that looks like an email, phone number, amount or TIN. The
+// receiving relay (or provider integration) owns ref → address resolution on
+// ITS side of the wire; the platform never hands a raw contact to this seam.
+// ---------------------------------------------------------------------------
+
+export interface MessageTransportResult {
   ok: boolean;
   providerMessageId?: string;
-} {
-  // Simulated provider: every send succeeds. A real provider integration
-  // would report failures here, which the failover loop below handles.
-  return { ok: true, providerMessageId: `prov_${channel}_${Date.now()}` };
+  error?: string;
+}
+
+export type MessageTransport = (
+  channel: MessageChannel,
+  recipientRef: string,
+  templateKey: string,
+  entityRef: string | null,
+) => Promise<MessageTransportResult>;
+
+// Simulated provider: every send succeeds. A real provider integration
+// reports failures instead, which the failover loop below handles.
+const simulatorTransport: MessageTransport = async (channel) => ({
+  ok: true,
+  providerMessageId: `prov_${channel}_${Date.now()}`,
+});
+
+// Default transport, DARK by default: with no MESSAGING_WEBHOOK_URL
+// configured every send stays in-process on the simulator — exactly the
+// historical behaviour. Setting the env var lights a generic JSON webhook
+// relay: the pointer-only payload {channel, recipientRef, templateKey,
+// entityRef} is POSTed to the URL (x-op-token carries
+// MESSAGING_WEBHOOK_TOKEN when set — same shared-secret shape as the
+// operational endpoints), and the relay resolves refs to real addresses and
+// talks to the actual SMTP/SMS/WhatsApp provider. An SMTP or WhatsApp BSP
+// integration later is just another MessageTransport. Env is read per call
+// so tests and operators can flip it without a restart.
+const defaultTransport: MessageTransport = async (
+  channel,
+  recipientRef,
+  templateKey,
+  entityRef,
+) => {
+  const url = process.env.MESSAGING_WEBHOOK_URL;
+  if (!url) {
+    return simulatorTransport(channel, recipientRef, templateKey, entityRef);
+  }
+  try {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+    };
+    const token = process.env.MESSAGING_WEBHOOK_TOKEN;
+    if (token) headers["x-op-token"] = token;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ channel, recipientRef, templateKey, entityRef }),
+    });
+    if (!resp.ok) {
+      return { ok: false, error: `messaging webhook returned ${resp.status}` };
+    }
+    const payload = (await resp.json().catch(() => null)) as {
+      providerMessageId?: string;
+    } | null;
+    return {
+      ok: true,
+      providerMessageId:
+        typeof payload?.providerMessageId === "string"
+          ? payload.providerMessageId
+          : undefined,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+};
+
+let transport: MessageTransport = defaultTransport;
+
+export function setMessageTransport(t: MessageTransport): void {
+  transport = t;
+}
+
+export function resetMessageTransport(): void {
+  transport = defaultTransport;
 }
 
 export async function sendMessage(input: SendInput): Promise<Message> {
@@ -123,7 +205,23 @@ export async function sendMessage(input: SendInput): Promise<Message> {
 
   while (channel) {
     if (!template.channels.includes(channel)) break;
-    const send = simulateProviderSend(channel);
+    // A transport that throws is treated exactly like one that reports
+    // failure: the failover walk continues (a real webhook can reject in
+    // ways its own error handling misses).
+    let send: MessageTransportResult;
+    try {
+      send = await transport(
+        channel,
+        input.recipientRef,
+        input.templateKey,
+        input.entityId ?? null,
+      );
+    } catch (err) {
+      send = {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
     if (send.ok) {
       const [row] = await getDb()
         .insert(messagesTable)
