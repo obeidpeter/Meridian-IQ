@@ -318,6 +318,26 @@ export function fastLaneCaseSummary(kase: ClerkCase): FastLaneCaseSummary {
   };
 }
 
+// Which body the bulk-approve dialog shows. The candidate list is LIVE — the
+// queue refetches while the dialog is open (window focus, another operator
+// deciding cases), so the fast lane can drain to zero underneath it. An empty
+// batch is a contract 400, so a drained dialog must disable confirm and say
+// why instead of offering a dead button. Precedence: once the report is in,
+// the outcomes view owns the dialog; while a batch is in flight the in-flight
+// items govern (the rows were snapshotted at click), so neither counts as
+// drained.
+export type BulkDialogPhase = "report" | "review" | "drained";
+
+export function bulkDialogPhase(args: {
+  hasReport: boolean;
+  candidateCount: number;
+  approvalPending: boolean;
+}): BulkDialogPhase {
+  if (args.hasReport) return "report";
+  if (args.candidateCount === 0 && !args.approvalPending) return "drained";
+  return "review";
+}
+
 // The bulk report, folded for display: how many drafts were created plus one
 // named reason per skipped case (a skipped case was left exactly as it was).
 export function bulkApproveSummary(report: ClerkBulkApproveReport): {

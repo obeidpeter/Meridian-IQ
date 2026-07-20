@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { serverErrorMessage } from "@/lib/errors";
+import { QueryError } from "@/components/query-error";
+import { errorStatus, serverErrorMessage } from "@/lib/errors";
 
 // Staff notification preferences — how (and whether) the weekly Clerk digest
 // reaches this firm member. Self-service and strictly personal: the server
@@ -27,6 +28,30 @@ import { serverErrorMessage } from "@/lib/errors";
 
 export function isFirmMemberRole(role: string | null | undefined): boolean {
   return role === "firm_admin" || role === "firm_staff";
+}
+
+// What the card renders. The distinction that matters: "hidden" is reserved
+// for callers the server would 403 (not a firm member — including the server
+// saying so itself while /me lags a role change); a TRANSIENT load failure
+// for a legitimate firm member is "error", never "hidden" — silently removing
+// a settings form because one fetch 500'd would read as the feature not
+// existing.
+export type PrefsCardState = "hidden" | "loading" | "error" | "form";
+
+export function prefsCardState(args: {
+  firmMember: boolean;
+  isError: boolean;
+  /** HTTP status of the load failure; undefined for a network-level error. */
+  errorStatus: number | undefined;
+  isSuccess: boolean;
+}): PrefsCardState {
+  if (!args.firmMember) return "hidden";
+  if (args.isError) {
+    // 403 is the server's own final answer that this user is not a firm
+    // member; anything else (500, network) is a failure worth retrying.
+    return args.errorStatus === 403 ? "hidden" : "error";
+  }
+  return args.isSuccess ? "form" : "loading";
 }
 
 export interface StaffPrefsForm {
@@ -66,7 +91,9 @@ export function prefsUpdatePayload(
 export function StaffNotificationPrefsCard() {
   const { data: me } = useGetMe();
   const firmMember = isFirmMemberRole(me?.role);
-  // No retry: a 403 (role changed underneath us) is a final answer.
+  // No automatic retry: a 403 (role changed underneath us) is a final
+  // answer. Other failures render the error card below, whose "Try again"
+  // is the manual retry.
   const prefs = useGetStaffNotificationPreferences({
     query: {
       queryKey: getGetStaffNotificationPreferencesQueryKey(),
@@ -74,7 +101,32 @@ export function StaffNotificationPrefsCard() {
       retry: false,
     },
   });
-  if (!firmMember || !prefs.isSuccess) return null;
+  const state = prefsCardState({
+    firmMember,
+    isError: prefs.isError,
+    errorStatus: errorStatus(prefs.error),
+    isSuccess: prefs.isSuccess,
+  });
+  if (state === "hidden" || state === "loading") return null;
+  if (state === "error") {
+    // A transient load failure must not silently remove a settings form —
+    // same failed-fetch treatment as the card's portfolio neighbours, with
+    // the card shell kept so the section does not vanish.
+    return (
+      <Card data-testid="card-staff-notification-prefs">
+        <CardHeader>
+          <CardTitle className="text-base">Your notifications</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <QueryError
+            thing="your notification preferences"
+            onRetry={() => void prefs.refetch()}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+  if (!prefs.isSuccess) return null; // narrows prefs.data; unreachable at "form"
   // The form body mounts only once the saved row has loaded, so its local
   // state can initialise from real values instead of racing the fetch.
   return <PrefsCardBody initial={prefs.data} />;

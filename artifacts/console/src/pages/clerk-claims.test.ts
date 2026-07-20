@@ -1,6 +1,10 @@
 import { test, expect, describe } from "vitest";
 import type { ClaimGapReport } from "@workspace/api-client-react";
-import { claimGapSummary, seededDraftState } from "./clerk-claims";
+import {
+  claimGapSummary,
+  seededDraftState,
+  shouldConfirmSeedOverwrite,
+} from "./clerk-claims";
 
 // The claim-gaps card's headline sentence: refusals against the window when
 // the register left questions unanswered, an all-clear otherwise.
@@ -58,5 +62,38 @@ describe("seededDraftState", () => {
     expect(seed.draftError).toBeNull();
     expect(seed.draftSuccess).toBeNull();
     expect(seed.draftOpen).toBe(true);
+  });
+});
+
+// The seed's dirty-panel guard: replacing non-empty DIFFERING panel text needs
+// the operator's explicit OK; everything else seeds silently.
+describe("shouldConfirmSeedOverwrite", () => {
+  test("an empty or whitespace-only panel seeds without asking", () => {
+    expect(shouldConfirmSeedOverwrite("", "What is the VAT rate?")).toBe(false);
+    expect(shouldConfirmSeedOverwrite("   \n ", "What is the VAT rate?")).toBe(
+      false,
+    );
+  });
+
+  test("non-empty differing text requires the confirmation", () => {
+    expect(
+      shouldConfirmSeedOverwrite(
+        "Half-written statutory context the operator typed…",
+        "What is the VAT rate?",
+      ),
+    ).toBe(true);
+  });
+
+  test("re-seeding the SAME question is not an overwrite — no interruption", () => {
+    expect(
+      shouldConfirmSeedOverwrite("What is the VAT rate?", "What is the VAT rate?"),
+    ).toBe(false);
+    // …including when only surrounding whitespace differs.
+    expect(
+      shouldConfirmSeedOverwrite(
+        "  What is the VAT rate? ",
+        "What is the VAT rate?",
+      ),
+    ).toBe(false);
   });
 });

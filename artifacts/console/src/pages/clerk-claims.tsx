@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   useListClaims,
   useCreateClaim,
@@ -33,6 +33,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -176,6 +186,19 @@ export function seededDraftState(question: string): {
     draftError: null,
     draftSuccess: null,
   };
+}
+
+// Seeding must never clobber work in progress: if the panel already holds
+// non-empty text that DIFFERS from the incoming question, replacing it needs
+// the operator's explicit OK first. An empty or whitespace-only panel seeds
+// silently, and re-seeding the same question (modulo surrounding whitespace)
+// is a no-op worth no interruption.
+export function shouldConfirmSeedOverwrite(
+  currentText: string,
+  question: string,
+): boolean {
+  const current = currentText.trim();
+  return current.length > 0 && current !== question.trim();
 }
 
 // The claim-gaps headline, phrased as one sentence so the card reads the same
@@ -534,8 +557,21 @@ export function ClerkClaims() {
   // "Draft claim from this" on an uncovered gap row: prefill the existing
   // Draft-with-Clerk panel with the refused question verbatim. Nothing is
   // created here — the operator reviews the seeded text, clicks draft, and
-  // the result is an ordinary draft under maker-checker.
-  const draftFromGap = (question: string) => {
+  // the result is an ordinary draft under maker-checker. A dirty panel
+  // (non-empty differing text) is never overwritten silently: the seed parks
+  // in pendingSeed and the confirm dialog below asks first.
+  const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [pendingSeed, setPendingSeed] = useState<string | null>(null);
+  // Focus lands in the seeded textarea AFTER the panel has committed (it may
+  // only mount on this very update), so keyboard and screen-reader users
+  // arrive at the text the click just planted instead of staying on a button
+  // at the bottom of the page.
+  const [seedFocusTick, setSeedFocusTick] = useState(0);
+  useEffect(() => {
+    if (seedFocusTick > 0) draftTextareaRef.current?.focus();
+  }, [seedFocusTick]);
+
+  const applySeed = (question: string) => {
     const seed = seededDraftState(question);
     setDraftOpen(seed.draftOpen);
     setDraftText(seed.draftText);
@@ -543,6 +579,15 @@ export function ClerkClaims() {
     setDraftSuccess(seed.draftSuccess);
     // The panel renders above the register table; bring it into view.
     window.scrollTo({ top: 0, behavior: "smooth" });
+    setSeedFocusTick((t) => t + 1);
+  };
+
+  const draftFromGap = (question: string) => {
+    if (shouldConfirmSeedOverwrite(draftText, question)) {
+      setPendingSeed(question);
+      return;
+    }
+    applySeed(question);
   };
 
   // 503 = the clerk_ai kill switch is off (CLERK_DISABLED); 403 = maker-checker
@@ -783,6 +828,7 @@ export function ClerkClaims() {
               flow: nothing goes live until a second operator approves it.
             </p>
             <Textarea
+              ref={draftTextareaRef}
               value={draftText}
               onChange={(e) => setDraftText(e.target.value)}
               placeholder="Paste the statutory text, circular or guidance…"
@@ -1153,6 +1199,41 @@ export function ClerkClaims() {
           </CardContent>
         </Card>
       )}
+
+      {/* Seed-overwrite guard: the gap row's seed replaces the Draft-with-
+          Clerk panel's text, so a dirty panel gets asked first. Cancelling
+          leaves the operator's text untouched. */}
+      <AlertDialog
+        open={pendingSeed !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingSeed(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace the draft panel text?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The Draft-with-Clerk panel already has source text in it.
+              Seeding this question replaces that text, and it is not saved
+              anywhere.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-seed-overwrite">
+              Keep my text
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingSeed !== null) applySeed(pendingSeed);
+                setPendingSeed(null);
+              }}
+              data-testid="button-confirm-seed-overwrite"
+            >
+              Replace it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Approve / reject / suspend — the note travels with the audit trail. */}
       <Dialog

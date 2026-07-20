@@ -1,6 +1,7 @@
 import { test, expect, describe } from "vitest";
 import {
   isFirmMemberRole,
+  prefsCardState,
   prefsFormFromServer,
   prefsUpdatePayload,
 } from "./staff-notification-prefs-card";
@@ -21,6 +22,52 @@ describe("isFirmMemberRole", () => {
     expect(isFirmMemberRole("client_user")).toBe(false);
     expect(isFirmMemberRole(undefined)).toBe(false);
     expect(isFirmMemberRole(null)).toBe(false);
+  });
+});
+
+// The card's render split. The load-bearing distinction: a role that should
+// never see the card hides it, but a TRANSIENT load failure for a firm member
+// must render an error with a retry — error ≠ hidden, or one 500 silently
+// removes a settings form.
+describe("prefsCardState", () => {
+  const base = {
+    firmMember: true,
+    isError: false,
+    errorStatus: undefined,
+    isSuccess: false,
+  };
+
+  test("non-firm-members stay hidden regardless of query state", () => {
+    expect(prefsCardState({ ...base, firmMember: false })).toBe("hidden");
+    expect(
+      prefsCardState({
+        ...base,
+        firmMember: false,
+        isError: true,
+        errorStatus: 500,
+      }),
+    ).toBe("hidden");
+  });
+
+  test("a transient failure for a firm member is ERROR, never hidden", () => {
+    expect(
+      prefsCardState({ ...base, isError: true, errorStatus: 500 }),
+    ).toBe("error");
+    // Network-level failure carries no HTTP status at all.
+    expect(
+      prefsCardState({ ...base, isError: true, errorStatus: undefined }),
+    ).toBe("error");
+  });
+
+  test("the server's own 403 is a final not-a-firm-member answer — hidden", () => {
+    expect(
+      prefsCardState({ ...base, isError: true, errorStatus: 403 }),
+    ).toBe("hidden");
+  });
+
+  test("loading renders nothing yet; success renders the form", () => {
+    expect(prefsCardState(base)).toBe("loading");
+    expect(prefsCardState({ ...base, isSuccess: true })).toBe("form");
   });
 });
 
