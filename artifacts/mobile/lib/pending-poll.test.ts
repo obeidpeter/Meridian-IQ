@@ -5,6 +5,7 @@ import {
   PENDING_POLL_INTERVAL_MS,
   pendingPollInterval,
   pollCapReached,
+  sinceForSubject,
   trackPendingSince,
 } from "./pending-poll.ts";
 
@@ -75,6 +76,40 @@ test("pendingPollInterval polls only while processing, focused and under cap", (
     }),
     500,
   );
+});
+
+test("sinceForSubject keeps the clock for the same subject, resets it on change", () => {
+  // Same subject (or an unkeyed poll: both null): the clock carries.
+  assert.equal(sinceForSubject(T0, "st-1", "st-1"), T0);
+  assert.equal(sinceForSubject(T0, null, null), T0);
+  // A different subject is NEW work: the clock resets.
+  assert.equal(sinceForSubject(T0, "st-1", "st-2"), null);
+  assert.equal(sinceForSubject(T0, null, "st-1"), null);
+  assert.equal(sinceForSubject(T0, "st-1", null), null);
+  // No clock to carry either way.
+  assert.equal(sinceForSubject(null, "st-1", "st-2"), null);
+});
+
+test("switching the polled subject restarts the cap window", () => {
+  let since: number | null = null;
+  let subject: string | null = null;
+  const decide = (nextSubject: string, processing: boolean, now: number) => {
+    since = sinceForSubject(since, subject, nextSubject);
+    subject = nextSubject;
+    since = trackPendingSince(since, processing, now);
+    return pendingPollInterval({ processing, focused: true, since, now });
+  };
+
+  // Statement A matches for nine minutes — still inside the window.
+  assert.equal(decide("st-a", true, T0), PENDING_POLL_INTERVAL_MS);
+  assert.equal(decide("st-a", true, T0 + 9 * 60_000), PENDING_POLL_INTERVAL_MS);
+  // The user selects statement B two minutes later: without the reset the
+  // combined stretch would cross the cap; keyed by subject it polls afresh.
+  const switchAt = T0 + 11 * 60_000;
+  assert.equal(decide("st-b", true, switchAt), PENDING_POLL_INTERVAL_MS);
+  assert.equal(since, switchAt);
+  // …and B's own cap still applies from ITS start.
+  assert.equal(decide("st-b", true, switchAt + PENDING_POLL_CAP_MS), false);
 });
 
 test("a full lifecycle: poll, blur, refocus, then stop at the cap", () => {

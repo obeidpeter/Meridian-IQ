@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { ClerkAnswer } from "@workspace/api-client-react";
 import {
   answerSourceNote,
   askableQuestion,
   dataAnswerScope,
+  heldAnswer,
   QUESTION_MAX,
   QUESTION_MIN,
   SUGGESTED_QUESTIONS,
@@ -31,6 +33,26 @@ test("every suggested chip is submittable as-is", () => {
   for (const q of SUGGESTED_QUESTIONS) {
     assert.equal(askableQuestion(q), q);
   }
+});
+
+test("heldAnswer mirrors the console's tested persistence semantic", () => {
+  const first: ClerkAnswer = {
+    answered: true,
+    proposition: "3 invoices were submitted.",
+  };
+  const refusal: ClerkAnswer = {
+    answered: false,
+    refusalReason: "Not covered by an approved claim.",
+  };
+  // A success replaces the held answer — a refusal IS the newest answer.
+  assert.equal(heldAnswer(null, { type: "success", answer: first }), first);
+  assert.equal(heldAnswer(first, { type: "success", answer: refusal }), refusal);
+  // A success WITHOUT an answer payload clears a stale one (never keeps it).
+  assert.equal(heldAnswer(first, { type: "success", answer: undefined }), null);
+  assert.equal(heldAnswer(first, { type: "success", answer: null }), null);
+  // An error keeps the previous answer — still the newest truth given.
+  assert.equal(heldAnswer(first, { type: "error" }), first);
+  assert.equal(heldAnswer(null, { type: "error" }), null);
 });
 
 test("askableQuestion trims and enforces the contract bounds", () => {

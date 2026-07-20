@@ -6,11 +6,10 @@ import {
   relativeTime,
 } from "./notifications";
 
-// PARITY PIN — the console app mirrors this module in its own
-// src/lib/notifications.ts (no cross-app shared lib exists). The canonical
-// channel vocabulary below is asserted verbatim in BOTH apps' suites, the
-// mobile chip-parity idiom: a divergence fails one side's test and points
-// at the other.
+// PARITY PIN — this module mirrors the SME app's src/lib/notifications.ts
+// (no cross-app shared lib exists). The canonical channel vocabulary below
+// is asserted verbatim in BOTH apps' suites, the mobile chip-parity idiom:
+// a divergence fails one side's test and points at the other.
 
 describe("channel vocabulary parity", () => {
   test("labels match the canonical set exactly", () => {

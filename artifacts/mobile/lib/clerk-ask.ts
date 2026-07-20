@@ -30,6 +30,23 @@ export const SUGGESTED_QUESTIONS: readonly string[] = [
 ];
 
 /**
+ * The answer held on screen after an ask settles — the console Ask page's
+ * tested semantic, mirrored here and in the SME web app: a success REPLACES
+ * the held answer with whatever it carried (a refusal IS the newest answer,
+ * and a success WITHOUT an answer payload clears a stale one instead of
+ * leaving it on screen), while an error keeps the previous answer — still
+ * the newest truth the asker was given.
+ */
+export function heldAnswer(
+  previous: ClerkAnswer | null,
+  outcome:
+    | { type: "success"; answer: ClerkAnswer | null | undefined }
+    | { type: "error" },
+): ClerkAnswer | null {
+  return outcome.type === "success" ? (outcome.answer ?? null) : previous;
+}
+
+/**
  * The trimmed question when it fits the contract bounds, else null. The
  * screen submits exactly what this returns, so the button's enablement and
  * the request body can never disagree about validity.

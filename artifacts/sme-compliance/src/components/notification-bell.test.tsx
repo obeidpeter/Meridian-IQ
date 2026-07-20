@@ -1,10 +1,28 @@
 // @vitest-environment jsdom
 // The notification bell's contract: nothing fetched (and nothing rendered)
 // until the user opens it, rows render on success only — title, channel
-// chip, relative time — and the popover light-dismisses.
+// chip, relative time — and the popover dismisses on Escape, outside
+// pointer-down (both via the Radix primitive now) and on navigation.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
+import { Router } from "wouter";
+import { memoryLocation } from "wouter/memory-location";
 import type { NotificationFeed } from "@workspace/api-client-react";
+
+// Radix's popper positioning needs a ResizeObserver; jsdom has none.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??=
+  ResizeObserverStub;
 
 const harness = vi.hoisted(() => ({
   feed: {
@@ -46,6 +64,10 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
 import { NotificationBell } from "./notification-bell";
 
 const bell = () => screen.getByTestId("button-notifications");
+
+// Radix attaches its outside-pointer-down listener on a 0ms timeout after
+// open (so the opening click can't self-dismiss) — flush it before firing.
+const flushTimers = () => act(() => new Promise((r) => setTimeout(r, 0)));
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -115,7 +137,7 @@ describe("NotificationBell", () => {
     expect(screen.queryByTestId("text-notifications-empty")).toBeNull();
   });
 
-  test("light-dismiss: Escape and outside clicks close the popover", () => {
+  test("light-dismiss: Escape and outside pointer-down close the popover", async () => {
     harness.feed.data = { items: [] };
     render(<NotificationBell />);
     fireEvent.click(bell());
@@ -126,7 +148,22 @@ describe("NotificationBell", () => {
 
     fireEvent.click(bell());
     expect(screen.getByTestId("popover-notifications")).toBeTruthy();
-    fireEvent.mouseDown(document.body);
+    await flushTimers();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByTestId("popover-notifications")).toBeNull();
+  });
+
+  test("a wouter navigation closes the popover", async () => {
+    const { hook, navigate } = memoryLocation({ path: "/" });
+    render(
+      <Router hook={hook}>
+        <NotificationBell />
+      </Router>,
+    );
+    fireEvent.click(bell());
+    expect(screen.getByTestId("popover-notifications")).toBeTruthy();
+
+    act(() => navigate("/invoices"));
     expect(screen.queryByTestId("popover-notifications")).toBeNull();
   });
 });

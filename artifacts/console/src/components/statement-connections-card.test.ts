@@ -3,6 +3,7 @@ import type { StatementSyncRun } from "@workspace/api-client-react";
 import {
   CONNECTION_STATUS_TONE,
   SYNC_RUN_TONE,
+  connectorFieldState,
   connectorLabel,
   lastSyncLabel,
   parseConnectionConfig,
@@ -41,6 +42,23 @@ describe("parseConnectionConfig", () => {
       expect(res.ok).toBe(false);
       if (!res.ok) expect(res.error).toContain("JSON object");
     }
+  });
+});
+
+describe("connectorFieldState", () => {
+  const one = [{ key: "mono", name: "Mono", description: "Open banking" }];
+
+  test("still-loading registry shows the skeleton", () => {
+    expect(connectorFieldState(undefined, false)).toBe("loading");
+  });
+
+  test("a failed fetch is an inline error, never an eternal skeleton", () => {
+    expect(connectorFieldState(undefined, true)).toBe("error");
+  });
+
+  test("a loaded registry is empty or ready by its length", () => {
+    expect(connectorFieldState([], false)).toBe("empty");
+    expect(connectorFieldState(one, false)).toBe("ready");
   });
 });
 

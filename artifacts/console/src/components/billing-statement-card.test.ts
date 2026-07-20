@@ -5,14 +5,67 @@ import type {
   BillingStatementUsage,
 } from "@workspace/api-client-react";
 import {
+  billingCardState,
   clerkUsageLine,
   overageLine,
   tierSummary,
 } from "./billing-statement-card";
+import { monthCsvFilename } from "@/lib/download";
 
-// Billing statement display helpers. The card itself is render-on-success
-// (a 403 for roles without billing scope hides the whole section), matching
-// the VAT pack beside it in the Money group.
+// Billing statement display helpers plus the card's render state machine.
+// Render-on-success is the INITIAL gate only (a 403 for roles without
+// billing scope hides the whole section); once shown, the card stays
+// mounted across month switches and failed month fetches.
+
+describe("billingCardState", () => {
+  test("hidden until the first statement loads — the initial render-on-success gate", () => {
+    // Initial fetch in flight: nothing to show yet.
+    expect(
+      billingCardState({ hasStatement: false, isError: false, isFetching: true }),
+    ).toBe("hidden");
+    // Initial fetch failed (403/404): the section stays away entirely.
+    expect(
+      billingCardState({ hasStatement: false, isError: true, isFetching: false }),
+    ).toBe("hidden");
+  });
+
+  test("a month switch keeps the card mounted with a loading hint", () => {
+    expect(
+      billingCardState({ hasStatement: true, isError: false, isFetching: true }),
+    ).toBe("loading");
+  });
+
+  test("a failed month fetch shows an inline error, never a vanished card", () => {
+    expect(
+      billingCardState({ hasStatement: true, isError: true, isFetching: false }),
+    ).toBe("error");
+    // Even while the retry is in flight the card reports the error state —
+    // the held statement stays on screen underneath.
+    expect(
+      billingCardState({ hasStatement: true, isError: true, isFetching: true }),
+    ).toBe("error");
+  });
+
+  test("a settled successful fetch renders the data plainly", () => {
+    expect(
+      billingCardState({ hasStatement: true, isError: false, isFetching: false }),
+    ).toBe("data");
+  });
+});
+
+describe("monthCsvFilename", () => {
+  test("names the saved file after the statement month", () => {
+    expect(monthCsvFilename("billing-statement", "2026-06-01")).toBe(
+      "billing-statement-2026-06.csv",
+    );
+  });
+
+  test("an empty month still yields a usable filename", () => {
+    expect(monthCsvFilename("billing-statement", "")).toBe(
+      "billing-statement.csv",
+    );
+  });
+});
 
 const tier = (over: Partial<BillingStatementTier> = {}): BillingStatementTier => ({
   key: "growth",

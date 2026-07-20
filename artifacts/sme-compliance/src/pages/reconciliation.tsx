@@ -11,6 +11,7 @@ import {
   useAssistMatchProposals,
   getListBankStatementsQueryKey,
   getListBankStatementProposalsQueryKey,
+  type StatementImportInput,
   type StatementImportResult,
   type MatchProposalView,
   type MatchAssist,
@@ -61,6 +62,44 @@ function percent(rate: number | string): string {
   const n = Number(rate);
   if (Number.isNaN(n)) return "—";
   return `${Math.round(n * 100)}%`;
+}
+
+/**
+ * The import request body for the current inputs. The scanned path's COMMIT
+ * posts back the preview's `proposedCsv` (with the preview's formatKey
+ * unchanged) instead of the PDF — the server refuses `pdfBase64` with
+ * commit:true (contract 0.40.0), so the rows the client checked in the
+ * preview are exactly the rows that commit; extraction can never silently
+ * re-run between preview and commit. Editing or re-picking a file clears
+ * `report`, which drops the held proposedCsv with it. A PDF preview from an
+ * older server carries no proposedCsv; the PDF then rides along unchanged
+ * and the server stays the authority on whether that commit is accepted.
+ */
+export function statementImportBody(args: {
+  clientPartyId: string;
+  csv: string;
+  pdf: { name: string; base64: string } | null;
+  report: StatementImportResult | null;
+  commit: boolean;
+  filename: string | null;
+}): StatementImportInput {
+  const proposedCsv =
+    args.commit && args.pdf && args.report && !args.report.committed
+      ? (args.report.proposedCsv ?? null)
+      : null;
+  return {
+    clientPartyId: args.clientPartyId,
+    ...(proposedCsv !== null
+      ? {
+          csv: proposedCsv,
+          ...(args.report?.formatKey ? { formatKey: args.report.formatKey } : {}),
+        }
+      : args.pdf
+        ? { pdfBase64: args.pdf.base64 }
+        : { csv: args.csv }),
+    commit: args.commit,
+    ...(args.filename ? { filename: args.filename } : {}),
+  };
 }
 
 export function Reconciliation() {
@@ -235,12 +274,14 @@ export function Reconciliation() {
     if (!clientPartyId || (!pdf && !csv.trim())) return;
     try {
       const res = await importMut.mutateAsync({
-        data: {
+        data: statementImportBody({
           clientPartyId,
-          ...(pdf ? { pdfBase64: pdf.base64 } : { csv }),
+          csv,
+          pdf,
+          report,
           commit,
-          ...(filename ? { filename } : {}),
-        },
+          filename,
+        }),
       });
       setReport(res);
       setReportSource(pdf ? "pdf" : "csv");
@@ -486,9 +527,9 @@ export function Reconciliation() {
                     </AlertTitle>
                     <AlertDescription>
                       The rows below are what Clerk proposed from the PDF —
-                      not a parsed export. Check the dates, amounts and
-                      directions against your statement before committing;
-                      nothing is saved until you do.
+                      and exactly what will be committed. Check the dates,
+                      amounts and directions against your statement; nothing
+                      is saved until you press “Commit statement”.
                     </AlertDescription>
                   </Alert>
                 )}

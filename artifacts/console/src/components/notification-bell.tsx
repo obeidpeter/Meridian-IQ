@@ -9,27 +9,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { pillClasses, type BadgeTone } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
+import {
+  channelBadgeClasses,
+  channelLabel,
+  NOTIFICATION_FEED_LIMIT,
+  relativeTime,
+} from "@/lib/notifications";
 
 // Notification inbox: the firm's recent alert fan-out, straight from the
 // messaging ledger. There is no per-user read state server-side, so the
 // badge is honestly a RECENT count (the feed length), never "unread".
 // Render-on-success: a server without the endpoint (older build → 404), or
-// a principal without a feed, shows no bell at all.
-
-const FEED_LIMIT = 20;
-
-export const CHANNEL_TONE: Record<string, BadgeTone> = {
-  email: "blue",
-  push: "violet",
-  sms: "amber",
-  whatsapp: "emerald",
-};
-
-/** "whatsapp" -> "whatsapp", "in_app" -> "in app" — chips read as prose. */
-export function channelLabel(channel: string): string {
-  return channel.replace(/_/g, " ");
-}
+// a principal without a feed, shows no bell at all. Channel labels/tones and
+// the relative-time buckets come from lib/notifications — the SME app's
+// vocabulary, mirrored by a parity test in each app.
 
 /**
  * The bell badge: null hides it entirely on an empty feed (a zero would read
@@ -38,25 +32,12 @@ export function channelLabel(channel: string): string {
  */
 export function badgeText(count: number): string | null {
   if (count <= 0) return null;
-  if (count >= FEED_LIMIT) return `${FEED_LIMIT}+`;
+  if (count >= NOTIFICATION_FEED_LIMIT) return `${NOTIFICATION_FEED_LIMIT}+`;
   return String(count);
 }
 
-// Coarse relative time for feed rows — same shape as the clerk queue's claim
-// ages; precision doesn't matter here.
-export function notificationAge(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const mins = Math.max(0, Math.round((Date.now() - then) / 60_000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
-}
-
 export function NotificationBell() {
-  const params = { limit: FEED_LIMIT };
+  const params = { limit: NOTIFICATION_FEED_LIMIT };
   const { data: feed, isSuccess } = useListNotifications(params, {
     query: { queryKey: getListNotificationsQueryKey(params), retry: false },
   });
@@ -92,7 +73,7 @@ export function NotificationBell() {
             className="px-4 py-6 text-center text-sm text-muted-foreground"
             data-testid="text-notifications-empty"
           >
-            Nothing yet.
+            Nothing yet — alerts we send you will show up here.
           </p>
         ) : (
           <ul
@@ -107,10 +88,12 @@ export function NotificationBell() {
               >
                 <p className="text-sm leading-5">{n.title}</p>
                 <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className={pillClasses(CHANNEL_TONE[n.channel] ?? "slate")}>
+                  <span className={channelBadgeClasses(n.channel)}>
                     {channelLabel(n.channel)}
                   </span>
-                  <span>{notificationAge(n.createdAt)}</span>
+                  <span title={formatDateTime(n.createdAt)}>
+                    {relativeTime(n.createdAt)}
+                  </span>
                 </p>
               </li>
             ))}

@@ -90,6 +90,23 @@ export function parseConnectionConfig(
   return { ok: true, config: parsed as Record<string, unknown> };
 }
 
+export type ConnectorFieldState = "loading" | "error" | "empty" | "ready";
+
+/**
+ * What the create dialog's connector picker renders. The registry fetch has
+ * no retry, so a failure must surface as an inline error + retry — leaving
+ * `connectors` undefined forever would otherwise read as an eternal
+ * skeleton.
+ */
+export function connectorFieldState(
+  connectors: StatementConnectorInfo[] | undefined,
+  isError: boolean,
+): ConnectorFieldState {
+  if (isError) return "error";
+  if (connectors === undefined) return "loading";
+  return connectors.length === 0 ? "empty" : "ready";
+}
+
 /** Human name for a connector key, falling back to the key itself. */
 export function connectorLabel(
   key: string,
@@ -139,9 +156,14 @@ function StatementConnectionsBody({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { data: connectors } = useListStatementConnectors({
+  const {
+    data: connectors,
+    isError: connectorsIsError,
+    refetch: refetchConnectors,
+  } = useListStatementConnectors({
     query: { queryKey: getListStatementConnectorsQueryKey(), retry: false },
   });
+  const connectorsState = connectorFieldState(connectors, connectorsIsError);
 
   const invalidateConnections = () =>
     queryClient.invalidateQueries({
@@ -352,9 +374,16 @@ function StatementConnectionsBody({
           <div className="space-y-3">
             <div className="space-y-1">
               <Label>Connector</Label>
-              {connectors === undefined ? (
+              {connectorsState === "loading" ? (
                 <Skeleton className="h-9" data-testid="skeleton-connectors" />
-              ) : connectors.length === 0 ? (
+              ) : connectorsState === "error" ? (
+                // A failed registry fetch must not read as an eternal
+                // skeleton — inline error + retry, dialog stays usable.
+                <QueryError
+                  thing="the connector list"
+                  onRetry={() => void refetchConnectors()}
+                />
+              ) : connectorsState === "empty" ? (
                 <p
                   className="text-sm text-muted-foreground"
                   data-testid="text-no-connectors"
@@ -370,7 +399,7 @@ function StatementConnectionsBody({
                     <SelectValue placeholder="Pick a connector…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {connectors.map((c) => (
+                    {(connectors ?? []).map((c) => (
                       <SelectItem key={c.key} value={c.key}>
                         {c.name}
                       </SelectItem>

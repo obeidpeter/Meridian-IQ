@@ -147,6 +147,20 @@ describe("AskContent answer persistence", () => {
     );
   });
 
+  test("a success WITHOUT an answer payload clears the held answer — console's tested semantic", () => {
+    render(<AskContent />);
+    askQuestion("What did we submit this month?");
+    deliver(answeredCase("case-1", dataAnswer("3 invoices were submitted.")));
+    expect(screen.getByTestId("card-clerk-answer")).toBeTruthy();
+
+    // A later success that carries no answer (older server / degenerate
+    // payload) must not leave the stale numbers on screen.
+    askQuestion("and for June?");
+    deliver({ id: "case-2" } as unknown as ClerkCase);
+    expect(screen.queryByTestId("card-clerk-answer")).toBeNull();
+    expect(screen.queryByTestId("card-clerk-refusal")).toBeNull();
+  });
+
   test("suggested chips stay on the client-safe data intents", () => {
     render(<AskContent />);
     const chips = screen.getByTestId("chips-suggested-questions");
