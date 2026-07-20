@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.40.0
+ * OpenAPI spec version: 0.41.0
  */
 
 export * from './acceptInvitationInput';
@@ -196,9 +196,12 @@ export * from './cpdEnrollmentView';
 export * from './cpdEnrollmentViewStatus';
 export * from './createClerkBatchInput';
 export * from './createClerkBatchInputSourceType';
+export * from './createFirmApiKeyInput';
+export * from './createFirmWebhookInput';
 export * from './createInvitationInput';
 export * from './createInvitationInputRole';
 export * from './createPasswordResetInput';
+export * from './createPaymentIntentInput';
 export * from './createStatementConnectionInput';
 export * from './createStatementConnectionInputConfig';
 export * from './createStatementFormatInput';
@@ -262,6 +265,8 @@ export * from './featureFlagOverrideInput';
 export * from './featureFlagUpdate';
 export * from './fieldError';
 export * from './firm';
+export * from './firmApiKey';
+export * from './firmApiKeyCreated';
 export * from './firmExportBundle';
 export * from './firmExportBundleCountsItem';
 export * from './firmExportBundleSections';
@@ -276,6 +281,10 @@ export * from './firmThemeInput';
 export * from './firmThemeInputTheme';
 export * from './firmThemeProperty';
 export * from './firmThemeTheme';
+export * from './firmWebhook';
+export * from './firmWebhookCreated';
+export * from './firmWebhookDelivery';
+export * from './firmWebhookDeliveryStatus';
 export * from './forbiddenResponse';
 export * from './gapItem';
 export * from './gapItemSeverity';
@@ -351,6 +360,7 @@ export * from './loginInput';
 export * from './mappingValidation';
 export * from './mappingValidationRow';
 export * from './mappingValidationRowParseStatus';
+export * from './markNotificationsReadInput';
 export * from './matchAssist';
 export * from './matchAssistCandidate';
 export * from './matchAssistSource';
@@ -409,6 +419,8 @@ export * from './paymentChaserDraftPreviousReminders';
 export * from './paymentChaserDraftSource';
 export * from './paymentFlagInput';
 export * from './paymentFlagInputPaymentStatus';
+export * from './paymentIntent';
+export * from './paymentIntentStatus';
 export * from './portfolioSummary';
 export * from './priceReview';
 export * from './projectionAccuracy';

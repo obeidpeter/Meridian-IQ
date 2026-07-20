@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.40.0
+ * OpenAPI spec version: 0.41.0
  */
 import * as zod from 'zod';
 
@@ -175,6 +175,63 @@ export const ChangePasswordBody = zod.object({
 })
 
 export const ChangePasswordResponse = zod.void()
+
+
+/**
+ * @summary The firm's API keys (metadata only — the secret is never retrievable)
+ */
+export const ListFirmApiKeysResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "keyPrefix": zod.string(),
+  "lastUsedAt": zod.coerce.date().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListFirmApiKeysResponse = zod.array(ListFirmApiKeysResponseItem)
+
+
+/**
+ * @summary Mint a firm API key; the secret is returned once and only its hash is stored
+ */
+export const createFirmApiKeyBodyNameMax = 80;
+
+export const createFirmApiKeyBodyCapabilitiesMax = 10;
+
+
+
+export const CreateFirmApiKeyBody = zod.object({
+  "name": zod.string().min(1).max(createFirmApiKeyBodyNameMax),
+  "capabilities": zod.array(zod.string()).min(1).max(createFirmApiKeyBodyCapabilitiesMax)
+})
+
+export const CreateFirmApiKeyResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "keyPrefix": zod.string(),
+  "secret": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Revoke a firm API key (irreversible; the key stops authenticating immediately)
+ */
+export const RevokeFirmApiKeyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RevokeFirmApiKeyResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "keyPrefix": zod.string(),
+  "lastUsedAt": zod.coerce.date().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+})
 
 
 /**
@@ -962,9 +1019,109 @@ export const ListNotificationsResponse = zod.object({
   "entityType": zod.string().nullish(),
   "entityId": zod.string().nullish(),
   "status": zod.string(),
+  "read": zod.boolean(),
   "createdAt": zod.string()
-}))
+})),
+  "unreadCount": zod.number()
 })
+
+
+/**
+ * @summary Mark the caller's notifications at or before a timestamp as read; returns the refreshed feed
+ */
+export const MarkNotificationsReadBody = zod.object({
+  "upToCreatedAt": zod.coerce.date()
+})
+
+export const MarkNotificationsReadResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "channel": zod.string(),
+  "templateKey": zod.string(),
+  "title": zod.string(),
+  "entityType": zod.string().nullish(),
+  "entityId": zod.string().nullish(),
+  "status": zod.string(),
+  "read": zod.boolean(),
+  "createdAt": zod.string()
+})),
+  "unreadCount": zod.number()
+})
+
+
+/**
+ * @summary The firm's outbound webhook endpoints (metadata only — the signing secret is never retrievable)
+ */
+export const ListFirmWebhooksResponseItem = zod.object({
+  "id": zod.string(),
+  "url": zod.string(),
+  "events": zod.array(zod.string()),
+  "active": zod.boolean(),
+  "secretPrefix": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListFirmWebhooksResponse = zod.array(ListFirmWebhooksResponseItem)
+
+
+/**
+ * @summary Register an outbound webhook endpoint; the signing secret is returned once and only its hash is stored
+ */
+export const createFirmWebhookBodyUrlMax = 500;
+
+export const createFirmWebhookBodyEventsMax = 20;
+
+
+
+export const CreateFirmWebhookBody = zod.object({
+  "url": zod.string().min(1).max(createFirmWebhookBodyUrlMax),
+  "events": zod.array(zod.string()).min(1).max(createFirmWebhookBodyEventsMax)
+})
+
+export const CreateFirmWebhookResponse = zod.object({
+  "id": zod.string(),
+  "url": zod.string(),
+  "events": zod.array(zod.string()),
+  "active": zod.boolean(),
+  "secretPrefix": zod.string(),
+  "secret": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Disable a webhook endpoint (deliveries stop; history is retained)
+ */
+export const DisableFirmWebhookParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DisableFirmWebhookResponse = zod.object({
+  "id": zod.string(),
+  "url": zod.string(),
+  "events": zod.array(zod.string()),
+  "active": zod.boolean(),
+  "secretPrefix": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delivery attempts for one webhook endpoint, newest first
+ */
+export const ListFirmWebhookDeliveriesParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListFirmWebhookDeliveriesResponseItem = zod.object({
+  "id": zod.string(),
+  "eventType": zod.string(),
+  "status": zod.enum(['pending', 'delivered', 'failed', 'dead']),
+  "attempts": zod.number(),
+  "lastError": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "deliveredAt": zod.coerce.date().nullable()
+})
+export const ListFirmWebhookDeliveriesResponse = zod.array(ListFirmWebhookDeliveriesResponseItem)
 
 
 /**
@@ -3137,6 +3294,50 @@ export const GenerateStatementsResponseItem = zod.object({
   "generatedAt": zod.coerce.date()
 })
 export const GenerateStatementsResponse = zod.array(GenerateStatementsResponseItem)
+
+
+/**
+ * @summary The firm's payment intents, newest first
+ */
+export const listPaymentIntentsResponseMonthStartRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const ListPaymentIntentsResponseItem = zod.object({
+  "id": zod.string(),
+  "monthStart": zod.string().regex(listPaymentIntentsResponseMonthStartRegExp),
+  "amountNgn": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'cancelled']),
+  "providerRef": zod.string().nullable(),
+  "checkoutUrl": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "confirmedAt": zod.coerce.date().nullable()
+})
+export const ListPaymentIntentsResponse = zod.array(ListPaymentIntentsResponseItem)
+
+
+/**
+ * @summary Start a payment for a billing month; the provider confirmation webhook is a machine rail off this contract
+ */
+export const createPaymentIntentBodyMonthStartRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const CreatePaymentIntentBody = zod.object({
+  "monthStart": zod.string().regex(createPaymentIntentBodyMonthStartRegExp)
+})
+
+export const createPaymentIntentResponseMonthStartRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const CreatePaymentIntentResponse = zod.object({
+  "id": zod.string(),
+  "monthStart": zod.string().regex(createPaymentIntentResponseMonthStartRegExp),
+  "amountNgn": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'failed', 'cancelled']),
+  "providerRef": zod.string().nullable(),
+  "checkoutUrl": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "confirmedAt": zod.coerce.date().nullable()
+})
 
 
 /**

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.40.0
+ * OpenAPI spec version: 0.41.0
  */
 import {
   useMutation,
@@ -92,8 +92,11 @@ import type {
   CpdEnrollment,
   CpdEnrollmentView,
   CreateClerkBatchInput,
+  CreateFirmApiKeyInput,
+  CreateFirmWebhookInput,
   CreateInvitationInput,
   CreatePasswordResetInput,
+  CreatePaymentIntentInput,
   CreateStatementConnectionInput,
   CreateStatementFormatInput,
   CreateStatementFormatResult,
@@ -134,12 +137,17 @@ import type {
   FeatureFlagOverrideInput,
   FeatureFlagUpdate,
   Firm,
+  FirmApiKey,
+  FirmApiKeyCreated,
   FirmExportBundle,
   FirmInput,
   FirmMember,
   FirmReceivables,
   FirmTheme,
   FirmThemeInput,
+  FirmWebhook,
+  FirmWebhookCreated,
+  FirmWebhookDelivery,
   ForbiddenResponse,
   GateMetrics,
   GenerateStatementsInput,
@@ -188,6 +196,7 @@ import type {
   ListStatementsParams,
   ListUnbilledIncomeParams,
   LoginInput,
+  MarkNotificationsReadInput,
   MatchAssist,
   MatchDecisionResult,
   MatchProposalView,
@@ -213,6 +222,7 @@ import type {
   PasswordResetWithToken,
   PaymentChaserDraft,
   PaymentFlagInput,
+  PaymentIntent,
   PortfolioSummary,
   PriceReview,
   ProjectionAccuracy,
@@ -1030,6 +1040,223 @@ export const useChangePassword = <TError = ErrorType<UnauthorizedResponse>,
         TContext
       > => {
       return useMutation(getChangePasswordMutationOptions(options));
+    }
+
+export const getListFirmApiKeysUrl = () => {
+
+
+
+
+  return `/api/firm-api-keys`
+}
+
+/**
+ * @summary The firm's API keys (metadata only — the secret is never retrievable)
+ */
+export const listFirmApiKeys = async ( options?: RequestInit): Promise<FirmApiKey[]> => {
+
+  return customFetch<FirmApiKey[]>(getListFirmApiKeysUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFirmApiKeysQueryKey = () => {
+    return [
+    `/api/firm-api-keys`
+    ] as const;
+    }
+
+
+export const getListFirmApiKeysQueryOptions = <TData = Awaited<ReturnType<typeof listFirmApiKeys>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFirmApiKeys>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFirmApiKeysQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFirmApiKeys>>> = ({ signal }) => listFirmApiKeys({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFirmApiKeys>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFirmApiKeysQueryResult = NonNullable<Awaited<ReturnType<typeof listFirmApiKeys>>>
+export type ListFirmApiKeysQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm's API keys (metadata only — the secret is never retrievable)
+ */
+
+export function useListFirmApiKeys<TData = Awaited<ReturnType<typeof listFirmApiKeys>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFirmApiKeys>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFirmApiKeysQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateFirmApiKeyUrl = () => {
+
+
+
+
+  return `/api/firm-api-keys`
+}
+
+/**
+ * @summary Mint a firm API key; the secret is returned once and only its hash is stored
+ */
+export const createFirmApiKey = async (createFirmApiKeyInput: CreateFirmApiKeyInput, options?: RequestInit): Promise<FirmApiKeyCreated> => {
+
+  return customFetch<FirmApiKeyCreated>(getCreateFirmApiKeyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createFirmApiKeyInput)
+  }
+);}
+
+
+
+
+export const getCreateFirmApiKeyMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFirmApiKey>>, TError,{data: BodyType<CreateFirmApiKeyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFirmApiKey>>, TError,{data: BodyType<CreateFirmApiKeyInput>}, TContext> => {
+
+const mutationKey = ['createFirmApiKey'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFirmApiKey>>, {data: BodyType<CreateFirmApiKeyInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFirmApiKey(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFirmApiKeyMutationResult = NonNullable<Awaited<ReturnType<typeof createFirmApiKey>>>
+    export type CreateFirmApiKeyMutationBody = BodyType<CreateFirmApiKeyInput>
+    export type CreateFirmApiKeyMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Mint a firm API key; the secret is returned once and only its hash is stored
+ */
+export const useCreateFirmApiKey = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFirmApiKey>>, TError,{data: BodyType<CreateFirmApiKeyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFirmApiKey>>,
+        TError,
+        {data: BodyType<CreateFirmApiKeyInput>},
+        TContext
+      > => {
+      return useMutation(getCreateFirmApiKeyMutationOptions(options));
+    }
+
+export const getRevokeFirmApiKeyUrl = (id: string,) => {
+
+
+
+
+  return `/api/firm-api-keys/${id}/revoke`
+}
+
+/**
+ * @summary Revoke a firm API key (irreversible; the key stops authenticating immediately)
+ */
+export const revokeFirmApiKey = async (id: string, options?: RequestInit): Promise<FirmApiKey> => {
+
+  return customFetch<FirmApiKey>(getRevokeFirmApiKeyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRevokeFirmApiKeyMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeFirmApiKey>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeFirmApiKey>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['revokeFirmApiKey'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeFirmApiKey>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  revokeFirmApiKey(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeFirmApiKeyMutationResult = NonNullable<Awaited<ReturnType<typeof revokeFirmApiKey>>>
+
+    export type RevokeFirmApiKeyMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Revoke a firm API key (irreversible; the key stops authenticating immediately)
+ */
+export const useRevokeFirmApiKey = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeFirmApiKey>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeFirmApiKey>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRevokeFirmApiKeyMutationOptions(options));
     }
 
 export const getAcceptInviteUrl = () => {
@@ -3615,6 +3842,370 @@ export function useListNotifications<TData = Awaited<ReturnType<typeof listNotif
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListNotificationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getMarkNotificationsReadUrl = () => {
+
+
+
+
+  return `/api/notifications/mark-read`
+}
+
+/**
+ * @summary Mark the caller's notifications at or before a timestamp as read; returns the refreshed feed
+ */
+export const markNotificationsRead = async (markNotificationsReadInput: MarkNotificationsReadInput, options?: RequestInit): Promise<NotificationFeed> => {
+
+  return customFetch<NotificationFeed>(getMarkNotificationsReadUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(markNotificationsReadInput)
+  }
+);}
+
+
+
+
+export const getMarkNotificationsReadMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotificationsRead>>, TError,{data: BodyType<MarkNotificationsReadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markNotificationsRead>>, TError,{data: BodyType<MarkNotificationsReadInput>}, TContext> => {
+
+const mutationKey = ['markNotificationsRead'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markNotificationsRead>>, {data: BodyType<MarkNotificationsReadInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  markNotificationsRead(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkNotificationsReadMutationResult = NonNullable<Awaited<ReturnType<typeof markNotificationsRead>>>
+    export type MarkNotificationsReadMutationBody = BodyType<MarkNotificationsReadInput>
+    export type MarkNotificationsReadMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Mark the caller's notifications at or before a timestamp as read; returns the refreshed feed
+ */
+export const useMarkNotificationsRead = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotificationsRead>>, TError,{data: BodyType<MarkNotificationsReadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markNotificationsRead>>,
+        TError,
+        {data: BodyType<MarkNotificationsReadInput>},
+        TContext
+      > => {
+      return useMutation(getMarkNotificationsReadMutationOptions(options));
+    }
+
+export const getListFirmWebhooksUrl = () => {
+
+
+
+
+  return `/api/firm-webhooks`
+}
+
+/**
+ * @summary The firm's outbound webhook endpoints (metadata only — the signing secret is never retrievable)
+ */
+export const listFirmWebhooks = async ( options?: RequestInit): Promise<FirmWebhook[]> => {
+
+  return customFetch<FirmWebhook[]>(getListFirmWebhooksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFirmWebhooksQueryKey = () => {
+    return [
+    `/api/firm-webhooks`
+    ] as const;
+    }
+
+
+export const getListFirmWebhooksQueryOptions = <TData = Awaited<ReturnType<typeof listFirmWebhooks>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFirmWebhooks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFirmWebhooksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFirmWebhooks>>> = ({ signal }) => listFirmWebhooks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFirmWebhooks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFirmWebhooksQueryResult = NonNullable<Awaited<ReturnType<typeof listFirmWebhooks>>>
+export type ListFirmWebhooksQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm's outbound webhook endpoints (metadata only — the signing secret is never retrievable)
+ */
+
+export function useListFirmWebhooks<TData = Awaited<ReturnType<typeof listFirmWebhooks>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFirmWebhooks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFirmWebhooksQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateFirmWebhookUrl = () => {
+
+
+
+
+  return `/api/firm-webhooks`
+}
+
+/**
+ * @summary Register an outbound webhook endpoint; the signing secret is returned once and only its hash is stored
+ */
+export const createFirmWebhook = async (createFirmWebhookInput: CreateFirmWebhookInput, options?: RequestInit): Promise<FirmWebhookCreated> => {
+
+  return customFetch<FirmWebhookCreated>(getCreateFirmWebhookUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createFirmWebhookInput)
+  }
+);}
+
+
+
+
+export const getCreateFirmWebhookMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFirmWebhook>>, TError,{data: BodyType<CreateFirmWebhookInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFirmWebhook>>, TError,{data: BodyType<CreateFirmWebhookInput>}, TContext> => {
+
+const mutationKey = ['createFirmWebhook'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFirmWebhook>>, {data: BodyType<CreateFirmWebhookInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFirmWebhook(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFirmWebhookMutationResult = NonNullable<Awaited<ReturnType<typeof createFirmWebhook>>>
+    export type CreateFirmWebhookMutationBody = BodyType<CreateFirmWebhookInput>
+    export type CreateFirmWebhookMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Register an outbound webhook endpoint; the signing secret is returned once and only its hash is stored
+ */
+export const useCreateFirmWebhook = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFirmWebhook>>, TError,{data: BodyType<CreateFirmWebhookInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFirmWebhook>>,
+        TError,
+        {data: BodyType<CreateFirmWebhookInput>},
+        TContext
+      > => {
+      return useMutation(getCreateFirmWebhookMutationOptions(options));
+    }
+
+export const getDisableFirmWebhookUrl = (id: string,) => {
+
+
+
+
+  return `/api/firm-webhooks/${id}/disable`
+}
+
+/**
+ * @summary Disable a webhook endpoint (deliveries stop; history is retained)
+ */
+export const disableFirmWebhook = async (id: string, options?: RequestInit): Promise<FirmWebhook> => {
+
+  return customFetch<FirmWebhook>(getDisableFirmWebhookUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getDisableFirmWebhookMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disableFirmWebhook>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof disableFirmWebhook>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['disableFirmWebhook'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof disableFirmWebhook>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  disableFirmWebhook(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DisableFirmWebhookMutationResult = NonNullable<Awaited<ReturnType<typeof disableFirmWebhook>>>
+
+    export type DisableFirmWebhookMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Disable a webhook endpoint (deliveries stop; history is retained)
+ */
+export const useDisableFirmWebhook = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disableFirmWebhook>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof disableFirmWebhook>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDisableFirmWebhookMutationOptions(options));
+    }
+
+export const getListFirmWebhookDeliveriesUrl = (id: string,) => {
+
+
+
+
+  return `/api/firm-webhooks/${id}/deliveries`
+}
+
+/**
+ * @summary Delivery attempts for one webhook endpoint, newest first
+ */
+export const listFirmWebhookDeliveries = async (id: string, options?: RequestInit): Promise<FirmWebhookDelivery[]> => {
+
+  return customFetch<FirmWebhookDelivery[]>(getListFirmWebhookDeliveriesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFirmWebhookDeliveriesQueryKey = (id: string,) => {
+    return [
+    `/api/firm-webhooks/${id}/deliveries`
+    ] as const;
+    }
+
+
+export const getListFirmWebhookDeliveriesQueryOptions = <TData = Awaited<ReturnType<typeof listFirmWebhookDeliveries>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFirmWebhookDeliveries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFirmWebhookDeliveriesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFirmWebhookDeliveries>>> = ({ signal }) => listFirmWebhookDeliveries(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFirmWebhookDeliveries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFirmWebhookDeliveriesQueryResult = NonNullable<Awaited<ReturnType<typeof listFirmWebhookDeliveries>>>
+export type ListFirmWebhookDeliveriesQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Delivery attempts for one webhook endpoint, newest first
+ */
+
+export function useListFirmWebhookDeliveries<TData = Awaited<ReturnType<typeof listFirmWebhookDeliveries>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFirmWebhookDeliveries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFirmWebhookDeliveriesQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -10122,6 +10713,153 @@ export const useGenerateStatements = <TError = ErrorType<BadRequestResponse>,
         TContext
       > => {
       return useMutation(getGenerateStatementsMutationOptions(options));
+    }
+
+export const getListPaymentIntentsUrl = () => {
+
+
+
+
+  return `/api/billing/payments`
+}
+
+/**
+ * @summary The firm's payment intents, newest first
+ */
+export const listPaymentIntents = async ( options?: RequestInit): Promise<PaymentIntent[]> => {
+
+  return customFetch<PaymentIntent[]>(getListPaymentIntentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPaymentIntentsQueryKey = () => {
+    return [
+    `/api/billing/payments`
+    ] as const;
+    }
+
+
+export const getListPaymentIntentsQueryOptions = <TData = Awaited<ReturnType<typeof listPaymentIntents>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPaymentIntents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPaymentIntentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPaymentIntents>>> = ({ signal }) => listPaymentIntents({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPaymentIntents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPaymentIntentsQueryResult = NonNullable<Awaited<ReturnType<typeof listPaymentIntents>>>
+export type ListPaymentIntentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm's payment intents, newest first
+ */
+
+export function useListPaymentIntents<TData = Awaited<ReturnType<typeof listPaymentIntents>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPaymentIntents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPaymentIntentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePaymentIntentUrl = () => {
+
+
+
+
+  return `/api/billing/payments`
+}
+
+/**
+ * @summary Start a payment for a billing month; the provider confirmation webhook is a machine rail off this contract
+ */
+export const createPaymentIntent = async (createPaymentIntentInput: CreatePaymentIntentInput, options?: RequestInit): Promise<PaymentIntent> => {
+
+  return customFetch<PaymentIntent>(getCreatePaymentIntentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createPaymentIntentInput)
+  }
+);}
+
+
+
+
+export const getCreatePaymentIntentMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPaymentIntent>>, TError,{data: BodyType<CreatePaymentIntentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPaymentIntent>>, TError,{data: BodyType<CreatePaymentIntentInput>}, TContext> => {
+
+const mutationKey = ['createPaymentIntent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPaymentIntent>>, {data: BodyType<CreatePaymentIntentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPaymentIntent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePaymentIntentMutationResult = NonNullable<Awaited<ReturnType<typeof createPaymentIntent>>>
+    export type CreatePaymentIntentMutationBody = BodyType<CreatePaymentIntentInput>
+    export type CreatePaymentIntentMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Start a payment for a billing month; the provider confirmation webhook is a machine rail off this contract
+ */
+export const useCreatePaymentIntent = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPaymentIntent>>, TError,{data: BodyType<CreatePaymentIntentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPaymentIntent>>,
+        TError,
+        {data: BodyType<CreatePaymentIntentInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePaymentIntentMutationOptions(options));
     }
 
 export const getListOperatorCasesUrl = (params?: ListOperatorCasesParams,) => {
