@@ -67,6 +67,9 @@ export const PUBLIC_PATHS = new Set([
   // accept-invite's token. The route itself fails closed (404) when the
   // secret is unconfigured.
   "/api/inbound/email",
+  // Inbound WhatsApp webhook: same machine-caller posture as the email rail —
+  // INBOUND_WHATSAPP_TOKEN is the credential; the route 404s while unset.
+  "/api/inbound/whatsapp",
 ]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";

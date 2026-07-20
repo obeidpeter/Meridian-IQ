@@ -15,9 +15,15 @@ import {
   useLogin,
   useLogout,
   useChangePassword,
+  useTotpChallenge,
+  useGetTotpStatus,
+  useSetupTotp,
+  useActivateTotp,
+  useDisableTotp,
   getGetMeQueryKey,
+  getGetTotpStatusQueryKey,
 } from "@workspace/api-client-react";
-import type { Me } from "@workspace/api-client-react";
+import type { Me, TotpSetup } from "@workspace/api-client-react";
 import { pillClasses } from "@workspace/format";
 import {
   FileCheck2,
@@ -33,8 +39,10 @@ import {
   AlertCircle,
   KeyRound,
   CheckCircle2,
+  Copy,
   Eye,
   EyeOff,
+  ShieldOff,
   Headphones,
   Landmark,
   LockKeyhole,
@@ -358,20 +366,49 @@ function RedirectingPanel({
   );
 }
 
+// The server's mfa pending token lives 5 minutes (modules/auth/totp.ts).
+// The challenge endpoint answers a uniform 401 for a wrong code AND an
+// expired token, so the client tells them apart by its own clock.
+const MFA_TOKEN_TTL_MS = 5 * 60 * 1000;
+
 function SignInPanel() {
   const qc = useQueryClient();
   const login = useLogin();
+  const totpChallenge = useTotpChallenge();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Which sign-in is running: "form" or a demo account's email. Drives the
-  // per-button spinners without disabling the whole panel.
+  // TOTP-enrolled account: a correct password earns no session, only a
+  // short-lived challenge token. Holding it (with its mint time) keeps the
+  // panel on the second step until a code — or "start over" — resolves it.
+  const [mfa, setMfa] = useState<{ token: string; issuedAt: number } | null>(
+    null,
+  );
+  const [totpCode, setTotpCode] = useState("");
+  const [totpError, setTotpError] = useState<string | null>(null);
+  // Which sign-in is running: "form", "totp" or a demo account's email. Drives
+  // the per-button spinners without disabling the whole panel.
   const [pending, setPending] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState<{
     label: string;
     href: string;
   } | null>(null);
+
+  // Shared success tail for both steps: the session cookie is set, so land
+  // the account in the workspace it signed in for (the operator's queue, the
+  // buyer's rails…). A full navigation, so the app boots against the fresh
+  // session cookie.
+  const completeSignIn = async (me: Me): Promise<boolean> => {
+    await qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    const target = DEFAULT_WORKSPACE[me.role as Role];
+    if (target) {
+      setRedirecting(target);
+      window.location.assign(target.href);
+      return true; // keep the "opening…" state until the browser navigates
+    }
+    return false;
+  };
 
   const signIn = async (
     source: string,
@@ -381,16 +418,15 @@ function SignInPanel() {
     setPending(source);
     try {
       const me = await login.mutateAsync({ data: creds });
-      await qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
-      const target = DEFAULT_WORKSPACE[me.role as Role];
-      if (target) {
-        // Land the account in the workspace it signed in for (the operator's
-        // queue, the buyer's rails…). A full navigation, so the app boots
-        // against the fresh session cookie.
-        setRedirecting(target);
-        window.location.assign(target.href);
-        return; // keep the "opening…" state until the browser navigates
+      if (me.mfaRequired && me.mfaToken) {
+        // Password verified, second factor pending: switch to the code step.
+        setMfa({ token: me.mfaToken, issuedAt: Date.now() });
+        setTotpCode("");
+        setTotpError(null);
+        setPending(null);
+        return;
       }
+      if (await completeSignIn(me)) return;
       setPending(null);
     } catch (err) {
       setError(loginErrorMessage(err));
@@ -404,8 +440,148 @@ function SignInPanel() {
     void signIn("form", { email, password });
   };
 
+  const onVerifyCode = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!mfa) return;
+    setTotpError(null);
+    setPending("totp");
+    try {
+      const me = await totpChallenge.mutateAsync({
+        data: { mfaToken: mfa.token, code: totpCode.trim() },
+      });
+      if (await completeSignIn(me)) return;
+      setPending(null);
+    } catch (err) {
+      setPending(null);
+      const status = (err as { status?: number })?.status;
+      if (status === 401 && Date.now() - mfa.issuedAt >= MFA_TOKEN_TTL_MS) {
+        // The 5-minute challenge window lapsed — back to the password step.
+        setMfa(null);
+        setTotpCode("");
+        setPassword("");
+        setError(
+          "That sign-in attempt expired. Enter your password again to get a new code prompt.",
+        );
+        return;
+      }
+      if (status === 401) {
+        setTotpError(
+          "That code didn't match. Check your authenticator app and try again — or use a recovery code.",
+        );
+      } else if (status !== undefined) {
+        setTotpError(
+          serverErrorFrom(err) ?? "Verification failed. Please try again.",
+        );
+      } else {
+        setTotpError(
+          "Could not reach the server. Check your connection and try again.",
+        );
+      }
+      document.getElementById("totp-code")?.focus();
+    }
+  };
+
+  const restartSignIn = () => {
+    setMfa(null);
+    setTotpCode("");
+    setTotpError(null);
+    setError(null);
+    setPassword("");
+  };
+
   if (redirecting) {
     return <RedirectingPanel target={redirecting} />;
+  }
+
+  if (mfa) {
+    return (
+      <div className="w-full" data-testid="panel-totp-challenge">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase text-teal-800">
+          <span className="grid size-8 place-items-center rounded-md bg-teal-100">
+            <ShieldCheck className="size-4" aria-hidden="true" />
+          </span>
+          Two-step verification
+        </div>
+
+        <h1 className="landing-display mt-6 text-4xl font-bold text-slate-950 sm:text-5xl">
+          Enter your code
+        </h1>
+        <p className="mt-3 max-w-md text-base leading-7 text-slate-600">
+          <span className="font-semibold text-slate-900">{email}</span> is
+          protected by two-factor authentication. Enter the 6-digit code from
+          your authenticator app — or one of your saved recovery codes.
+        </p>
+
+        <form onSubmit={onVerifyCode} className="mt-8 space-y-5">
+          <div className="space-y-2">
+            <Label
+              htmlFor="totp-code"
+              className="text-sm font-bold text-slate-800"
+            >
+              Authentication code
+            </Label>
+            <Input
+              id="totp-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value)}
+              placeholder="123456"
+              required
+              minLength={6}
+              maxLength={32}
+              aria-invalid={totpError ? true : undefined}
+              aria-describedby={totpError ? "totp-error" : "totp-help"}
+              className="h-12 border-slate-300 bg-white px-4 font-mono text-lg tracking-[0.25em] shadow-sm"
+              data-testid="input-totp-code"
+            />
+            <p id="totp-help" className="text-xs text-slate-500">
+              Codes rotate every 30 seconds. A recovery code works here too.
+            </p>
+          </div>
+          {totpError && (
+            <div
+              role="alert"
+              id="totp-error"
+              className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
+              data-testid="text-totp-error"
+            >
+              <AlertCircle
+                className="mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <span>{totpError}</span>
+            </div>
+          )}
+          <Button
+            type="submit"
+            className="min-h-12 w-full bg-[#0b6463] text-base font-bold text-white shadow-sm hover:bg-[#084d4d]"
+            disabled={pending !== null || totpCode.trim().length < 6}
+            data-testid="button-totp-verify"
+          >
+            {pending === "totp" && (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            )}
+            Verify and continue
+            {pending !== "totp" && (
+              <ArrowRight className="size-4" aria-hidden="true" />
+            )}
+          </Button>
+        </form>
+
+        <button
+          type="button"
+          onClick={restartSignIn}
+          className="mt-5 inline-flex items-center gap-1.5 rounded-sm text-sm font-bold text-[#0b6463] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+          data-testid="button-totp-restart"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          Start over with your password
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -762,6 +938,469 @@ function ChangePasswordForm() {
   );
 }
 
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      className="h-7 px-2 text-muted-foreground hover:text-foreground"
+      aria-label={label}
+      onClick={() => {
+        void navigator.clipboard?.writeText(value).then(
+          () => {
+            setCopied(true);
+            if (timer.current) clearTimeout(timer.current);
+            timer.current = setTimeout(() => setCopied(false), 2000);
+          },
+          () => {
+            /* clipboard unavailable — the value stays selectable on screen */
+          },
+        );
+      }}
+    >
+      {copied ? (
+        <CheckCircle2
+          className="h-3.5 w-3.5 text-emerald-600"
+          aria-hidden="true"
+        />
+      ) : (
+        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+      {copied ? "Copied" : "Copy"}
+    </Button>
+  );
+}
+
+// Two-factor lifecycle for the signed-in account: status → enrol (secret,
+// otpauth URI and recovery codes shown exactly once) → activate with a live
+// code (revokes every other session; this one survives on the re-issued
+// cookie) → disable, which demands the password AND a code.
+function TotpSecurityCard() {
+  const qc = useQueryClient();
+  const statusQuery = useGetTotpStatus({
+    query: { queryKey: getGetTotpStatusQueryKey() },
+  });
+  const setup = useSetupTotp();
+  const activate = useActivateTotp();
+  const disable = useDisableTotp();
+
+  // Enrolment material exists only in this component's state — shown once,
+  // gone on unmount. Only hashes persist server-side.
+  const [material, setMaterial] = useState<TotpSetup | null>(null);
+  const [activateCode, setActivateCode] = useState("");
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [justActivated, setJustActivated] = useState(false);
+
+  const [disableOpen, setDisableOpen] = useState(false);
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disableCode, setDisableCode] = useState("");
+  const [disableError, setDisableError] = useState<string | null>(null);
+  const [justDisabled, setJustDisabled] = useState(false);
+
+  const begin = async () => {
+    setSetupError(null);
+    setJustDisabled(false);
+    try {
+      const m = await setup.mutateAsync();
+      setMaterial(m);
+      setActivateCode("");
+    } catch (err) {
+      // A 409 means another surface already enabled it — refresh the truth.
+      await qc.invalidateQueries({ queryKey: getGetTotpStatusQueryKey() });
+      setSetupError(
+        serverErrorFrom(err) ?? "Could not start enrolment. Try again.",
+      );
+    }
+  };
+
+  const onActivate = async (e: FormEvent) => {
+    e.preventDefault();
+    setSetupError(null);
+    try {
+      const status = await activate.mutateAsync({
+        data: { code: activateCode.trim() },
+      });
+      // The response re-issued this session's cookie under the bumped epoch —
+      // every OTHER session is now signed out; this panel carries on.
+      qc.setQueryData(getGetTotpStatusQueryKey(), status);
+      setMaterial(null);
+      setActivateCode("");
+      setJustActivated(true);
+    } catch (err) {
+      setSetupError(
+        serverErrorFrom(err) ??
+          "That code did not match. Check the authenticator app and try again.",
+      );
+      document.getElementById("totp-activate")?.focus();
+    }
+  };
+
+  const onDisable = async (e: FormEvent) => {
+    e.preventDefault();
+    setDisableError(null);
+    try {
+      const status = await disable.mutateAsync({
+        data: { password: disablePassword, code: disableCode.trim() },
+      });
+      qc.setQueryData(getGetTotpStatusQueryKey(), status);
+      setDisableOpen(false);
+      setDisablePassword("");
+      setDisableCode("");
+      setJustActivated(false);
+      setJustDisabled(true);
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      setDisableError(
+        status === 401
+          ? "Invalid password or code."
+          : (serverErrorFrom(err) ??
+              "Could not turn off two-factor. Try again."),
+      );
+    }
+  };
+
+  const info = statusQuery.data;
+
+  return (
+    <div className="mt-3 rounded-lg bg-muted/60 p-3" data-testid="card-totp">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-medium">
+          <ShieldCheck
+            className="h-4 w-4 text-teal-600 dark:text-teal-400"
+            aria-hidden="true"
+          />
+          Two-factor authentication
+        </p>
+        {info &&
+          (info.enabled ? (
+            <span className={pillClasses("teal")}>On</span>
+          ) : (
+            <span className={pillClasses("slate")}>Off</span>
+          ))}
+      </div>
+
+      {statusQuery.isLoading && (
+        <div
+          className="mt-2 h-8 animate-pulse rounded-md bg-muted"
+          aria-hidden="true"
+        />
+      )}
+
+      {material ? (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Add this secret to your authenticator app (paste the setup link or
+            type the secret in), then confirm with a live code.
+          </p>
+          <div className="rounded-md border bg-background p-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase text-muted-foreground">
+                Secret
+              </p>
+              <CopyButton value={material.secret} label="Copy secret" />
+            </div>
+            <code
+              className="block break-all font-mono text-xs"
+              data-testid="text-totp-secret"
+            >
+              {material.secret}
+            </code>
+          </div>
+          <div className="rounded-md border bg-background p-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase text-muted-foreground">
+                Setup link (otpauth)
+              </p>
+              <CopyButton
+                value={material.otpauthUri}
+                label="Copy otpauth URI"
+              />
+            </div>
+            <code className="block break-all font-mono text-[11px] text-muted-foreground">
+              {material.otpauthUri}
+            </code>
+          </div>
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-700 dark:bg-amber-950/40">
+            <p className="flex items-start gap-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200">
+              <AlertCircle
+                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              These recovery codes are shown once — right now. Store them
+              somewhere safe before you continue. Each code signs you in
+              exactly once if you ever lose your authenticator.
+            </p>
+            <ul
+              className="mt-2 grid grid-cols-2 gap-1 font-mono text-xs text-amber-900 dark:text-amber-100"
+              data-testid="list-recovery-codes"
+            >
+              {material.recoveryCodes.map((code) => (
+                <li key={code}>{code}</li>
+              ))}
+            </ul>
+            <div className="mt-1.5">
+              <CopyButton
+                value={material.recoveryCodes.join("\n")}
+                label="Copy recovery codes"
+              />
+            </div>
+          </div>
+          <form onSubmit={onActivate} className="space-y-1.5">
+            <Label htmlFor="totp-activate" className="text-xs">
+              Code from your authenticator app
+            </Label>
+            <Input
+              id="totp-activate"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={activateCode}
+              onChange={(e) => setActivateCode(e.target.value)}
+              required
+              minLength={6}
+              maxLength={8}
+              placeholder="123456"
+              className="font-mono"
+              aria-invalid={setupError ? true : undefined}
+              aria-describedby={setupError ? "totp-setup-error" : undefined}
+              data-testid="input-totp-activate"
+            />
+            {setupError && (
+              <p
+                role="alert"
+                id="totp-setup-error"
+                className="flex items-start gap-1.5 text-xs text-destructive"
+              >
+                <AlertCircle
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                  aria-hidden="true"
+                />{" "}
+                {setupError}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Activating signs out every other session on this account.
+            </p>
+            <div className="flex gap-2 pt-1">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={activate.isPending || activateCode.trim().length < 6}
+                data-testid="button-totp-activate"
+              >
+                {activate.isPending ? "Verifying…" : "Verify & turn on"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setMaterial(null);
+                  setActivateCode("");
+                  setSetupError(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : info?.enabled ? (
+        <div className="mt-2 space-y-2">
+          <p
+            className="text-xs text-muted-foreground"
+            data-testid="text-totp-enabled"
+          >
+            A code from your authenticator app is required at sign-in
+            {info.enabledAt
+              ? ` — on since ${new Date(info.enabledAt).toLocaleDateString(
+                  undefined,
+                  { year: "numeric", month: "short", day: "numeric" },
+                )}`
+              : ""}
+            .
+          </p>
+          <p
+            className="text-xs text-muted-foreground"
+            data-testid="text-recovery-remaining"
+          >
+            {info.recoveryCodesRemaining ?? 0} recovery code
+            {(info.recoveryCodesRemaining ?? 0) === 1 ? "" : "s"} left.
+          </p>
+          {justActivated && (
+            <p
+              role="status"
+              className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"
+              data-testid="text-totp-activated"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Two-factor is on. Other signed-in sessions were signed out.
+            </p>
+          )}
+          {!disableOpen ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDisableError(null);
+                setDisableOpen(true);
+              }}
+              className="-ml-2 text-muted-foreground hover:text-foreground"
+              data-testid="button-totp-disable-show"
+            >
+              <ShieldOff className="h-3.5 w-3.5" aria-hidden="true" /> Turn off
+              two-factor
+            </Button>
+          ) : (
+            <form onSubmit={onDisable} className="space-y-3 rounded-lg border p-3">
+              <p className="text-xs font-medium">Turn off two-factor</p>
+              <p className="text-xs text-muted-foreground">
+                Confirm with your password and a current code (or a recovery
+                code). This signs out every other session.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="totp-disable-password" className="text-xs">
+                  Current password
+                </Label>
+                <Input
+                  id="totp-disable-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={disablePassword}
+                  onChange={(e) => setDisablePassword(e.target.value)}
+                  required
+                  aria-invalid={disableError ? true : undefined}
+                  aria-describedby={
+                    disableError ? "totp-disable-error" : undefined
+                  }
+                  data-testid="input-totp-disable-password"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="totp-disable-code" className="text-xs">
+                  Authentication code
+                </Label>
+                <Input
+                  id="totp-disable-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={disableCode}
+                  onChange={(e) => setDisableCode(e.target.value)}
+                  required
+                  minLength={6}
+                  maxLength={32}
+                  placeholder="123456"
+                  className="font-mono"
+                  aria-invalid={disableError ? true : undefined}
+                  aria-describedby={
+                    disableError ? "totp-disable-error" : undefined
+                  }
+                  data-testid="input-totp-disable-code"
+                />
+              </div>
+              {disableError && (
+                <p
+                  role="alert"
+                  id="totp-disable-error"
+                  className="flex items-start gap-1.5 text-xs text-destructive"
+                >
+                  <AlertCircle
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  />{" "}
+                  {disableError}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="destructive"
+                  disabled={
+                    disable.isPending ||
+                    !disablePassword ||
+                    disableCode.trim().length < 6
+                  }
+                  data-testid="button-totp-disable"
+                >
+                  {disable.isPending ? "Turning off…" : "Turn off"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setDisableOpen(false);
+                    setDisableError(null);
+                    setDisablePassword("");
+                    setDisableCode("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
+      ) : info ? (
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Require a code from an authenticator app at sign-in, on top of
+            your password.
+          </p>
+          {justDisabled && (
+            <p
+              role="status"
+              className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"
+              data-testid="text-totp-disabled"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />{" "}
+              Two-factor turned off.
+            </p>
+          )}
+          {setupError && (
+            <p
+              role="alert"
+              className="flex items-start gap-1.5 text-xs text-destructive"
+            >
+              <AlertCircle
+                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                aria-hidden="true"
+              />{" "}
+              {setupError}
+            </p>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void begin()}
+            disabled={setup.isPending}
+            data-testid="button-totp-enable"
+          >
+            <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />
+            {setup.isPending ? "Preparing…" : "Enable two-factor"}
+          </Button>
+        </div>
+      ) : statusQuery.isError ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Could not load two-factor status. Refresh to retry.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function SignedInPanel({ me }: { me: Me }) {
   const qc = useQueryClient();
   const logout = useLogout();
@@ -805,6 +1444,7 @@ function SignedInPanel({ me }: { me: Me }) {
         </p>
         <ChangePasswordForm />
       </div>
+      <TotpSecurityCard />
       <p className="mt-3 text-sm text-muted-foreground">
         Open a workspace highlighted below, or switch accounts.
       </p>

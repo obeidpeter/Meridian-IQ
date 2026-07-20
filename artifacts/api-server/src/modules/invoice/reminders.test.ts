@@ -15,6 +15,10 @@ import {
   featureFlagsTable,
 } from "@workspace/db";
 import { setFlag } from "../flags/flags.ts";
+import {
+  setMessageTransport,
+  resetMessageTransport,
+} from "../messaging/messaging.ts";
 import { createDraft } from "./service.ts";
 import {
   sweepDeadlineReminders,
@@ -40,6 +44,7 @@ const supplierOptedOut = randomUUID();
 const supplierDark = randomUUID();
 const supplierStale = randomUUID();
 const supplierRevoked = randomUUID();
+const supplierFailing = randomUUID();
 
 // Matches the module's internal recipient derivation (letters of the uuid):
 // the assertion key tying message rows back to a fixture party.
@@ -135,6 +140,7 @@ before(async () => {
       supplierDark,
       supplierStale,
       supplierRevoked,
+      supplierFailing,
     ].map(
       (id, i) => ({
         id,
@@ -156,6 +162,7 @@ before(async () => {
       supplierDark,
       supplierStale,
       supplierRevoked,
+      supplierFailing,
     ].map((partyId) => ({
       partyId,
       layer: 1,
@@ -261,6 +268,35 @@ test("revoked layer-1 consent suppresses sends but still claims the slot", async
 
   assert.equal((await remindersFor(invoice.id)).length, 1);
   assert.equal((await messagesFor(supplierRevoked)).length, 0);
+});
+
+test("a send failure does not unclaim: at-most-once, never re-offered", async () => {
+  // Every provider channel fails: the claim must still commit (claim-then-
+  // send), the failures must land in the messages ledger, and a recovered
+  // transport must NOT get a second attempt for the same slot.
+  setMessageTransport(async () => ({ ok: false, error: "provider down" }));
+  try {
+    const invoice = await draftFor(supplierFailing, DUE_SOON_ISSUE);
+    await drainReminders();
+
+    const ledger = await remindersFor(invoice.id);
+    assert.equal(ledger.length, 1, "slot claimed despite every send failing");
+    assert.equal(ledger[0].kind, "due_soon");
+    // Default channels (whatsapp + email), each walking its failover chain to
+    // exhaustion: one failed row per attempted channel send.
+    const failed = await messagesFor(supplierFailing);
+    assert.equal(failed.length, 2);
+    assert.ok(failed.every((m) => m.status === "failed"));
+
+    // Transport recovers: the committed claim keeps the reminder retired —
+    // better a missed nudge than a double alert.
+    resetMessageTransport();
+    await drainReminders();
+    assert.equal((await remindersFor(invoice.id)).length, 1);
+    assert.equal((await messagesFor(supplierFailing)).length, failed.length);
+  } finally {
+    resetMessageTransport();
+  }
 });
 
 test("submitted invoices never remind", async () => {

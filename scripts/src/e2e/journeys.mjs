@@ -4,6 +4,8 @@
 // Journeys restore what they mutate (flags, consent, passwords) so the suite
 // reruns cleanly on the same seed.
 
+import { totpStep, totpCodeAtStep } from "./totp.mjs";
+
 const DEMO_PASSWORD = "meridian2027";
 
 async function signIn(page, BASE, demoTestId, waitUrl) {
@@ -176,6 +178,127 @@ async function journeyOwnerConsent(page, BASE, check) {
   await page.getByTestId("button-revoke-2").click();
   await page.waitForSelector('[data-testid="button-grant-2"]', { timeout: 10000 });
   check("consent layer 2 grant/revoke round-trips", true);
+  await signOutFromApp(page, BASE);
+}
+
+// ---------- buyer finance: TOTP enrolment lifecycle ----------
+// Enrol → challenge sign-in → disable, computing live RFC 6238 codes in the
+// harness from the base32 secret the enrolment card shows on screen. Uses
+// finance@zenithretail.example — the one seeded demo account no other journey
+// signs in as — and restores it to single-factor (and signed out) before
+// finishing, so the suite reruns cleanly on the same seed.
+async function journeyTotp(page, BASE, check) {
+  const EMAIL = "finance@zenithretail.example";
+
+  // The server burns each accepted code's 30s step (single-use, RFC 6238
+  // §5.2) and matches within a ±1-step window. Track the highest step burned
+  // and mint every next code at a strictly later step — waiting out a step
+  // boundary when the suite outruns the clock.
+  let burnedStep = -1;
+  const freshCode = async (secret) => {
+    while (burnedStep > totpStep()) await page.waitForTimeout(1000);
+    const step = Math.max(totpStep(), burnedStep + 1);
+    burnedStep = step;
+    return totpCodeAtStep(secret, step);
+  };
+
+  // Password-only sign-in works today and lands the buyer workspace.
+  await page.goto(BASE + "/login", { waitUntil: "networkidle" });
+  await page.getByTestId("input-email").fill(EMAIL);
+  await page.getByTestId("input-password").fill(DEMO_PASSWORD);
+  await page.getByTestId("button-sign-in").click();
+  await page.waitForURL("**/buyer/**", { timeout: 20000 });
+
+  // The portal's signed-in panel carries the security card.
+  await page.goto(BASE + "/login", { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="card-totp"]', { timeout: 10000 });
+  check(
+    "security card shows two-factor off for a fresh account",
+    await page.getByTestId("button-totp-enable").isVisible(),
+  );
+
+  // Enable: secret, otpauth URI and the 8 recovery codes are shown once.
+  await page.getByTestId("button-totp-enable").click();
+  await page.waitForSelector('[data-testid="text-totp-secret"]', {
+    timeout: 10000,
+  });
+  const secret = (await page.getByTestId("text-totp-secret").innerText()).trim();
+  check(
+    "enrolment reveals a base32 secret",
+    /^[A-Z2-7]{16,}$/.test(secret),
+  );
+  check(
+    "eight single-use recovery codes are shown",
+    (await page.locator('[data-testid="list-recovery-codes"] li').count()) === 8,
+  );
+
+  // Activate with a live code computed in the harness from that secret.
+  await page.getByTestId("input-totp-activate").fill(await freshCode(secret));
+  await page.getByTestId("button-totp-activate").click();
+  await page.waitForSelector('[data-testid="text-totp-enabled"]', {
+    timeout: 10000,
+  });
+  check(
+    "live code activates two-factor; the panel survives the re-issued cookie",
+    (await page.getByTestId("text-recovery-remaining").innerText()).includes("8"),
+  );
+
+  // Activation bumped the session epoch and re-issued THIS session's cookie —
+  // signing out through the same panel proves the session carried over.
+  await signOutFromApp(page, BASE);
+
+  // An enrolled account's password now earns a challenge, not a session.
+  await page.getByTestId("input-email").fill(EMAIL);
+  await page.getByTestId("input-password").fill(DEMO_PASSWORD);
+  await page.getByTestId("button-sign-in").click();
+  await page.waitForSelector('[data-testid="input-totp-code"]', {
+    timeout: 10000,
+  });
+  check("enrolled sign-in demands the second factor", true);
+
+  // A wrong code shows the uniform error and allows retry. Pick a code that
+  // is provably invalid across the server's whole ±1-step window.
+  const windowCodes = [totpStep() - 1, totpStep(), totpStep() + 1].map((s) =>
+    totpCodeAtStep(secret, s),
+  );
+  const wrongCode = windowCodes.includes("000000") ? "999999" : "000000";
+  await page.getByTestId("input-totp-code").fill(wrongCode);
+  await page.getByTestId("button-totp-verify").click();
+  await page.waitForSelector('[data-testid="text-totp-error"]', {
+    timeout: 10000,
+  });
+  check("wrong code shows the uniform challenge error", true);
+
+  // A fresh code completes the challenge into the buyer workspace.
+  await page.getByTestId("input-totp-code").fill(await freshCode(secret));
+  await page.getByTestId("button-totp-verify").click();
+  await page.waitForURL("**/buyer/**", { timeout: 20000 });
+  check("fresh code completes the challenge into the workspace", true);
+
+  // Disable requires the password AND a live code, then restores single-factor.
+  await page.goto(BASE + "/login", { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="text-totp-enabled"]', {
+    timeout: 10000,
+  });
+  await page.getByTestId("button-totp-disable-show").click();
+  await page.getByTestId("input-totp-disable-password").fill(DEMO_PASSWORD);
+  await page.getByTestId("input-totp-disable-code").fill(await freshCode(secret));
+  await page.getByTestId("button-totp-disable").click();
+  await page.waitForSelector('[data-testid="button-totp-enable"]', {
+    timeout: 10000,
+  });
+  check("password + code disables two-factor", true);
+
+  // Single-step sign-in is restored (the account is back to its seeded state).
+  await signOutFromApp(page, BASE);
+  await page.getByTestId("input-email").fill(EMAIL);
+  await page.getByTestId("input-password").fill(DEMO_PASSWORD);
+  await page.getByTestId("button-sign-in").click();
+  await page.waitForURL("**/buyer/**", { timeout: 20000 });
+  check("single-step sign-in restored after disable", true);
+
+  // Leave nothing signed in for the journeys that follow.
+  await page.goto(BASE + "/login", { waitUntil: "networkidle" });
   await signOutFromApp(page, BASE);
 }
 
@@ -437,6 +560,7 @@ export async function runJourneys(page, BASE, check) {
   await journeyFirmAdminAdvisory(page, BASE, check);
   await journeyAuditorReadOnly(page, BASE, check);
   await journeyOwnerConsent(page, BASE, check);
+  await journeyTotp(page, BASE, check);
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
   await journeyPasswordReset(page, BASE, check);
