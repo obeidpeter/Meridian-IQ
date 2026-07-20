@@ -254,6 +254,24 @@ const LADDER: LadderStep[] = [
       not(pol("statement_sync_runs")),
     ],
   },
+  {
+    version: 21, // payment-intent guardrails
+    atTop: [pol("payment_intents")],
+    afterRollback: [not(pol("payment_intents"))],
+  },
+  {
+    version: 22, // firm integrations guardrails (API keys + webhooks)
+    atTop: [
+      pol("firm_api_keys"),
+      pol("firm_webhooks"),
+      pol("firm_webhook_deliveries"),
+    ],
+    afterRollback: [
+      not(pol("firm_api_keys")),
+      not(pol("firm_webhooks")),
+      not(pol("firm_webhook_deliveries")),
+    ],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   uuid,
@@ -9,6 +10,7 @@ import {
   jsonb,
   pgEnum,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { firmsTable, usersTable } from "./organizations.ts";
 import { partiesTable } from "./parties.ts";
@@ -183,6 +185,56 @@ export const operatorCasesTable = pgTable("operator_cases", {
   updatedAt: updatedAt(),
 });
 
+// --- Payment intents (payment collection seam) -------------------------------
+// One row per attempt to collect a closed month's platform fee from a firm,
+// Paystack-shaped: the intent is created with the fee computed by the SAME
+// billing-statement core the firm already sees, handed to an injectable
+// payment provider (simulator by default — the rail is dark until
+// PAYMENT_PROVIDER_URL lights a relay), and settled by the off-contract
+// confirmation webhook via a pending→confirmed/failed CAS. The partial unique
+// index is the duplicate-payment wall: at most one LIVE (pending or
+// confirmed) intent per (firm, month) — a failed or cancelled attempt frees
+// the slot for a retry.
+export const paymentIntentStatusEnum = pgEnum("payment_intent_status", [
+  "pending",
+  "confirmed",
+  "failed",
+  "cancelled",
+]);
+
+export const paymentIntentsTable = pgTable(
+  "payment_intents",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    // Billing month as YYYY-MM-01 — the closed-Lagos-month key the billing
+    // statement (and the vat-pack option list) already uses.
+    monthStart: text("month_start").notNull(),
+    // The fee total captured at intent creation, in naira (2dp string) —
+    // computeBillingFee's output, frozen so a later tier change never
+    // silently reprices an in-flight payment.
+    amountNgn: numeric("amount_ngn").notNull(),
+    status: paymentIntentStatusEnum("status").notNull().default("pending"),
+    // The provider's reference for this payment — the key the confirmation
+    // webhook settles by. Null only if a future provider defers minting one.
+    providerRef: text("provider_ref"),
+    // Hosted checkout page when the provider offers one; the simulator
+    // returns none.
+    checkoutUrl: text("checkout_url"),
+    createdAt: createdAt(),
+    // Stamped by the webhook CAS when the payment confirms.
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  },
+  (t) => [
+    // DB invariant: one live intent per firm-month (see header note).
+    uniqueIndex("payment_intents_one_live_per_month")
+      .on(t.firmId, t.monthStart)
+      .where(sql`${t.status} IN ('pending', 'confirmed')`),
+  ],
+);
+
 // --- Revenue-share statements (CON-06) --------------------------------------
 // Monthly per-firm statement, reconciled to billing from tier config + the
 // firm's billed invoice volume for the period. Regeneratable: one row per
@@ -215,3 +267,5 @@ export const revenueShareStatementsTable = pgTable(
 
 export type BillingTier = typeof billingTiersTable.$inferSelect;
 export type OperatorCase = typeof operatorCasesTable.$inferSelect;
+export type PaymentIntent = typeof paymentIntentsTable.$inferSelect;
+export type PaymentIntentStatus = PaymentIntent["status"];
