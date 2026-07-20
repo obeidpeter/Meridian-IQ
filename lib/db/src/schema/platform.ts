@@ -93,6 +93,10 @@ export const messagesTable = pgTable("messages", {
   providerMessageId: text("provider_message_id"),
   failoverFrom: messageChannelEnum("failover_from"),
   error: text("error"),
+  // Recipient read-state for the notification feed: null = unread. Set only
+  // by the feed's mark-read path, always under the same recipient-identity
+  // predicate that scopes reads (SEC-03 — identity columns are the wall).
+  readAt: timestamp("read_at", { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, (t) => [
@@ -100,7 +104,11 @@ export const messagesTable = pgTable("messages", {
   index("messages_recipient_created_idx").on(t.recipientRef, t.createdAt),
   // The notification feeds scan by recipient identity, newest first. Partial:
   // each send sets exactly one identity column, so each index holds only its
-  // own rail's rows.
+  // own rail's rows. The unread count and the mark-read UPDATE ride the SAME
+  // identity indexes: a per-recipient feed is tens-to-hundreds of rows, so
+  // filtering `read_at IS NULL` inside an already identity-narrowed scan is
+  // trivial — an additional partial index WHERE read_at IS NULL would buy
+  // nothing at these sizes and is deliberately not added.
   index("messages_recipient_user_created_idx")
     .on(t.recipientUserId, t.createdAt)
     .where(sql`recipient_user_id IS NOT NULL`),

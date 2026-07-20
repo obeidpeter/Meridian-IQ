@@ -9,10 +9,15 @@ import {
   ListMessagesResponse,
   ListNotificationsQueryParams,
   ListNotificationsResponse,
+  MarkNotificationsReadBody,
+  MarkNotificationsReadResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { sendMessage, markDelivery } from "../modules/messaging/messaging";
-import { listNotificationsFor } from "../modules/messaging/inbox";
+import {
+  markNotificationsRead,
+  notificationFeedFor,
+} from "../modules/messaging/inbox";
 import { assertCan } from "../modules/auth/rbac";
 import { requireFlag } from "../modules/flags/flags";
 
@@ -62,12 +67,25 @@ router.post("/messages/:id/delivery", requireFlag("messaging_notifications"), as
 // exist would only hide the user's own history (a dark deployment simply has
 // an empty ledger, so the feed is naturally empty). No assertCan either: any
 // authenticated principal may read its OWN feed — the per-principal
-// recipient_ref resolution inside listNotificationsFor is the wall (SEC-03),
-// and roles with no recipient identity in the ledger get an empty list.
+// recipient-identity resolution inside notificationFeedFor is the wall
+// (SEC-03), and roles with no recipient identity in the ledger get an empty
+// feed. unreadCount rides the same identity predicate.
 router.get("/notifications", async (req, res): Promise<void> => {
   const query = parseOrThrow(ListNotificationsQueryParams, req.query);
-  const items = await listNotificationsFor(req.principal, query.limit ?? 50);
-  res.json(ListNotificationsResponse.parse({ items }));
+  const feed = await notificationFeedFor(req.principal, query.limit ?? 50);
+  res.json(ListNotificationsResponse.parse(feed));
+});
+
+// Mark the caller's own notifications read, up to an inclusive createdAt
+// boundary, and return the refreshed feed. Same no-gate posture as the GET:
+// any authenticated principal may flip read-state on its OWN feed only — the
+// recipient-identity predicate inside markNotificationsRead is the wall
+// (SEC-03), and roles with no recipient identity mark nothing and get the
+// same empty feed back.
+router.post("/notifications/mark-read", async (req, res): Promise<void> => {
+  const parsed = parseOrThrow(MarkNotificationsReadBody, req.body);
+  const feed = await markNotificationsRead(req.principal, parsed.upToCreatedAt);
+  res.json(MarkNotificationsReadResponse.parse(feed));
 });
 
 export default router;

@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, lte, sql } from "drizzle-orm";
 import { getDb, messagesTable } from "@workspace/db";
 import { isUuid } from "../../lib/uuid";
 import type { Principal } from "../auth/rbac";
@@ -50,7 +50,13 @@ export interface NotificationItem {
   entityType: string | null;
   entityId: string | null;
   status: string;
+  read: boolean;
   createdAt: string;
+}
+
+export interface NotificationFeed {
+  items: NotificationItem[];
+  unreadCount: number;
 }
 
 // The ledger row is pointer-only and STAYS pointer-only in the feed: the one
@@ -90,29 +96,75 @@ function recipientIdentityFor(
   return null;
 }
 
-export async function listNotificationsFor(
+export async function notificationFeedFor(
   principal: Principal,
   limit = 50,
-): Promise<NotificationItem[]> {
+): Promise<NotificationFeed> {
   // Clamp defensively even though the route's query validator already bounds
   // it — the module is the wall, not the parse.
   const capped = Math.min(100, Math.max(1, Math.floor(limit)));
   const identity = recipientIdentityFor(principal);
-  if (!identity) return [];
+  if (!identity) return { items: [], unreadCount: 0 };
+  const scope = eq(identity.column, identity.value);
   const rows = await getDb()
     .select()
     .from(messagesTable)
-    .where(eq(identity.column, identity.value))
+    .where(scope)
     .orderBy(desc(messagesTable.createdAt))
     .limit(capped);
-  return rows.map((row) => ({
-    id: row.id,
-    channel: row.channel,
-    templateKey: row.templateKey,
-    title: titleFor(row.templateKey),
-    entityType: row.entityType,
-    entityId: row.entityId,
-    status: row.status,
-    createdAt: row.createdAt.toISOString(),
-  }));
+  // Unread count under the SAME identity predicate as the row scan — the
+  // count must never see (or leak the existence of) rows the feed itself
+  // would not serve. Counted over the whole feed, not just the returned
+  // page, so the badge stays honest past the limit.
+  const [{ unread }] = await getDb()
+    .select({ unread: sql<number>`count(*)::int` })
+    .from(messagesTable)
+    .where(and(scope, isNull(messagesTable.readAt)));
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      channel: row.channel,
+      templateKey: row.templateKey,
+      title: titleFor(row.templateKey),
+      entityType: row.entityType,
+      entityId: row.entityId,
+      status: row.status,
+      read: row.readAt != null,
+      createdAt: row.createdAt.toISOString(),
+    })),
+    unreadCount: unread,
+  };
+}
+
+// Mark the caller's own notifications at-or-before a timestamp as read and
+// return the refreshed feed. The UPDATE runs under the SAME recipient-identity
+// predicate that scopes reads (SEC-03: identity columns are the wall — a
+// caller can never flip read-state on a sibling's or colliding-ref rows).
+// `created_at <= upToCreatedAt` (inclusive) lets the client pass its newest
+// visible item's createdAt and mark exactly what it has seen — rows sent
+// AFTER that instant stay unread. Already-read rows are skipped so read_at
+// keeps the FIRST read time (idempotent re-marks touch nothing).
+export async function markNotificationsRead(
+  principal: Principal,
+  upToCreatedAt: Date,
+  limit = 50,
+): Promise<NotificationFeed> {
+  const identity = recipientIdentityFor(principal);
+  if (identity) {
+    // DB-clock now() so read_at can never precede a created_at stamped by
+    // the same database. The ORM update also bumps updated_at ($onUpdate) —
+    // harmless here: nothing reads messages.updated_at as a clock, and the
+    // retention sweep deletes by created_at.
+    await getDb()
+      .update(messagesTable)
+      .set({ readAt: sql`now()` })
+      .where(
+        and(
+          eq(identity.column, identity.value),
+          lte(messagesTable.createdAt, upToCreatedAt),
+          isNull(messagesTable.readAt),
+        ),
+      );
+  }
+  return notificationFeedFor(principal, limit);
 }
