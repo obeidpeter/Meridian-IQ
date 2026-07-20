@@ -4,11 +4,13 @@ import { eq } from "drizzle-orm";
 import {
   getDb,
   auditEventsTable,
+  clerkCasesTable,
   clerkInferenceCallsTable,
   type ClerkExtraction,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { isDomainError } from "../../test-helpers/assertions.ts";
+import { latestAuditEvent } from "../../test-helpers/audit.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import {
   saveAndEnableClerkFlag,
@@ -23,7 +25,8 @@ import {
   releaseCase,
 } from "./cases.ts";
 import { computeCorrections } from "./corrections.ts";
-import { runClerkWatchdog } from "./watchdog.ts";
+import { sha256 } from "./gateway.ts";
+import { runClerkWatchdog, sweepStuckPendingCases } from "./watchdog.ts";
 
 // Clerk operations package: correction exhaust, case claiming, and the
 // watchdog auto-trip. Same conventions as the sibling clerk test files —
@@ -262,4 +265,81 @@ test("watchdog trips the kill switch on a bad-output spike and audits it", async
   const second = await runClerkWatchdog(deps);
   assert.equal(second.checked, false);
   assert.equal(second.tripped, false);
+});
+
+// ---------------------------------------------------------------------------
+// Stuck-pending recovery
+// ---------------------------------------------------------------------------
+
+test("stuck pending cases flip to failed and stop blocking the duplicate guard", async () => {
+  const db = getDb();
+  const stuckText = `Invoice INV-STUCK ${RUN_SALT}`;
+  // A case orphaned mid-model-call: the process died, so it sat in `pending`
+  // past the threshold. Seeded directly with a backdated created_at.
+  const [stuck] = await db
+    .insert(clerkCasesTable)
+    .values({
+      kind: "extraction",
+      status: "pending",
+      sourceType: "text",
+      sourceName: "stuck.txt",
+      sourceText: stuckText,
+      sourceHash: sha256(stuckText),
+      createdBy: opA,
+      createdAt: new Date(Date.now() - 16 * 60 * 1000),
+    })
+    .returning();
+  // A case whose model call is legitimately in flight right now.
+  const freshText = `Invoice INV-FRESH ${RUN_SALT}`;
+  const [fresh] = await db
+    .insert(clerkCasesTable)
+    .values({
+      kind: "extraction",
+      status: "pending",
+      sourceType: "text",
+      sourceName: "fresh.txt",
+      sourceText: freshText,
+      sourceHash: sha256(freshText),
+      createdBy: opA,
+    })
+    .returning();
+
+  // While the orphan is pending, re-uploading the same document 409s — the
+  // failure mode that silently ate inbound-email redeliveries.
+  const gateway = fakeGateway(() => EXTRACTION_JSON, FAKE_MODEL);
+  await assert.rejects(
+    createExtractionCase({ sourceType: "text", text: stuckText }, opA, gateway),
+    isDomainError("DUPLICATE_SOURCE", 409),
+  );
+
+  // The sweep flips ONLY the over-threshold case, with a stored reason and
+  // an audit trace.
+  const recovered = await sweepStuckPendingCases();
+  assert.ok(recovered >= 1);
+  const [flipped] = await db
+    .select()
+    .from(clerkCasesTable)
+    .where(eq(clerkCasesTable.id, stuck.id));
+  assert.equal(flipped.status, "failed");
+  assert.match(flipped.failReason ?? "", /never completed/);
+  const [untouched] = await db
+    .select()
+    .from(clerkCasesTable)
+    .where(eq(clerkCasesTable.id, fresh.id));
+  assert.equal(untouched.status, "pending");
+  const audit = await latestAuditEvent(
+    "clerk.case.stuck_pending_failed",
+    stuck.id,
+  );
+  assert.ok(audit, "the recovery is audited per case");
+
+  // End to end: the duplicate guard skips failed cases, so the re-upload now
+  // goes through and extraction runs normally.
+  const reuploaded = await createExtractionCase(
+    { sourceType: "text", text: stuckText },
+    opA,
+    gateway,
+  );
+  assert.equal(reuploaded.status, "extracted");
+  assert.notEqual(reuploaded.id, stuck.id);
 });

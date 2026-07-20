@@ -9,7 +9,35 @@
 // JS (SQL predicates that must match these semantics use
 // `AT TIME ZONE 'Africa/Lagos'`, which resolves to the same fixed offset).
 
+import { sql, type SQL } from "drizzle-orm";
+
 const LAGOS_OFFSET_MS = 60 * 60 * 1000;
+
+/**
+ * SQL fragment: the Lagos calendar "today" as a date. The one expression every
+ * statutory day predicate (overdue, due-soon, VAT 21st) must share — never
+ * `current_date`, which is the UTC day and lags Lagos by an hour.
+ */
+export function lagosTodaySql(): SQL {
+  return sql`(now() AT TIME ZONE 'Africa/Lagos')::date`;
+}
+
+/**
+ * SQL fragment: `column` (a timestamptz) falls inside the Lagos calendar
+ * window [start, start + interval). `start` is a local-calendar anchor like
+ * "2026-06-01" (cast to a plain timestamp — Lagos wall time), `interval` any
+ * Postgres interval literal ("1 month", "7 days"). Every module that buckets
+ * events into Lagos calendar periods should build its predicate here so the
+ * boundaries can never drift apart.
+ */
+export function lagosWindowSql(
+  column: SQL,
+  start: string,
+  interval = "1 month",
+): SQL {
+  return sql`(${column} AT TIME ZONE 'Africa/Lagos' >= ${start}::timestamp
+    AND ${column} AT TIME ZONE 'Africa/Lagos' < ${start}::timestamp + ${interval}::interval)`;
+}
 
 /** The Lagos calendar date (YYYY-MM-DD) of the given instant. */
 export function lagosDateString(at: Date = new Date()): string {

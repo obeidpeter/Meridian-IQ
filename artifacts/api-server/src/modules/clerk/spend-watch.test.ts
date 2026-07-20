@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
-import { getDb, runInBypassContext, auditEventsTable } from "@workspace/db";
+import { runInBypassContext } from "@workspace/db";
 import {
   detectSpendAnomalies,
   firmSpendDays,
@@ -10,6 +9,7 @@ import {
   SPEND_ANOMALY_ACTION,
   type FirmSpendDay,
 } from "./spend-watch.ts";
+import { latestAuditEvent } from "../../test-helpers/audit.ts";
 
 // Firm spend anomaly watch. Pinned invariants:
 //  - detection is pure and conservative: both gates (absolute floor AND
@@ -116,21 +116,9 @@ test("the sweep alerts once per (firm, day) via the audit ledger", async () => {
   const first = await sweepSpendWatch({ spendDays });
   assert.deepEqual(first, { checked: true, anomalies: 1, alerted: 1 });
 
-  const [event] = await runInBypassContext(() =>
-    getDb()
-      .select({
-        entityId: auditEventsTable.entityId,
-        after: auditEventsTable.after,
-      })
-      .from(auditEventsTable)
-      .where(
-        and(
-          eq(auditEventsTable.action, SPEND_ANOMALY_ACTION),
-          eq(auditEventsTable.entityId, `${firmId}:2026-07-04`),
-        ),
-      )
-      .orderBy(desc(auditEventsTable.seq))
-      .limit(1),
+  const event = await latestAuditEvent(
+    SPEND_ANOMALY_ACTION,
+    `${firmId}:2026-07-04`,
   );
   assert.ok(event, "the spike landed in the audit ledger");
   assert.equal((event.after as { tokens?: number }).tokens, 200_000);

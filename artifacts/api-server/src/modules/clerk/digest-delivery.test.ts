@@ -5,6 +5,7 @@ import { and, eq, gte } from "drizzle-orm";
 import {
   getDb,
   firmsTable,
+  membershipsTable,
   usersTable,
   featureFlagsTable,
   messagesTable,
@@ -32,11 +33,14 @@ const SALT = makeRunSalt();
 const firmDeliver = randomUUID();
 const firmOptOut = randomUUID();
 const firmDark = randomUUID();
+const firmOffboard = randomUUID();
 const emailStaff = randomUUID();
 const pushStaff = randomUUID();
 const optOutStaff = randomUUID();
 const noChannelStaff = randomUUID();
 const darkStaff = randomUUID();
+const activeStaff = randomUUID();
+const offboardedStaff = randomUUID();
 
 const MESSAGING_FLAG = "messaging_notifications";
 let messagingFlagWasEnabled: boolean | null = null;
@@ -113,6 +117,7 @@ before(async () => {
     { id: firmDeliver, name: `Digest Deliver Firm ${SALT}` },
     { id: firmOptOut, name: `Digest OptOut Firm ${SALT}` },
     { id: firmDark, name: `Digest Dark Firm ${SALT}` },
+    { id: firmOffboard, name: `Digest Offboard Firm ${SALT}` },
   ]);
   await db.insert(usersTable).values([
     { id: emailStaff, email: `dd-email-${SALT}@test.example` },
@@ -120,6 +125,19 @@ before(async () => {
     { id: optOutStaff, email: `dd-optout-${SALT}@test.example` },
     { id: noChannelStaff, email: `dd-nochan-${SALT}@test.example` },
     { id: darkStaff, email: `dd-dark-${SALT}@test.example` },
+    { id: activeStaff, email: `dd-active-${SALT}@test.example` },
+    { id: offboardedStaff, email: `dd-gone-${SALT}@test.example` },
+  ]);
+  // Delivery addresses only CURRENT staff: recipients join preferences
+  // against a live firm_admin/firm_staff membership. offboardedStaff gets
+  // NO membership row on purpose — its stale preference row must go quiet.
+  await db.insert(membershipsTable).values([
+    { userId: emailStaff, firmId: firmDeliver, role: "firm_admin" },
+    { userId: pushStaff, firmId: firmDeliver, role: "firm_staff" },
+    { userId: optOutStaff, firmId: firmOptOut, role: "firm_staff" },
+    { userId: noChannelStaff, firmId: firmOptOut, role: "firm_staff" },
+    { userId: darkStaff, firmId: firmDark, role: "firm_staff" },
+    { userId: activeStaff, firmId: firmOffboard, role: "firm_staff" },
   ]);
   await db.insert(staffNotificationPreferencesTable).values([
     // Opted in, email channel with an address on the preference row.
@@ -166,6 +184,26 @@ before(async () => {
       emailEnabled: true,
       pushEnabled: false,
       email: `dark-${SALT}@test.example`,
+    },
+    // Still-employed member of the offboarding firm — the control that proves
+    // delivery ran for that firm's digest.
+    {
+      userId: activeStaff,
+      firmId: firmOffboard,
+      digestEnabled: true,
+      emailEnabled: true,
+      pushEnabled: false,
+      email: `active-${SALT}@test.example`,
+    },
+    // Opted in with a live channel but NO membership row (offboarded): the
+    // recipients join must drop this row entirely.
+    {
+      userId: offboardedStaff,
+      firmId: firmOffboard,
+      digestEnabled: true,
+      emailEnabled: true,
+      pushEnabled: true,
+      email: `gone-${SALT}@test.example`,
     },
   ]);
   await db.insert(pushDevicesTable).values({
@@ -218,6 +256,18 @@ test("delivery: a digest is offered exactly once across two passes, pointer-only
   await drainDeliveries();
   assert.equal((await digestMessagesFor(emailStaff)).length, 1);
   assert.equal((await digestMessagesFor(pushStaff)).length, 1);
+});
+
+test("delivery: an offboarded member's stale preference row goes quiet", async () => {
+  const row = await seedDigest(firmOffboard, 0);
+  await drainDeliveries();
+
+  // The still-employed member is addressed — delivery ran for this digest —
+  // while the offboarded one (preferences intact, membership gone) is not.
+  const claimed = await digestById(row.id);
+  assert.ok(claimed.deliveredAt);
+  assert.equal((await digestMessagesFor(activeStaff)).length, 1);
+  assert.equal((await digestMessagesFor(offboardedStaff)).length, 0);
 });
 
 test("delivery: opted-out staff (and channel-less opt-ins) claim silently", async () => {

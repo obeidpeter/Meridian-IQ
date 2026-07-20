@@ -97,6 +97,12 @@ export const invoicesTable = pgTable("invoices", {
   index("invoices_related_invoice_idx")
     .on(t.relatedInvoiceId)
     .where(sql`related_invoice_id IS NOT NULL`),
+  // The pipeline's stuck-submission reconcile scans ALL invoices in
+  // 'submitted' on a fast cadence; partial so the scan reads a sliver of the
+  // table instead of walking every terminal-state row.
+  index("invoices_submitted_reconcile_idx")
+    .on(t.id)
+    .where(sql`status = 'submitted'`),
 ]);
 
 export const invoiceLinesTable = pgTable("invoice_lines", {

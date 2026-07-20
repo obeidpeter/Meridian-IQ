@@ -1,8 +1,7 @@
-import { and, eq, sql } from "drizzle-orm";
-import { getDb, runInBypassContext, auditEventsTable } from "@workspace/db";
-import { logger } from "../../lib/logger";
-import { appendAudit } from "../audit/audit";
+import { sql } from "drizzle-orm";
+import { getDb, runInBypassContext } from "@workspace/db";
 import { registerSweep } from "../pipeline/pipeline";
+import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
 
 // Resistance-drop alert (round-8 idea #2). The injection-resistance trend
 // (metrics.injectionTrend) is a chart someone has to look at; the red team
@@ -17,14 +16,6 @@ import { registerSweep } from "../pipeline/pipeline";
 //
 // Thresholds are env-tunable and deliberately need a real sample: a month
 // with a handful of injection fixtures produces rates too noisy to alert on.
-
-// A malformed value (empty string → 0, garbage → NaN) must never produce
-// NaN rates (0/0 slips every comparison and would 500 the metrics parse) or
-// a permanently-silent watch — fall back to the default instead.
-function envThreshold(raw: string | undefined, fallback: number): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
 
 const MIN_FIXTURES = envThreshold(process.env.RESISTANCE_ALERT_MIN_FIXTURES, 5);
 const DROP_POINTS = envThreshold(process.env.RESISTANCE_ALERT_DROP, 0.1);
@@ -47,7 +38,9 @@ export interface ResistanceDrop {
 }
 
 // The trend chart's month buckets — one query, shared with getClerkMetrics so
-// the alert and the chart can never disagree about the numbers.
+// the alert and the chart can never disagree about the numbers. Buckets are
+// pinned to UTC explicitly (`AT TIME ZONE 'UTC'` — bare date_trunc on a
+// timestamptz follows the SESSION timezone, not UTC).
 export async function injectionResistanceMonths(): Promise<ResistanceMonth[]> {
   const rows = (
     await getDb().execute<{
@@ -56,12 +49,12 @@ export async function injectionResistanceMonths(): Promise<ResistanceMonth[]> {
       injection_fixtures: number;
       injection_resisted: number;
     }>(sql`
-      SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') AS month,
+      SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC'), 'YYYY-MM') AS month,
         COUNT(*)::int AS runs,
         SUM(injection_fixtures)::int AS injection_fixtures,
         SUM(injection_resisted)::int AS injection_resisted
       FROM clerk_eval_runs
-      WHERE created_at >= date_trunc('month', now()) - interval '5 months'
+      WHERE created_at >= (date_trunc('month', now() AT TIME ZONE 'UTC') - interval '5 months') AT TIME ZONE 'UTC'
       GROUP BY 1
       ORDER BY 1
     `)
@@ -113,14 +106,14 @@ export interface ResistanceWatchDeps {
 
 const realDeps: ResistanceWatchDeps = { months: injectionResistanceMonths };
 
-// One alert per degraded month: the append-only audit ledger is the durable
-// cross-instance dedup key (entity_id = the month that dropped), fronted by
-// an in-process cache so the month-long tail of a detected drop doesn't
-// re-query the ledger every sweep minute. Two instances FIRST detecting the
-// same drop simultaneously can, in the worst case, both append (the audit
-// advisory lock serializes the appends, not the check-then-append) — a
-// harmless duplicate history row, accepted rather than adding a lock.
-const alertedMonths = new Set<string>();
+// One alert per degraded month: entity_id = the month that dropped; dedup
+// discipline in alertOnceViaAuditLedger (audit ledger as the durable
+// cross-instance key, in-process cache in front).
+const alertResistanceDrop = alertOnceViaAuditLedger({
+  action: RESISTANCE_DROP_ACTION,
+  entityType: "clerk_eval",
+  actorId: "resistance-watch",
+});
 
 export async function sweepResistanceWatch(
   deps: ResistanceWatchDeps = realDeps,
@@ -128,32 +121,10 @@ export async function sweepResistanceWatch(
   return runInBypassContext(async () => {
     const drop = detectResistanceDrop(await deps.months());
     if (!drop) return { checked: true, dropped: false, alerted: false };
-    if (alertedMonths.has(drop.toMonth)) {
-      return { checked: true, dropped: true, alerted: false };
-    }
 
-    const [existing] = await getDb()
-      .select({ seq: auditEventsTable.seq })
-      .from(auditEventsTable)
-      .where(
-        and(
-          eq(auditEventsTable.action, RESISTANCE_DROP_ACTION),
-          eq(auditEventsTable.entityId, drop.toMonth),
-        ),
-      )
-      .limit(1);
-    if (existing) {
-      alertedMonths.add(drop.toMonth);
-      return { checked: true, dropped: true, alerted: false };
-    }
-
-    await appendAudit({
-      actorId: "resistance-watch",
-      actorRole: "system",
-      action: RESISTANCE_DROP_ACTION,
-      entityType: "clerk_eval",
-      entityId: drop.toMonth,
-      after: {
+    const alerted = await alertResistanceDrop(
+      drop.toMonth,
+      {
         fromMonth: drop.fromMonth,
         toMonth: drop.toMonth,
         fromRate: drop.fromRate,
@@ -162,14 +133,10 @@ export async function sweepResistanceWatch(
         reason:
           "Injection resistance fell materially below the previous measured month; review the eval runs and recent prompt changes on the Clerk health page.",
       },
-    });
-    logger.error(
-      { ...drop },
       "Injection resistance DROPPED month-over-month: review Clerk health (eval runs, recent prompt changes, red-team fixtures) before promoting anything.",
     );
-    alertedMonths.add(drop.toMonth);
-    return { checked: true, dropped: true, alerted: true };
+    return { checked: true, dropped: true, alerted };
   });
 }
 
-registerSweep(sweepResistanceWatch);
+registerSweep(atMostHourly(sweepResistanceWatch));

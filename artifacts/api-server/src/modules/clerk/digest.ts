@@ -1,10 +1,11 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   getDb,
   runInBypassContext,
   clerkDigestsTable,
   firmsTable,
+  membershipsTable,
   staffNotificationPreferencesTable,
   type ClerkDigestRow,
 } from "@workspace/db";
@@ -14,6 +15,7 @@ import { pointerEntityRef } from "../messaging/recipient-ref";
 import { sendPushToUser } from "../push/push";
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
+import { lagosTodaySql } from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import { countFirmUnbilled } from "../invoice/unbilled-income";
 import { firmMoneySummary } from "../invoice/cashflow";
@@ -111,6 +113,7 @@ export function digestWeekStart(now: Date = new Date()): Date {
 // "today" (lib/lagos-time.ts): current_date would use the UTC day, which lags
 // local statutory time by an hour around midnight.
 export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
+  const today = lagosTodaySql();
   const rows = (
     await getDb().execute<{
       unsubmitted: number;
@@ -125,20 +128,20 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
         )::int AS unsubmitted,
         COUNT(*) FILTER (
           WHERE i.status IN ('draft', 'validated')
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int > (now() AT TIME ZONE 'Africa/Lagos')::date
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= (now() AT TIME ZONE 'Africa/Lagos')::date + 7
+            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int > ${today}
+            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${today} + 7
         )::int AS due_soon,
         -- The deadline is Lagos midnight STARTING day issue+window, so an
         -- invoice is overdue ON that day (<=) — same boundary as the
         -- dashboards, reminders and the Ask Clerk data intents.
         COUNT(*) FILTER (
           WHERE i.status IN ('draft', 'validated')
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= (now() AT TIME ZONE 'Africa/Lagos')::date
+            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${today}
         )::int AS overdue,
         COUNT(*) FILTER (WHERE i.status = 'failed')::int AS failed,
         COUNT(*) FILTER (
           WHERE i.status IN ('submitted', 'stamped', 'confirmed')
-            AND COALESCE(i.due_date, i.issue_date) < (now() AT TIME ZONE 'Africa/Lagos')::date - 60
+            AND COALESCE(i.due_date, i.issue_date) < ${today} - 60
         )::int AS recv_over_60
       FROM invoices i
       WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}
@@ -336,14 +339,17 @@ export async function generateFirmDigest(
 }
 
 // Offer generated digests to the firm's OPTED-IN staff, mirroring
-// deliverClientStatements: bypass transaction, oldest-first delivered_at IS
-// NULL scan, claim-first compare-and-set as the atomic once-only gate, dark
+// deliverClientStatements: oldest-first delivered_at IS NULL scan, claim-
+// first compare-and-set as the atomic once-only gate, dark
 // messaging_notifications flag claims silently (PL-02 — turning the flag on
 // later must not blast a backlog of old digests). Two deliberate differences
 // from the statement fan-out:
 //  - recipients come from staff_notification_preferences (digestEnabled plus
-//    at least one channel on); NO recipients claims silently, because opt-in
-//    means quiet is the correct outcome, not a failure;
+//    at least one channel on) joined against a LIVE firm membership
+//    (firm_admin/firm_staff in that firm — an offboarded member's stale
+//    preference row must not keep receiving the firm's digests); NO
+//    recipients claims silently, because opt-in means quiet is the correct
+//    outcome, not a failure;
 //  - there is NO party consent gate: the recipient is a firm member who
 //    opted in to their own firm's digest themselves — this is not the
 //    CORE-03 client-alert model, and no client party's consent governs it.
@@ -353,25 +359,36 @@ export async function generateFirmDigest(
 // messaging provider addresses nothing today, matching every existing send).
 // Returns the number of rows CLAIMED this pass; zero means the backlog is
 // drained, so callers can loop until then.
+//
+// Sweep-only: must run OUTSIDE any request context. The candidate/recipient
+// reads and the sends run on the ambient-free raw pool (autocommit — each
+// message/push insert is individually durable); only the per-row claim opens
+// a transaction, and it COMMITS before any send leaves. Holding one bypass
+// transaction across the whole pass — claims, recipient reads AND the live
+// Expo push HTTP — meant a mid-pass failure rolled back every claim and
+// message row while pushes had already left the building, and sibling
+// instances blocked on the row locks for the duration.
 export async function deliverFirmDigests(limit = DELIVERY_BATCH): Promise<number> {
-  return runInBypassContext(async () => {
-    // Oldest first: a backlog wider than one pass drains in generation order.
-    const pending = await getDb()
-      .select()
-      .from(clerkDigestsTable)
-      .where(isNull(clerkDigestsTable.deliveredAt))
-      .orderBy(clerkDigestsTable.createdAt)
-      .limit(limit);
-    if (pending.length === 0) return 0;
+  // Plain short read (raw pool): candidate rows, oldest first, so a backlog
+  // wider than one pass drains in generation order.
+  const pending = await getDb()
+    .select()
+    .from(clerkDigestsTable)
+    .where(isNull(clerkDigestsTable.deliveredAt))
+    .orderBy(clerkDigestsTable.createdAt)
+    .limit(limit);
+  if (pending.length === 0) return 0;
 
-    const messagingOn = await isFeatureEnabled("messaging_notifications", null);
-    let claimed = 0;
-    for (const row of pending) {
-      // Claim the row first: the compare-and-set on delivered_at is the
-      // atomic once-only gate. The whole pass runs in one bypass
-      // transaction, so a mid-pass crash rolls back claims AND message rows
-      // together — a digest is never half-delivered.
-      const claim = await getDb()
+  const messagingOn = await isFeatureEnabled("messaging_notifications", null);
+  let claimed = 0;
+  for (const row of pending) {
+    // Claim first, in its OWN short committed transaction: the compare-and-
+    // set on delivered_at is the atomic once-only gate, and committing it
+    // before sending is the at-most-once trade — a claimed row whose sends
+    // then fail is NOT re-offered (better a missed nudge than a double
+    // alert; the console shows the digest either way).
+    const claim = await runInBypassContext(() =>
+      getDb()
         .update(clerkDigestsTable)
         .set({ deliveredAt: new Date() })
         .where(
@@ -380,58 +397,78 @@ export async function deliverFirmDigests(limit = DELIVERY_BATCH): Promise<number
             isNull(clerkDigestsTable.deliveredAt),
           ),
         )
-        .returning({ id: clerkDigestsTable.id });
-      if (claim.length === 0) continue; // another instance won this row
-      claimed++;
+        .returning({ id: clerkDigestsTable.id }),
+    );
+    if (claim.length === 0) continue; // another instance won this row
+    claimed++;
 
-      // The claim is written even while messaging is dark (PL-02).
-      if (!messagingOn) continue;
+    // The claim is written even while messaging is dark (PL-02).
+    if (!messagingOn) continue;
 
-      // Opted-in staff with at least one live channel. Nobody opted in →
-      // the claim above already retired the row; send nothing.
-      const recipients = (
-        await getDb()
-          .select()
-          .from(staffNotificationPreferencesTable)
-          .where(
-            and(
-              eq(staffNotificationPreferencesTable.firmId, row.firmId),
-              eq(staffNotificationPreferencesTable.digestEnabled, true),
-            ),
-          )
-      ).filter((r) => (r.emailEnabled && r.email !== null) || r.pushEnabled);
+    // Opted-in staff with at least one live channel AND a current staff
+    // membership in this firm (offboarding revokes the membership, not the
+    // self-service preference row — the join is what stops a departed
+    // member's digests). Nobody left → the claim above already retired the
+    // row; send nothing. selectDistinct: a user holding both staff roles in
+    // the firm must still be addressed once.
+    const recipients = (
+      await getDb()
+        .selectDistinct({
+          userId: staffNotificationPreferencesTable.userId,
+          emailEnabled: staffNotificationPreferencesTable.emailEnabled,
+          pushEnabled: staffNotificationPreferencesTable.pushEnabled,
+          email: staffNotificationPreferencesTable.email,
+        })
+        .from(staffNotificationPreferencesTable)
+        .innerJoin(
+          membershipsTable,
+          and(
+            eq(membershipsTable.userId, staffNotificationPreferencesTable.userId),
+            eq(membershipsTable.firmId, staffNotificationPreferencesTable.firmId),
+            inArray(membershipsTable.role, ["firm_admin", "firm_staff"]),
+          ),
+        )
+        .where(
+          and(
+            eq(staffNotificationPreferencesTable.firmId, row.firmId),
+            eq(staffNotificationPreferencesTable.digestEnabled, true),
+          ),
+        )
+    ).filter((r) => (r.emailEnabled && r.email !== null) || r.pushEnabled);
 
-      const entityId = pointerEntityRef("dig", row.id);
-      for (const recipient of recipients) {
-        if (recipient.emailEnabled && recipient.email) {
-          try {
-            await sendMessage({
-              channel: "email",
-              recipientRef: pointerEntityRef("usr", recipient.userId),
-              templateKey: "firm_digest_ready",
-              entityType: "clerk_digest",
-              entityId,
-            });
-          } catch {
-            // Channel failures are recorded in the messages ledger.
-          }
+    // Sends happen AFTER the claim committed, outside any open transaction:
+    // each message/push write is an autocommit insert, so a crash here loses
+    // at most the remaining channels of one digest — never a committed claim.
+    const entityId = pointerEntityRef("dig", row.id);
+    for (const recipient of recipients) {
+      if (recipient.emailEnabled && recipient.email) {
+        try {
+          await sendMessage({
+            channel: "email",
+            recipientRef: pointerEntityRef("usr", recipient.userId),
+            templateKey: "firm_digest_ready",
+            entityType: "clerk_digest",
+            entityId,
+          });
+        } catch {
+          // Channel failures are recorded in the messages ledger.
         }
-        if (recipient.pushEnabled) {
-          try {
-            await sendPushToUser({
-              userId: recipient.userId,
-              templateKey: "firm_digest_ready",
-              entityType: "clerk_digest",
-              entityId,
-            });
-          } catch {
-            // Push failures are likewise recorded by the push module.
-          }
+      }
+      if (recipient.pushEnabled) {
+        try {
+          await sendPushToUser({
+            userId: recipient.userId,
+            templateKey: "firm_digest_ready",
+            entityType: "clerk_digest",
+            entityId,
+          });
+        } catch {
+          // Push failures are likewise recorded by the push module.
         }
       }
     }
-    return claimed;
-  });
+  }
+  return claimed;
 }
 
 // Latest digest for a firm (the route's read path; RLS-scoped by 0011).
