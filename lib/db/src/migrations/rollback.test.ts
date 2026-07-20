@@ -246,6 +246,14 @@ const LADDER: LadderStep[] = [
     atTop: [pol("staff_notification_preferences")],
     afterRollback: [not(pol("staff_notification_preferences"))],
   },
+  {
+    version: 20, // bank-feed connection guardrails
+    atTop: [pol("statement_connections"), pol("statement_sync_runs")],
+    afterRollback: [
+      not(pol("statement_connections")),
+      not(pol("statement_sync_runs")),
+    ],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except
