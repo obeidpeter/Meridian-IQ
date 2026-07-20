@@ -7,8 +7,17 @@ import {
   ChangePasswordBody,
   AcceptInviteBody,
   ResetPasswordBody,
+  TotpChallengeBody,
+  TotpChallengeResponse,
+  GetTotpStatusResponse,
+  SetupTotpResponse,
+  ActivateTotpBody,
+  ActivateTotpResponse,
+  DisableTotpBody,
+  DisableTotpResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
+import { DomainError } from "../modules/errors";
 import { ROLE_CAPABILITIES } from "../modules/auth/rbac";
 import {
   SESSION_COOKIE,
@@ -17,6 +26,15 @@ import {
   hashPassword,
   verifyPassword,
 } from "../modules/auth/session";
+import {
+  buildOtpauthUri,
+  generateRecoveryCodes,
+  generateTotpSecret,
+  hashRecoveryCode,
+  issueMfaToken,
+  verifyMfaToken,
+  verifyTotpCode,
+} from "../modules/auth/totp";
 import {
   isLoginThrottled,
   recordLoginFailure,
@@ -53,6 +71,24 @@ function cookieOptions(req: { secure?: boolean; headers: Record<string, unknown>
   };
 }
 
+// Optional TOTP enforcement for locked-down deployments, dark by default.
+// When TOTP_REQUIRED_ROLES is set (comma-separated role list, e.g.
+// "operator,firm_admin"), a matching-role account WITHOUT TOTP enrolment is
+// refused at login with a distinct 403 TOTP_REQUIRED. Chicken-and-egg, stated
+// plainly: enrolment itself requires a signed-in session, so an unenrolled
+// user cannot self-enrol while their role is listed — this flag is for
+// deployments that have ALREADY completed enrolment (set it after the rollout,
+// or clear it temporarily / use an operator-assisted flow to onboard a new
+// account). Unset env = zero behaviour change.
+function totpRequiredRoles(): Set<string> {
+  return new Set(
+    (process.env.TOTP_REQUIRED_ROLES ?? "")
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean),
+  );
+}
+
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(LoginBody, req.body);
   const retryAfter = await isLoginThrottled(req, parsed.email);
@@ -85,6 +121,38 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
   const membership = memberships[0];
+  if (!result.totpEnabledAt && totpRequiredRoles().has(membership.role)) {
+    res.status(403).json({
+      code: "TOTP_REQUIRED",
+      error:
+        "This deployment requires two-factor authentication for your role. " +
+        "Enrol an authenticator app before signing in.",
+    });
+    return;
+  }
+  if (result.totpEnabledAt) {
+    // TOTP-enrolled account: the password alone earns no session — no cookie,
+    // no bearer token (mobile included). The short-lived mfaToken is only the
+    // right to attempt /auth/totp/challenge, which issues the real session.
+    // auth.login is NOT audited here; the completed challenge is the audited
+    // sign-in event.
+    const mfaToken = await issueMfaToken(result.userId, result.sessionEpoch);
+    res.json(
+      LoginResponse.parse({
+        userId: result.userId,
+        role: membership.role,
+        email: result.email,
+        fullName: result.fullName,
+        firmId: membership.firmId,
+        clientPartyId: membership.clientPartyId,
+        buyerPartyId: membership.buyerPartyId,
+        capabilities: ROLE_CAPABILITIES[membership.role] ?? [],
+        mfaRequired: true,
+        mfaToken,
+      }),
+    );
+    return;
+  }
   const token = await issueSessionToken(result.userId, result.sessionEpoch);
   res.cookie(SESSION_COOKIE, token, cookieOptions(req));
   // Only native/mobile clients (which cannot use HttpOnly cookies) receive the
@@ -113,6 +181,349 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       // Same signed session token as the cookie, for native mobile clients
       // that cannot use HttpOnly cookies (sent as Authorization: Bearer).
       ...(isMobileClient ? { token } : {}),
+    }),
+  );
+});
+
+// Redeem a login mfaToken plus a TOTP or recovery code for the real session.
+// Public (PUBLIC_PATHS): the caller by definition has no session yet — the
+// signed, 5-minute mfaToken IS the credential, exactly the accept-invite
+// posture. Every failure mode (bad token, stale epoch, unenrolled account,
+// wrong code, replayed code) is a uniform 401 so the endpoint is not an
+// oracle for which stage failed. Code guessing is capped by the same generic
+// action limiter as the change-password credential check (raw-pool counters
+// that survive this route's 4xx rollback).
+router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
+  const parsed = parseOrThrow(TotpChallengeBody, req.body);
+  const unauthorized = () => {
+    res.status(401).json({ error: "Invalid sign-in challenge or code" });
+  };
+  const verified = await verifyMfaToken(parsed.mfaToken);
+  if (!verified) {
+    unauthorized();
+    return;
+  }
+  const throttleKey = `totp:${verified.userId}`;
+  const retryAfter = await isActionThrottled(throttleKey);
+  if (retryAfter !== null) {
+    res.setHeader("Retry-After", String(retryAfter));
+    res.status(429).json({
+      error: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+    });
+    return;
+  }
+  const [user] = await getDb()
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      fullName: usersTable.fullName,
+      sessionEpoch: usersTable.sessionEpoch,
+      totpSecret: usersTable.totpSecret,
+      totpEnabledAt: usersTable.totpEnabledAt,
+      totpRecoveryCodes: usersTable.totpRecoveryCodes,
+      totpLastUsedStep: usersTable.totpLastUsedStep,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, verified.userId))
+    .limit(1);
+  if (
+    !user ||
+    // Epoch check mirrors the session parser: a password change between login
+    // and challenge revokes the pending token too (SEC-02).
+    verified.epoch < user.sessionEpoch ||
+    !user.totpEnabledAt ||
+    !user.totpSecret
+  ) {
+    unauthorized();
+    return;
+  }
+  // A current TOTP code first; failing that, a one-time recovery code.
+  const totpMatch = verifyTotpCode(user.totpSecret, parsed.code, {
+    lastUsedStep: user.totpLastUsedStep,
+  });
+  let usedRecoveryCode = false;
+  if (totpMatch) {
+    // Single-use within the window (RFC 6238 §5.2): persist the accepted step
+    // so an observed code cannot be replayed while it is still "current".
+    await getDb()
+      .update(usersTable)
+      .set({ totpLastUsedStep: totpMatch.step })
+      .where(eq(usersTable.id, user.id));
+  } else {
+    const codeHash = hashRecoveryCode(parsed.code);
+    const remaining = user.totpRecoveryCodes ?? [];
+    if (!remaining.includes(codeHash)) {
+      await recordActionFailure(throttleKey);
+      unauthorized();
+      return;
+    }
+    // Burn the code: a recovery code redeems exactly once.
+    usedRecoveryCode = true;
+    await getDb()
+      .update(usersTable)
+      .set({ totpRecoveryCodes: remaining.filter((h) => h !== codeHash) })
+      .where(eq(usersTable.id, user.id));
+  }
+  await clearActionFailures(throttleKey);
+  const memberships = await getDb()
+    .select({
+      firmId: membershipsTable.firmId,
+      role: membershipsTable.role,
+      clientPartyId: membershipsTable.clientPartyId,
+      buyerPartyId: membershipsTable.buyerPartyId,
+    })
+    .from(membershipsTable)
+    .where(eq(membershipsTable.userId, user.id));
+  if (memberships.length === 0) {
+    res.status(401).json({ error: "Account has no active membership" });
+    return;
+  }
+  const membership = memberships[0];
+  // From here this is exactly the login success path: cookie for browsers,
+  // bearer token in the body only for the self-identified mobile client.
+  const token = await issueSessionToken(user.id, user.sessionEpoch);
+  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
+  const isMobileClient = req.get("x-meridian-client") === "mobile";
+  await appendAudit({
+    actorId: user.id,
+    firmId: membership.firmId,
+    action: "auth.totp.challenge",
+    entityType: "user",
+    entityId: user.id,
+    after: {
+      role: membership.role,
+      method: usedRecoveryCode ? "recovery_code" : "totp",
+    },
+  });
+  res.json(
+    TotpChallengeResponse.parse({
+      userId: user.id,
+      role: membership.role,
+      email: user.email,
+      fullName: user.fullName,
+      firmId: membership.firmId,
+      clientPartyId: membership.clientPartyId,
+      buyerPartyId: membership.buyerPartyId,
+      capabilities: ROLE_CAPABILITIES[membership.role] ?? [],
+      ...(isMobileClient ? { token } : {}),
+    }),
+  );
+});
+
+// Begin TOTP enrolment (authenticated). Stores the secret in the PENDING state
+// (totpEnabledAt null — login behaviour unchanged until activation) and
+// returns the secret, otpauth URI and recovery codes exactly once; only the
+// recovery codes' sha256 hashes persist. Re-running setup while still pending
+// simply rotates the pending material; once enabled it is a 409 — disable
+// first (which demands password + code), so a hijacked session cannot swap
+// the victim's authenticator.
+router.post("/auth/totp/setup", async (req, res): Promise<void> => {
+  const [user] = await getDb()
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      totpEnabledAt: usersTable.totpEnabledAt,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.principal.userId))
+    .limit(1);
+  if (!user) {
+    throw new DomainError("NOT_FOUND", "Account not found", 404);
+  }
+  if (user.totpEnabledAt) {
+    throw new DomainError(
+      "TOTP_ALREADY_ENABLED",
+      "Two-factor authentication is already enabled. Disable it before re-enrolling.",
+      409,
+    );
+  }
+  const secret = generateTotpSecret();
+  const { codes, hashes } = generateRecoveryCodes();
+  await getDb()
+    .update(usersTable)
+    .set({
+      totpSecret: secret,
+      totpEnabledAt: null,
+      totpRecoveryCodes: hashes,
+      totpLastUsedStep: null,
+    })
+    .where(eq(usersTable.id, user.id));
+  res.json(
+    SetupTotpResponse.parse({
+      secret,
+      otpauthUri: buildOtpauthUri(user.email, secret),
+      recoveryCodes: codes,
+    }),
+  );
+});
+
+// Confirm enrolment with a live code from the authenticator (authenticated).
+// Only now does login start demanding the second factor. Like change-password,
+// the session epoch is bumped — any other outstanding session (a possible
+// hijacker included) is revoked at the moment the account hardens — and the
+// caller's own cookie is re-issued under the new epoch.
+router.post("/auth/totp/activate", async (req, res): Promise<void> => {
+  const parsed = parseOrThrow(ActivateTotpBody, req.body);
+  const [user] = await getDb()
+    .select({
+      id: usersTable.id,
+      sessionEpoch: usersTable.sessionEpoch,
+      totpSecret: usersTable.totpSecret,
+      totpEnabledAt: usersTable.totpEnabledAt,
+      totpRecoveryCodes: usersTable.totpRecoveryCodes,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.principal.userId))
+    .limit(1);
+  if (!user || !user.totpSecret || user.totpEnabledAt) {
+    throw new DomainError(
+      "TOTP_NOT_PENDING",
+      "No pending TOTP enrolment to activate. Call setup first.",
+      400,
+    );
+  }
+  const match = verifyTotpCode(user.totpSecret, parsed.code);
+  if (!match) {
+    throw new DomainError(
+      "TOTP_INVALID_CODE",
+      "That code did not match. Check the authenticator app and try again.",
+      400,
+    );
+  }
+  const enabledAt = new Date();
+  const nextEpoch = user.sessionEpoch + 1;
+  await getDb()
+    .update(usersTable)
+    .set({
+      totpEnabledAt: enabledAt,
+      // The activation code is spent: it cannot be replayed at the challenge
+      // endpoint within its own validity window.
+      totpLastUsedStep: match.step,
+      sessionEpoch: nextEpoch,
+    })
+    .where(eq(usersTable.id, user.id));
+  await appendAudit({
+    actorId: user.id,
+    firmId: req.principal.firmId,
+    action: "auth.totp.activate",
+    entityType: "user",
+    entityId: user.id,
+    after: { totpEnabled: true, sessionsRevoked: true },
+  });
+  const token = await issueSessionToken(user.id, nextEpoch);
+  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
+  res.json(
+    ActivateTotpResponse.parse({
+      enabled: true,
+      enabledAt: enabledAt.toISOString(),
+      recoveryCodesRemaining: (user.totpRecoveryCodes ?? []).length,
+    }),
+  );
+});
+
+// Disable TOTP (authenticated). Demands the account password AND a live code
+// (or a recovery code): a stolen session cookie alone must not be enough to
+// strip the second factor. Same throttle as the challenge — this is a
+// credential check. Clears all enrolment state, bumps the epoch (revoking
+// every other session) and re-issues the caller's cookie.
+router.post("/auth/totp/disable", async (req, res): Promise<void> => {
+  const parsed = parseOrThrow(DisableTotpBody, req.body);
+  const throttleKey = `totp:${req.principal.userId}`;
+  const retryAfter = await isActionThrottled(throttleKey);
+  if (retryAfter !== null) {
+    res.setHeader("Retry-After", String(retryAfter));
+    res.status(429).json({
+      error: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+    });
+    return;
+  }
+  const [user] = await getDb()
+    .select({
+      id: usersTable.id,
+      passwordHash: usersTable.passwordHash,
+      sessionEpoch: usersTable.sessionEpoch,
+      totpSecret: usersTable.totpSecret,
+      totpEnabledAt: usersTable.totpEnabledAt,
+      totpRecoveryCodes: usersTable.totpRecoveryCodes,
+      totpLastUsedStep: usersTable.totpLastUsedStep,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.principal.userId))
+    .limit(1);
+  if (!user || !user.totpEnabledAt || !user.totpSecret) {
+    throw new DomainError(
+      "TOTP_NOT_ENABLED",
+      "Two-factor authentication is not enabled on this account.",
+      400,
+    );
+  }
+  const passwordOk = Boolean(
+    user.passwordHash &&
+      (await verifyPassword(parsed.password, user.passwordHash)),
+  );
+  const totpMatch = verifyTotpCode(user.totpSecret, parsed.code, {
+    lastUsedStep: user.totpLastUsedStep,
+  });
+  const recoveryOk =
+    !totpMatch &&
+    (user.totpRecoveryCodes ?? []).includes(hashRecoveryCode(parsed.code));
+  if (!passwordOk || (!totpMatch && !recoveryOk)) {
+    await recordActionFailure(throttleKey);
+    // Uniform: never say which of the two factors failed.
+    res.status(401).json({ error: "Invalid password or code" });
+    return;
+  }
+  await clearActionFailures(throttleKey);
+  const nextEpoch = user.sessionEpoch + 1;
+  await getDb()
+    .update(usersTable)
+    .set({
+      totpSecret: null,
+      totpEnabledAt: null,
+      totpRecoveryCodes: null,
+      totpLastUsedStep: null,
+      sessionEpoch: nextEpoch,
+    })
+    .where(eq(usersTable.id, user.id));
+  await appendAudit({
+    actorId: user.id,
+    firmId: req.principal.firmId,
+    action: "auth.totp.disable",
+    entityType: "user",
+    entityId: user.id,
+    after: { totpEnabled: false, sessionsRevoked: true },
+  });
+  const token = await issueSessionToken(user.id, nextEpoch);
+  res.cookie(SESSION_COOKIE, token, cookieOptions(req));
+  res.json(
+    DisableTotpResponse.parse({
+      enabled: false,
+      enabledAt: null,
+      recoveryCodesRemaining: null,
+    }),
+  );
+});
+
+// Enrolment state for the signed-in account (settings surfaces). Never returns
+// the secret; the remaining-recovery-code count lets the UI nudge a user who
+// has burned most of them.
+router.get("/auth/totp/status", async (req, res): Promise<void> => {
+  const [user] = await getDb()
+    .select({
+      totpEnabledAt: usersTable.totpEnabledAt,
+      totpRecoveryCodes: usersTable.totpRecoveryCodes,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.principal.userId))
+    .limit(1);
+  const enabled = Boolean(user?.totpEnabledAt);
+  res.json(
+    GetTotpStatusResponse.parse({
+      enabled,
+      enabledAt: user?.totpEnabledAt ? user.totpEnabledAt.toISOString() : null,
+      recoveryCodesRemaining: enabled
+        ? (user?.totpRecoveryCodes ?? []).length
+        : null,
     }),
   );
 });

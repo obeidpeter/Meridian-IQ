@@ -40,7 +40,10 @@ const VALID_ROLES: Role[] = [
 // wake-up trigger — an anonymous scheduler ping, see routes/sweep.ts — public
 // stamp verification, subdomain branding resolution — the white-label shell
 // needs its theme before any login — and the session endpoints themselves).
-const PUBLIC_PATHS = new Set([
+// Exported for middleware/rate-limit.ts: public paths are exempt from the
+// per-principal limiter because each carries its own gate (login throttle,
+// op tokens, webhook shared secret).
+export const PUBLIC_PATHS = new Set([
   "/api/healthz",
   "/api/readyz",
   "/api/metrics",
@@ -55,6 +58,10 @@ const PUBLIC_PATHS = new Set([
   // Password-reset redeem: same posture (IDN-02) — the caller's session is
   // exactly what was lost, so the single-use token is the credential.
   "/api/auth/reset-password",
+  // TOTP challenge: like accept-invite, the signed short-lived mfaToken issued
+  // by /auth/login IS the credential — the caller by definition holds no
+  // session yet (the cookie is only issued once the second factor passes).
+  "/api/auth/totp/challenge",
   // Inbound email webhook (routes/inbound.ts): a machine caller with no
   // session — the INBOUND_EMAIL_TOKEN shared secret IS the credential, like
   // accept-invite's token. The route itself fails closed (404) when the

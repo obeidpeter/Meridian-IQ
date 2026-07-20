@@ -40,6 +40,20 @@ export const usersTable = pgTable("users", {
   // epoch) stop resolving to a principal — the compromise-remediation path that
   // a stateless HMAC token would otherwise leave open until its 7-day expiry.
   sessionEpoch: integer("session_epoch").notNull().default(0),
+  // TOTP two-factor (opt-in, modules/auth/totp.ts). The base32 secret is
+  // stored at setup time with totpEnabledAt NULL (pending enrolment — not yet
+  // enforced at login); activation with a valid code stamps totpEnabledAt.
+  // These are user-keyed columns on a table with no tenant key, so no RLS
+  // policy is involved — the login/challenge paths read them pre-tenant.
+  totpSecret: text("totp_secret"),
+  totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
+  // sha256 hex hashes of the one-time recovery codes (shown once at setup);
+  // a redeemed code is removed, so length = codes remaining.
+  totpRecoveryCodes: jsonb("totp_recovery_codes").$type<string[]>(),
+  // The last 30s step a TOTP code was accepted for (challenge/activate), so a
+  // sniffed code cannot be replayed within its own validity window (RFC 6238
+  // §5.2: a verified code must be accepted at most once).
+  totpLastUsedStep: integer("totp_last_used_step"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

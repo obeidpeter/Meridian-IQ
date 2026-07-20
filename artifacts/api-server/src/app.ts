@@ -8,6 +8,7 @@ import router from "./routes";
 import inboundRouter from "./routes/inbound";
 import { logger } from "./lib/logger";
 import { resolvePrincipal, requireCsrfHeader } from "./middleware/principal";
+import { rateLimit } from "./middleware/rate-limit";
 import { errorHandler } from "./middleware/error";
 import { metricsMiddleware } from "./lib/metrics";
 
@@ -29,7 +30,12 @@ const NO_CONTEXT_PATHS = new Set([
 ]);
 
 // Method-scoped variant for the Clerk routes that call the model provider
-// in-request: a multi-second completion (up to eleven for a full batch
+// in-request. NOTE: these model-calling exemptions are mirrored by the MODEL
+// rate-limit class in middleware/rate-limit.ts (MODEL_RATE_LIMITED_ROUTES /
+// _PATTERNS, which also covers the digest-posture single-completion routes
+// that stay inside the transaction) — when a route joins or leaves this list
+// because of a provider call, update that list too.
+// A multi-second completion (up to eleven for a full batch
 // intake) must not pin a pooled connection inside an open transaction or run
 // into the 30s request-transaction cap — a full batch at realistic provider
 // latencies EXCEEDS the cap and would roll back every created case after the
@@ -370,6 +376,11 @@ if (process.env.CLERK_SECRET_KEY) {
   app.use(clerkMiddleware());
 }
 app.use(resolvePrincipal);
+// Per-principal rate limiting: AFTER resolvePrincipal (keys on the resolved
+// userId) and BEFORE tenantContext (the counter bump must ride the raw pool
+// outside the request transaction — a 429's own rollback would otherwise
+// erase the count that produced it; see middleware/rate-limit.ts).
+app.use(rateLimit);
 app.use(tenantContext);
 // Machine webhook rail (not in the OpenAPI contract): mounted directly here
 // rather than through routes/index.ts so the contract-facing router stays
