@@ -626,7 +626,22 @@ function CaptureContent() {
               title="Nothing sent yet"
               description="Your submissions and their review status will show up here."
               className="py-8"
-            />
+            >
+              {/* Wired to the real file input above — the CTA opens the same
+                  picker the form uses, so "snap" (mobile camera) and upload
+                  both just work. */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-1"
+                onClick={() =>
+                  document.getElementById("capture-file")?.click()
+                }
+                data-testid="button-empty-first-capture"
+              >
+                Snap or upload your first document
+              </Button>
+            </EmptyState>
           ) : (
             sortedCases.map((c) => {
               const expanded = selectedId === c.id;

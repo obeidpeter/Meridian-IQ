@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
 import { StaffNotificationPrefsCard } from "@/components/staff-notification-prefs-card";
+import { StatementConnectionsCard } from "@/components/statement-connections-card";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
 import {
@@ -1258,6 +1259,16 @@ export function Portfolio() {
       <ClerkAdoptionCard />
 
       <ReceivablesCard />
+
+      {/* Bank-feed connections sit with the money surfaces (receivables /
+          reconciliation feed). Render-on-success: servers without the rail
+          (older build, feature dark → 404) show nothing at all. */}
+      <StatementConnectionsCard
+        clients={clients.map((c) => ({
+          clientPartyId: c.clientPartyId,
+          legalName: c.legalName,
+        }))}
+      />
     </div>
   );
 }

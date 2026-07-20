@@ -3,18 +3,24 @@ import {
   useGetClerkMetrics,
   useRunClerkEval,
   useListClerkEvalRuns,
+  useListEvalFixtures,
+  useRetireEvalFixture,
+  useRestoreEvalFixture,
   useGetExtractionPrompt,
   useRunPromptCanary,
   useRunModelCanary,
   useGetClerkTierReport,
   getGetClerkMetricsQueryKey,
   getListClerkEvalRunsQueryKey,
+  getListEvalFixturesQueryKey,
   getGetExtractionPromptQueryKey,
   getGetClerkTierReportQueryKey,
 } from "@workspace/api-client-react";
 import type {
   ClerkMetricsCases,
   ClerkMetricsQualityAlert,
+  EvalFixtureReport,
+  EvalFixtureSummary,
   ModelCanaryReport,
   PromptCanaryReport,
 } from "@workspace/api-client-react";
@@ -25,12 +31,27 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { QueryError } from "@/components/query-error";
 import { ClerkPageHeader } from "@/components/clerk-shell";
 import { StatTile } from "@/components/stat-tile";
@@ -495,6 +516,346 @@ function ModelCanaryCard() {
             </p>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---- Eval corpus curation --------------------------------------------------
+// The full fixture inventory (static, grown, red-team) with per-fixture pass
+// history reconstructed from stored runs. Curation is scoped on purpose:
+// grown/red-team fixtures can be retired (and restored) from the UI; static
+// fixtures ship in code, so their rows stay read-only with a tooltip saying
+// why.
+
+const FIXTURE_SOURCE_TONE: Record<string, BadgeTone> = {
+  static: "slate",
+  grown: "blue",
+  redteam: "violet",
+};
+
+// "redteam" is the wire value; the chip reads "red-team" like the prose.
+export function fixtureSourceLabel(source: string): string {
+  return source === "redteam" ? "red-team" : source;
+}
+
+// Accuracy from history: correct/compared across every stored run that
+// scored this fixture. Null (rendered as the em-dash sentinel) until a run
+// has compared at least one field — 0/0 is "no history", not 0%.
+export function fixtureAccuracy(f: {
+  fieldsCompared?: number;
+  fieldsCorrect?: number;
+}): number | null {
+  if (!f.fieldsCompared) return null;
+  return (f.fieldsCorrect ?? 0) / f.fieldsCompared;
+}
+
+// Why a static row has no retire button. Null for grown/red-team rows, which
+// are curatable.
+export function retireDisabledReason(source: string): string | null {
+  return source === "static"
+    ? "Static fixtures ship in code — removing one is a code change, not a curation act."
+    : null;
+}
+
+// One-line inventory summary so the card reads at a glance even collapsed.
+export function corpusSummary(report: EvalFixtureReport): string {
+  let staticCount = 0;
+  let grown = 0;
+  let redteam = 0;
+  let retired = 0;
+  for (const f of report.fixtures) {
+    if (f.source === "static") staticCount += 1;
+    else if (f.source === "grown") grown += 1;
+    else if (f.source === "redteam") redteam += 1;
+    if (f.retired) retired += 1;
+  }
+  const parts = [
+    `${report.fixtures.length} fixture(s) — ${staticCount} static, ${grown} grown, ${redteam} red-team`,
+  ];
+  if (retired > 0) parts.push(`${retired} retired`);
+  parts.push(`history from ${report.runsScanned} stored run(s)`);
+  return parts.join(" · ");
+}
+
+// The corpus can run to 200+ rows (red-team growth); render a preview and
+// let the operator expand to everything.
+export const CORPUS_PREVIEW_ROWS = 25;
+export function visibleFixtureCount(total: number, showAll: boolean): number {
+  return showAll ? total : Math.min(total, CORPUS_PREVIEW_ROWS);
+}
+
+function EvalCorpusCard() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const {
+    data: corpus,
+    isLoading,
+    error,
+    refetch,
+  } = useListEvalFixtures({
+    query: { queryKey: getListEvalFixturesQueryKey(), retry: false },
+  });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: getListEvalFixturesQueryKey() });
+
+  const [showAll, setShowAll] = useState(false);
+  const [pendingRetire, setPendingRetire] = useState<EvalFixtureSummary | null>(
+    null,
+  );
+
+  const retire = useRetireEvalFixture({
+    mutation: {
+      onSuccess: (fx) => {
+        invalidate();
+        setPendingRetire(null);
+        toast({
+          title: `Retired ${fx.key}`,
+          description:
+            "It is out of every future evaluation run and canary. Restore it here any time.",
+        });
+      },
+      onError: (e) => {
+        setPendingRetire(null);
+        toast({
+          title: "Could not retire the fixture",
+          description: serverErrorMessage(e) ?? "Try again in a moment.",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+  const restore = useRestoreEvalFixture({
+    mutation: {
+      onSuccess: (fx) => {
+        invalidate();
+        toast({
+          title: `Restored ${fx.key}`,
+          description: "It rejoins the corpus from the next run onward.",
+        });
+      },
+      onError: (e) =>
+        toast({
+          title: "Could not restore the fixture",
+          description: serverErrorMessage(e) ?? "Try again in a moment.",
+          variant: "destructive",
+        }),
+    },
+  });
+
+  const fixtures = corpus?.fixtures ?? [];
+  const shown = fixtures.slice(0, visibleFixtureCount(fixtures.length, showAll));
+  const rowBusy = (key: string) =>
+    (retire.isPending && retire.variables?.key === key) ||
+    (restore.isPending && restore.variables?.key === key);
+
+  return (
+    <Card data-testid="section-eval-corpus">
+      <CardHeader>
+        <CardTitle className="text-base">Evaluation corpus</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Every fixture the evaluation and canaries run over, with its pass
+          history from stored runs. Retiring a grown or red-team fixture
+          removes it from every future run and canary — static fixtures ship
+          in code and stay read-only here.
+        </p>
+        {isLoading ? (
+          <Skeleton className="h-24" />
+        ) : error || !corpus ? (
+          <QueryError
+            thing="the evaluation corpus"
+            onRetry={() => refetch()}
+            detail={error instanceof Error ? error.message : undefined}
+          />
+        ) : fixtures.length === 0 ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-corpus-empty"
+          >
+            No fixtures in the corpus yet.
+          </p>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground" data-testid="text-corpus-summary">
+              {corpusSummary(corpus)}
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="table-eval-corpus">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Fixture</th>
+                    <th className="py-2 pr-3 font-medium">Source</th>
+                    <th className="py-2 pr-3 font-medium">Risk</th>
+                    <th className="py-2 pr-3 font-medium text-right">Runs</th>
+                    <th className="py-2 pr-3 font-medium">Last outcome</th>
+                    <th className="py-2 pr-3 font-medium text-right">
+                      Accuracy
+                    </th>
+                    <th className="py-2 font-medium text-right">Curation</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {shown.map((f) => {
+                    const accuracy = fixtureAccuracy(f);
+                    const staticReason = retireDisabledReason(f.source);
+                    const busy = rowBusy(f.key);
+                    return (
+                      <tr
+                        key={f.key}
+                        className={f.retired ? "opacity-60" : ""}
+                        data-testid={`row-corpus-${f.key}`}
+                      >
+                        <td className="py-2 pr-3">
+                          <span className="block max-w-56 truncate">
+                            {f.label}
+                          </span>
+                          <code className="text-xs text-muted-foreground">
+                            {f.key}
+                          </code>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <span
+                            className={pillClasses(
+                              FIXTURE_SOURCE_TONE[f.source] ?? "slate",
+                            )}
+                          >
+                            {fixtureSourceLabel(f.source)}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <span
+                            className={pillClasses(
+                              EVAL_RISK_TONE[f.riskLabel] ?? "slate",
+                            )}
+                          >
+                            {f.riskLabel}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {f.runs ?? 0}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {f.lastOutcome ? (
+                            <span
+                              className={pillClasses(
+                                EVAL_OUTCOME_TONE[f.lastOutcome] ?? "slate",
+                              )}
+                            >
+                              {f.lastOutcome}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">
+                          {accuracy == null ? "—" : formatPct(accuracy)}
+                          {(f.injectionFixtures ?? 0) > 0 && (
+                            <span className="block text-xs text-muted-foreground">
+                              resisted {f.injectionResisted ?? 0}/
+                              {f.injectionFixtures}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right">
+                          {f.retired ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className={pillClasses("slate")}>
+                                retired
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => restore.mutate({ key: f.key })}
+                                disabled={busy}
+                                data-testid={`button-restore-${f.key}`}
+                              >
+                                {busy ? "Restoring…" : "Restore"}
+                              </Button>
+                            </span>
+                          ) : staticReason ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  className="text-xs text-muted-foreground cursor-help"
+                                  tabIndex={0}
+                                  data-testid={`text-static-${f.key}`}
+                                >
+                                  read-only
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-64">
+                                {staticReason}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setPendingRetire(f)}
+                              disabled={busy}
+                              data-testid={`button-retire-${f.key}`}
+                            >
+                              {busy ? "Retiring…" : "Retire"}
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {fixtures.length > CORPUS_PREVIEW_ROWS && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setShowAll((o) => !o)}
+                data-testid="button-corpus-show-all"
+              >
+                {showAll
+                  ? `Show first ${CORPUS_PREVIEW_ROWS}`
+                  : `Show all ${fixtures.length} fixtures`}
+              </Button>
+            )}
+          </>
+        )}
+
+        {/* Retiring is reversible but consequential — every future run and
+            canary skips the fixture — so it takes an explicit confirm. */}
+        <AlertDialog
+          open={pendingRetire !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingRetire(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Retire {pendingRetire?.key}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Retiring this fixture removes it from every future run and
+                canary. Its past run history is kept, and you can restore it
+                from this table at any time.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-retire">
+                Keep it
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (pendingRetire) retire.mutate({ key: pendingRetire.key });
+                }}
+                data-testid="button-confirm-retire"
+              >
+                Retire fixture
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
@@ -1298,6 +1659,8 @@ export function HealthPanel() {
           )}
         </CardContent>
       </Card>
+
+      <EvalCorpusCard />
 
       {metrics && (
         <Card data-testid="section-platform-spend">

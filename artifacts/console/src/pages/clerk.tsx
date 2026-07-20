@@ -57,6 +57,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { ClerkDisabledBanner, ClerkPageHeader } from "@/components/clerk-shell";
 import { useToast } from "@/hooks/use-toast";
@@ -101,6 +102,7 @@ import {
 } from "@/pages/use-voice-recorder";
 import {
   AlertTriangle,
+  Inbox,
   Mic,
   Plus,
   PowerOff,
@@ -1047,9 +1049,38 @@ export function ClerkWorkspace() {
                 {/* The query is already extraction-only (kind param), so no
                     client-side kind filter is needed here anymore. */}
                 {sortedCases.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No documents read yet.
-                  </p>
+                  // First-run empty state: show the two ways in — a single
+                  // capture, or a multi-invoice bundle (same form, batch
+                  // pre-ticked). Both only OPEN the form; reading still
+                  // takes the operator's click.
+                  <EmptyState
+                    icon={Inbox}
+                    title="No documents read yet"
+                    description="Capture an invoice document, voice note or pasted text — Clerk reads it and queues it here for your review."
+                    className="py-8 px-2"
+                  >
+                    <div className="flex flex-wrap justify-center gap-2 mt-1">
+                      <Button
+                        size="sm"
+                        onClick={() => setCaptureOpen(true)}
+                        data-testid="button-empty-capture"
+                      >
+                        <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
+                        Capture your first document
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setCaptureOpen(true);
+                          setBatchMode(true);
+                        }}
+                        data-testid="button-empty-import-batch"
+                      >
+                        Import a multi-invoice bundle
+                      </Button>
+                    </div>
+                  </EmptyState>
                 ) : (
                   <div className="space-y-2">
                     {queueGroups.map((g) => {
