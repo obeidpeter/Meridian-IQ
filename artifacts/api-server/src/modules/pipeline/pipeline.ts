@@ -652,12 +652,25 @@ async function guardedDrainPass(): Promise<{ ran: boolean; drained: number }> {
   }
 }
 
+// Duplicate-stamp reconciliation hunts a condition the unique(invoiceId)
+// constraint + idempotent insert already prevent at write time — it exists
+// only to surface historical/anomalous rows. Scanning for that every 30s
+// bought nothing, so it rides the reconcile loop at most hourly (module-level
+// timestamp, advanced BEFORE the run so a failing pass also waits out the
+// hour). The stuck-submission re-enqueue stays on the fast cadence — that one
+// is real recovery work.
+const DUPLICATE_STAMP_INTERVAL_MS = 60 * 60 * 1000;
+let lastDuplicateStampSweep = 0;
+
 async function guardedReconcilePass(): Promise<boolean> {
   if (reconciling) return false;
   reconciling = true;
   try {
     await reconcile();
-    await reconcileDuplicateStamps();
+    if (Date.now() - lastDuplicateStampSweep >= DUPLICATE_STAMP_INTERVAL_MS) {
+      lastDuplicateStampSweep = Date.now();
+      await reconcileDuplicateStamps();
+    }
     return true;
   } catch (err) {
     logger.error({ err }, "pipeline reconcile sweep failed");

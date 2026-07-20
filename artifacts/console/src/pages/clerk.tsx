@@ -74,6 +74,7 @@ import {
   approveFormFromCase,
   bulkApproveFormFromCase,
   bulkApproveSummary,
+  bulkDialogPhase,
   clerkDisabledToast,
   correctionHint,
   fastLaneCaseSummary,
@@ -637,7 +638,11 @@ export function ClerkWorkspace() {
         );
         return new Map<string, ClerkPartySuggestions | undefined>(entries);
       },
-      enabled: bulkOpen && bulkIds.length >= 2,
+      // >= 1, not >= 2: the open dialog's list is live, so a refetch can
+      // shrink it below the 2-case button threshold — a single remaining
+      // candidate still needs its party suggestions resolved or it would
+      // render as "will be skipped" forever.
+      enabled: bulkOpen && bulkIds.length >= 1,
       staleTime: 60_000,
       retry: false,
     },
@@ -655,7 +660,19 @@ export function ClerkWorkspace() {
     },
   });
 
+  // Which body the dialog shows: outcomes report, live candidate review, or
+  // the drained state (the open dialog's queue refetched down to zero — an
+  // empty batch would be a contract 400, so confirm disables and the dialog
+  // says why).
+  const bulkPhase = bulkDialogPhase({
+    hasReport: bulkReport !== null,
+    candidateCount: bulkCandidates.length,
+    approvalPending: bulkApprove.isPending,
+  });
+
   const confirmBulkApprove = () => {
+    // Belt and braces behind the disabled button: never send an empty batch.
+    if (bulkCandidates.length === 0) return;
     setBulkLabels(
       new Map(
         bulkCandidates.map((c) => {
@@ -1785,6 +1802,35 @@ export function ClerkWorkspace() {
                 </div>
               );
             })()
+          ) : bulkPhase === "drained" ? (
+            <>
+              {/* The live queue drained the candidate list while the dialog
+                  was open (a refetch, or another operator decided the cases).
+                  Confirm stays disabled — an empty batch is a contract 400 —
+                  and the dialog says why instead of offering a dead button. */}
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="text-bulk-drained"
+              >
+                The queue changed — nothing left to approve. The fast-lane
+                cases were decided or updated while this dialog was open.
+              </p>
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  onClick={closeBulkDialog}
+                  data-testid="button-cancel-bulk-approve"
+                >
+                  Close
+                </Button>
+                <Button
+                  disabled
+                  data-testid="button-confirm-bulk-approve"
+                >
+                  Approve as drafts
+                </Button>
+              </DialogFooter>
+            </>
           ) : (
             <>
               <div

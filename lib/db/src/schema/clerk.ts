@@ -256,10 +256,14 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   updatedAt: updatedAt(),
 },
 // The duplicate-intake guard probes source_hash on every case creation; the
-// queue lists filter by status.
+// queue lists filter by status (the updated_at suffix additionally serves the
+// decision-clock scans — quality watch, adoption, avgDecisionMinutes — that
+// filter status and read/bucket by updated_at; prefix-compatible with the old
+// (status) index); claim-gap mining scans question cases by created_at.
 (t) => [
   index("clerk_cases_source_hash_idx").on(t.sourceHash),
-  index("clerk_cases_status_idx").on(t.status),
+  index("clerk_cases_status_idx").on(t.status, t.updatedAt),
+  index("clerk_cases_kind_created_idx").on(t.kind, t.createdAt),
   // The batch progress join counts a batch's reviewed cases.
   index("clerk_cases_batch_idx").on(t.batchId),
 ]);
@@ -510,6 +514,11 @@ export const clerkClientStatementsTable = pgTable(
       t.clientPartyId,
       t.monthStart,
     ),
+    // The delivery pass scans undelivered rows oldest-first every sweep;
+    // partial so the scan never touches the ever-growing delivered majority.
+    index("clerk_client_statements_undelivered_idx")
+      .on(t.createdAt)
+      .where(sql`delivered_at IS NULL`),
   ],
 );
 export type ClerkClientStatementRow =

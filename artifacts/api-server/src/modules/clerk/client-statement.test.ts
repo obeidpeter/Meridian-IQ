@@ -24,6 +24,7 @@ import {
   listClientStatements,
   monthLabel,
   statementIsQuiet,
+  sweepClientStatements,
 } from "./client-statement.ts";
 import type { CompletionRequest } from "./gateway.ts";
 import {
@@ -108,13 +109,14 @@ const QUIET_FACTS: ClientStatementFacts = {
 async function seedStatement(
   clientPartyId: string,
   facts: ClientStatementFacts,
+  monthStart = MONTH,
 ) {
   const [row] = await getDb()
     .insert(clerkClientStatementsTable)
     .values({
       firmId: firmA,
       clientPartyId,
-      monthStart: MONTH,
+      monthStart,
       facts,
       headline: `Seeded statement ${SALT}`,
       bullets: [],
@@ -404,6 +406,53 @@ test("delivery: quiet statements claim silently — delivered, nothing sent", as
   const claimed = await statementById(row.id);
   assert.ok(claimed.deliveredAt, "the quiet row stops rescanning forever");
   assert.equal((await statementMessagesFor(quietClient)).length, 0);
+});
+
+test("the sweep delivers even while the generation flag is off", async () => {
+  // The clerk_client_statements flag gates GENERATION only: turning it off
+  // must not strand already-generated rows undelivered (they'd otherwise
+  // blast out as a stale backlog on re-enable). Force the flag off, seed an
+  // undelivered row, and run the real sweep.
+  const STATEMENT_FLAG = "clerk_client_statements";
+  const [existing] = await getDb()
+    .select()
+    .from(featureFlagsTable)
+    .where(eq(featureFlagsTable.key, STATEMENT_FLAG))
+    .limit(1);
+  const statementFlagWasEnabled = existing ? existing.enabled : null;
+  await getDb()
+    .insert(featureFlagsTable)
+    .values({ key: STATEMENT_FLAG, enabled: false, description: "test" })
+    .onConflictDoUpdate({
+      target: featureFlagsTable.key,
+      set: { enabled: false },
+    });
+  try {
+    // A quiet row (fresh month — the unique key already holds this client's
+    // MONTH row from the quiet-delivery test): the claim retires it without
+    // needing consent fixtures.
+    const row = await seedStatement(quietClient, QUIET_FACTS, lagosMonthStart(3));
+    // One delivery pass is bounded; other suites' undelivered backlog could
+    // outsize it, so sweep until our row is claimed (bounded — each pass
+    // claims up to 50 rows, so a stuck loop fails the assertion instead of
+    // spinning forever).
+    for (let i = 0; i < 20; i++) {
+      await sweepClientStatements();
+      if ((await statementById(row.id)).deliveredAt) break;
+    }
+    assert.ok(
+      (await statementById(row.id)).deliveredAt,
+      "delivery ran despite the dark generation flag",
+    );
+  } finally {
+    if (statementFlagWasEnabled === null) {
+      await getDb()
+        .delete(featureFlagsTable)
+        .where(eq(featureFlagsTable.key, STATEMENT_FLAG));
+    } else {
+      await setFlag(STATEMENT_FLAG, statementFlagWasEnabled);
+    }
+  }
 });
 
 test("delivery: no layer-1 consent claims the row but sends nothing (CORE-03)", async () => {

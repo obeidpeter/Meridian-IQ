@@ -30,12 +30,19 @@ const QUESTION_MIN = 3;
 const QUESTION_MAX = 2000;
 
 // Pre-phrased to land in the grounded data intents, so a first click answers
-// from the asker's own records instead of a register refusal.
+// from the asker's own records instead of a register refusal. This page
+// serves client_users too (SEC-03), who are only offered the
+// CLIENT_SAFE_DATA_INTENTS subset (api-server modules/clerk/data-intents.ts)
+// — so every chip here must classify to an intent on THAT allowlist, or the
+// chip is a one-click refusal for a client. Check the allowlist before
+// adding or rewording a chip.
 const SUGGESTED_QUESTIONS = [
   "What's overdue?",
   "What did we submit this month?",
   "What invoices haven't gone out?",
-  "Who owes us?",
+  // data.aged_receivables (client-safe) — not "who owes us?", which lands in
+  // data.outstanding_receivables and refuses for client askers.
+  "What's been outstanding longest?",
 ];
 
 function AnswerCard({ answer }: { answer: ClerkAnswer }) {
@@ -93,18 +100,27 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
   );
 }
 
-function AskContent() {
+// Exported for the component tests (the page export wraps it in
+// CapabilityGate, whose useGetMe needs a live session).
+export function AskContent() {
   const { toast } = useToast();
   const [question, setQuestion] = useState("");
   const [disabledBanner, setDisabledBanner] = useState(false);
   // Multi-turn (round 12): follow-ups carry the previous question's scope;
   // the server re-verifies the id belongs to this firm before using it.
   const [previousCaseId, setPreviousCaseId] = useState<string | null>(null);
+  // The rendered answer lives in state, NOT ask.data: submitting a follow-up
+  // resets the mutation's data, which would blank the very answer being
+  // followed up on (and never bring it back if the follow-up errors). Held
+  // here it stays visible through the in-flight follow-up, survives a
+  // follow-up error, and is replaced only by the next answer.
+  const [lastAnswer, setLastAnswer] = useState<ClerkAnswer | null>(null);
 
   const ask = useAskClerk({
     mutation: {
       onSuccess: (row) => {
         setDisabledBanner(false);
+        if (row.answer) setLastAnswer(row.answer);
         // Only a DATA answer carries scope worth threading — keeping the
         // last data-answered id preserves the thread across a refusal or
         // register-claim answer in between.
@@ -199,7 +215,7 @@ function AskContent() {
             </div>
           </CardContent>
         </Card>
-        {ask.data?.answer && <AnswerCard answer={ask.data.answer} />}
+        {lastAnswer && <AnswerCard answer={lastAnswer} />}
         <p className="text-xs text-muted-foreground">
           Looking to send an invoice instead?{" "}
           <Link href="/clerk" className="text-primary hover:underline">

@@ -508,8 +508,10 @@ function EscalationsCard({ escalations }: { escalations: Escalation[] }) {
 // facts (digest posture — template always answers) and NEVER sent by the
 // platform: the client copies it into their own email. The buyer's mined
 // payment rhythm renders alongside so the client knows whether this buyer is
-// late for THEM before chasing at all.
-function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
+// late for THEM before chasing at all. Exported for the component tests
+// (copy-logs-once is a ladder invariant: stage escalation keys off the row
+// count, so a double log falsely hardens the next reminder's tone).
+export function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
   const [copied, setCopied] = useState(false);
   const draft = useDraftPaymentChaser();
   // Chase ladder (round-14 idea #3): copying the draft records it as a SENT
@@ -542,8 +544,12 @@ function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       // Best-effort ladder log: a failure here never blocks the copy. Only
-      // the first copy of a given draft logs (loggedStage guards repeats).
-      if (loggedStage !== draft.data.stage) {
+      // the first copy of a given draft logs — loggedStage guards repeats
+      // after the log lands, and isPending guards rapid re-copies while the
+      // first log is still in flight (loggedStage only updates onSuccess, so
+      // without it a double-click would double-log and falsely escalate the
+      // ladder).
+      if (loggedStage !== draft.data.stage && !logReminder.isPending) {
         logReminder.mutate(
           { invoiceId: invoice.id },
           { onSuccess: (s) => setLoggedStage(s.stage) },

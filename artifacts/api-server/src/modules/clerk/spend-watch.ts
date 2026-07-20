@@ -1,8 +1,7 @@
-import { and, eq, sql } from "drizzle-orm";
-import { getDb, runInBypassContext, auditEventsTable } from "@workspace/db";
-import { logger } from "../../lib/logger";
-import { appendAudit } from "../audit/audit";
+import { sql } from "drizzle-orm";
+import { getDb, runInBypassContext } from "@workspace/db";
 import { registerSweep } from "../pipeline/pipeline";
+import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
 
 // Firm spend anomaly watch. The per-firm monthly budget is a hard monthly
 // cap, and the platform spend meter is a chart someone has to look at — but a
@@ -17,14 +16,6 @@ import { registerSweep } from "../pipeline/pipeline";
 //
 // Thresholds are env-tunable and deliberately need a real baseline: a firm
 // with only a couple of measured days produces medians too noisy to alert on.
-
-// A malformed value (empty string → 0, garbage → NaN) must never produce
-// NaN comparisons or a permanently-silent watch — fall back to the default
-// instead.
-function envThreshold(raw: string | undefined, fallback: number): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
 
 // The absolute floor keeps small firms quiet: 5× a tiny median is still tiny.
 const MIN_TOKENS = envThreshold(process.env.SPEND_ALERT_MIN_TOKENS, 100_000);
@@ -50,18 +41,20 @@ export interface SpendAnomaly {
 
 // Per-firm daily token totals over a trailing window, straight from the
 // inference ledger. Firm-funded traffic only (firm_id NOT NULL — platform
-// traffic has no budget owner to alert about); UTC days, the same boundary
-// posture as the per-firm budgets, and the same token expression budget.ts
-// charges, so the watch counts exactly what the budget counts.
+// traffic has no budget owner to alert about); UTC days pinned explicitly
+// (`AT TIME ZONE 'UTC'` — bare date_trunc on a timestamptz follows the
+// SESSION timezone, not UTC), the same boundary posture as the per-firm
+// budgets, and the same token expression budget.ts charges, so the watch
+// counts exactly what the budget counts.
 export async function firmSpendDays(days = 15): Promise<FirmSpendDay[]> {
   const rows = (
     await getDb().execute<{ firm_id: string; day: string; tokens: number }>(sql`
       SELECT firm_id,
-        to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
+        to_char(date_trunc('day', created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
         SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0))::int AS tokens
       FROM clerk_inference_calls
       WHERE firm_id IS NOT NULL
-        AND created_at >= date_trunc('day', now()) - make_interval(days => ${days})
+        AND created_at >= (date_trunc('day', now() AT TIME ZONE 'UTC') - make_interval(days => ${days})) AT TIME ZONE 'UTC'
       GROUP BY 1, 2
       ORDER BY 1, 2
     `)
@@ -129,14 +122,14 @@ export interface SpendWatchDeps {
 
 const realDeps: SpendWatchDeps = { spendDays: firmSpendDays };
 
-// One alert per (firm, day): the append-only audit ledger is the durable
-// cross-instance dedup key (entity_id = "firmId:day"), fronted by an
-// in-process cache so the day-long tail of a detected spike doesn't re-query
-// the ledger every sweep minute. Two instances FIRST detecting the same spike
-// simultaneously can, in the worst case, both append (the audit advisory lock
-// serializes the appends, not the check-then-append) — a harmless duplicate
-// history row, accepted rather than adding a lock.
-const alertedFirmDays = new Set<string>();
+// One alert per (firm, day): entity_id = "firmId:day"; dedup discipline in
+// alertOnceViaAuditLedger (audit ledger as the durable cross-instance key,
+// in-process cache in front).
+const alertSpendAnomaly = alertOnceViaAuditLedger({
+  action: SPEND_ANOMALY_ACTION,
+  entityType: "clerk_spend",
+  actorId: "spend-watch",
+});
 
 export async function sweepSpendWatch(
   deps: SpendWatchDeps = realDeps,
@@ -145,31 +138,9 @@ export async function sweepSpendWatch(
     const anomalies = detectSpendAnomalies(await deps.spendDays());
     let alerted = 0;
     for (const anomaly of anomalies) {
-      const key = `${anomaly.firmId}:${anomaly.day}`;
-      if (alertedFirmDays.has(key)) continue;
-
-      const [existing] = await getDb()
-        .select({ seq: auditEventsTable.seq })
-        .from(auditEventsTable)
-        .where(
-          and(
-            eq(auditEventsTable.action, SPEND_ANOMALY_ACTION),
-            eq(auditEventsTable.entityId, key),
-          ),
-        )
-        .limit(1);
-      if (existing) {
-        alertedFirmDays.add(key);
-        continue;
-      }
-
-      await appendAudit({
-        actorId: "spend-watch",
-        actorRole: "system",
-        action: SPEND_ANOMALY_ACTION,
-        entityType: "clerk_spend",
-        entityId: key,
-        after: {
+      const appended = await alertSpendAnomaly(
+        `${anomaly.firmId}:${anomaly.day}`,
+        {
           firmId: anomaly.firmId,
           day: anomaly.day,
           tokens: anomaly.tokens,
@@ -177,16 +148,12 @@ export async function sweepSpendWatch(
           reason:
             "The firm's latest-day Clerk token spend spiked materially above its own trailing baseline; review the firm's ledger traffic before the monthly budget absorbs it.",
         },
-      });
-      logger.error(
-        { ...anomaly },
         "Firm Clerk spend SPIKED above its own baseline: review the firm's inference traffic (runaway integration, scripted client or compromised session) on the Clerk health page.",
       );
-      alertedFirmDays.add(key);
-      alerted += 1;
+      if (appended) alerted += 1;
     }
     return { checked: true, anomalies: anomalies.length, alerted };
   });
 }
 
-registerSweep(sweepSpendWatch);
+registerSweep(atMostHourly(sweepSpendWatch));

@@ -97,8 +97,8 @@ export async function firmClerkUsageByPurpose(
 //    day-one spikes project absurdly and would train firms to ignore it.
 export type BudgetPaceBand = "ok" | "warning" | "critical";
 
-export const PACE_WARNING_USED_FRACTION = 0.8;
-export const PACE_MIN_ELAPSED_FRACTION = 0.25;
+const PACE_WARNING_USED_FRACTION = 0.8;
+const PACE_MIN_ELAPSED_FRACTION = 0.25;
 
 export function budgetPace(
   usage: Pick<FirmClerkUsage, "monthStart" | "usedTokens" | "budgetTokens">,

@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { and, desc, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -378,7 +378,12 @@ export async function creatorClientParty(
         clientPartyId: membershipsTable.clientPartyId,
       })
       .from(membershipsTable)
-      .where(eq(membershipsTable.userId, userId)),
+      .where(eq(membershipsTable.userId, userId))
+      // Deterministic pick for a user with several client memberships: the
+      // OLDEST client_user row wins, every time — an unordered scan would let
+      // the plan decide which sibling party scopes the preflight (SEC-03).
+      // Same rule as the inbound email rail's sender resolution.
+      .orderBy(asc(membershipsTable.createdAt)),
   );
   const clientMembership = rows.find((r) => r.role === "client_user");
   return clientMembership?.clientPartyId ?? null;
@@ -434,6 +439,10 @@ export async function retryExtraction(
     // who created the case is the one who reads its preflight (SEC-03).
     await creatorClientParty(existing.createdBy),
   );
+  // The retry route runs OUTSIDE the request transaction (app.ts
+  // NO_CONTEXT_ROUTE_PATTERNS) — with no ambient context, appendAudit's
+  // getDb() is the raw pool and the event commits in its own transaction, so
+  // this write is durable on that path too.
   await appendAudit({
     actorId,
     action: "clerk.case.retry",

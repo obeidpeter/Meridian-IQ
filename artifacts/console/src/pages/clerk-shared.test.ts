@@ -9,6 +9,7 @@ import {
   approveFormFromCase,
   bulkApproveFormFromCase,
   bulkApproveSummary,
+  bulkDialogPhase,
   fastLaneCaseSummary,
   isReadyToApprove,
   vatFractionFromPercent,
@@ -631,5 +632,68 @@ describe("groupQueueByBatch", () => {
 
   test("an empty queue groups to nothing", () => {
     expect(groupQueueByBatch([])).toEqual([]);
+  });
+});
+
+// The bulk dialog's candidate list is live (the queue refetches while it is
+// open), so it can drain to zero underneath the dialog. An empty batch is a
+// contract 400 — the drained phase is what keeps confirm disabled and puts
+// an explanation where the rows were.
+describe("bulkDialogPhase", () => {
+  test("candidates on screen review as normal", () => {
+    expect(
+      bulkDialogPhase({
+        hasReport: false,
+        candidateCount: 3,
+        approvalPending: false,
+      }),
+    ).toBe("review");
+  });
+
+  test("zero remaining candidates is drained — never a live confirm over an empty batch", () => {
+    expect(
+      bulkDialogPhase({
+        hasReport: false,
+        candidateCount: 0,
+        approvalPending: false,
+      }),
+    ).toBe("drained");
+  });
+
+  test("a single remaining candidate still reviews (the dialog outlives the 2-case button threshold)", () => {
+    expect(
+      bulkDialogPhase({
+        hasReport: false,
+        candidateCount: 1,
+        approvalPending: false,
+      }),
+    ).toBe("review");
+  });
+
+  test("in-flight approval stays in review even if the live list drains — the batch was snapshotted at click", () => {
+    expect(
+      bulkDialogPhase({
+        hasReport: false,
+        candidateCount: 0,
+        approvalPending: true,
+      }),
+    ).toBe("review");
+  });
+
+  test("the report owns the dialog once it is in, whatever the live list says", () => {
+    expect(
+      bulkDialogPhase({
+        hasReport: true,
+        candidateCount: 0,
+        approvalPending: false,
+      }),
+    ).toBe("report");
+    expect(
+      bulkDialogPhase({
+        hasReport: true,
+        candidateCount: 5,
+        approvalPending: false,
+      }),
+    ).toBe("report");
   });
 });

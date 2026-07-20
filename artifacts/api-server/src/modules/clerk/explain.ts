@@ -58,7 +58,9 @@ export interface FailureExplanation {
 export async function explainInvoiceFailure(
   invoiceId: string,
   principal: Principal,
-  gateway: ClerkGateway,
+  // Null when no provider is available (routes pass gatewayOrNull()): the
+  // grounded catalogue text answers, per the digest posture above.
+  gateway: ClerkGateway | null,
 ): Promise<FailureExplanation> {
   const [invoice] = await getDb()
     .select({
@@ -114,9 +116,11 @@ export async function explainInvoiceFailure(
     source: "catalogue",
   };
 
-  // Clerk phrasing is best-effort: kill switch off or budget spent → the
-  // grounded catalogue text is the answer, not an error.
-  if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return catalogueFallback;
+  // Clerk phrasing is best-effort: no provider, kill switch off or budget
+  // spent → the grounded catalogue text is the answer, not an error.
+  if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) {
+    return catalogueFallback;
+  }
   const tenant = tenantFirmId(principal);
   if (tenant) {
     try {

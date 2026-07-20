@@ -61,7 +61,31 @@ const NO_CONTEXT_ROUTES = new Set([
   // should buffer in tenantContext, and the detached model calls must not
   // inherit (or outlive) a per-request transaction.
   "POST /api/inbound/email",
+  // No model call, but up to 50 decideCase items each append audit rows —
+  // and appendAudit serializes on a GLOBAL advisory xact lock. Inside one
+  // request transaction the first item's audit lock would be held until the
+  // whole batch commits (a platform-wide appendAudit convoy, plus a deadlock
+  // window against the row-lock→audit-lock order of reject/claim). Instead
+  // each item commits in its own short bypass transaction (bulk-approve.ts),
+  // holding the audit lock per item only.
+  "POST /api/clerk/cases/bulk-approve",
 ]);
+
+// Parameterized-path variant of NO_CONTEXT_ROUTES: the Set above can only
+// match literal paths, so routes with an :id segment that must skip the
+// request transaction are listed here as method + pattern instead. Keep this
+// list short — every entry gives up the ambient-transaction atomicity and
+// must manage its own commits (clerk scope.ts / raw-pool audit).
+const NO_CONTEXT_ROUTE_PATTERNS: ReadonlyArray<{
+  method: string;
+  pattern: RegExp;
+}> = [
+  // Case retry re-runs a FULL extraction on the stored source — up to a
+  // 4-page vision call — exactly the multi-second provider work the capture
+  // routes above are exempted for; its writes commit via inClerkScope and
+  // the audit row lands on the raw pool.
+  { method: "POST", pattern: /^\/api\/clerk\/cases\/[^/]+\/retry$/ },
+];
 
 // Hard cap on how long a request may hold its transaction open. A handler that
 // never responds (and whose socket never closes) would otherwise pin a pooled
@@ -92,7 +116,10 @@ class RequestRollback extends Error {}
 function tenantContext(req: Request, res: Response, next: NextFunction): void {
   if (
     NO_CONTEXT_PATHS.has(req.path) ||
-    NO_CONTEXT_ROUTES.has(`${req.method} ${req.path}`)
+    NO_CONTEXT_ROUTES.has(`${req.method} ${req.path}`) ||
+    NO_CONTEXT_ROUTE_PATTERNS.some(
+      (r) => r.method === req.method && r.pattern.test(req.path),
+    )
   ) {
     next();
     return;

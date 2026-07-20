@@ -32,7 +32,7 @@ const THUMB_WIDTH = 500;
 // Full-page render width for extraction — same as single-scan capture.
 const EXTRACT_WIDTH = 1600;
 
-export const SEGMENT_SCAN_PROMPT_VERSION = "segment-scan.v1";
+const SEGMENT_SCAN_PROMPT_VERSION = "segment-scan.v1";
 const SEGMENT_SCAN_SYSTEM = [
   "You see the pages of ONE scanned bundle containing several invoices, as page images in document order.",
   "Propose how the pages split into individual invoice documents: contiguous page ranges, in order, covering every page exactly once.",

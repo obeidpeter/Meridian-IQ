@@ -60,12 +60,29 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
   );
 }
 
+// TanStack v5 resets mutation.data the moment the next mutate() starts, so an
+// answer rendered straight off the mutation would vanish exactly when the
+// operator wants to re-read it — while their follow-up is in flight. The page
+// therefore holds the last rendered answer itself: replaced on success
+// (refusals included — a refusal IS the newest answer), kept through a
+// pending follow-up and kept when the follow-up errors.
+export function heldAnswer(
+  previous: ClerkAnswer | null,
+  outcome:
+    | { type: "success"; answer: ClerkAnswer | null | undefined }
+    | { type: "error" },
+): ClerkAnswer | null {
+  return outcome.type === "success" ? (outcome.answer ?? null) : previous;
+}
+
 // Routed Ask page inside the Clerk shell. Now that Ask is its own route
 // (not an unmounting tab), the question state and the ask mutation live here.
 export function ClerkAskPage() {
   usePageTitle("Ask Clerk");
   const ask = useAskClerk();
   const [question, setQuestion] = useState("");
+  // The last answer shown, held in component state (see heldAnswer above).
+  const [answer, setAnswer] = useState<ClerkAnswer | null>(null);
   // Multi-turn (round 12): the previous answered case threads follow-ups —
   // "and for June?" reuses the last lookup's platform-recorded scope. The
   // server re-verifies the id belongs to this firm before using it.
@@ -93,15 +110,23 @@ export function ClerkAskPage() {
               // the last data-answered id preserves the thread across a
               // refusal or register-claim answer in between.
               onSuccess: (row) => {
+                setAnswer((prev) =>
+                  heldAnswer(prev, { type: "success", answer: row.answer }),
+                );
                 if (row.answer?.answered && row.answer?.dataIntent) {
                   setPreviousCaseId(row.id);
                 }
+              },
+              // A failed follow-up keeps the previous answer on screen — it
+              // is still the newest truth the operator was given.
+              onError: () => {
+                setAnswer((prev) => heldAnswer(prev, { type: "error" }));
               },
             },
           )
         }
         isPending={ask.isPending}
-        answer={ask.data?.answer}
+        answer={answer}
       />
     </div>
   );

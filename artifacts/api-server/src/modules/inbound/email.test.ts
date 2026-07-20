@@ -50,15 +50,19 @@ const DOMAIN = `${SALT}.inbound-test.local`;
 
 const firm1 = randomUUID();
 const firmBroke = randomUUID();
+const firmCapped = randomUUID();
 const clientParty = randomUUID();
 const brokePartyId = randomUUID();
+const cappedPartyId = randomUUID();
 const clientUserId = randomUUID();
 const staffUserId = randomUUID();
 const brokeUserId = randomUUID();
+const cappedUserId = randomUUID();
 
 const CLIENT_EMAIL = `client@${DOMAIN}`;
 const STAFF_EMAIL = `staff@${DOMAIN}`;
 const BROKE_EMAIL = `broke@${DOMAIN}`;
+const CAPPED_EMAIL = `capped@${DOMAIN}`;
 
 const okExtraction = () => JSON.stringify({ fields: [], lines: [] });
 
@@ -119,15 +123,18 @@ before(async () => {
   await db.insert(firmsTable).values([
     { id: firm1, name: `Inbound Firm ${SALT}` },
     { id: firmBroke, name: `Inbound Broke Firm ${SALT}` },
+    { id: firmCapped, name: `Inbound Capped Firm ${SALT}` },
   ]);
   await db.insert(partiesTable).values([
     { id: clientParty, type: "client_business", legalName: `Inbound Client ${SALT}` },
     { id: brokePartyId, type: "client_business", legalName: `Inbound Broke ${SALT}` },
+    { id: cappedPartyId, type: "client_business", legalName: `Inbound Capped ${SALT}` },
   ]);
   await db.insert(usersTable).values([
     { id: clientUserId, email: CLIENT_EMAIL },
     { id: staffUserId, email: STAFF_EMAIL },
     { id: brokeUserId, email: BROKE_EMAIL },
+    { id: cappedUserId, email: CAPPED_EMAIL },
   ]);
   await db.insert(membershipsTable).values([
     {
@@ -142,6 +149,12 @@ before(async () => {
       firmId: firmBroke,
       role: "client_user",
       clientPartyId: brokePartyId,
+    },
+    {
+      userId: cappedUserId,
+      firmId: firmCapped,
+      role: "client_user",
+      clientPartyId: cappedPartyId,
     },
   ]);
   // Spend the broke firm's entire default allowance (2,000,000 tokens) so its
@@ -388,6 +401,46 @@ test("resolved sender: PDF walks the text path, PNG the vision path, cases stamp
       ]),
     );
   assert.equal(again.length, 2, "still exactly one case per attachment");
+});
+
+test("daily attachment cap: over-cap attachments audit-skip, counted from the durable receipts", async () => {
+  const savedCap = process.env.INBOUND_EMAIL_DAILY_CAP;
+  process.env.INBOUND_EMAIL_DAILY_CAP = "2";
+  try {
+    const csv = (tag: string) => ({
+      filename: `${tag}-${SALT}.csv`,
+      contentType: "text/csv",
+      contentBase64: PNG_B64,
+    });
+    // Fresh firm, cap 2, three attachments: the first two consume the day's
+    // allowance (and then skip as unsupported — no provider needed), the
+    // third is refused by the cap itself.
+    const first = await processInboundEmail({
+      sender: CAPPED_EMAIL,
+      attachments: [csv("cap-a"), csv("cap-b"), csv("cap-c")],
+    });
+    assert.equal(first.resolved, true);
+    assert.deepEqual(
+      first.skipped.map((s) => s.reason),
+      ["UNSUPPORTED_TYPE", "UNSUPPORTED_TYPE", "INBOUND_DAILY_CAP"],
+    );
+
+    // The receipt of the first email (3 attachments in caseIds+skipped) now
+    // exceeds the cap, so a second email is refused entirely — the count
+    // comes from the audit trail, not process memory.
+    const second = await processInboundEmail({
+      sender: CAPPED_EMAIL,
+      attachments: [csv("cap-d")],
+    });
+    assert.equal(second.resolved, true);
+    assert.deepEqual(
+      second.skipped.map((s) => s.reason),
+      ["INBOUND_DAILY_CAP"],
+    );
+  } finally {
+    if (savedCap === undefined) delete process.env.INBOUND_EMAIL_DAILY_CAP;
+    else process.env.INBOUND_EMAIL_DAILY_CAP = savedCap;
+  }
 });
 
 test("exhausted budget: audit-skip before any provider work, nothing thrown", async () => {

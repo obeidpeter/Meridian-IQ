@@ -50,8 +50,10 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { usePendingPoll } from "@/hooks/usePendingPoll";
 import { apiErrorMessage, isFeatureUnavailable } from "@/lib/api-error";
 import { formatCurrency, formatDate, humanize } from "@/lib/format";
+import { PENDING_POLL_STALLED_MESSAGE } from "@/lib/pending-poll";
 import { useSession } from "@/lib/session";
 
 // The server rejects statements above 4M characters (SEC-M3); catch that
@@ -143,6 +145,13 @@ export default function ReconciliationScreen() {
     message: string;
   } | null>(null);
 
+  // Proposal generation runs async in the worker after a commit; poll until
+  // every committed statement reports `reconciled` — but bounded: only while
+  // this screen is focused, and never past the 10-minute cap (a statement
+  // stuck matching that long is the worker's problem, not the phone's).
+  const statementsPoll = usePendingPoll();
+  const proposalsPoll = usePendingPoll();
+
   const statementsQuery = useListBankStatements(
     { clientPartyId: clientPartyId ?? "" },
     {
@@ -152,12 +161,10 @@ export default function ReconciliationScreen() {
           clientPartyId: clientPartyId ?? "",
         }),
         retry: false,
-        // Proposal generation runs async in the worker after a commit; keep
-        // polling until every committed statement reports `reconciled`.
         refetchInterval: (query) =>
-          (query.state.data ?? []).some((s) => s.status === "committed")
-            ? 3000
-            : false,
+          statementsPoll.interval(
+            (query.state.data ?? []).some((s) => s.status === "committed"),
+          ),
       },
     },
   );
@@ -178,11 +185,11 @@ export default function ReconciliationScreen() {
       enabled: !!selectedId,
       queryKey: getListBankStatementProposalsQueryKey(selectedId ?? ""),
       retry: false,
-      // A just-committed statement has no proposals yet — poll until the
-      // reconcile worker finishes. (`validated` previews never advance, so
-      // only `committed` warrants polling.)
-      refetchInterval:
-        selectedStatement?.status === "committed" ? 3000 : false,
+      // A just-committed statement has no proposals yet — poll (bounded,
+      // focus-gated) until the reconcile worker finishes. (`validated`
+      // previews never advance, so only `committed` warrants polling.)
+      refetchInterval: () =>
+        proposalsPoll.interval(selectedStatement?.status === "committed"),
     },
   });
 
@@ -605,6 +612,11 @@ export default function ReconciliationScreen() {
                   );
                 })
               )}
+              {statementsPoll.stalled ? (
+                <AppText variant="caption" color={colors.mutedForeground}>
+                  {PENDING_POLL_STALLED_MESSAGE}
+                </AppText>
+              ) : null}
             </View>
 
             {selectedStatement ? (
@@ -735,6 +747,11 @@ export default function ReconciliationScreen() {
                     );
                   })
                 )}
+                {proposalsPoll.stalled ? (
+                  <AppText variant="caption" color={colors.mutedForeground}>
+                    {PENDING_POLL_STALLED_MESSAGE}
+                  </AppText>
+                ) : null}
               </View>
             ) : null}
           </View>

@@ -1,8 +1,7 @@
-import { and, eq, sql } from "drizzle-orm";
-import { getDb, runInBypassContext, auditEventsTable } from "@workspace/db";
-import { logger } from "../../lib/logger";
-import { appendAudit } from "../audit/audit";
+import { sql } from "drizzle-orm";
+import { getDb, runInBypassContext } from "@workspace/db";
 import { registerSweep } from "../pipeline/pipeline";
+import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
 
 // Kept-rate drift watch — the accuracy sibling of resistance-watch.ts. The
 // corrections exhaust (every field an operator kept or overrode at approval)
@@ -18,13 +17,6 @@ import { registerSweep } from "../pipeline/pipeline";
 //
 // Thresholds are env-tunable and deliberately need a real sample: a month
 // with a handful of compared fields produces rates too noisy to alert on.
-
-// A malformed value (empty string → 0, garbage → NaN) must never produce
-// NaN rates or a permanently-silent watch — fall back to the default instead.
-function envThreshold(raw: string | undefined, fallback: number): number {
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
 
 const MIN_FIELDS = envThreshold(process.env.QUALITY_ALERT_MIN_FIELDS, 50);
 const DROP_POINTS = envThreshold(process.env.QUALITY_ALERT_DROP_POINTS, 0.1);
@@ -51,7 +43,9 @@ export interface QualityDrop {
 // header AND line entries live in the same `corrections` jsonb array), and
 // the decision timestamp is `updated_at` (the decision write; decided cases
 // take no further writes — the same expression as avgDecisionMinutes), with
-// the injection trend's to_char/date_trunc month bucketing.
+// the injection trend's to_char/date_trunc month bucketing, pinned to UTC
+// explicitly (`AT TIME ZONE 'UTC'` — bare date_trunc on a timestamptz
+// follows the SESSION timezone, not UTC).
 export async function keptRateMonths(monthsBack = 5): Promise<KeptRateMonth[]> {
   const rows = (
     await getDb().execute<{
@@ -59,14 +53,14 @@ export async function keptRateMonths(monthsBack = 5): Promise<KeptRateMonth[]> {
       fields: number;
       kept: number;
     }>(sql`
-      SELECT to_char(date_trunc('month', c.updated_at), 'YYYY-MM') AS month,
+      SELECT to_char(date_trunc('month', c.updated_at AT TIME ZONE 'UTC'), 'YYYY-MM') AS month,
         COUNT(*)::int AS fields,
         COUNT(*) FILTER (WHERE NOT (cor ->> 'changed')::boolean)::int AS kept
       FROM clerk_cases c, LATERAL jsonb_array_elements(c.corrections) AS cor
       WHERE c.kind = 'extraction'
         AND c.status = 'approved'
         AND c.corrections IS NOT NULL
-        AND c.updated_at >= date_trunc('month', now()) - make_interval(months => ${monthsBack})
+        AND c.updated_at >= (date_trunc('month', now() AT TIME ZONE 'UTC') - make_interval(months => ${monthsBack})) AT TIME ZONE 'UTC'
       GROUP BY 1
       ORDER BY 1
     `)
@@ -128,14 +122,14 @@ export interface QualityWatchDeps {
 
 const realDeps: QualityWatchDeps = { months: keptRateMonths };
 
-// One alert per degraded month: the append-only audit ledger is the durable
-// cross-instance dedup key (entity_id = the month that dropped), fronted by
-// an in-process cache so the month-long tail of a detected drop doesn't
-// re-query the ledger every sweep minute. Two instances FIRST detecting the
-// same drop simultaneously can, in the worst case, both append (the audit
-// advisory lock serializes the appends, not the check-then-append) — a
-// harmless duplicate history row, accepted rather than adding a lock.
-const alertedMonths = new Set<string>();
+// One alert per degraded month: entity_id = the month that dropped; dedup
+// discipline in alertOnceViaAuditLedger (audit ledger as the durable
+// cross-instance key, in-process cache in front).
+const alertQualityDrop = alertOnceViaAuditLedger({
+  action: QUALITY_DROP_ACTION,
+  entityType: "clerk_quality",
+  actorId: "quality-watch",
+});
 
 export async function sweepQualityWatch(
   deps: QualityWatchDeps = realDeps,
@@ -143,32 +137,10 @@ export async function sweepQualityWatch(
   return runInBypassContext(async () => {
     const drop = detectQualityDrop(await deps.months());
     if (!drop) return { checked: true, dropped: false, alerted: false };
-    if (alertedMonths.has(drop.toMonth)) {
-      return { checked: true, dropped: true, alerted: false };
-    }
 
-    const [existing] = await getDb()
-      .select({ seq: auditEventsTable.seq })
-      .from(auditEventsTable)
-      .where(
-        and(
-          eq(auditEventsTable.action, QUALITY_DROP_ACTION),
-          eq(auditEventsTable.entityId, drop.toMonth),
-        ),
-      )
-      .limit(1);
-    if (existing) {
-      alertedMonths.add(drop.toMonth);
-      return { checked: true, dropped: true, alerted: false };
-    }
-
-    await appendAudit({
-      actorId: "quality-watch",
-      actorRole: "system",
-      action: QUALITY_DROP_ACTION,
-      entityType: "clerk_quality",
-      entityId: drop.toMonth,
-      after: {
+    const alerted = await alertQualityDrop(
+      drop.toMonth,
+      {
         fromMonth: drop.fromMonth,
         toMonth: drop.toMonth,
         fromRate: drop.fromRate,
@@ -177,14 +149,10 @@ export async function sweepQualityWatch(
         reason:
           "Extraction kept-rate fell materially below the previous measured month; review the corrections exhaust and recent model/prompt changes on the Clerk health page.",
       },
-    });
-    logger.error(
-      { ...drop },
       "Extraction kept-rate DROPPED month-over-month: review Clerk health (corrections exhaust, calibration, recent model or prompt changes) before trusting new extractions unreviewed.",
     );
-    alertedMonths.add(drop.toMonth);
-    return { checked: true, dropped: true, alerted: true };
+    return { checked: true, dropped: true, alerted };
   });
 }
 
-registerSweep(sweepQualityWatch);
+registerSweep(atMostHourly(sweepQualityWatch));

@@ -1,5 +1,5 @@
-import { sql } from "drizzle-orm";
-import { getDb } from "@workspace/db";
+import { and, eq, lt, sql } from "drizzle-orm";
+import { getDb, clerkCasesTable } from "@workspace/db";
 import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
 import { isFeatureEnabled, setFlag } from "../flags/flags";
@@ -97,6 +97,63 @@ export async function runClerkWatchdog(
   return { checked: true, tripped: true, sample: total, badRate };
 }
 
+// Stuck-pending recovery. An extraction case sits in `pending` only for the
+// duration of one model call; a process death (deploy, OOM, crash) mid-call
+// strands it there forever — undecidable (review wants `extracted`),
+// unretryable (retry wants `failed`), exempt from the content-retention sweep
+// (which purges terminal states only), and worst of all BLOCKING the
+// duplicate guard: re-uploading the same document — including an inbound-
+// email redelivery — 409s with DUPLICATE_SOURCE against a case nobody can
+// act on. This sweep flips pending extraction cases older than a threshold
+// to `failed` with a stored reason, which makes them retryable, purgeable
+// and non-blocking (the duplicate guard already skips failed/rejected).
+// Zero model calls; runs regardless of the kill switch — a tripped switch
+// mid-call is exactly one of the ways cases get stuck.
+//
+// The threshold must comfortably exceed any legitimate model call (the
+// longest are multi-page vision extractions, well under a minute each).
+const STUCK_PENDING_MINUTES = Number(
+  process.env.CLERK_STUCK_PENDING_MINUTES ?? 15,
+);
+
+export async function sweepStuckPendingCases(): Promise<number> {
+  const minutes = STUCK_PENDING_MINUTES;
+  if (!Number.isFinite(minutes) || minutes < 1) return 0;
+  const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+  const rows = await getDb()
+    .update(clerkCasesTable)
+    .set({
+      status: "failed",
+      failReason: `Extraction never completed — the process handling this case stopped mid-call. Marked failed by the watchdog after ${minutes} minutes; retry the case or re-upload the document.`,
+    })
+    .where(
+      and(
+        eq(clerkCasesTable.kind, "extraction"),
+        eq(clerkCasesTable.status, "pending"),
+        lt(clerkCasesTable.createdAt, cutoff),
+      ),
+    )
+    .returning({ id: clerkCasesTable.id });
+  for (const row of rows) {
+    await appendAudit({
+      actorId: "clerk-watchdog",
+      actorRole: "system",
+      action: "clerk.case.stuck_pending_failed",
+      entityType: "clerk_case",
+      entityId: row.id,
+      after: { thresholdMinutes: minutes },
+    });
+  }
+  if (rows.length > 0) {
+    logger.warn(
+      { recovered: rows.length, thresholdMinutes: minutes },
+      "Clerk watchdog: stuck pending extraction cases flipped to failed (retryable, purgeable, duplicate guard unblocked).",
+    );
+  }
+  return rows.length;
+}
+
 registerSweep(runClerkWatchdog);
+registerSweep(sweepStuckPendingCases);
 registerSweep(sweepExpiredClaims);
 registerSweep(sweepExpiredCaseContent);

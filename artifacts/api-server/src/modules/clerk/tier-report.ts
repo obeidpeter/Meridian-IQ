@@ -11,13 +11,13 @@ import { CLERK_MODEL, modelForPurpose, parseModelTiers } from "./provider";
 // by editing env config, and the prompt canary already exists to validate
 // any switch before it ships.
 
-export const TIER_REPORT_WINDOW_DAYS = 90;
+const TIER_REPORT_WINDOW_DAYS = 90;
 // Below this many calls the validity rate is noise, not evidence.
 export const TIER_MIN_CALLS = 50;
 // A cheap tier must hold schema-valid output at effectively production
 // quality; under this the recommendation is to keep (or revert to) the
 // default model.
-export const TIER_VALID_THRESHOLD = 0.99;
+const TIER_VALID_THRESHOLD = 0.99;
 
 // Extraction is where corrections carry real money, and evals must measure
 // what production extraction runs — never tier these on validity alone.

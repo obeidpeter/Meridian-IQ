@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { and, desc, eq } from "drizzle-orm";
-import { getDb, runInBypassContext, auditEventsTable } from "@workspace/db";
+import { runInBypassContext } from "@workspace/db";
 import {
   detectResistanceDrop,
   injectionResistanceMonths,
@@ -10,6 +9,7 @@ import {
   type ResistanceMonth,
 } from "./resistance-watch.ts";
 import { getClerkMetrics } from "./metrics.ts";
+import { latestAuditEvent } from "../../test-helpers/audit.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Resistance-drop alert (round-8 idea #2). Pinned invariants:
@@ -89,22 +89,7 @@ test("the sweep alerts once per degraded month via the audit ledger", async () =
   const first = await sweepResistanceWatch({ months });
   assert.deepEqual(first, { checked: true, dropped: true, alerted: true });
 
-  const [event] = await runInBypassContext(() =>
-    getDb()
-      .select({
-        entityId: auditEventsTable.entityId,
-        after: auditEventsTable.after,
-      })
-      .from(auditEventsTable)
-      .where(
-        and(
-          eq(auditEventsTable.action, RESISTANCE_DROP_ACTION),
-          eq(auditEventsTable.entityId, toMonth),
-        ),
-      )
-      .orderBy(desc(auditEventsTable.seq))
-      .limit(1),
-  );
+  const event = await latestAuditEvent(RESISTANCE_DROP_ACTION, toMonth);
   assert.ok(event, "the drop landed in the audit ledger");
   assert.equal((event.after as { fromMonth?: string }).fromMonth, fromMonth);
   assert.equal((event.after as { toRate?: number }).toRate, 0.5);

@@ -14,7 +14,7 @@ import { fanOutAlert } from "../messaging/fan-out";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
-import { lagosParts } from "../../lib/lagos-time";
+import { lagosParts, lagosWindowSql } from "../../lib/lagos-time";
 import { assertFirmClerkBudget } from "./budget";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
 import { getClerkGateway } from "./provider";
@@ -108,6 +108,9 @@ export async function computeClientStatementFacts(
   clientPartyId: string,
   monthStart: string,
 ): Promise<ClientStatementFacts> {
+  // The in-month attempt window (Lagos calendar) is shared with every other
+  // Lagos bucketing predicate via lagosWindowSql.
+  const inMonth = lagosWindowSql(sql`sa.created_at`, monthStart);
   const rows = (
     await getDb().execute<{
       issued: number;
@@ -126,44 +129,35 @@ export async function computeClientStatementFacts(
           AND i.supplier_party_id = ${clientPartyId}
           AND i.issue_date >= ${monthStart}::date
           AND i.issue_date < ${monthStart}::date + interval '1 month'
+      ),
+      -- Accepted by the rails DURING the month, whatever month the invoice
+      -- was issued in (mirrors data.submitted_this_month). One CTE, one
+      -- predicate — the three accepted facts below must agree by construction.
+      accepted_invoices AS (
+        SELECT i.*
+        FROM invoices i
+        WHERE i.kind = 'invoice'
+          AND i.firm_id = ${firmId}
+          AND i.supplier_party_id = ${clientPartyId}
+          AND EXISTS (
+            SELECT 1 FROM submission_attempts sa
+            WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
+              AND ${inMonth}
+          )
       )
       SELECT
         (SELECT COUNT(*) FROM month_invoices)::int AS issued,
         (SELECT COALESCE(SUM(grand_total), 0) FROM month_invoices)::text AS issued_total,
-        -- Accepted by the rails DURING the month, whatever month the invoice
-        -- was issued in (mirrors data.submitted_this_month).
-        (SELECT COUNT(*) FROM invoices i WHERE i.kind = 'invoice'
-          AND i.firm_id = ${firmId} AND i.supplier_party_id = ${clientPartyId}
-          AND EXISTS (
-            SELECT 1 FROM submission_attempts sa
-            WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
-              AND sa.created_at AT TIME ZONE 'Africa/Lagos' >= ${monthStart}::timestamp
-              AND sa.created_at AT TIME ZONE 'Africa/Lagos' < ${monthStart}::timestamp + interval '1 month'
-          ))::int AS accepted,
-        (SELECT COALESCE(SUM(i.grand_total), 0) FROM invoices i WHERE i.kind = 'invoice'
-          AND i.firm_id = ${firmId} AND i.supplier_party_id = ${clientPartyId}
-          AND EXISTS (
-            SELECT 1 FROM submission_attempts sa
-            WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
-              AND sa.created_at AT TIME ZONE 'Africa/Lagos' >= ${monthStart}::timestamp
-              AND sa.created_at AT TIME ZONE 'Africa/Lagos' < ${monthStart}::timestamp + interval '1 month'
-          ))::text AS accepted_total,
-        (SELECT COALESCE(SUM(i.vat_total), 0) FROM invoices i WHERE i.kind = 'invoice'
-          AND i.firm_id = ${firmId} AND i.supplier_party_id = ${clientPartyId}
-          AND EXISTS (
-            SELECT 1 FROM submission_attempts sa
-            WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
-              AND sa.created_at AT TIME ZONE 'Africa/Lagos' >= ${monthStart}::timestamp
-              AND sa.created_at AT TIME ZONE 'Africa/Lagos' < ${monthStart}::timestamp + interval '1 month'
-          ))::text AS accepted_vat,
+        (SELECT COUNT(*) FROM accepted_invoices)::int AS accepted,
+        (SELECT COALESCE(SUM(grand_total), 0) FROM accepted_invoices)::text AS accepted_total,
+        (SELECT COALESCE(SUM(vat_total), 0) FROM accepted_invoices)::text AS accepted_vat,
         -- Distinct invoices whose submission was REJECTED during the month.
         (SELECT COUNT(DISTINCT sa.invoice_id) FROM submission_attempts sa
           JOIN invoices i ON i.id = sa.invoice_id
           WHERE i.kind = 'invoice'
             AND i.firm_id = ${firmId} AND i.supplier_party_id = ${clientPartyId}
             AND sa.status IN ('rejected', 'error')
-            AND sa.created_at AT TIME ZONE 'Africa/Lagos' >= ${monthStart}::timestamp
-            AND sa.created_at AT TIME ZONE 'Africa/Lagos' < ${monthStart}::timestamp + interval '1 month'
+            AND ${inMonth}
         )::int AS failed,
         -- Issued in the month and STILL unsubmitted today.
         (SELECT COUNT(*) FROM month_invoices
@@ -359,28 +353,39 @@ export async function listClientStatements(
 // the number of rows CLAIMED this pass (sends may be fewer: quiet months,
 // dark flag and consent refusals claim silently); zero means the backlog is
 // drained, so callers can loop until then.
+//
+// Sweep-only: must run OUTSIDE any request context. The candidate read and
+// the sends run on the ambient-free raw pool (autocommit — each message/push
+// insert is individually durable); only the per-row claim opens a
+// transaction, and it COMMITS before any send leaves. Holding one bypass
+// transaction across the whole pass — claims, recipient reads AND the live
+// Expo push HTTP — meant a mid-pass failure rolled back every claim and
+// message row while pushes had already left the building, and sibling
+// instances blocked on the row locks for the duration.
 export async function deliverClientStatements(
   limit = DELIVERY_BATCH,
 ): Promise<number> {
-  return runInBypassContext(async () => {
-    // Oldest first: a backlog wider than one pass drains in generation order.
-    const pending = await getDb()
-      .select()
-      .from(clerkClientStatementsTable)
-      .where(isNull(clerkClientStatementsTable.deliveredAt))
-      .orderBy(clerkClientStatementsTable.createdAt)
-      .limit(limit);
-    if (pending.length === 0) return 0;
+  // Plain short read (raw pool): candidate rows, oldest first, so a backlog
+  // wider than one pass drains in generation order.
+  const pending = await getDb()
+    .select()
+    .from(clerkClientStatementsTable)
+    .where(isNull(clerkClientStatementsTable.deliveredAt))
+    .orderBy(clerkClientStatementsTable.createdAt)
+    .limit(limit);
+  if (pending.length === 0) return 0;
 
-    const messagingOn = await isFeatureEnabled("messaging_notifications", null);
-    let claimed = 0;
-    for (const row of pending) {
-      // Claim the row first: the compare-and-set on delivered_at is the
-      // atomic once-only gate (mirroring the deadline_reminder_sends ledger).
-      // The whole pass runs in one bypass transaction, so a mid-pass crash
-      // rolls back claims AND message rows together — a statement is never
-      // half-delivered across the claim and the message log.
-      const claim = await getDb()
+  const messagingOn = await isFeatureEnabled("messaging_notifications", null);
+  let claimed = 0;
+  for (const row of pending) {
+    // Claim first, in its OWN short committed transaction: the compare-and-
+    // set on delivered_at is the atomic once-only gate (mirroring the
+    // deadline_reminder_sends ledger), and committing it before sending is
+    // the at-most-once trade — a claimed row whose sends then fail is NOT
+    // re-offered (better a missed nudge than a double alert; the SME
+    // dashboard shows the statement either way).
+    const claim = await runInBypassContext(() =>
+      getDb()
         .update(clerkClientStatementsTable)
         .set({ deliveredAt: new Date() })
         .where(
@@ -389,113 +394,122 @@ export async function deliverClientStatements(
             isNull(clerkClientStatementsTable.deliveredAt),
           ),
         )
-        .returning({ id: clerkClientStatementsTable.id });
-      if (claim.length === 0) continue; // another instance won this row
-      claimed++;
+        .returning({ id: clerkClientStatementsTable.id }),
+    );
+    if (claim.length === 0) continue; // another instance won this row
+    claimed++;
 
-      // A quiet month is not worth a notification: mark it delivered (the
-      // claim above) so it stops rescanning forever, but send nothing.
-      if (statementIsQuiet(row.facts)) continue;
-      // The claim is written even while messaging is dark (PL-02): turning
-      // the flag on later must not blast a backlog of old statements.
-      if (!messagingOn) continue;
+    // A quiet month is not worth a notification: mark it delivered (the
+    // claim above) so it stops rescanning forever, but send nothing.
+    if (statementIsQuiet(row.facts)) continue;
+    // The claim is written even while messaging is dark (PL-02): turning
+    // the flag on later must not blast a backlog of old statements.
+    if (!messagingOn) continue;
 
-      const [prefs] = await getDb()
-        .select()
-        .from(alertPreferencesTable)
-        .where(eq(alertPreferencesTable.clientPartyId, row.clientPartyId))
-        .limit(1);
-      await fanOutAlert({
-        prefs,
-        clientPartyId: row.clientPartyId,
-        firmId: row.firmId,
-        templateKey: "client_statement_ready",
-        entityType: "clerk_client_statement",
-        entityId: pointerEntityRef("stmt", row.id),
-        // Same default as deadline reminders: with no prefs row, SMS is off.
-        smsDefaultWhenNoPrefs: false,
-      });
-    }
-    return claimed;
-  });
+    // Sends happen AFTER the claim committed, outside any open transaction:
+    // each fan-out write is an autocommit insert, so a crash here loses at
+    // most the remaining channels of one statement — never a committed claim.
+    const [prefs] = await getDb()
+      .select()
+      .from(alertPreferencesTable)
+      .where(eq(alertPreferencesTable.clientPartyId, row.clientPartyId))
+      .limit(1);
+    await fanOutAlert({
+      prefs,
+      clientPartyId: row.clientPartyId,
+      firmId: row.firmId,
+      templateKey: "client_statement_ready",
+      entityType: "clerk_client_statement",
+      entityId: pointerEntityRef("stmt", row.id),
+      // Same default as deadline reminders: with no prefs row, SMS is off.
+      smsDefaultWhenNoPrefs: false,
+    });
+  }
+  return claimed;
 }
 
-registerSweep(async function sweepClientStatements(): Promise<void> {
-  // Opt-in: statements for every engaged client can spend firm tokens, so
-  // the flag must be turned on deliberately (off/missing = none at all).
-  if (!(await isFeatureEnabled(STATEMENT_FLAG_KEY))) return;
-  // Candidate selection is a SHORT bypass transaction; generation — up to one
-  // model call per (firm, client) — runs OUTSIDE it, same shape as the digest
-  // sweep and for the same reason (a slow provider must not stall the shared
-  // minute loop). Cross-instance idempotency rests on the unique
-  // (firm_id, client_party_id, month_start) key.
-  const monthStart = lagosMonthStart(1);
-  const pairs = await runInBypassContext(async () => {
-    const [{ locked }] = (
-      await getDb().execute<{ locked: boolean }>(
-        sql`SELECT pg_try_advisory_xact_lock(${STATEMENT_LOCK_ID}) AS locked`,
-      )
-    ).rows;
-    if (!locked) return [];
+export async function sweepClientStatements(): Promise<void> {
+  // Opt-in GENERATION only: statements for every engaged client can spend
+  // firm tokens, so the flag must be turned on deliberately (off/missing =
+  // none generated at all). The flag deliberately does NOT gate delivery
+  // below — otherwise turning it off would strand already-generated rows
+  // undelivered, and re-enabling would blast the stale backlog at once
+  // (the digest sweep's shape, for the same reason).
+  if (await isFeatureEnabled(STATEMENT_FLAG_KEY)) {
+    // Candidate selection is a SHORT bypass transaction; generation — up to
+    // one model call per (firm, client) — runs OUTSIDE it, same shape as the
+    // digest sweep and for the same reason (a slow provider must not stall
+    // the shared minute loop). Cross-instance idempotency rests on the unique
+    // (firm_id, client_party_id, month_start) key.
+    const monthStart = lagosMonthStart(1);
+    const pairs = await runInBypassContext(async () => {
+      const [{ locked }] = (
+        await getDb().execute<{ locked: boolean }>(
+          sql`SELECT pg_try_advisory_xact_lock(${STATEMENT_LOCK_ID}) AS locked`,
+        )
+      ).rows;
+      if (!locked) return [];
 
-    // A statement is owed to every client the firm actively serves: open or
-    // in-progress engagements only, so archived clients stop accumulating
-    // statements. selectDistinct because a client can have several
-    // engagements with the same firm.
-    return getDb()
-      .selectDistinct({
-        firmId: engagementsTable.firmId,
-        clientPartyId: engagementsTable.clientPartyId,
-      })
-      .from(engagementsTable)
-      .leftJoin(
-        clerkClientStatementsTable,
-        and(
-          eq(clerkClientStatementsTable.firmId, engagementsTable.firmId),
-          eq(
-            clerkClientStatementsTable.clientPartyId,
-            engagementsTable.clientPartyId,
+      // A statement is owed to every client the firm actively serves: open or
+      // in-progress engagements only, so archived clients stop accumulating
+      // statements. selectDistinct because a client can have several
+      // engagements with the same firm.
+      return getDb()
+        .selectDistinct({
+          firmId: engagementsTable.firmId,
+          clientPartyId: engagementsTable.clientPartyId,
+        })
+        .from(engagementsTable)
+        .leftJoin(
+          clerkClientStatementsTable,
+          and(
+            eq(clerkClientStatementsTable.firmId, engagementsTable.firmId),
+            eq(
+              clerkClientStatementsTable.clientPartyId,
+              engagementsTable.clientPartyId,
+            ),
+            eq(clerkClientStatementsTable.monthStart, monthStart),
           ),
-          eq(clerkClientStatementsTable.monthStart, monthStart),
-        ),
-      )
-      .where(
-        and(
-          sql`${engagementsTable.status} IN ('open', 'in_progress')`,
-          isNull(clerkClientStatementsTable.id),
-        ),
-      )
-      .limit(STATEMENT_BATCH);
-  });
-  if (pairs.length > 0) {
-    // No provider configured (or kill switch off) still produces statements —
-    // just from the template path.
-    let gateway: ClerkGateway | null = null;
-    try {
-      gateway = await getClerkGateway();
-    } catch {
-      gateway = null;
-    }
-    let generated = 0;
-    for (const pair of pairs) {
-      await generateClientStatement(
-        pair.firmId,
-        pair.clientPartyId,
-        monthStart,
-        gateway,
+        )
+        .where(
+          and(
+            sql`${engagementsTable.status} IN ('open', 'in_progress')`,
+            isNull(clerkClientStatementsTable.id),
+          ),
+        )
+        .limit(STATEMENT_BATCH);
+    });
+    if (pairs.length > 0) {
+      // No provider configured (or kill switch off) still produces
+      // statements — just from the template path.
+      let gateway: ClerkGateway | null = null;
+      try {
+        gateway = await getClerkGateway();
+      } catch {
+        gateway = null;
+      }
+      let generated = 0;
+      for (const pair of pairs) {
+        await generateClientStatement(
+          pair.firmId,
+          pair.clientPartyId,
+          monthStart,
+          gateway,
+        );
+        generated += 1;
+      }
+      logger.info(
+        { generated, monthStart },
+        "client statement sweep: monthly statements generated",
       );
-      generated += 1;
     }
-    logger.info(
-      { generated, monthStart },
-      "client statement sweep: monthly statements generated",
-    );
   }
 
-  // Delivery runs every pass — even when nothing was generated — so rows
-  // generated before delivery existed (and stragglers from a bounded pass)
-  // are still offered. The delivered_at compare-and-set keeps this idempotent
-  // across instances without the generation lock.
+  // Delivery runs every pass — even when nothing was generated and even while
+  // the generation flag is dark — so rows generated before delivery existed
+  // (and stragglers from a bounded pass) are still offered. The delivered_at
+  // compare-and-set keeps this idempotent across instances without the
+  // generation lock.
   const delivered = await deliverClientStatements();
   if (delivered > 0) {
     logger.info(
@@ -503,4 +517,6 @@ registerSweep(async function sweepClientStatements(): Promise<void> {
       "client statement sweep: statements offered to alert channels",
     );
   }
-});
+}
+
+registerSweep(sweepClientStatements);

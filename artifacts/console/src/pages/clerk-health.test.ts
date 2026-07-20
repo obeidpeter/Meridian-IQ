@@ -1,6 +1,7 @@
 import { test, expect, describe } from "vitest";
 import type { ClerkMetricsCases } from "@workspace/api-client-react";
 import {
+  canaryPrefillNote,
   fmtEvalDuration,
   fmtMs,
   fmtTokens,
@@ -161,5 +162,21 @@ describe("casesTileDetail", () => {
     expect(casesTileDetail({ ...base, avgQueueWaitMinutes: 0 })).toBe(
       "queue wait 0m",
     );
+  });
+});
+
+// Prompt-canary prefill: a failed incumbent-prompt fetch must not leave the
+// "Start from the live prompt" button disabled with no reason — the note says
+// why and points at the manual path (the canary itself still runs on pasted
+// candidates).
+describe("canaryPrefillNote", () => {
+  test("says why the prefill is dead and what to do instead", () => {
+    expect(canaryPrefillNote(true)).toBe(
+      "Couldn't load the live prompt — paste a candidate manually.",
+    );
+  });
+
+  test("silent while the prompt loads or once it has loaded", () => {
+    expect(canaryPrefillNote(false)).toBeNull();
   });
 });

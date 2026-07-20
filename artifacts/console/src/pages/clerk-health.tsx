@@ -201,11 +201,21 @@ const VERDICT_TONE: Record<string, BadgeTone> = {
   regression: "red",
 };
 
+// When the incumbent-prompt fetch fails, the prefill button cannot work —
+// say WHY next to the permanently disabled control instead of leaving a dead
+// button: the canary itself still runs fine on a hand-pasted candidate.
+export function canaryPrefillNote(promptLoadFailed: boolean): string | null {
+  return promptLoadFailed
+    ? "Couldn't load the live prompt — paste a candidate manually."
+    : null;
+}
+
 function PromptCanaryCard() {
   const { toast } = useToast();
-  const { data: incumbent } = useGetExtractionPrompt({
+  const { data: incumbent, isError: incumbentFailed } = useGetExtractionPrompt({
     query: { queryKey: getGetExtractionPromptQueryKey(), retry: false },
   });
+  const prefillNote = canaryPrefillNote(incumbentFailed);
   const [candidate, setCandidate] = useState("");
   const [report, setReport] = useState<PromptCanaryReport | null>(null);
   const canary = useRunPromptCanary({
@@ -259,7 +269,7 @@ function PromptCanaryCard() {
           accuracy is judged outside a 2% noise band. Nothing is stored;
           promoting a prompt is a code change.
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -269,6 +279,14 @@ function PromptCanaryCard() {
           >
             Start from the live prompt
           </Button>
+          {prefillNote && (
+            <p
+              className="text-xs text-destructive"
+              data-testid="text-canary-prefill-error"
+            >
+              {prefillNote}
+            </p>
+          )}
         </div>
         <Textarea
           value={candidate}

@@ -40,15 +40,18 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { usePendingPoll } from "@/hooks/usePendingPoll";
 import { apiErrorMessage, hasStatus } from "@/lib/api-error";
 import {
   buildCameraCaseInput,
+  buildDocumentCaseInput,
   clerkStatusMeta,
+  DOCUMENT_TOO_LARGE_MESSAGE,
   fieldLabel,
   MAX_FILE_BYTES,
-  pickSourceType,
 } from "@/lib/clerk-capture";
 import { timeAgo } from "@/lib/format";
+import { PENDING_POLL_STALLED_MESSAGE } from "@/lib/pending-poll";
 import { useSession } from "@/lib/session";
 
 // How each capture source presents in the submissions list — the mobile
@@ -89,6 +92,12 @@ export default function ClerkCaptureScreen() {
 
   const listKey = getListClerkCasesQueryKey({ kind: "extraction" });
 
+  // Extraction runs async after create; poll while anything is still being
+  // read so "Reading…" advances without a manual refresh — but bounded: only
+  // while this screen is focused, and never past the 10-minute cap (a case
+  // stuck that long is the server watchdog's job, not the phone's).
+  const pendingPoll = usePendingPoll();
+
   // The server scopes this list to the caller's own submissions.
   const casesQuery = useListClerkCases(
     { kind: "extraction" },
@@ -97,12 +106,10 @@ export default function ClerkCaptureScreen() {
         enabled: canCapture,
         queryKey: listKey,
         retry: false,
-        // Extraction runs async after create; keep polling while anything is
-        // still being read so "Reading…" advances without a manual refresh.
         refetchInterval: (query) =>
-          (query.state.data ?? []).some((c) => c.status === "pending")
-            ? 3000
-            : false,
+          pendingPoll.interval(
+            (query.state.data ?? []).some((c) => c.status === "pending"),
+          ),
       },
     },
   );
@@ -242,22 +249,22 @@ export default function ClerkCaptureScreen() {
       if (result.canceled) return;
       const asset = result.assets[0];
       if (!asset) return;
+      // Fast pre-read check when the picker reports a size, so a huge file
+      // isn't read into memory at all…
       if (asset.size != null && asset.size > MAX_FILE_BYTES) {
-        setBanner({
-          tone: "error",
-          message:
-            "That file is too large to send. Keep it under 5 MB — a phone photo of the document works well.",
-        });
+        setBanner({ tone: "error", message: DOCUMENT_TOO_LARGE_MESSAGE });
         return;
       }
       const base64 = await new File(asset.uri).base64();
-      const sourceType = pickSourceType(asset.name ?? "", asset.mimeType);
-      await submit({
-        sourceType,
-        ...(asset.name ? { name: asset.name } : {}),
-        ...(asset.mimeType ? { contentType: asset.mimeType } : {}),
-        ...(sourceType === "pdf" ? { pdfBase64: base64 } : { imageBase64: base64 }),
-      });
+      // …but `size` is optional (Android pickers commonly omit it), so the
+      // build re-measures the actual base64 payload and refuses oversized
+      // files here instead of round-tripping to an opaque 413.
+      const built = buildDocumentCaseInput(base64, asset.name, asset.mimeType);
+      if (!built.ok) {
+        setBanner({ tone: "error", message: built.message });
+        return;
+      }
+      await submit(built.input);
     } catch {
       setBanner({
         tone: "error",
@@ -421,6 +428,11 @@ export default function ClerkCaptureScreen() {
                   />
                 ))
               )}
+              {pendingPoll.stalled ? (
+                <AppText variant="caption" color={colors.mutedForeground}>
+                  {PENDING_POLL_STALLED_MESSAGE}
+                </AppText>
+              ) : null}
             </View>
           </View>
         )}

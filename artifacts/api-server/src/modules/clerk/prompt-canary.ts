@@ -26,9 +26,9 @@ import { appendAudit } from "../audit/audit";
 
 // Both sides of every fixture run, so a canary costs 2× a corpus pass. The
 // cap bounds that; `truncated` in the report says when it engaged.
-export const MAX_CANARY_FIXTURES = 40;
+const MAX_CANARY_FIXTURES = 40;
 // Accuracy changes inside this band are noise, not signal.
-export const ACCURACY_EPSILON = 0.02;
+const ACCURACY_EPSILON = 0.02;
 const MIN_CANDIDATE_CHARS = 100;
 const MAX_CANDIDATE_CHARS = 20_000;
 const CANARY_PROMPT_VERSION = `${EXTRACT_PROMPT_VERSION}+canary`;

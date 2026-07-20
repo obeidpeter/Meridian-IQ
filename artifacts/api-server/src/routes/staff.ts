@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb, staffNotificationPreferencesTable } from "@workspace/db";
 import {
   GetStaffNotificationPreferencesResponse,
@@ -22,6 +22,18 @@ import { DomainError } from "../modules/errors";
 // requireFirmScope pins the row to the caller's tenant. Everything defaults
 // OFF — a member who never opts in receives nothing (which is also why
 // delivery needs no consent gate; see modules/clerk/digest.ts).
+//
+// Preferences are PER CURRENT-FIRM CONTEXT: the row key is (userId, firmId)
+// — both from the principal — so a multi-firm staff member holds an
+// independent row per firm, matching the table's firm-keyed RLS (migration
+// 0019). The contract shape is unchanged; the firm is implied by the
+// caller's tenant, never named in the payload.
+//
+// WARNING: the `email` field is a free-text, unverified address. It only
+// gates whether the email channel fires; delivery itself is pointer-only
+// (usr/dig refs, SEC-12) and never uses this address as a destination. It
+// must NEVER become a send destination without a verification step (see the
+// schema comment in lib/db/src/schema/organizations.ts).
 
 const router: IRouter = Router();
 
@@ -46,15 +58,19 @@ function staffSelfScope(principal: Principal): string {
 }
 
 router.get("/staff/notification-preferences", async (req, res): Promise<void> => {
-  staffSelfScope(req.principal);
+  const firmId = staffSelfScope(req.principal);
   // The dev x-mock shim can carry a non-UUID userId ("dev-user"); such a
-  // principal can own no row, so it reads the all-off defaults.
+  // principal can own no row, so it reads the all-off defaults. The firm
+  // filter keeps a multi-firm member's firms independent (composite key).
   const [row] = isUuid(req.principal.userId)
     ? await getDb()
         .select()
         .from(staffNotificationPreferencesTable)
         .where(
-          eq(staffNotificationPreferencesTable.userId, req.principal.userId),
+          and(
+            eq(staffNotificationPreferencesTable.userId, req.principal.userId),
+            eq(staffNotificationPreferencesTable.firmId, firmId),
+          ),
         )
         .limit(1)
     : [];
@@ -78,13 +94,18 @@ router.put("/staff/notification-preferences", async (req, res): Promise<void> =>
     return;
   }
 
-  // Partial input merges onto the existing row (or the all-off defaults):
-  // omitted switches keep their value; email distinguishes omitted
-  // (undefined — keep) from explicit null (clear).
+  // Partial input merges onto the existing row for THIS firm (or the all-off
+  // defaults): omitted switches keep their value; email distinguishes
+  // omitted (undefined — keep) from explicit null (clear).
   const [existing] = await getDb()
     .select()
     .from(staffNotificationPreferencesTable)
-    .where(eq(staffNotificationPreferencesTable.userId, req.principal.userId))
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, req.principal.userId),
+        eq(staffNotificationPreferencesTable.firmId, firmId),
+      ),
+    )
     .limit(1);
   const next = {
     digestEnabled:
@@ -105,10 +126,14 @@ router.put("/staff/notification-preferences", async (req, res): Promise<void> =>
     .insert(staffNotificationPreferencesTable)
     .values({ userId: req.principal.userId, firmId, ...next })
     .onConflictDoUpdate({
-      target: staffNotificationPreferencesTable.userId,
-      // firmId follows the principal's current tenant (multi-membership users
-      // re-home the row to whichever firm they saved under last).
-      set: { firmId, ...next, updatedAt: new Date() },
+      // Composite key (userId, firmId), both from the principal: a
+      // multi-firm member saves each firm's preferences independently —
+      // never re-homing (or clobbering) another firm's row.
+      target: [
+        staffNotificationPreferencesTable.userId,
+        staffNotificationPreferencesTable.firmId,
+      ],
+      set: { ...next, updatedAt: new Date() },
     })
     .returning();
   res.json(

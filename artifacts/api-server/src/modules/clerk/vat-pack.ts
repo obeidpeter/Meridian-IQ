@@ -50,7 +50,7 @@ export interface VatPack {
   note: string;
 }
 
-export const VAT_PACK_MONTHS = 12;
+const VAT_PACK_MONTHS = 12;
 
 // The closed Lagos months on offer, newest first ("YYYY-MM-01").
 export function closedLagosMonths(

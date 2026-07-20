@@ -1,11 +1,9 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
-  auditEventsTable,
   usersTable,
   clerkCasesTable,
   type ClerkCorrection,
@@ -18,6 +16,7 @@ import {
   type KeptRateMonth,
 } from "./quality-watch.ts";
 import { getClerkMetrics } from "./metrics.ts";
+import { latestAuditEvent } from "../../test-helpers/audit.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Kept-rate drift watch. Pinned invariants:
@@ -184,24 +183,7 @@ test("the sweep alerts once per degraded month via the audit ledger", async () =
   const first = await sweepQualityWatch({ months });
   assert.deepEqual(first, { checked: true, dropped: true, alerted: true });
 
-  const [event] = await runInBypassContext(() =>
-    getDb()
-      .select({
-        entityId: auditEventsTable.entityId,
-        actorId: auditEventsTable.actorId,
-        actorRole: auditEventsTable.actorRole,
-        after: auditEventsTable.after,
-      })
-      .from(auditEventsTable)
-      .where(
-        and(
-          eq(auditEventsTable.action, QUALITY_DROP_ACTION),
-          eq(auditEventsTable.entityId, toMonth),
-        ),
-      )
-      .orderBy(desc(auditEventsTable.seq))
-      .limit(1),
-  );
+  const event = await latestAuditEvent(QUALITY_DROP_ACTION, toMonth);
   assert.ok(event, "the drop landed in the audit ledger");
   assert.equal(event.actorId, "quality-watch");
   assert.equal(event.actorRole, "system");

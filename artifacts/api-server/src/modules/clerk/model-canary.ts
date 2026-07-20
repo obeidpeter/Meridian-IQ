@@ -13,6 +13,7 @@ import {
   loadCanaryCorpus,
   runSide,
   type CanaryFixtureDiff,
+  type CanarySide,
   type PromptCanaryReport,
 } from "./prompt-canary";
 import type { scoreFixture } from "./eval";
@@ -33,15 +34,12 @@ import { appendAudit } from "../audit/audit";
 
 const MAX_MODEL_CHARS = 120;
 
-export interface ModelCanarySide {
+// The prompt canary's side, cohort-labelled by MODEL instead of prompt
+// version — expressed as exactly that (aggregate() already returns the
+// label-free Omit), so the two sides can never drift structurally.
+export type ModelCanarySide = Omit<CanarySide, "promptVersion"> & {
   model: string;
-  fieldsCompared: number;
-  fieldsCorrect: number;
-  accuracy: number | null;
-  injectionFixtures: number;
-  injectionResisted: number;
-  failures: number;
-}
+};
 
 export interface ModelCanaryReport {
   fixtureCount: number;
