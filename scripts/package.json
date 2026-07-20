@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "e2e": "node src/e2e/run.mjs"
+    "e2e": "node src/e2e/run.mjs",
+    "load-smoke": "node src/load-smoke.mjs"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

@@ -1,6 +1,11 @@
 import { sql, type SQL } from "drizzle-orm";
 import { getDb, type ProtectedFact } from "@workspace/db";
-import { lagosParts } from "../../lib/lagos-time";
+import {
+  lagosDateString,
+  lagosParts,
+  lagosTodaySql,
+  lagosWindowSql,
+} from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import {
   firmMoneySummary,
@@ -9,7 +14,6 @@ import {
   receivableProjections,
 } from "../invoice/cashflow";
 import { OUTSTANDING } from "../invoice/receivables";
-import { lagosDateString } from "../../lib/lagos-time";
 import { firmClerkUsage } from "./budget";
 
 // Grounded firm-data Q&A (Clerk idea #6). Ask Clerk gains a SECOND closed
@@ -69,8 +73,6 @@ export interface DataIntent {
   accepts: { month?: boolean; client?: boolean };
   run(firmId: string, params?: DataIntentParams): Promise<DataIntentResult>;
 }
-
-const LAGOS_TODAY = sql`(now() AT TIME ZONE 'Africa/Lagos')::date`;
 
 // " for Adaeze Foods Ltd" — the client-scope suffix for answer texts.
 function forClient(params?: DataIntentParams): string {
@@ -186,7 +188,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
       const agg = await invoiceAggregate(
         firmId,
         sql`i.status IN ('draft', 'validated')
-          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${LAGOS_TODAY}`,
+          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${lagosTodaySql()}`,
         params,
       );
       return {
@@ -206,8 +208,8 @@ export const DATA_INTENTS: readonly DataIntent[] = [
       const agg = await invoiceAggregate(
         firmId,
         sql`i.status IN ('draft', 'validated')
-          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int > ${LAGOS_TODAY}
-          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${LAGOS_TODAY} + 7`,
+          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int > ${lagosTodaySql()}
+          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${lagosTodaySql()} + 7`,
         params,
       );
       return {
@@ -264,12 +266,10 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     accepts: { month: true, client: true },
     async run(firmId, params) {
       // The month window is the app-resolved first-of-month date (Lagos
-      // calendar); default = the current Lagos month, exactly as before.
+      // calendar) through the shared lagosWindowSql predicate builder;
+      // default = the current Lagos month, exactly as before.
       const monthWindow = params?.monthStart
-        ? sql`sa.created_at AT TIME ZONE 'Africa/Lagos'
-              >= ${params.monthStart}::timestamp
-            AND sa.created_at AT TIME ZONE 'Africa/Lagos'
-              < ${params.monthStart}::timestamp + interval '1 month'`
+        ? lagosWindowSql(sql`sa.created_at`, params.monthStart)
         : sql`date_trunc('month', sa.created_at AT TIME ZONE 'Africa/Lagos')
               = date_trunc('month', now() AT TIME ZONE 'Africa/Lagos')`;
       const agg = await invoiceAggregate(
@@ -306,7 +306,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
       const agg = await invoiceAggregate(
         firmId,
         sql`i.status IN ('submitted', 'stamped', 'confirmed')
-          AND COALESCE(i.due_date, i.issue_date) < ${LAGOS_TODAY} - ${RECEIVABLE_AGE_DAYS}::int`,
+          AND COALESCE(i.due_date, i.issue_date) < ${lagosTodaySql()} - ${RECEIVABLE_AGE_DAYS}::int`,
         params,
       );
       return {

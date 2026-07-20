@@ -1,9 +1,10 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
 import { OUTSTANDING } from "./receivables";
 import {
   listPaymentBehaviour,
+  summarizeBehaviour,
   type BuyerPaymentBehaviour,
 } from "./payment-behaviour";
 
@@ -346,6 +347,148 @@ export async function listChaseRows(
 
 const MAX_SUMMARY_CLIENTS = 50;
 
+// Parameterized `IN (...)` list for the set-based summary queries below.
+function idList(ids: string[]): SQL {
+  return sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  );
+}
+
+// The outstandingRows query with the single-client filter widened to the
+// summary's client set (one round trip instead of one per client), grouped
+// per client in memory. Same SELECT list + `${OUTSTANDING}` predicate, same
+// issue-date ordering within each client (the global ORDER BY preserves the
+// per-client relative order), so projectReceivables sees exactly the rows the
+// per-client path would. The 50k cap is shared across the set instead of per
+// client — far above any real firm book either way.
+async function outstandingRowsByClient(
+  firmId: string,
+  clientPartyIds: string[],
+): Promise<Map<string, OutstandingRow[]>> {
+  const out = new Map<string, OutstandingRow[]>();
+  if (clientPartyIds.length === 0) return out;
+  const rows = (
+    await getDb().execute<{
+      supplier_party_id: string;
+      invoice_id: string;
+      invoice_number: string;
+      buyer_party_id: string;
+      buyer_name: string;
+      currency: string;
+      grand_total: string;
+      issue_date: string;
+      due_date: string | null;
+    }>(sql`
+      SELECT
+        i.supplier_party_id,
+        i.id AS invoice_id,
+        i.invoice_number,
+        i.buyer_party_id,
+        p.legal_name AS buyer_name,
+        i.currency,
+        i.grand_total::text AS grand_total,
+        i.issue_date::text AS issue_date,
+        i.due_date::text AS due_date
+      FROM invoices i
+      JOIN parties p ON p.id = i.buyer_party_id
+      WHERE ${OUTSTANDING}
+        AND i.firm_id = ${firmId}
+        AND i.supplier_party_id IN (${idList(clientPartyIds)})
+      ORDER BY i.issue_date ASC
+      LIMIT 50000
+    `)
+  ).rows;
+  for (const r of rows) {
+    const list = out.get(r.supplier_party_id) ?? [];
+    list.push({
+      invoiceId: r.invoice_id,
+      invoiceNumber: r.invoice_number,
+      buyerPartyId: r.buyer_party_id,
+      buyerName: r.buyer_name,
+      currency: r.currency,
+      grandTotal: r.grand_total,
+      issueDate: r.issue_date,
+      dueDate: r.due_date,
+    });
+    out.set(r.supplier_party_id, list);
+  }
+  return out;
+}
+
+// Mirrors payment-behaviour.ts LOOKBACK_DAYS — kept in lockstep by the
+// loop-vs-set equivalence test in cashflow.test.ts.
+const SETTLEMENT_LOOKBACK_DAYS = 365;
+
+// The acceptedSettlementRows evidence query (payment-behaviour.ts) with the
+// single-client filter widened to the summary's client set, then
+// summarizeBehaviour run PER CLIENT over its own evidence rows — identical
+// predicates, identical plain-median aggregation (the summary path has never
+// used projection-accuracy's leave-one-out variant), identical per-client
+// buyer caps. Behaviour stays keyed (client, buyer): buyer B's rhythm with
+// client X derives only from client X's own settlements, exactly as the
+// per-client listPaymentBehaviour call computes it.
+async function paymentBehaviourByClient(
+  firmId: string,
+  clientPartyIds: string[],
+  now: Date,
+): Promise<Map<string, Map<string, BuyerPaymentBehaviour>>> {
+  const out = new Map<string, Map<string, BuyerPaymentBehaviour>>();
+  if (clientPartyIds.length === 0) return out;
+  const since = lagosDateString(
+    new Date(now.getTime() - SETTLEMENT_LOOKBACK_DAYS * 86_400_000),
+  );
+  const rows = (
+    await getDb().execute<{
+      supplier_party_id: string;
+      buyer_party_id: string;
+      buyer_name: string;
+      days_to_pay: number;
+      value_date: string;
+    }>(sql`
+      SELECT
+        i.supplier_party_id,
+        i.buyer_party_id,
+        p.legal_name AS buyer_name,
+        (l.value_date - i.issue_date)::int AS days_to_pay,
+        l.value_date::text AS value_date
+      FROM match_proposals m
+      JOIN bank_statement_lines l ON l.id = m.statement_line_id
+      JOIN invoices i ON i.id = m.invoice_id
+      JOIN parties p ON p.id = i.buyer_party_id
+      WHERE m.status = 'accepted'
+        AND m.firm_id = ${firmId}
+        AND i.firm_id = ${firmId}
+        AND i.supplier_party_id IN (${idList(clientPartyIds)})
+        AND i.kind = 'invoice'
+        AND l.direction = 'credit'
+        AND l.value_date IS NOT NULL
+        AND l.value_date >= ${since}
+    `)
+  ).rows;
+  const evidenceByClient = new Map<
+    string,
+    { buyerPartyId: string; buyerName: string; daysToPay: number; valueDate: string }[]
+  >();
+  for (const r of rows) {
+    const list = evidenceByClient.get(r.supplier_party_id) ?? [];
+    list.push({
+      buyerPartyId: r.buyer_party_id,
+      buyerName: r.buyer_name,
+      daysToPay: Number(r.days_to_pay),
+      valueDate: r.value_date,
+    });
+    evidenceByClient.set(r.supplier_party_id, list);
+  }
+  for (const [clientPartyId, evidence] of evidenceByClient) {
+    out.set(
+      clientPartyId,
+      new Map(summarizeBehaviour(evidence).map((b) => [b.buyerPartyId, b])),
+    );
+  }
+  return out;
+}
+
 export interface FirmChaseRow extends ChaseRow {
   clientName: string;
 }
@@ -390,16 +533,30 @@ export async function firmMoneySummary(
   const truncated = clientRows.length > MAX_SUMMARY_CLIENTS;
   const clients = clientRows.slice(0, MAX_SUMMARY_CLIENTS);
 
+  // Set-based fan-in: ONE outstanding query and ONE settlement-evidence query
+  // across the whole client set replace the per-client pair that used to run
+  // up to 2×50 sequential round trips. The pure pipeline below —
+  // projectReceivables / isChaseEligible / rankChaseRows per client, in the
+  // clients' outstanding-value order — is exactly the loop the per-client
+  // receivableProjections path runs, so the aggregates are identical
+  // (equivalence pinned by the loop-vs-set test in cashflow.test.ts).
+  const clientIds = clients.map((c) => c.supplier_party_id);
+  const [outstandingByClient, behaviourByClient] = await Promise.all([
+    outstandingRowsByClient(firmId, clientIds),
+    paymentBehaviourByClient(firmId, clientIds, now),
+  ]);
+
   let expectedWeekCount = 0;
   let expectedWeekTotal = 0;
   let overdueExpectedCount = 0;
   let chaseCount = 0;
   const topChase: FirmChaseRow[] = [];
   for (const client of clients) {
-    const projections = await receivableProjections(
-      firmId,
-      client.supplier_party_id,
-      now,
+    const projections = projectReceivables(
+      outstandingByClient.get(client.supplier_party_id) ?? [],
+      behaviourByClient.get(client.supplier_party_id) ??
+        new Map<string, BuyerPaymentBehaviour>(),
+      today,
     );
     for (const p of projections) {
       if (p.daysBeyondExpected > 0) {
