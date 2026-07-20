@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
+import { NotificationBell } from "@/components/notification-bell";
 import { roleLabel } from "@/components/capability-gate";
 import { PORTAL_URL } from "@/components/require-session";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
@@ -445,6 +446,9 @@ export function Layout({ children }: { children: ReactNode }) {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-4">
+            {/* Recent-notification inbox — render-on-success, so a server
+                without the feed endpoint shows no bell at all. */}
+            <NotificationBell />
             <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">
               <LockKeyhole
                 className="size-3.5 text-teal-700"

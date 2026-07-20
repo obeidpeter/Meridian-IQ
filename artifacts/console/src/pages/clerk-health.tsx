@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   useGetClerkMetrics,
   useRunClerkEval,
@@ -17,6 +17,7 @@ import {
   getGetClerkTierReportQueryKey,
 } from "@workspace/api-client-react";
 import type {
+  ClerkMetrics,
   ClerkMetricsCases,
   ClerkMetricsQualityAlert,
   EvalFixtureReport,
@@ -48,6 +49,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -72,6 +79,18 @@ import { STATUS_TONE } from "@/pages/clerk-shared";
 // /clerk/metrics; the window selector re-queries the server.
 
 const HEALTH_WINDOWS = [7, 30, 90];
+
+// The health page's many stacked sections, grouped for navigation. Grouping
+// is presentation only — every section keeps its exact markup and testids —
+// and the resistance/quality alert banners are hoisted ABOVE the tabs so a
+// drop stays visible regardless of the active tab.
+export const HEALTH_TABS = [
+  { value: "overview", label: "Overview" },
+  { value: "quality", label: "Quality" },
+  { value: "economics", label: "Economics" },
+  { value: "evals", label: "Evals" },
+  { value: "canaries", label: "Canaries" },
+] as const;
 
 const OUTCOME_TONE: Record<string, BadgeTone> = {
   ok: "emerald",
@@ -941,6 +960,33 @@ export function HealthPanel() {
   const [showEvalDetail, setShowEvalDetail] = useState(false);
   const latestRun = evalRuns?.[0];
 
+  // The metrics-driven tabs share one guard: skeleton while /clerk/metrics
+  // loads, the query error (with its HTTP status) on failure, content once it
+  // resolves. It repeats per tab because each tab owns its own subtree; the
+  // callback parameter shadows `metrics` with the non-null value so the
+  // section markup inside stays exactly as it was when stacked.
+  const withMetrics = (
+    render: (metrics: ClerkMetrics) => ReactNode,
+  ): ReactNode =>
+    isLoading ? (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-28" />
+        ))}
+      </div>
+    ) : error || !metrics ? (
+      <QueryError
+        thing="Clerk health metrics"
+        onRetry={() => refetch()}
+        // The fetch error message carries the HTTP status ("HTTP 404 …"),
+        // which instantly separates a stale api-server build (404 — rebuild
+        // and restart the server) from a server fault (500).
+        detail={error instanceof Error ? error.message : undefined}
+      />
+    ) : (
+      render(metrics)
+    );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -970,23 +1016,72 @@ export function HealthPanel() {
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28" />
-          ))}
+      {/* Health-critical alerts are hoisted above the tabs so a
+          resistance or kept-rate drop stays visible no matter which tab
+          is active. Red stays reserved for guardrail alerts (the
+          resistance drop); the kept-rate banner keeps its AMBER — a
+          quality signal that deserves a watchful eye, matching the amber
+          band of overrideRateClass. */}
+      {metrics?.resistanceAlert && (
+        <div
+          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+          data-testid="alert-resistance-drop"
+        >
+          <p className="font-semibold">
+            Injection resistance dropped:{" "}
+            {formatPct(metrics.resistanceAlert.fromRate)} in{" "}
+            {metrics.resistanceAlert.fromMonth} →{" "}
+            {formatPct(metrics.resistanceAlert.toRate)} in{" "}
+            {metrics.resistanceAlert.toMonth} (
+            {metrics.resistanceAlert.injectionFixtures} injection
+            fixtures).
+          </p>
+          <p className="mt-1 text-xs">
+            Review recent prompt changes and the red-team fixtures before
+            promoting anything. The sweep has recorded this drop in the
+            audit ledger.
+          </p>
         </div>
-      ) : error || !metrics ? (
-        <QueryError
-          thing="Clerk health metrics"
-          onRetry={() => refetch()}
-          // The fetch error message carries the HTTP status ("HTTP 404 …"),
-          // which instantly separates a stale api-server build (404 — rebuild
-          // and restart the server) from a server fault (500).
-          detail={error instanceof Error ? error.message : undefined}
-        />
-      ) : (
-        <>
+      )}
+      {metrics?.qualityAlert && (
+        <div
+          className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+          data-testid="alert-quality-drop"
+        >
+          <p className="font-semibold">
+            {qualityAlertText(metrics.qualityAlert)}
+          </p>
+          <p className="mt-1 text-xs">
+            Check the field-corrections and correction-shapes tables for
+            where the overrides land before changing prompts or models.
+          </p>
+        </div>
+      )}
+
+      <Tabs defaultValue="overview">
+        <TabsList className="h-auto flex-wrap" data-testid="tabs-health">
+          {HEALTH_TABS.map((t) => (
+            <TabsTrigger
+              key={t.value}
+              value={t.value}
+              data-testid={`tab-health-${t.value}`}
+            >
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {/* Every tab stays force-mounted (the advisory page's idiom) so
+            section state — a run canary's report, the corpus "show all"
+            toggle, the eval fixture detail — survives switching tabs,
+            exactly as it did when the sections were stacked. */}
+        <TabsContent
+          value="overview"
+          forceMount
+          className="mt-4 space-y-4 data-[state=inactive]:hidden"
+        >
+          {withMetrics((metrics) => (
+            <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
               label="Cases"
@@ -1051,123 +1146,6 @@ export function HealthPanel() {
               />
             </div>
           </div>
-
-          <Card data-testid="section-unit-economics">
-            <CardHeader>
-              <CardTitle className="text-base">
-                Unit economics — where the tokens go
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {metrics.economics.byPurpose.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No inference calls in this window.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Purpose</th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Calls
-                        </th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Prompt tk
-                        </th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Completion tk
-                        </th>
-                        <th className="py-2 pr-3 font-medium text-right">
-                          Errors
-                        </th>
-                        <th className="py-2 font-medium text-right">Est. spend</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {metrics.economics.byPurpose.map((p) => (
-                        <tr
-                          key={p.purpose}
-                          data-testid={`row-economics-${p.purpose}`}
-                        >
-                          <td className="py-2 pr-3">{p.purpose}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {p.calls}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {fmtTokens(p.promptTokens)}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {fmtTokens(p.completionTokens)}
-                          </td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {p.errorCount}
-                          </td>
-                          <td className="py-2 text-right tabular-nums">
-                            {fmtUsd(p.estimatedUsd)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <div data-testid="economics-months">
-                <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
-                  Failure taxonomy by month
-                </p>
-                {metrics.economics.months.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No inference history yet.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                          <th className="py-2 pr-3 font-medium">Month</th>
-                          <th className="py-2 pr-3 font-medium text-right">
-                            Calls
-                          </th>
-                          <th className="py-2 pr-3 font-medium text-right">OK</th>
-                          <th className="py-2 pr-3 font-medium text-right">
-                            Invalid
-                          </th>
-                          <th className="py-2 pr-3 font-medium text-right">
-                            Killed
-                          </th>
-                          <th className="py-2 font-medium text-right">Error</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {metrics.economics.months.map((m) => (
-                          <tr key={m.month} data-testid={`row-economics-month-${m.month}`}>
-                            <td className="py-2 pr-3 tabular-nums">{m.month}</td>
-                            <td className="py-2 pr-3 text-right tabular-nums">
-                              {m.calls}
-                            </td>
-                            <td className="py-2 pr-3 text-right tabular-nums">
-                              {m.okCount}
-                            </td>
-                            <td className="py-2 pr-3 text-right tabular-nums">
-                              {m.invalidCount}
-                            </td>
-                            <td className="py-2 pr-3 text-right tabular-nums">
-                              {m.killedCount}
-                            </td>
-                            <td className="py-2 text-right tabular-nums">
-                              {m.errorCount}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardContent className="pt-6 space-y-4">
@@ -1242,7 +1220,17 @@ export function HealthPanel() {
               )}
             </CardContent>
           </Card>
+            </>
+          ))}
+        </TabsContent>
 
+        <TabsContent
+          value="quality"
+          forceMount
+          className="mt-4 space-y-4 data-[state=inactive]:hidden"
+        >
+          {withMetrics((metrics) => (
+            <>
           {metrics.calibration && (
             <Card>
               <CardHeader>
@@ -1491,9 +1479,302 @@ export function HealthPanel() {
               )}
             </CardContent>
           </Card>
-        </>
-      )}
 
+              {(metrics.keptRateTrend?.length ?? 0) > 0 && (
+        <Card data-testid="section-kept-rate-trend">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Extraction kept-rate trend
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              From the corrections exhaust — the share of compared fields
+              operators KEPT unchanged when approving, by month. Pure SQL, no
+              model involved in the judgment.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="table-kept-rate-months">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Month</th>
+                    <th className="py-2 pr-3 font-medium text-right">Fields</th>
+                    <th className="py-2 font-medium text-right">Kept rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {(metrics.keptRateTrend ?? []).map((m) => (
+                    <tr key={m.month}>
+                      <td className="py-2 pr-3 tabular-nums">{m.month}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {m.fields}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {m.fields === 0 ? "—" : formatPct(m.keptRate)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+              )}
+            </>
+          ))}
+        </TabsContent>
+
+        <TabsContent
+          value="economics"
+          forceMount
+          className="mt-4 space-y-4 data-[state=inactive]:hidden"
+        >
+          {withMetrics((metrics) => (
+            <>
+          <Card data-testid="section-unit-economics">
+            <CardHeader>
+              <CardTitle className="text-base">
+                Unit economics — where the tokens go
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {metrics.economics.byPurpose.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No inference calls in this window.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-3 font-medium">Purpose</th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Calls
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Prompt tk
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Completion tk
+                        </th>
+                        <th className="py-2 pr-3 font-medium text-right">
+                          Errors
+                        </th>
+                        <th className="py-2 font-medium text-right">Est. spend</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {metrics.economics.byPurpose.map((p) => (
+                        <tr
+                          key={p.purpose}
+                          data-testid={`row-economics-${p.purpose}`}
+                        >
+                          <td className="py-2 pr-3">{p.purpose}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {p.calls}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {fmtTokens(p.promptTokens)}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {fmtTokens(p.completionTokens)}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums">
+                            {p.errorCount}
+                          </td>
+                          <td className="py-2 text-right tabular-nums">
+                            {fmtUsd(p.estimatedUsd)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div data-testid="economics-months">
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                  Failure taxonomy by month
+                </p>
+                {metrics.economics.months.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No inference history yet.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                          <th className="py-2 pr-3 font-medium">Month</th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Calls
+                          </th>
+                          <th className="py-2 pr-3 font-medium text-right">OK</th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Invalid
+                          </th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Killed
+                          </th>
+                          <th className="py-2 font-medium text-right">Error</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {metrics.economics.months.map((m) => (
+                          <tr key={m.month} data-testid={`row-economics-month-${m.month}`}>
+                            <td className="py-2 pr-3 tabular-nums">{m.month}</td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {m.calls}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {m.okCount}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {m.invalidCount}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {m.killedCount}
+                            </td>
+                            <td className="py-2 text-right tabular-nums">
+                              {m.errorCount}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+        <Card data-testid="section-platform-spend">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Platform spend — {metrics.platformSpend.month}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatTile
+                label="Tokens month-to-date"
+                value={metrics.platformSpend.totalTokens.toLocaleString()}
+                testId="stat-spend-total"
+              />
+              <StatTile
+                label="Projected this month"
+                value={metrics.platformSpend.projectedTokens.toLocaleString()}
+                testId="stat-spend-projected"
+              />
+              <StatTile
+                label="Est. cost"
+                value={
+                  metrics.platformSpend.estimatedUsd != null
+                    ? `$${metrics.platformSpend.estimatedUsd.toFixed(2)}`
+                    : "—"
+                }
+                testId="stat-spend-usd"
+              />
+              <StatTile
+                label="Projected cost"
+                value={
+                  metrics.platformSpend.projectedUsd != null
+                    ? `$${metrics.platformSpend.projectedUsd.toFixed(2)}`
+                    : "—"
+                }
+                testId="stat-spend-projected-usd"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {metrics.platformSpend.firmFundedTokens.toLocaleString()} tokens
+              firm-funded ·{" "}
+              {metrics.platformSpend.platformFundedTokens.toLocaleString()}{" "}
+              platform-funded (desk tooling, evals). Ledger totals on the same
+              UTC month boundary the per-firm budgets use; cost estimates need
+              CLERK_COST_PER_1M_INPUT_USD / _OUTPUT_USD set.
+            </p>
+          </CardContent>
+        </Card>
+            </>
+          ))}
+
+      {tierReport && tierReport.rows.length > 0 && (
+        <Card data-testid="section-tier-report">
+          <CardHeader>
+            <CardTitle className="text-base">Model-tier evidence</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Trailing {tierReport.windowDays} days from the inference ledger,
+              joined with the tier map in force (base model{" "}
+              <span className="font-mono">{tierReport.baseModel}</span>).
+              Recommendations are deterministic; act on them via
+              CLERK_MODEL_TIERS (takes effect on server restart) and validate
+              with a prompt canary first.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="table-tier-report">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Purpose</th>
+                    <th className="py-2 pr-3 font-medium text-right">Calls</th>
+                    <th className="py-2 pr-3 font-medium text-right">Tokens</th>
+                    <th className="py-2 pr-3 font-medium text-right">Share</th>
+                    <th className="py-2 pr-3 font-medium text-right">Valid</th>
+                    <th className="py-2 pr-3 font-medium">Model</th>
+                    <th className="py-2 font-medium">Recommendation</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {tierReport.rows.map((r) => (
+                    <tr key={r.purpose}>
+                      <td className="py-2 pr-3 font-mono text-xs">{r.purpose}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {r.calls}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {r.totalTokens.toLocaleString()}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {formatPct(r.spendShare)}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums">
+                        {formatPct(r.validRate)}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-xs">
+                        {r.currentModel}
+                        {r.tiered ? " (tier)" : ""}
+                      </td>
+                      <td className="py-2" title={r.reason}>
+                        <span
+                          className={pillClasses(
+                            r.recommendation === "candidate"
+                              ? "emerald"
+                              : r.recommendation === "tiered"
+                                ? "blue"
+                                : r.recommendation === "revert"
+                                  ? "red"
+                                  : "slate",
+                          )}
+                        >
+                          {r.recommendation.replace("_", " ")}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+        </TabsContent>
+
+        <TabsContent
+          value="evals"
+          forceMount
+          className="mt-4 space-y-4 data-[state=inactive]:hidden"
+        >
       <Card data-testid="section-evaluation">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">Evaluation</CardTitle>
@@ -1660,128 +1941,7 @@ export function HealthPanel() {
         </CardContent>
       </Card>
 
-      <EvalCorpusCard />
-
-      {metrics && (
-        <Card data-testid="section-platform-spend">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Platform spend — {metrics.platformSpend.month}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatTile
-                label="Tokens month-to-date"
-                value={metrics.platformSpend.totalTokens.toLocaleString()}
-                testId="stat-spend-total"
-              />
-              <StatTile
-                label="Projected this month"
-                value={metrics.platformSpend.projectedTokens.toLocaleString()}
-                testId="stat-spend-projected"
-              />
-              <StatTile
-                label="Est. cost"
-                value={
-                  metrics.platformSpend.estimatedUsd != null
-                    ? `$${metrics.platformSpend.estimatedUsd.toFixed(2)}`
-                    : "—"
-                }
-                testId="stat-spend-usd"
-              />
-              <StatTile
-                label="Projected cost"
-                value={
-                  metrics.platformSpend.projectedUsd != null
-                    ? `$${metrics.platformSpend.projectedUsd.toFixed(2)}`
-                    : "—"
-                }
-                testId="stat-spend-projected-usd"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {metrics.platformSpend.firmFundedTokens.toLocaleString()} tokens
-              firm-funded ·{" "}
-              {metrics.platformSpend.platformFundedTokens.toLocaleString()}{" "}
-              platform-funded (desk tooling, evals). Ledger totals on the same
-              UTC month boundary the per-firm budgets use; cost estimates need
-              CLERK_COST_PER_1M_INPUT_USD / _OUTPUT_USD set.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {tierReport && tierReport.rows.length > 0 && (
-        <Card data-testid="section-tier-report">
-          <CardHeader>
-            <CardTitle className="text-base">Model-tier evidence</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Trailing {tierReport.windowDays} days from the inference ledger,
-              joined with the tier map in force (base model{" "}
-              <span className="font-mono">{tierReport.baseModel}</span>).
-              Recommendations are deterministic; act on them via
-              CLERK_MODEL_TIERS (takes effect on server restart) and validate
-              with a prompt canary first.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="table-tier-report">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                    <th className="py-2 pr-3 font-medium">Purpose</th>
-                    <th className="py-2 pr-3 font-medium text-right">Calls</th>
-                    <th className="py-2 pr-3 font-medium text-right">Tokens</th>
-                    <th className="py-2 pr-3 font-medium text-right">Share</th>
-                    <th className="py-2 pr-3 font-medium text-right">Valid</th>
-                    <th className="py-2 pr-3 font-medium">Model</th>
-                    <th className="py-2 font-medium">Recommendation</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {tierReport.rows.map((r) => (
-                    <tr key={r.purpose}>
-                      <td className="py-2 pr-3 font-mono text-xs">{r.purpose}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {r.calls}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {r.totalTokens.toLocaleString()}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {formatPct(r.spendShare)}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {formatPct(r.validRate)}
-                      </td>
-                      <td className="py-2 pr-3 font-mono text-xs">
-                        {r.currentModel}
-                        {r.tiered ? " (tier)" : ""}
-                      </td>
-                      <td className="py-2" title={r.reason}>
-                        <span
-                          className={pillClasses(
-                            r.recommendation === "candidate"
-                              ? "emerald"
-                              : r.recommendation === "tiered"
-                                ? "blue"
-                                : r.recommendation === "revert"
-                                  ? "red"
-                                  : "slate",
-                          )}
-                        >
-                          {r.recommendation.replace("_", " ")}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          <EvalCorpusCard />
 
       {metrics && metrics.injectionTrend.months.length > 0 && (
         <Card data-testid="section-injection-trend">
@@ -1797,27 +1957,6 @@ export function HealthPanel() {
               critical field kept its legitimate value. Pure SQL, no model
               involved in the judgment.
             </p>
-            {metrics.resistanceAlert && (
-              <div
-                className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-                data-testid="alert-resistance-drop"
-              >
-                <p className="font-semibold">
-                  Injection resistance dropped:{" "}
-                  {formatPct(metrics.resistanceAlert.fromRate)} in{" "}
-                  {metrics.resistanceAlert.fromMonth} →{" "}
-                  {formatPct(metrics.resistanceAlert.toRate)} in{" "}
-                  {metrics.resistanceAlert.toMonth} (
-                  {metrics.resistanceAlert.injectionFixtures} injection
-                  fixtures).
-                </p>
-                <p className="mt-1 text-xs">
-                  Review recent prompt changes and the red-team fixtures before
-                  promoting anything. The sweep has recorded this drop in the
-                  audit ledger.
-                </p>
-              </div>
-            )}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm" data-testid="table-injection-months">
@@ -1877,70 +2016,17 @@ export function HealthPanel() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
 
-      {/* Quality watch (kept-rate trend): the extraction-quality twin of the
-          injection-resistance trend — same shape, same hidden-when-absent
-          posture. The alert banner is AMBER, not red: red is reserved for
-          guardrail alerts (the resistance drop); a kept-rate slide is a
-          quality signal that deserves a watchful eye, matching the amber
-          band of overrideRateClass. */}
-      {metrics && (metrics.keptRateTrend?.length ?? 0) > 0 && (
-        <Card data-testid="section-kept-rate-trend">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Extraction kept-rate trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              From the corrections exhaust — the share of compared fields
-              operators KEPT unchanged when approving, by month. Pure SQL, no
-              model involved in the judgment.
-            </p>
-            {metrics.qualityAlert && (
-              <div
-                className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
-                data-testid="alert-quality-drop"
-              >
-                <p className="font-semibold">
-                  {qualityAlertText(metrics.qualityAlert)}
-                </p>
-                <p className="mt-1 text-xs">
-                  Check the field-corrections and correction-shapes tables for
-                  where the overrides land before changing prompts or models.
-                </p>
-              </div>
-            )}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="table-kept-rate-months">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                    <th className="py-2 pr-3 font-medium">Month</th>
-                    <th className="py-2 pr-3 font-medium text-right">Fields</th>
-                    <th className="py-2 font-medium text-right">Kept rate</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {(metrics.keptRateTrend ?? []).map((m) => (
-                    <tr key={m.month}>
-                      <td className="py-2 pr-3 tabular-nums">{m.month}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {m.fields}
-                      </td>
-                      <td className="py-2 text-right tabular-nums">
-                        {m.fields === 0 ? "—" : formatPct(m.keptRate)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <PromptCanaryCard />
-      <ModelCanaryCard />
+        <TabsContent
+          value="canaries"
+          forceMount
+          className="mt-4 space-y-4 data-[state=inactive]:hidden"
+        >
+          <PromptCanaryCard />
+          <ModelCanaryCard />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

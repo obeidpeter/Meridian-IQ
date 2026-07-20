@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
   getGetFirmReceivablesQueryKey,
@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BillingStatementCard } from "@/components/billing-statement-card";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
 import { StaffNotificationPrefsCard } from "@/components/staff-notification-prefs-card";
 import { StatementConnectionsCard } from "@/components/statement-connections-card";
@@ -74,6 +75,63 @@ function formatMoney(value: string, currency: string): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n)} ${currency}`;
+}
+
+// The portfolio's many cards, grouped for scanning. Grouping is layout only —
+// every card keeps its own gating (render-on-success / role checks) and its
+// testids. The anchor row under the header jumps to each group.
+export const PORTFOLIO_GROUPS = [
+  { id: "clients", label: "Clients" },
+  { id: "money", label: "Money" },
+  { id: "compliance", label: "Compliance" },
+  { id: "connections", label: "Connections & delivery" },
+] as const;
+
+// A labeled group of cards. scroll-mt keeps an anchor-jumped heading clear of
+// the sticky console header.
+function PortfolioSection({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      id={id}
+      aria-label={label}
+      className="scroll-mt-24 space-y-4"
+      data-testid={`portfolio-section-${id}`}
+    >
+      <h2 className="border-b border-slate-200 pb-1.5 text-[11px] font-extrabold uppercase tracking-wide text-teal-700 dark:border-slate-800">
+        {label}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function PortfolioAnchorRow() {
+  return (
+    <nav
+      aria-label="Portfolio sections"
+      className="flex flex-wrap gap-2"
+      data-testid="portfolio-anchor-row"
+    >
+      {PORTFOLIO_GROUPS.map((g) => (
+        <a
+          key={g.id}
+          href={`#${g.id}`}
+          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:border-slate-800 dark:bg-card dark:text-muted-foreground dark:hover:text-foreground"
+          data-testid={`anchor-${g.id}`}
+        >
+          {g.label}
+        </a>
+      ))}
+    </nav>
+  );
 }
 
 // "2026-06-01" -> "June 2026" for the VAT pack month picker.
@@ -1177,6 +1235,9 @@ export function Portfolio() {
         />
       </div>
 
+      <PortfolioAnchorRow />
+
+      <PortfolioSection id="clients" label="Clients">
       <Card className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card">
         <CardHeader>
           <CardTitle className="flex items-center justify-between gap-4 text-base">
@@ -1239,36 +1300,38 @@ export function Portfolio() {
         </CardContent>
       </Card>
 
-      <ClerkWeeklyDigestCard />
-
-      {/* Digest delivery is what these preferences control, so they live
-          beside the digest itself. Firm members only — the card self-gates
-          on role, mirroring the server's 403 for everyone else. */}
-      <StaffNotificationPrefsCard />
-
-      <ComplianceCalendarCard />
-
-      <VatPackCard />
-
-      <VatSettlementCard />
-
-      <QuarterlyReviewCard />
-
-      <RejectionPatternsCard />
-
       <ClerkAdoptionCard />
+      </PortfolioSection>
 
-      <ReceivablesCard />
+      <PortfolioSection id="money" label="Money">
+        <ReceivablesCard />
+        <BillingStatementCard />
+      </PortfolioSection>
 
-      {/* Bank-feed connections sit with the money surfaces (receivables /
-          reconciliation feed). Render-on-success: servers without the rail
-          (older build, feature dark → 404) show nothing at all. */}
-      <StatementConnectionsCard
-        clients={clients.map((c) => ({
-          clientPartyId: c.clientPartyId,
-          legalName: c.legalName,
-        }))}
-      />
+      <PortfolioSection id="compliance" label="Compliance">
+        <ComplianceCalendarCard />
+        <VatPackCard />
+        <VatSettlementCard />
+        <QuarterlyReviewCard />
+        <RejectionPatternsCard />
+      </PortfolioSection>
+
+      <PortfolioSection id="connections" label="Connections & delivery">
+        {/* Bank-feed connections sit with the delivery surfaces. Render-on-
+            success: servers without the rail (older build, feature dark →
+            404) show nothing at all. */}
+        <StatementConnectionsCard
+          clients={clients.map((c) => ({
+            clientPartyId: c.clientPartyId,
+            legalName: c.legalName,
+          }))}
+        />
+        <ClerkWeeklyDigestCard />
+        {/* Digest delivery is what these preferences control, so they live
+            beside the digest itself. Firm members only — the card self-gates
+            on role, mirroring the server's 403 for everyone else. */}
+        <StaffNotificationPrefsCard />
+      </PortfolioSection>
     </div>
   );
 }

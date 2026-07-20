@@ -5,6 +5,7 @@ import type {
   EvalFixtureSummary,
 } from "@workspace/api-client-react";
 import {
+  HEALTH_TABS,
   canaryPrefillNote,
   fmtEvalDuration,
   fmtMs,
@@ -22,6 +23,30 @@ import {
   retireDisabledReason,
   visibleFixtureCount,
 } from "./clerk-health";
+
+// The tab groups are presentation only — every section keeps its testids and
+// the alert banners are hoisted above the tabs — but the grouping itself is
+// contract: the default tab must stay first and the values unique (they feed
+// data-testids and the Tabs value space).
+describe("HEALTH_TABS", () => {
+  test("overview leads (it is the default tab) and the IA groups follow", () => {
+    expect(HEALTH_TABS.map((t) => t.value)).toEqual([
+      "overview",
+      "quality",
+      "economics",
+      "evals",
+      "canaries",
+    ]);
+  });
+
+  test("values are unique and every tab carries a human label", () => {
+    const values = HEALTH_TABS.map((t) => t.value);
+    expect(new Set(values).size).toBe(values.length);
+    for (const t of HEALTH_TABS) {
+      expect(t.label.length).toBeGreaterThan(0);
+    }
+  });
+});
 
 describe("overrideRateClass", () => {
   test("reddens above 25%, ambers above 10%, and is blank at or below 10%", () => {
