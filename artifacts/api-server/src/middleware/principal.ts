@@ -8,6 +8,10 @@ import {
   verifySessionToken,
   currentSessionEpoch,
 } from "../modules/auth/session";
+import {
+  looksLikeApiKey,
+  resolveApiKeyPrincipal,
+} from "../modules/integrations/api-keys";
 import { logger } from "../lib/logger";
 
 // Principal resolution.
@@ -70,6 +74,10 @@ export const PUBLIC_PATHS = new Set([
   // Inbound WhatsApp webhook: same machine-caller posture as the email rail —
   // INBOUND_WHATSAPP_TOKEN is the credential; the route 404s while unset.
   "/api/inbound/whatsapp",
+  // Payment confirmation webhook (routes/billing-payments.ts): the same
+  // machine-caller posture — PAYMENT_WEBHOOK_TOKEN is the credential; the
+  // route fails closed (404) while the secret is unconfigured.
+  "/api/billing/payments/confirm",
 ]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
@@ -253,12 +261,27 @@ export function resolvePrincipal(
   }
   // Resolution order: explicit dev headers (only when DEV_AUTH_ENABLED — never
   // in production or a misconfigured env) win for tests and tooling; then a
-  // Bearer session token (mobile); then the first-party session cookie; then a
-  // Clerk-verified session in production.
+  // machine API key (`Bearer mk_...`); then a Bearer session token (mobile);
+  // then the first-party session cookie; then a Clerk-verified session in
+  // production.
   const resolve = (async (): Promise<Principal | null> => {
     if (DEV_AUTH_ENABLED) {
       const dev = resolveDevPrincipal(req);
       if (dev) return dev;
+    }
+    // Firm API keys (modules/integrations/api-keys.ts): an
+    // `Authorization: Bearer mk_...` credential resolves BEFORE every
+    // cookie/session path — and never falls through to them, so an
+    // unknown/revoked key is a clean 401 rather than a request that silently
+    // rides an ambient browser cookie. The resolved machine principal is
+    // pinned to the key's firm (subject to tenantContext firm RLS — the
+    // synthetic role is not in BYPASS_ROLES), carries no client party, and
+    // grants exactly the key's capability list (rbac.ts override); the rate
+    // limiter buckets it under its key-derived userId.
+    const authz = header(req, "authorization");
+    if (authz?.toLowerCase().startsWith("bearer ")) {
+      const token = authz.slice(7).trim();
+      if (looksLikeApiKey(token)) return resolveApiKeyPrincipal(token);
     }
     const bearer = await resolveBearerPrincipal(req);
     if (bearer) return bearer;

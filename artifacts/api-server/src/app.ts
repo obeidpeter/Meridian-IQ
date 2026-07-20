@@ -85,6 +85,15 @@ const NO_CONTEXT_ROUTES = new Set([
   // each item commits in its own short bypass transaction (bulk-approve.ts),
   // holding the audit lock per item only.
   "POST /api/clerk/cases/bulk-approve",
+  // Payment confirmation webhook (routes/billing-payments.ts): a machine
+  // rail like the inbound webhooks — no model call, but the settle path
+  // appends an audit row, and appendAudit serializes on the GLOBAL advisory
+  // xact lock (the bulk-approve rationale): inside the buffered request
+  // transaction that lock would be held until the response settled. The
+  // module instead commits CAS + audit in its own short bypass transaction
+  // (modules/billing/payments.ts confirmPaymentIntent), so the 202 goes out
+  // only after the settle is durably committed.
+  "POST /api/billing/payments/confirm",
 ]);
 
 // Parameterized-path variant of NO_CONTEXT_ROUTES: the Set above can only
