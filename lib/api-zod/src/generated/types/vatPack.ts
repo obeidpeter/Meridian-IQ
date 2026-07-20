@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.36.0
+ * OpenAPI spec version: 0.37.0
  */
 import type { VatPackRowsItem } from './vatPackRowsItem';
 import type { VatPackTotals } from './vatPackTotals';

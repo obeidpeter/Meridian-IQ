@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.36.0
+ * OpenAPI spec version: 0.37.0
  */
 export interface HealthStatus {
   status: string;
@@ -30,6 +30,50 @@ export interface Me {
   capabilities: string[];
   /** @nullable */
   token?: string | null;
+  mfaRequired?: boolean;
+  /** @nullable */
+  mfaToken?: string | null;
+}
+
+export interface TotpChallengeInput {
+  mfaToken: string;
+  /**
+     * @minLength 6
+     * @maxLength 32
+     */
+  code: string;
+}
+
+export interface TotpStatus {
+  enabled: boolean;
+  /** @nullable */
+  enabledAt?: string | null;
+  /** @nullable */
+  recoveryCodesRemaining?: number | null;
+}
+
+export interface TotpSetup {
+  secret: string;
+  otpauthUri: string;
+  recoveryCodes: string[];
+}
+
+export interface TotpActivateInput {
+  /**
+     * @minLength 6
+     * @maxLength 8
+     */
+  code: string;
+}
+
+export interface TotpDisableInput {
+  /** @minLength 1 */
+  password: string;
+  /**
+     * @minLength 6
+     * @maxLength 32
+     */
+  code: string;
 }
 
 export interface LoginInput {

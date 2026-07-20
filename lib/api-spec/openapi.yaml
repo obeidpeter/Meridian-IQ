@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.36.0
+  version: 0.37.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -97,6 +97,92 @@ paths:
       responses:
         "204":
           description: Signed out
+  /auth/totp/challenge:
+    post:
+      operationId: totpChallenge
+      tags: [auth]
+      summary: Redeem a login mfaToken plus a TOTP or recovery code for the session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpChallengeInput"
+      responses:
+        "200":
+          description: Signed in; principal returned and session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /auth/totp/status:
+    get:
+      operationId: getTotpStatus
+      tags: [auth]
+      summary: Whether the signed-in user has TOTP enabled
+      responses:
+        "200":
+          description: Enrolment state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpStatus"
+  /auth/totp/setup:
+    post:
+      operationId: setupTotp
+      tags: [auth]
+      summary: Begin TOTP enrolment — returns the secret, otpauth URI and recovery codes (shown once)
+      responses:
+        "200":
+          description: Pending enrolment; activate with a valid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpSetup"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /auth/totp/activate:
+    post:
+      operationId: activateTotp
+      tags: [auth]
+      summary: Confirm enrolment with a valid code; revokes other sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpActivateInput"
+      responses:
+        "200":
+          description: TOTP enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpStatus"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/totp/disable:
+    post:
+      operationId: disableTotp
+      tags: [auth]
+      summary: Disable TOTP — requires the password and a current code; revokes other sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpDisableInput"
+      responses:
+        "200":
+          description: TOTP disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /auth/change-password:
     post:
       operationId: changePassword
@@ -3955,6 +4041,66 @@ components:
         # token as the cookie; sent as `Authorization: Bearer <token>`.
         token:
           type: ["string", "null"]
+        # TOTP two-factor: when the account has TOTP enabled, /auth/login does
+        # NOT set the session cookie; it returns mfaRequired=true plus a
+        # short-lived signed mfaToken to redeem at /auth/totp/challenge.
+        mfaRequired:
+          type: boolean
+        mfaToken:
+          type: ["string", "null"]
+    TotpChallengeInput:
+      type: object
+      required: [mfaToken, code]
+      properties:
+        mfaToken:
+          type: string
+        # A 6-digit TOTP code, or a one-time recovery code.
+        code:
+          type: string
+          minLength: 6
+          maxLength: 32
+    TotpStatus:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+        enabledAt:
+          type: ["string", "null"]
+        recoveryCodesRemaining:
+          type: ["integer", "null"]
+    TotpSetup:
+      type: object
+      required: [secret, otpauthUri, recoveryCodes]
+      properties:
+        # Base32 secret for manual entry; shown once, never retrievable again.
+        secret:
+          type: string
+        otpauthUri:
+          type: string
+        recoveryCodes:
+          type: array
+          items:
+            type: string
+    TotpActivateInput:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 6
+          maxLength: 8
+    TotpDisableInput:
+      type: object
+      required: [password, code]
+      properties:
+        password:
+          type: string
+          minLength: 1
+        code:
+          type: string
+          minLength: 6
+          maxLength: 32
     LoginInput:
       type: object
       required: [email, password]

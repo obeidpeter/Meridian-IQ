@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.36.0
+ * OpenAPI spec version: 0.37.0
  */
 import {
   useMutation,
@@ -248,6 +248,11 @@ import type {
   SubscriptionView,
   TierUpdate,
   TinCheckInput,
+  TotpActivateInput,
+  TotpChallengeInput,
+  TotpDisableInput,
+  TotpSetup,
+  TotpStatus,
   UblDocument,
   UnauthorizedResponse,
   UnbilledIncomeAlert,
@@ -585,6 +590,363 @@ export const useLogout = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLogoutMutationOptions(options));
+    }
+
+export const getTotpChallengeUrl = () => {
+
+
+
+
+  return `/api/auth/totp/challenge`
+}
+
+/**
+ * @summary Redeem a login mfaToken plus a TOTP or recovery code for the session cookie
+ */
+export const totpChallenge = async (totpChallengeInput: TotpChallengeInput, options?: RequestInit): Promise<Me> => {
+
+  return customFetch<Me>(getTotpChallengeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(totpChallengeInput)
+  }
+);}
+
+
+
+
+export const getTotpChallengeMutationOptions = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof totpChallenge>>, TError,{data: BodyType<TotpChallengeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof totpChallenge>>, TError,{data: BodyType<TotpChallengeInput>}, TContext> => {
+
+const mutationKey = ['totpChallenge'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof totpChallenge>>, {data: BodyType<TotpChallengeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  totpChallenge(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TotpChallengeMutationResult = NonNullable<Awaited<ReturnType<typeof totpChallenge>>>
+    export type TotpChallengeMutationBody = BodyType<TotpChallengeInput>
+    export type TotpChallengeMutationError = ErrorType<UnauthorizedResponse>
+
+    /**
+ * @summary Redeem a login mfaToken plus a TOTP or recovery code for the session cookie
+ */
+export const useTotpChallenge = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof totpChallenge>>, TError,{data: BodyType<TotpChallengeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof totpChallenge>>,
+        TError,
+        {data: BodyType<TotpChallengeInput>},
+        TContext
+      > => {
+      return useMutation(getTotpChallengeMutationOptions(options));
+    }
+
+export const getGetTotpStatusUrl = () => {
+
+
+
+
+  return `/api/auth/totp/status`
+}
+
+/**
+ * @summary Whether the signed-in user has TOTP enabled
+ */
+export const getTotpStatus = async ( options?: RequestInit): Promise<TotpStatus> => {
+
+  return customFetch<TotpStatus>(getGetTotpStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTotpStatusQueryKey = () => {
+    return [
+    `/api/auth/totp/status`
+    ] as const;
+    }
+
+
+export const getGetTotpStatusQueryOptions = <TData = Awaited<ReturnType<typeof getTotpStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTotpStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTotpStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTotpStatus>>> = ({ signal }) => getTotpStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTotpStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTotpStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getTotpStatus>>>
+export type GetTotpStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Whether the signed-in user has TOTP enabled
+ */
+
+export function useGetTotpStatus<TData = Awaited<ReturnType<typeof getTotpStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTotpStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTotpStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetupTotpUrl = () => {
+
+
+
+
+  return `/api/auth/totp/setup`
+}
+
+/**
+ * @summary Begin TOTP enrolment — returns the secret, otpauth URI and recovery codes (shown once)
+ */
+export const setupTotp = async ( options?: RequestInit): Promise<TotpSetup> => {
+
+  return customFetch<TotpSetup>(getSetupTotpUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSetupTotpMutationOptions = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setupTotp>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setupTotp>>, TError,void, TContext> => {
+
+const mutationKey = ['setupTotp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setupTotp>>, void> = () => {
+
+
+          return  setupTotp(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetupTotpMutationResult = NonNullable<Awaited<ReturnType<typeof setupTotp>>>
+
+    export type SetupTotpMutationError = ErrorType<ConflictResponse>
+
+    /**
+ * @summary Begin TOTP enrolment — returns the secret, otpauth URI and recovery codes (shown once)
+ */
+export const useSetupTotp = <TError = ErrorType<ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setupTotp>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setupTotp>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSetupTotpMutationOptions(options));
+    }
+
+export const getActivateTotpUrl = () => {
+
+
+
+
+  return `/api/auth/totp/activate`
+}
+
+/**
+ * @summary Confirm enrolment with a valid code; revokes other sessions
+ */
+export const activateTotp = async (totpActivateInput: TotpActivateInput, options?: RequestInit): Promise<TotpStatus> => {
+
+  return customFetch<TotpStatus>(getActivateTotpUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(totpActivateInput)
+  }
+);}
+
+
+
+
+export const getActivateTotpMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateTotp>>, TError,{data: BodyType<TotpActivateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof activateTotp>>, TError,{data: BodyType<TotpActivateInput>}, TContext> => {
+
+const mutationKey = ['activateTotp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof activateTotp>>, {data: BodyType<TotpActivateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  activateTotp(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActivateTotpMutationResult = NonNullable<Awaited<ReturnType<typeof activateTotp>>>
+    export type ActivateTotpMutationBody = BodyType<TotpActivateInput>
+    export type ActivateTotpMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Confirm enrolment with a valid code; revokes other sessions
+ */
+export const useActivateTotp = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateTotp>>, TError,{data: BodyType<TotpActivateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof activateTotp>>,
+        TError,
+        {data: BodyType<TotpActivateInput>},
+        TContext
+      > => {
+      return useMutation(getActivateTotpMutationOptions(options));
+    }
+
+export const getDisableTotpUrl = () => {
+
+
+
+
+  return `/api/auth/totp/disable`
+}
+
+/**
+ * @summary Disable TOTP — requires the password and a current code; revokes other sessions
+ */
+export const disableTotp = async (totpDisableInput: TotpDisableInput, options?: RequestInit): Promise<TotpStatus> => {
+
+  return customFetch<TotpStatus>(getDisableTotpUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(totpDisableInput)
+  }
+);}
+
+
+
+
+export const getDisableTotpMutationOptions = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disableTotp>>, TError,{data: BodyType<TotpDisableInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof disableTotp>>, TError,{data: BodyType<TotpDisableInput>}, TContext> => {
+
+const mutationKey = ['disableTotp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof disableTotp>>, {data: BodyType<TotpDisableInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  disableTotp(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DisableTotpMutationResult = NonNullable<Awaited<ReturnType<typeof disableTotp>>>
+    export type DisableTotpMutationBody = BodyType<TotpDisableInput>
+    export type DisableTotpMutationError = ErrorType<UnauthorizedResponse>
+
+    /**
+ * @summary Disable TOTP — requires the password and a current code; revokes other sessions
+ */
+export const useDisableTotp = <TError = ErrorType<UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof disableTotp>>, TError,{data: BodyType<TotpDisableInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof disableTotp>>,
+        TError,
+        {data: BodyType<TotpDisableInput>},
+        TContext
+      > => {
+      return useMutation(getDisableTotpMutationOptions(options));
     }
 
 export const getChangePasswordUrl = () => {

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.36.0
+ * OpenAPI spec version: 0.37.0
  */
 import * as zod from 'zod';
 
@@ -30,7 +30,9 @@ export const GetMeResponse = zod.object({
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
-  "token": zod.string().nullish()
+  "token": zod.string().nullish(),
+  "mfaRequired": zod.boolean().optional(),
+  "mfaToken": zod.string().nullish()
 })
 
 
@@ -57,7 +59,9 @@ export const LoginResponse = zod.object({
   "clientPartyId": zod.string().nullish(),
   "buyerPartyId": zod.string().nullish(),
   "capabilities": zod.array(zod.string()),
-  "token": zod.string().nullish()
+  "token": zod.string().nullish(),
+  "mfaRequired": zod.boolean().optional(),
+  "mfaToken": zod.string().nullish()
 })
 
 
@@ -65,6 +69,94 @@ export const LoginResponse = zod.object({
  * @summary Clear the session cookie
  */
 export const LogoutResponse = zod.void()
+
+
+/**
+ * @summary Redeem a login mfaToken plus a TOTP or recovery code for the session cookie
+ */
+export const totpChallengeBodyCodeMin = 6;
+export const totpChallengeBodyCodeMax = 32;
+
+
+
+export const TotpChallengeBody = zod.object({
+  "mfaToken": zod.string(),
+  "code": zod.string().min(totpChallengeBodyCodeMin).max(totpChallengeBodyCodeMax)
+})
+
+export const TotpChallengeResponse = zod.object({
+  "userId": zod.string(),
+  "role": zod.string(),
+  "email": zod.string().nullish(),
+  "fullName": zod.string().nullish(),
+  "firmId": zod.string().nullish(),
+  "clientPartyId": zod.string().nullish(),
+  "buyerPartyId": zod.string().nullish(),
+  "capabilities": zod.array(zod.string()),
+  "token": zod.string().nullish(),
+  "mfaRequired": zod.boolean().optional(),
+  "mfaToken": zod.string().nullish()
+})
+
+
+/**
+ * @summary Whether the signed-in user has TOTP enabled
+ */
+export const GetTotpStatusResponse = zod.object({
+  "enabled": zod.boolean(),
+  "enabledAt": zod.string().nullish(),
+  "recoveryCodesRemaining": zod.number().nullish()
+})
+
+
+/**
+ * @summary Begin TOTP enrolment — returns the secret, otpauth URI and recovery codes (shown once)
+ */
+export const SetupTotpResponse = zod.object({
+  "secret": zod.string(),
+  "otpauthUri": zod.string(),
+  "recoveryCodes": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Confirm enrolment with a valid code; revokes other sessions
+ */
+export const activateTotpBodyCodeMin = 6;
+export const activateTotpBodyCodeMax = 8;
+
+
+
+export const ActivateTotpBody = zod.object({
+  "code": zod.string().min(activateTotpBodyCodeMin).max(activateTotpBodyCodeMax)
+})
+
+export const ActivateTotpResponse = zod.object({
+  "enabled": zod.boolean(),
+  "enabledAt": zod.string().nullish(),
+  "recoveryCodesRemaining": zod.number().nullish()
+})
+
+
+/**
+ * @summary Disable TOTP — requires the password and a current code; revokes other sessions
+ */
+
+export const disableTotpBodyCodeMin = 6;
+export const disableTotpBodyCodeMax = 32;
+
+
+
+export const DisableTotpBody = zod.object({
+  "password": zod.string().min(1),
+  "code": zod.string().min(disableTotpBodyCodeMin).max(disableTotpBodyCodeMax)
+})
+
+export const DisableTotpResponse = zod.object({
+  "enabled": zod.boolean(),
+  "enabledAt": zod.string().nullish(),
+  "recoveryCodesRemaining": zod.number().nullish()
+})
 
 
 /**
