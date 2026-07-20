@@ -23,6 +23,7 @@ import {
   useListSettlements,
   useGetInvoiceStatusLight,
   useGetInvoiceRejectionRisk,
+  getGetInvoicePdfUrl,
   getGetInvoiceRejectionRiskQueryKey,
   getGetInvoiceQueryKey,
   getListSubmissionAttemptsQueryKey,
@@ -85,11 +86,13 @@ import {
   type LineDraft,
 } from "@/lib/invoice-lines";
 import { ERROR_FOCUS } from "@/lib/error-focus";
+import { invoicePdfFilename, triggerDownload } from "@/lib/download";
 import {
   ArrowLeft,
   ShieldCheck,
   Send,
   AlertTriangle,
+  Download,
   LifeBuoy,
   CheckCircle2,
   Clock,
@@ -1157,6 +1160,24 @@ export function InvoiceDetail() {
                   : "Submit for stamping"}
             </Button>
           )}
+          {/* Every invoice has a PDF — the server watermarks unstamped ones —
+              so the button is always offered. Same idiom as the vault's CSV
+              export: a plain same-origin navigation, auth on the session
+              cookie, but via a named-download anchor so the file saves as
+              invoice-<number>.pdf. */}
+          <Button
+            variant="outline"
+            onClick={() =>
+              triggerDownload(
+                getGetInvoicePdfUrl(id),
+                invoicePdfFilename(invoice.invoiceNumber),
+              )
+            }
+            data-testid="button-download-pdf"
+          >
+            <Download className="w-4 h-4 mr-2" aria-hidden="true" /> Download
+            PDF
+          </Button>
           {canCredit && (
             <Button
               variant="outline"
