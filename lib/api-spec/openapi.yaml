@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.39.0
+  version: 0.40.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -7934,6 +7934,12 @@ components:
           type: ["string", "null"]
         committed:
           type: boolean
+        # PDF previews only: the deterministic CSV rendering of the model's
+        # proposed lines. Commit by POSTing this back as `csv` — the rows the
+        # user checked are exactly the rows that commit; a PDF with
+        # commit:true is refused so extraction can never silently re-run.
+        proposedCsv:
+          type: ["string", "null"]
         formatKey:
           type: ["string", "null"]
         accountRef:

@@ -43,7 +43,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.39.0`).
+contract change (it is currently `0.40.0`).
 
 ## Clerk AI — the principles (details: docs/clerk-ai.md)
 

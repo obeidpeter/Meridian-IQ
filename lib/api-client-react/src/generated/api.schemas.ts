@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.39.0
+ * OpenAPI spec version: 0.40.0
  */
 export interface HealthStatus {
   status: string;
@@ -2644,6 +2644,8 @@ export interface StatementImportResult {
   /** @nullable */
   statementId: string | null;
   committed: boolean;
+  /** @nullable */
+  proposedCsv?: string | null;
   /** @nullable */
   formatKey: string | null;
   /** @nullable */

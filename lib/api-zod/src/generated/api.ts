@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.39.0
+ * OpenAPI spec version: 0.40.0
  */
 import * as zod from 'zod';
 
@@ -3335,6 +3335,7 @@ export const ImportBankStatementBody = zod.object({
 export const ImportBankStatementResponse = zod.object({
   "statementId": zod.string().nullable(),
   "committed": zod.boolean(),
+  "proposedCsv": zod.string().nullish(),
   "formatKey": zod.string().nullable(),
   "accountRef": zod.string().nullish(),
   "lineCount": zod.number(),
