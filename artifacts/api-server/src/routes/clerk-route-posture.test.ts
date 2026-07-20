@@ -21,6 +21,10 @@ import { ROLE_CAPABILITIES } from "../modules/auth/rbac.ts";
 //
 // Source-text assertions are deliberately narrow: each targets one route
 // block, so they fail loudly on the specific revert they guard against.
+//
+// The Clerk surface lives in routes/clerk/ (split by concern; see the
+// barrel's map in routes/clerk/index.ts) — each tripwire reads the group
+// file that carries its route.
 
 const src = (rel: string): string =>
   readFileSync(join(import.meta.dirname, "..", rel), "utf8");
@@ -34,7 +38,7 @@ function routeBlock(source: string, path: string): string {
 }
 
 test("explain-failure stays reachable for the client who owns the failed invoice", () => {
-  const block = routeBlock(src("routes/clerk.ts"), "/clerk/explain-failure");
+  const block = routeBlock(src("routes/clerk/ask.ts"), "/clerk/explain-failure");
   assert.ok(
     block.includes('assertCan(req.principal, "clerk.capture")'),
     "explain-failure must gate on clerk.capture — clerk.ask would lock out client_users and break the SME fix-and-retry card",
@@ -46,7 +50,7 @@ test("explain-failure stays reachable for the client who owns the failed invoice
 });
 
 test("draft-invoice checks the firm budget before any provider spend", () => {
-  const block = routeBlock(src("routes/clerk.ts"), "/clerk/draft-invoice");
+  const block = routeBlock(src("routes/clerk/drafts.ts"), "/clerk/draft-invoice");
   const budgetAt = block.indexOf("assertFirmClerkBudget");
   const moduleAt = block.indexOf("draftInvoiceWithClerk(");
   assert.ok(budgetAt >= 0, "the route checks the budget");
@@ -89,7 +93,7 @@ test("client_user holds clerk.ask (Ask) but never clerk.use (review)", () => {
 });
 
 test("the ask route passes the principal-derived client posture into the module", () => {
-  const block = routeBlock(src("routes/clerk.ts"), "/clerk/ask");
+  const block = routeBlock(src("routes/clerk/ask.ts"), "/clerk/ask");
   assert.ok(
     block.includes('clientScoped: req.principal.role === "client_user"'),
     "askClerk must learn it is serving a client from the PRINCIPAL",
@@ -107,7 +111,7 @@ test("the ask route passes the principal-derived client posture into the module"
 });
 
 test("the digest route refuses client_user despite the shared capability", () => {
-  const block = routeBlock(src("routes/clerk.ts"), "/clerk/digest");
+  const block = routeBlock(src("routes/clerk/reports.ts"), "/clerk/digest");
   assert.ok(
     block.includes('assertCan(req.principal, "clerk.ask")'),
     "the digest keeps its clerk.ask gate for firm principals",
@@ -129,7 +133,10 @@ test("the digest route refuses client_user despite the shared capability", () =>
 });
 
 test("bulk approval is operator-gated and runs OUTSIDE the request transaction", () => {
-  const block = routeBlock(src("routes/clerk.ts"), "/clerk/cases/bulk-approve");
+  const block = routeBlock(
+    src("routes/clerk/cases.ts"),
+    "/clerk/cases/bulk-approve",
+  );
   assert.ok(
     block.includes('assertCan(req.principal, "clerk.use")'),
     "bulk approval is a review decision — operator-only like the single endpoint",

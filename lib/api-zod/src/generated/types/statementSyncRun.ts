@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.38.0
+ * OpenAPI spec version: 0.39.0
  */
 import type { StatementSyncRunStatus } from './statementSyncRunStatus';
 

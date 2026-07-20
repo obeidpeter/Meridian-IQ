@@ -94,6 +94,11 @@ export type ClerkPurpose =
   // Scanned-bundle segmentation (batch-async): one vision call proposing
   // page ranges; the app validates coverage before anything else runs.
   | "segment_scan"
+  // Scanned bank-statement intake (statements/scan-intake.ts): one call
+  // proposing transaction lines from a PDF statement; the proposal is
+  // rendered to CSV and re-parsed by the deterministic statement parser, and
+  // a human reviews the preview before anything commits.
+  | "extract_statement"
   // Catalogue-grounded failure explainer (expansion C): rephrases an error
   // catalogue entry in plain language; never invents remediation steps.
   | "explain_failure"

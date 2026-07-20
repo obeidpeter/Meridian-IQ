@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notification-bell";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import type { Me } from "@workspace/api-client-react";
@@ -206,29 +207,32 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col md:flex-row">
         <div className="md:hidden flex items-center justify-between p-4 border-b bg-card">
           <BrandMark />
-          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Open menu"
-                data-testid="button-menu"
-              >
-                <Menu />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
-              <SheetTitle className="sr-only">Navigation</SheetTitle>
-              <NavLinks
-                links={links}
-                location={location}
-                me={me}
-                onNavigate={() => setSheetOpen(false)}
-                onSignOut={signOut}
-                signingOut={logout.isPending}
-              />
-            </SheetContent>
-          </Sheet>
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Open menu"
+                  data-testid="button-menu"
+                >
+                  <Menu />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-64 p-0">
+                <SheetTitle className="sr-only">Navigation</SheetTitle>
+                <NavLinks
+                  links={links}
+                  location={location}
+                  me={me}
+                  onNavigate={() => setSheetOpen(false)}
+                  onSignOut={signOut}
+                  signingOut={logout.isPending}
+                />
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
 
         <div className="hidden md:flex w-64 border-r bg-card min-h-screen sticky top-0 max-h-screen flex-col">
@@ -247,6 +251,11 @@ export function Layout({ children }: { children: ReactNode }) {
           tabIndex={-1}
           className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full focus-visible:outline-none"
         >
+          {/* Desktop header strip: the bell lives in the mobile top bar on
+              small screens, so this row only renders at md+. */}
+          <div className="hidden md:flex justify-end mb-4">
+            <NotificationBell />
+          </div>
           {children}
         </main>
       </div>

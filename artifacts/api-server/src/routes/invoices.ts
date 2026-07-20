@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import {
   getDb,
+  firmsTable,
   invoicesTable,
   stampRecordsTable,
   submissionAttemptsTable,
@@ -53,8 +54,11 @@ import {
   CreateSettlementResponse,
   GetInvoiceStatusLightParams,
   GetInvoiceStatusLightResponse,
+  GetInvoicePdfParams,
   GetInvoiceRejectionRiskParams,
   GetInvoiceRejectionRiskResponse,
+  GetBillingStatementQueryParams,
+  GetBillingStatementResponse,
   GetVatPackQueryParams,
   GetVatPackResponse,
   DraftVatPackCoverNoteBody,
@@ -108,6 +112,8 @@ import { listUnmatchedCredits } from "../modules/invoice/unmatched-credits";
 import { computeProjectionAccuracy } from "../modules/invoice/projection-accuracy";
 import { computeRejectionRisk } from "../modules/invoice/rejection-risk";
 import { recordChase } from "../modules/invoice/chase-log";
+import { renderInvoicePdf, sendPdfAttachment } from "../modules/invoice/pdf";
+import { computeBillingStatement } from "../modules/invoice/billing-statement";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { likePattern } from "../lib/sql";
 import {
@@ -440,6 +446,63 @@ router.post("/quarterly-review/cover-note", async (req, res): Promise<void> => {
   res.json(DraftQuarterlyCoverNoteResponse.parse(note));
 });
 
+// Monthly platform-billing statement (round-15): tier, metered usage and the
+// computed fee for a closed Lagos month — deterministic, nothing stored, the
+// vat-pack posture pointed at the platform's own bill. Same gates as the VAT
+// pack: firm principals only (console.portfolio.read + firm scope), and the
+// month must be on the closed-month option list.
+async function resolveBillingStatement(
+  principal: Principal,
+  rawQuery: unknown,
+) {
+  assertCan(principal, "console.portfolio.read");
+  const firmId = requireFirmScope(principal);
+  const query = parseOrThrow(GetBillingStatementQueryParams, rawQuery);
+  const month = resolveClosedPeriod(
+    query.month,
+    closedLagosMonths(),
+    "BAD_MONTH",
+  );
+  return computeBillingStatement(firmId, month);
+}
+
+router.get("/billing/statement", async (req, res): Promise<void> => {
+  const statement = await resolveBillingStatement(req.principal, req.query);
+  res.json(GetBillingStatementResponse.parse(statement));
+});
+
+router.get("/billing/statement/export", async (req, res): Promise<void> => {
+  // resolveBillingStatement parses the (identical) query schema; no second parse.
+  const s = await resolveBillingStatement(req.principal, req.query);
+  const csv = toCsv(
+    ["item", "value"],
+    [
+      ["month", s.monthLabel],
+      ["tier", `${s.tier.name} (${s.tier.key})`],
+      ["baseFee", s.fee.base],
+      ["includedInvoices", String(s.tier.includedInvoices)],
+      ["acceptedInvoices", String(s.usage.acceptedInvoices)],
+      ["overageInvoices", String(s.fee.overageInvoices)],
+      ["overagePrice", s.tier.overagePrice],
+      ["overageFee", s.fee.overage],
+      ["totalFee", s.fee.total],
+      ["submissionAttempts", String(s.usage.submissionAttempts)],
+      ["clerkCalls", String(s.usage.clerkCalls)],
+      ["clerkTokens", String(s.usage.clerkTokens)],
+      ...s.usage.byPurpose.map(
+        (p) => [`clerkTokens:${p.purpose}`, String(p.tokens)] as string[],
+      ),
+      // The disclosure travels WITH the file a partner hands around.
+      ["note", s.note],
+    ],
+  );
+  sendCsvAttachment(
+    res,
+    `billing-statement-${s.monthStart.slice(0, 7)}.csv`,
+    csv,
+  );
+});
+
 // Frequent line items (round-4 idea #1): mined on demand from the client's
 // own invoices, nothing stored, no model. Same SEC-03 resolution as the
 // recurring suggestions: a client_user is pinned to its own party; a firm
@@ -681,6 +744,59 @@ router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
     },
   });
   res.status(202).json(CreditNoteInvoiceResponse.parse(submitted));
+});
+
+// Branded invoice PDF: the client-facing paper for a document the platform
+// already holds. Same gate and scoping as GET /invoices/:id exactly —
+// invoice.read + loadForTenant (404 unknown, tenant + SEC-03: a client_user
+// only downloads its own invoices, never a sibling's). Rendering is pure
+// (modules/invoice/pdf.ts); this route owns loading the parties, the firm's
+// whitelabel theme and the stamp record.
+router.get("/invoices/:id/pdf", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const params = parseOrThrow(GetInvoicePdfParams, req.params);
+  const { invoice, lines } = await loadForTenant(req, params.id);
+  const [parties, stamps, firms] = await Promise.all([
+    getDb()
+      .select()
+      .from(partiesTable)
+      .where(
+        inArray(partiesTable.id, [
+          invoice.supplierPartyId,
+          invoice.buyerPartyId,
+        ]),
+      ),
+    getDb()
+      .select()
+      .from(stampRecordsTable)
+      .where(eq(stampRecordsTable.invoiceId, params.id))
+      .orderBy(asc(stampRecordsTable.createdAt))
+      .limit(1),
+    getDb()
+      .select({ name: firmsTable.name, theme: firmsTable.theme })
+      .from(firmsTable)
+      .where(eq(firmsTable.id, invoice.firmId))
+      .limit(1),
+  ]);
+  const supplier = parties.find((p) => p.id === invoice.supplierPartyId);
+  const buyer = parties.find((p) => p.id === invoice.buyerPartyId);
+  if (!supplier || !buyer) {
+    throw new DomainError("NOT_FOUND", "Invoice parties not found", 404);
+  }
+  // brandName falls back to the firm's own name — the whitelabel page's rule.
+  const theme: Record<string, unknown> = { ...(firms[0]?.theme ?? {}) };
+  if (typeof theme.brandName !== "string" || !theme.brandName.trim()) {
+    if (firms[0]?.name) theme.brandName = firms[0].name;
+  }
+  const pdf = await renderInvoicePdf({
+    invoice,
+    lines,
+    supplier,
+    buyer,
+    stamp: stamps[0] ?? null,
+    theme,
+  });
+  sendPdfAttachment(res, `invoice-${invoice.invoiceNumber}.pdf`, pdf);
 });
 
 router.get("/invoices/:id/ubl", async (req, res): Promise<void> => {

@@ -7,7 +7,7 @@ import {
   usersTable,
   clerkInferenceCallsTable,
 } from "@workspace/db";
-import clerkRouter from "./clerk.ts";
+import clerkRouter from "./clerk/index.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { createExtractionCase } from "../modules/clerk/cases.ts";
 import {

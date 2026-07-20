@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.38.0
+  version: 0.39.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -819,6 +819,84 @@ paths:
                 type: string
         "400":
           $ref: "#/components/responses/BadRequest"
+  /billing/statement:
+    get:
+      operationId: getBillingStatement
+      tags: [invoices]
+      summary: Deterministic monthly platform-billing statement for the firm — tier, metered usage, computed fee (nothing stored)
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: Billing statement for a closed month
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingStatement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /billing/statement/export:
+    get:
+      operationId: exportBillingStatementCsv
+      tags: [invoices]
+      summary: Download the monthly billing statement as CSV
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: CSV file (Content-Disposition attachment)
+          content:
+            text/csv:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [messaging]
+      summary: The signed-in user's own notification feed, resolved from the pointer-only messages ledger
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Newest-first feed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationFeed"
+  /firms/{id}/export:
+    get:
+      operationId: exportFirmData
+      tags: [audit]
+      summary: Full-firm portability export (operator-gated) — invoices, parties, statements, consent trail, firm-scoped audit events
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Export bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirmExportBundle"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /vat-pack/cover-note:
     post:
       operationId: draftVatPackCoverNote
@@ -3280,6 +3358,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StatusLight"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /invoices/{id}/pdf:
+    get:
+      operationId: getInvoicePdf
+      tags: [invoices]
+      summary: Branded invoice PDF — firm whitelabel theme, stamp reference and verify QR when stamped
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: PDF document (Content-Disposition attachment)
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
         "404":
           $ref: "#/components/responses/NotFound"
   /invoices/{id}/rejection-risk:
@@ -7792,11 +7887,17 @@ components:
           format: date-time
     StatementImportInput:
       type: object
-      required: [clientPartyId, csv, commit]
+      required: [clientPartyId, commit]
       properties:
         clientPartyId:
           type: string
+        # Exactly one of csv | pdfBase64 (server-enforced). A PDF statement is
+        # rasterized and its lines PROPOSED by vision extraction — the preview
+        # (commit:false) is the human check before anything commits.
         csv:
+          type: string
+          minLength: 1
+        pdfBase64:
           type: string
           minLength: 1
         formatKey:
@@ -9819,6 +9920,133 @@ components:
         # verified address.
         emailVerifiedAt:
           type: ["string", "null"]
+    BillingStatement:
+      type: object
+      required: [monthStart, monthLabel, months, tier, usage, fee, note]
+      properties:
+        monthStart:
+          type: string
+        monthLabel:
+          type: string
+        months:
+          type: array
+          items:
+            type: object
+            required: [value, label]
+            properties:
+              value:
+                type: string
+              label:
+                type: string
+        tier:
+          type: object
+          required: [key, name, monthlyPrice, includedInvoices, overagePrice, clerkMonthlyTokens]
+          properties:
+            key:
+              type: string
+            name:
+              type: string
+            monthlyPrice:
+              type: string
+            includedInvoices:
+              type: integer
+            overagePrice:
+              type: string
+            clerkMonthlyTokens:
+              type: ["integer", "null"]
+        usage:
+          type: object
+          required: [acceptedInvoices, submissionAttempts, clerkTokens, clerkCalls, byPurpose]
+          properties:
+            acceptedInvoices:
+              type: integer
+            submissionAttempts:
+              type: integer
+            clerkTokens:
+              type: integer
+            clerkCalls:
+              type: integer
+            byPurpose:
+              type: array
+              items:
+                type: object
+                required: [purpose, tokens]
+                properties:
+                  purpose:
+                    type: string
+                  tokens:
+                    type: integer
+        fee:
+          type: object
+          required: [base, overageInvoices, overage, total]
+          properties:
+            base:
+              type: string
+            overageInvoices:
+              type: integer
+            overage:
+              type: string
+            total:
+              type: string
+        note:
+          type: string
+    NotificationFeed:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, channel, templateKey, title, status, createdAt]
+            properties:
+              id:
+                type: string
+              channel:
+                type: string
+              templateKey:
+                type: string
+              # Human copy resolved server-side from the template registry —
+              # the ledger row itself stays pointer-only.
+              title:
+                type: string
+              entityType:
+                type: ["string", "null"]
+              entityId:
+                type: ["string", "null"]
+              status:
+                type: string
+              createdAt:
+                type: string
+    FirmExportBundle:
+      type: object
+      required: [firmId, exportedAt, sections]
+      properties:
+        firmId:
+          type: string
+        exportedAt:
+          type: string
+        # Section name -> rows. Row shapes mirror the platform tables; capped
+        # per section with a truncation marker in `counts`.
+        sections:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+        counts:
+          type: array
+          items:
+            type: object
+            required: [section, rows, truncated]
+            properties:
+              section:
+                type: string
+              rows:
+                type: integer
+              truncated:
+                type: boolean
     ConfirmStaffEmailInput:
       type: object
       required: [code]

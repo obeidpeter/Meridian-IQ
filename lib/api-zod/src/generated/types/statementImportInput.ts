@@ -3,13 +3,15 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.38.0
+ * OpenAPI spec version: 0.39.0
  */
 
 export interface StatementImportInput {
   clientPartyId: string;
   /** @minLength 1 */
-  csv: string;
+  csv?: string;
+  /** @minLength 1 */
+  pdfBase64?: string;
   formatKey?: string;
   filename?: string;
   commit: boolean;

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
@@ -28,9 +29,15 @@ import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { FilePickerButton } from "@/components/file-picker-button";
 import { RowStatusIcon } from "@/components/row-status-icon";
+import { ClerkDisabledBanner } from "@/components/clerk-disabled-banner";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureDisabled, serverErrorMessage } from "@/lib/errors";
+import { fileToBase64, handleClerkGatewayError } from "@/lib/clerk";
+import {
+  isPdfStatementFile,
+  statementPdfSizeError,
+} from "@/lib/statement-file";
 import {
   Landmark,
   ScanSearch,
@@ -95,6 +102,16 @@ export function Reconciliation() {
 
   const [csv, setCsv] = useState("");
   const [filename, setFilename] = useState<string | null>(null);
+  // Scanned-statement path (contract 0.39.0): a picked PDF is held as base64
+  // and sent as pdfBase64 instead of csv — Clerk reads it into lines
+  // server-side. Exactly one of pdf / csv text is ever live.
+  const [pdf, setPdf] = useState<{ name: string; base64: string } | null>(null);
+  // Which path produced the current report: PDF preview rows are Clerk's
+  // PROPOSAL, not a parsed export, so they get an explicit check-first banner.
+  const [reportSource, setReportSource] = useState<"csv" | "pdf">("csv");
+  // Kill-switch banner for the scanned path (503 CLERK_DISABLED) — the same
+  // pattern as the capture page; the CSV path never touches the model.
+  const [clerkDown, setClerkDown] = useState(false);
   const [report, setReport] = useState<StatementImportResult | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [decidingId, setDecidingId] = useState<string | null>(null);
@@ -170,10 +187,39 @@ export function Reconciliation() {
     [csv],
   );
 
+  // File-type sniff: a PDF routes to the scanned path (base64, size-guarded),
+  // anything else stays on the unchanged CSV text path.
   const onFile = async (file: File) => {
+    if (isPdfStatementFile(file.name, file.type)) {
+      const sizeError = statementPdfSizeError(file.size);
+      if (sizeError) {
+        toast({
+          title: "Scanned statement too large",
+          description: sizeError,
+          variant: "destructive",
+        });
+        return;
+      }
+      try {
+        const base64 = await fileToBase64(file);
+        setPdf({ name: file.name, base64 });
+        setCsv("");
+        setFilename(file.name);
+        setReport(null);
+        setClerkDown(false);
+      } catch {
+        toast({
+          title: "Could not read file",
+          description: "The PDF could not be read — try re-exporting it.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
     try {
       const text = await file.text();
       setCsv(text);
+      setPdf(null);
       setFilename(file.name);
       setReport(null);
     } catch {
@@ -186,17 +232,18 @@ export function Reconciliation() {
   };
 
   const run = async (commit: boolean) => {
-    if (!clientPartyId || !csv.trim()) return;
+    if (!clientPartyId || (!pdf && !csv.trim())) return;
     try {
       const res = await importMut.mutateAsync({
         data: {
           clientPartyId,
-          csv,
+          ...(pdf ? { pdfBase64: pdf.base64 } : { csv }),
           commit,
           ...(filename ? { filename } : {}),
         },
       });
       setReport(res);
+      setReportSource(pdf ? "pdf" : "csv");
       if (commit) {
         // Not awaited: a background refetch rejection must not surface as a
         // false "commit failed" error after the statement already committed.
@@ -204,6 +251,7 @@ export function Reconciliation() {
           queryKey: getListBankStatementsQueryKey({ clientPartyId }),
         });
         setCsv("");
+        setPdf(null);
         setFilename(null);
         if (res.statementId) setSelectedId(res.statementId);
         toast({
@@ -217,6 +265,20 @@ export function Reconciliation() {
         });
       }
     } catch (e) {
+      if (pdf) {
+        // The scanned path spends Clerk tokens, so it can hit the gateway's
+        // guardrails: 503 kill switch raises the banner, 429 budget and the
+        // typed intake rejections relay the server's own words (the capture
+        // page's pattern).
+        handleClerkGatewayError(e, {
+          onDisabled: () => setClerkDown(true),
+          toast,
+          fallbackTitle: commit
+            ? "Commit failed"
+            : "Clerk couldn't read that statement",
+        });
+        return;
+      }
       toast({
         title: commit ? "Commit failed" : "Parse check failed",
         description: e instanceof Error ? e.message : "Please check your CSV.",
@@ -317,15 +379,24 @@ export function Reconciliation() {
 
       <RequireClientScope thing="reconciliation workspace">
         <div className="space-y-6">
+          {clerkDown && (
+            <ClerkDisabledBanner>
+              Scanned-statement reading is paused. Upload your bank&apos;s CSV
+              export instead, or try the PDF again later.
+            </ClerkDisabledBanner>
+          )}
+
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">1. Add a bank statement (CSV)</CardTitle>
+              <CardTitle className="text-base">
+                1. Add a bank statement (CSV or scanned PDF)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
                 <FilePickerButton
-                  accept=".csv,text/csv,text/plain"
-                  label="Upload CSV"
+                  accept=".csv,.pdf,text/csv,text/plain,application/pdf"
+                  label="Upload CSV or PDF"
                   onFile={onFile}
                 />
               </div>
@@ -340,12 +411,23 @@ export function Reconciliation() {
                   value={csv}
                   onChange={(e) => {
                     setCsv(e.target.value);
+                    setPdf(null);
                     setFilename(null);
                     setReport(null);
                   }}
                 />
               </div>
-              {csvLines.length > 0 && (
+              {pdf && (
+                <p
+                  className="text-sm text-muted-foreground"
+                  data-testid="text-pdf-loaded"
+                >
+                  Loaded <span className="font-medium">{pdf.name}</span> — a
+                  scanned statement. Clerk will read it into lines; run the
+                  parse check to see what it found before committing.
+                </p>
+              )}
+              {!pdf && csvLines.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">
                     {filename ? (
@@ -368,13 +450,20 @@ export function Reconciliation() {
             <Button
               variant="outline"
               onClick={() => run(false)}
-              disabled={!csv.trim() || importMut.isPending}
+              disabled={(!pdf && !csv.trim()) || importMut.isPending}
             >
               <ScanSearch className="w-4 h-4 mr-2" aria-hidden="true" />
-              {importMut.isPending ? "Working…" : "Check parsing"}
+              {importMut.isPending
+                ? pdf
+                  ? "Clerk is reading…"
+                  : "Working…"
+                : "Check parsing"}
             </Button>
             {report && !report.committed && (
-              <Button onClick={() => run(true)} disabled={!csv.trim() || importMut.isPending}>
+              <Button
+                onClick={() => run(true)}
+                disabled={(!pdf && !csv.trim()) || importMut.isPending}
+              >
                 <Landmark className="w-4 h-4 mr-2" aria-hidden="true" />
                 {importMut.isPending ? "Working…" : "Commit statement"}
               </Button>
@@ -389,6 +478,20 @@ export function Reconciliation() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {reportSource === "pdf" && !report.committed && (
+                  <Alert data-testid="banner-scanned-preview">
+                    <Sparkles className="h-4 w-4" aria-hidden="true" />
+                    <AlertTitle>
+                      Clerk read this scanned statement
+                    </AlertTitle>
+                    <AlertDescription>
+                      The rows below are what Clerk proposed from the PDF —
+                      not a parsed export. Check the dates, amounts and
+                      directions against your statement before committing;
+                      nothing is saved until you do.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="flex flex-wrap items-center gap-4 text-sm">
                   <span>
                     Format:{" "}
@@ -472,7 +575,7 @@ export function Reconciliation() {
                 <EmptyState
                   icon={Landmark}
                   title="No statements yet"
-                  description="Upload a bank CSV above to start reconciling."
+                  description="Upload a bank CSV or scanned PDF above to start reconciling."
                   className="px-0 py-8 justify-center"
                 />
               ) : (

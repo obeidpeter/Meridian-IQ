@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.38.0
+ * OpenAPI spec version: 0.39.0
  */
 
 export * from './acceptInvitationInput';
@@ -34,6 +34,12 @@ export * from './bankStatementStatus';
 export * from './batchClerkCasesInput';
 export * from './batchClerkCasesInputSourceType';
 export * from './batchClerkCasesResult';
+export * from './billingStatement';
+export * from './billingStatementFee';
+export * from './billingStatementMonthsItem';
+export * from './billingStatementTier';
+export * from './billingStatementUsage';
+export * from './billingStatementUsageByPurposeItem';
 export * from './billingTier';
 export * from './billingTierKey';
 export * from './bulkAcceptInput';
@@ -244,6 +250,7 @@ export * from './evalFixtureReport';
 export * from './evalFixtureSummary';
 export * from './evalFixtureSummarySource';
 export * from './explainFailureInput';
+export * from './exportBillingStatementCsvParams';
 export * from './exportInvoicesCsvParams';
 export * from './exportReceivablesCsvParams';
 export * from './exportVatPackCsvParams';
@@ -255,6 +262,10 @@ export * from './featureFlagOverrideInput';
 export * from './featureFlagUpdate';
 export * from './fieldError';
 export * from './firm';
+export * from './firmExportBundle';
+export * from './firmExportBundleCountsItem';
+export * from './firmExportBundleSections';
+export * from './firmExportBundleSectionsItem';
 export * from './firmInput';
 export * from './firmMember';
 export * from './firmReceivables';
@@ -270,6 +281,7 @@ export * from './gapItem';
 export * from './gapItemSeverity';
 export * from './gateMetrics';
 export * from './generateStatementsInput';
+export * from './getBillingStatementParams';
 export * from './getCashflowOutlookParams';
 export * from './getChaseListParams';
 export * from './getClerkClaimGapsParams';
@@ -327,6 +339,7 @@ export * from './listClientStatementsParams';
 export * from './listErpConnectionsParams';
 export * from './listInvoicesParams';
 export * from './listLineItemSuggestionsParams';
+export * from './listNotificationsParams';
 export * from './listOperatorCasesParams';
 export * from './listOperatorCasesStatus';
 export * from './listPartiesParams';
@@ -362,6 +375,8 @@ export * from './modelCanaryReportFixturesItem';
 export * from './modelCanaryReportVerdict';
 export * from './modelCanarySide';
 export * from './notFoundResponse';
+export * from './notificationFeed';
+export * from './notificationFeedItemsItem';
 export * from './onboardingProspect';
 export * from './onboardingProspectStage';
 export * from './operatorBrief';

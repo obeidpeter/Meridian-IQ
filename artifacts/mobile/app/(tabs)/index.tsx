@@ -37,6 +37,7 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import { updatesAudience } from "@/lib/clerk-updates";
 import {
   countdownLabel,
   formatCurrency,
@@ -104,6 +105,10 @@ export default function HomeScreen() {
   const summary = query.data;
   const firstName = me?.fullName?.split(" ")[0];
   const canClerkCapture = !!me?.capabilities?.includes("clerk.capture");
+  const canClerkAsk = !!me?.capabilities?.includes("clerk.ask");
+  // Firm staff get the weekly digest, clients their monthly statements —
+  // null (no capability / platform role) hides the tile entirely.
+  const updates = updatesAudience(me?.role, me?.capabilities);
 
   return (
     <ScreenScroll
@@ -227,6 +232,22 @@ export default function HomeScreen() {
                   icon="camera"
                   onPress={() => router.push("/clerk-capture")}
                   testID="action-clerk-capture"
+                />
+              ) : null}
+              {canClerkAsk ? (
+                <ActionTile
+                  label="Ask Clerk"
+                  icon="help-circle"
+                  onPress={() => router.push("/clerk-ask")}
+                  testID="action-clerk-ask"
+                />
+              ) : null}
+              {updates ? (
+                <ActionTile
+                  label="Digests & statements"
+                  icon="book-open"
+                  onPress={() => router.push("/clerk-updates")}
+                  testID="action-clerk-updates"
                 />
               ) : null}
             </View>

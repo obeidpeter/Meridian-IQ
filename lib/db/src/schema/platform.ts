@@ -85,7 +85,8 @@ export const messagesTable = pgTable("messages", {
   error: text("error"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-});
+  // The per-user notification feed scans by recipient pointer, newest first.
+}, (t) => [index("messages_recipient_created_idx").on(t.recipientRef, t.createdAt)]);
 
 // Transactional outbox: written in the same transaction as the domain change,
 // drained by the worker (INT-09). status=dead is the dead-letter queue.
