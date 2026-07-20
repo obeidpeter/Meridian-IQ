@@ -42,7 +42,7 @@ const MODEL_DEFAULT_PER_MIN = 60;
 //      NOT here: it is public and carries its own shared-secret gate.
 //   2. The digest-posture single-completion routes that stay inside the
 //      ordinary transaction (see the catalogue-draft comment in
-//      routes/clerk.ts): explain-failure, draft-chaser, reconciliation-assist,
+//      routes/clerk/drafts.ts): explain-failure, draft-chaser, reconciliation-assist,
 //      claims draft, both cover notes, reply drafts, narrative.
 // Adding a model-calling route? Add it to the matching list here too.
 export const MODEL_RATE_LIMITED_ROUTES: ReadonlySet<string> = new Set([
