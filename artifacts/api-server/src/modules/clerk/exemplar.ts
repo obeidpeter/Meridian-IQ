@@ -48,8 +48,8 @@ const EXEMPLAR_SCAN_LIMIT = 200;
 // is demonstrably misleading and is skipped (the next candidate, or cold
 // extraction, takes over). Thresholds are conservative: judgment needs real
 // history, and an occasional bad descendant should not kill a good exemplar.
-export const HYGIENE_MIN_CASES = 3;
-export const HYGIENE_MAX_OVERRIDE_RATE = 0.5;
+const HYGIENE_MIN_CASES = 3;
+const HYGIENE_MAX_OVERRIDE_RATE = 0.5;
 // Below this many characters a "document" is a text snippet whose token
 // overlap says little; skip rather than match noise.
 const MIN_DOC_CHARS = 40;

@@ -101,7 +101,7 @@ import {
   computeQuarterlyReview,
 } from "../modules/advisory/quarterly-pack";
 import { draftQuarterlyCoverNote } from "../modules/advisory/quarterly-note";
-import { getClerkGateway } from "../modules/clerk/provider";
+import { gatewayOrNull } from "../modules/clerk/provider";
 import { listLineItemSuggestions } from "../modules/invoice/line-items";
 import { listPaymentBehaviour } from "../modules/invoice/payment-behaviour";
 import { listUnmatchedCredits } from "../modules/invoice/unmatched-credits";
@@ -281,6 +281,29 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
   );
 });
 
+// The closed-period discipline shared by every VAT-pack/quarterly surface:
+// the requested month/quarter (or the newest closed one when omitted) must be
+// on the module's own closed-period option list, or the request is refused
+// with the matching catalogue code. One definition so the five call sites
+// cannot drift.
+function resolveClosedPeriod(
+  raw: string | undefined,
+  list: string[],
+  code: "BAD_MONTH" | "BAD_QUARTER",
+): string {
+  const period = raw ?? list[0];
+  if (!list.includes(period)) {
+    throw new DomainError(
+      code,
+      code === "BAD_MONTH"
+        ? "month must be one of the last 12 closed Lagos months (YYYY-MM-01)"
+        : "quarter must be the first month of one of the last 4 closed Lagos quarters (YYYY-MM-01)",
+      400,
+    );
+  }
+  return period;
+}
+
 // Monthly VAT filing pack (exhaust idea #2): per-client output VAT for a
 // closed Lagos month, deterministic and computed on demand — the firm-level
 // view of the per-client statement facts. Firm principals only (a client_user
@@ -289,15 +312,11 @@ async function resolveVatPack(principal: Principal, rawQuery: unknown) {
   assertCan(principal, "console.portfolio.read");
   const firmId = requireFirmScope(principal);
   const query = parseOrThrow(GetVatPackQueryParams, rawQuery);
-  const months = closedLagosMonths();
-  const month = query.month ?? months[0];
-  if (!months.includes(month)) {
-    throw new DomainError(
-      "BAD_MONTH",
-      "month must be one of the last 12 closed Lagos months (YYYY-MM-01)",
-      400,
-    );
-  }
+  const month = resolveClosedPeriod(
+    query.month,
+    closedLagosMonths(),
+    "BAD_MONTH",
+  );
   return computeVatPack(firmId, month);
 }
 
@@ -349,22 +368,18 @@ router.get("/vat-pack/export", async (req, res): Promise<void> => {
 // into a note the partner edits and owns. Digest posture end to end — kill
 // switch, missing provider, exhausted budget or invalid output all answer
 // with the deterministic template (never an error), so there is no route
-// budget pre-check: the gateway backstop turns an exhausted allowance into
-// the fallback, exactly like the failure explainer.
+// budget pre-check: the module treats the gateway backstop's typed
+// budget-exhausted failure as one more reason to answer with the template.
 router.post("/vat-pack/cover-note", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
   const firmId = requireFirmScope(req.principal);
   const body = parseOrThrow(DraftVatPackCoverNoteBody, req.body ?? {});
-  const months = closedLagosMonths();
-  const month = body.month ?? months[0];
-  if (!months.includes(month)) {
-    throw new DomainError(
-      "BAD_MONTH",
-      "month must be one of the last 12 closed Lagos months (YYYY-MM-01)",
-      400,
-    );
-  }
-  const gateway = await getClerkGateway().catch(() => null);
+  const month = resolveClosedPeriod(
+    body.month,
+    closedLagosMonths(),
+    "BAD_MONTH",
+  );
+  const gateway = await gatewayOrNull();
   const note = await draftVatCoverNote(firmId, month, gateway);
   res.json(DraftVatPackCoverNoteResponse.parse(note));
 });
@@ -377,15 +392,11 @@ router.get("/vat-pack/settlement-check", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
   const firmId = requireFirmScope(req.principal);
   const query = parseOrThrow(GetVatSettlementCheckQueryParams, req.query);
-  const months = closedLagosMonths();
-  const month = query.month ?? months[0];
-  if (!months.includes(month)) {
-    throw new DomainError(
-      "BAD_MONTH",
-      "month must be one of the last 12 closed Lagos months (YYYY-MM-01)",
-      400,
-    );
-  }
+  const month = resolveClosedPeriod(
+    query.month,
+    closedLagosMonths(),
+    "BAD_MONTH",
+  );
   const check = await computeVatSettlementCheck(firmId, month);
   res.json(GetVatSettlementCheckResponse.parse(check));
 });
@@ -398,15 +409,11 @@ async function resolveQuarterlyReview(principal: Principal, rawQuery: unknown) {
   assertCan(principal, "console.portfolio.read");
   const firmId = requireFirmScope(principal);
   const query = parseOrThrow(GetQuarterlyReviewQueryParams, rawQuery);
-  const quarters = closedLagosQuarters();
-  const quarter = query.quarter ?? quarters[0];
-  if (!quarters.includes(quarter)) {
-    throw new DomainError(
-      "BAD_QUARTER",
-      "quarter must be the first month of one of the last 4 closed Lagos quarters (YYYY-MM-01)",
-      400,
-    );
-  }
+  const quarter = resolveClosedPeriod(
+    query.quarter,
+    closedLagosQuarters(),
+    "BAD_QUARTER",
+  );
   return computeQuarterlyReview(firmId, quarter);
 }
 
@@ -423,16 +430,12 @@ router.post("/quarterly-review/cover-note", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
   const firmId = requireFirmScope(req.principal);
   const body = parseOrThrow(DraftQuarterlyCoverNoteBody, req.body ?? {});
-  const quarters = closedLagosQuarters();
-  const quarter = body.quarter ?? quarters[0];
-  if (!quarters.includes(quarter)) {
-    throw new DomainError(
-      "BAD_QUARTER",
-      "quarter must be the first month of one of the last 4 closed Lagos quarters (YYYY-MM-01)",
-      400,
-    );
-  }
-  const gateway = await getClerkGateway().catch(() => null);
+  const quarter = resolveClosedPeriod(
+    body.quarter,
+    closedLagosQuarters(),
+    "BAD_QUARTER",
+  );
+  const gateway = await gatewayOrNull();
   const note = await draftQuarterlyCoverNote(firmId, quarter, gateway);
   res.json(DraftQuarterlyCoverNoteResponse.parse(note));
 });

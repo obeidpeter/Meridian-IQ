@@ -238,6 +238,18 @@ test("explainInvoiceFailure: an exhausted budget falls back to catalogue text", 
   assert.deepEqual(result.nextSteps, [`test fix ${SALT}`]);
 });
 
+test("explainInvoiceFailure: a null gateway (provider unavailable) still answers catalogue text", async () => {
+  // The route passes gatewayOrNull(): when the provider integration cannot
+  // even be constructed (missing AI env), the module receives null and the
+  // grounded catalogue fallback answers — the digest posture the surface
+  // promises, never a 500.
+  const result = await explainInvoiceFailure(invoiceId, admin, null);
+  assert.equal(result.source, "catalogue");
+  assert.equal(result.errorCode, CODE);
+  assert.equal(result.explanation, `test cause ${SALT}`);
+  assert.deepEqual(result.nextSteps, [`test fix ${SALT}`]);
+});
+
 test("explainInvoiceFailure: a client_user reaches only its own party's invoices (SEC-03)", async () => {
   // The route now gates on clerk.capture so the client who owns the failed
   // invoice can use the fix flow; the module remains the scope authority.

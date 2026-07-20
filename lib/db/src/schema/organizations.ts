@@ -8,6 +8,7 @@ import {
   timestamp,
   index,
   pgEnum,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { partiesTable } from "./parties.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
@@ -143,20 +144,28 @@ export const invitationsTable = pgTable(
 
 export type Invitation = typeof invitationsTable.$inferSelect;
 
-// Per-staff-member notification preferences (self-service; one row per user,
-// written only by the /staff/notification-preferences routes with the userId
-// taken from the principal). OPT-IN: every switch defaults OFF — a firm
-// member receives nothing until they turn a digest and at least one channel
-// on themselves, which is why digest delivery needs no party consent gate
-// (this is not the CORE-03 client-alert model). firmId names the tenant the
-// digest belongs to (firm-keyed RLS, migration 0019); email is the delivery
-// address the member chose, nullable and never copied into message rows
-// (pointer-only discipline, SEC-12).
+// Per-staff-member notification preferences (self-service; one row per
+// (user, firm) membership, written only by the /staff/notification-preferences
+// routes with the userId taken from the principal and the firmId from the
+// principal's current tenant). The composite key matters: RLS on this table
+// is FIRM-keyed (migration 0019), so a multi-firm staff member must hold an
+// independent row per firm — a userId-only key would make firm B's upsert
+// collide with the firm-A row that firm B's RLS context cannot even see.
+// OPT-IN: every switch defaults OFF — a firm member receives nothing until
+// they turn a digest and at least one channel on themselves, which is why
+// digest delivery needs no party consent gate (this is not the CORE-03
+// client-alert model).
+// WARNING: `email` is a free-text, UNVERIFIED address the member typed in.
+// Today it is inert — digest delivery is pointer-only (SEC-12) and sends to
+// the membership identity, never to this column — and it must NEVER become a
+// send destination without an ownership-verification step first (an attacker
+// with a staff session could otherwise route a firm's digest pointers to an
+// arbitrary inbox).
 export const staffNotificationPreferencesTable = pgTable(
   "staff_notification_preferences",
   {
     userId: uuid("user_id")
-      .primaryKey()
+      .notNull()
       .references(() => usersTable.id),
     firmId: uuid("firm_id")
       .notNull()
@@ -167,8 +176,11 @@ export const staffNotificationPreferencesTable = pgTable(
     email: text("email"),
     updatedAt: updatedAt(),
   },
-  // The digest delivery pass resolves a firm's opted-in staff in one scan.
-  (t) => [index("staff_notification_prefs_firm_idx").on(t.firmId)],
+  (t) => [
+    primaryKey({ columns: [t.userId, t.firmId] }),
+    // The digest delivery pass resolves a firm's opted-in staff in one scan.
+    index("staff_notification_prefs_firm_idx").on(t.firmId),
+  ],
 );
 export type StaffNotificationPreferencesRow =
   typeof staffNotificationPreferencesTable.$inferSelect;

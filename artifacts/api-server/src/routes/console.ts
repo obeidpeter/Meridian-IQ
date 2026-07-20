@@ -80,7 +80,7 @@ import { computeRejectionPatterns } from "../modules/desk/rejection-patterns";
 import { computeAdoptionReport } from "../modules/clerk/adoption";
 import { computeOperatorBrief } from "../modules/desk/daily-brief";
 import { computeComplianceCalendar } from "../modules/invoice/compliance-calendar";
-import { getClerkGateway } from "../modules/clerk/provider";
+import { gatewayOrNull } from "../modules/clerk/provider";
 import { getFirmReceivables } from "../modules/invoice/receivables";
 import {
   SUBMISSION_WINDOW_DAYS,
@@ -1307,7 +1307,7 @@ router.post(
     // Template posture end to end: an unconfigured provider integration must
     // yield the deterministic template, not a 500 (same guard as the
     // narrative and reconcile-assist routes).
-    const gateway = await getClerkGateway().catch(() => null);
+    const gateway = await gatewayOrNull();
     const draft = await draftEscalationReply(params.id, gateway);
     res.json(DraftEscalationReplyResponse.parse(draft));
   },

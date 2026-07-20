@@ -109,7 +109,7 @@ import { computeTierReport } from "../modules/clerk/tier-report";
 import { assistMatch } from "../modules/clerk/reconcile-assist";
 import { requireFlag } from "../modules/flags/flags";
 import { getClerkMetrics } from "../modules/clerk/metrics";
-import { getClerkGateway } from "../modules/clerk/provider";
+import { gatewayOrNull, getClerkGateway } from "../modules/clerk/provider";
 import { suggestPartiesForCase } from "../modules/clerk/party-match";
 import {
   listEvalRuns,
@@ -223,8 +223,11 @@ router.post("/clerk/cases/:id/decision", async (req, res): Promise<void> => {
 // confident critical fields) — the per-case machinery (decideCase's CAS,
 // audit rows, draft-only invariant) runs unchanged per item; the batch adds
 // iteration and per-row outcomes only. Operator-gated like single decisions.
-// Bounded (50) DB-only work with NO model call, so it runs inside the
-// ordinary request transaction — deliberately NOT on NO_CONTEXT_ROUTES.
+// No model call, but the batch runs OUTSIDE the request transaction
+// (NO_CONTEXT_ROUTES): each item commits in its own short bypass transaction
+// (bulk-approve.ts), so the global audit advisory lock is held per item —
+// never across a 50-item batch — and a decided item stays decided even if a
+// later item fails, exactly like bulk-submit.
 router.post("/clerk/cases/bulk-approve", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
   const parsed = parseOrThrow(BulkApproveClerkCasesBody, req.body);
@@ -246,6 +249,11 @@ router.post("/clerk/cases/:id/release", async (req, res): Promise<void> => {
   res.json(ReleaseClerkCaseResponse.parse(row));
 });
 
+// Retry re-runs a FULL extraction (up to a 4-page vision call) on the stored
+// source, so like first-time capture it runs outside the request transaction
+// (app.ts NO_CONTEXT_ROUTE_PATTERNS — the parameterized-path variant of
+// NO_CONTEXT_ROUTES): the module's writes commit in their own short
+// transactions and the audit row on the raw pool.
 router.post("/clerk/cases/:id/retry", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
   const params = parseOrThrow(RetryClerkCaseParams, req.params);
@@ -377,7 +385,9 @@ router.post("/clerk/ask", async (req, res): Promise<void> => {
 router.post("/clerk/explain-failure", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
   const parsed = parseOrThrow(ExplainInvoiceFailureBody, req.body);
-  const gateway = await getClerkGateway();
+  // Best-effort gateway (digest posture): a provider that cannot even load
+  // answers with the catalogue text, never a 500.
+  const gateway = await gatewayOrNull();
   const explanation = await explainInvoiceFailure(
     parsed.invoiceId,
     req.principal,
@@ -395,7 +405,7 @@ router.post("/clerk/explain-failure", async (req, res): Promise<void> => {
 router.post("/clerk/draft-chaser", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
   const parsed = parseOrThrow(DraftPaymentChaserBody, req.body);
-  const gateway = await getClerkGateway().catch(() => null);
+  const gateway = await gatewayOrNull();
   const draft = await draftPaymentChaser(
     parsed.invoiceId,
     req.principal,
@@ -528,12 +538,7 @@ router.post(
     const parsed = parseOrThrow(AssistMatchProposalsBody, req.body);
     // Best-effort gateway: no provider configured still explains via the
     // template path (digest posture), unlike the fail-closed capture routes.
-    let gateway = null;
-    try {
-      gateway = await getClerkGateway();
-    } catch {
-      gateway = null;
-    }
+    const gateway = await gatewayOrNull();
     const result = await assistMatch(
       parsed.statementLineId,
       req.principal,
@@ -593,8 +598,11 @@ router.get("/clerk/digest", async (req, res): Promise<void> => {
   }
   const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
   if (!tenant) {
-    res.status(400).json({ error: "A firm scope is required for the digest" });
-    return;
+    throw new DomainError(
+      "NO_TENANT",
+      "A firm scope is required for the digest",
+      400,
+    );
   }
   const digest = await latestDigestForFirm(tenant);
   if (!digest) {
@@ -656,8 +664,11 @@ router.post("/clerk/claims/draft", async (req, res): Promise<void> => {
 // entry grounded in the raw rail rejections observed for the code. The draft
 // is RETURNED for the operator to edit — saving still goes through the
 // ordinary catalogue.write routes, so the human disposes and the audit trail
-// is theirs. Runs outside the request transaction (NO_CONTEXT_ROUTES) like
-// every model-calling Clerk path.
+// is theirs. Runs outside the request transaction (NO_CONTEXT_ROUTES) —
+// though not every model-calling path does: the single-completion
+// explainer/drafting routes (explain-failure, draft-chaser, reconcile
+// assist, claims draft, both cover notes, reply drafts, narrative) stay
+// inside the ordinary transaction.
 router.post("/clerk/catalogue-draft", async (req, res): Promise<void> => {
   assertCan(req.principal, "catalogue.write");
   const parsed = parseOrThrow(DraftCatalogueEntryWithClerkBody, req.body);
@@ -672,8 +683,11 @@ router.get("/clerk/usage", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.capture");
   const tenant = tenantFirmId(req.principal) ?? req.principal.firmId;
   if (!tenant) {
-    res.status(400).json({ error: "A firm scope is required for Clerk usage" });
-    return;
+    throw new DomainError(
+      "NO_TENANT",
+      "A firm scope is required for Clerk usage",
+      400,
+    );
   }
   const usage = await firmClerkUsage(tenant);
   // Per-purpose split of the same month window — which feature is spending

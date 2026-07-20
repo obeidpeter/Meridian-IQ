@@ -26,7 +26,7 @@ import {
 } from "../modules/advisory/questionnaire";
 import { parseLedgerCsv, analyzeLedger } from "../modules/advisory/vatRisk";
 import { draftEngagementNarrative } from "../modules/advisory/narrative";
-import { getClerkGateway } from "../modules/clerk/provider";
+import { gatewayOrNull } from "../modules/clerk/provider";
 import { verifyStampBatch } from "../modules/rails/adapter";
 
 const router: IRouter = Router();
@@ -184,12 +184,7 @@ router.post("/vat-risk/analyze", async (req, res): Promise<void> => {
 router.post("/engagements/:id/narrative", async (req, res): Promise<void> => {
   assertCan(req.principal, "engagement.write");
   const params = parseOrThrow(DraftEngagementNarrativeParams, req.params);
-  let gateway = null;
-  try {
-    gateway = await getClerkGateway();
-  } catch {
-    gateway = null;
-  }
+  const gateway = await gatewayOrNull();
   const result = await draftEngagementNarrative(
     params.id,
     req.principal,

@@ -14,7 +14,7 @@ import { getDb } from "@workspace/db";
 // batch segments alike). Cases that never reached approval count in the
 // firm totals, not against a client.
 
-export const ADOPTION_DEFAULT_WINDOW_DAYS = 90;
+const ADOPTION_DEFAULT_WINDOW_DAYS = 90;
 
 export interface AdoptionClientRow {
   clientPartyId: string;

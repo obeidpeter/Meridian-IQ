@@ -130,6 +130,21 @@ export async function getClerkGateway(): Promise<ClerkGateway> {
   return cached;
 }
 
+// Best-effort variant for the digest-posture surfaces (explainer, chaser,
+// cover notes, narrative, reply drafts, reconcile assist): those modules all
+// accept `ClerkGateway | null` and answer with their deterministic template
+// when no model is available, so a provider that cannot even be CONSTRUCTED
+// (missing AI-integration env) must yield null — never a 500 — for them.
+// Fail-closed surfaces (capture, batch, ask, evals) keep calling
+// getClerkGateway() directly so a broken provider surfaces as an error.
+export async function gatewayOrNull(): Promise<ClerkGateway | null> {
+  try {
+    return await getClerkGateway();
+  } catch {
+    return null;
+  }
+}
+
 // Model canary (model-canary.ts): a gateway whose provider ALWAYS calls the
 // given model id, bypassing CLERK_MODEL_TIERS routing — the candidate side of
 // a model canary must run the exact model under evaluation whatever tiering

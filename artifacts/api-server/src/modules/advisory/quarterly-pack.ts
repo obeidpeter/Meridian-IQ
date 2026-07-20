@@ -59,7 +59,7 @@ export interface QuarterlyReview {
   note: string;
 }
 
-export const QUARTER_COUNT = 4;
+const QUARTER_COUNT = 4;
 const MAX_REJECTION_ROWS = 5;
 
 // First month of each closed Lagos quarter on offer, newest first

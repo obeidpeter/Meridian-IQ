@@ -1,4 +1,4 @@
-import { getDb, type ClerkCase } from "@workspace/db";
+import { runRequestContext, type ClerkCase } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 import { decideCase, getCase, type CaseDecisionInput } from "./cases";
@@ -13,6 +13,20 @@ import { decideCase, getCase, type CaseDecisionInput } from "./cases";
 // a server-side eligibility re-check per item, and per-row outcomes — one bad
 // row never aborts the batch, and nothing here is automatic: the operator
 // chose every case and supplied every confirmed value.
+//
+// Transaction shape: the route runs OUTSIDE the request transaction (app.ts
+// NO_CONTEXT_ROUTES) and each item commits in its own short bypass
+// transaction below. Inside one request transaction, the first item's
+// appendAudit would take the GLOBAL audit advisory xact lock (audit.ts) and
+// hold it until the whole 50-item batch committed — a platform-wide
+// appendAudit convoy, a 30s-cap risk, and a real deadlock window (approve
+// orders audit-lock→row-lock; reject/claim order row-lock→audit-lock).
+// Per-item commit matches bulk-submit's semantics: a decided item STAYS
+// decided even if a later item (or the response) fails, the audit lock is
+// held per item only, and decideCase's alias-memory exhaust (raw pool,
+// self-committing) can no longer learn from a batch that later rolls back —
+// its item's decision commits an instant after it, and nothing batch-wide
+// can undo either.
 
 // Mirrors the console's fast-lane predicate `isReadyToApprove`
 // (artifacts/console/src/pages/clerk-shared.ts) — if that predicate changes,
@@ -51,6 +65,11 @@ export function fastLaneBlocker(
   return null;
 }
 
+// Control-flow marker for an item refused BEFORE any decision write: thrown
+// inside the per-item transaction (aborting it — it held only reads) and
+// caught by the loop to record the skip reason.
+class BulkSkip extends Error {}
+
 export interface BulkApproveItem {
   caseId: string;
   decision: CaseDecisionInput;
@@ -84,39 +103,33 @@ export async function bulkApproveCases(
       continue;
     }
 
-    let kase: ClerkCase;
     try {
-      kase = await getCase(item.caseId);
-    } catch (err) {
-      skip(
-        err instanceof DomainError ? err.message : "Case could not be loaded",
-      );
-      continue;
-    }
-
-    // Server-side fast-lane eligibility BEFORE any decision is applied — the
-    // console computes the same predicate for display, but the server owns
-    // the rule.
-    const blocked = fastLaneBlocker(kase);
-    if (blocked) {
-      skip(blocked);
-      continue;
-    }
-
-    try {
-      // Each item runs in its own savepoint (getDb().transaction nests
-      // inside the ambient request transaction): decideCase creates the
-      // draft invoice BEFORE its status compare-and-set, and the single-
-      // decision route relies on the 4xx rollback to discard that draft
-      // when the CAS loses a race. Here the error is CAUGHT (the batch
-      // continues, the response is 200), so the savepoint is what rolls the
-      // losing item's writes back — without it a decided-elsewhere case
-      // would commit an orphaned draft.
-      await getDb().transaction(async () => {
+      // Each item runs in its OWN short committed transaction, with the same
+      // bypass RLS posture the operator's request transaction would have
+      // carried (clerk.use is operator-only; operators are BYPASS_ROLES in
+      // app.ts). decideCase creates the draft invoice BEFORE its status
+      // compare-and-set, and the single-decision route relies on the 4xx
+      // rollback to discard that draft when the CAS loses a race. Here the
+      // error is CAUGHT (the batch continues, the response is 200), so the
+      // per-item transaction is what rolls the losing item's writes back —
+      // without it a decided-elsewhere case would commit an orphaned draft.
+      // A committed item is durable immediately: nothing later in the batch
+      // can undo it (deliberate — the same semantics as bulk-submit).
+      await runRequestContext({ bypass: true, firmId: null }, async () => {
+        const kase: ClerkCase = await getCase(item.caseId);
+        // Server-side fast-lane eligibility BEFORE any decision is applied —
+        // the console computes the same predicate for display, but the
+        // server owns the rule.
+        const blocked = fastLaneBlocker(kase);
+        if (blocked) throw new BulkSkip(blocked);
         await decideCase(item.caseId, item.decision, actorId);
       });
       results.push({ caseId: item.caseId, outcome: "approved", reason: null });
     } catch (err) {
+      if (err instanceof BulkSkip) {
+        skip(err.message);
+        continue;
+      }
       // A state race (decided elsewhere between the eligibility read and the
       // CAS) or any domain refusal marks THIS row skipped; the batch keeps
       // going — mirroring bulk-submit's per-row posture.

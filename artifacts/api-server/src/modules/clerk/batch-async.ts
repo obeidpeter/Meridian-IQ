@@ -62,7 +62,7 @@ import { inClerkScope } from "./scope";
 // single upload — same duplicate guard, same extraction, same pre-flight,
 // same human review. The batch machinery adds throughput, never authority.
 
-export const MAX_ASYNC_BATCH_SEGMENTS = 50;
+const MAX_ASYNC_BATCH_SEGMENTS = 50;
 // Extractions per processBatch call; also bounds a sweep pass's model calls.
 export const SEGMENTS_PER_SLICE = 10;
 // A claim whose heartbeat is older than this belongs to a dead processor.

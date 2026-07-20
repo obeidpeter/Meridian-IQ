@@ -39,6 +39,10 @@ test("explain-failure stays reachable for the client who owns the failed invoice
     block.includes('assertCan(req.principal, "clerk.capture")'),
     "explain-failure must gate on clerk.capture — clerk.ask would lock out client_users and break the SME fix-and-retry card",
   );
+  assert.ok(
+    block.includes("gatewayOrNull()"),
+    "explain-failure is a digest-posture surface: a provider that cannot even load must yield the catalogue fallback (module accepts null), never a 500 from a bare getClerkGateway()",
+  );
 });
 
 test("draft-invoice checks the firm budget before any provider spend", () => {
@@ -124,17 +128,54 @@ test("the digest route refuses client_user despite the shared capability", () =>
   );
 });
 
-test("bulk approval is operator-gated and runs inside the request transaction", () => {
+test("bulk approval is operator-gated and runs OUTSIDE the request transaction", () => {
   const block = routeBlock(src("routes/clerk.ts"), "/clerk/cases/bulk-approve");
   assert.ok(
     block.includes('assertCan(req.principal, "clerk.use")'),
     "bulk approval is a review decision — operator-only like the single endpoint",
   );
+  // Deliberate posture: no model call, but each of up to 50 decideCase items
+  // appends audit rows, and appendAudit serializes on a GLOBAL advisory xact
+  // lock. Inside one request transaction the first item's lock would be held
+  // until the whole batch committed — a platform-wide appendAudit convoy, a
+  // 30s-cap risk, and a deadlock window against the row-lock→audit-lock
+  // ordering of reject/claim. The module instead commits each item in its
+  // own short bypass transaction (bulk-approve.ts), so the route must skip
+  // the ambient transaction.
   const appSrc = src("app.ts");
   const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
   const setEnd = appSrc.indexOf("])", setStart);
   assert.ok(
-    !appSrc.slice(setStart, setEnd).includes("bulk-approve"),
-    "bounded DB-only work belongs inside the ordinary request transaction — no model call happens here",
+    appSrc
+      .slice(setStart, setEnd)
+      .includes('"POST /api/clerk/cases/bulk-approve"'),
+    "bulk-approve must run outside the request transaction: per-item commits keep the global audit lock per-item and a decided item durable (bulk-submit semantics)",
+  );
+  assert.ok(
+    src("modules/clerk/bulk-approve.ts").includes(
+      "runRequestContext({ bypass: true, firmId: null }",
+    ),
+    "each bulk-approve item must open its own short bypass transaction — the RLS posture the operator's request transaction carried",
+  );
+});
+
+test("case retry runs outside the request transaction via the pattern list", () => {
+  // NO_CONTEXT_ROUTES is a literal-path Set; parameterized paths live in
+  // NO_CONTEXT_ROUTE_PATTERNS. Retry re-runs a full extraction (up to a
+  // 4-page vision call) and must not pin a pooled connection under the 30s
+  // request-transaction cap.
+  const appSrc = src("app.ts");
+  const listStart = appSrc.indexOf("NO_CONTEXT_ROUTE_PATTERNS");
+  assert.ok(listStart >= 0, "the parameterized NO_CONTEXT list exists");
+  const listEnd = appSrc.indexOf("];", listStart);
+  const list = appSrc.slice(listStart, listEnd);
+  assert.ok(
+    list.includes("clerk\\/cases\\/[^/]+\\/retry") ||
+      list.includes("clerk/cases/[^/]+/retry"),
+    "POST /api/clerk/cases/:id/retry must be exempted from the request transaction",
+  );
+  assert.ok(
+    appSrc.includes("NO_CONTEXT_ROUTE_PATTERNS.some"),
+    "tenantContext must actually consult the pattern list",
   );
 });
