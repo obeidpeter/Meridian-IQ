@@ -48,6 +48,13 @@ import {
   acceptProposal,
   rejectProposal,
 } from "../modules/statements/service";
+import {
+  SCAN_PROPOSAL_FORMAT_KEY,
+  proposeStatementLinesFromPdf,
+  renderProposedCsv,
+} from "../modules/statements/scan-intake";
+import { assertFirmClerkBudget } from "../modules/clerk/budget";
+import { isPurposePermitted } from "../modules/consent/consent";
 import { bulkAcceptProposals } from "../modules/statements/bulk-accept";
 import {
   deleteFormatMapping,
@@ -70,18 +77,71 @@ router.post("/statements", requireFlag("reconciliation"), async (req, res): Prom
   assertCan(req.principal, "statement.write");
   const firmId = requireFirmScope(req.principal);
   const parsed = parseOrThrow(ImportBankStatementBody, req.body);
-  if (parsed.csv.length > MAX_STATEMENT_CSV_CHARS) {
-    res.status(413).json({
-      error: "Statement file is too large to process",
-    });
-    return;
+  // Exactly one source: a CSV export (parsed deterministically) or a PDF
+  // statement (lines PROPOSED by one model call, then re-parsed). The
+  // contract marks both optional, so the exclusive-or is server-enforced.
+  const hasCsv = parsed.csv !== undefined;
+  const hasPdf = parsed.pdfBase64 !== undefined;
+  if (hasCsv === hasPdf) {
+    throw new DomainError(
+      "VALIDATION",
+      "Provide exactly one of csv or pdfBase64",
+      400,
+    );
   }
   await assertPartyAccess(req.principal, parsed.clientPartyId);
+
+  let csv: string;
+  let formatKey = parsed.formatKey ?? null;
+  if (hasCsv) {
+    if (parsed.csv!.length > MAX_STATEMENT_CSV_CHARS) {
+      res.status(413).json({
+        error: "Statement file is too large to process",
+      });
+      return;
+    }
+    csv = parsed.csv!;
+  } else {
+    // PDF branch — the one model call on this route. It deliberately stays
+    // INSIDE the request transaction (unlike the clerk capture routes, which
+    // are NO_CONTEXT): everything before the call is reads only (no row or
+    // advisory lock is held while the provider runs), the call is bounded
+    // (text capped at 150k chars / scans capped at 4 rendered pages), and
+    // ingestStatement's writes then keep the ordinary all-or-nothing
+    // atomicity with the response. The accepted trade is the 30s request-tx
+    // cap: one bounded completion fits it; anything bigger belongs on an
+    // async path.
+    //
+    // CORE-03 pre-check (token thrift only — ingestStatement remains the
+    // enforcing gate): without layer-1 consent the ingest below would 403
+    // AFTER the tokens were spent.
+    if (!(await isPurposePermitted(parsed.clientPartyId, "reconciliation"))) {
+      throw new DomainError(
+        "CONSENT_REQUIRED",
+        "Client has not granted compliance (layer 1) consent",
+        403,
+      );
+    }
+    // Budget gate BEFORE the provider is touched (the capture-route idiom):
+    // an exhausted firm gets a clean 429 without any model call. statement.write
+    // holders are always firm-scoped, so this call is always firm-funded.
+    await assertFirmClerkBudget(firmId);
+    const proposal = await proposeStatementLinesFromPdf(
+      parsed.pdfBase64!,
+      firmId,
+      req.principal.userId,
+    );
+    csv = renderProposedCsv(proposal.lines);
+    // Pin the parser: proposed lines are rendered to the generic shape, so
+    // detection must never drift to a bank-specific parser.
+    formatKey = SCAN_PROPOSAL_FORMAT_KEY;
+  }
+
   const result = await ingestStatement({
     firmId,
     clientPartyId: parsed.clientPartyId,
-    csv: parsed.csv,
-    formatKey: parsed.formatKey ?? null,
+    csv,
+    formatKey,
     filename: parsed.filename ?? null,
     commit: parsed.commit,
     actorId: req.principal.userId,
