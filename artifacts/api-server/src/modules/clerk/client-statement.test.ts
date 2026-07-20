@@ -393,6 +393,8 @@ test("delivery: a busy statement is offered exactly once across two passes", asy
   // Pointer-only payload (SEC-12): opaque refs, no month/amounts/counts.
   assert.equal(msgs[0].entityType, "clerk_client_statement");
   assert.ok(msgs[0].entityId?.startsWith("stmt-"));
+  // Every row stamps the REAL recipient identity the inbox scopes by.
+  assert.ok(msgs.every((m) => m.recipientPartyId === deliverClient));
 
   // Second pass: the delivered_at claim blocks a re-send.
   await drainDeliveries();

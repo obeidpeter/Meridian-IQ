@@ -120,7 +120,11 @@ export function AskContent() {
     mutation: {
       onSuccess: (row) => {
         setDisabledBanner(false);
-        if (row.answer) setLastAnswer(row.answer);
+        // The console Ask page's tested semantic: a success REPLACES the
+        // held answer with whatever it carried — a success without an
+        // answer payload clears a stale one instead of leaving it on
+        // screen; an error (onError below) keeps the previous answer.
+        setLastAnswer(row.answer ?? null);
         // Only a DATA answer carries scope worth threading — keeping the
         // last data-answered id preserves the thread across a refusal or
         // register-claim answer in between.
@@ -215,7 +219,11 @@ export function AskContent() {
             </div>
           </CardContent>
         </Card>
-        {lastAnswer && <AnswerCard answer={lastAnswer} />}
+        {/* Persistent polite live region: the answer arrives asynchronously
+            after "Ask", so screen readers hear it without hunting for it. */}
+        <div aria-live="polite">
+          {lastAnswer && <AnswerCard answer={lastAnswer} />}
+        </div>
         <p className="text-xs text-muted-foreground">
           Looking to send an invoice instead?{" "}
           <Link href="/clerk" className="text-primary hover:underline">

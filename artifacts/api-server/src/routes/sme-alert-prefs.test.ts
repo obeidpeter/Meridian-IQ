@@ -121,6 +121,65 @@ test("client_user CANNOT update another client party's alert preferences", async
   assert.equal(res.status, 403, "cross-client update must be rejected");
 });
 
+test("the prefs PUT records contact provenance; toggles alone never clobber it", async () => {
+  await ensureFixtures();
+  const client: Principal = {
+    userId: "dev-user",
+    role: "client_user",
+    firmId,
+    clientPartyId: partyId,
+    buyerPartyId: null,
+  };
+  const staff: Principal = {
+    userId: "dev-user",
+    role: "firm_staff",
+    firmId,
+    clientPartyId: null,
+    buyerPartyId: null,
+  };
+  const readRow = async () => {
+    const [row] = await getDb()
+      .select()
+      .from(alertPreferencesTable)
+      .where(eq(alertPreferencesTable.clientPartyId, partyId))
+      .limit(1);
+    return row;
+  };
+
+  // The client saves its own number: provenance = client_user — this is what
+  // makes it a WhatsApp routing key (modules/inbound/whatsapp.ts).
+  const clientBase = await listen(appFor(client, smeRouter));
+  const clientPut = await fetch(`${clientBase}/clients/${partyId}/alert-preferences`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ whatsappTo: "0803 111 2233" }),
+  });
+  assert.equal(clientPut.status, 200);
+  assert.equal((await readRow()).contactSetByRole, "client_user");
+
+  // Staff toggling a channel WITHOUT naming a contact field must leave the
+  // client's provenance intact — an innocent toggle must not silently kill
+  // the client's routing key.
+  const staffBase = await listen(appFor(staff, smeRouter));
+  const toggle = await fetch(`${staffBase}/clients/${partyId}/alert-preferences`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ smsEnabled: false }),
+  });
+  assert.equal(toggle.status, 200);
+  assert.equal((await readRow()).contactSetByRole, "client_user");
+
+  // Staff WRITING a number re-stamps provenance to the staff role — the
+  // number stops being a routing key until the client sets it themselves.
+  const staffNumber = await fetch(`${staffBase}/clients/${partyId}/alert-preferences`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ phone: "0803 999 8877" }),
+  });
+  assert.equal(staffNumber.status, 200);
+  assert.equal((await readRow()).contactSetByRole, "firm_staff");
+});
+
 test("roles with neither client scope nor messaging.send are rejected", async () => {
   const principal: Principal = {
     userId: "dev-user",

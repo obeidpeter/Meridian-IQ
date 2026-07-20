@@ -444,6 +444,94 @@ test("request dispatches the raw {email, code} to the relay; confirm verifies", 
   }
 });
 
+test("a concurrent address swap between read and confirm cannot stamp the new address (CAS)", async () => {
+  // The race: request A reads the row and validates its code; a PUT swaps the
+  // address (clearing hash + verification, possibly followed by a fresh code
+  // for the NEW address) and commits; request A's write then lands. With a
+  // bare (userId, firmId) predicate the stamp would land on the unverified
+  // new address. The route's UPDATE is compare-and-set on the stored code
+  // hash, so the stamp can only ever land on the exact pending-code state the
+  // presented code proved.
+  //
+  // Plant the pre-race state: address A with a valid pending code.
+  await getDb()
+    .update(staffNotificationPreferencesTable)
+    .set({
+      email: `race-a-${SALT}@test.example`,
+      emailVerifiedAt: null,
+      emailVerifyCodeHash: sha256Hex("111111"),
+      emailVerifyExpiresAt: new Date(Date.now() + 60_000),
+    })
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, verifyId),
+        eq(staffNotificationPreferencesTable.firmId, firmId),
+      ),
+    );
+  // The interleaved PUT commits: new address, verification state reset, and a
+  // NEW code already pending for it (the worst shape — a bare-key update
+  // would burn the new code AND stamp the new address).
+  await getDb()
+    .update(staffNotificationPreferencesTable)
+    .set({
+      email: `race-b-${SALT}@test.example`,
+      emailVerifiedAt: null,
+      emailVerifyCodeHash: sha256Hex("222222"),
+      emailVerifyExpiresAt: new Date(Date.now() + 60_000),
+    })
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, verifyId),
+        eq(staffNotificationPreferencesTable.firmId, firmId),
+      ),
+    );
+  // Request A's confirm arrives with the OLD code: 400, and the new address
+  // stays unverified with its own pending code intact.
+  const base = await listen(appFor(principalFor("firm_staff", verifyId), staffRouter));
+  const res = await fetch(
+    `${base}/staff/notification-preferences/confirm-email`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ code: "111111" }),
+    },
+  );
+  assert.equal(res.status, 400);
+  const row = await verifyRow(verifyId);
+  assert.equal(row.emailVerifiedAt, null, "the swapped-in address must not be stamped");
+  assert.equal(row.emailVerifyCodeHash, sha256Hex("222222"), "the new pending code survives");
+  await clearActionFailures(`everifyc:${verifyId}`);
+  // Restore the pre-race address so the later address-change tests see the
+  // state the earlier tests left behind (unverified is fine — they re-stamp).
+  const restore = await fetch(`${base}/staff/notification-preferences`, {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ email: `verify-${SALT}@test.example` }),
+  });
+  assert.equal(restore.status, 200);
+});
+
+test("the confirm-email UPDATE is compare-and-set on the stored code hash (tripwire)", async () => {
+  // The behavioral test above passes even under the pre-CAS code (the READ
+  // fails after the swap). What the read cannot guarantee is the window
+  // BETWEEN read and write — only the UPDATE's own predicate closes it, and
+  // no black-box test can interpose inside one request. Pin it in source, the
+  // route-posture idiom.
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./staff.ts", import.meta.url), "utf8");
+  const confirmAt = src.indexOf("confirm-email");
+  assert.ok(confirmAt >= 0);
+  const updateAt = src.indexOf(".update(staffNotificationPreferencesTable)", confirmAt);
+  assert.ok(updateAt >= 0, "the confirm route updates the prefs row");
+  const whereAt = src.indexOf(".where(", updateAt);
+  const returningAt = src.indexOf(".returning()", whereAt);
+  const wherePredicate = src.slice(whereAt, returningAt);
+  assert.ok(
+    wherePredicate.includes("emailVerifyCodeHash, presentedHash"),
+    "the stamp's WHERE must carry the presented code hash — a bare (userId, firmId) predicate re-opens the swap race",
+  );
+});
+
 test("an expired code is rejected", async () => {
   // Plant a known, already-expired code directly.
   await getDb()

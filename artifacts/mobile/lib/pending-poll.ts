@@ -25,6 +25,21 @@ export const PENDING_POLL_STALLED_MESSAGE =
   "Still processing — pull down to refresh, or check back in a bit.";
 
 /**
+ * Carry — or reset — the continuous-processing clock when the POLLED SUBJECT
+ * can change between renders: switching from one statement's proposals to
+ * another's is NEW work, not the same stuck stretch, so the cap clock starts
+ * over instead of inheriting the previous subject's elapsed time. The same
+ * subject (or an unkeyed poll, where both keys stay null) keeps the clock.
+ */
+export function sinceForSubject(
+  since: number | null,
+  prevKey: string | null,
+  nextKey: string | null,
+): number | null {
+  return prevKey === nextKey ? since : null;
+}
+
+/**
  * Advance the continuous-processing clock: processing sets (or keeps) the
  * epoch-ms start; idle resets it to null. The cap therefore measures one
  * unbroken stretch of processing, and new work after a quiet spell always

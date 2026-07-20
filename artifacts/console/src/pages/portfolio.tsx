@@ -21,6 +21,10 @@ import {
   getGetQuarterlyReviewQueryKey,
   useDraftQuarterlyCoverNote,
   type QuarterlyReviewCoverNote,
+  useGetClerkDigest,
+  getGetClerkDigestQueryKey,
+  useListStatementConnections,
+  getListStatementConnectionsQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,7 +39,10 @@ import {
 } from "@/components/ui/select";
 import { BillingStatementCard } from "@/components/billing-statement-card";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
-import { StaffNotificationPrefsCard } from "@/components/staff-notification-prefs-card";
+import {
+  StaffNotificationPrefsCard,
+  isFirmMemberRole,
+} from "@/components/staff-notification-prefs-card";
 import { StatementConnectionsCard } from "@/components/statement-connections-card";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
@@ -87,6 +94,52 @@ export const PORTFOLIO_GROUPS = [
   { id: "connections", label: "Connections & delivery" },
 ] as const;
 
+export type PortfolioGroup = (typeof PORTFOLIO_GROUPS)[number];
+
+// ---- Section occupancy -------------------------------------------------------
+// "clients" and "money" always carry an unconditionally rendered card, but
+// "compliance" and "connections" are composed ENTIRELY of self-gating
+// render-on-success cards — if every member gates itself to null (older
+// server build, feature dark, wrong role), the section would be a bare
+// heading with a dead anchor chip. The page therefore observes the SAME
+// queries the cards gate on (identical query keys, so react-query dedupes to
+// one fetch) and renders a section + its chip only once at least one member
+// card will actually show.
+
+/** Mirrors ComplianceCalendarCard's own empty gate. */
+export function calendarHasContent<
+  T extends { days: unknown[]; overdue: { invoices: number } },
+>(calendar: T | undefined): calendar is T {
+  return (
+    !!calendar && (calendar.days.length > 0 || calendar.overdue.invoices > 0)
+  );
+}
+
+/** Mirrors RejectionPatternsCard's own empty gate. */
+export function rejectionsHaveContent<T extends { rows: unknown[] }>(
+  report: T | undefined,
+): report is T {
+  return !!report && report.rows.length > 0;
+}
+
+/**
+ * The groups whose sections (and anchor chips) render, in scanning order.
+ * Clients and Money are always occupied; Compliance and Connections come
+ * from the lifted occupancy flags.
+ */
+export function visiblePortfolioGroups(occupied: {
+  compliance: boolean;
+  connections: boolean;
+}): PortfolioGroup[] {
+  return PORTFOLIO_GROUPS.filter((g) =>
+    g.id === "compliance"
+      ? occupied.compliance
+      : g.id === "connections"
+        ? occupied.connections
+        : true,
+  );
+}
+
 // A labeled group of cards. scroll-mt keeps an anchor-jumped heading clear of
 // the sticky console header.
 function PortfolioSection({
@@ -113,14 +166,14 @@ function PortfolioSection({
   );
 }
 
-function PortfolioAnchorRow() {
+function PortfolioAnchorRow({ groups }: { groups: PortfolioGroup[] }) {
   return (
     <nav
       aria-label="Portfolio sections"
       className="flex flex-wrap gap-2"
       data-testid="portfolio-anchor-row"
     >
-      {PORTFOLIO_GROUPS.map((g) => (
+      {groups.map((g) => (
         <a
           key={g.id}
           href={`#${g.id}`}
@@ -706,10 +759,9 @@ function ComplianceCalendarCard() {
   const { data: calendar, isSuccess } = useGetFirmComplianceCalendar({
     query: { queryKey: getGetFirmComplianceCalendarQueryKey(), retry: false },
   });
-  if (!isSuccess || !calendar) return null;
-  if (calendar.days.length === 0 && calendar.overdue.invoices === 0) {
-    return null;
-  }
+  // Same predicate the page's section-occupancy check uses, so the card and
+  // the section can never disagree about a quiet calendar.
+  if (!isSuccess || !calendarHasContent(calendar)) return null;
   return (
     <Card
       className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
@@ -848,8 +900,9 @@ function RejectionPatternsCard() {
   const { data: report, isSuccess } = useGetRejectionPatterns({
     query: { queryKey: getGetRejectionPatternsQueryKey(), retry: false },
   });
-  if (!isSuccess || !report) return null;
-  if (report.rows.length === 0) return null;
+  // Same predicate the page's section-occupancy check uses, so the card and
+  // the section can never disagree about a quiet firm.
+  if (!isSuccess || !rejectionsHaveContent(report)) return null;
   const trend = (count: number, previous: number) =>
     count > previous ? (
       <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
@@ -1128,6 +1181,77 @@ export function Portfolio() {
   const { data, isLoading, error, refetch } = useGetPortfolio();
   const canImport = (me?.capabilities ?? []).includes("clients.import");
 
+  // Section occupancy: observe the SAME queries the section's self-gating
+  // cards gate on — identical query keys, so react-query dedupes each to a
+  // single fetch shared with the card once it mounts. Enabled only once the
+  // book has clients, mirroring when the sections themselves can render.
+  const hasBook = !!data && data.clients.length > 0;
+  const gateVatPack = useGetVatPack(undefined, {
+    query: {
+      queryKey: getGetVatPackQueryKey(undefined),
+      retry: false,
+      enabled: hasBook,
+    },
+  });
+  const gateSettlement = useGetVatSettlementCheck(undefined, {
+    query: {
+      queryKey: getGetVatSettlementCheckQueryKey(undefined),
+      retry: false,
+      enabled: hasBook,
+    },
+  });
+  const gateQuarterly = useGetQuarterlyReview(undefined, {
+    query: {
+      queryKey: getGetQuarterlyReviewQueryKey(undefined),
+      retry: false,
+      enabled: hasBook,
+    },
+  });
+  const gateCalendar = useGetFirmComplianceCalendar({
+    query: {
+      queryKey: getGetFirmComplianceCalendarQueryKey(),
+      retry: false,
+      enabled: hasBook,
+    },
+  });
+  const gateRejections = useGetRejectionPatterns({
+    query: {
+      queryKey: getGetRejectionPatternsQueryKey(),
+      retry: false,
+      enabled: hasBook,
+    },
+  });
+  const gateConnections = useListStatementConnections({
+    query: {
+      queryKey: getListStatementConnectionsQueryKey(),
+      retry: false,
+      enabled: hasBook,
+    },
+  });
+  const gateDigest = useGetClerkDigest({
+    query: {
+      queryKey: getGetClerkDigestQueryKey(),
+      retry: false,
+      enabled: hasBook,
+    },
+  });
+  const complianceOccupied =
+    (gateCalendar.isSuccess && calendarHasContent(gateCalendar.data)) ||
+    gateVatPack.isSuccess ||
+    gateSettlement.isSuccess ||
+    gateQuarterly.isSuccess ||
+    (gateRejections.isSuccess && rejectionsHaveContent(gateRejections.data));
+  const connectionsOccupied =
+    gateConnections.isSuccess ||
+    gateDigest.isSuccess ||
+    // The staff-prefs card renders for firm members (including its inline
+    // error state), and only for them — mirror its role gate.
+    isFirmMemberRole(me?.role);
+  const groups = visiblePortfolioGroups({
+    compliance: complianceOccupied,
+    connections: connectionsOccupied,
+  });
+
   if (isLoading) {
     return <PortfolioSkeleton />;
   }
@@ -1235,7 +1359,7 @@ export function Portfolio() {
         />
       </div>
 
-      <PortfolioAnchorRow />
+      <PortfolioAnchorRow groups={groups} />
 
       <PortfolioSection id="clients" label="Clients">
       <Card className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card">
@@ -1308,30 +1432,37 @@ export function Portfolio() {
         <BillingStatementCard />
       </PortfolioSection>
 
-      <PortfolioSection id="compliance" label="Compliance">
-        <ComplianceCalendarCard />
-        <VatPackCard />
-        <VatSettlementCard />
-        <QuarterlyReviewCard />
-        <RejectionPatternsCard />
-      </PortfolioSection>
+      {/* The two all-self-gating sections render only when at least one
+          member card will show — otherwise a role or server build that hides
+          every card would leave a bare heading behind a dead anchor chip. */}
+      {complianceOccupied && (
+        <PortfolioSection id="compliance" label="Compliance">
+          <ComplianceCalendarCard />
+          <VatPackCard />
+          <VatSettlementCard />
+          <QuarterlyReviewCard />
+          <RejectionPatternsCard />
+        </PortfolioSection>
+      )}
 
-      <PortfolioSection id="connections" label="Connections & delivery">
-        {/* Bank-feed connections sit with the delivery surfaces. Render-on-
-            success: servers without the rail (older build, feature dark →
-            404) show nothing at all. */}
-        <StatementConnectionsCard
-          clients={clients.map((c) => ({
-            clientPartyId: c.clientPartyId,
-            legalName: c.legalName,
-          }))}
-        />
-        <ClerkWeeklyDigestCard />
-        {/* Digest delivery is what these preferences control, so they live
-            beside the digest itself. Firm members only — the card self-gates
-            on role, mirroring the server's 403 for everyone else. */}
-        <StaffNotificationPrefsCard />
-      </PortfolioSection>
+      {connectionsOccupied && (
+        <PortfolioSection id="connections" label="Connections & delivery">
+          {/* Bank-feed connections sit with the delivery surfaces. Render-on-
+              success: servers without the rail (older build, feature dark →
+              404) show nothing at all. */}
+          <StatementConnectionsCard
+            clients={clients.map((c) => ({
+              clientPartyId: c.clientPartyId,
+              legalName: c.legalName,
+            }))}
+          />
+          <ClerkWeeklyDigestCard />
+          {/* Digest delivery is what these preferences control, so they live
+              beside the digest itself. Firm members only — the card self-gates
+              on role, mirroring the server's 403 for everyone else. */}
+          <StaffNotificationPrefsCard />
+        </PortfolioSection>
+      )}
     </div>
   );
 }

@@ -160,6 +160,7 @@ export function AskPanel({
             onChange={(e) => onQuestionChange(e.target.value)}
             placeholder="What VAT rate applies to a consulting invoice? What is overdue this week?"
             rows={3}
+            aria-label="Your question"
             data-testid="input-ask-question"
           />
           <div className="flex items-center justify-between gap-3">
@@ -178,7 +179,9 @@ export function AskPanel({
           </div>
         </CardContent>
       </Card>
-      {answer && <AnswerCard answer={answer} />}
+      {/* Persistent polite live region: the answer arrives asynchronously
+          after "Ask", so screen readers hear it without hunting for it. */}
+      <div aria-live="polite">{answer && <AnswerCard answer={answer} />}</div>
     </div>
   );
 }

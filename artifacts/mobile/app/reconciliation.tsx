@@ -150,7 +150,10 @@ export default function ReconciliationScreen() {
   // this screen is focused, and never past the 10-minute cap (a statement
   // stuck matching that long is the worker's problem, not the phone's).
   const statementsPoll = usePendingPoll();
-  const proposalsPoll = usePendingPoll();
+  // Keyed by the selected statement: switching statements is NEW work, so
+  // the continuous-processing cap clock restarts instead of inheriting the
+  // previous statement's elapsed time.
+  const proposalsPoll = usePendingPoll(selectedId);
 
   const statementsQuery = useListBankStatements(
     { clientPartyId: clientPartyId ?? "" },

@@ -17,6 +17,13 @@ export interface Principal {
   firmId: string | null;
   clientPartyId: string | null;
   buyerPartyId: string | null;
+  // Machine principals ONLY (firm API keys — modules/integrations/api-keys.ts,
+  // resolved in middleware/principal.ts): when present, this explicit list
+  // REPLACES the role matrix in can() — the key grants exactly the
+  // capabilities minted onto it (a vetted machine-safe subset), never a
+  // role's full set. Absent on every human principal, whose capabilities
+  // keep coming from ROLE_CAPABILITIES unchanged.
+  capabilities?: readonly Capability[];
 }
 
 // Capability strings used to gate actions. Kept coarse-grained and stable so
@@ -227,6 +234,12 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
 };
 
 export function can(principal: Principal, capability: Capability): boolean {
+  // Capability-override principals (firm API keys) are judged on their
+  // explicit grant list alone; the role matrix never applies to them (their
+  // synthetic "api_key" role has no matrix row, so falling through would
+  // deny everything — and MUST keep denying everything if the override is
+  // ever absent: fail closed).
+  if (principal.capabilities) return principal.capabilities.includes(capability);
   return ROLE_CAPABILITIES[principal.role]?.includes(capability) ?? false;
 }
 

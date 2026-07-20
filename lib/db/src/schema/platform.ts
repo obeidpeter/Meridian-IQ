@@ -71,11 +71,21 @@ export const messageStatusEnum = pgEnum("message_status", [
 ]);
 
 // Messaging carries pointers only — never amounts, names, TINs or documents
-// (SEC-12, PL-04). recipientRef and entity pointers are opaque references.
+// (SEC-12, PL-04). recipientRef and entity pointers are opaque references
+// used for display and provider-side correlation ONLY: the ref is a lossy
+// letters-only derivation (~15.5 bits for staff refs), so it can collide at
+// scale and must never be the feed's isolation wall. The nullable
+// recipient_user_id / recipient_party_id columns are the REAL recipient
+// identity — exactly one is set by each send rail (party alerts vs staff
+// notifications) — and the notification inbox reads strictly by them. Plain
+// uuids, deliberately no FK: this is a platform-wide pointer ledger, not a
+// tenant table, and rows must outlive party merges/user offboarding.
 export const messagesTable = pgTable("messages", {
   id: id(),
   channel: messageChannelEnum("channel").notNull(),
   recipientRef: text("recipient_ref").notNull(),
+  recipientUserId: uuid("recipient_user_id"),
+  recipientPartyId: uuid("recipient_party_id"),
   templateKey: text("template_key").notNull(),
   entityType: text("entity_type"),
   entityId: text("entity_id"),
@@ -83,10 +93,29 @@ export const messagesTable = pgTable("messages", {
   providerMessageId: text("provider_message_id"),
   failoverFrom: messageChannelEnum("failover_from"),
   error: text("error"),
+  // Recipient read-state for the notification feed: null = unread. Set only
+  // by the feed's mark-read path, always under the same recipient-identity
+  // predicate that scopes reads (SEC-03 — identity columns are the wall).
+  readAt: timestamp("read_at", { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-  // The per-user notification feed scans by recipient pointer, newest first.
-}, (t) => [index("messages_recipient_created_idx").on(t.recipientRef, t.createdAt)]);
+}, (t) => [
+  // Kept for provider-side correlation lookups (delivery webhooks, ops).
+  index("messages_recipient_created_idx").on(t.recipientRef, t.createdAt),
+  // The notification feeds scan by recipient identity, newest first. Partial:
+  // each send sets exactly one identity column, so each index holds only its
+  // own rail's rows. The unread count and the mark-read UPDATE ride the SAME
+  // identity indexes: a per-recipient feed is tens-to-hundreds of rows, so
+  // filtering `read_at IS NULL` inside an already identity-narrowed scan is
+  // trivial — an additional partial index WHERE read_at IS NULL would buy
+  // nothing at these sizes and is deliberately not added.
+  index("messages_recipient_user_created_idx")
+    .on(t.recipientUserId, t.createdAt)
+    .where(sql`recipient_user_id IS NOT NULL`),
+  index("messages_recipient_party_created_idx")
+    .on(t.recipientPartyId, t.createdAt)
+    .where(sql`recipient_party_id IS NOT NULL`),
+]);
 
 // Transactional outbox: written in the same transaction as the domain change,
 // drained by the worker (INT-09). status=dead is the dead-letter queue.

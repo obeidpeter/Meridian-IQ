@@ -1,6 +1,6 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import {
-  getDb,
+  db as baseDb,
   auditEventsTable,
   bankStatementsTable,
   billingTiersTable,
@@ -52,12 +52,31 @@ export interface FirmExportBundle {
 }
 
 // `cap` is injectable for tests only; production callers take the default.
+//
+// SNAPSHOT DISCIPLINE: the bundle is a dozen sequential section reads, and a
+// regulator/offboarding artifact whose sections disagree with each other (an
+// invoice_lines row whose invoice landed between the two reads, a member the
+// audit tail already names) is worse than a slightly stale one. All sections
+// therefore run inside ONE explicit REPEATABLE READ transaction — every read
+// sees the same MVCC snapshot. The transaction is opened on the base client
+// (not the ambient request transaction, whose isolation level is fixed by the
+// time a handler runs): the route is operator-gated and would run RLS-bypass
+// anyway, and everything here is read-only.
 export async function exportFirmData(
   firmId: string,
   cap: number = EXPORT_SECTION_ROW_CAP,
 ): Promise<FirmExportBundle> {
-  const db = getDb();
+  return baseDb.transaction(
+    (tx) => exportFirmDataWithin(tx, firmId, cap),
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
+}
 
+async function exportFirmDataWithin(
+  db: Pick<typeof baseDb, "select">,
+  firmId: string,
+  cap: number,
+): Promise<FirmExportBundle> {
   const [firm] = await db
     .select()
     .from(firmsTable)

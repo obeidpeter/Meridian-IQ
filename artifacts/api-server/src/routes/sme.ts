@@ -739,17 +739,28 @@ router.put("/clients/:id/alert-preferences", async (req, res): Promise<void> => 
   const params = parseOrThrow(UpdateAlertPreferencesParams, req.params);
   const parsed = parseOrThrow(UpdateAlertPreferencesBody, req.body);
   await assertPartyAccess(req.principal, params.id);
+  // Contact-number provenance (see modules/inbound/whatsapp.ts): whenever the
+  // payload names a routing-key field (whatsappTo/phone), record WHICH role
+  // wrote it — the inbound WhatsApp rail only routes on numbers the client
+  // set themselves. A PUT that never names those fields (e.g. staff toggling
+  // a channel) leaves the existing provenance untouched.
+  const touchesContact =
+    parsed.whatsappTo !== undefined || parsed.phone !== undefined;
+  const provenance = touchesContact
+    ? { contactSetByRole: req.principal.role }
+    : {};
   const values = {
     clientPartyId: params.id,
     ...DEFAULT_PREFS,
     ...parsed,
+    ...provenance,
   };
   const [row] = await getDb()
     .insert(alertPreferencesTable)
     .values(values)
     .onConflictDoUpdate({
       target: alertPreferencesTable.clientPartyId,
-      set: { ...parsed, updatedAt: new Date() },
+      set: { ...parsed, ...provenance, updatedAt: new Date() },
     })
     .returning();
   await appendAudit({
@@ -792,6 +803,9 @@ router.post("/clients/:id/alerts/test", async (req, res): Promise<void> => {
       const message = await sendMessage({
         channel,
         recipientRef,
+        // Real recipient identity for the ledger/feed (the ref is display
+        // and correlation only).
+        recipientPartyId: params.id,
         templateKey: "deadline_reminder",
       });
       results.push({

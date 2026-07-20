@@ -80,6 +80,10 @@ import { computeRejectionPatterns } from "../modules/desk/rejection-patterns";
 import { computeAdoptionReport } from "../modules/clerk/adoption";
 import { computeOperatorBrief } from "../modules/desk/daily-brief";
 import { computeComplianceCalendar } from "../modules/invoice/compliance-calendar";
+import {
+  billingTierForFirm,
+  computeBillingFee,
+} from "../modules/invoice/billing-statement";
 import { gatewayOrNull } from "../modules/clerk/provider";
 import { getFirmReceivables } from "../modules/invoice/receivables";
 import {
@@ -564,48 +568,23 @@ router.patch("/console/pipeline/:id", async (req, res): Promise<void> => {
 });
 
 // --- Billing helpers --------------------------------------------------------
-async function tierForFirm(firmId: string): Promise<BillingTier> {
-  const [sub] = await getDb()
-    .select()
-    .from(firmSubscriptionsTable)
-    .where(eq(firmSubscriptionsTable.firmId, firmId))
-    .limit(1);
-  if (sub) {
-    const [tier] = await getDb()
-      .select()
-      .from(billingTiersTable)
-      .where(eq(billingTiersTable.id, sub.tierId))
-      .limit(1);
-    if (tier) return tier;
-  }
-  const [fallback] = await getDb()
-    .select()
-    .from(billingTiersTable)
-    .where(eq(billingTiersTable.key, "essential"))
-    .limit(1);
-  if (!fallback) {
-    throw new DomainError("NO_TIER", "No billing tiers configured", 500);
-  }
-  return fallback;
-}
-
-// Deterministic billing maths — subscription + per-invoice overage, then the
-// firm's revenue share, all rounded to two decimals (kobo) so statements and
-// the unearned-income view reconcile to the naira.
+// Tier resolution AND the base+overage fee core are shared with the monthly
+// platform-billing statement (modules/invoice/billing-statement.ts:
+// billingTierForFirm / computeBillingFee), so the two billing surfaces cannot
+// disagree about which tier a firm is on or what its fee is. This wrapper
+// layers the revenue-share maths (statement-only concern) on top, rounded to
+// two decimals (kobo) so statements and the unearned-income view reconcile to
+// the naira.
 function computeBilling(tier: BillingTier, billedInvoices: number) {
-  const included = tier.includedInvoices;
-  const overageInvoices = Math.max(0, billedInvoices - included);
-  const subscriptionAmount = Number(tier.monthlyPrice);
-  const overageAmount = overageInvoices * Number(tier.overagePrice);
-  const billingAmount = subscriptionAmount + overageAmount;
+  const fee = computeBillingFee(tier, billedInvoices);
   const pct = Number(tier.revenueSharePct);
-  const revenueShareAmount = billingAmount * pct;
+  const revenueShareAmount = Number(fee.total) * pct;
   return {
-    includedInvoices: included,
-    overageInvoices,
-    subscriptionAmount: subscriptionAmount.toFixed(2),
-    overageAmount: overageAmount.toFixed(2),
-    billingAmount: billingAmount.toFixed(2),
+    includedInvoices: tier.includedInvoices,
+    overageInvoices: fee.overageInvoices,
+    subscriptionAmount: fee.base,
+    overageAmount: fee.overage,
+    billingAmount: fee.total,
     revenueSharePct: pct.toString(),
     revenueShareAmount: revenueShareAmount.toFixed(2),
   };
@@ -614,7 +593,7 @@ function computeBilling(tier: BillingTier, billedInvoices: number) {
 router.get("/console/unearned-income", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
   const firmId = firmScope(req.principal);
-  const tier = await tierForFirm(firmId);
+  const tier = await billingTierForFirm(firmId);
   const pct = Number(tier.revenueSharePct);
   const overagePrice = Number(tier.overagePrice);
 
@@ -797,7 +776,7 @@ router.get("/billing/subscription", async (req, res): Promise<void> => {
     .from(firmSubscriptionsTable)
     .where(eq(firmSubscriptionsTable.firmId, firmId))
     .limit(1);
-  const tier = await tierForFirm(firmId);
+  const tier = await billingTierForFirm(firmId);
   res.json(
     GetSubscriptionResponse.parse({
       firmId,
@@ -899,7 +878,7 @@ router.get("/billing/statements", async (req, res): Promise<void> => {
 
 async function generateStatement(firmId: string, period: string) {
   const { start, end } = periodBounds(period);
-  const tier = await tierForFirm(firmId);
+  const tier = await billingTierForFirm(firmId);
   const [{ count }] = await getDb()
     .select({ count: sql<number>`count(*)::int` })
     .from(invoicesTable)

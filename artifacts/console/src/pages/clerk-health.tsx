@@ -700,7 +700,7 @@ function EvalCorpusCard() {
             <p className="text-xs text-muted-foreground" data-testid="text-corpus-summary">
               {corpusSummary(corpus)}
             </p>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" id="table-eval-corpus-region">
               <table className="w-full text-sm" data-testid="table-eval-corpus">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -831,6 +831,8 @@ function EvalCorpusCard() {
                 size="sm"
                 variant="secondary"
                 onClick={() => setShowAll((o) => !o)}
+                aria-expanded={showAll}
+                aria-controls="table-eval-corpus-region"
                 data-testid="button-corpus-show-all"
               >
                 {showAll
@@ -1871,6 +1873,8 @@ export function HealthPanel() {
                     size="sm"
                     variant="secondary"
                     onClick={() => setShowEvalDetail((o) => !o)}
+                    aria-expanded={showEvalDetail}
+                    aria-controls="detail-eval-fixtures"
                     data-testid="button-toggle-eval-detail"
                   >
                     {showEvalDetail
@@ -1884,6 +1888,7 @@ export function HealthPanel() {
                       </p>
                       <div
                         className="border rounded-md divide-y text-sm"
+                        id="detail-eval-fixtures"
                         data-testid="detail-eval-fixtures"
                       >
                         {latestRun.results.map((fx) => (

@@ -22,6 +22,7 @@ import {
   recordActionFailure,
 } from "../modules/auth/throttle";
 import { requireFirmScope, type Principal } from "../modules/auth/rbac";
+import { relayConfigured, sendRawToRelay } from "../modules/messaging/messaging";
 import { DomainError } from "../modules/errors";
 
 // Staff notification preferences (self-service, OPT-IN). A firm member
@@ -215,17 +216,13 @@ router.post(
     // failures — there is no failure signal to count instead).
     await recordActionFailure(throttleKey);
 
-    // The outbound relay is the messaging transport's webhook. When it is not
-    // configured the platform has no way to reach any inbox: respond 202 and
-    // send nothing — the response is deliberately identical to the dispatched
-    // case so this endpoint is not a relay-configuration oracle.
-    //
-    // ORCHESTRATOR TODO: modules/messaging/messaging.ts (outside this
-    // change's partition) reads the same env var in its default transport; a
-    // small exported relayConfigured() there would let this env read live
-    // with the transport instead of being duplicated here.
-    const relayUrl = process.env.MESSAGING_WEBHOOK_URL;
-    if (!relayUrl) {
+    // The outbound relay is the messaging transport's webhook
+    // (relayConfigured lives with the transport that reads the same env).
+    // When it is not configured the platform has no way to reach any inbox:
+    // respond 202 and send nothing — the response is deliberately identical
+    // to the dispatched case so this endpoint is not a relay-configuration
+    // oracle.
+    if (!relayConfigured()) {
       res.status(202).end();
       return;
     }
@@ -248,32 +245,17 @@ router.post(
     // DELIBERATE, DOCUMENTED SEC-12 EXCEPTION: the platform's messaging seam
     // is pointer-only — sendMessage rejects anything that looks like a raw
     // address, and the RELAY owns ref→address resolution on its side of the
-    // wire (see modules/messaging/messaging.ts). Verification is the one flow
-    // that cannot ride a pointer: its entire purpose is to prove ownership of
-    // an address the platform has not yet blessed, so no ref→address mapping
-    // exists for the relay to resolve. The raw {email, code} therefore
-    // crosses to the SAME relay endpoint (same URL, same x-op-token secret) —
-    // the address-handling boundary SEC-12 already trusts with every resolved
-    // address — under its own kind tag, and to nowhere else. A relay failure
-    // is absorbed: the response never reveals whether a send happened.
-    try {
-      const headers: Record<string, string> = {
-        "content-type": "application/json",
-      };
-      const token = process.env.MESSAGING_WEBHOOK_TOKEN;
-      if (token) headers["x-op-token"] = token;
-      await fetch(relayUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          kind: "staff_email_verify",
-          email: row.email,
-          code,
-        }),
-      });
-    } catch {
-      // No oracle: dispatch failures look exactly like successes.
-    }
+    // wire. Verification is the one flow that cannot ride a pointer: its
+    // entire purpose is to prove ownership of an address the platform has not
+    // yet blessed, so no ref→address mapping exists for the relay to resolve.
+    // The raw {email, code} therefore crosses to the SAME relay endpoint
+    // through sendRawToRelay — the exception's one home in
+    // modules/messaging/messaging.ts (same URL, same x-op-token secret, same
+    // 5s abort ceiling), the address-handling boundary SEC-12 already trusts
+    // with every resolved address — under its own kind tag, and to nowhere
+    // else. The result is deliberately ignored: dispatch failures look
+    // exactly like successes, so the endpoint is no oracle.
+    await sendRawToRelay("staff_email_verify", { email: row.email, code });
     res.status(202).end();
   },
 );
@@ -304,19 +286,26 @@ router.post(
     }
 
     const row = await ownRow(req.principal.userId, firmId);
+    const presentedHash = sha256Hex(parsed.code);
     const valid =
       row?.emailVerifyCodeHash != null &&
       row.emailVerifyExpiresAt != null &&
       row.emailVerifyExpiresAt.getTime() > Date.now() &&
-      digestEquals(sha256Hex(parsed.code), row.emailVerifyCodeHash);
+      digestEquals(presentedHash, row.emailVerifyCodeHash);
     if (!valid) {
       // Raw-pool counter: survives this 400's transaction rollback.
       await recordActionFailure(throttleKey);
       res.status(400).json({ error: "Invalid or expired code" });
       return;
     }
-    await clearActionFailures(throttleKey);
 
+    // Compare-and-set on the STORED code hash, not just (userId, firmId): a
+    // concurrent PUT can swap the address (clearing hash + verification)
+    // between the read above and this write — a bare-key UPDATE would then
+    // stamp emailVerifiedAt onto the NEW, unverified address. The hash
+    // predicate makes the stamp land only on the exact pending-code state the
+    // presented code proved; zero rows means the state moved underneath us
+    // and the confirm fails like any other invalid code.
     const now = new Date();
     const [updated] = await getDb()
       .update(staffNotificationPreferencesTable)
@@ -330,9 +319,16 @@ router.post(
         and(
           eq(staffNotificationPreferencesTable.userId, req.principal.userId),
           eq(staffNotificationPreferencesTable.firmId, firmId),
+          eq(staffNotificationPreferencesTable.emailVerifyCodeHash, presentedHash),
         ),
       )
       .returning();
+    if (!updated) {
+      await recordActionFailure(throttleKey);
+      res.status(400).json({ error: "Invalid or expired code" });
+      return;
+    }
+    await clearActionFailures(throttleKey);
     // Pointer-only audit: the verified ADDRESS never enters the audit trail.
     await appendAudit({
       actorId: req.principal.userId,

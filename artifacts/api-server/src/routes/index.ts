@@ -29,6 +29,10 @@ import connectorsRouter from "./connectors";
 import claimsRouter from "./claims";
 import clerkRouter from "./clerk";
 import staffRouter from "./staff";
+import billingPaymentsRouter from "./billing-payments";
+// Also registers the webhook fan-out/dispatch sweep with the pipeline worker
+// (modules/integrations/webhooks.ts registerSweep at import time).
+import integrationsRouter from "./integrations";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 import "../modules/desk/triage";
@@ -42,6 +46,7 @@ import "../modules/clerk/spend-watch";
 import "../modules/clerk/quality-watch";
 import "../modules/push/register";
 import "../modules/invoice/register";
+import "../modules/messaging/retention";
 
 const router: IRouter = Router();
 
@@ -75,5 +80,7 @@ router.use(connectorsRouter);
 router.use(claimsRouter);
 router.use(clerkRouter);
 router.use(staffRouter);
+router.use(billingPaymentsRouter);
+router.use(integrationsRouter);
 
 export default router;

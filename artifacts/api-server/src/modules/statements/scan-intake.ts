@@ -14,6 +14,10 @@ import {
   rasterizePdfScan,
 } from "../clerk/cases";
 import { fenceUntrusted } from "../clerk/prompts";
+import {
+  GENERIC_CSV_FORMAT_KEY,
+  renderGenericStatementCsv,
+} from "./parsers";
 
 // Scanned bank-statement intake. Clients hand their accountant PDF statements
 // far more often than CSV exports; instead of rejecting them, ONE model call
@@ -114,34 +118,23 @@ function statementScanContent(pagesB64: string[]): UserContent {
 // fallback: Date/Narration/Reference/Amount/Direction with CR/DR markers).
 // Passed to ingestStatement explicitly so detection can never drift to
 // another parser.
-export const SCAN_PROPOSAL_FORMAT_KEY = "generic_csv";
+export const SCAN_PROPOSAL_FORMAT_KEY = GENERIC_CSV_FORMAT_KEY;
 
-// RFC-4180 escaping only — a deliberate LOCAL MIRROR of
-// feed-contract.ts's renderFeedCsv (same header, same cell rule): this CSV is
-// machine-parsed by parseStatementText, never opened in a spreadsheet, so
-// lib/csv.ts's formula-guard apostrophes would corrupt narrations on the
-// round-trip. Kept local rather than imported so the statement-scan surface
-// and the bank-feed engine can evolve independently; if the generic_csv shape
-// itself ever changes, both renderers change with the parser.
-function csvCell(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
+// The proposal's deterministic CSV rendering — the ONE renderer shared with
+// the bank-feed engine (parsers.ts's renderGenericStatementCsv, living next
+// to the parser it inverts). This CSV is what the route hands back as
+// `proposedCsv` on a PDF preview: committing means POSTing it back as `csv`,
+// so the rows the user checked are exactly the rows that commit and
+// extraction never silently re-runs.
 export function renderProposedCsv(lines: ProposedStatementLine[]): string {
-  const rows = lines.map((l) =>
-    [
-      csvCell(l.valueDate),
-      csvCell(l.narration),
-      csvCell(l.reference ?? ""),
-      csvCell(l.amount),
-      l.direction === "credit" ? "CR" : "DR",
-    ].join(","),
-  );
-  return ["Date,Narration,Reference,Amount,Direction", ...rows].join("\n");
+  return renderGenericStatementCsv(lines);
 }
 
 export interface StatementScanProposal {
   lines: ProposedStatementLine[];
+  // The deterministic generic_csv rendering of `lines` — returned so the
+  // caller previews and hands back EXACTLY this text for the commit leg.
+  csv: string;
   // Which extraction path served the proposal: a PDF with a text layer stays
   // on the (cheaper, more reliable) text path; a textless scan is rasterized
   // (max 4 pages — rasterizePdfScan's cap) and walks the vision path.
@@ -233,5 +226,10 @@ export async function proposeStatementLinesFromPdf(
     after: { via, pageCount, lineCount: result.data.lines.length },
   });
 
-  return { lines: result.data.lines, via, pageCount };
+  return {
+    lines: result.data.lines,
+    csv: renderProposedCsv(result.data.lines),
+    via,
+    pageCount,
+  };
 }

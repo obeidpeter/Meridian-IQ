@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import {
   getDb,
+  runRequestContext,
   bankStatementsTable,
   bankStatementLinesTable,
   matchProposalsTable,
@@ -51,7 +52,6 @@ import {
 import {
   SCAN_PROPOSAL_FORMAT_KEY,
   proposeStatementLinesFromPdf,
-  renderProposedCsv,
 } from "../modules/statements/scan-intake";
 import { assertFirmClerkBudget } from "../modules/clerk/budget";
 import { isPurposePermitted } from "../modules/consent/consent";
@@ -73,6 +73,16 @@ const MAX_STATEMENT_CSV_CHARS = 4_000_000;
 
 const router: IRouter = Router();
 
+// NOTE (app.ts NO_CONTEXT_ROUTES): POST /api/statements runs OUTSIDE the
+// per-request transaction — the PDF branch's model call is multi-second work
+// that must not pin a pooled connection under the 30s request-tx cap. The
+// gates below (requireFlag, assertCan, assertPartyAccess, the consent/budget
+// pre-checks) all read req.principal and run their lookups on the raw pool,
+// which is correct for them: none touch a tenant-RLS-dependent read that the
+// explicit firm filters do not already pin. Atomicity for the WRITES is
+// re-established explicitly: ingestStatement runs inside its own short bypass
+// transaction below, so statement + lines + reconcile outbox still commit
+// all-or-nothing.
 router.post("/statements", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.write");
   const firmId = requireFirmScope(req.principal);
@@ -89,9 +99,23 @@ router.post("/statements", requireFlag("reconciliation"), async (req, res): Prom
       400,
     );
   }
+  // Commit-from-preview (contract 0.40.0): a PDF may only ever PREVIEW. The
+  // preview response carries `proposedCsv` — the deterministic rendering of
+  // the model's proposal — and committing means POSTing that text back as
+  // `csv` with commit:true, so the rows the user checked are exactly the rows
+  // that commit and extraction never silently re-runs (or re-bills) on the
+  // commit leg.
+  if (hasPdf && parsed.commit) {
+    throw new DomainError(
+      "PDF_COMMIT_FROM_PREVIEW",
+      "A PDF statement can only be previewed. Review the preview, then commit by posting its proposedCsv back as csv with commit:true.",
+      400,
+    );
+  }
   await assertPartyAccess(req.principal, parsed.clientPartyId);
 
   let csv: string;
+  let proposedCsv: string | null = null;
   let formatKey = parsed.formatKey ?? null;
   if (hasCsv) {
     if (parsed.csv!.length > MAX_STATEMENT_CSV_CHARS) {
@@ -102,15 +126,11 @@ router.post("/statements", requireFlag("reconciliation"), async (req, res): Prom
     }
     csv = parsed.csv!;
   } else {
-    // PDF branch — the one model call on this route. It deliberately stays
-    // INSIDE the request transaction (unlike the clerk capture routes, which
-    // are NO_CONTEXT): everything before the call is reads only (no row or
-    // advisory lock is held while the provider runs), the call is bounded
-    // (text capped at 150k chars / scans capped at 4 rendered pages), and
-    // ingestStatement's writes then keep the ordinary all-or-nothing
-    // atomicity with the response. The accepted trade is the 30s request-tx
-    // cap: one bounded completion fits it; anything bigger belongs on an
-    // async path.
+    // PDF branch — the one model call on this route, running with NO ambient
+    // transaction (see the NO_CONTEXT note above): everything before the call
+    // is reads only, the call is bounded (text capped at 150k chars / scans
+    // capped at 4 rendered pages), and the provider's multi-second latency
+    // holds no pooled connection.
     //
     // CORE-03 pre-check (token thrift only — ingestStatement remains the
     // enforcing gate): without layer-1 consent the ingest below would 403
@@ -131,22 +151,31 @@ router.post("/statements", requireFlag("reconciliation"), async (req, res): Prom
       firmId,
       req.principal.userId,
     );
-    csv = renderProposedCsv(proposal.lines);
+    csv = proposal.csv;
+    proposedCsv = proposal.csv;
     // Pin the parser: proposed lines are rendered to the generic shape, so
     // detection must never drift to a bank-specific parser.
     formatKey = SCAN_PROPOSAL_FORMAT_KEY;
   }
 
-  const result = await ingestStatement({
-    firmId,
-    clientPartyId: parsed.clientPartyId,
-    csv,
-    formatKey,
-    filename: parsed.filename ?? null,
-    commit: parsed.commit,
-    actorId: req.principal.userId,
-  });
-  res.json(ImportBankStatementResponse.parse(result));
+  // The ingest (BOTH branches — preview and commit, CSV and PDF) runs in its
+  // own short bypass transaction: the route is NO_CONTEXT, so this is what
+  // preserves ingestStatement's statement+lines+outbox atomicity. Bypass with
+  // firmId forced from the principal above is the same effective posture the
+  // request transaction gave this firm-scoped write (every query in
+  // ingestStatement filters by that firmId explicitly).
+  const result = await runRequestContext({ bypass: true, firmId: null }, () =>
+    ingestStatement({
+      firmId,
+      clientPartyId: parsed.clientPartyId,
+      csv,
+      formatKey,
+      filename: parsed.filename ?? null,
+      commit: parsed.commit,
+      actorId: req.principal.userId,
+    }),
+  );
+  res.json(ImportBankStatementResponse.parse({ ...result, proposedCsv }));
 });
 
 router.get("/statements", requireFlag("reconciliation"), async (req, res): Promise<void> => {

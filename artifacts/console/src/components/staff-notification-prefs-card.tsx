@@ -371,6 +371,7 @@ function PrefsCardBody({ initial }: { initial: StaffNotificationPreferences }) {
                   {codeSent && (
                     <p
                       className="text-xs text-muted-foreground"
+                      role="status"
                       data-testid="text-verification-sent"
                     >
                       Check your inbox — a code is on its way. Delivery needs
@@ -420,6 +421,7 @@ function PrefsCardBody({ initial }: { initial: StaffNotificationPreferences }) {
             {verifyError && (
               <p
                 className="text-sm text-destructive"
+                role="alert"
                 data-testid="text-verification-error"
               >
                 {verifyError}
@@ -439,13 +441,18 @@ function PrefsCardBody({ initial }: { initial: StaffNotificationPreferences }) {
           {saved && (
             <p
               className="text-sm text-emerald-700 dark:text-emerald-400"
+              role="status"
               data-testid="text-prefs-saved"
             >
               Saved
             </p>
           )}
           {error && (
-            <p className="text-sm text-destructive" data-testid="text-prefs-error">
+            <p
+              className="text-sm text-destructive"
+              role="alert"
+              data-testid="text-prefs-error"
+            >
               {error}
             </p>
           )}

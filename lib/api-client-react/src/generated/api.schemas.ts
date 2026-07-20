@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.39.0
+ * OpenAPI spec version: 0.41.0
  */
 export interface HealthStatus {
   status: string;
@@ -2645,6 +2645,8 @@ export interface StatementImportResult {
   statementId: string | null;
   committed: boolean;
   /** @nullable */
+  proposedCsv?: string | null;
+  /** @nullable */
   formatKey: string | null;
   /** @nullable */
   accountRef?: string | null;
@@ -4159,11 +4161,13 @@ export type NotificationFeedItemsItem = {
   /** @nullable */
   entityId?: string | null;
   status: string;
+  read: boolean;
   createdAt: string;
 };
 
 export interface NotificationFeed {
   items: NotificationFeedItemsItem[];
+  unreadCount: number;
 }
 
 export type FirmExportBundleSectionsItem = { [key: string]: unknown };
@@ -4515,6 +4519,128 @@ export interface ClerkEvalRun {
   results: ClerkEvalFixtureResult[];
   durationMs: number;
   createdAt: string;
+}
+
+export interface CreatePaymentIntentInput {
+  /** @pattern ^\d{4}-\d{2}-01$ */
+  monthStart: string;
+}
+
+export type PaymentIntentStatus = typeof PaymentIntentStatus[keyof typeof PaymentIntentStatus];
+
+
+export const PaymentIntentStatus = {
+  pending: 'pending',
+  confirmed: 'confirmed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export interface PaymentIntent {
+  id: string;
+  /** @pattern ^\d{4}-\d{2}-01$ */
+  monthStart: string;
+  amountNgn: string;
+  status: PaymentIntentStatus;
+  /** @nullable */
+  providerRef: string | null;
+  /** @nullable */
+  checkoutUrl: string | null;
+  createdAt: string;
+  /** @nullable */
+  confirmedAt: string | null;
+}
+
+export interface CreateFirmApiKeyInput {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * @minItems 1
+     * @maxItems 10
+     */
+  capabilities: string[];
+}
+
+export interface FirmApiKey {
+  id: string;
+  name: string;
+  capabilities: string[];
+  keyPrefix: string;
+  /** @nullable */
+  lastUsedAt: string | null;
+  /** @nullable */
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface FirmApiKeyCreated {
+  id: string;
+  name: string;
+  capabilities: string[];
+  keyPrefix: string;
+  secret: string;
+  createdAt: string;
+}
+
+export interface CreateFirmWebhookInput {
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  url: string;
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  events: string[];
+}
+
+export interface FirmWebhook {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  secretPrefix: string;
+  createdAt: string;
+}
+
+export interface FirmWebhookCreated {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  secretPrefix: string;
+  secret: string;
+  createdAt: string;
+}
+
+export type FirmWebhookDeliveryStatus = typeof FirmWebhookDeliveryStatus[keyof typeof FirmWebhookDeliveryStatus];
+
+
+export const FirmWebhookDeliveryStatus = {
+  pending: 'pending',
+  delivered: 'delivered',
+  failed: 'failed',
+  dead: 'dead',
+} as const;
+
+export interface FirmWebhookDelivery {
+  id: string;
+  eventType: string;
+  status: FirmWebhookDeliveryStatus;
+  attempts: number;
+  /** @nullable */
+  lastError: string | null;
+  createdAt: string;
+  /** @nullable */
+  deliveredAt: string | null;
+}
+
+export interface MarkNotificationsReadInput {
+  upToCreatedAt: string;
 }
 
 /**

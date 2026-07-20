@@ -27,6 +27,7 @@ import {
   UserPlus,
   CircleUserRound,
   LockKeyhole,
+  KeyRound,
 } from "lucide-react";
 import {
   Sheet,
@@ -50,7 +51,14 @@ type NavLink = {
   href: string;
   label: string;
   icon: typeof Users;
-  capability: string;
+  /** RBAC capability the page's API surface requires. */
+  capability?: string;
+  /**
+   * Exact-role requirement for the few surfaces the server gates on a role
+   * rather than a capability (routes/integrations.ts firmAdminScope). A link
+   * carrying `role` renders only for that role.
+   */
+  role?: string;
 };
 
 const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
@@ -92,6 +100,12 @@ const NAV_GROUPS: { title: string; links: NavLink[] }[] = [
         label: "Integrations",
         icon: Plug,
         capability: "connector.read",
+      },
+      {
+        href: "/api-access",
+        label: "API & webhooks",
+        icon: KeyRound,
+        role: "firm_admin",
       },
     ],
   },
@@ -275,7 +289,11 @@ export function Layout({ children }: { children: ReactNode }) {
   const capabilities = new Set(me?.capabilities ?? []);
   const groups = NAV_GROUPS.map((g) => ({
     ...g,
-    links: g.links.filter((l) => capabilities.has(l.capability)),
+    links: g.links.filter(
+      (l) =>
+        (l.capability === undefined || capabilities.has(l.capability)) &&
+        (l.role === undefined || me?.role === l.role),
+    ),
   })).filter((g) => g.links.length > 0);
   const roleContext = ROLE_CONTEXT[me?.role ?? ""] ?? {
     title: "Accountant Console",

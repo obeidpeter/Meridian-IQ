@@ -136,17 +136,22 @@ scheduler pings `GET /api/internal/sweep` to run one full pass on demand.
 - **Notification inbox** (`modules/messaging/inbox.ts`,
   `GET /notifications`, any signed-in principal): the messages ledger read
   from the RECIPIENT's side, newest first. `messages` has NO firm key and NO
-  RLS policy — it is a platform-wide pointer ledger — so **recipient_ref
-  equality IS the isolation wall** (firm-keyed RLS could not be a sibling
-  wall here anyway: two client_users of one firm share the firm's RLS
-  scope). Per-role resolution: `client_user` →
-  `recipientRefFor(clientPartyId)` (the ref every party-scoped alert rail
-  sends to); firm_admin/firm_staff → `pointerEntityRef("usr", userId)` (the
-  staff-preference rails' ref) — staff deliberately do NOT also see their
-  firm's party-ref rows, which would leak per-client alert traffic to every
-  teammate (the operator message log, `GET /messages`, is the firm-wide
-  monitor, behind its own gate); operator/auditor/bank/buyer roles get an
-  empty feed (no send rail mints refs for them). Rows STAY pointer-only in
+  RLS policy — it is a platform-wide pointer ledger — so **the
+  recipient-identity equality IS the isolation wall**: every send rail stamps
+  exactly one of `recipient_party_id` / `recipient_user_id` on the row, and
+  the feed reads strictly by those uuid columns (firm-keyed RLS could not be
+  a sibling wall here anyway: two client_users of one firm share the firm's
+  RLS scope). The opaque `recipient_ref` is a lossy letters-only derivation
+  kept for display and provider-side correlation ONLY — never scoping. Rows
+  predating the identity columns silently drop out of feeds (pointer-only
+  history; accepted). Per-role resolution: `client_user` → its own
+  `clientPartyId` (the identity every party-scoped alert rail stamps);
+  firm_admin/firm_staff → their own `userId` (the staff-preference rails'
+  identity) — staff deliberately do NOT also see their firm's party rows,
+  which would leak per-client alert traffic to every teammate (the operator
+  message log, `GET /messages`, is the firm-wide monitor, behind its own
+  gate); operator/auditor/bank/buyer roles get an empty feed (no send rail
+  stamps identities for them). Rows STAY pointer-only in
   the feed: the only server-side resolution is a human title from the
   template registry's static description (unknown/retired keys are
   humanized, never fail the feed); entity pointers pass through opaque. The
@@ -189,10 +194,16 @@ All reconciliation surfaces are gated by the `reconciliation` feature flag.
   normalize surfaces as an ordinary "invalid" preview row — never a silent
   drop, never a value the model smuggles past the parse pipeline. The route
   pre-checks CORE-03 consent (token thrift; ingest remains the enforcing
-  gate) and the firm Clerk budget BEFORE the provider; the model call
-  deliberately stays INSIDE the request transaction (reads only before it,
-  bounded call, all-or-nothing atomicity with the response — the accepted
-  trade is the 30s request-tx cap).
+  gate) and the firm Clerk budget BEFORE the provider. **Commit-from-preview
+  (contract 0.40.0)**: a PDF may only PREVIEW — the response carries
+  `proposedCsv` (the deterministic rendering of the proposal), and committing
+  means POSTing that text back as `csv` with `commit:true`; `pdfBase64` +
+  `commit:true` is refused (400 `PDF_COMMIT_FROM_PREVIEW`), so extraction
+  never silently re-runs on the commit leg. The route runs OUTSIDE the
+  request transaction (app.ts `NO_CONTEXT_ROUTES` — the model call must not
+  pin a pooled connection under the 30s cap) and is in the MODEL rate-limit
+  class; `ingestStatement` runs in its own short bypass transaction so
+  statement + lines + reconcile outbox still commit all-or-nothing.
 - **Custom statement formats** (`modules/statements/custom-formats.ts`,
   operator `catalogue.write`, global reference data like the error
   catalogue) store column-name mappings consumed by the same parser seam —
@@ -265,6 +276,55 @@ All reconciliation surfaces are gated by the `reconciliation` feature flag.
   (`GET /invoices/export`), VAT pack (`GET /vat-pack/export`), receivables
   (`GET /dashboard/receivables/export`), audit trail (`GET /audit/export` +
   `/audit/export/csv`).
+
+## Integration layer (payments, API keys, webhooks)
+
+- **Payment collection** (`modules/billing/payments.ts`, `routes/billing-payments.ts`,
+  migration 0021, `console.portfolio.read` + firm scope): a firm records a
+  payment intent against a CLOSED billing month — the amount is the shared
+  billing fee core (so an intent can never disagree with the statement), a
+  partial unique index `(firm_id, month_start) WHERE status IN
+  ('pending','confirmed')` enforces one live intent per month (409),
+  zero-fee months refuse (400). The provider is an injectable
+  `PaymentProvider` (the push/messaging transport idiom): the simulator is
+  the default, `PAYMENT_PROVIDER_URL`/`_TOKEN` light a JSON relay that may
+  return a `checkoutUrl`. Confirmation is a machine rail deliberately OFF
+  the contract (`POST /api/billing/payments/confirm`, fail-closed
+  `PAYMENT_WEBHOOK_TOKEN`, 404 while unset): a CAS `pending → confirmed |
+  failed` transition, idempotent on replay, pointer-only audit. Subscription
+  paid-through state stays operator-managed — payments record intent, they
+  do not mutate entitlement.
+- **Firm API keys** (`modules/integrations/api-keys.ts`, migration 0022,
+  `firm_admin` only): `mk_<prefix>_<secret>` minted once, only its sha256
+  stored. An `Authorization: Bearer mk_…` header resolves in
+  `middleware/principal.ts` BEFORE any cookie/session path (constant-time
+  compare, revoked/unknown → 401) to a firm-pinned MACHINE principal whose
+  capabilities are EXACTLY the key's — from a vetted allowlist
+  (`invoice.read`, `invoice.write`, `statement.write`; never `clerk.*`,
+  identity, billing or `invoice.submit`), enforced by an additive
+  short-circuit in `can()`. The machine principal is not in `BYPASS_ROLES`
+  (tenant RLS applies), is rate-limited under `apikey:<id>`, and cannot mint
+  keys (no self-propagation). `lastUsedAt` is a best-effort raw-pool write
+  throttled to once/min.
+- **Outbound webhooks** (`modules/integrations/webhooks.ts`, same migration,
+  `firm_admin`): a closed event catalog (`invoice.stamped`, `invoice.settled`,
+  `statement.reconciled`) fanned out set-based from the append-only
+  lifecycle/audit ledgers into `firm_webhook_deliveries` (idempotent via a
+  `(webhook_id, event_key)` dedup index, events newer than the subscription
+  only). A `registerSweep` dispatcher drains pending deliveries with a
+  pre-charged claim (`FOR UPDATE SKIP LOCKED`, attempts + backoff advanced
+  before network I/O), a 5s `AbortSignal` timeout, `redirect: "manual"` +
+  https/public-host SSRF guards, a pointer-only body (SEC-12) and an
+  `X-Meridian-Signature` HMAC-SHA256 keyed by the sha256 of the shown-once
+  `whsec_` secret; five failures dead-letter the delivery. Per-firm delivery
+  logs are the firm's own audit of what left.
+- **Notification read-state & retention**: the feed carries `read` /
+  `unreadCount` computed under the same recipient-identity predicate that is
+  the inbox's isolation wall; `POST /notifications/mark-read` is an
+  inclusive-boundary update over the caller's own rows. The messages ledger
+  now has its first retention sweep (`MESSAGES_RETENTION_DAYS`, default 180,
+  bounded 1000-row batches, hourly) — pointer-only rows, so age is the only
+  criterion.
 
 ## Web & mobile surfaces
 

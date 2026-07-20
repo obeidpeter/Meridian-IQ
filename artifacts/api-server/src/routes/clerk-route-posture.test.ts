@@ -166,6 +166,57 @@ test("bulk approval is operator-gated and runs OUTSIDE the request transaction",
   );
 });
 
+test("BOTH inbound rails run outside the request transaction", () => {
+  // Each rail responds 202 and then runs sender resolution + capture in a
+  // DETACHED promise. Inside tenantContext that promise inherits — and
+  // outlives — the request transaction: the 202 commits (or rolls back) the
+  // tx while the pipeline is still using it, so its audits/cases fail or
+  // interleave into whatever request grabs the pooled connection next. The
+  // rails must therefore both be NO_CONTEXT; their detached DB stages open
+  // their own short transactions (clerk scope.ts / appendAudit's own tx).
+  const appSrc = src("app.ts");
+  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
+  assert.ok(setStart >= 0);
+  const set = appSrc.slice(setStart, appSrc.indexOf("])", setStart));
+  assert.ok(
+    set.includes('"POST /api/inbound/email"'),
+    "the inbound email webhook must skip the request transaction",
+  );
+  assert.ok(
+    set.includes('"POST /api/inbound/whatsapp"'),
+    "the inbound WhatsApp webhook must skip the request transaction — a detached pipeline inheriting the request tx fails its audits and interleaves across requests",
+  );
+});
+
+test("statement import runs outside the request transaction, in the MODEL class, with its own atomic ingest", () => {
+  // The PDF branch is one bounded model call: NO_CONTEXT so it never pins a
+  // pooled connection under the 30s cap, MODEL rate-limited like every other
+  // token-spending route (the CSV branch shares the class — the
+  // /clerk/batches precedent), and the route re-establishes write atomicity
+  // itself by running ingestStatement inside its own bypass transaction.
+  const appSrc = src("app.ts");
+  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
+  const set = appSrc.slice(setStart, appSrc.indexOf("])", setStart));
+  assert.ok(
+    set.includes('"POST /api/statements"'),
+    "POST /api/statements must skip the request transaction (bounded model call)",
+  );
+  const rlSrc = src("middleware/rate-limit.ts");
+  const rlStart = rlSrc.indexOf("MODEL_RATE_LIMITED_ROUTES");
+  const rlSet = rlSrc.slice(rlStart, rlSrc.indexOf("])", rlStart));
+  assert.ok(
+    rlSet.includes('"POST /api/statements"'),
+    "POST /api/statements must be in the MODEL rate-limit class",
+  );
+  const block = routeBlock(src("routes/statements.ts"), "/statements");
+  const wrapAt = block.indexOf("runRequestContext({ bypass: true, firmId: null }");
+  const ingestAt = block.indexOf("ingestStatement(");
+  assert.ok(
+    wrapAt >= 0 && ingestAt > wrapAt,
+    "with the route NO_CONTEXT, ingestStatement must run inside its own bypass transaction or statement+lines+outbox lose their all-or-nothing commit",
+  );
+});
+
 test("case retry runs outside the request transaction via the pattern list", () => {
   // NO_CONTEXT_ROUTES is a literal-path Set; parameterized paths live in
   // NO_CONTEXT_ROUTE_PATTERNS. Retry re-runs a full extraction (up to a

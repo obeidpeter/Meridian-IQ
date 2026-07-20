@@ -2,26 +2,44 @@ import { describe, expect, test } from "vitest";
 import {
   channelBadgeClasses,
   channelLabel,
+  NOTIFICATION_FEED_LIMIT,
   relativeTime,
 } from "./notifications";
 
-describe("channelLabel", () => {
-  test("names the known delivery channels with their proper casing", () => {
+// PARITY PIN — the console app mirrors this module in its own
+// src/lib/notifications.ts (no cross-app shared lib exists). The canonical
+// channel vocabulary below is asserted verbatim in BOTH apps' suites, the
+// mobile chip-parity idiom: a divergence fails one side's test and points
+// at the other.
+
+describe("channel vocabulary parity", () => {
+  test("labels match the canonical set exactly", () => {
     expect(channelLabel("email")).toBe("Email");
     expect(channelLabel("push")).toBe("Push");
     expect(channelLabel("sms")).toBe("SMS");
     expect(channelLabel("whatsapp")).toBe("WhatsApp");
   });
 
+  test("tones match the canonical set exactly", () => {
+    expect(channelBadgeClasses("email")).toContain("blue");
+    expect(channelBadgeClasses("push")).toContain("violet");
+    expect(channelBadgeClasses("sms")).toContain("teal");
+    expect(channelBadgeClasses("whatsapp")).toContain("emerald");
+  });
+
+  test("both apps request the same feed page size", () => {
+    expect(NOTIFICATION_FEED_LIMIT).toBe(20);
+  });
+});
+
+describe("channelLabel", () => {
   test("humanizes an unknown channel instead of breaking the feed", () => {
     expect(channelLabel("carrier_pigeon")).toBe("Carrier pigeon");
   });
 });
 
 describe("channelBadgeClasses", () => {
-  test("tones the known channels and falls back to slate", () => {
-    expect(channelBadgeClasses("email")).toContain("blue");
-    expect(channelBadgeClasses("whatsapp")).toContain("emerald");
+  test("falls back to slate for unknown channels", () => {
     expect(channelBadgeClasses("carrier_pigeon")).toContain("slate");
   });
 });

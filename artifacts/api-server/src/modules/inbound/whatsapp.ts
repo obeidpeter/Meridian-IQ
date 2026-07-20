@@ -6,18 +6,13 @@ import {
   alertPreferencesTable,
   membershipsTable,
 } from "@workspace/db";
-import { logger } from "../../lib/logger";
 import { normalizePhone } from "../../lib/phone";
 import { appendAudit } from "../audit/audit";
-import { assertFirmClerkBudget } from "../clerk/budget";
-import { createExtractionCase, type CreateCaseInput } from "../clerk/cases";
 import type { ClerkGateway } from "../clerk/gateway";
-import { getClerkGateway } from "../clerk/provider";
-import { DomainError } from "../errors";
 import {
   attachmentSource,
-  dailyCapFromEnv,
-  inboundAttachmentsToday,
+  makeInboundCapture,
+  remainingInboundAllowance,
   withInboundSlot,
   type InboundAttachment,
 } from "./shared";
@@ -102,10 +97,15 @@ export function maskInboundPhone(sender: string): string {
 //  1. normalize the webhook's sender through the ONE shared normalizer
 //     (lib/phone.ts);
 //  2. compare against every alert_preferences row that stores a WhatsApp or
-//     phone number — the stored values are free text a client typed, so they
-//     are normalized through the SAME function at compare time
-//     (fetch-and-filter: the table is one small row per client party, and
-//     normalizing in SQL would fork the normalizer);
+//     phone number AND whose contact fields the CLIENT set themselves
+//     (contact_set_by_role = 'client_user') — the stored values are free text
+//     used here as a global routing key, and a firm-staff-typed number must
+//     never be able to route documents into a client's book (a number becomes
+//     a routing key only when the client set it themselves; rows predating
+//     the provenance column fail closed and do not route). Values are
+//     normalized through the SAME function at compare time (fetch-and-filter:
+//     the table is one small row per client party, and normalizing in SQL
+//     would fork the normalizer);
 //  3. EXACTLY ONE matching client party resolves; zero or several refuse
 //     (the caller audit-skips) — a shared office number must never guess;
 //  4. firm + acting user come from the party's OLDEST client_user membership
@@ -128,9 +128,13 @@ export async function resolveInboundWhatsAppSender(
       })
       .from(alertPreferencesTable)
       .where(
-        or(
-          isNotNull(alertPreferencesTable.whatsappTo),
-          isNotNull(alertPreferencesTable.phone),
+        and(
+          or(
+            isNotNull(alertPreferencesTable.whatsappTo),
+            isNotNull(alertPreferencesTable.phone),
+          ),
+          // Provenance gate: only client-set numbers are routing keys.
+          eq(alertPreferencesTable.contactSetByRole, "client_user"),
         ),
       );
     // clientPartyId is the table's primary key, so each row is one party;
@@ -211,56 +215,20 @@ async function processInboundWhatsAppNow(
   // separate count). A text-only message consumes allowance like an
   // attachment: it lands in caseIds or skipped either way, which is exactly
   // what the receipt-based count sums.
-  const usedToday = await inboundAttachmentsToday(
+  let remaining = await remainingInboundAllowance(
     "inbound.whatsapp.received",
+    "INBOUND_WHATSAPP_DAILY_CAP",
     resolved.firmId,
   );
-  let remaining = Math.max(
-    0,
-    dailyCapFromEnv("INBOUND_WHATSAPP_DAILY_CAP") - usedToday,
+
+  // Shared per-item capture closure (./shared.ts): budget gate before the
+  // provider, lazy gateway, every per-item failure (BSPs redeliver on
+  // timeout) absorbed as a skip.
+  const { capture, caseIds, skipped } = makeInboundCapture(
+    resolved,
+    gateway,
+    "Inbound WhatsApp item",
   );
-
-  // Resolved lazily so a message whose items all skip never needs a provider
-  // to be configured at all.
-  let gw: ClerkGateway | null = gateway ?? null;
-  const caseIds: string[] = [];
-  const skipped: { filename: string; reason: string }[] = [];
-
-  const capture = async (
-    filename: string,
-    source: CreateCaseInput,
-  ): Promise<void> => {
-    try {
-      // Same budget gate as the capture route: checked BEFORE the provider
-      // is touched, so an exhausted firm spends nothing (the gateway
-      // enforces it again as a backstop).
-      await assertFirmClerkBudget(resolved.firmId);
-      gw ??= await getClerkGateway();
-      const kase = await createExtractionCase(
-        source,
-        resolved.userId,
-        gw,
-        undefined,
-        {
-          firmId: resolved.firmId,
-          clientScoped: true,
-          clientPartyId: resolved.clientPartyId,
-        },
-      );
-      caseIds.push(kase.id);
-    } catch (err) {
-      // CLERK_BUDGET_EXHAUSTED, DUPLICATE_SOURCE (BSPs redeliver on
-      // timeout), the module's own upload guards, the kill switch — all skip
-      // THIS item with the domain code on record; nothing escapes the
-      // detached promise.
-      if (err instanceof DomainError) {
-        skipped.push({ filename, reason: err.code });
-      } else {
-        logger.error({ err }, "Inbound WhatsApp item processing failed");
-        skipped.push({ filename, reason: "ERROR" });
-      }
-    }
-  };
 
   for (const [index, att] of input.attachments.entries()) {
     const filename = mediaFilename(att, index);

@@ -22,7 +22,7 @@ import {
 } from "@workspace/db";
 import { lagosDateString, lagosWindowSql } from "../../lib/lagos-time";
 import { monthLabel } from "../clerk/client-statement";
-import { closedLagosMonths } from "../clerk/vat-pack";
+import { closedLagosMonths, packMonthInvoicesSql } from "../clerk/vat-pack";
 import { DomainError } from "../errors";
 
 export interface BillingStatementTier {
@@ -63,9 +63,9 @@ export interface BillingStatement {
 }
 
 // The tier the firm is billed on: subscription join, with the essential row
-// as the no-subscription fallback (the same resolution routes/console.ts
-// uses for revenue-share statements, so the two billing surfaces cannot
-// disagree about which tier a firm is on).
+// as the no-subscription fallback. THE shared resolution — routes/console.ts
+// imports this for revenue-share statements, so the two billing surfaces
+// cannot disagree about which tier a firm is on.
 export async function billingTierForFirm(firmId: string): Promise<BillingTier> {
   const [sub] = await getDb()
     .select()
@@ -92,7 +92,9 @@ export async function billingTierForFirm(firmId: string): Promise<BillingTier> {
 }
 
 // Pure fee maths, exported so the overage arithmetic is testable without a
-// tier row in the database. 2dp strings (kobo), never floats in the output.
+// tier row in the database — and shared with routes/console.ts's revenue-share
+// statements (which layer the share percentage on top of this fee core).
+// 2dp strings (kobo), never floats in the output.
 export function computeBillingFee(
   tier: Pick<BillingTier, "monthlyPrice" | "includedInvoices" | "overagePrice">,
   acceptedInvoices: number,
@@ -118,22 +120,15 @@ export async function computeBillingStatement(
   const db = getDb();
   const tier = await billingTierForFirm(firmId);
 
-  // Accepted invoices: vat-pack's predicate exactly (issue-month basis on the
-  // Lagos calendar, cancelled excluded, an accepted attempt whenever it
-  // happened) — invoices only, matching the pack's acceptedCount column.
+  // Accepted invoices: vat-pack's predicate exactly — the SHARED
+  // packMonthInvoicesSql fragment (issue-month basis on the Lagos calendar,
+  // cancelled excluded, an accepted attempt whenever it happened) — invoices
+  // only, matching the pack's acceptedCount column by construction.
   const [accepted] = (
     await db.execute<{ n: number }>(sql`
       SELECT COUNT(*)::int AS n
       FROM invoices i
-      WHERE i.firm_id = ${firmId}
-        AND i.kind = 'invoice'
-        AND i.status <> 'cancelled'
-        AND i.issue_date >= ${monthStart}::date
-        AND i.issue_date < (${monthStart}::date + interval '1 month')
-        AND EXISTS (
-          SELECT 1 FROM submission_attempts sa
-          WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
-        )
+      WHERE ${packMonthInvoicesSql(firmId, monthStart)}
     `)
   ).rows;
 

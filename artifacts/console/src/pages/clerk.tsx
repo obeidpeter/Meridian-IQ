@@ -1793,6 +1793,7 @@ export function ClerkWorkspace() {
                 <div className="space-y-3" data-testid="bulk-approve-report">
                   <p
                     className="text-sm font-medium text-emerald-700 dark:text-emerald-400"
+                    role="status"
                     data-testid="text-bulk-approved-count"
                   >
                     {summary.approved} case

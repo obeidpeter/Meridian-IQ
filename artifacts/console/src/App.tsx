@@ -8,7 +8,7 @@ import { errorStatus } from "@/lib/errors";
 
 import { Layout } from "@/components/layout";
 import { RequireSession } from "@/components/require-session";
-import { CapabilityGate } from "@/components/capability-gate";
+import { CapabilityGate, RoleGate } from "@/components/capability-gate";
 import { Portfolio, PortfolioSkeleton } from "@/pages/portfolio";
 import { ClientDetail } from "@/pages/client-detail";
 import { ClientImport } from "@/pages/client-import";
@@ -23,6 +23,7 @@ import { WhiteLabel } from "@/pages/whitelabel";
 import { Certification } from "@/pages/certification";
 import { Advisory } from "@/pages/advisory";
 import { Integrations } from "@/pages/integrations";
+import { ApiAccess } from "@/pages/api-access";
 import { Catalogue } from "@/pages/catalogue";
 import { AuditEvidence } from "@/pages/audit-evidence";
 import { GateMetrics } from "@/pages/gate-metrics";
@@ -167,6 +168,14 @@ function ConsoleRoutes() {
           <CapabilityGate capability="connector.read">
             <Integrations />
           </CapabilityGate>
+        </Route>
+        {/* API keys/webhooks are firm-level administration: the server gates
+            on the explicit firm_admin role (not a capability), so the route
+            mirrors that with RoleGate. */}
+        <Route path="/api-access">
+          <RoleGate role="firm_admin">
+            <ApiAccess />
+          </RoleGate>
         </Route>
         <Route path="/operator-queue">
           <CapabilityGate capability="operator.queue.read">

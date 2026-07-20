@@ -2,9 +2,10 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import express from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   getDb,
+  runInBypassContext,
   runRequestContext,
   firmsTable,
   usersTable,
@@ -23,6 +24,7 @@ import {
 } from "@workspace/db";
 import statementConnectionsRouter from "../../routes/statement-connections.ts";
 import type { Principal } from "../auth/rbac.ts";
+import { DomainError } from "../errors.ts";
 import { drain } from "../pipeline/pipeline.ts";
 import { runFeedSync } from "./feed-engine.ts";
 import {
@@ -497,6 +499,100 @@ test("feed sync round-trip: pulled lines land via ingestStatement and reconcile 
     { method: "POST", headers: JSON_HEADERS },
   );
   assert.equal(disabled.status, 409);
+});
+
+// ---------------------------------------------------------------------------
+// Mutual exclusion: two syncs of one connection cannot both ingest a page
+// ---------------------------------------------------------------------------
+
+test("concurrent syncs of one connection are mutually exclusive (advisory xact lock)", async () => {
+  const [connection] = await getDb()
+    .insert(statementConnectionsTable)
+    .values({
+      firmId,
+      clientPartyId: clientParty,
+      connectorKey: "demobank",
+      config: { apiKey: `demo_${SALT}`, account: `mutex-${SALT}` },
+    })
+    .returning();
+  const statementCount = async () =>
+    (
+      await getDb()
+        .select({ id: bankStatementsTable.id })
+        .from(bankStatementsTable)
+        .where(
+          and(
+            eq(bankStatementsTable.firmId, firmId),
+            eq(bankStatementsTable.clientPartyId, clientParty),
+          ),
+        )
+    ).length;
+  const countBefore = await statementCount();
+
+  // Hold the connection's lock in one open bypass transaction — standing in
+  // deterministically for a concurrent sync mid-flight (the outbox worker
+  // runs each sync inside one bypass transaction, so this is exactly the
+  // state a racing instance observes).
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let acquired!: () => void;
+  const lockTaken = new Promise<void>((resolve) => {
+    acquired = resolve;
+  });
+  const holder = runInBypassContext(async () => {
+    await getDb().execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${connection.id}::text))`,
+    );
+    acquired();
+    await held;
+  });
+  await lockTaken;
+
+  try {
+    // The second sync fails FAST with a retryable error. Mirror the outbox
+    // handler's shape exactly: the worker runs each event inside one bypass
+    // transaction and handleFeedSync CATCHES the throw (returning a
+    // retry/dead outcome), so the transaction commits — including the run
+    // row's failure marker. A DomainError would dead-letter; contention must
+    // be a plain Error so it retries with backoff instead.
+    const outcome = await runInBypassContext(async () => {
+      try {
+        await runFeedSync(connection.id);
+        return { kind: "done" as const, message: "" };
+      } catch (err) {
+        return {
+          kind: err instanceof DomainError ? ("dead" as const) : ("retry" as const),
+          message: String((err as Error).message),
+        };
+      }
+    });
+    assert.equal(
+      outcome.kind,
+      "retry",
+      "lock contention must be retryable, never a dead-letter DomainError",
+    );
+    assert.match(outcome.message, /already in progress/);
+  } finally {
+    release();
+  }
+  await holder;
+  assert.equal(await statementCount(), countBefore, "the blocked sync ingested nothing");
+  const [blockedRun] = await getDb()
+    .select()
+    .from(statementSyncRunsTable)
+    .where(eq(statementSyncRunsTable.connectionId, connection.id))
+    .orderBy(desc(statementSyncRunsTable.startedAt))
+    .limit(1);
+  assert.equal(blockedRun.status, "failed");
+  assert.match(blockedRun.error ?? "", /already in progress/);
+
+  // Lock free again: the retry proceeds and the page lands exactly once.
+  const result = await runInBypassContext(() => runFeedSync(connection.id));
+  assert.ok(result.linesPulled > 0);
+  assert.ok(result.statementId);
+  assert.equal(await statementCount(), countBefore + 1, "one page ingested once");
 });
 
 // ---------------------------------------------------------------------------

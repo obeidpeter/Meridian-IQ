@@ -24,6 +24,7 @@ import { apiErrorMessage, hasStatus } from "@/lib/api-error";
 import {
   answerSourceNote,
   askableQuestion,
+  heldAnswer,
   QUESTION_MAX,
   SUGGESTED_QUESTIONS,
 } from "@/lib/clerk-ask";
@@ -51,9 +52,10 @@ export default function ClerkAskScreen() {
   // The rendered answer lives in state, NOT ask.data: submitting a follow-up
   // resets the mutation's data, which would blank the very answer being
   // followed up on (and never bring it back if the follow-up errors). Held
-  // here it stays visible through the in-flight follow-up, survives a
-  // follow-up error, and is replaced only by the next answer — the SME
-  // page's pattern exactly.
+  // here it stays visible through the in-flight follow-up and survives a
+  // follow-up error; every SUCCESS replaces it via heldAnswer — including a
+  // success with no answer payload, which clears a stale one. That is the
+  // console Ask page's tested semantic, mirrored in the SME web app too.
   const [lastAnswer, setLastAnswer] = useState<ClerkAnswer | null>(null);
 
   const ask = useAskClerk();
@@ -71,7 +73,9 @@ export default function ClerkAskScreen() {
           ...(previousCaseId ? { previousCaseId } : {}),
         },
       });
-      if (row.answer) setLastAnswer(row.answer);
+      setLastAnswer((prev) =>
+        heldAnswer(prev, { type: "success", answer: row.answer }),
+      );
       // Only a DATA answer carries scope worth threading — keeping the last
       // data-answered id preserves the thread across a refusal or a
       // register-claim answer in between.
@@ -80,6 +84,8 @@ export default function ClerkAskScreen() {
       }
       setQuestion("");
     } catch (error) {
+      // The held answer is deliberately untouched here — heldAnswer's error
+      // semantic: the previous answer is still the newest truth given.
       // The capture screen's friendly split: 429 is the firm's monthly Clerk
       // allowance, 503 is the kill switch; anything else relays the server's
       // own words before the fallback.

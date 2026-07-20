@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useReducer,
   useRef,
   useState,
   type FormEvent,
@@ -23,7 +24,7 @@ import {
   getGetMeQueryKey,
   getGetTotpStatusQueryKey,
 } from "@workspace/api-client-react";
-import type { Me, TotpSetup } from "@workspace/api-client-react";
+import type { Me } from "@workspace/api-client-react";
 import { pillClasses } from "@workspace/format";
 import {
   FileCheck2,
@@ -57,6 +58,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PortalHeader } from "@/components/portal-header";
 import { serverErrorFrom } from "@/lib/errors";
+import { mfaChallengeDisposition } from "@/lib/mfa";
+import {
+  TOTP_CARD_INITIAL,
+  totpCardTransition,
+} from "@/lib/totp-card";
 import LandingPage from "@/LandingPage";
 import { AcceptInvite } from "@/AcceptInvite";
 import { ResetPassword } from "@/ResetPassword";
@@ -366,11 +372,6 @@ function RedirectingPanel({
   );
 }
 
-// The server's mfa pending token lives 5 minutes (modules/auth/totp.ts).
-// The challenge endpoint answers a uniform 401 for a wrong code AND an
-// expired token, so the client tells them apart by its own clock.
-const MFA_TOKEN_TTL_MS = 5 * 60 * 1000;
-
 function SignInPanel() {
   const qc = useQueryClient();
   const login = useLogin();
@@ -453,8 +454,14 @@ function SignInPanel() {
       setPending(null);
     } catch (err) {
       setPending(null);
-      const status = (err as { status?: number })?.status;
-      if (status === 401 && Date.now() - mfa.issuedAt >= MFA_TOKEN_TTL_MS) {
+      // The server 401s identically for a wrong code and an expired token;
+      // the pure helper splits them on this client's own clock (lib/mfa).
+      const disposition = mfaChallengeDisposition({
+        status: (err as { status?: number })?.status,
+        issuedAt: mfa.issuedAt,
+        now: Date.now(),
+      });
+      if (disposition === "restart") {
         // The 5-minute challenge window lapsed — back to the password step.
         setMfa(null);
         setTotpCode("");
@@ -464,11 +471,11 @@ function SignInPanel() {
         );
         return;
       }
-      if (status === 401) {
+      if (disposition === "invalid-code") {
         setTotpError(
           "That code didn't match. Check your authenticator app and try again — or use a recovery code.",
         );
-      } else if (status !== undefined) {
+      } else if (disposition === "server-error") {
         setTotpError(
           serverErrorFrom(err) ?? "Verification failed. Please try again.",
         );
@@ -983,7 +990,10 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 // Two-factor lifecycle for the signed-in account: status → enrol (secret,
 // otpauth URI and recovery codes shown exactly once) → activate with a live
 // code (revokes every other session; this one survives on the re-issued
-// cookie) → disable, which demands the password AND a code.
+// cookie) → disable, which demands the password AND a code. The lifecycle
+// state itself steps through the pure reducer in lib/totp-card so the
+// transitions are unit-testable; this component keeps only the input text
+// and the react-query effects.
 function TotpSecurityCard() {
   const qc = useQueryClient();
   const statusQuery = useGetTotpStatus({
@@ -995,36 +1005,31 @@ function TotpSecurityCard() {
 
   // Enrolment material exists only in this component's state — shown once,
   // gone on unmount. Only hashes persist server-side.
-  const [material, setMaterial] = useState<TotpSetup | null>(null);
+  const [card, dispatch] = useReducer(totpCardTransition, TOTP_CARD_INITIAL);
+  const { material, setupError, justActivated, justDisabled, disableOpen, disableError } =
+    card;
   const [activateCode, setActivateCode] = useState("");
-  const [setupError, setSetupError] = useState<string | null>(null);
-  const [justActivated, setJustActivated] = useState(false);
-
-  const [disableOpen, setDisableOpen] = useState(false);
   const [disablePassword, setDisablePassword] = useState("");
   const [disableCode, setDisableCode] = useState("");
-  const [disableError, setDisableError] = useState<string | null>(null);
-  const [justDisabled, setJustDisabled] = useState(false);
 
   const begin = async () => {
-    setSetupError(null);
-    setJustDisabled(false);
     try {
       const m = await setup.mutateAsync();
-      setMaterial(m);
+      dispatch({ type: "begin-success", material: m });
       setActivateCode("");
     } catch (err) {
       // A 409 means another surface already enabled it — refresh the truth.
       await qc.invalidateQueries({ queryKey: getGetTotpStatusQueryKey() });
-      setSetupError(
-        serverErrorFrom(err) ?? "Could not start enrolment. Try again.",
-      );
+      dispatch({
+        type: "begin-error",
+        message:
+          serverErrorFrom(err) ?? "Could not start enrolment. Try again.",
+      });
     }
   };
 
   const onActivate = async (e: FormEvent) => {
     e.preventDefault();
-    setSetupError(null);
     try {
       const status = await activate.mutateAsync({
         data: { code: activateCode.trim() },
@@ -1032,39 +1037,39 @@ function TotpSecurityCard() {
       // The response re-issued this session's cookie under the bumped epoch —
       // every OTHER session is now signed out; this panel carries on.
       qc.setQueryData(getGetTotpStatusQueryKey(), status);
-      setMaterial(null);
+      dispatch({ type: "activate-success" });
       setActivateCode("");
-      setJustActivated(true);
     } catch (err) {
-      setSetupError(
-        serverErrorFrom(err) ??
+      dispatch({
+        type: "activate-error",
+        message:
+          serverErrorFrom(err) ??
           "That code did not match. Check the authenticator app and try again.",
-      );
+      });
       document.getElementById("totp-activate")?.focus();
     }
   };
 
   const onDisable = async (e: FormEvent) => {
     e.preventDefault();
-    setDisableError(null);
     try {
       const status = await disable.mutateAsync({
         data: { password: disablePassword, code: disableCode.trim() },
       });
       qc.setQueryData(getGetTotpStatusQueryKey(), status);
-      setDisableOpen(false);
+      dispatch({ type: "disable-success" });
       setDisablePassword("");
       setDisableCode("");
-      setJustActivated(false);
-      setJustDisabled(true);
     } catch (err) {
       const status = (err as { status?: number })?.status;
-      setDisableError(
-        status === 401
-          ? "Invalid password or code."
-          : (serverErrorFrom(err) ??
-              "Could not turn off two-factor. Try again."),
-      );
+      dispatch({
+        type: "disable-error",
+        message:
+          status === 401
+            ? "Invalid password or code."
+            : (serverErrorFrom(err) ??
+                "Could not turn off two-factor. Try again."),
+      });
     }
   };
 
@@ -1204,9 +1209,8 @@ function TotpSecurityCard() {
                 size="sm"
                 variant="ghost"
                 onClick={() => {
-                  setMaterial(null);
+                  dispatch({ type: "cancel-setup" });
                   setActivateCode("");
-                  setSetupError(null);
                 }}
               >
                 Cancel
@@ -1251,10 +1255,7 @@ function TotpSecurityCard() {
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => {
-                setDisableError(null);
-                setDisableOpen(true);
-              }}
+              onClick={() => dispatch({ type: "disable-open" })}
               className="-ml-2 text-muted-foreground hover:text-foreground"
               data-testid="button-totp-disable-show"
             >
@@ -1341,8 +1342,7 @@ function TotpSecurityCard() {
                   size="sm"
                   variant="ghost"
                   onClick={() => {
-                    setDisableOpen(false);
-                    setDisableError(null);
+                    dispatch({ type: "disable-cancel" });
                     setDisablePassword("");
                     setDisableCode("");
                   }}

@@ -45,6 +45,9 @@ export async function fanOutAlert(input: {
       await sendMessage({
         channel,
         recipientRef: recipientRefFor(input.clientPartyId),
+        // The ledger row's REAL recipient identity — the client party the
+        // alert is addressed to; the ref stays display/correlation only.
+        recipientPartyId: input.clientPartyId,
         templateKey: input.templateKey,
         entityType: input.entityType,
         entityId: input.entityId,

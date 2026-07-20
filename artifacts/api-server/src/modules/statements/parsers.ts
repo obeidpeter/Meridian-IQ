@@ -446,6 +446,50 @@ export function findParser(key: string): StatementParser | null {
   return STATEMENT_PARSERS.find((p) => p.key === key) ?? null;
 }
 
+// ---- generic_csv rendering (the parser's inverse) ----
+// The built-in fallback's key, exported for the surfaces that RENDER to it
+// (bank feeds, scanned-statement proposals) and pass it explicitly so
+// detection can never drift to a bank-specific parser.
+export const GENERIC_CSV_FORMAT_KEY = "generic_csv";
+
+// The minimal line shape the renderer needs — feed-contract's
+// StatementFeedLine and scan-intake's ProposedStatementLine both satisfy it.
+export interface GenericCsvLine {
+  valueDate: string;
+  narration: string;
+  reference?: string | null;
+  amount: string;
+  direction: "credit" | "debit";
+}
+
+// RFC-4180 escaping only. Deliberately NOT lib/csv.ts's toCsv: that writer is
+// for human-opened exports and prefixes formula-trigger cells with an
+// apostrophe (CWE-1236), which would corrupt narrations on the parse
+// round-trip. This CSV is machine-parsed by parseStatementText, never opened
+// in a spreadsheet. ONE renderer next to the parser it inverts (the bank-feed
+// engine and the statement-scan surface both consume it), so the generic_csv
+// shape can only ever change in lockstep with the parser.
+function csvCell(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+// Render normalized lines to the generic_csv shape ingestStatement parses.
+// The round-trip is exact: every rendered line parses (feed.test.ts and
+// scan-intake.test.ts prove it), so a committed rendering always reports
+// parsedCount === lineCount.
+export function renderGenericStatementCsv(lines: GenericCsvLine[]): string {
+  const rows = lines.map((l) =>
+    [
+      csvCell(l.valueDate),
+      csvCell(l.narration),
+      csvCell(l.reference ?? ""),
+      csvCell(l.amount),
+      l.direction === "credit" ? "CR" : "DR",
+    ].join(","),
+  );
+  return ["Date,Narration,Reference,Amount,Direction", ...rows].join("\n");
+}
+
 // The first few raw rows of an export — the window every parser's detect()
 // scans (banks prefix exports with account metadata before the header row).
 export function parseCsvHeadersOnly(text: string): string[][] {

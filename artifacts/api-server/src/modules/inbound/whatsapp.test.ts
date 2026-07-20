@@ -58,6 +58,7 @@ const PHONE_AMBIG = `+23471${runDigits}`;
 const PHONE_NO_MEMBER = `+23472${runDigits}`;
 const PHONE_CAPPED = `+23473${runDigits}`;
 const PHONE_UNKNOWN = `+23474${runDigits}`;
+const PHONE_STAFF_SET = `+23475${runDigits}`;
 // The resolved party STORES its number in the bare local convention
 // (070XXXXXXXX) while the webhook presents it formatted internationally —
 // resolution must normalize BOTH sides.
@@ -71,8 +72,10 @@ const partyAmbA = randomUUID();
 const partyAmbB = randomUUID();
 const partyNoMember = randomUUID();
 const partyCapped = randomUUID();
+const partyStaffSet = randomUUID();
 const clientUserId = randomUUID();
 const cappedUserId = randomUUID();
+const staffSetUserId = randomUUID();
 
 const okExtraction = () => JSON.stringify({ fields: [], lines: [] });
 
@@ -151,10 +154,12 @@ before(async () => {
     { id: partyAmbB, type: "client_business", legalName: `WA Amb B ${SALT}` },
     { id: partyNoMember, type: "client_business", legalName: `WA Orphan ${SALT}` },
     { id: partyCapped, type: "client_business", legalName: `WA Capped ${SALT}` },
+    { id: partyStaffSet, type: "client_business", legalName: `WA StaffSet ${SALT}` },
   ]);
   await db.insert(usersTable).values([
     { id: clientUserId, email: `wa-client-${SALT}@inbound-test.local` },
     { id: cappedUserId, email: `wa-capped-${SALT}@inbound-test.local` },
+    { id: staffSetUserId, email: `wa-staffset-${SALT}@inbound-test.local` },
   ]);
   await db.insert(membershipsTable).values([
     {
@@ -169,17 +174,28 @@ before(async () => {
       role: "client_user",
       clientPartyId: partyCapped,
     },
+    {
+      userId: staffSetUserId,
+      firmId: firm1,
+      role: "client_user",
+      clientPartyId: partyStaffSet,
+    },
   ]);
   // Stored numbers are free text: the resolved party keeps the bare local
   // convention, one ambiguous party stores whatsappTo and its twin stores the
   // same number under phone — either field matching counts, and two parties
-  // sharing a number must refuse.
+  // sharing a number must refuse. Provenance gate: only rows whose contact
+  // fields the CLIENT set themselves (contact_set_by_role='client_user') are
+  // routing keys — the staff-set fixture and any legacy null-provenance row
+  // must refuse even with an otherwise-perfect match.
   await db.insert(alertPreferencesTable).values([
-    { clientPartyId: partyResolved, whatsappTo: STORED_RESOLVED },
-    { clientPartyId: partyAmbA, whatsappTo: `071${runDigits}` },
-    { clientPartyId: partyAmbB, phone: PHONE_AMBIG },
-    { clientPartyId: partyNoMember, phone: PHONE_NO_MEMBER },
-    { clientPartyId: partyCapped, whatsappTo: PHONE_CAPPED },
+    { clientPartyId: partyResolved, whatsappTo: STORED_RESOLVED, contactSetByRole: "client_user" },
+    { clientPartyId: partyAmbA, whatsappTo: `071${runDigits}`, contactSetByRole: "client_user" },
+    { clientPartyId: partyAmbB, phone: PHONE_AMBIG, contactSetByRole: "client_user" },
+    { clientPartyId: partyNoMember, phone: PHONE_NO_MEMBER, contactSetByRole: "client_user" },
+    { clientPartyId: partyCapped, whatsappTo: PHONE_CAPPED, contactSetByRole: "client_user" },
+    // Staff typed this number in for the client: never a routing key.
+    { clientPartyId: partyStaffSet, whatsappTo: PHONE_STAFF_SET, contactSetByRole: "firm_staff" },
   ]);
 });
 
@@ -349,6 +365,24 @@ test("sender resolution normalizes BOTH sides of the comparison", async () => {
     ok: false,
     reason: "invalid_phone",
   });
+});
+
+test("a staff-set number is never a routing key (contact provenance)", async () => {
+  // The row matches perfectly — party, membership, normalized number — but
+  // the number was typed in by firm staff (contact_set_by_role='firm_staff'),
+  // so resolution must refuse: a staff-writable free-text field must not be
+  // able to route documents into a client's book. Legacy rows with NULL
+  // provenance fail closed the same way (the eq() filter excludes null).
+  assert.deepEqual(await resolveInboundWhatsAppSender(PHONE_STAFF_SET), {
+    ok: false,
+    reason: "no_match",
+  });
+  const dropped = await processInboundWhatsApp({
+    sender: PHONE_STAFF_SET,
+    text: LONG_TEXT,
+    attachments: [],
+  });
+  assert.deepEqual(dropped, { resolved: false, caseIds: [], skipped: [] });
 });
 
 test("resolved sender: media walks the capture path stamped for the client; redelivery absorbed", async () => {

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   getDb,
   statementConnectionsTable,
@@ -80,6 +80,27 @@ export async function runFeedSync(
   }
 
   try {
+    // Per-connection mutual exclusion: two concurrent syncs of the SAME
+    // connection would both read the stored cursor and both ingest the same
+    // page (the duplicate-page hazard the cursor exists to prevent). The
+    // advisory xact lock — keyed on the connection id, held to the end of the
+    // enclosing transaction (the outbox worker runs each event inside one
+    // bypass transaction, so the lock spans the whole pull+ingest+cursor
+    // update) — makes the second sync fail fast instead. The failure is a
+    // plain Error (never DomainError), so the outbox handler below RETRIES it
+    // with backoff once the holder has finished — the run is not lost, just
+    // deferred.
+    const [{ locked }] = (
+      await getDb().execute<{ locked: boolean }>(
+        sql`SELECT pg_try_advisory_xact_lock(hashtext(${connectionId}::text)) AS locked`,
+      )
+    ).rows;
+    if (!locked) {
+      throw new Error(
+        `Feed sync already in progress for connection ${connectionId}`,
+      );
+    }
+
     const connector = findFeedConnector(connection.connectorKey);
     if (!connector) {
       throw new DomainError(
