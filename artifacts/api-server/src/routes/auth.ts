@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb, membershipsTable, usersTable } from "@workspace/db";
 import {
   LoginBody,
@@ -42,6 +42,7 @@ import {
   isActionThrottled,
   recordActionFailure,
   clearActionFailures,
+  throttleActionAttempt,
 } from "../modules/auth/throttle";
 import { acceptInvitation } from "../modules/auth/invitations";
 import { resetPassword } from "../modules/auth/password-reset";
@@ -121,7 +122,16 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
   const membership = memberships[0];
-  if (!result.totpEnabledAt && totpRequiredRoles().has(membership.role)) {
+  // The enrolment requirement is judged against EVERY membership, not just the
+  // one this response happens to surface: the effective role is chosen
+  // per-request (x-firm-id), so a user who ALSO holds a listed role elsewhere
+  // must not earn a session through a benign first membership and then operate
+  // under the listed role unchallenged.
+  const requiredRoles = totpRequiredRoles();
+  if (
+    !result.totpEnabledAt &&
+    memberships.some((m) => requiredRoles.has(m.role))
+  ) {
     res.status(403).json({
       code: "TOTP_REQUIRED",
       error:
@@ -190,9 +200,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 // signed, 5-minute mfaToken IS the credential, exactly the accept-invite
 // posture. Every failure mode (bad token, stale epoch, unenrolled account,
 // wrong code, replayed code) is a uniform 401 so the endpoint is not an
-// oracle for which stage failed. Code guessing is capped by the same generic
-// action limiter as the change-password credential check (raw-pool counters
-// that survive this route's 4xx rollback).
+// oracle for which stage failed. Code guessing is capped by the action
+// limiter's atomic bump-first gate (raw-pool counters that survive this
+// route's 4xx rollback): the attempt is counted BEFORE the code is examined,
+// so a concurrent burst cannot slip past a separately-read counter.
 router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(TotpChallengeBody, req.body);
   const unauthorized = () => {
@@ -204,7 +215,13 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
     return;
   }
   const throttleKey = `totp:${verified.userId}`;
-  const retryAfter = await isActionThrottled(throttleKey);
+  // Guess cap, bump-FIRST: this public route is exempt from the global rate
+  // limiter, and a check-then-record pair would let a concurrent burst of
+  // guesses all pass the read before any failure landed (TOCTOU). The attempt
+  // is counted atomically and refused on the post-increment count; a
+  // successful challenge clears the key below, so counting attempts (not just
+  // failures) never throttles a legitimate sign-in.
+  const retryAfter = await throttleActionAttempt(throttleKey);
   if (retryAfter !== null) {
     res.setHeader("Retry-After", String(retryAfter));
     res.status(429).json({
@@ -245,24 +262,53 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
   if (totpMatch) {
     // Single-use within the window (RFC 6238 §5.2): persist the accepted step
     // so an observed code cannot be replayed while it is still "current".
-    await getDb()
+    // Compare-and-set, not a plain write: the WHERE re-asserts at write time
+    // that the step is still fresh, so two concurrent redemptions of the same
+    // code (both of which passed the read above) cannot both succeed — the
+    // loser matches zero rows and gets the same uniform 401 as a wrong code,
+    // with its attempt already counted by the bump-first gate above.
+    const claimed = await getDb()
       .update(usersTable)
       .set({ totpLastUsedStep: totpMatch.step })
-      .where(eq(usersTable.id, user.id));
-  } else {
-    const codeHash = hashRecoveryCode(parsed.code);
-    const remaining = user.totpRecoveryCodes ?? [];
-    if (!remaining.includes(codeHash)) {
-      await recordActionFailure(throttleKey);
+      .where(
+        and(
+          eq(usersTable.id, user.id),
+          or(
+            isNull(usersTable.totpLastUsedStep),
+            lt(usersTable.totpLastUsedStep, totpMatch.step),
+          ),
+        ),
+      )
+      .returning({ id: usersTable.id });
+    if (claimed.length === 0) {
       unauthorized();
       return;
     }
-    // Burn the code: a recovery code redeems exactly once.
-    usedRecoveryCode = true;
-    await getDb()
+  } else {
+    // Burn the code: a recovery code redeems exactly once. Presence check and
+    // removal are ONE statement — `@>` asserts the hash is still in the jsonb
+    // array at write time and `- text` removes it — so a concurrently-burned
+    // (or plain wrong) code matches zero rows and 401s; the read-includes-
+    // then-filtered-write shape had the same double-redeem race as the step
+    // pin. A NULL column never satisfies `@>`, so unenrolled states refuse too.
+    const codeHash = hashRecoveryCode(parsed.code);
+    const burned = await getDb()
       .update(usersTable)
-      .set({ totpRecoveryCodes: remaining.filter((h) => h !== codeHash) })
-      .where(eq(usersTable.id, user.id));
+      .set({
+        totpRecoveryCodes: sql`${usersTable.totpRecoveryCodes} - ${codeHash}::text`,
+      })
+      .where(
+        and(
+          eq(usersTable.id, user.id),
+          sql`${usersTable.totpRecoveryCodes} @> to_jsonb(array[${codeHash}::text])`,
+        ),
+      )
+      .returning({ id: usersTable.id });
+    if (burned.length === 0) {
+      unauthorized();
+      return;
+    }
+    usedRecoveryCode = true;
   }
   await clearActionFailures(throttleKey);
   const memberships = await getDb()
@@ -392,7 +438,12 @@ router.post("/auth/totp/activate", async (req, res): Promise<void> => {
   }
   const enabledAt = new Date();
   const nextEpoch = user.sessionEpoch + 1;
-  await getDb()
+  // Same CAS discipline as the challenge's step pin: activation only lands on
+  // a still-PENDING enrolment whose step pin this code still beats, so two
+  // concurrent activations (or an activation racing a challenge) cannot both
+  // claim the same code / both bump the epoch. The loser matches zero rows
+  // and gets the not-pending answer — accurate once the winner has committed.
+  const activated = await getDb()
     .update(usersTable)
     .set({
       totpEnabledAt: enabledAt,
@@ -401,7 +452,24 @@ router.post("/auth/totp/activate", async (req, res): Promise<void> => {
       totpLastUsedStep: match.step,
       sessionEpoch: nextEpoch,
     })
-    .where(eq(usersTable.id, user.id));
+    .where(
+      and(
+        eq(usersTable.id, user.id),
+        isNull(usersTable.totpEnabledAt),
+        or(
+          isNull(usersTable.totpLastUsedStep),
+          lt(usersTable.totpLastUsedStep, match.step),
+        ),
+      ),
+    )
+    .returning({ id: usersTable.id });
+  if (activated.length === 0) {
+    throw new DomainError(
+      "TOTP_NOT_PENDING",
+      "No pending TOTP enrolment to activate. Call setup first.",
+      400,
+    );
+  }
   await appendAudit({
     actorId: user.id,
     firmId: req.principal.firmId,

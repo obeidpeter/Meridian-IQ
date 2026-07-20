@@ -73,9 +73,13 @@ export async function isLoginThrottled(
 
 // Atomic increment-and-window-reset: within the window the count rises; once
 // the window has elapsed it resets to 1 with a fresh start. RETURNING keeps it
-// a single round-trip and correct under concurrent failures on the same key.
-async function bump(key: string, windowMs: number): Promise<void> {
-  await pool.query(
+// a single round-trip and correct under concurrent failures on the same key —
+// every concurrent bump on one key observes a distinct post-increment count.
+async function bump(
+  key: string,
+  windowMs: number,
+): Promise<{ count: number; window_start: Date }> {
+  const { rows } = await pool.query<{ count: number; window_start: Date }>(
     `INSERT INTO login_attempts (key, count, window_start)
      VALUES ($1, 1, now())
      ON CONFLICT (key) DO UPDATE SET
@@ -84,9 +88,11 @@ async function bump(key: string, windowMs: number): Promise<void> {
          THEN 1 ELSE login_attempts.count + 1 END,
        window_start = CASE
          WHEN login_attempts.window_start < now() - make_interval(secs => $2)
-         THEN now() ELSE login_attempts.window_start END`,
+         THEN now() ELSE login_attempts.window_start END
+     RETURNING count, window_start`,
     [key, windowMs / 1000],
   );
+  return rows[0];
 }
 
 export async function recordLoginFailure(
@@ -129,6 +135,25 @@ export async function isActionThrottled(key: string): Promise<number | null> {
 
 export async function recordActionFailure(key: string): Promise<void> {
   await bump(key, ACTION_WINDOW_MS);
+}
+
+// Atomic bump-FIRST gate for burst-exposed credential checks (e.g. the public,
+// limiter-exempt /auth/totp/challenge): the attempt is counted and the
+// post-increment count read in ONE statement, so N concurrent attempts see N
+// distinct counts and every one past the cap is refused — unlike the
+// isActionThrottled → recordActionFailure pair, where a concurrent burst can
+// pass the SELECT gate before any failure lands (TOCTOU). Returns null when
+// this attempt is allowed, else the wait in seconds. Callers gating with this
+// must NOT also call recordActionFailure (the attempt is already counted);
+// clearActionFailures on success keeps legitimate users from accumulating
+// attempts toward the cap.
+export async function throttleActionAttempt(
+  key: string,
+): Promise<number | null> {
+  const row = await bump(key, ACTION_WINDOW_MS);
+  if (row.count <= ACTION_MAX_FAILURES) return null;
+  const elapsed = Date.now() - new Date(row.window_start).getTime();
+  return Math.max(1, Math.ceil((ACTION_WINDOW_MS - elapsed) / 1000));
 }
 
 export async function clearActionFailures(key: string): Promise<void> {

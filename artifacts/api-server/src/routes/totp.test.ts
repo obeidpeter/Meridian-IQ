@@ -1,13 +1,14 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { getDb, pool, usersTable, membershipsTable } from "@workspace/db";
 import authRouter from "./auth.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { hashPassword, verifySessionToken, issueSessionToken } from "../modules/auth/session.ts";
 import {
   totpCode,
+  totpStep,
   hashRecoveryCode,
   generateTotpSecret,
   generateRecoveryCodes,
@@ -54,6 +55,29 @@ const userD = {
   email: `totp-d-${SALT}@test.local`,
   role: "firm_admin" as const,
 };
+// userE/userF race the same code concurrently (CAS single-use); userG fires a
+// burst of guesses (bump-first throttle); userH holds TWO memberships for the
+// any-membership TOTP_REQUIRED_ROLES check.
+const userE = {
+  id: randomUUID(),
+  email: `totp-e-${SALT}@test.local`,
+  role: "firm_staff" as const,
+};
+const userF = {
+  id: randomUUID(),
+  email: `totp-f-${SALT}@test.local`,
+  role: "firm_staff" as const,
+};
+const userG = {
+  id: randomUUID(),
+  email: `totp-g-${SALT}@test.local`,
+  role: "firm_staff" as const,
+};
+const userH = {
+  id: randomUUID(),
+  email: `totp-h-${SALT}@test.local`,
+  role: "firm_staff" as const,
+};
 
 function principalFor(user: { id: string; role: Principal["role"] }): Principal {
   return {
@@ -99,7 +123,7 @@ function sessionCookie(res: Response): string | null {
 
 before(async () => {
   const db = getDb();
-  for (const user of [userA, userB, userC, userD]) {
+  for (const user of [userA, userB, userC, userD, userE, userF, userG]) {
     await db.insert(usersTable).values({
       id: user.id,
       email: user.email,
@@ -109,6 +133,19 @@ before(async () => {
       .insert(membershipsTable)
       .values({ userId: user.id, role: user.role, firmId: null });
   }
+  // userH: the benign firm_staff membership FIRST (so a memberships[0]-only
+  // check would see it), then a cross-tenant operator membership.
+  await db.insert(usersTable).values({
+    id: userH.id,
+    email: userH.email,
+    passwordHash: await hashPassword(PASSWORD),
+  });
+  await db
+    .insert(membershipsTable)
+    .values({ userId: userH.id, role: "firm_staff", firmId: null });
+  await db
+    .insert(membershipsTable)
+    .values({ userId: userH.id, role: "operator", firmId: null });
 });
 
 after(async () => {
@@ -501,6 +538,185 @@ test("TOTP_REQUIRED_ROLES is dark by default and refuses only matching unenrolle
     assert.equal(enrolled.status, 200);
     const enrolledBody = (await enrolled.json()) as Record<string, unknown>;
     assert.equal(enrolledBody.mfaRequired, true);
+  } finally {
+    if (saved === undefined) delete process.env.TOTP_REQUIRED_ROLES;
+    else process.env.TOTP_REQUIRED_ROLES = saved;
+  }
+});
+
+test("concurrent redemption of the same TOTP code yields exactly one session (CAS on the step pin)", async () => {
+  const secret = generateTotpSecret();
+  await getDb()
+    .update(usersTable)
+    .set({ totpSecret: secret, totpEnabledAt: new Date() })
+    .where(eq(usersTable.id, userE.id));
+  const base = await listen(appFor(principalFor(userE), authRouter));
+  const login = await postJson(base, "/auth/login", {
+    email: userE.email,
+    password: PASSWORD,
+  });
+  assert.equal(login.status, 200);
+  const { mfaToken } = (await login.json()) as { mfaToken: string };
+  assert.ok(mfaToken);
+
+  const now = Date.now();
+  const code = totpCode(secret, now);
+  const [r1, r2] = await Promise.all([
+    postJson(base, "/auth/totp/challenge", { mfaToken, code }),
+    postJson(base, "/auth/totp/challenge", { mfaToken, code }),
+  ]);
+  const statuses = [r1.status, r2.status].sort((a, b) => a - b);
+  assert.deepEqual(statuses, [200, 401], "exactly one of the pair earns the session");
+  const winner = r1.status === 200 ? r1 : r2;
+  assert.ok(sessionCookie(winner), "the single winner gets the cookie");
+
+  const [row] = await getDb()
+    .select({ totpLastUsedStep: usersTable.totpLastUsedStep })
+    .from(usersTable)
+    .where(eq(usersTable.id, userE.id))
+    .limit(1);
+  assert.equal(row.totpLastUsedStep, totpStep(now), "the code's step is pinned exactly once");
+
+  // The redemption tail replayed with the SAME step: the CAS WHERE re-asserts
+  // freshness at write time, so even a caller whose earlier read was stale
+  // claims zero rows — the guard the route turns into the uniform 401.
+  const replayedCas = await getDb()
+    .update(usersTable)
+    .set({ totpLastUsedStep: totpStep(now) })
+    .where(
+      and(
+        eq(usersTable.id, userE.id),
+        or(
+          isNull(usersTable.totpLastUsedStep),
+          lt(usersTable.totpLastUsedStep, totpStep(now)),
+        ),
+      ),
+    )
+    .returning({ id: usersTable.id });
+  assert.equal(replayedCas.length, 0, "same-step CAS claims zero rows");
+
+  // And over HTTP the replay stays the uniform 401.
+  const again = await postJson(base, "/auth/totp/challenge", { mfaToken, code });
+  assert.equal(again.status, 401);
+});
+
+test("concurrent redemption of the same recovery code burns it exactly once", async () => {
+  const secret = generateTotpSecret();
+  const { codes, hashes } = generateRecoveryCodes();
+  await getDb()
+    .update(usersTable)
+    .set({
+      totpSecret: secret,
+      totpEnabledAt: new Date(),
+      totpRecoveryCodes: hashes,
+    })
+    .where(eq(usersTable.id, userF.id));
+  const base = await listen(appFor(principalFor(userF), authRouter));
+  const login = await postJson(base, "/auth/login", {
+    email: userF.email,
+    password: PASSWORD,
+  });
+  assert.equal(login.status, 200);
+  const { mfaToken } = (await login.json()) as { mfaToken: string };
+
+  const recovery = codes[0];
+  const [r1, r2] = await Promise.all([
+    postJson(base, "/auth/totp/challenge", { mfaToken, code: recovery }),
+    postJson(base, "/auth/totp/challenge", { mfaToken, code: recovery }),
+  ]);
+  const statuses = [r1.status, r2.status].sort((a, b) => a - b);
+  assert.deepEqual(statuses, [200, 401], "a recovery code redeems once even under a race");
+
+  const [row] = await getDb()
+    .select({ totpRecoveryCodes: usersTable.totpRecoveryCodes })
+    .from(usersTable)
+    .where(eq(usersTable.id, userF.id))
+    .limit(1);
+  // The atomic burn (containment check + removal in ONE statement) fires
+  // once: 8 → 7, never 6, and only the redeemed hash is gone.
+  assert.deepEqual(row.totpRecoveryCodes, hashes.slice(1), "decremented exactly once");
+
+  const again = await postJson(base, "/auth/totp/challenge", {
+    mfaToken,
+    code: recovery,
+  });
+  assert.equal(again.status, 401, "later replays stay refused");
+});
+
+test("a concurrent burst of guesses is counted atomically: the cap holds under the race", async () => {
+  const secret = generateTotpSecret();
+  await getDb()
+    .update(usersTable)
+    .set({ totpSecret: secret, totpEnabledAt: new Date() })
+    .where(eq(usersTable.id, userG.id));
+  const base = await listen(appFor(principalFor(userG), authRouter));
+  const login = await postJson(base, "/auth/login", {
+    email: userG.email,
+    password: PASSWORD,
+  });
+  assert.equal(login.status, 200);
+  const { mfaToken } = (await login.json()) as { mfaToken: string };
+
+  // Six near-simultaneous wrong guesses: the bump-first gate hands each a
+  // distinct post-increment count, so exactly the cap's worth (5) reach the
+  // code check and the sixth is refused — a prior-read gate would have let
+  // all six through.
+  const wrong = wrongCodeFor(secret);
+  const results = await Promise.all(
+    Array.from({ length: 6 }, () =>
+      postJson(base, "/auth/totp/challenge", { mfaToken, code: wrong }),
+    ),
+  );
+  const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+  assert.deepEqual(statuses, [401, 401, 401, 401, 401, 429]);
+  const throttled = results.find((r) => r.status === 429);
+  assert.ok(throttled);
+  assert.ok(Number(throttled.headers.get("retry-after")) > 0);
+
+  // The window now refuses even a valid code, exactly like sequential failures.
+  const valid = await postJson(base, "/auth/totp/challenge", {
+    mfaToken,
+    code: totpCode(secret, Date.now()),
+  });
+  assert.equal(valid.status, 429);
+});
+
+test("TOTP_REQUIRED_ROLES matches ANY membership, not just the first surfaced one", async () => {
+  const base = await listen(appFor(principalFor(userH), authRouter));
+
+  // Flag dark: the dual-role (firm_staff + operator) user signs in normally.
+  assert.equal(process.env.TOTP_REQUIRED_ROLES, undefined);
+  const dark = await postJson(base, "/auth/login", {
+    email: userH.email,
+    password: PASSWORD,
+  });
+  assert.equal(dark.status, 200);
+  assert.ok(sessionCookie(dark));
+
+  const saved = process.env.TOTP_REQUIRED_ROLES;
+  process.env.TOTP_REQUIRED_ROLES = "operator";
+  try {
+    // The benign firm_staff membership was inserted FIRST (memberships[0]);
+    // the listed operator membership must still refuse the unenrolled login —
+    // the effective role is chosen per-request via x-firm-id, so any listed
+    // role anywhere on the account demands enrolment before a session exists.
+    const refused = await postJson(base, "/auth/login", {
+      email: userH.email,
+      password: PASSWORD,
+    });
+    assert.equal(refused.status, 403);
+    const body = (await refused.json()) as Record<string, unknown>;
+    assert.equal(body.code, "TOTP_REQUIRED");
+    assert.equal(sessionCookie(refused), null);
+
+    // A single benign membership is untouched (userC: unenrolled firm_staff
+    // after the disable test above).
+    const staffBase = await listen(appFor(principalFor(userC), authRouter));
+    const staff = await postJson(staffBase, "/auth/login", {
+      email: userC.email,
+      password: PASSWORD,
+    });
+    assert.equal(staff.status, 200);
   } finally {
     if (saved === undefined) delete process.env.TOTP_REQUIRED_ROLES;
     else process.env.TOTP_REQUIRED_ROLES = saved;
