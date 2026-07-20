@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import {
   useGetBillingStatement,
   getGetBillingStatementQueryKey,
   getExportBillingStatementCsvUrl,
+  useListPaymentIntents,
+  useCreatePaymentIntent,
+  getListPaymentIntentsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   BillingStatement,
   BillingStatementFee,
   BillingStatementTier,
   BillingStatementUsage,
+  PaymentIntent,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,8 +25,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { QueryError } from "@/components/query-error";
-import { Download } from "lucide-react";
-import { formatNaira } from "@/lib/format";
+import { Download, ExternalLink } from "lucide-react";
+import { errorStatus } from "@/lib/errors";
+import { formatNaira, humanize, pillClasses } from "@/lib/format";
+import type { BadgeTone } from "@/lib/format";
 import { monthCsvFilename, triggerDownload } from "@/lib/download";
 
 // Monthly platform-billing statement: tier, metered usage and the computed
@@ -32,6 +38,10 @@ import { monthCsvFilename, triggerDownload } from "@/lib/download";
 // hides the whole section. Once a statement has loaded the card stays
 // mounted across month switches — a failed month fetch shows an inline
 // error + retry (the prefsCardState precedent), never a vanished card.
+// Payments (contract 0.41.0): the card can also RECORD a payment intent for
+// the selected month — the amount is computed server-side from the same fee
+// core the card renders, so what the firm pays can never disagree with what
+// it was shown — and lists the firm's intents with their provider status.
 
 /** One line describing the plan the fee is computed from. */
 export function tierSummary(tier: BillingStatementTier): string {
@@ -63,6 +73,58 @@ export function overageLine(fee: BillingStatementFee): string {
     : "—";
 }
 
+/**
+ * Friendly copy for a failed "record payment intent". The two 4xx answers
+ * the server gives deliberately (payments.ts) get their own words: 409 is
+ * the duplicate-payment wall (a live intent already exists for the month),
+ * 400 is the zero-fee refusal (nothing to collect). Anything else is a
+ * plain retryable failure.
+ */
+export function paymentErrorCopy(status: number | undefined): string {
+  if (status === 409)
+    return "A payment for this month is already in motion — see the payments below.";
+  if (status === 400)
+    return "There's nothing to collect for this month — the computed fee is zero.";
+  return "Could not record the payment intent. Try again.";
+}
+
+// Provider lifecycle of a payment intent: pending until the confirmation
+// webhook settles it one way or the other.
+const INTENT_LABELS: Record<string, string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
+const INTENT_TONES: Record<string, BadgeTone> = {
+  pending: "amber",
+  confirmed: "emerald",
+  failed: "red",
+  cancelled: "slate",
+};
+
+export function intentStatusLabel(status: string): string {
+  return INTENT_LABELS[status] ?? humanize(status);
+}
+
+export function intentBadgeClasses(status: string): string {
+  return pillClasses(INTENT_TONES[status] ?? "slate");
+}
+
+/**
+ * Month label for an intent row, resolved through the statement's own month
+ * option list (intents can only ever target those closed months — the
+ * server enforces it), falling back to the raw YYYY-MM-01 for anything the
+ * list no longer carries.
+ */
+export function intentMonthLabel(
+  monthStart: string,
+  months: { value: string; label: string }[],
+): string {
+  return months.find((m) => m.value === monthStart)?.label ?? monthStart;
+}
+
 export type BillingCardState = "hidden" | "data" | "loading" | "error";
 
 /**
@@ -83,6 +145,7 @@ export function billingCardState(args: {
 }
 
 export function BillingStatementCard() {
+  const queryClient = useQueryClient();
   const [month, setMonth] = useState<string | undefined>(undefined);
   const params = month ? { month } : undefined;
   const query = useGetBillingStatement(params, {
@@ -102,6 +165,35 @@ export function BillingStatementCard() {
   useEffect(() => {
     if (query.isSuccess && query.data) setLastGood(query.data);
   }, [query.isSuccess, query.data]);
+
+  // Payment intents: render-on-success like the card itself (the payments
+  // routes carry their own scope; a 403/404 hides the section, never breaks
+  // the card).
+  const intentsQuery = useListPaymentIntents({
+    query: { queryKey: getListPaymentIntentsQueryKey(), retry: false },
+  });
+  const createIntent = useCreatePaymentIntent();
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  // The intent the last click created — carries the checkout link the firm
+  // follows to actually pay.
+  const [recorded, setRecorded] = useState<PaymentIntent | null>(null);
+
+  const recordPayment = (monthStart: string) => {
+    setPaymentError(null);
+    setRecorded(null);
+    createIntent.mutate(
+      { data: { monthStart } },
+      {
+        onSuccess: (intent) => {
+          setRecorded(intent);
+          void queryClient.invalidateQueries({
+            queryKey: getListPaymentIntentsQueryKey(),
+          });
+        },
+        onError: (err) => setPaymentError(paymentErrorCopy(errorStatus(err))),
+      },
+    );
+  };
 
   const statement = query.data ?? lastGood;
   const state = billingCardState({
@@ -127,10 +219,15 @@ export function BillingStatementCard() {
               onValueChange={(m) => {
                 setMonth(m);
                 setShowPurposes(false);
+                // Payment feedback describes the month it was recorded for —
+                // clear it so it never captions a different month's numbers.
+                setPaymentError(null);
+                setRecorded(null);
               }}
             >
               <SelectTrigger
                 className="h-8 w-44 text-xs"
+                aria-label="Billing month"
                 data-testid="select-billing-month"
               >
                 <SelectValue />
@@ -276,6 +373,121 @@ export function BillingStatementCard() {
             >
               {statement.note}
             </p>
+
+            {intentsQuery.isSuccess && (
+              <div
+                className="space-y-2 border-t pt-3"
+                data-testid="section-billing-payments"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Payments</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={createIntent.isPending}
+                    onClick={() => recordPayment(statement.monthStart)}
+                    data-testid="button-record-payment"
+                  >
+                    {createIntent.isPending
+                      ? "Recording…"
+                      : `Record payment intent — ${statement.monthLabel}`}
+                  </Button>
+                </div>
+                {paymentError && (
+                  <p
+                    className="text-sm text-destructive"
+                    role="alert"
+                    data-testid="text-payment-error"
+                  >
+                    {paymentError}
+                  </p>
+                )}
+                {recorded && (
+                  <p
+                    className="text-sm text-emerald-700 dark:text-emerald-400"
+                    role="status"
+                    data-testid="text-payment-recorded"
+                  >
+                    Recorded {formatNaira(recorded.amountNgn)} for{" "}
+                    {intentMonthLabel(recorded.monthStart, statement.months)}.
+                    {recorded.checkoutUrl && (
+                      <>
+                        {" "}
+                        <a
+                          href={recorded.checkoutUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-medium underline underline-offset-2"
+                          data-testid="link-recorded-checkout"
+                        >
+                          Open checkout
+                          <ExternalLink
+                            className="size-3.5"
+                            aria-hidden="true"
+                          />
+                          <span className="sr-only">(opens in a new tab)</span>
+                        </a>
+                      </>
+                    )}
+                  </p>
+                )}
+                {(intentsQuery.data ?? []).length === 0 ? (
+                  <p
+                    className="text-xs text-muted-foreground"
+                    data-testid="text-no-payments"
+                  >
+                    No payments recorded yet — recording an intent computes
+                    the month&apos;s fee server-side and opens a checkout.
+                  </p>
+                ) : (
+                  <ul className="divide-y" data-testid="list-payment-intents">
+                    {(intentsQuery.data ?? []).map((intent) => (
+                      <li
+                        key={intent.id}
+                        className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                        data-testid={`row-payment-${intent.id}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span>
+                            {intentMonthLabel(
+                              intent.monthStart,
+                              statement.months,
+                            )}
+                          </span>
+                          <span className={intentBadgeClasses(intent.status)}>
+                            {intentStatusLabel(intent.status)}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-3">
+                          {intent.status === "pending" &&
+                            intent.checkoutUrl && (
+                              <a
+                                href={intent.checkoutUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-medium underline underline-offset-2"
+                                data-testid={`link-checkout-${intent.id}`}
+                              >
+                                Checkout
+                                <ExternalLink
+                                  className="size-3"
+                                  aria-hidden="true"
+                                />
+                                <span className="sr-only">
+                                  (opens in a new tab)
+                                </span>
+                              </a>
+                            )}
+                          <span className="tabular-nums">
+                            {formatNaira(intent.amountNgn)}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </>
         )}
       </CardContent>

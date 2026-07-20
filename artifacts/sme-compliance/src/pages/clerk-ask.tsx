@@ -219,7 +219,11 @@ export function AskContent() {
             </div>
           </CardContent>
         </Card>
-        {lastAnswer && <AnswerCard answer={lastAnswer} />}
+        {/* Persistent polite live region: the answer arrives asynchronously
+            after "Ask", so screen readers hear it without hunting for it. */}
+        <div aria-live="polite">
+          {lastAnswer && <AnswerCard answer={lastAnswer} />}
+        </div>
         <p className="text-xs text-muted-foreground">
           Looking to send an invoice instead?{" "}
           <Link href="/clerk" className="text-primary hover:underline">

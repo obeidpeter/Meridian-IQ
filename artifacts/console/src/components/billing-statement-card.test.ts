@@ -7,7 +7,11 @@ import type {
 import {
   billingCardState,
   clerkUsageLine,
+  intentBadgeClasses,
+  intentMonthLabel,
+  intentStatusLabel,
   overageLine,
+  paymentErrorCopy,
   tierSummary,
 } from "./billing-statement-card";
 import { monthCsvFilename } from "@/lib/download";
@@ -137,5 +141,53 @@ describe("overageLine", () => {
     const line = overageLine(fee({ overageInvoices: 7, overage: "1400" }));
     expect(line).toContain("7 invoice(s) over the plan");
     expect(line).not.toBe("—");
+  });
+});
+
+describe("paymentErrorCopy", () => {
+  test("409 is the duplicate-payment wall, pointed at the list below", () => {
+    expect(paymentErrorCopy(409)).toContain("already in motion");
+  });
+
+  test("400 is the zero-fee refusal — nothing to collect", () => {
+    expect(paymentErrorCopy(400)).toContain("nothing to collect");
+  });
+
+  test("anything else reads as a plain retryable failure", () => {
+    expect(paymentErrorCopy(500)).toContain("Try again");
+    expect(paymentErrorCopy(undefined)).toContain("Try again");
+  });
+});
+
+describe("payment intent status pills", () => {
+  test("maps the provider lifecycle to labels and tones", () => {
+    expect(intentStatusLabel("pending")).toBe("Pending");
+    expect(intentBadgeClasses("pending")).toContain("amber");
+    expect(intentStatusLabel("confirmed")).toBe("Confirmed");
+    expect(intentBadgeClasses("confirmed")).toContain("emerald");
+    expect(intentStatusLabel("failed")).toBe("Failed");
+    expect(intentBadgeClasses("failed")).toContain("red");
+    expect(intentStatusLabel("cancelled")).toBe("Cancelled");
+    expect(intentBadgeClasses("cancelled")).toContain("slate");
+  });
+
+  test("a status from a newer server humanizes into a slate pill", () => {
+    expect(intentStatusLabel("refunded")).toBe("Refunded");
+    expect(intentBadgeClasses("refunded")).toContain("slate");
+  });
+});
+
+describe("intentMonthLabel", () => {
+  const months = [
+    { value: "2026-06-01", label: "June 2026" },
+    { value: "2026-05-01", label: "May 2026" },
+  ];
+
+  test("resolves through the statement's own month options", () => {
+    expect(intentMonthLabel("2026-06-01", months)).toBe("June 2026");
+  });
+
+  test("falls back to the raw month for anything the list no longer carries", () => {
+    expect(intentMonthLabel("2024-01-01", months)).toBe("2024-01-01");
   });
 });

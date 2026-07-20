@@ -533,7 +533,13 @@ export function Reconciliation() {
                     </AlertDescription>
                   </Alert>
                 )}
-                <div className="flex flex-wrap items-center gap-4 text-sm">
+                {/* role=status: the report lands asynchronously after "Check
+                    parsing" / "Commit statement", so announce the headline
+                    numbers instead of leaving screen readers to hunt. */}
+                <div
+                  className="flex flex-wrap items-center gap-4 text-sm"
+                  role="status"
+                >
                   <span>
                     Format:{" "}
                     <span className="font-mono text-xs bg-muted rounded px-1.5 py-0.5">

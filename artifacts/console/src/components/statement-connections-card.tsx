@@ -326,6 +326,7 @@ function StatementConnectionsBody({
                         variant="ghost"
                         onClick={() => setOpenRunsId(runsOpen ? null : conn.id)}
                         aria-expanded={runsOpen}
+                        aria-controls={`connection-runs-${conn.id}`}
                         data-testid={`button-runs-${conn.id}`}
                       >
                         {runsOpen ? "Hide runs" : "Runs"}
@@ -349,7 +350,11 @@ function StatementConnectionsBody({
                       </span>
                     </p>
                   )}
-                  {runsOpen && <ConnectionRuns connectionId={conn.id} />}
+                  {runsOpen && (
+                    <div id={`connection-runs-${conn.id}`}>
+                      <ConnectionRuns connectionId={conn.id} />
+                    </div>
+                  )}
                 </div>
               );
             })}
