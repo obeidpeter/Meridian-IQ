@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.37.0
+ * OpenAPI spec version: 0.38.0
  */
 import * as zod from 'zod';
 
@@ -5084,6 +5084,80 @@ export const RunPromptCanaryResponse = zod.object({
 
 
 /**
+ * @summary The full eval corpus with per-fixture pass history reconstructed from stored runs
+ */
+export const ListEvalFixturesResponse = zod.object({
+  "fixtures": zod.array(zod.object({
+  "key": zod.string(),
+  "source": zod.enum(['static', 'grown', 'redteam']),
+  "label": zod.string(),
+  "riskLabel": zod.string(),
+  "retired": zod.boolean(),
+  "retiredAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "runs": zod.number().optional(),
+  "lastOutcome": zod.string().nullish(),
+  "fieldsCompared": zod.number().optional(),
+  "fieldsCorrect": zod.number().optional(),
+  "injectionFixtures": zod.number().optional(),
+  "injectionResisted": zod.number().optional(),
+  "lastMismatchedFields": zod.array(zod.string()).optional()
+})),
+  "runsScanned": zod.number()
+})
+
+
+/**
+ * @summary Retire a grown or red-team fixture from the corpus (static fixtures cannot be retired)
+ */
+export const RetireEvalFixtureParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const RetireEvalFixtureResponse = zod.object({
+  "key": zod.string(),
+  "source": zod.enum(['static', 'grown', 'redteam']),
+  "label": zod.string(),
+  "riskLabel": zod.string(),
+  "retired": zod.boolean(),
+  "retiredAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "runs": zod.number().optional(),
+  "lastOutcome": zod.string().nullish(),
+  "fieldsCompared": zod.number().optional(),
+  "fieldsCorrect": zod.number().optional(),
+  "injectionFixtures": zod.number().optional(),
+  "injectionResisted": zod.number().optional(),
+  "lastMismatchedFields": zod.array(zod.string()).optional()
+})
+
+
+/**
+ * @summary Restore a retired fixture to the corpus
+ */
+export const RestoreEvalFixtureParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const RestoreEvalFixtureResponse = zod.object({
+  "key": zod.string(),
+  "source": zod.enum(['static', 'grown', 'redteam']),
+  "label": zod.string(),
+  "riskLabel": zod.string(),
+  "retired": zod.boolean(),
+  "retiredAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "runs": zod.number().optional(),
+  "lastOutcome": zod.string().nullish(),
+  "fieldsCompared": zod.number().optional(),
+  "fieldsCorrect": zod.number().optional(),
+  "injectionFixtures": zod.number().optional(),
+  "injectionResisted": zod.number().optional(),
+  "lastMismatchedFields": zod.array(zod.string()).optional()
+})
+
+
+/**
  * @summary Past evaluation runs, newest first
  */
 export const listClerkEvalRunsQueryLimitMax = 100;
@@ -5232,7 +5306,8 @@ export const GetStaffNotificationPreferencesResponse = zod.object({
   "digestEnabled": zod.boolean(),
   "emailEnabled": zod.boolean(),
   "pushEnabled": zod.boolean(),
-  "email": zod.string().nullable()
+  "email": zod.string().nullable(),
+  "emailVerifiedAt": zod.string().nullable()
 })
 
 
@@ -5250,8 +5325,121 @@ export const UpdateStaffNotificationPreferencesResponse = zod.object({
   "digestEnabled": zod.boolean(),
   "emailEnabled": zod.boolean(),
   "pushEnabled": zod.boolean(),
-  "email": zod.string().nullable()
+  "email": zod.string().nullable(),
+  "emailVerifiedAt": zod.string().nullable()
 })
+
+
+/**
+ * @summary Send a verification code to the saved email (requires the outbound relay; 503 while messaging is dark)
+ */
+export const RequestStaffEmailVerificationResponse = zod.void()
+
+
+/**
+ * @summary Confirm the saved email with the received code
+ */
+export const confirmStaffEmailBodyCodeMin = 6;
+export const confirmStaffEmailBodyCodeMax = 8;
+
+
+
+export const ConfirmStaffEmailBody = zod.object({
+  "code": zod.string().min(confirmStaffEmailBodyCodeMin).max(confirmStaffEmailBodyCodeMax)
+})
+
+export const ConfirmStaffEmailResponse = zod.object({
+  "digestEnabled": zod.boolean(),
+  "emailEnabled": zod.boolean(),
+  "pushEnabled": zod.boolean(),
+  "email": zod.string().nullable(),
+  "emailVerifiedAt": zod.string().nullable()
+})
+
+
+/**
+ * @summary Registry of available bank-feed connectors
+ */
+export const ListStatementConnectorsResponseItem = zod.object({
+  "key": zod.string(),
+  "name": zod.string(),
+  "description": zod.string()
+})
+export const ListStatementConnectorsResponse = zod.array(ListStatementConnectorsResponseItem)
+
+
+/**
+ * @summary The firm's configured bank-feed connections
+ */
+export const ListStatementConnectionsResponseItem = zod.object({
+  "id": zod.string(),
+  "connectorKey": zod.string(),
+  "clientPartyId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "status": zod.enum(['active', 'disabled']),
+  "lastSyncAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListStatementConnectionsResponse = zod.array(ListStatementConnectionsResponseItem)
+
+
+/**
+ * @summary Configure a bank-feed connection for a client party
+ */
+export const CreateStatementConnectionBody = zod.object({
+  "connectorKey": zod.string(),
+  "clientPartyId": zod.string().uuid(),
+  "config": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const CreateStatementConnectionResponse = zod.object({
+  "id": zod.string(),
+  "connectorKey": zod.string(),
+  "clientPartyId": zod.string(),
+  "clientName": zod.string().nullish(),
+  "status": zod.enum(['active', 'disabled']),
+  "lastSyncAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Pull new statement lines through the connector; they land via the ordinary ingest flow
+ */
+export const SyncStatementConnectionParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const SyncStatementConnectionResponse = zod.object({
+  "id": zod.string(),
+  "connectionId": zod.string(),
+  "status": zod.enum(['running', 'succeeded', 'failed']),
+  "linesPulled": zod.number().nullish(),
+  "statementId": zod.string().nullish(),
+  "error": zod.string().nullish(),
+  "startedAt": zod.string(),
+  "finishedAt": zod.string().nullish()
+})
+
+
+/**
+ * @summary Past sync runs for a connection, newest first
+ */
+export const ListStatementSyncRunsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListStatementSyncRunsResponseItem = zod.object({
+  "id": zod.string(),
+  "connectionId": zod.string(),
+  "status": zod.enum(['running', 'succeeded', 'failed']),
+  "linesPulled": zod.number().nullish(),
+  "statementId": zod.string().nullish(),
+  "error": zod.string().nullish(),
+  "startedAt": zod.string(),
+  "finishedAt": zod.string().nullish()
+})
+export const ListStatementSyncRunsResponse = zod.array(ListStatementSyncRunsResponseItem)
 
 
 /**

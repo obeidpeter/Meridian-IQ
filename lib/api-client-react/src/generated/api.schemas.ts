@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.37.0
+ * OpenAPI spec version: 0.38.0
  */
 export interface HealthStatus {
   status: string;
@@ -4098,6 +4098,108 @@ export interface StaffNotificationPreferences {
   pushEnabled: boolean;
   /** @nullable */
   email: string | null;
+  /** @nullable */
+  emailVerifiedAt: string | null;
+}
+
+export interface ConfirmStaffEmailInput {
+  /**
+     * @minLength 6
+     * @maxLength 8
+     */
+  code: string;
+}
+
+export type EvalFixtureSummarySource = typeof EvalFixtureSummarySource[keyof typeof EvalFixtureSummarySource];
+
+
+export const EvalFixtureSummarySource = {
+  static: 'static',
+  grown: 'grown',
+  redteam: 'redteam',
+} as const;
+
+export interface EvalFixtureSummary {
+  key: string;
+  source: EvalFixtureSummarySource;
+  label: string;
+  riskLabel: string;
+  retired: boolean;
+  /** @nullable */
+  retiredAt?: string | null;
+  /** @nullable */
+  createdAt?: string | null;
+  runs?: number;
+  /** @nullable */
+  lastOutcome?: string | null;
+  fieldsCompared?: number;
+  fieldsCorrect?: number;
+  injectionFixtures?: number;
+  injectionResisted?: number;
+  lastMismatchedFields?: string[];
+}
+
+export interface EvalFixtureReport {
+  fixtures: EvalFixtureSummary[];
+  runsScanned: number;
+}
+
+export interface StatementConnectorInfo {
+  key: string;
+  name: string;
+  description: string;
+}
+
+export type StatementConnectionStatus = typeof StatementConnectionStatus[keyof typeof StatementConnectionStatus];
+
+
+export const StatementConnectionStatus = {
+  active: 'active',
+  disabled: 'disabled',
+} as const;
+
+export interface StatementConnection {
+  id: string;
+  connectorKey: string;
+  clientPartyId: string;
+  /** @nullable */
+  clientName?: string | null;
+  status: StatementConnectionStatus;
+  /** @nullable */
+  lastSyncAt?: string | null;
+  createdAt: string;
+}
+
+export type CreateStatementConnectionInputConfig = { [key: string]: unknown };
+
+export interface CreateStatementConnectionInput {
+  connectorKey: string;
+  clientPartyId: string;
+  config?: CreateStatementConnectionInputConfig;
+}
+
+export type StatementSyncRunStatus = typeof StatementSyncRunStatus[keyof typeof StatementSyncRunStatus];
+
+
+export const StatementSyncRunStatus = {
+  running: 'running',
+  succeeded: 'succeeded',
+  failed: 'failed',
+} as const;
+
+export interface StatementSyncRun {
+  id: string;
+  connectionId: string;
+  status: StatementSyncRunStatus;
+  /** @nullable */
+  linesPulled?: number | null;
+  /** @nullable */
+  statementId?: string | null;
+  /** @nullable */
+  error?: string | null;
+  startedAt: string;
+  /** @nullable */
+  finishedAt?: string | null;
 }
 
 export interface UpdateStaffNotificationPreferencesInput {

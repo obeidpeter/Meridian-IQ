@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.37.0
+ * OpenAPI spec version: 0.38.0
  */
 import {
   useMutation,
@@ -79,6 +79,7 @@ import type {
   ClientPortfolioDetail,
   ComplianceCalendar,
   ComplianceDeadline,
+  ConfirmStaffEmailInput,
   Confirmation,
   ConfirmationInput,
   ConflictResponse,
@@ -92,6 +93,7 @@ import type {
   CreateClerkBatchInput,
   CreateInvitationInput,
   CreatePasswordResetInput,
+  CreateStatementConnectionInput,
   CreateStatementFormatInput,
   CreateStatementFormatResult,
   CreditNoteInput,
@@ -118,6 +120,8 @@ import type {
   Escalation,
   EscalationInput,
   EscalationReplyDraft,
+  EvalFixtureReport,
+  EvalFixtureSummary,
   ExplainFailureInput,
   ExportInvoicesCsvParams,
   ExportReceivablesCsvParams,
@@ -238,10 +242,13 @@ import type {
   StampRecord,
   StampVerifyInput,
   StampVerifyResult,
+  StatementConnection,
+  StatementConnectorInfo,
   StatementFormatDraft,
   StatementFormatView,
   StatementImportInput,
   StatementImportResult,
+  StatementSyncRun,
   StatusLight,
   SubmissionAttempt,
   SubscriptionUpdate,
@@ -13905,6 +13912,223 @@ export const useRunPromptCanary = <TError = ErrorType<BadRequestResponse>,
       return useMutation(getRunPromptCanaryMutationOptions(options));
     }
 
+export const getListEvalFixturesUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/fixtures`
+}
+
+/**
+ * @summary The full eval corpus with per-fixture pass history reconstructed from stored runs
+ */
+export const listEvalFixtures = async ( options?: RequestInit): Promise<EvalFixtureReport> => {
+
+  return customFetch<EvalFixtureReport>(getListEvalFixturesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListEvalFixturesQueryKey = () => {
+    return [
+    `/api/clerk/eval/fixtures`
+    ] as const;
+    }
+
+
+export const getListEvalFixturesQueryOptions = <TData = Awaited<ReturnType<typeof listEvalFixtures>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEvalFixtures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListEvalFixturesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEvalFixtures>>> = ({ signal }) => listEvalFixtures({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEvalFixtures>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListEvalFixturesQueryResult = NonNullable<Awaited<ReturnType<typeof listEvalFixtures>>>
+export type ListEvalFixturesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The full eval corpus with per-fixture pass history reconstructed from stored runs
+ */
+
+export function useListEvalFixtures<TData = Awaited<ReturnType<typeof listEvalFixtures>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEvalFixtures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListEvalFixturesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRetireEvalFixtureUrl = (key: string,) => {
+
+
+
+
+  return `/api/clerk/eval/fixtures/${key}/retire`
+}
+
+/**
+ * @summary Retire a grown or red-team fixture from the corpus (static fixtures cannot be retired)
+ */
+export const retireEvalFixture = async (key: string, options?: RequestInit): Promise<EvalFixtureSummary> => {
+
+  return customFetch<EvalFixtureSummary>(getRetireEvalFixtureUrl(key),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetireEvalFixtureMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireEvalFixture>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retireEvalFixture>>, TError,{key: string}, TContext> => {
+
+const mutationKey = ['retireEvalFixture'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retireEvalFixture>>, {key: string}> = (props) => {
+          const {key} = props ?? {};
+
+          return  retireEvalFixture(key,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetireEvalFixtureMutationResult = NonNullable<Awaited<ReturnType<typeof retireEvalFixture>>>
+
+    export type RetireEvalFixtureMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Retire a grown or red-team fixture from the corpus (static fixtures cannot be retired)
+ */
+export const useRetireEvalFixture = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireEvalFixture>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retireEvalFixture>>,
+        TError,
+        {key: string},
+        TContext
+      > => {
+      return useMutation(getRetireEvalFixtureMutationOptions(options));
+    }
+
+export const getRestoreEvalFixtureUrl = (key: string,) => {
+
+
+
+
+  return `/api/clerk/eval/fixtures/${key}/restore`
+}
+
+/**
+ * @summary Restore a retired fixture to the corpus
+ */
+export const restoreEvalFixture = async (key: string, options?: RequestInit): Promise<EvalFixtureSummary> => {
+
+  return customFetch<EvalFixtureSummary>(getRestoreEvalFixtureUrl(key),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreEvalFixtureMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreEvalFixture>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreEvalFixture>>, TError,{key: string}, TContext> => {
+
+const mutationKey = ['restoreEvalFixture'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreEvalFixture>>, {key: string}> = (props) => {
+          const {key} = props ?? {};
+
+          return  restoreEvalFixture(key,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreEvalFixtureMutationResult = NonNullable<Awaited<ReturnType<typeof restoreEvalFixture>>>
+
+    export type RestoreEvalFixtureMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Restore a retired fixture to the corpus
+ */
+export const useRestoreEvalFixture = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreEvalFixture>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreEvalFixture>>,
+        TError,
+        {key: string},
+        TContext
+      > => {
+      return useMutation(getRestoreEvalFixtureMutationOptions(options));
+    }
+
 export const getListClerkEvalRunsUrl = (params?: ListClerkEvalRunsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -14282,6 +14506,517 @@ export const useUpdateStaffNotificationPreferences = <TError = ErrorType<BadRequ
       > => {
       return useMutation(getUpdateStaffNotificationPreferencesMutationOptions(options));
     }
+
+export const getRequestStaffEmailVerificationUrl = () => {
+
+
+
+
+  return `/api/staff/notification-preferences/request-email-verification`
+}
+
+/**
+ * @summary Send a verification code to the saved email (requires the outbound relay; 503 while messaging is dark)
+ */
+export const requestStaffEmailVerification = async ( options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getRequestStaffEmailVerificationUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRequestStaffEmailVerificationMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestStaffEmailVerification>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestStaffEmailVerification>>, TError,void, TContext> => {
+
+const mutationKey = ['requestStaffEmailVerification'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestStaffEmailVerification>>, void> = () => {
+
+
+          return  requestStaffEmailVerification(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestStaffEmailVerificationMutationResult = NonNullable<Awaited<ReturnType<typeof requestStaffEmailVerification>>>
+
+    export type RequestStaffEmailVerificationMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Send a verification code to the saved email (requires the outbound relay; 503 while messaging is dark)
+ */
+export const useRequestStaffEmailVerification = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestStaffEmailVerification>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestStaffEmailVerification>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRequestStaffEmailVerificationMutationOptions(options));
+    }
+
+export const getConfirmStaffEmailUrl = () => {
+
+
+
+
+  return `/api/staff/notification-preferences/confirm-email`
+}
+
+/**
+ * @summary Confirm the saved email with the received code
+ */
+export const confirmStaffEmail = async (confirmStaffEmailInput: ConfirmStaffEmailInput, options?: RequestInit): Promise<StaffNotificationPreferences> => {
+
+  return customFetch<StaffNotificationPreferences>(getConfirmStaffEmailUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(confirmStaffEmailInput)
+  }
+);}
+
+
+
+
+export const getConfirmStaffEmailMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmStaffEmail>>, TError,{data: BodyType<ConfirmStaffEmailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmStaffEmail>>, TError,{data: BodyType<ConfirmStaffEmailInput>}, TContext> => {
+
+const mutationKey = ['confirmStaffEmail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmStaffEmail>>, {data: BodyType<ConfirmStaffEmailInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  confirmStaffEmail(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmStaffEmailMutationResult = NonNullable<Awaited<ReturnType<typeof confirmStaffEmail>>>
+    export type ConfirmStaffEmailMutationBody = BodyType<ConfirmStaffEmailInput>
+    export type ConfirmStaffEmailMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Confirm the saved email with the received code
+ */
+export const useConfirmStaffEmail = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmStaffEmail>>, TError,{data: BodyType<ConfirmStaffEmailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmStaffEmail>>,
+        TError,
+        {data: BodyType<ConfirmStaffEmailInput>},
+        TContext
+      > => {
+      return useMutation(getConfirmStaffEmailMutationOptions(options));
+    }
+
+export const getListStatementConnectorsUrl = () => {
+
+
+
+
+  return `/api/statement-connectors`
+}
+
+/**
+ * @summary Registry of available bank-feed connectors
+ */
+export const listStatementConnectors = async ( options?: RequestInit): Promise<StatementConnectorInfo[]> => {
+
+  return customFetch<StatementConnectorInfo[]>(getListStatementConnectorsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStatementConnectorsQueryKey = () => {
+    return [
+    `/api/statement-connectors`
+    ] as const;
+    }
+
+
+export const getListStatementConnectorsQueryOptions = <TData = Awaited<ReturnType<typeof listStatementConnectors>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStatementConnectors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStatementConnectorsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStatementConnectors>>> = ({ signal }) => listStatementConnectors({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStatementConnectors>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStatementConnectorsQueryResult = NonNullable<Awaited<ReturnType<typeof listStatementConnectors>>>
+export type ListStatementConnectorsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Registry of available bank-feed connectors
+ */
+
+export function useListStatementConnectors<TData = Awaited<ReturnType<typeof listStatementConnectors>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStatementConnectors>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStatementConnectorsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListStatementConnectionsUrl = () => {
+
+
+
+
+  return `/api/statement-connections`
+}
+
+/**
+ * @summary The firm's configured bank-feed connections
+ */
+export const listStatementConnections = async ( options?: RequestInit): Promise<StatementConnection[]> => {
+
+  return customFetch<StatementConnection[]>(getListStatementConnectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStatementConnectionsQueryKey = () => {
+    return [
+    `/api/statement-connections`
+    ] as const;
+    }
+
+
+export const getListStatementConnectionsQueryOptions = <TData = Awaited<ReturnType<typeof listStatementConnections>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStatementConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStatementConnectionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStatementConnections>>> = ({ signal }) => listStatementConnections({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStatementConnections>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStatementConnectionsQueryResult = NonNullable<Awaited<ReturnType<typeof listStatementConnections>>>
+export type ListStatementConnectionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm's configured bank-feed connections
+ */
+
+export function useListStatementConnections<TData = Awaited<ReturnType<typeof listStatementConnections>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStatementConnections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStatementConnectionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateStatementConnectionUrl = () => {
+
+
+
+
+  return `/api/statement-connections`
+}
+
+/**
+ * @summary Configure a bank-feed connection for a client party
+ */
+export const createStatementConnection = async (createStatementConnectionInput: CreateStatementConnectionInput, options?: RequestInit): Promise<StatementConnection> => {
+
+  return customFetch<StatementConnection>(getCreateStatementConnectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createStatementConnectionInput)
+  }
+);}
+
+
+
+
+export const getCreateStatementConnectionMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStatementConnection>>, TError,{data: BodyType<CreateStatementConnectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createStatementConnection>>, TError,{data: BodyType<CreateStatementConnectionInput>}, TContext> => {
+
+const mutationKey = ['createStatementConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createStatementConnection>>, {data: BodyType<CreateStatementConnectionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createStatementConnection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateStatementConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof createStatementConnection>>>
+    export type CreateStatementConnectionMutationBody = BodyType<CreateStatementConnectionInput>
+    export type CreateStatementConnectionMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Configure a bank-feed connection for a client party
+ */
+export const useCreateStatementConnection = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStatementConnection>>, TError,{data: BodyType<CreateStatementConnectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createStatementConnection>>,
+        TError,
+        {data: BodyType<CreateStatementConnectionInput>},
+        TContext
+      > => {
+      return useMutation(getCreateStatementConnectionMutationOptions(options));
+    }
+
+export const getSyncStatementConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/statement-connections/${id}/sync`
+}
+
+/**
+ * @summary Pull new statement lines through the connector; they land via the ordinary ingest flow
+ */
+export const syncStatementConnection = async (id: string, options?: RequestInit): Promise<StatementSyncRun> => {
+
+  return customFetch<StatementSyncRun>(getSyncStatementConnectionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSyncStatementConnectionMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncStatementConnection>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncStatementConnection>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['syncStatementConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncStatementConnection>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  syncStatementConnection(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncStatementConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof syncStatementConnection>>>
+
+    export type SyncStatementConnectionMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Pull new statement lines through the connector; they land via the ordinary ingest flow
+ */
+export const useSyncStatementConnection = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncStatementConnection>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncStatementConnection>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getSyncStatementConnectionMutationOptions(options));
+    }
+
+export const getListStatementSyncRunsUrl = (id: string,) => {
+
+
+
+
+  return `/api/statement-connections/${id}/runs`
+}
+
+/**
+ * @summary Past sync runs for a connection, newest first
+ */
+export const listStatementSyncRuns = async (id: string, options?: RequestInit): Promise<StatementSyncRun[]> => {
+
+  return customFetch<StatementSyncRun[]>(getListStatementSyncRunsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStatementSyncRunsQueryKey = (id: string,) => {
+    return [
+    `/api/statement-connections/${id}/runs`
+    ] as const;
+    }
+
+
+export const getListStatementSyncRunsQueryOptions = <TData = Awaited<ReturnType<typeof listStatementSyncRuns>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStatementSyncRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStatementSyncRunsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStatementSyncRuns>>> = ({ signal }) => listStatementSyncRuns(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStatementSyncRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStatementSyncRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listStatementSyncRuns>>>
+export type ListStatementSyncRunsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Past sync runs for a connection, newest first
+ */
+
+export function useListStatementSyncRuns<TData = Awaited<ReturnType<typeof listStatementSyncRuns>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStatementSyncRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStatementSyncRunsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListClientStatementsUrl = (params?: ListClientStatementsParams,) => {
   const normalizedParams = new URLSearchParams();
