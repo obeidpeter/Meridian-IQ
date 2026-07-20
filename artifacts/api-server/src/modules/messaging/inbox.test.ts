@@ -14,32 +14,28 @@ import {
 } from "../../test-helpers/route-harness.ts";
 
 // Notification inbox scoping (SEC-03). The messages ledger has NO firm key
-// and NO RLS policy, so the recipient_ref equality inside listNotificationsFor
-// IS the isolation wall — these tests pin it from every side:
-//  - a client_user sees exactly its own party's `ref-…` rows;
+// and NO RLS policy, so the recipient IDENTITY equality inside
+// listNotificationsFor IS the isolation wall — and it is the
+// recipient_party_id / recipient_user_id uuid columns, NOT the lossy
+// letters-only recipient_ref (staff refs carry ~15.5 bits; ref collisions are
+// certain at scale). These tests pin it from every side:
+//  - a client_user sees exactly the rows stamped with its own party id;
 //  - a SIBLING client of the same firm sees none of them;
-//  - firm staff see exactly their own `usr-…` rows — NOT the firm's party
-//    alerts (those belong to the client they were addressed to);
+//  - a row whose lossy REF collides but whose identity differs never leaks;
+//  - rows predating the identity columns (null identity) drop from feeds;
+//  - firm staff see exactly their own user-identity rows — NOT the firm's
+//    party alerts (those belong to the client they were addressed to);
 //  - roles with no recipient identity in the ledger (operator here) get an
 //    empty feed;
 //  - titles resolve from the template registry (unknown keys humanize, never
 //    throw), rows stay pointer-only, newest-first, limit clamped to 1..100.
 
-// Ref-target ids are RANDOM LETTERS so each run's refs are unique on a
-// long-lived scratch DB (recipientRefFor keeps the first 16 letters;
-// pointerEntityRef the first 6 — uuid hex letters alone would collide).
-const letters = (n: number): string =>
-  Array.from({ length: n }, () =>
-    String.fromCharCode(97 + Math.floor(Math.random() * 26)),
-  ).join("");
-
 const firmId = randomUUID();
-const partyA = letters(20);
-const partyB = letters(20);
-const staffUserId = letters(20);
+const partyA = randomUUID();
+const partyB = randomUUID();
+const staffUserId = randomUUID();
 
 const refA = recipientRefFor(partyA);
-const refB = recipientRefFor(partyB);
 const refStaff = pointerEntityRef("usr", staffUserId);
 
 const clientA: Principal = {
@@ -82,6 +78,7 @@ before(async () => {
       {
         channel: "email",
         recipientRef: refA,
+        recipientPartyId: partyA,
         templateKey: "deadline_reminder",
         entityType: "invoice",
         entityId: "inv-abc",
@@ -91,6 +88,7 @@ before(async () => {
       {
         channel: "whatsapp",
         recipientRef: refA,
+        recipientPartyId: partyA,
         templateKey: "invoice_stamped",
         entityType: "invoice",
         entityId: "inv-def",
@@ -100,6 +98,7 @@ before(async () => {
       {
         channel: "push",
         recipientRef: refA,
+        recipientPartyId: partyA,
         templateKey: "some_retired_template",
         status: "sent",
         createdAt: at(10),
@@ -107,20 +106,52 @@ before(async () => {
       // Sibling client B, same firm: must never surface in A's feed.
       {
         channel: "sms",
-        recipientRef: refB,
+        recipientRef: recipientRefFor(partyB),
+        recipientPartyId: partyB,
         templateKey: "deadline_reminder",
         status: "sent",
         createdAt: at(15),
+      },
+      // REF COLLISION probe: a row whose lossy recipientRef equals client
+      // A's but whose real identity is a DIFFERENT party. The old ref-equality
+      // wall would have served this row to A; the identity wall must not.
+      {
+        channel: "email",
+        recipientRef: refA,
+        recipientPartyId: randomUUID(),
+        templateKey: "b2c_window_alert",
+        status: "sent",
+        createdAt: at(8),
+      },
+      // Legacy row predating the identity columns (null identity): drops out
+      // of every feed — pointer-only history, accepted.
+      {
+        channel: "email",
+        recipientRef: refA,
+        templateKey: "deadline_reminder",
+        status: "sent",
+        createdAt: at(6),
       },
       // Staff member's own row (the digest-delivery rail's shape).
       {
         channel: "push",
         recipientRef: refStaff,
+        recipientUserId: staffUserId,
         templateKey: "firm_digest_ready",
         entityType: "clerk_digest",
         entityId: "dig-abc",
         status: "sent",
         createdAt: at(5),
+      },
+      // Staff-ref collision probe: same lossy usr- ref shape possible for a
+      // different user; identity differs, must never surface for staffUserId.
+      {
+        channel: "email",
+        recipientRef: refStaff,
+        recipientUserId: randomUUID(),
+        templateKey: "firm_digest_ready",
+        status: "sent",
+        createdAt: at(4),
       },
     ]);
 });
@@ -146,6 +177,21 @@ test("a client_user sees exactly its own party's rows, newest first", async () =
   assert.ok(!Number.isNaN(Date.parse(items[0].createdAt)));
 });
 
+test("a colliding recipientRef never leaks: identity, not ref, is the wall", async () => {
+  const items = await listNotificationsFor(clientA);
+  assert.ok(
+    items.every((i) => i.templateKey !== "b2c_window_alert"),
+    "a row sharing A's lossy ref but stamped with another party's identity must not surface",
+  );
+});
+
+test("rows predating the identity columns silently drop from feeds", async () => {
+  const items = await listNotificationsFor(clientA);
+  // The legacy null-identity row was the second-newest of A's ref rows;
+  // exactly the three identity-stamped rows answer.
+  assert.equal(items.length, 3);
+});
+
 test("titles resolve from the template registry; unknown keys humanize", async () => {
   const items = await listNotificationsFor(clientA);
   const stamped = items.find((i) => i.templateKey === "invoice_stamped");
@@ -161,19 +207,26 @@ test("a sibling client of the same firm sees none of them (SEC-03)", async () =>
   assert.ok(items.every((i) => i.templateKey !== "invoice_stamped"));
 });
 
-test("firm staff see their own usr- rows only — never the firm's party alerts", async () => {
+test("firm staff see their own user-identity rows only — never the firm's party alerts", async () => {
   const items = await listNotificationsFor(staff);
   assert.equal(items.length, 1);
   assert.equal(items[0].templateKey, "firm_digest_ready");
+  assert.equal(items[0].channel, "push", "the colliding-ref email row stays out");
   assert.equal(items[0].title, TEMPLATES.firm_digest_ready.description);
 });
 
 test("roles without a recipient identity in the ledger get an empty feed", async () => {
   assert.deepEqual(await listNotificationsFor(operator), []);
-  // A client_user missing its party scope resolves to no ref — empty, never
-  // someone else's rows.
+  // A client_user missing its party scope resolves to no identity — empty,
+  // never someone else's rows.
   assert.deepEqual(
     await listNotificationsFor({ ...clientA, clientPartyId: null }),
+    [],
+  );
+  // The dev-header shim's non-uuid userId owns no rows and must not error
+  // the uuid-column comparison.
+  assert.deepEqual(
+    await listNotificationsFor({ ...staff, userId: "dev-user" }),
     [],
   );
 });

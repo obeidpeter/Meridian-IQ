@@ -69,6 +69,13 @@ const FAILOVER: Record<MessageChannel, MessageChannel | null> = {
 export interface SendInput {
   channel: MessageChannel;
   recipientRef: string; // opaque pointer (user id / hashed contact), never raw PII
+  // The REAL recipient identity for the ledger row (exactly one per rail):
+  // party-scoped alert rails set recipientPartyId, staff-notification rails
+  // set recipientUserId. The notification inbox reads STRICTLY by these
+  // columns — the lossy letters-only recipientRef stays for display and
+  // provider-side correlation only, never as an isolation wall.
+  recipientUserId?: string;
+  recipientPartyId?: string;
   templateKey: string;
   entityType?: string;
   entityId?: string;
@@ -136,6 +143,56 @@ const simulatorTransport: MessageTransport = async (channel) => ({
 // talks to the actual SMTP/SMS/WhatsApp provider. An SMTP or WhatsApp BSP
 // integration later is just another MessageTransport. Env is read per call
 // so tests and operators can flip it without a restart.
+// Hard ceiling on any relay round-trip: sends run inside sweeps and request
+// handlers, and a relay that accepts the TCP connection but never answers
+// would otherwise pin the caller indefinitely (fetch has no default timeout).
+// An abort surfaces as the ordinary channel-failure path (failover walk /
+// absorbed error) — never a hang.
+const RELAY_TIMEOUT_MS = 5_000;
+
+// Env is read per call so tests and operators can flip the relay without a
+// restart. Exported for the one flow that must know whether ANY outbound
+// path exists before generating state (routes/staff.ts email verification —
+// a dark relay must store no code so the endpoint is not a config oracle).
+export function relayConfigured(): boolean {
+  return Boolean(process.env.MESSAGING_WEBHOOK_URL);
+}
+
+// POST an arbitrary kind-tagged JSON payload to the configured relay (same
+// URL, same x-op-token shared secret as the pointer-only transport below).
+// This is the ONE home of the documented SEC-12 exception: address-carrying
+// payloads (staff email verification — proving ownership of an address the
+// platform has not blessed cannot ride a pointer) cross to the SAME relay
+// endpoint the platform already trusts as its address-handling boundary, and
+// to nowhere else. Failures are reported, never thrown — callers decide
+// whether to absorb them (the verification flow does, to stay oracle-free).
+export async function sendRawToRelay(
+  kind: string,
+  payload: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  const url = process.env.MESSAGING_WEBHOOK_URL;
+  if (!url) return { ok: false, error: "relay not configured" };
+  try {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+    };
+    const token = process.env.MESSAGING_WEBHOOK_TOKEN;
+    if (token) headers["x-op-token"] = token;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ kind, ...payload }),
+      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
+    });
+    if (!resp.ok) {
+      return { ok: false, error: `messaging webhook returned ${resp.status}` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 const defaultTransport: MessageTransport = async (
   channel,
   recipientRef,
@@ -156,6 +213,9 @@ const defaultTransport: MessageTransport = async (
       method: "POST",
       headers,
       body: JSON.stringify({ channel, recipientRef, templateKey, entityRef }),
+      // Abort a hung relay after the shared ceiling; the abort lands on the
+      // existing channel-failure path below and the failover walk continues.
+      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
     });
     if (!resp.ok) {
       return { ok: false, error: `messaging webhook returned ${resp.status}` };
@@ -228,6 +288,8 @@ export async function sendMessage(input: SendInput): Promise<Message> {
         .values({
           channel,
           recipientRef: input.recipientRef,
+          recipientUserId: input.recipientUserId ?? null,
+          recipientPartyId: input.recipientPartyId ?? null,
           templateKey: input.templateKey,
           entityType: input.entityType ?? null,
           entityId: input.entityId ?? null,
@@ -247,6 +309,8 @@ export async function sendMessage(input: SendInput): Promise<Message> {
     .values({
       channel: input.channel,
       recipientRef: input.recipientRef,
+      recipientUserId: input.recipientUserId ?? null,
+      recipientPartyId: input.recipientPartyId ?? null,
       templateKey: input.templateKey,
       entityType: input.entityType ?? null,
       entityId: input.entityId ?? null,

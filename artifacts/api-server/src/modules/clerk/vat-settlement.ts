@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
-import { closedLagosMonths } from "./vat-pack";
+import { closedLagosMonths, packMonthInvoicesSql } from "./vat-pack";
 import { monthLabel } from "./client-statement";
 import { OUTSTANDING } from "../invoice/receivables";
 
@@ -64,18 +64,8 @@ export interface VatSettlementCheck {
 }
 
 // The pack-month membership predicate — computeVatPack's WHERE clause for
-// kind='invoice', kept in one fragment so the two stay identical.
-function packMonthInvoices(firmId: string, monthStart: string) {
-  return sql`i.firm_id = ${firmId}
-    AND i.kind = 'invoice'
-    AND i.status <> 'cancelled'
-    AND i.issue_date >= ${monthStart}::date
-    AND i.issue_date < (${monthStart}::date + interval '1 month')
-    AND EXISTS (
-      SELECT 1 FROM submission_attempts sa
-      WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
-    )`;
-}
+// kind='invoice' — is the SHARED packMonthInvoicesSql fragment (vat-pack.ts),
+// so this check and the pack stay identical by construction.
 
 export async function computeVatSettlementCheck(
   firmId: string,
@@ -114,7 +104,7 @@ export async function computeVatSettlementCheck(
         ), 0)::numeric(18,2)::text AS other_total,
         COUNT(DISTINCT i.currency)::int AS currency_n
       FROM invoices i
-      WHERE ${packMonthInvoices(firmId, monthStart)}
+      WHERE ${packMonthInvoicesSql(firmId, monthStart)}
     `)
   ).rows;
 
@@ -144,7 +134,7 @@ export async function computeVatSettlementCheck(
       FROM invoices i
       JOIN parties ps ON ps.id = i.supplier_party_id
       JOIN parties pb ON pb.id = i.buyer_party_id
-      WHERE ${packMonthInvoices(firmId, monthStart)}
+      WHERE ${packMonthInvoicesSql(firmId, monthStart)}
         AND ${OUTSTANDING}
       ORDER BY i.grand_total DESC, i.issue_date ASC
       LIMIT ${MAX_UNSETTLED_ROWS + 1}

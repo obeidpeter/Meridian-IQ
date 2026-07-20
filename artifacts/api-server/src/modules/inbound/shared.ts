@@ -1,12 +1,18 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import { getDb, auditEventsTable } from "@workspace/db";
-import type { CreateCaseInput } from "../clerk/cases";
+import { logger } from "../../lib/logger";
+import { assertFirmClerkBudget } from "../clerk/budget";
+import { createExtractionCase, type CreateCaseInput } from "../clerk/cases";
+import type { ClerkGateway } from "../clerk/gateway";
+import { getClerkGateway } from "../clerk/provider";
+import { DomainError } from "../errors";
 
 // Machinery shared by the inbound intake rails (email, WhatsApp). Both rails
 // have the same shape — an unauthenticated-ish machine webhook that resolves
 // a sender to a client and walks attachments through the ordinary Clerk
-// capture path — so the volume ceiling, the concurrency bound and the
-// attachment→capture-source mapping live here once.
+// capture path — so the volume ceiling, the concurrency bound, the
+// attachment→capture-source mapping and the per-item capture closure live
+// here once.
 
 export interface InboundAttachment {
   filename: string;
@@ -126,4 +132,69 @@ export async function inboundAttachmentsToday(
       ),
     );
   return Number(row?.count ?? 0);
+}
+
+// Today's remaining allowance for a resolved firm on one rail: the rail's env
+// cap minus the receipt-counted usage, floored at zero. Both rails burn this
+// number down item by item.
+export async function remainingInboundAllowance(
+  action: string,
+  envName: string,
+  firmId: string,
+): Promise<number> {
+  const usedToday = await inboundAttachmentsToday(action, firmId);
+  return Math.max(0, dailyCapFromEnv(envName) - usedToday);
+}
+
+// The identity every capture on an inbound rail is stamped with.
+export interface ResolvedInboundClient {
+  userId: string;
+  firmId: string;
+  clientPartyId: string | null;
+}
+
+// The per-item capture closure both rails share: budget gate BEFORE the
+// provider (the capture-route idiom — the gateway enforces it again as a
+// backstop), gateway resolved lazily so a message whose items all skip never
+// needs a provider configured at all, and NOTHING throws for a per-item
+// problem — CLERK_BUDGET_EXHAUSTED, DUPLICATE_SOURCE (providers redeliver on
+// timeout), the module's own upload guards and the kill switch all skip THIS
+// item with the domain code on record, so nothing escapes the detached
+// promise. Results accumulate on the returned caseIds/skipped arrays, which
+// the caller folds into its pointer-only receipt.
+export function makeInboundCapture(
+  resolved: ResolvedInboundClient,
+  gateway: ClerkGateway | undefined,
+  logLabel: string,
+): {
+  capture: (filename: string, source: CreateCaseInput) => Promise<void>;
+  caseIds: string[];
+  skipped: { filename: string; reason: string }[];
+} {
+  let gw: ClerkGateway | null = gateway ?? null;
+  const caseIds: string[] = [];
+  const skipped: { filename: string; reason: string }[] = [];
+  const capture = async (
+    filename: string,
+    source: CreateCaseInput,
+  ): Promise<void> => {
+    try {
+      await assertFirmClerkBudget(resolved.firmId);
+      gw ??= await getClerkGateway();
+      const kase = await createExtractionCase(source, resolved.userId, gw, undefined, {
+        firmId: resolved.firmId,
+        clientScoped: true,
+        clientPartyId: resolved.clientPartyId,
+      });
+      caseIds.push(kase.id);
+    } catch (err) {
+      if (err instanceof DomainError) {
+        skipped.push({ filename, reason: err.code });
+      } else {
+        logger.error({ err }, `${logLabel} processing failed`);
+        skipped.push({ filename, reason: "ERROR" });
+      }
+    }
+  };
+  return { capture, caseIds, skipped };
 }

@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import {
+  GENERIC_CSV_FORMAT_KEY,
+  renderGenericStatementCsv,
+} from "./parsers.ts";
 
 // Bank-feed connector contract (Wave C) — the open-banking seam the parser
 // abstraction (parsers.ts) always promised, built on the ERP connector
@@ -55,31 +59,15 @@ export interface StatementFeedConnector {
 // through parseStatementText — no bank-specific quirks, single amount column,
 // explicit direction. The engine passes this key explicitly so detection can
 // never drift to another parser.
-export const FEED_FORMAT_KEY = "generic_csv";
+export const FEED_FORMAT_KEY = GENERIC_CSV_FORMAT_KEY;
 
-// RFC-4180 escaping only. Deliberately NOT lib/csv.ts's toCsv: that writer is
-// for human-opened exports and prefixes formula-trigger cells with an
-// apostrophe (CWE-1236), which would corrupt narrations on the parse
-// round-trip. This CSV is machine-parsed by parseStatementText, never opened
-// in a spreadsheet.
-function csvCell(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
-// Render pulled lines to the generic_csv shape ingestStatement parses. The
-// round-trip is exact: every rendered line parses (feed.test.ts proves it),
-// so a committed feed statement always reports parsedCount === lineCount.
+// Render pulled lines to the generic_csv shape ingestStatement parses — the
+// ONE renderer that lives next to the parser it inverts (parsers.ts; the
+// scanned-statement surface uses the same one). The round-trip is exact:
+// every rendered line parses (feed.test.ts proves it), so a committed feed
+// statement always reports parsedCount === lineCount.
 export function renderFeedCsv(lines: StatementFeedLine[]): string {
-  const rows = lines.map((l) =>
-    [
-      csvCell(l.valueDate),
-      csvCell(l.narration),
-      csvCell(l.reference ?? ""),
-      csvCell(l.amount),
-      l.direction === "credit" ? "CR" : "DR",
-    ].join(","),
-  );
-  return ["Date,Narration,Reference,Amount,Direction", ...rows].join("\n");
+  return renderGenericStatementCsv(lines);
 }
 
 // ---- simulated connector -----------------------------------------------------

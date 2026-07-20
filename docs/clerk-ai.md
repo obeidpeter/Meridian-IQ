@@ -112,10 +112,14 @@ review.
   `POST /api/inbound/whatsapp`, same posture, `INBOUND_WHATSAPP_TOKEN`
   fail-closed) — resolves the sender phone through the shared E.164
   normalizer (`src/lib/phone.ts`, Nigerian 0-prefix → +234) against stored
-  alert-preference numbers and proceeds ONLY on an exactly-one party match
-  (ambiguity refuses, never guesses). Media walks capture; ≥40-char
-  text-only messages walk text capture. Both rails share the daily-cap /
-  semaphore / type-mapping machinery in `modules/inbound/shared.ts`.
+  alert-preference numbers **that the client set themselves**
+  (`alert_preferences.contact_set_by_role = 'client_user'`, recorded by the
+  prefs PUT — a firm-staff-typed number is never a routing key, and rows
+  predating the provenance column fail closed) and proceeds ONLY on an
+  exactly-one party match (ambiguity refuses, never guesses). Media walks
+  capture; ≥40-char text-only messages walk text capture. Both rails share
+  the daily-cap / semaphore / type-mapping / per-item capture machinery in
+  `modules/inbound/shared.ts`.
 - **Scanned bank-statement intake** is the same grounding split pointed at
   statements (`modules/statements/scan-intake.ts`, purpose
   `extract_statement`) — see `docs/platform.md` § Statements; the proposal

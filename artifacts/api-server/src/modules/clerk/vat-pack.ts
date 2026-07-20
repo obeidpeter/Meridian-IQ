@@ -60,6 +60,24 @@ export function closedLagosMonths(
   return Array.from({ length: count }, (_, i) => lagosMonthStart(i + 1, now));
 }
 
+// The pack-month membership predicate for kind='invoice' — computeVatPack's
+// WHERE clause narrowed to invoices only (the pack's own query also admits
+// credit notes as offsets), kept in ONE fragment consumed by the settlement
+// cross-check (vat-settlement.ts) and the platform billing statement
+// (modules/invoice/billing-statement.ts) so those surfaces can never disagree
+// with the pack about what "accepted in the month" means. Table alias is `i`.
+export function packMonthInvoicesSql(firmId: string, monthStart: string) {
+  return sql`i.firm_id = ${firmId}
+    AND i.kind = 'invoice'
+    AND i.status <> 'cancelled'
+    AND i.issue_date >= ${monthStart}::date
+    AND i.issue_date < (${monthStart}::date + interval '1 month')
+    AND EXISTS (
+      SELECT 1 FROM submission_attempts sa
+      WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
+    )`;
+}
+
 const ZERO_TOTALS: VatPackTotals = {
   acceptedCount: 0,
   acceptedTotal: "0",

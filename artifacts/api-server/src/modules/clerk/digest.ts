@@ -459,6 +459,9 @@ export async function deliverFirmDigests(limit = DELIVERY_BATCH): Promise<number
           await sendMessage({
             channel: "email",
             recipientRef: pointerEntityRef("usr", recipient.userId),
+            // The ledger row's REAL recipient identity — the opted-in staff
+            // member; the lossy ref stays display/correlation only.
+            recipientUserId: recipient.userId,
             templateKey: "firm_digest_ready",
             entityType: "clerk_digest",
             entityId,

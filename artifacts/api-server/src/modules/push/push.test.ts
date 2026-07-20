@@ -144,6 +144,15 @@ test("DeviceNotRegistered tokens are pruned from tickets AND receipts; live toke
     [liveToken],
     "both dead tokens must be deleted; the live token must remain",
   );
+
+  // The ledger row stamps the REAL recipient identity (the client party) the
+  // notification inbox scopes by; the lossy ref stays display-only.
+  const [ledgerRow] = await getDb()
+    .select()
+    .from(messagesTable)
+    .where(eq(messagesTable.recipientRef, recipientRef));
+  assert.equal(ledgerRow.recipientPartyId, partyId);
+  assert.equal(ledgerRow.recipientUserId, null);
 });
 
 test("after all tokens are pruned, subsequent sends skip without a ledger row", async () => {

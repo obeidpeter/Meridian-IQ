@@ -38,8 +38,9 @@ const MODEL_DEFAULT_PER_MIN = 60;
 // Two families, kept in lockstep with their sources of truth:
 //   1. app.ts NO_CONTEXT_ROUTES / NO_CONTEXT_ROUTE_PATTERNS — the multi-second
 //      provider calls exempted from the request transaction (capture, batch,
-//      ask, evals/canaries, drafts, case retry). The inbound-email webhook is
-//      NOT here: it is public and carries its own shared-secret gate.
+//      ask, evals/canaries, drafts, case retry, statement import). The inbound
+//      webhooks (email AND WhatsApp) are NOT here: they are public and carry
+//      their own shared-secret gates plus the per-firm daily caps.
 //   2. The digest-posture single-completion routes that stay inside the
 //      ordinary transaction (see the catalogue-draft comment in
 //      routes/clerk/drafts.ts): explain-failure, draft-chaser, reconciliation-assist,
@@ -63,6 +64,11 @@ export const MODEL_RATE_LIMITED_ROUTES: ReadonlySet<string> = new Set([
   "POST /api/clerk/reconciliation-assist",
   "POST /api/vat-pack/cover-note",
   "POST /api/quarterly-review/cover-note",
+  // Statement import: the PDF branch is one bounded extract_statement call
+  // (/clerk/batches precedent — the CSV branch spends nothing but shares the
+  // class, exactly like the queue-only batches route; a 4MB CSV parse is not
+  // free either).
+  "POST /api/statements",
 ]);
 
 export const MODEL_RATE_LIMITED_ROUTE_PATTERNS: ReadonlyArray<{

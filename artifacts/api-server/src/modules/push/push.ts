@@ -215,6 +215,9 @@ export async function sendPushAlert(opts: {
   return dispatchPush(
     await devicesForClientParty(opts.clientPartyId, opts.firmId),
     recipientRefFor(opts.clientPartyId),
+    // The ledger row's REAL recipient identity: the client party. The lossy
+    // ref above stays for display/correlation only (SEC-12 shape unchanged).
+    { recipientPartyId: opts.clientPartyId },
     opts,
   );
 }
@@ -231,16 +234,20 @@ export async function sendPushToUser(opts: {
   return dispatchPush(
     await devicesForUser(opts.userId),
     pointerEntityRef("usr", opts.userId),
+    // The ledger row's REAL recipient identity: the user themselves.
+    { recipientUserId: opts.userId },
     opts,
   );
 }
 
 // Shared transport + receipt + ledger path for both recipient shapes: the
 // notification copy, token pruning and the messages-ledger record are
-// identical whoever the devices belong to.
+// identical whoever the devices belong to. `identity` carries the exact
+// recipient columns the notification inbox reads by (one per rail).
 async function dispatchPush(
   devices: { expoPushToken: string }[],
   recipientRef: string,
+  identity: { recipientUserId?: string; recipientPartyId?: string },
   opts: { templateKey: PushTemplateKey; entityType?: string; entityId?: string },
 ): Promise<PushSendOutcome> {
   if (devices.length === 0) {
@@ -338,6 +345,8 @@ async function dispatchPush(
     .values({
       channel: "push",
       recipientRef,
+      recipientUserId: identity.recipientUserId ?? null,
+      recipientPartyId: identity.recipientPartyId ?? null,
       templateKey: opts.templateKey,
       entityType: opts.entityType ?? null,
       entityId: opts.entityId ?? null,

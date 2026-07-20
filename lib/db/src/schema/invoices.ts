@@ -90,6 +90,10 @@ export const invoicesTable = pgTable("invoices", {
 (t) => [
   index("invoices_firm_status_idx").on(t.firmId, t.status),
   index("invoices_firm_created_idx").on(t.firmId, t.createdAt),
+  // The issue-month family (VAT pack, settlement check, quarterly review,
+  // billing statement, compliance calendar) all filter firm_id + an
+  // issue_date range; without this they walk the whole firm partition.
+  index("invoices_firm_issue_date_idx").on(t.firmId, t.issueDate),
   index("invoices_supplier_idx").on(t.supplierPartyId),
   index("invoices_buyer_idx").on(t.buyerPartyId),
   // The adjustment guard scans for live credit notes pointing at an original;

@@ -23,7 +23,13 @@ export const auditEventsTable = pgTable(
   // The watch sweeps (spend/quality/resistance) and the unmapped-code sweep
   // use the ledger as their dedup key: "has (action, entityId) been alerted
   // before?" — a probe that must not seq-scan an append-only table.
-  (t) => [index("audit_events_action_entity_idx").on(t.action, t.entityId)],
+  (t) => [
+    index("audit_events_action_entity_idx").on(t.action, t.entityId),
+    // The firm-scoped audit reads (audit route filters, the firm-export
+    // bundle's ORDER BY seq section) walk one firm's slice of an ever-growing
+    // global ledger.
+    index("audit_events_firm_seq_idx").on(t.firmId, t.seq),
+  ],
 );
 
 export type AuditEvent = typeof auditEventsTable.$inferSelect;

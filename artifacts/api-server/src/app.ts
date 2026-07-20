@@ -61,12 +61,22 @@ const NO_CONTEXT_ROUTES = new Set([
   // A canary is 2× a corpus pass of model calls — far past the 30s cap.
   "POST /api/clerk/eval/canary",
   "POST /api/clerk/eval/model-canary",
-  // Inbound email webhook (routes/inbound.ts): the handler responds 202 and
+  // Inbound webhooks (routes/inbound.ts): each handler responds 202 and
   // then runs sender resolution + extraction in a detached promise whose DB
   // stages commit in their own short transactions (clerk scope.ts) — nothing
   // should buffer in tenantContext, and the detached model calls must not
-  // inherit (or outlive) a per-request transaction.
+  // inherit (or outlive) a per-request transaction. BOTH rails: a detached
+  // pipeline left inside the request transaction outlives the 202's commit,
+  // so its audits/cases fail or interleave into a stranger's transaction.
   "POST /api/inbound/email",
+  "POST /api/inbound/whatsapp",
+  // Statement import: the PDF branch makes one bounded model call
+  // (scan-intake.ts) that must not pin a pooled connection under the 30s
+  // request-transaction cap. The handler re-establishes atomicity for the
+  // writes itself: ingestStatement runs inside its own short bypass
+  // transaction (routes/statements.ts), so statement + lines + reconcile
+  // outbox still commit all-or-nothing.
+  "POST /api/statements",
   // No model call, but up to 50 decideCase items each append audit rows —
   // and appendAudit serializes on a GLOBAL advisory xact lock. Inside one
   // request transaction the first item's audit lock would be held until the

@@ -300,6 +300,9 @@ test("delivery: a digest is offered exactly once across two passes, pointer-only
     assert.equal(m.entityType, "clerk_digest");
     assert.equal(m.entityId, pointerEntityRef("dig", row.id));
   }
+  // Both channels stamp the REAL recipient identity the inbox scopes by.
+  assert.ok(emailMsgs.every((m) => m.recipientUserId === emailStaff));
+  assert.ok(pushMsgs.every((m) => m.recipientUserId === pushStaff));
 
   // Second pass: the delivered_at claim blocks a re-send.
   await drainDeliveries();

@@ -217,6 +217,9 @@ test("a text-layer PDF walks the text path; the proposal previews and commits th
   assert.equal(proposal.via, "text");
   assert.equal(proposal.pageCount, 0);
   assert.equal(proposal.lines.length, 2);
+  // The proposal carries its own deterministic rendering — the exact text the
+  // route returns as proposedCsv and the commit leg posts back as csv.
+  assert.equal(proposal.csv, renderProposedCsv(proposal.lines));
 
   assert.equal(calls.length, 1, "one model call proposes the lines");
   const req = calls[0];
@@ -386,6 +389,30 @@ test("POST /statements rejects neither/both of csv|pdfBase64 with 400", async ()
   assert.equal(both.status, 400);
 });
 
+test("pdfBase64 + commit:true is refused: commit only ever happens from the previewed CSV", async () => {
+  // Commit-from-preview (contract 0.40.0): a PDF may only PREVIEW; the
+  // commit leg posts the preview's proposedCsv back as csv. The refusal is a
+  // contract-shape 400 that runs BEFORE consent/budget — no tokens, no
+  // writes, no model call ever happens on a pdf+commit request.
+  const base = await listen(appFor(staff, router));
+  const res = await fetch(`${base}/statements`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      clientPartyId: clientParty,
+      pdfBase64: textPdf("commit-refused"),
+      commit: true,
+    }),
+  });
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error?: string };
+  assert.match(
+    String(body.error ?? ""),
+    /preview/i,
+    "the message names the preview-then-commit flow",
+  );
+});
+
 test("an exhausted firm gets 429 on the pdf branch, before any provider work or writes", async () => {
   const base = await listen(appFor(staffBroke, router));
   const res = await fetch(`${base}/statements`, {
@@ -394,7 +421,9 @@ test("an exhausted firm gets 429 on the pdf branch, before any provider work or 
     body: JSON.stringify({
       clientPartyId: brokeParty,
       pdfBase64: textPdf("broke"),
-      commit: true,
+      // commit:false — a PDF can only preview now; commit:true would be the
+      // PDF_COMMIT_FROM_PREVIEW 400 before the budget gate is even reached.
+      commit: false,
     }),
   });
   assert.equal(res.status, 429);
@@ -475,9 +504,15 @@ test("the CSV path is unchanged: preview parses without any model involvement", 
   const body = (await res.json()) as {
     committed: boolean;
     parsedCount: number;
+    proposedCsv: string | null;
     rows: Array<{ direction: string | null }>;
   };
   assert.equal(body.committed, false);
   assert.equal(body.parsedCount, 1);
   assert.equal(body.rows[0].direction, "credit");
+  assert.equal(
+    body.proposedCsv,
+    null,
+    "proposedCsv is a PDF-preview artifact; the CSV path answers null",
+  );
 });

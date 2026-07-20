@@ -28,6 +28,14 @@ export const alertPreferencesTable = pgTable("alert_preferences", {
   whatsappTo: text("whatsapp_to"),
   phone: text("phone"),
   email: text("email"),
+  // Provenance of the stored contact numbers: the principal ROLE that last
+  // wrote whatsappTo/phone (recorded by the prefs PUT whenever either field
+  // is named in the payload). The inbound WhatsApp rail only treats a number
+  // as a routing key when the client set it themselves
+  // (contact_set_by_role = 'client_user') — a firm-staff-typed free-text
+  // number must not be able to route documents into a client's book. Null on
+  // rows that predate the column (fail closed: they do not route).
+  contactSetByRole: text("contact_set_by_role"),
   deadlineAlerts: boolean("deadline_alerts").notNull().default(true),
   failureAlerts: boolean("failure_alerts").notNull().default(true),
   penaltyAlerts: boolean("penalty_alerts").notNull().default(true),

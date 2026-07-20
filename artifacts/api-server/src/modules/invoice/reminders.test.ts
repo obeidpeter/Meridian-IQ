@@ -195,6 +195,9 @@ test("due-soon invoice reminds once through default channels", async () => {
   // No prefs row: table defaults — whatsapp + email on, sms off.
   const msgs = await messagesFor(supplierDueSoon);
   assert.deepEqual(msgs.map((m) => m.channel).sort(), ["email", "whatsapp"]);
+  // Every row carries the REAL recipient identity the notification inbox
+  // scopes by (fan-out stamps recipient_party_id; the ref is display-only).
+  assert.ok(msgs.every((m) => m.recipientPartyId === supplierDueSoon));
 
   // Second pass: the ledger row blocks a re-send.
   await drainReminders();

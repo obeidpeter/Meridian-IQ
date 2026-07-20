@@ -6,18 +6,13 @@ import {
   membershipsTable,
   usersTable,
 } from "@workspace/db";
-import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
 import { normalizeEmail } from "../auth/session";
-import { assertFirmClerkBudget } from "../clerk/budget";
-import { createExtractionCase } from "../clerk/cases";
 import type { ClerkGateway } from "../clerk/gateway";
-import { getClerkGateway } from "../clerk/provider";
-import { DomainError } from "../errors";
 import {
   attachmentSource,
-  dailyCapFromEnv,
-  inboundAttachmentsToday,
+  makeInboundCapture,
+  remainingInboundAllowance,
   withInboundSlot,
   type InboundAttachment,
 } from "./shared";
@@ -152,20 +147,19 @@ async function processInboundEmailNow(
   // allowance audit-skip like any other per-attachment refusal — the sender
   // never sees a different response (anti-probe), and the skip reason lands
   // in the durable receipt.
-  const usedToday = await inboundAttachmentsToday(
+  let remaining = await remainingInboundAllowance(
     "inbound.email.received",
+    "INBOUND_EMAIL_DAILY_CAP",
     resolved.firmId,
   );
-  let remaining = Math.max(
-    0,
-    dailyCapFromEnv("INBOUND_EMAIL_DAILY_CAP") - usedToday,
-  );
 
-  // Resolved lazily so an email whose attachments all skip (or all hit the
-  // budget gate) never needs a provider to be configured at all.
-  let gw: ClerkGateway | null = gateway ?? null;
-  const caseIds: string[] = [];
-  const skipped: { filename: string; reason: string }[] = [];
+  // Shared per-item capture closure (./shared.ts): budget gate before the
+  // provider, lazy gateway, every per-attachment failure absorbed as a skip.
+  const { capture, caseIds, skipped } = makeInboundCapture(
+    resolved,
+    gateway,
+    "Inbound email attachment",
+  );
   for (const att of input.attachments) {
     if (remaining <= 0) {
       skipped.push({ filename: att.filename, reason: "INBOUND_DAILY_CAP" });
@@ -180,35 +174,7 @@ async function processInboundEmailNow(
       skipped.push({ filename: att.filename, reason: "UNSUPPORTED_TYPE" });
       continue;
     }
-    try {
-      // Same budget gate as the capture route: checked BEFORE the provider is
-      // touched, so an exhausted firm spends nothing (the gateway enforces it
-      // again as a backstop).
-      await assertFirmClerkBudget(resolved.firmId);
-      gw ??= await getClerkGateway();
-      const kase = await createExtractionCase(
-        source,
-        resolved.userId,
-        gw,
-        undefined,
-        {
-          firmId: resolved.firmId,
-          clientScoped: true,
-          clientPartyId: resolved.clientPartyId,
-        },
-      );
-      caseIds.push(kase.id);
-    } catch (err) {
-      // CLERK_BUDGET_EXHAUSTED, DUPLICATE_SOURCE (redelivery), the module's
-      // own upload guards, the kill switch — all skip THIS attachment with
-      // the domain code on record; nothing escapes the detached promise.
-      if (err instanceof DomainError) {
-        skipped.push({ filename: att.filename, reason: err.code });
-      } else {
-        logger.error({ err }, "Inbound email attachment processing failed");
-        skipped.push({ filename: att.filename, reason: "ERROR" });
-      }
-    }
+    await capture(att.filename, source);
   }
 
   // Pointer-only receipt: case ids and skip reasons, never attachment content.
