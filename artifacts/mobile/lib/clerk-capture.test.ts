@@ -3,11 +3,14 @@ import assert from "node:assert/strict";
 import {
   base64ByteLength,
   buildCameraCaseInput,
+  buildDocumentCaseInput,
   CAMERA_EMPTY_MESSAGE,
   CAMERA_RETAKE_MESSAGE,
   cameraPhotoName,
   CLERK_STATUS_META,
   clerkStatusMeta,
+  DOCUMENT_TOO_LARGE_MESSAGE,
+  DOCUMENT_UNREADABLE_MESSAGE,
   fieldLabel,
   MAX_FILE_BYTES,
   pickSourceType,
@@ -145,6 +148,61 @@ test("buildCameraCaseInput refuses an empty capture with its own copy", () => {
   const refused = buildCameraCaseInput("", new Date());
   assert.equal(refused.ok, false);
   if (!refused.ok) assert.equal(refused.message, CAMERA_EMPTY_MESSAGE);
+});
+
+// The document path ("Pick a document"): DocumentPicker's `size` is optional
+// — Android providers commonly omit it — so the guard that matters measures
+// the base64 that will actually be sent. Without it, an oversized no-`size`
+// pick round-trips to an opaque 413.
+
+test("buildDocumentCaseInput assembles the pdf and image submission shapes", () => {
+  const b64 = Buffer.from("fake file bytes").toString("base64");
+  const pdf = buildDocumentCaseInput(b64, "invoice.pdf", "application/pdf");
+  assert.ok(pdf.ok);
+  assert.deepEqual(pdf.input, {
+    sourceType: "pdf",
+    name: "invoice.pdf",
+    contentType: "application/pdf",
+    pdfBase64: b64,
+  });
+  const image = buildDocumentCaseInput(b64, "receipt.jpg", "image/jpeg");
+  assert.ok(image.ok);
+  assert.deepEqual(image.input, {
+    sourceType: "image",
+    name: "receipt.jpg",
+    contentType: "image/jpeg",
+    imageBase64: b64,
+  });
+  // A nameless, mimeless pick (both optional on Android) still builds,
+  // defaulting to the image path and omitting the optional fields.
+  const bare = buildDocumentCaseInput(b64, null, null);
+  assert.ok(bare.ok);
+  assert.deepEqual(bare.input, { sourceType: "image", imageBase64: b64 });
+});
+
+test("buildDocumentCaseInput catches an oversized file the picker reported no size for", () => {
+  // At exactly the cap the payload still goes through…
+  const atLimit = buildDocumentCaseInput(
+    Buffer.alloc(MAX_FILE_BYTES).toString("base64"),
+    "scan.pdf",
+    "application/pdf",
+  );
+  assert.equal(atLimit.ok, true);
+  // …one byte more refuses with the pick-smaller copy, measured from the
+  // base64 itself — no picker `size` involved.
+  const over = buildDocumentCaseInput(
+    Buffer.alloc(MAX_FILE_BYTES + 1).toString("base64"),
+    "scan.pdf",
+    "application/pdf",
+  );
+  assert.equal(over.ok, false);
+  if (!over.ok) assert.equal(over.message, DOCUMENT_TOO_LARGE_MESSAGE);
+});
+
+test("buildDocumentCaseInput refuses an unreadable (empty) file", () => {
+  const refused = buildDocumentCaseInput("", "invoice.pdf", "application/pdf");
+  assert.equal(refused.ok, false);
+  if (!refused.ok) assert.equal(refused.message, DOCUMENT_UNREADABLE_MESSAGE);
 });
 
 test("fieldLabel spaces camelCase and capitalizes the first word only", () => {

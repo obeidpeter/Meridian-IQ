@@ -127,6 +127,47 @@ export function buildCameraCaseInput(
   };
 }
 
+// Shown at both pickDocument oversize checkpoints — the picker's size probe
+// and the post-read base64 measurement — one constant so the wording can't
+// drift between them (the reconciliation screen's CSV guard follows the same
+// pattern).
+export const DOCUMENT_TOO_LARGE_MESSAGE =
+  "That file is too large to send. Keep it under 5 MB — a phone photo of the document works well.";
+
+export const DOCUMENT_UNREADABLE_MESSAGE =
+  "We couldn't read that file. Pick a PDF or a photo of the invoice, or paste its text below.";
+
+/**
+ * Turn a picked document's base64 into the pdf/image case submission a file
+ * pick produces, or refuse with user-facing copy. The guard measures the
+ * base64 that will actually be sent (base64ByteLength) rather than trusting
+ * DocumentPicker's optional `size` — Android providers commonly omit it, and
+ * an unmeasured oversized file would otherwise round-trip to an opaque 413.
+ */
+export function buildDocumentCaseInput(
+  base64: string,
+  name?: string | null,
+  mimeType?: string | null,
+): CameraCaseBuild {
+  const bytes = base64ByteLength(base64);
+  if (bytes === 0) return { ok: false, message: DOCUMENT_UNREADABLE_MESSAGE };
+  if (bytes > MAX_FILE_BYTES) {
+    return { ok: false, message: DOCUMENT_TOO_LARGE_MESSAGE };
+  }
+  const sourceType = pickSourceType(name ?? "", mimeType ?? undefined);
+  return {
+    ok: true,
+    input: {
+      sourceType,
+      ...(name ? { name } : {}),
+      ...(mimeType ? { contentType: mimeType } : {}),
+      ...(sourceType === "pdf"
+        ? { pdfBase64: base64 }
+        : { imageBase64: base64 }),
+    },
+  };
+}
+
 /** "invoiceNumber" → "Invoice number" for the extracted key→value rows. */
 export function fieldLabel(field: string): string {
   const spaced = field.replace(/([A-Z])/g, " $1").toLowerCase();
