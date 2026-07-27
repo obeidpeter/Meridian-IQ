@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, createHash } from "node:crypto";
+import { isIP } from "node:net";
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
   getDb,
@@ -97,12 +98,46 @@ export function vetEvents(requested: string[]): string[] {
 
 // The delivery URL is TENANT-SUPPLIED, which makes the dispatcher an SSRF
 // vector: in production require https and reject loopback/link-local/private
-// literal hosts (DNS-level rebinding is out of scope here — pointer-only
-// payloads bound the blast radius to "a POST arrived", and redirects are
-// never followed). Outside production plain http/loopback is allowed so
-// tests and local receivers work.
+// literal hosts — the IPv4 ranges below, and for bracketed IPv6 literals the
+// unspecified/loopback addresses, unique-local fc00::/7, link-local
+// fe80::/10 and any v4-mapped ::ffff:… form whose embedded IPv4 falls in the
+// same private ranges (DNS-level rebinding is out of scope here —
+// pointer-only payloads bound the blast radius to "a POST arrived", and
+// redirects are never followed). Outside production plain http/loopback is
+// allowed so tests and local receivers work.
 const PRIVATE_HOST_RE =
   /^(localhost|127\.(\d{1,3}\.){2}\d{1,3}|0\.0\.0\.0|10\.(\d{1,3}\.){2}\d{1,3}|192\.168\.(\d{1,3}\.)\d{1,3}|172\.(1[6-9]|2\d|3[01])\.(\d{1,3}\.)\d{1,3}|169\.254\.(\d{1,3}\.)\d{1,3}|\[?::1\]?)$/i;
+
+// The embedded IPv4 of a v4-mapped literal, dotted-quad; null for anything
+// else. WHATWG serializes ::ffff:a.b.c.d as pure hex groups (::ffff:hhhh:hhhh)
+// before vetting sees it, but both spellings are handled.
+function embeddedMappedIpv4(host: string): string | null {
+  const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(host);
+  if (dotted) return dotted[1];
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+  if (!hex) return null;
+  const hi = parseInt(hex[1], 16);
+  const lo = parseInt(hex[2], 16);
+  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+}
+
+// Production vetting for bracketed IPv6 literal hostnames (PRIVATE_HOST_RE
+// only knows the IPv4 ranges and exactly ::1): reject the unspecified and
+// loopback addresses, fc00::/7, fe80::/10, and v4-mapped addresses whose
+// embedded IPv4 the IPv4 vetting would itself reject.
+function isPrivateIpv6Literal(hostname: string): boolean {
+  if (!hostname.startsWith("[") || !hostname.endsWith("]")) return false;
+  const host = hostname.slice(1, -1).toLowerCase();
+  if (isIP(host) !== 6) return false;
+  if (host === "::" || host === "::1") return true;
+  // The first hextet decides both prefix ranges; a leading "::" compresses
+  // zeros, so its empty first group parses to NaN and matches neither.
+  const firstHextet = parseInt(host.split(":", 1)[0], 16);
+  if ((firstHextet & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
+  if ((firstHextet & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  const embedded = embeddedMappedIpv4(host);
+  return embedded !== null && PRIVATE_HOST_RE.test(embedded);
+}
 
 export function vetWebhookUrl(raw: string): string {
   let url: URL;
@@ -122,7 +157,10 @@ export function vetWebhookUrl(raw: string): string {
     if (url.protocol !== "https:") {
       throw new DomainError("INVALID_URL", "Webhook URL must use https", 400);
     }
-    if (PRIVATE_HOST_RE.test(url.hostname)) {
+    if (
+      PRIVATE_HOST_RE.test(url.hostname) ||
+      isPrivateIpv6Literal(url.hostname)
+    ) {
       throw new DomainError(
         "INVALID_URL",
         "Webhook URL must resolve to a public host",

@@ -1,10 +1,11 @@
+import { DomainError } from "../errors";
 import type {
   ClerkGateway,
   ClerkProvider,
   CompletionRequest,
   CompletionResult,
 } from "./gateway";
-import { createGateway } from "./gateway";
+import { createGateway, recordExternalCall } from "./gateway";
 
 // Production provider: OpenAI via the Replit AI integrations proxy. Kept in
 // its own module (and loaded lazily) so importing the gateway in tests never
@@ -181,4 +182,49 @@ export async function transcribeVoiceProd(audio: Buffer): Promise<string> {
   // error to the caller, which records the ledger row and fails the intake.
   const compatible = await ensureCompatibleFormat(audio);
   return speechToText(compatible.buffer, compatible.format);
+}
+
+// Transcribe one decoded voice note and ledger the call, shared by capture's
+// voice intake and NL invoice drafting. Same discipline as infer(): the call
+// lands in the append-only ledger success or failure, hashed on the audio
+// bytes. Returns the trimmed transcript; what counts as USABLE speech stays
+// with each caller — their policies (and messages) differ.
+export async function transcribeAndLedger(
+  buf: Buffer,
+  firmId: string | null,
+  transcriber: VoiceTranscriber,
+): Promise<string> {
+  const audioB64 = buf.toString("base64");
+  const startedAt = Date.now();
+  let transcript: string;
+  try {
+    transcript = (await transcriber(buf)).trim();
+  } catch (err) {
+    await recordExternalCall({
+      firmId,
+      purpose: "transcribe_voice",
+      model: TRANSCRIBE_MODEL,
+      promptVersion: "transcribe-v1",
+      inputForHash: audioB64,
+      outcome: "error",
+      errorText: err instanceof Error ? err.message : String(err),
+      latencyMs: Date.now() - startedAt,
+    });
+    throw new DomainError(
+      "VOICE_UNREADABLE",
+      "The voice note could not be transcribed. Re-record it in a quieter spot, or type the details instead.",
+      422,
+    );
+  }
+  await recordExternalCall({
+    firmId,
+    purpose: "transcribe_voice",
+    model: TRANSCRIBE_MODEL,
+    promptVersion: "transcribe-v1",
+    inputForHash: audioB64,
+    outcome: "ok",
+    outputChars: transcript.length,
+    latencyMs: Date.now() - startedAt,
+  });
+  return transcript;
 }

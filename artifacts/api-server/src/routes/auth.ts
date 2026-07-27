@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb, membershipsTable, usersTable } from "@workspace/db";
 import {
   LoginBody,
@@ -17,6 +17,7 @@ import {
   DisableTotpResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
+import { sendThrottled429 } from "../lib/throttle-response";
 import { DomainError } from "../modules/errors";
 import { ROLE_CAPABILITIES } from "../modules/auth/rbac";
 import {
@@ -90,14 +91,49 @@ function totpRequiredRoles(): Set<string> {
   );
 }
 
+// Membership rows for a just-authenticated user, oldest first: the membership
+// a sign-in response surfaces must be deterministic, and an unordered SELECT
+// let heap order pick the effective default firm/role. Callers keep their own
+// no-membership 401.
+async function loadMemberships(userId: string) {
+  return getDb()
+    .select({
+      firmId: membershipsTable.firmId,
+      role: membershipsTable.role,
+      clientPartyId: membershipsTable.clientPartyId,
+      buyerPartyId: membershipsTable.buyerPartyId,
+    })
+    .from(membershipsTable)
+    .where(eq(membershipsTable.userId, userId))
+    .orderBy(asc(membershipsTable.createdAt));
+}
+
+type Membership = Awaited<ReturnType<typeof loadMemberships>>[number];
+
+// The account fields every sign-in response shares (login, its mfa branch, the
+// TOTP challenge). Branches spread their extras on top and still parse through
+// their own contract schema.
+function accountPayload(
+  user: { id: string; email: string; fullName: string | null },
+  membership: Membership,
+) {
+  return {
+    userId: user.id,
+    role: membership.role,
+    email: user.email,
+    fullName: user.fullName,
+    firmId: membership.firmId,
+    clientPartyId: membership.clientPartyId,
+    buyerPartyId: membership.buyerPartyId,
+    capabilities: ROLE_CAPABILITIES[membership.role] ?? [],
+  };
+}
+
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = parseOrThrow(LoginBody, req.body);
   const retryAfter = await isLoginThrottled(req, parsed.email);
   if (retryAfter !== null) {
-    res.setHeader("Retry-After", String(retryAfter));
-    res.status(429).json({
-      error: `Too many sign-in attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
-    });
+    sendThrottled429(res, retryAfter, "Too many sign-in attempts");
     return;
   }
   const result = await authenticate(parsed.email, parsed.password);
@@ -108,19 +144,13 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
   await clearLoginFailures(req, parsed.email);
-  const memberships = await getDb()
-    .select({
-      firmId: membershipsTable.firmId,
-      role: membershipsTable.role,
-      clientPartyId: membershipsTable.clientPartyId,
-      buyerPartyId: membershipsTable.buyerPartyId,
-    })
-    .from(membershipsTable)
-    .where(eq(membershipsTable.userId, result.userId));
+  const memberships = await loadMemberships(result.userId);
   if (memberships.length === 0) {
     res.status(401).json({ error: "Account has no active membership" });
     return;
   }
+  // The response surfaces the OLDEST membership (loadMemberships orders by
+  // createdAt); a multi-membership user re-scopes per request with x-firm-id.
   const membership = memberships[0];
   // The enrolment requirement is judged against EVERY membership, not just the
   // one this response happens to surface: the effective role is chosen
@@ -149,14 +179,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     const mfaToken = await issueMfaToken(result.userId, result.sessionEpoch);
     res.json(
       LoginResponse.parse({
-        userId: result.userId,
-        role: membership.role,
-        email: result.email,
-        fullName: result.fullName,
-        firmId: membership.firmId,
-        clientPartyId: membership.clientPartyId,
-        buyerPartyId: membership.buyerPartyId,
-        capabilities: ROLE_CAPABILITIES[membership.role] ?? [],
+        ...accountPayload(
+          { id: result.userId, email: result.email, fullName: result.fullName },
+          membership,
+        ),
         mfaRequired: true,
         mfaToken,
       }),
@@ -180,14 +206,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   });
   res.json(
     LoginResponse.parse({
-      userId: result.userId,
-      role: membership.role,
-      email: result.email,
-      fullName: result.fullName,
-      firmId: membership.firmId,
-      clientPartyId: membership.clientPartyId,
-      buyerPartyId: membership.buyerPartyId,
-      capabilities: ROLE_CAPABILITIES[membership.role] ?? [],
+      ...accountPayload(
+        { id: result.userId, email: result.email, fullName: result.fullName },
+        membership,
+      ),
       // Same signed session token as the cookie, for native mobile clients
       // that cannot use HttpOnly cookies (sent as Authorization: Bearer).
       ...(isMobileClient ? { token } : {}),
@@ -223,10 +245,7 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
   // failures) never throttles a legitimate sign-in.
   const retryAfter = await throttleActionAttempt(throttleKey);
   if (retryAfter !== null) {
-    res.setHeader("Retry-After", String(retryAfter));
-    res.status(429).json({
-      error: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
-    });
+    sendThrottled429(res, retryAfter, "Too many attempts");
     return;
   }
   const [user] = await getDb()
@@ -311,19 +330,12 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
     usedRecoveryCode = true;
   }
   await clearActionFailures(throttleKey);
-  const memberships = await getDb()
-    .select({
-      firmId: membershipsTable.firmId,
-      role: membershipsTable.role,
-      clientPartyId: membershipsTable.clientPartyId,
-      buyerPartyId: membershipsTable.buyerPartyId,
-    })
-    .from(membershipsTable)
-    .where(eq(membershipsTable.userId, user.id));
+  const memberships = await loadMemberships(user.id);
   if (memberships.length === 0) {
     res.status(401).json({ error: "Account has no active membership" });
     return;
   }
+  // Same deterministic pick as login: the OLDEST membership is surfaced.
   const membership = memberships[0];
   // From here this is exactly the login success path: cookie for browsers,
   // bearer token in the body only for the self-identified mobile client.
@@ -343,14 +355,7 @@ router.post("/auth/totp/challenge", async (req, res): Promise<void> => {
   });
   res.json(
     TotpChallengeResponse.parse({
-      userId: user.id,
-      role: membership.role,
-      email: user.email,
-      fullName: user.fullName,
-      firmId: membership.firmId,
-      clientPartyId: membership.clientPartyId,
-      buyerPartyId: membership.buyerPartyId,
-      capabilities: ROLE_CAPABILITIES[membership.role] ?? [],
+      ...accountPayload(user, membership),
       ...(isMobileClient ? { token } : {}),
     }),
   );
@@ -499,10 +504,7 @@ router.post("/auth/totp/disable", async (req, res): Promise<void> => {
   const throttleKey = `totp:${req.principal.userId}`;
   const retryAfter = await isActionThrottled(throttleKey);
   if (retryAfter !== null) {
-    res.setHeader("Retry-After", String(retryAfter));
-    res.status(429).json({
-      error: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
-    });
+    sendThrottled429(res, retryAfter, "Too many attempts");
     return;
   }
   const [user] = await getDb()
@@ -619,10 +621,7 @@ router.post("/auth/change-password", async (req, res): Promise<void> => {
   const throttleKey = `chpw:${req.principal.userId}`;
   const retryAfter = await isActionThrottled(throttleKey);
   if (retryAfter !== null) {
-    res.setHeader("Retry-After", String(retryAfter));
-    res.status(429).json({
-      error: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
-    });
+    sendThrottled429(res, retryAfter, "Too many attempts");
     return;
   }
   const [user] = await getDb()

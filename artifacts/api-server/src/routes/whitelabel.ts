@@ -43,8 +43,7 @@ router.get("/public/theme", requireFlag("white_label", { global: true }), async 
     .where(eq(firmsTable.subdomain, query.subdomain))
     .limit(1);
   if (!firm) {
-    res.status(404).json({ error: "No firm on this subdomain" });
-    return;
+    throw new DomainError("NOT_FOUND", "No firm on this subdomain", 404);
   }
   res.json(GetPublicThemeResponse.parse(firm));
 });
@@ -60,8 +59,7 @@ router.put("/firms/:id/theme", requireFlag("white_label"), async (req, res): Pro
     .where(eq(firmsTable.id, params.id))
     .limit(1);
   if (!existing) {
-    res.status(404).json({ error: "Firm not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Firm not found", 404);
   }
   // Subdomains are unique across firms; answer a taken name with a 409 rather
   // than letting the DB constraint surface as a 500.

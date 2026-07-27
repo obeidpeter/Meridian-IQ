@@ -12,6 +12,7 @@ import {
   ListUnbilledIncomeResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
+import { resolveClientAnalyticsScope } from "../lib/client-scope";
 import {
   assertCan,
   assertClientPartyScope,
@@ -51,13 +52,11 @@ router.get("/recurring-invoices", async (req, res): Promise<void> => {
 router.get("/recurring-suggestions", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(ListRecurringSuggestionsQueryParams, req.query);
-  const firmId = requireFirmScope(req.principal);
-  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
-  if (!target) {
-    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
-  }
-  assertClientPartyScope(req.principal, target);
-  const suggestions = await listRecurringSuggestions(firmId, target);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const suggestions = await listRecurringSuggestions(firmId, clientPartyId);
   res.json(ListRecurringSuggestionsResponse.parse(suggestions));
 });
 
@@ -68,13 +67,11 @@ router.get("/recurring-suggestions", async (req, res): Promise<void> => {
 router.get("/unbilled-income", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(ListUnbilledIncomeQueryParams, req.query);
-  const firmId = requireFirmScope(req.principal);
-  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
-  if (!target) {
-    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
-  }
-  assertClientPartyScope(req.principal, target);
-  const alerts = await listUnbilledIncome(firmId, target);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const alerts = await listUnbilledIncome(firmId, clientPartyId);
   res.json(ListUnbilledIncomeResponse.parse(alerts));
 });
 
@@ -98,8 +95,7 @@ router.patch("/recurring-invoices/:id", async (req, res): Promise<void> => {
   const body = parseOrThrow(UpdateRecurringInvoiceBody, req.body);
   const template = await getTemplate(params.id);
   if (!template) {
-    res.status(404).json({ error: "Template not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Template not found", 404);
   }
   assertSameTenant(req.principal, template.firmId);
   assertClientPartyScope(req.principal, template.supplierPartyId);

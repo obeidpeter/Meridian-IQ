@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { getDb } from "@workspace/db";
-import { lagosDateString } from "../../lib/lagos-time";
+import { lagosDateString, lagosTodaySql } from "../../lib/lagos-time";
 
 // Receivables aging for the SME dashboard: who owes this client what, and how
 // old is it. An invoice is an outstanding receivable once it has been issued
@@ -50,7 +50,7 @@ const REF_DATE = sql`COALESCE(i.due_date, i.issue_date)`;
 // Aging is a Lagos-calendar question: current_date would use the session
 // (UTC) day, which lags local statutory time by an hour around midnight
 // (see lib/lagos-time.ts).
-const LAGOS_TODAY = sql`(now() AT TIME ZONE 'Africa/Lagos')::date`;
+const LAGOS_TODAY = lagosTodaySql();
 
 const ZERO: ReceivablesBucket = { amount: "0.00", count: 0 };
 

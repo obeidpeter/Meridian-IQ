@@ -23,7 +23,8 @@ import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
 import { countFirmChasedTwice } from "../invoice/chase-log";
 import { assertFirmClerkBudget } from "./budget";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
-import { getClerkGateway } from "./provider";
+import { gatewayOrNull } from "./provider";
+import { isAre, plural } from "./text";
 
 // Weekly firm digest (Clerk power D). Every fact in a digest — counts of
 // unsubmitted, due-soon, overdue and failed invoices, aged receivables — is
@@ -167,14 +168,6 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     unmatchedCreditClients: unmatched.clients,
     chasedTwiceCount: chasedTwice,
   };
-}
-
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
-function isAre(n: number): string {
-  return n === 1 ? "is" : "are";
 }
 
 // The deterministic fallback narrative — also the grounding shown to the
@@ -538,12 +531,7 @@ registerSweep(async function sweepClerkDigests(): Promise<void> {
     if (firms.length > 0) {
       // No provider configured (or kill switch off) still produces digests —
       // just from the template path.
-      let gateway: ClerkGateway | null = null;
-      try {
-        gateway = await getClerkGateway();
-      } catch {
-        gateway = null;
-      }
+      const gateway = await gatewayOrNull();
       let generated = 0;
       for (const firm of firms) {
         await generateFirmDigest(firm.id, gateway);

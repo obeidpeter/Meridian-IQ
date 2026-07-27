@@ -1,4 +1,6 @@
 import { lagosDateString } from "../../lib/lagos-time";
+import { DEFAULT_TERMS_DAYS } from "./cashflow";
+import { daysBetween } from "./date-math";
 import {
   acceptedSettlementRows,
   median,
@@ -23,7 +25,6 @@ import {
 //  - error is signed (positive = money arrived LATER than projected).
 
 const MIN_RHYTHM_OTHERS = 3;
-const DEFAULT_TERMS_DAYS = 30;
 const WITHIN_DAYS = 7;
 const MAX_BUYERS = 50;
 const MIN_BUYER_SETTLEMENTS = 3;
@@ -49,14 +50,6 @@ export interface ProjectionAccuracy {
   basisSplit: { rhythm: number; dueDate: number; defaultTerms: number };
   buyers: ProjectionAccuracyBuyer[];
   note: string;
-}
-
-function daysBetween(a: string, b: string): number {
-  return Math.round(
-    (new Date(`${b}T00:00:00Z`).getTime() -
-      new Date(`${a}T00:00:00Z`).getTime()) /
-      86_400_000,
-  );
 }
 
 // Pure evaluation over the evidence rows, exported for tests. Mirrors the
@@ -158,6 +151,6 @@ export async function computeProjectionAccuracy(
   clientPartyId: string,
   now: Date = new Date(),
 ): Promise<ProjectionAccuracy> {
-  const rows = await acceptedSettlementRows(firmId, clientPartyId, now);
+  const rows = await acceptedSettlementRows(firmId, [clientPartyId], now);
   return summarizeProjectionAccuracy(rows, lagosDateString(now));
 }

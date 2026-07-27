@@ -16,6 +16,7 @@ import {
   recurringInvoiceTemplatesTable,
 } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
+import { daysBetween, median } from "./date-math";
 import type { LineInput } from "./lines";
 
 // Recurring-invoice suggestions (exhaust idea #3). recurring_invoice_templates
@@ -53,21 +54,6 @@ export interface HistoryRow {
   id: string;
   issueDate: string;
   grandTotal: number;
-}
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function daysBetween(a: string, b: string): number {
-  return Math.round(
-    (new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) /
-      86_400_000,
-  );
 }
 
 // Pure pattern detection over one buyer's invoices (oldest-first), exported

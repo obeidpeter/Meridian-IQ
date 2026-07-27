@@ -190,8 +190,7 @@ router.post(
       .where(eq(statementConnectionsTable.id, params.id))
       .limit(1);
     if (!connection) {
-      res.status(404).json({ error: "Connection not found" });
-      return;
+      throw new DomainError("NOT_FOUND", "Connection not found", 404);
     }
     assertSameTenant(req.principal, connection.firmId);
     if (connection.status === "disabled") {
@@ -238,8 +237,7 @@ router.get(
       .where(eq(statementConnectionsTable.id, params.id))
       .limit(1);
     if (!connection) {
-      res.status(404).json({ error: "Connection not found" });
-      return;
+      throw new DomainError("NOT_FOUND", "Connection not found", 404);
     }
     assertSameTenant(req.principal, connection.firmId);
     const rows = await getDb()

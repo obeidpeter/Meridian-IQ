@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { getAuth } from "@clerk/express";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { getDb, usersTable, membershipsTable, type Role } from "@workspace/db";
 import type { Principal } from "../modules/auth/rbac";
 import {
@@ -22,7 +22,7 @@ import { logger } from "../lib/logger";
 // tenant (firm) and role are resolved from this platform's own membership table,
 // which is the authoritative role-permission source (CON-01, SEC-02/03). A user
 // with several memberships selects one with the x-firm-id header; otherwise the
-// first membership is used. No verified session (or no membership) => 401.
+// OLDEST membership is used. No verified session (or no membership) => 401.
 //
 // Development: a dev-header principal keeps the RBAC + tenant-isolation contract
 // exercisable without a frontend to originate Clerk sessions:
@@ -144,8 +144,9 @@ function header(req: Request, name: string): string | null {
 // Tenancy and role for a resolved platform user, from the membership table —
 // the authoritative role-permission source shared by the Clerk and first-party
 // session paths. A user with several memberships selects one with the
-// x-firm-id header; otherwise the first membership is used. No membership (or
-// an unknown x-firm-id) => null.
+// x-firm-id header; otherwise the OLDEST membership is used (ordered by
+// createdAt — an unordered SELECT let heap order pick the effective default
+// firm/role). No membership (or an unknown x-firm-id) => null.
 async function principalFromMembership(
   req: Request,
   userId: string,
@@ -158,7 +159,8 @@ async function principalFromMembership(
       buyerPartyId: membershipsTable.buyerPartyId,
     })
     .from(membershipsTable)
-    .where(eq(membershipsTable.userId, userId));
+    .where(eq(membershipsTable.userId, userId))
+    .orderBy(asc(membershipsTable.createdAt));
   if (memberships.length === 0) return null;
 
   const requestedFirm = header(req, "x-firm-id");

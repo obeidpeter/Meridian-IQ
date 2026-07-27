@@ -15,6 +15,7 @@ import {
   remainingInboundAllowance,
   withInboundSlot,
   type InboundAttachment,
+  type InboundProcessResult,
 } from "./shared";
 
 // Inbound WhatsApp intake (provider-agnostic): a client sends an invoice
@@ -79,11 +80,8 @@ export type WhatsAppSenderResolution =
       reason: "invalid_phone" | "no_match" | "ambiguous" | "no_membership";
     };
 
-export interface InboundWhatsAppResult {
-  resolved: boolean;
-  caseIds: string[];
-  skipped: { filename: string; reason: string }[];
-}
+// The shared result shape (./shared.ts), under this rail's historical name.
+export type InboundWhatsAppResult = InboundProcessResult;
 
 // Audit rows must never store a full phone number (the ignored path stores
 // numbers we could not even resolve to a client): keep the last 4 digits

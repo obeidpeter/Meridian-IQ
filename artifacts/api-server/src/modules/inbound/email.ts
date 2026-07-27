@@ -15,6 +15,8 @@ import {
   remainingInboundAllowance,
   withInboundSlot,
   type InboundAttachment,
+  type InboundProcessResult,
+  type ResolvedInboundClient,
 } from "./shared";
 
 // Inbound email intake (provider-agnostic): a client forwards an invoice to
@@ -31,7 +33,7 @@ import {
 // concurrency bound live in ./shared.ts — the WhatsApp rail uses exactly the
 // same machinery. This rail's cap counts the inbound.email.received audit
 // receipts under INBOUND_EMAIL_DAILY_CAP.
-export type { InboundAttachment } from "./shared";
+export type { InboundAttachment, InboundProcessResult } from "./shared";
 
 export interface InboundEmailInput {
   sender: string;
@@ -39,17 +41,8 @@ export interface InboundEmailInput {
   attachments: InboundAttachment[];
 }
 
-export interface ResolvedInboundSender {
-  userId: string;
-  firmId: string;
-  clientPartyId: string | null;
-}
-
-export interface InboundProcessResult {
-  resolved: boolean;
-  caseIds: string[];
-  skipped: { filename: string; reason: string }[];
-}
+// The shared capture identity (./shared.ts), under this rail's historical name.
+export type ResolvedInboundSender = ResolvedInboundClient;
 
 // Audit rows must never store a full email address (it is the sender's
 // identity, and the ignored path stores addresses we could not even resolve

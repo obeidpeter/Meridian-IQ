@@ -13,9 +13,7 @@ import {
   tenantFirmId,
   type Principal,
 } from "../auth/rbac";
-import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
-import { isFeatureEnabled } from "../flags/flags";
-import { assertFirmClerkBudget } from "./budget";
+import { inferPhrasing, type ClerkGateway } from "./gateway";
 
 // Contextual Clerk (expansion C): "what's wrong with this invoice?". The
 // answer is ALWAYS grounded in the error catalogue — the deterministic
@@ -117,29 +115,18 @@ export async function explainInvoiceFailure(
   };
 
   // Clerk phrasing is best-effort: no provider, kill switch off or budget
-  // spent → the grounded catalogue text is the answer, not an error.
-  if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) {
-    return catalogueFallback;
-  }
-  const tenant = tenantFirmId(principal);
-  if (tenant) {
-    try {
-      await assertFirmClerkBudget(tenant);
-    } catch {
-      return catalogueFallback;
-    }
-  }
-
+  // spent → the grounded catalogue text is the answer, not an error
+  // (inferPhrasing — the gateway backstop covers the budget).
   const user = [
     `Invoice number: ${invoice.invoiceNumber}`,
     `Error code: ${attempt.errorCode}`,
     `Catalogue cause: ${cause}`,
     `Catalogue fix: ${fix}`,
   ].join("\n");
-  const result = await gateway.infer<z.infer<typeof explainOutput>>({
+  const data = await inferPhrasing<z.infer<typeof explainOutput>>(gateway, {
     purpose: "explain_failure",
     caseId: null,
-    firmId: tenant,
+    firmId: tenantFirmId(principal),
     promptVersion: EXPLAIN_PROMPT_VERSION,
     system: EXPLAIN_SYSTEM,
     user,
@@ -148,11 +135,11 @@ export async function explainInvoiceFailure(
     validator: explainOutput,
     inputForHash: `${invoiceId}:${attempt.errorCode}`,
   });
-  if (!result.ok) return catalogueFallback;
+  if (!data) return catalogueFallback;
   return {
     errorCode: attempt.errorCode,
-    explanation: result.data.explanation,
-    nextSteps: result.data.nextSteps,
+    explanation: data.explanation,
+    nextSteps: data.nextSteps,
     source: "clerk",
   };
 }

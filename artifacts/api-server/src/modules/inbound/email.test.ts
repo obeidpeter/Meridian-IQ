@@ -1,7 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import express from "express";
 import { desc, eq, inArray } from "drizzle-orm";
 import {
   getDb,
@@ -13,8 +12,6 @@ import {
   clerkInferenceCallsTable,
   auditEventsTable,
 } from "@workspace/db";
-import inboundRouter from "../../routes/inbound.ts";
-import { errorHandler } from "../../middleware/error.ts";
 import {
   listen,
   closeAllServers,
@@ -27,6 +24,13 @@ import {
   restoreClerkFlag,
 } from "../clerk/test-support.ts";
 import type { CompletionRequest } from "../clerk/gateway.ts";
+import {
+  eventually,
+  inboundApp,
+  makePdfAttachment,
+  okExtraction,
+  textPdf,
+} from "./test-support.ts";
 import {
   maskInboundSender,
   processInboundEmail,
@@ -64,56 +68,7 @@ const STAFF_EMAIL = `staff@${DOMAIN}`;
 const BROKE_EMAIL = `broke@${DOMAIN}`;
 const CAPPED_EMAIL = `capped@${DOMAIN}`;
 
-const okExtraction = () => JSON.stringify({ fields: [], lines: [] });
-
-// A one-page PDF whose content stream draws real text (the clerk-scan.test
-// fixture), so extraction stays on the text path.
-function textPdf(tag: string): string {
-  const streamBody = `BT /F1 14 Tf 20 50 Td (INVOICE ${tag} ${SALT}) Tj ET`;
-  const pdf = `%PDF-1.4
-1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
-2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
-3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj
-4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
-5 0 obj << /Length ${streamBody.length} >> stream
-${streamBody}
-endstream endobj
-trailer << /Size 6 /Root 1 0 R >>
-%%EOF`;
-  return Buffer.from(pdf).toString("base64");
-}
-
 const PNG_B64 = Buffer.from(`png-bytes-${SALT}`).toString("base64");
-
-function inboundApp() {
-  const app = express();
-  app.use(express.json({ limit: "8mb" }));
-  app.use((req, _res, next) => {
-    req.log = {
-      warn: () => {},
-      error: () => {},
-      info: () => {},
-    } as unknown as typeof req.log;
-    next();
-  });
-  app.use("/api", inboundRouter);
-  app.use(errorHandler);
-  return app;
-}
-
-async function eventually<T>(
-  probe: () => Promise<T | null | undefined>,
-  label: string,
-  timeoutMs = 5_000,
-): Promise<T> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const value = await probe();
-    if (value) return value;
-    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
-    await new Promise((r) => setTimeout(r, 50));
-  }
-}
 
 const savedToken = process.env.INBOUND_EMAIL_TOKEN;
 
@@ -185,11 +140,7 @@ function emailBody(sender: string, attachments: unknown[]): string {
   return JSON.stringify({ sender, subject: `Invoice ${SALT}`, attachments });
 }
 
-const pdfAttachment = (tag: string) => ({
-  filename: `${tag}-${SALT}.pdf`,
-  contentType: "application/pdf",
-  contentBase64: textPdf(tag),
-});
+const pdfAttachment = makePdfAttachment(SALT);
 const pngAttachment = (tag: string) => ({
   filename: `${tag}-${SALT}.png`,
   contentType: "image/png",
@@ -234,7 +185,7 @@ test("unknown sender: 202 identical to success, nothing created, masked audit ro
     method: "POST",
     headers: JSON_HEADERS,
     body: emailBody(ghost, [
-      { filename, contentType: "application/pdf", contentBase64: textPdf("ghost") },
+      { filename, contentType: "application/pdf", contentBase64: textPdf("ghost", SALT) },
     ]),
   });
   assert.equal(res.status, 202);

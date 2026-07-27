@@ -366,8 +366,7 @@ router.post(
       .where(eq(matchProposalsTable.id, params.id))
       .limit(1);
     if (!proposal) {
-      res.status(404).json({ error: "Proposal not found" });
-      return;
+      throw new DomainError("NOT_FOUND", "Proposal not found", 404);
     }
     assertSameTenant(req.principal, proposal.firmId);
     const result = await acceptProposal(params.id, {
@@ -397,8 +396,7 @@ router.post(
       .where(eq(bankStatementsTable.id, params.id))
       .limit(1);
     if (!statement) {
-      res.status(404).json({ error: "Statement not found" });
-      return;
+      throw new DomainError("NOT_FOUND", "Statement not found", 404);
     }
     assertSameTenant(req.principal, statement.firmId);
     assertClientPartyScope(req.principal, statement.clientPartyId);
@@ -423,8 +421,7 @@ router.post(
       .where(eq(matchProposalsTable.id, params.id))
       .limit(1);
     if (!proposal) {
-      res.status(404).json({ error: "Proposal not found" });
-      return;
+      throw new DomainError("NOT_FOUND", "Proposal not found", 404);
     }
     assertSameTenant(req.principal, proposal.firmId);
     const result = await rejectProposal(params.id, {

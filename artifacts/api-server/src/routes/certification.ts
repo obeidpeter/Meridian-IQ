@@ -48,8 +48,7 @@ router.post(
       )
       .limit(1);
     if (!course) {
-      res.status(404).json({ error: "Course not found" });
-      return;
+      throw new DomainError("NOT_FOUND", "Course not found", 404);
     }
     // Idempotent per (course, firm, user): re-enrolling returns the existing
     // row. The firm filter mirrors the unique constraint and the RLS scope.
@@ -108,8 +107,7 @@ router.post(
       )
       .limit(1);
     if (!enrollment) {
-      res.status(404).json({ error: "Not enrolled in this course" });
-      return;
+      throw new DomainError("NOT_FOUND", "Not enrolled in this course", 404);
     }
     if (enrollment.status === "completed") {
       throw new DomainError("ALREADY_COMPLETED", "Course already completed", 409);

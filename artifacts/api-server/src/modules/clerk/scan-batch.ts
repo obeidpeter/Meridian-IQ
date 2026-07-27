@@ -82,6 +82,18 @@ const SCAN_SEGMENTS_JSON_SCHEMA: Record<string, unknown> = {
   },
 };
 
+// The page cap, enforced identically at queue time (probeBundle) and at
+// render time (rasterizeBundle) — the message must not drift between them.
+function assertBundlePageCap(total: number): void {
+  if (total > MAX_BATCH_SCAN_PAGES) {
+    throw new DomainError(
+      "SCAN_TOO_LONG",
+      `This bundle has ${total} pages; a scanned bundle takes at most ${MAX_BATCH_SCAN_PAGES}. Split the PDF and queue the parts separately.`,
+      422,
+    );
+  }
+}
+
 // Render the bundle's pages. Throws SCAN_TOO_LONG past the page cap and
 // PDF_UNREADABLE when nothing renders — both fail the batch with the message.
 export async function rasterizeBundle(
@@ -95,13 +107,7 @@ export async function rasterizeBundle(
       first: MAX_BATCH_SCAN_PAGES,
       desiredWidth: width,
     });
-    if (shot.total > MAX_BATCH_SCAN_PAGES) {
-      throw new DomainError(
-        "SCAN_TOO_LONG",
-        `This bundle has ${shot.total} pages; a scanned bundle takes at most ${MAX_BATCH_SCAN_PAGES}. Split the PDF and queue the parts separately.`,
-        422,
-      );
-    }
+    assertBundlePageCap(shot.total);
     const pages = shot.pages
       .map((p) => p.dataUrl?.replace(/^data:image\/png;base64,/, "") ?? "")
       .filter((p) => p.length > 0);
@@ -141,13 +147,7 @@ export async function probeBundle(buf: Buffer): Promise<number> {
   const parser = new PDFParse({ data: buf });
   try {
     const shot = await parser.getScreenshot({ first: 1, desiredWidth: 100 });
-    if (shot.total > MAX_BATCH_SCAN_PAGES) {
-      throw new DomainError(
-        "SCAN_TOO_LONG",
-        `This bundle has ${shot.total} pages; a scanned bundle takes at most ${MAX_BATCH_SCAN_PAGES}. Split the PDF and queue the parts separately.`,
-        422,
-      );
-    }
+    assertBundlePageCap(shot.total);
     if (shot.pages.length === 0 || !shot.pages[0].dataUrl) {
       throw new DomainError(
         "PDF_UNREADABLE",

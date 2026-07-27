@@ -158,6 +158,36 @@ export function relayConfigured(): boolean {
   return Boolean(process.env.MESSAGING_WEBHOOK_URL);
 }
 
+// The one relay POST scaffold both senders share: content-type + x-op-token
+// (MESSAGING_WEBHOOK_TOKEN) headers, the shared timeout ceiling (the abort
+// lands on the caller's ordinary failure path), non-2xx mapped to the
+// historical error string, network errors reported never thrown. The 2xx
+// Response comes back UNREAD so each caller decides whether to parse a body.
+async function postToMessagingRelay(
+  url: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: true; resp: Response } | { ok: false; error: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+    };
+    const token = process.env.MESSAGING_WEBHOOK_TOKEN;
+    if (token) headers["x-op-token"] = token;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
+    });
+    if (!resp.ok) {
+      return { ok: false, error: `messaging webhook returned ${resp.status}` };
+    }
+    return { ok: true, resp };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // POST an arbitrary kind-tagged JSON payload to the configured relay (same
 // URL, same x-op-token shared secret as the pointer-only transport below).
 // This is the ONE home of the documented SEC-12 exception: address-carrying
@@ -172,25 +202,8 @@ export async function sendRawToRelay(
 ): Promise<{ ok: boolean; error?: string }> {
   const url = process.env.MESSAGING_WEBHOOK_URL;
   if (!url) return { ok: false, error: "relay not configured" };
-  try {
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-    };
-    const token = process.env.MESSAGING_WEBHOOK_TOKEN;
-    if (token) headers["x-op-token"] = token;
-    const resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ kind, ...payload }),
-      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
-    });
-    if (!resp.ok) {
-      return { ok: false, error: `messaging webhook returned ${resp.status}` };
-    }
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
+  const posted = await postToMessagingRelay(url, { kind, ...payload });
+  return posted.ok ? { ok: true } : posted;
 }
 
 const defaultTransport: MessageTransport = async (
@@ -203,36 +216,23 @@ const defaultTransport: MessageTransport = async (
   if (!url) {
     return simulatorTransport(channel, recipientRef, templateKey, entityRef);
   }
-  try {
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-    };
-    const token = process.env.MESSAGING_WEBHOOK_TOKEN;
-    if (token) headers["x-op-token"] = token;
-    const resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ channel, recipientRef, templateKey, entityRef }),
-      // Abort a hung relay after the shared ceiling; the abort lands on the
-      // existing channel-failure path below and the failover walk continues.
-      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
-    });
-    if (!resp.ok) {
-      return { ok: false, error: `messaging webhook returned ${resp.status}` };
-    }
-    const payload = (await resp.json().catch(() => null)) as {
-      providerMessageId?: string;
-    } | null;
-    return {
-      ok: true,
-      providerMessageId:
-        typeof payload?.providerMessageId === "string"
-          ? payload.providerMessageId
-          : undefined,
-    };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
+  const posted = await postToMessagingRelay(url, {
+    channel,
+    recipientRef,
+    templateKey,
+    entityRef,
+  });
+  if (!posted.ok) return posted;
+  const payload = (await posted.resp.json().catch(() => null)) as {
+    providerMessageId?: string;
+  } | null;
+  return {
+    ok: true,
+    providerMessageId:
+      typeof payload?.providerMessageId === "string"
+        ? payload.providerMessageId
+        : undefined,
+  };
 };
 
 let transport: MessageTransport = defaultTransport;
@@ -264,7 +264,13 @@ export async function sendMessage(input: SendInput): Promise<Message> {
   let failoverFrom: MessageChannel | null = null;
 
   while (channel) {
-    if (!template.channels.includes(channel)) break;
+    // A channel the template does not permit is SKIPPED, not terminal: the
+    // walk advances down the chain without attempting it (invoice_stamped
+    // has no sms, but a whatsapp failure must still reach email).
+    if (!template.channels.includes(channel)) {
+      channel = FAILOVER[channel];
+      continue;
+    }
     // A transport that throws is treated exactly like one that reports
     // failure: the failover walk continues (a real webhook can reject in
     // ways its own error handling misses).

@@ -5,7 +5,7 @@ import { DomainError } from "../errors";
 import { tenantFirmId, type Principal } from "../auth/rbac";
 import { partySphereCondition } from "../party/party";
 import { decodeBase64Checked } from "./cases";
-import { assertClerkEnabled, recordExternalCall, type ClerkGateway } from "./gateway";
+import { assertClerkEnabled, type ClerkGateway } from "./gateway";
 import { inClerkScope } from "./scope";
 import { fenceUntrusted } from "./prompts";
 import {
@@ -14,8 +14,8 @@ import {
   type PartySuggestion,
 } from "./party-match";
 import {
+  transcribeAndLedger,
   transcribeVoiceProd,
-  TRANSCRIBE_MODEL,
   type VoiceTranscriber,
 } from "./provider";
 
@@ -241,38 +241,11 @@ export async function draftInvoiceWithClerk(
   let transcript: string | undefined;
   if (input.audioBase64) {
     const buf = decodeBase64Checked(input.audioBase64, "Audio");
-    const audioB64 = buf.toString("base64");
-    const startedAt = Date.now();
-    const firmId = tenantFirmId(principal);
-    try {
-      transcript = (await transcriber(buf)).trim();
-    } catch (err) {
-      await recordExternalCall({
-        firmId,
-        purpose: "transcribe_voice",
-        model: TRANSCRIBE_MODEL,
-        promptVersion: "transcribe-v1",
-        inputForHash: audioB64,
-        outcome: "error",
-        errorText: err instanceof Error ? err.message : String(err),
-        latencyMs: Date.now() - startedAt,
-      });
-      throw new DomainError(
-        "VOICE_UNREADABLE",
-        "The voice note could not be transcribed. Re-record it in a quieter spot, or type the details instead.",
-        422,
-      );
-    }
-    await recordExternalCall({
-      firmId,
-      purpose: "transcribe_voice",
-      model: TRANSCRIBE_MODEL,
-      promptVersion: "transcribe-v1",
-      inputForHash: audioB64,
-      outcome: "ok",
-      outputChars: transcript.length,
-      latencyMs: Date.now() - startedAt,
-    });
+    transcript = await transcribeAndLedger(
+      buf,
+      tenantFirmId(principal),
+      transcriber,
+    );
     if (transcript.length < MIN_INSTRUCTION_CHARS) {
       throw new DomainError(
         "VOICE_NO_SPEECH",

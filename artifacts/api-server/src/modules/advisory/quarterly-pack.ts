@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
-import { lagosDateString } from "../../lib/lagos-time";
+import { lagosDateString, lagosWindowSql } from "../../lib/lagos-time";
 import { lagosMonthStart, monthLabel } from "../clerk/client-statement";
 import { computeVatPack } from "../clerk/vat-pack";
 import { OUTSTANDING } from "../invoice/receivables";
@@ -96,12 +96,6 @@ export function quarterLabel(quarterStart: string): string {
   return `Q${Math.floor((m - 1) / 3) + 1} ${y} (${first} – ${last})`;
 }
 
-// Lagos-calendar quarter window on a timestamptz column aliased in scope.
-function lagosQuarterWindow(column: ReturnType<typeof sql>, quarterStart: string) {
-  return sql`${column} >= (${quarterStart}::timestamp AT TIME ZONE 'Africa/Lagos')
-    AND ${column} < ((${quarterStart}::date + interval '3 months')::timestamp AT TIME ZONE 'Africa/Lagos')`;
-}
-
 const money = (n: number) => n.toFixed(2);
 
 export async function computeQuarterlyReview(
@@ -144,7 +138,7 @@ export async function computeQuarterlyReview(
       FROM submission_attempts sa
       JOIN invoices i ON i.id = sa.invoice_id
       WHERE i.firm_id = ${firmId}
-        AND ${lagosQuarterWindow(sql`sa.created_at`, quarterStart)}
+        AND ${lagosWindowSql(sql`sa.created_at`, quarterStart, "3 months")}
     `)
   ).rows;
 
@@ -167,7 +161,7 @@ export async function computeQuarterlyReview(
       LEFT JOIN error_catalogue ec ON ec.code = sa.error_code
       WHERE i.firm_id = ${firmId}
         AND sa.status = 'rejected'
-        AND ${lagosQuarterWindow(sql`sa.created_at`, quarterStart)}
+        AND ${lagosWindowSql(sql`sa.created_at`, quarterStart, "3 months")}
       GROUP BY GROUPING SETS ((COALESCE(sa.error_code, 'UNMAPPED')), ())
       ORDER BY GROUPING(COALESCE(sa.error_code, 'UNMAPPED')) DESC, n DESC
       LIMIT ${MAX_REJECTION_ROWS + 1}
@@ -207,7 +201,7 @@ export async function computeQuarterlyReview(
       FROM clerk_cases
       WHERE firm_id = ${firmId}
         AND kind = 'extraction'
-        AND ${lagosQuarterWindow(sql`created_at`, quarterStart)}
+        AND ${lagosWindowSql(sql`created_at`, quarterStart, "3 months")}
     `)
   ).rows;
 

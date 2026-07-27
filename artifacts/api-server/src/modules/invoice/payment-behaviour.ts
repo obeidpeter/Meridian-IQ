@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
+import { median } from "./date-math";
 
 // Buyer payment-behaviour memory (round-9 idea #1). Reconciliation matches
 // record when money ACTUALLY arrived: an accepted match ties an invoice to a
@@ -34,12 +35,16 @@ export interface BuyerPaymentBehaviour {
   lastSettledDate: string;
 }
 
-export function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+// Re-exported from date-math for existing consumers (projection-accuracy).
+export { median };
+
+// Parameterized `IN (...)` list for the client-set variants of the miners'
+// queries.
+export function idList(ids: string[]): SQL {
+  return sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  );
 }
 
 // Pure aggregation over observed (buyer, daysToPay, valueDate) rows,
@@ -99,20 +104,24 @@ export interface SettlementEvidenceRow {
   daysToPay: number;
 }
 
-// The single evidence query behind BOTH the behaviour miner and the
-// projection-accuracy report (round-14 idea #2) — one predicate set so the
-// two surfaces can never disagree about what counts as an observed
-// settlement.
+// The single evidence query behind the behaviour miner, the
+// projection-accuracy report (round-14 idea #2) AND the firm money summary's
+// set-based fan-in (cashflow.ts) — one predicate set so the surfaces can
+// never disagree about what counts as an observed settlement. Single-client
+// callers pass a one-element list; every row carries its supplier so set
+// callers can group evidence per client.
 export async function acceptedSettlementRows(
   firmId: string,
-  clientPartyId: string,
+  clientPartyIds: string[],
   now: Date = new Date(),
-): Promise<SettlementEvidenceRow[]> {
+): Promise<(SettlementEvidenceRow & { supplierPartyId: string })[]> {
+  if (clientPartyIds.length === 0) return [];
   const since = lagosDateString(
     new Date(now.getTime() - LOOKBACK_DAYS * 86_400_000),
   );
   const rows = (
     await getDb().execute<{
+      supplier_party_id: string;
       buyer_party_id: string;
       buyer_name: string;
       issue_date: string;
@@ -121,6 +130,7 @@ export async function acceptedSettlementRows(
       value_date: string;
     }>(sql`
       SELECT
+        i.supplier_party_id,
         i.buyer_party_id,
         p.legal_name AS buyer_name,
         i.issue_date::text AS issue_date,
@@ -134,7 +144,7 @@ export async function acceptedSettlementRows(
       WHERE m.status = 'accepted'
         AND m.firm_id = ${firmId}
         AND i.firm_id = ${firmId}
-        AND i.supplier_party_id = ${clientPartyId}
+        AND i.supplier_party_id IN (${idList(clientPartyIds)})
         AND i.kind = 'invoice'
         AND l.direction = 'credit'
         AND l.value_date IS NOT NULL
@@ -142,6 +152,7 @@ export async function acceptedSettlementRows(
     `)
   ).rows;
   return rows.map((r) => ({
+    supplierPartyId: r.supplier_party_id,
     buyerPartyId: r.buyer_party_id,
     buyerName: r.buyer_name,
     issueDate: r.issue_date,
@@ -157,7 +168,7 @@ export async function listPaymentBehaviour(
   clientPartyId: string,
   now: Date = new Date(),
 ): Promise<BuyerPaymentBehaviour[]> {
-  return summarizeBehaviour(await acceptedSettlementRows(firmId, clientPartyId, now));
+  return summarizeBehaviour(await acceptedSettlementRows(firmId, [clientPartyId], now));
 }
 
 // One buyer's behaviour, for surfaces anchored to a single invoice (the

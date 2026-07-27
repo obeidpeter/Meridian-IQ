@@ -15,9 +15,7 @@ import {
   tenantFirmId,
   type Principal,
 } from "../auth/rbac";
-import { isFeatureEnabled } from "../flags/flags";
-import { assertFirmClerkBudget } from "./budget";
-import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
+import { inferPhrasing, type ClerkGateway } from "./gateway";
 import { fenceUntrusted } from "./prompts";
 
 // Reconciliation match assist (Clerk idea #2). The matcher's middle band —
@@ -236,18 +234,8 @@ export async function assistMatch(
   };
 
   // Clerk phrasing is best-effort: no provider, kill switch off or budget
-  // spent → the grounded template text is the answer, not an error.
-  if (!gateway) return template;
-  if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return template;
-  const tenant = tenantFirmId(principal);
-  if (tenant) {
-    try {
-      await assertFirmClerkBudget(tenant);
-    } catch {
-      return template;
-    }
-  }
-
+  // spent → the grounded template text is the answer, not an error
+  // (inferPhrasing — the gateway backstop covers the budget).
   const candidateFacts = proposals.map((p, i) => {
     const r = ranked[i];
     return [
@@ -271,9 +259,9 @@ export async function assistMatch(
     ),
   ].join("\n");
 
-  const result = await gateway.infer<z.infer<typeof assistOutput>>({
+  const data = await inferPhrasing<z.infer<typeof assistOutput>>(gateway, {
     purpose: "explain_match",
-    firmId: tenant,
+    firmId: tenantFirmId(principal),
     promptVersion: MATCH_ASSIST_PROMPT_VERSION,
     system: MATCH_ASSIST_SYSTEM,
     user,
@@ -282,6 +270,6 @@ export async function assistMatch(
     validator: assistOutput,
     inputForHash: `${statementLineId}:${ranked.map((r) => `${r.proposalId}=${r.confidence}`).join(",")}`,
   });
-  if (!result.ok) return template;
-  return { ...template, explanation: result.data.explanation, source: "clerk" };
+  if (!data) return template;
+  return { ...template, explanation: data.explanation, source: "clerk" };
 }

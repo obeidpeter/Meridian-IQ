@@ -7,6 +7,7 @@ import {
   recurringInvoiceTemplatesTable,
 } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
+import { addDays, daysBetween } from "./date-math";
 import {
   buyerBillingHistories,
   detectMonthlyPattern,
@@ -43,20 +44,6 @@ export interface UnbilledIncomeAlert {
   lastIssueDate: string;
   expectedByDate: string;
   overdueDays: number;
-}
-
-function addDays(dateString: string, days: number): string {
-  const d = new Date(`${dateString}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function daysBetween(a: string, b: string): number {
-  return Math.round(
-    (new Date(`${b}T00:00:00Z`).getTime() -
-      new Date(`${a}T00:00:00Z`).getTime()) /
-      86_400_000,
-  );
 }
 
 // Pure projection over one buyer's mined pattern, exported for tests: the

@@ -143,6 +143,18 @@ test("vetting: unknown events and bad URLs are rejected; production requires pub
     assert.throws(() => vetWebhookUrl("https://localhost/x"), /public/);
     assert.throws(() => vetWebhookUrl("https://10.0.0.8/x"), /public/);
     assert.throws(() => vetWebhookUrl("https://169.254.169.254/x"), /public/);
+    // IPv6 literals: WHATWG canonicalizes ::ffff:127.0.0.1 to its hex form
+    // ([::ffff:7f00:1]) before vetting sees it — the v4-mapped loopback,
+    // unspecified, unique-local and link-local literals must all refuse;
+    // a genuinely public literal passes.
+    assert.throws(() => vetWebhookUrl("https://[::ffff:127.0.0.1]/x"), /public/);
+    assert.throws(() => vetWebhookUrl("https://[::]/x"), /public/);
+    assert.throws(() => vetWebhookUrl("https://[fd00::1]/x"), /public/);
+    assert.throws(() => vetWebhookUrl("https://[fe80::1]/x"), /public/);
+    assert.equal(
+      vetWebhookUrl("https://[2606:4700::1111]/x"),
+      "https://[2606:4700::1111]/x",
+    );
   } finally {
     process.env.NODE_ENV = env;
   }

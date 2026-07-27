@@ -108,8 +108,7 @@ router.post("/connections/:id/sync", requireFlag("erp_connectors"), async (req, 
     .where(eq(erpConnectionsTable.id, params.id))
     .limit(1);
   if (!connection) {
-    res.status(404).json({ error: "Connection not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Connection not found", 404);
   }
   assertSameTenant(req.principal, connection.firmId);
   if (connection.status === "paused") {
@@ -150,8 +149,7 @@ router.get("/connections/:id/runs", requireFlag("erp_connectors"), async (req, r
     .where(eq(erpConnectionsTable.id, params.id))
     .limit(1);
   if (!connection) {
-    res.status(404).json({ error: "Connection not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Connection not found", 404);
   }
   assertSameTenant(req.principal, connection.firmId);
   const rows = await getDb()

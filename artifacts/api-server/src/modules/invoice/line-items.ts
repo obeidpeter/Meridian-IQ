@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb, invoicesTable, invoiceLinesTable } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
+import { median } from "./date-math";
 
 // Line-item memory (exhaust idea #1, round 4). A client's approved invoices
 // already show WHAT they sell: the same line descriptions, at consistent
@@ -81,14 +82,6 @@ interface MinedLine {
   unitPrice: number;
   vatRate: number;
   issueDate: string;
-}
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 // Pure aggregation over mined lines, exported for unit tests: group by
