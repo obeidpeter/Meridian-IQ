@@ -1,8 +1,10 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import {
   getDb,
+  claimRecordsTable,
   engagementsTable,
   firmsTable,
   partiesTable,
@@ -924,4 +926,155 @@ test("multi-turn for a client threads only its OWN cases; firm staff keep firm-w
     staff2Prompts[0].includes("Previous question context"),
     "firm staff threading stays firm-wide",
   );
+});
+
+// ---- Answer links (round 7) -------------------------------------------------
+
+// Resolve an invoice row by id on the raw pool (test runs as the DB owner).
+const invoiceById = async (id: string) => {
+  const [row] = await getDb()
+    .select({
+      id: invoicesTable.id,
+      invoiceNumber: invoicesTable.invoiceNumber,
+      supplierPartyId: invoicesTable.supplierPartyId,
+      firmId: invoicesTable.firmId,
+    })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, id))
+    .limit(1);
+  return row;
+};
+
+test("a data answer carries open-the-invoice links with real invoice ids", async () => {
+  const result = await lookup("data.overdue_submissions");
+  assert.ok(result?.links, "links present when the sample names invoices");
+  assert.equal(result.links.length, 3);
+  // Labels mirror the sample fact exactly, in the same order.
+  const sample = result.facts.find((f) => f.key === "sample")?.value;
+  assert.deepEqual(
+    result.links.map((l) => l.label),
+    sample?.split(", "),
+    "link labels are exactly the sampled invoice numbers",
+  );
+  for (const link of result.links) {
+    assert.equal(link.kind, "invoice");
+    const row = await invoiceById(link.id);
+    assert.ok(row, "every link id is a real invoice row");
+    assert.equal(row.invoiceNumber, link.label, "id and label name the same invoice");
+    assert.equal(row.firmId, firmA, "links never leave the asker's firm");
+  }
+
+  // The full ask path spreads the links into the stored answer.
+  const gateway = fakeGateway(() =>
+    JSON.stringify({ claimKey: "data.overdue_submissions", category: "unknown" }),
+  );
+  const kase = await askClerk(`Overdue with links? ${SALT}`, askerId, gateway, {
+    firmId: firmA,
+  });
+  assert.equal(kase.status, "approved");
+  assert.equal(kase.answer?.links?.length, 3);
+  assert.deepEqual(
+    kase.answer?.links?.map((l) => l.label).sort(),
+    result.links.map((l) => l.label).sort(),
+  );
+});
+
+test("chase-list answers link the named invoices; linkless intents stay linkless", async () => {
+  const chase = await lookup("data.chase_list");
+  assert.ok(chase?.links, "firm-wide chase list links its rows");
+  assert.equal(chase.links.length, 2);
+  assert.ok(chase.links.some((l) => l.label === RECEIVABLE_NUM));
+  for (const link of chase.links) {
+    const row = await invoiceById(link.id);
+    assert.equal(row?.invoiceNumber, link.label);
+  }
+  // Per-client branch links too (partyA owns both chase-eligible invoices).
+  const scoped = await inClerkScope(firmA, () =>
+    runDataIntent("data.chase_list", firmA, {
+      clientPartyId: partyA,
+      clientName: `DI Party A ${SALT}`,
+    }),
+  );
+  assert.ok(scoped?.links);
+  assert.equal(scoped.links.length, 2);
+
+  // Deliberately linkless: debtor rankings, inflow projections, allowance.
+  assert.equal((await lookup("data.outstanding_receivables"))?.links, undefined);
+  assert.equal((await lookup("data.expected_inflows"))?.links, undefined);
+  assert.equal((await lookup("data.clerk_allowance"))?.links, undefined);
+  // An empty sample carries no links key at all (additive, never noisy).
+  const emptyScoped = await inClerkScope(firmA, () =>
+    runDataIntent("data.failed_submissions", firmA, {
+      clientPartyId: partyA2,
+      clientName: `DI Party Z ${SALT}`,
+    }),
+  );
+  assert.equal(emptyScoped?.facts.find((f) => f.key === "count")?.value, "0");
+  assert.equal(emptyScoped?.links, undefined);
+});
+
+test("a client-scoped ask's links stay within the client's own invoices (SEC-03)", async () => {
+  const gateway = fakeGateway(() =>
+    JSON.stringify({
+      claimKey: "data.overdue_submissions",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    }),
+  );
+  const kase = await askClerk(
+    `Overdue links for me? ${SALT}`,
+    clientAskerId,
+    gateway,
+    { firmId: firmA, clientScoped: true, clientPartyId: partyA2 },
+  );
+  assert.equal(kase.status, "approved");
+  assert.ok(kase.answer?.links);
+  assert.equal(
+    kase.answer.links.length,
+    1,
+    "only the caller's own overdue invoice is linked",
+  );
+  assert.equal(kase.answer.links[0].label, CLIENT2_OVERDUE_NUM);
+  const row = await invoiceById(kase.answer.links[0].id);
+  assert.equal(
+    row?.supplierPartyId,
+    partyA2,
+    "the linked id is the caller's OWN invoice, never a sibling's",
+  );
+});
+
+test("register answers and refusals carry no links", async () => {
+  const claimKey = `test.link_free_claim_${SALT}`;
+  await getDb().insert(claimRecordsTable).values({
+    claimKey,
+    version: 1,
+    state: "active",
+    title: `Link-free claim ${SALT}`,
+    proposition: "The standard VAT rate is {rate}.",
+    protectedFacts: [
+      { key: "rate", label: "Standard rate", kind: "rate", value: "7.5", unit: "%" },
+    ],
+    citation: "Test Act s.1",
+    effectiveFrom: "2020-01-01",
+    createdBy: askerId,
+  });
+  const claimGateway = fakeGateway(() =>
+    JSON.stringify({ claimKey, category: "unknown" }),
+  );
+  const claimCase = await askClerk(`What is the rate? ${SALT}`, askerId, claimGateway, {
+    firmId: firmA,
+  });
+  assert.equal(claimCase.status, "approved");
+  assert.equal(claimCase.answer?.claimKey, claimKey);
+  assert.equal(claimCase.answer?.links, undefined, "claim answers carry no links");
+
+  const refuseGateway = fakeGateway(() =>
+    JSON.stringify({ claimKey: "none", category: "unknown" }),
+  );
+  const refused = await askClerk(`Unanswerable? ${SALT}`, askerId, refuseGateway, {
+    firmId: firmA,
+  });
+  assert.equal(refused.answer?.answered, false);
+  assert.equal(refused.answer?.links, undefined, "refusals carry no links");
 });

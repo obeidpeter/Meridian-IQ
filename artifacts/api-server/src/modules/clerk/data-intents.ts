@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { getDb, type ProtectedFact } from "@workspace/db";
+import { getDb, type ClerkAnswerLink, type ProtectedFact } from "@workspace/db";
 import {
   lagosDateString,
   lagosParts,
@@ -51,6 +51,14 @@ export const SAMPLE_LIMIT = 5;
 export interface DataIntentResult {
   text: string;
   facts: ProtectedFact[];
+  // Deterministic open-the-invoice links for the invoices the sample names
+  // (round 7): app-built from the SAME rows as the sample, capped the same
+  // way, label = invoice number. Absent when the intent's answer names no
+  // invoices. The queries below are already firm-scoped (explicit firm_id
+  // filter + the caller's inClerkScope RLS posture) and pinned to a client
+  // asker's own party by ask.ts (SEC-03), so a link id can never exceed the
+  // asker's own visibility.
+  links?: ClerkAnswerLink[];
 }
 
 // Resolved lookup parameters (idea #4). Every value here is APP-RESOLVED
@@ -84,6 +92,9 @@ interface InvoiceAggregate {
   count: number;
   totalNgn: string;
   sample: string[];
+  // The SAME sample rows with their invoice ids, for answer links. Kept
+  // separate from `sample` so the existing sample fact stays byte-identical.
+  sampleRows: { id: string; invoiceNumber: string }[];
 }
 
 // One round trip per lookup: count + value total + up to SAMPLE_LIMIT invoice
@@ -103,9 +114,10 @@ async function invoiceAggregate(
       n: number;
       total: string;
       sample: string[] | null;
+      sample_rows: { id: string; invoiceNumber: string }[] | null;
     }>(sql`
       WITH hits AS (
-        SELECT i.invoice_number, i.issue_date, i.grand_total
+        SELECT i.id, i.invoice_number, i.issue_date, i.grand_total
         FROM invoices i
         WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}${clientFilter} AND (${predicate})
       )
@@ -116,7 +128,18 @@ async function invoiceAggregate(
           SELECT invoice_number FROM hits
           ORDER BY issue_date, invoice_number
           LIMIT ${SAMPLE_LIMIT}
-        ) s) AS sample
+        ) s) AS sample,
+        (SELECT COALESCE(
+          jsonb_agg(
+            jsonb_build_object('id', s.id, 'invoiceNumber', s.invoice_number)
+            ORDER BY s.issue_date, s.invoice_number
+          ),
+          '[]'::jsonb
+        ) FROM (
+          SELECT id, invoice_number, issue_date FROM hits
+          ORDER BY issue_date, invoice_number
+          LIMIT ${SAMPLE_LIMIT}
+        ) s) AS sample_rows
     `)
   ).rows;
   const r = rows[0];
@@ -124,6 +147,39 @@ async function invoiceAggregate(
     count: Number(r?.n ?? 0),
     totalNgn: String(r?.total ?? "0"),
     sample: r?.sample ?? [],
+    sampleRows: r?.sample_rows ?? [],
+  };
+}
+
+// Open-the-invoice links built from the aggregate's own sample rows (round
+// 7) — the ids come from the SAME firm/SEC-03-scoped query that produced the
+// sample, so a link never names an invoice the asker could not already list.
+// Spread additively into a DataIntentResult; empty samples carry no links
+// key at all, and the sample facts themselves stay byte-identical.
+function sampleLinks(agg: InvoiceAggregate): { links?: ClerkAnswerLink[] } {
+  if (agg.sampleRows.length === 0) return {};
+  return {
+    links: agg.sampleRows.slice(0, SAMPLE_LIMIT).map((r) => ({
+      label: r.invoiceNumber,
+      kind: "invoice" as const,
+      id: r.id,
+    })),
+  };
+}
+
+// The chase-list counterpart: per-row invoice ids from listChaseRows /
+// firmMoneySummary's topChase — already firm-scoped and (per-client) pinned
+// to the asker's own party, like every query in this catalogue.
+function chaseLinks(rows: { invoiceId: string; invoiceNumber: string }[]): {
+  links?: ClerkAnswerLink[];
+} {
+  if (rows.length === 0) return {};
+  return {
+    links: rows.slice(0, SAMPLE_LIMIT).map((r) => ({
+      label: r.invoiceNumber,
+      kind: "invoice" as const,
+      id: r.invoiceId,
+    })),
   };
 }
 
@@ -190,6 +246,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
             ? `No invoices${forClient(params)} are past the ${SUBMISSION_WINDOW_DAYS}-day submission window. Nothing is overdue today.`
             : `${plural(agg.count, "invoice")}${forClient(params)} ${isAre(agg.count)} past the ${SUBMISSION_WINDOW_DAYS}-day submission window: ${nameSample(agg)}. Submit these first to limit penalty exposure.`,
         facts: invoiceFacts(agg, "Invoices past the submission window"),
+        ...sampleLinks(agg),
       };
     },
   },
@@ -211,6 +268,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
             ? `No submission deadlines${forClient(params)} fall in the next 7 days.`
             : `${plural(agg.count, "invoice")}${forClient(params)} ${isAre(agg.count)} due for submission within the next 7 days: ${nameSample(agg)}.`,
         facts: invoiceFacts(agg, "Deadlines in the next 7 days"),
+        ...sampleLinks(agg),
       };
     },
   },
@@ -230,6 +288,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
             ? `No invoices${forClient(params)} are currently in a failed submission state.`
             : `${plural(agg.count, "invoice")}${forClient(params)} failed rail submission: ${nameSample(agg)}. Open each invoice for the specific catalogue fix.`,
         facts: invoiceFacts(agg, "Failed submissions"),
+        ...sampleLinks(agg),
       };
     },
   },
@@ -249,6 +308,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
             ? `Every invoice${forClient(params)} has been submitted — nothing is sitting in draft or validated.`
             : `${plural(agg.count, "invoice")}${forClient(params)} ${isAre(agg.count)} still unsubmitted (draft or validated): ${nameSample(agg)}.`,
         facts: invoiceFacts(agg, "Unsubmitted invoices"),
+        ...sampleLinks(agg),
       };
     },
   },
@@ -288,6 +348,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
           `Accepted by the rails ${period}`,
           true,
         ),
+        ...sampleLinks(agg),
       };
     },
   },
@@ -308,6 +369,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
             ? `No receivables${forClient(params)} are more than ${RECEIVABLE_AGE_DAYS} days old.`
             : `${plural(agg.count, "receivable")}${forClient(params)} ${isAre(agg.count)} more than ${RECEIVABLE_AGE_DAYS} days old, NGN ${agg.totalNgn} in total: ${nameSample(agg)}. Consider chasing payment.`,
         facts: invoiceFacts(agg, `Receivables over ${RECEIVABLE_AGE_DAYS} days`, true),
+        ...sampleLinks(agg),
       };
     },
   },
@@ -474,6 +536,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
               ? `Nothing${forClient(params)} is currently worth chasing — no invoice is past both its due date and the customer's usual payment rhythm.`
               : `${plural(eligible, "invoice")}${forClient(params)} ${isAre(eligible)} worth chasing: ${nameRows(rows)}. Open an invoice to draft a payment reminder.`,
           facts: [countFact("chase_count", "Worth chasing", eligible)],
+          ...chaseLinks(rows),
         };
       }
       const summary = await firmMoneySummary(firmId);
@@ -491,6 +554,7 @@ export const DATA_INTENTS: readonly DataIntent[] = [
                 })),
               )}.`,
         facts: [countFact("chase_count", "Worth chasing", summary.chaseCount)],
+        ...chaseLinks(summary.topChase),
       };
     },
   },

@@ -4,12 +4,15 @@ import {
   useRunClerkEval,
   useListClerkEvalRuns,
   useListEvalFixtures,
+  useMintFixtureFromCase,
   useRetireEvalFixture,
   useRestoreEvalFixture,
+  useGetAskFeedbackReport,
   useGetExtractionPrompt,
   useRunPromptCanary,
   useRunModelCanary,
   useGetClerkTierReport,
+  getGetAskFeedbackReportQueryKey,
   getGetClerkMetricsQueryKey,
   getListClerkEvalRunsQueryKey,
   getListEvalFixturesQueryKey,
@@ -17,6 +20,7 @@ import {
   getGetClerkTierReportQueryKey,
 } from "@workspace/api-client-react";
 import type {
+  AskFeedbackReportTotals,
   ClerkMetrics,
   ClerkMetricsCases,
   ClerkMetricsQualityAlert,
@@ -28,7 +32,9 @@ import type {
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -64,7 +70,7 @@ import { ClerkPageHeader } from "@/components/clerk-shell";
 import { StatTile } from "@/components/stat-tile";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { serverErrorMessage } from "@/lib/errors";
+import { errorStatus, serverErrorMessage } from "@/lib/errors";
 import {
   formatDateTime,
   formatPct,
@@ -626,6 +632,35 @@ export function corpusSummary(report: EvalFixtureReport): string {
   return parts.join(" · ");
 }
 
+// Inline copy for a failed case promotion. The statuses are the contract's:
+// 404 the case isn't there (or not visible), 409 it was already promoted,
+// 400 the server refused the shape of the request — including SCRUB_REQUIRED
+// when pseudonymization is unchecked for an active client, where the
+// server's own words say exactly that and are relayed verbatim.
+export function mintFixtureErrorCopy(err: unknown): string {
+  const status = errorStatus(err);
+  if (status === 404) return "No case with that id.";
+  if (status === 409) {
+    return "That case has already been promoted into the corpus.";
+  }
+  if (status === 400) {
+    return (
+      serverErrorMessage(err) ??
+      "That case can't be promoted — check that it has been decided."
+    );
+  }
+  return (
+    serverErrorMessage(err) ??
+    "Could not mint the fixture. Try again in a moment."
+  );
+}
+
+// One line over the ask-feedback card: how the rated answers split, plus how
+// many answers nobody rated (the denominator that keeps the split honest).
+export function askFeedbackTotalsLine(totals: AskFeedbackReportTotals): string {
+  return `${totals.helpful} helpful · ${totals.notHelpful} not helpful · ${totals.unrated} unrated`;
+}
+
 // The corpus can run to 200+ rows (red-team growth); render a preview and
 // let the operator expand to everything.
 export const CORPUS_PREVIEW_ROWS = 25;
@@ -651,6 +686,37 @@ function EvalCorpusCard() {
   const [pendingRetire, setPendingRetire] = useState<EvalFixtureSummary | null>(
     null,
   );
+
+  // Corpus promotion: a decided capture case becomes a grown fixture. The
+  // scrub box starts checked and STAYS the operator's call in the UI — the
+  // server is the enforcer (SCRUB_REQUIRED while the case's client is
+  // active), and its refusal surfaces inline rather than being pre-empted by
+  // a disabled control.
+  const [mintCaseId, setMintCaseId] = useState("");
+  const [mintScrub, setMintScrub] = useState(true);
+  const [mintedKey, setMintedKey] = useState<string | null>(null);
+  const [mintError, setMintError] = useState<string | null>(null);
+  const mint = useMintFixtureFromCase({
+    mutation: {
+      onSuccess: (fx) => {
+        invalidate();
+        setMintedKey(fx.key);
+        setMintError(null);
+        setMintCaseId("");
+      },
+      onError: (e) => {
+        setMintedKey(null);
+        setMintError(mintFixtureErrorCopy(e));
+      },
+    },
+  });
+  const submitMint = () => {
+    const caseId = mintCaseId.trim();
+    if (!caseId || mint.isPending) return;
+    setMintedKey(null);
+    setMintError(null);
+    mint.mutate({ data: { caseId, scrub: mintScrub } });
+  };
 
   const retire = useRetireEvalFixture({
     mutation: {
@@ -872,6 +938,76 @@ function EvalCorpusCard() {
           </>
         )}
 
+        {/* Corpus promotion: the operator names a decided case; the server
+            re-reads it, pseudonymizes known party identities in the document
+            text (enforced while the client is active) and stores it as a
+            grown fixture. */}
+        <div
+          className="space-y-2 border-t pt-3"
+          data-testid="form-mint-fixture"
+        >
+          <p className="text-xs font-medium text-muted-foreground uppercase">
+            Promote a case
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Turn a decided capture case into a grown fixture: its document
+            text becomes part of every future evaluation run and canary.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={mintCaseId}
+              onChange={(e) => {
+                setMintCaseId(e.target.value);
+                setMintedKey(null);
+                setMintError(null);
+              }}
+              placeholder="Case id…"
+              className="w-72 font-mono text-xs"
+              aria-label="Case id to promote"
+              data-testid="input-mint-case-id"
+            />
+            <Button
+              size="sm"
+              onClick={submitMint}
+              disabled={mint.isPending || mintCaseId.trim().length === 0}
+              data-testid="button-mint-fixture"
+            >
+              {mint.isPending ? "Minting…" : "Mint fixture"}
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Checkbox
+              id="mint-scrub"
+              checked={mintScrub}
+              onCheckedChange={(v) => setMintScrub(v === true)}
+              data-testid="checkbox-mint-scrub"
+            />
+            <Label htmlFor="mint-scrub" className="text-sm font-normal">
+              Pseudonymize identities
+            </Label>
+            <span className="text-xs text-muted-foreground">
+              required while the client is active
+            </span>
+          </div>
+          {mintError && (
+            <p
+              className="text-xs text-destructive"
+              data-testid="text-mint-error"
+            >
+              {mintError}
+            </p>
+          )}
+          {mintedKey && (
+            <p
+              className="text-xs font-medium text-emerald-700 dark:text-emerald-400"
+              data-testid="text-mint-success"
+            >
+              Minted fixture <code>{mintedKey}</code> — it joins every future
+              run and canary.
+            </p>
+          )}
+        </div>
+
         {/* Retiring is reversible but consequential — every future run and
             canary skips the fixture — so it takes an explicit confirm. */}
         <AlertDialog
@@ -946,6 +1082,18 @@ export function HealthPanel() {
   const { data: tierReport } = useGetClerkTierReport({
     query: {
       queryKey: getGetClerkTierReportQueryKey(),
+      staleTime: 5 * 60_000,
+      retry: false,
+    },
+  });
+
+  // Ask helpfulness mining (the refusal-mining sibling): pure SQL over the
+  // feedback column, loaded eagerly like the tier report. Render-on-success
+  // — on an older server the endpoint 404s and the card simply never
+  // appears, same as the tier report's skew posture.
+  const { data: askFeedback } = useGetAskFeedbackReport({
+    query: {
+      queryKey: getGetAskFeedbackReportQueryKey(),
       staleTime: 5 * 60_000,
       retry: false,
     },
@@ -1553,6 +1701,88 @@ export function HealthPanel() {
               )}
             </>
           ))}
+
+          {/* Independent of /clerk/metrics on purpose: the feedback report
+              is its own query, so a metrics failure doesn't hide it (and
+              vice versa). */}
+          {askFeedback && (
+            <Card data-testid="card-ask-feedback">
+              <CardHeader>
+                <CardTitle className="text-base">Ask feedback</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Helpfulness signals askers left on answered questions — the
+                  refusal-mining sibling. Most askers rate nothing, so read
+                  the split against the unrated count.
+                </p>
+                <p className="text-sm" data-testid="text-ask-feedback-totals">
+                  {askFeedbackTotalsLine(askFeedback.totals)}
+                </p>
+                {askFeedback.byIntent.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table
+                      className="w-full text-sm"
+                      data-testid="table-ask-feedback-intents"
+                    >
+                      <thead>
+                        <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                          <th className="py-2 pr-3 font-medium">Intent</th>
+                          <th className="py-2 pr-3 font-medium text-right">
+                            Helpful
+                          </th>
+                          <th className="py-2 font-medium text-right">
+                            Not helpful
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {askFeedback.byIntent.map((r) => (
+                          <tr
+                            key={r.intent}
+                            data-testid={`row-ask-feedback-${r.intent}`}
+                          >
+                            <td className="py-2 pr-3 font-mono text-xs">
+                              {r.intent}
+                            </td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {r.helpful}
+                            </td>
+                            <td className="py-2 text-right tabular-nums">
+                              {r.notHelpful}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {askFeedback.recentNotHelpful.length > 0 && (
+                  <div data-testid="list-ask-feedback-not-helpful">
+                    <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                      Recent not-helpful questions
+                    </p>
+                    <ul className="space-y-1 text-sm">
+                      {askFeedback.recentNotHelpful.map((q) => (
+                        <li
+                          key={q.caseId}
+                          className="flex items-baseline gap-2"
+                          data-testid={`row-not-helpful-${q.caseId}`}
+                        >
+                          <span className="min-w-0 flex-1 truncate">
+                            {q.question}
+                          </span>
+                          <span className="whitespace-nowrap text-xs text-muted-foreground">
+                            {formatDateTime(q.createdAt)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent

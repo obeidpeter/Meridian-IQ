@@ -929,3 +929,70 @@ export async function getClerkMetrics(
     ...(correctionShapes.length > 0 ? { correctionShapes } : {}),
   };
 }
+
+// ---- Adaptive fast lane (round 7) ------------------------------------------
+// Per-firm fast-lane confidence threshold, derived from the firm's OWN
+// calibration exhaust. Callers thread the returned value into the fast-lane
+// predicate (bulk-approve.ts fastLaneBlocker; the console reads the same
+// number off kase.fastLaneThreshold) so the queue and the bulk-approve
+// re-verify can never disagree.
+//
+// The rule — the deliberate CONSERVATIVE first step, not a general model:
+// only when the firm's top confidence band ("0.8-1.0") holds a real sample
+// (>= FAST_LANE_MIN_FIELDS compared header fields in the window) AND the
+// operators kept >= FAST_LANE_MIN_KEPT_RATE of those values unchanged does
+// the threshold relax from the default 0.9 to the floor 0.8. Two outcomes
+// only, floored at 0.8 — no interpolation, no per-field tuning — because the
+// fast lane bulk-approves critical fields and a miscalibrated relaxation is
+// operator trust spent at compliance cost. Everything is recomputed from SQL
+// on demand; nothing is stored.
+
+export const FAST_LANE_DEFAULT = 0.9;
+export const FAST_LANE_FLOOR = 0.8;
+
+// The calibration band the rule reads (CALIBRATION_BANDS' top band).
+const FAST_LANE_BAND = "0.8-1.0";
+const FAST_LANE_MIN_FIELDS = 200;
+const FAST_LANE_MIN_KEPT_RATE = 0.97;
+// Same window and sample cap as getClerkMetrics' default calibration input,
+// so the console's calibration table and the derived threshold read the same
+// evidence shape.
+const FAST_LANE_WINDOW_DAYS = 30;
+
+export async function firmFastLaneThreshold(
+  firmId: string | null,
+): Promise<number> {
+  // Operator captures carry no firm — no exhaust to justify relaxing.
+  if (!firmId) return FAST_LANE_DEFAULT;
+  // The calibration input query (getClerkMetrics) narrowed to ONE firm's
+  // approved, corrected extractions. clerk_cases is bypass-only RLS: callers
+  // run under an operator/bypass context (bulk-approve's per-item bypass
+  // transaction, the operator-facing case reads).
+  const rows = (
+    await getDb().execute(sql`
+      SELECT extraction, corrections
+      FROM clerk_cases
+      WHERE created_at >= now() - make_interval(days => ${FAST_LANE_WINDOW_DAYS})
+        AND firm_id = ${firmId}
+        AND kind = 'extraction'
+        AND status = 'approved'
+        AND extraction IS NOT NULL
+        AND corrections IS NOT NULL
+      ORDER BY created_at DESC
+      LIMIT 500
+    `)
+  ).rows as {
+    extraction: ClerkExtraction | null;
+    corrections: ClerkCorrection[] | null;
+  }[];
+  const calibration = computeCalibration(rows);
+  const band = calibration?.buckets.find((b) => b.range === FAST_LANE_BAND);
+  if (
+    band &&
+    band.fields >= FAST_LANE_MIN_FIELDS &&
+    band.keptRate >= FAST_LANE_MIN_KEPT_RATE
+  ) {
+    return FAST_LANE_FLOOR;
+  }
+  return FAST_LANE_DEFAULT;
+}

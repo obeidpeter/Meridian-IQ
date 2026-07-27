@@ -185,6 +185,16 @@ export interface ClerkCorrection {
   changed: boolean;
 }
 
+// Deterministic action link derived from a data answer's own sample rows by
+// the app (never the model): names a surface the asker may open. The source
+// queries are firm/SEC-03-scoped, so an id here never exceeds the asker's
+// own visibility.
+export interface ClerkAnswerLink {
+  label: string;
+  kind: "invoice";
+  id: string;
+}
+
 // Assembled deterministically from an approved ClaimRecord (claim answers) or
 // a fixed firm-record lookup (data answers, dataIntent set) — or a neutral
 // refusal (answered=false). Never free model prose.
@@ -202,6 +212,7 @@ export interface ClerkAnswer {
   facts?: ProtectedFact[];
   citation?: string;
   refusalReason?: string;
+  links?: ClerkAnswerLink[];
 }
 
 export const clerkCasesTable = pgTable("clerk_cases", {
@@ -235,6 +246,8 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   // --- question cases ---
   question: text("question"),
   answer: jsonb("answer").$type<ClerkAnswer>(),
+  // Asker's helpfulness signal on a question case: 'helpful' | 'not_helpful'; null = unrated.
+  feedback: text("feedback"),
   // --- review claim (one operator actively works a case at a time) ---
   claimedBy: uuid("claimed_by").references(() => usersTable.id),
   claimedAt: timestamp("claimed_at", { withTimezone: true }),

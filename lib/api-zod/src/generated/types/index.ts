@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.42.0
+ * OpenAPI spec version: 0.43.0
  */
 
 export * from './acceptInvitationInput';
@@ -15,6 +15,10 @@ export * from './alertDeliveryResultStatus';
 export * from './alertPreferences';
 export * from './alertPreferencesInput';
 export * from './askClerkInput';
+export * from './askFeedbackReport';
+export * from './askFeedbackReportByIntentItem';
+export * from './askFeedbackReportRecentNotHelpfulItem';
+export * from './askFeedbackReportTotals';
 export * from './assessmentAnswer';
 export * from './assessmentReport';
 export * from './assessmentReportBand';
@@ -96,6 +100,8 @@ export * from './clerkAdoptionReportClientsItem';
 export * from './clerkAdoptionReportTotals';
 export * from './clerkAnswer';
 export * from './clerkAnswerDataParams';
+export * from './clerkAnswerLink';
+export * from './clerkAnswerLinkKind';
 export * from './clerkBatchView';
 export * from './clerkBatchViewKind';
 export * from './clerkBatchViewStatus';
@@ -110,9 +116,11 @@ export * from './clerkCaseCreateInputSourceType';
 export * from './clerkCaseDecisionInput';
 export * from './clerkCaseDecisionInputAction';
 export * from './clerkCaseDecisionInputCategory';
+export * from './clerkCaseFeedback';
 export * from './clerkCaseKind';
 export * from './clerkCasePreflightItem';
 export * from './clerkCasePreflightItemSeverity';
+export * from './clerkCaseSourcePages';
 export * from './clerkCaseStatus';
 export * from './clerkClientStatement';
 export * from './clerkClientStatementFacts';
@@ -128,6 +136,7 @@ export * from './clerkEvalRun';
 export * from './clerkExtraction';
 export * from './clerkExtractionField';
 export * from './clerkExtractionLine';
+export * from './clerkFeedbackInput';
 export * from './clerkMetrics';
 export * from './clerkMetricsAsk';
 export * from './clerkMetricsCalibration';
@@ -393,6 +402,7 @@ export * from './messageDeliveryInput';
 export * from './messageInput';
 export * from './messageInputChannel';
 export * from './messageStatus';
+export * from './mintFixtureInput';
 export * from './modelCanaryReport';
 export * from './modelCanaryReportFixturesItem';
 export * from './modelCanaryReportVerdict';

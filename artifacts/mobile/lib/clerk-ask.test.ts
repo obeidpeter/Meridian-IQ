@@ -1,10 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { ClerkAnswer } from "@workspace/api-client-react";
+import type { ClerkAnswer, ClerkAnswerLink } from "@workspace/api-client-react";
 import {
+  answerLinks,
   answerSourceNote,
   askableQuestion,
   dataAnswerScope,
+  feedbackToSubmit,
   heldAnswer,
   QUESTION_MAX,
   QUESTION_MIN,
@@ -35,7 +37,7 @@ test("every suggested chip is submittable as-is", () => {
   }
 });
 
-test("heldAnswer mirrors the console's tested persistence semantic", () => {
+test("heldAnswer mirrors the console's tested persistence semantic, carrying the case id", () => {
   const first: ClerkAnswer = {
     answered: true,
     proposition: "3 invoices were submitted.",
@@ -44,15 +46,62 @@ test("heldAnswer mirrors the console's tested persistence semantic", () => {
     answered: false,
     refusalReason: "Not covered by an approved claim.",
   };
-  // A success replaces the held answer — a refusal IS the newest answer.
-  assert.equal(heldAnswer(null, { type: "success", answer: first }), first);
-  assert.equal(heldAnswer(first, { type: "success", answer: refusal }), refusal);
+  // A success replaces the held answer — a refusal IS the newest answer —
+  // and threads the answered case's id alongside it.
+  const held = heldAnswer(null, {
+    type: "success",
+    answer: first,
+    caseId: "case-1",
+  });
+  assert.deepEqual(held, { answer: first, caseId: "case-1" });
+  assert.deepEqual(
+    heldAnswer(held, { type: "success", answer: refusal, caseId: "case-2" }),
+    { answer: refusal, caseId: "case-2" },
+  );
+  // A missing id degrades to null rather than inventing one.
+  assert.deepEqual(heldAnswer(null, { type: "success", answer: first }), {
+    answer: first,
+    caseId: null,
+  });
   // A success WITHOUT an answer payload clears a stale one (never keeps it).
-  assert.equal(heldAnswer(first, { type: "success", answer: undefined }), null);
-  assert.equal(heldAnswer(first, { type: "success", answer: null }), null);
-  // An error keeps the previous answer — still the newest truth given.
-  assert.equal(heldAnswer(first, { type: "error" }), first);
+  assert.equal(
+    heldAnswer(held, { type: "success", answer: undefined, caseId: "case-3" }),
+    null,
+  );
+  assert.equal(
+    heldAnswer(held, { type: "success", answer: null, caseId: "case-3" }),
+    null,
+  );
+  // An error keeps the previous answer — still the newest truth given —
+  // with the SAME case id, so feedback still lands on the shown answer.
+  assert.equal(heldAnswer(held, { type: "error" }), held);
   assert.equal(heldAnswer(null, { type: "error" }), null);
+});
+
+test("answerLinks keeps only invoice links that carry an id, in order", () => {
+  const links: ClerkAnswerLink[] = [
+    { label: "INV-001", kind: "invoice", id: "inv-1" },
+    // The server named an invoice the asker cannot open — no dead button.
+    { label: "INV-002", kind: "invoice", id: null },
+    { label: "INV-003", kind: "invoice" },
+    { label: "INV-004", kind: "invoice", id: "inv-4" },
+  ];
+  assert.deepEqual(answerLinks({ links }), [
+    { label: "INV-001", id: "inv-1" },
+    { label: "INV-004", id: "inv-4" },
+  ]);
+  assert.deepEqual(answerLinks({}), []);
+  assert.deepEqual(answerLinks({ links: [] }), []);
+});
+
+test("feedbackToSubmit switches thumbs and swallows a repeat press", () => {
+  assert.equal(feedbackToSubmit(null, "helpful"), "helpful");
+  assert.equal(feedbackToSubmit(null, "not_helpful"), "not_helpful");
+  assert.equal(feedbackToSubmit("helpful", "not_helpful"), "not_helpful");
+  assert.equal(feedbackToSubmit("not_helpful", "helpful"), "helpful");
+  // The already-selected thumb again: nothing new to tell the server.
+  assert.equal(feedbackToSubmit("helpful", "helpful"), null);
+  assert.equal(feedbackToSubmit("not_helpful", "not_helpful"), null);
 });
 
 test("askableQuestion trims and enforces the contract bounds", () => {

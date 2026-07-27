@@ -413,6 +413,13 @@ export async function askClerk(
         ...(Object.keys(dataParams).length > 0 ? { dataParams } : {}),
         proposition: outcome.text,
         facts: outcome.facts,
+        // Open-the-invoice links (round 7), app-built from the lookup's own
+        // sample rows. The lookup already ran firm/SEC-03-scoped (and a
+        // client asker's party was FORCED above), so every id here is an
+        // invoice the asker may already see.
+        ...(outcome.links && outcome.links.length > 0
+          ? { links: outcome.links }
+          : {}),
         citation: `Computed live from your firm's records on ${lagosDateString()} (Lagos)`,
       },
       "approved",

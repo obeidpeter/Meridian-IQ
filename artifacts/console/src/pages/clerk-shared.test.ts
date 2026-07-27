@@ -18,6 +18,7 @@ import {
   correctionHint,
   fieldWeights,
   groupQueueByBatch,
+  imageDataUri,
   reviewEffort,
   type ApproveForm,
 } from "./clerk-shared";
@@ -172,6 +173,45 @@ describe("isReadyToApprove", () => {
     expect(isReadyToApprove(makeCase({ status: "in_review" }))).toBe(false);
     expect(isReadyToApprove(makeCase({ status: "pending" }))).toBe(false);
     expect(isReadyToApprove(makeCase({ status: "approved" }))).toBe(false);
+  });
+
+  test("the case's own fastLaneThreshold governs the critical-confidence bar", () => {
+    const shaky = (patch: Partial<ClerkCase>) =>
+      makeCase({
+        extraction: {
+          fields: [field({ critical: true, confidence: 0.85 })],
+          lines: [],
+          promptVersion: "v1",
+          model: "test-model",
+        },
+        ...patch,
+      });
+    // A calibrated server can lower the bar: 0.85 clears a 0.8 threshold…
+    expect(isReadyToApprove(shaky({ fastLaneThreshold: 0.8 }))).toBe(true);
+    // …but the same field fails the wire-absent 0.9 fallback.
+    expect(isReadyToApprove(shaky({}))).toBe(false);
+    // An explicit 0.9 behaves exactly like the fallback.
+    expect(isReadyToApprove(shaky({ fastLaneThreshold: 0.9 }))).toBe(false);
+    // The boundary stays inclusive under a served threshold too.
+    expect(isReadyToApprove(shaky({ fastLaneThreshold: 0.85 }))).toBe(true);
+  });
+});
+
+describe("imageDataUri", () => {
+  test("sniffs the subtype from the base64 header bytes", () => {
+    expect(imageDataUri("iVBORw0KGgoAAAANSUhEUg")).toBe(
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg",
+    );
+    expect(imageDataUri("/9j/4AAQSkZJRg")).toBe(
+      "data:image/jpeg;base64,/9j/4AAQSkZJRg",
+    );
+    expect(imageDataUri("UklGRhoAAABXRUJQ")).toBe(
+      "data:image/webp;base64,UklGRhoAAABXRUJQ",
+    );
+  });
+
+  test("falls back to png for anything unrecognised (scan pages are PNG)", () => {
+    expect(imageDataUri("QUJDREVG")).toBe("data:image/png;base64,QUJDREVG");
   });
 });
 

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.42.0
+ * OpenAPI spec version: 0.43.0
  */
 import {
   useMutation,
@@ -25,6 +25,7 @@ import type {
   AlertPreferences,
   AlertPreferencesInput,
   AskClerkInput,
+  AskFeedbackReport,
   AssessmentReport,
   AssistMatchProposalsInput,
   AuditBundle,
@@ -70,9 +71,11 @@ import type {
   ClerkCase,
   ClerkCaseCreateInput,
   ClerkCaseDecisionInput,
+  ClerkCaseSourcePages,
   ClerkClientStatement,
   ClerkDigest,
   ClerkEvalRun,
+  ClerkFeedbackInput,
   ClerkMetrics,
   ClerkPartySuggestions,
   ClerkTierReport,
@@ -214,6 +217,7 @@ import type {
   Message,
   MessageDeliveryInput,
   MessageInput,
+  MintFixtureInput,
   ModelCanaryReport,
   NotFoundResponse,
   NotificationFeed,
@@ -15236,6 +15240,231 @@ export function useGetInvoiceRejectionRisk<TData = Awaited<ReturnType<typeof get
 
 
 
+export const getGetClerkCaseSourcePagesUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/cases/${id}/source-pages`
+}
+
+/**
+ * @summary Rendered source pages of a scanned capture, for the review pane (operator; content only while retention holds it)
+ */
+export const getClerkCaseSourcePages = async (id: string, options?: RequestInit): Promise<ClerkCaseSourcePages> => {
+
+  return customFetch<ClerkCaseSourcePages>(getGetClerkCaseSourcePagesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkCaseSourcePagesQueryKey = (id: string,) => {
+    return [
+    `/api/clerk/cases/${id}/source-pages`
+    ] as const;
+    }
+
+
+export const getGetClerkCaseSourcePagesQueryOptions = <TData = Awaited<ReturnType<typeof getClerkCaseSourcePages>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkCaseSourcePages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkCaseSourcePagesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkCaseSourcePages>>> = ({ signal }) => getClerkCaseSourcePages(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkCaseSourcePages>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkCaseSourcePagesQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkCaseSourcePages>>>
+export type GetClerkCaseSourcePagesQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Rendered source pages of a scanned capture, for the review pane (operator; content only while retention holds it)
+ */
+
+export function useGetClerkCaseSourcePages<TData = Awaited<ReturnType<typeof getClerkCaseSourcePages>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkCaseSourcePages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkCaseSourcePagesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSubmitClerkFeedbackUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/cases/${id}/feedback`
+}
+
+/**
+ * @summary Record the asker's helpfulness signal on an answered question
+ */
+export const submitClerkFeedback = async (id: string,
+    clerkFeedbackInput: ClerkFeedbackInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getSubmitClerkFeedbackUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clerkFeedbackInput)
+  }
+);}
+
+
+
+
+export const getSubmitClerkFeedbackMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitClerkFeedback>>, TError,{id: string;data: BodyType<ClerkFeedbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitClerkFeedback>>, TError,{id: string;data: BodyType<ClerkFeedbackInput>}, TContext> => {
+
+const mutationKey = ['submitClerkFeedback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitClerkFeedback>>, {id: string;data: BodyType<ClerkFeedbackInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  submitClerkFeedback(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitClerkFeedbackMutationResult = NonNullable<Awaited<ReturnType<typeof submitClerkFeedback>>>
+    export type SubmitClerkFeedbackMutationBody = BodyType<ClerkFeedbackInput>
+    export type SubmitClerkFeedbackMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Record the asker's helpfulness signal on an answered question
+ */
+export const useSubmitClerkFeedback = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitClerkFeedback>>, TError,{id: string;data: BodyType<ClerkFeedbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitClerkFeedback>>,
+        TError,
+        {id: string;data: BodyType<ClerkFeedbackInput>},
+        TContext
+      > => {
+      return useMutation(getSubmitClerkFeedbackMutationOptions(options));
+    }
+
+export const getGetAskFeedbackReportUrl = () => {
+
+
+
+
+  return `/api/clerk/ask-feedback`
+}
+
+/**
+ * @summary Helpfulness mining over answered questions (the refusal-mining sibling)
+ */
+export const getAskFeedbackReport = async ( options?: RequestInit): Promise<AskFeedbackReport> => {
+
+  return customFetch<AskFeedbackReport>(getGetAskFeedbackReportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAskFeedbackReportQueryKey = () => {
+    return [
+    `/api/clerk/ask-feedback`
+    ] as const;
+    }
+
+
+export const getGetAskFeedbackReportQueryOptions = <TData = Awaited<ReturnType<typeof getAskFeedbackReport>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAskFeedbackReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAskFeedbackReportQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAskFeedbackReport>>> = ({ signal }) => getAskFeedbackReport({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAskFeedbackReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAskFeedbackReportQueryResult = NonNullable<Awaited<ReturnType<typeof getAskFeedbackReport>>>
+export type GetAskFeedbackReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Helpfulness mining over answered questions (the refusal-mining sibling)
+ */
+
+export function useGetAskFeedbackReport<TData = Awaited<ReturnType<typeof getAskFeedbackReport>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAskFeedbackReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAskFeedbackReportQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getRetryClerkCaseUrl = (id: string,) => {
 
 
@@ -15816,6 +16045,76 @@ export function useListEvalFixtures<TData = Awaited<ReturnType<typeof listEvalFi
 
 
 
+
+export const getMintFixtureFromCaseUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/fixtures/from-case`
+}
+
+/**
+ * @summary Promote a decided case into the eval corpus, pseudonymizing known party identities in the document text
+ */
+export const mintFixtureFromCase = async (mintFixtureInput: MintFixtureInput, options?: RequestInit): Promise<EvalFixtureSummary> => {
+
+  return customFetch<EvalFixtureSummary>(getMintFixtureFromCaseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(mintFixtureInput)
+  }
+);}
+
+
+
+
+export const getMintFixtureFromCaseMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mintFixtureFromCase>>, TError,{data: BodyType<MintFixtureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof mintFixtureFromCase>>, TError,{data: BodyType<MintFixtureInput>}, TContext> => {
+
+const mutationKey = ['mintFixtureFromCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof mintFixtureFromCase>>, {data: BodyType<MintFixtureInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  mintFixtureFromCase(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MintFixtureFromCaseMutationResult = NonNullable<Awaited<ReturnType<typeof mintFixtureFromCase>>>
+    export type MintFixtureFromCaseMutationBody = BodyType<MintFixtureInput>
+    export type MintFixtureFromCaseMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Promote a decided case into the eval corpus, pseudonymizing known party identities in the document text
+ */
+export const useMintFixtureFromCase = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mintFixtureFromCase>>, TError,{data: BodyType<MintFixtureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof mintFixtureFromCase>>,
+        TError,
+        {data: BodyType<MintFixtureInput>},
+        TContext
+      > => {
+      return useMutation(getMintFixtureFromCaseMutationOptions(options));
+    }
 
 export const getRetireEvalFixtureUrl = (key: string,) => {
 

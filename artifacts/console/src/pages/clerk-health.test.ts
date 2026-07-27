@@ -6,12 +6,14 @@ import type {
 } from "@workspace/api-client-react";
 import {
   HEALTH_TABS,
+  askFeedbackTotalsLine,
   canaryPrefillNote,
   fmtEvalDuration,
   fmtMs,
   fmtTokens,
   fmtUsd,
   casesTileDetail,
+  mintFixtureErrorCopy,
   modelCanaryRowClass,
   overrideRateClass,
   qualityAlertText,
@@ -45,6 +47,53 @@ describe("HEALTH_TABS", () => {
     for (const t of HEALTH_TABS) {
       expect(t.label.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("mintFixtureErrorCopy", () => {
+  test("maps the contract statuses to short inline copy", () => {
+    expect(mintFixtureErrorCopy({ status: 404 })).toBe("No case with that id.");
+    expect(mintFixtureErrorCopy({ status: 409 })).toBe(
+      "That case has already been promoted into the corpus.",
+    );
+  });
+
+  test("a 400 relays the server's own words — SCRUB_REQUIRED reaches the operator verbatim", () => {
+    expect(
+      mintFixtureErrorCopy({
+        status: 400,
+        data: {
+          error:
+            "SCRUB_REQUIRED: pseudonymization is required while the client is active",
+        },
+      }),
+    ).toBe(
+      "SCRUB_REQUIRED: pseudonymization is required while the client is active",
+    );
+    // A bare 400 without a body still gets an actionable line.
+    expect(mintFixtureErrorCopy({ status: 400 })).toBe(
+      "That case can't be promoted — check that it has been decided.",
+    );
+  });
+
+  test("anything else falls back to the server's words, then the generic line", () => {
+    expect(
+      mintFixtureErrorCopy({ status: 500, data: { error: "boom" } }),
+    ).toBe("boom");
+    expect(mintFixtureErrorCopy(new Error("network"))).toBe(
+      "Could not mint the fixture. Try again in a moment.",
+    );
+  });
+});
+
+describe("askFeedbackTotalsLine", () => {
+  test("reads the rated split against the unrated denominator", () => {
+    expect(
+      askFeedbackTotalsLine({ helpful: 12, notHelpful: 3, unrated: 40 }),
+    ).toBe("12 helpful · 3 not helpful · 40 unrated");
+    expect(askFeedbackTotalsLine({ helpful: 0, notHelpful: 0, unrated: 0 })).toBe(
+      "0 helpful · 0 not helpful · 0 unrated",
+    );
   });
 });
 

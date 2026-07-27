@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.42.0
+ * OpenAPI spec version: 0.43.0
  */
 export interface HealthStatus {
   status: string;
@@ -3183,7 +3183,59 @@ export interface ClerkExtraction {
   model: string;
 }
 
+export interface ClerkCaseSourcePages {
+  pages: string[];
+  purged: boolean;
+}
+
+export interface ClerkFeedbackInput {
+  helpful: boolean;
+}
+
+export type AskFeedbackReportTotals = {
+  helpful: number;
+  notHelpful: number;
+  unrated: number;
+};
+
+export type AskFeedbackReportByIntentItem = {
+  intent: string;
+  helpful: number;
+  notHelpful: number;
+};
+
+export type AskFeedbackReportRecentNotHelpfulItem = {
+  caseId: string;
+  question: string;
+  createdAt: string;
+};
+
+export interface AskFeedbackReport {
+  totals: AskFeedbackReportTotals;
+  byIntent: AskFeedbackReportByIntentItem[];
+  recentNotHelpful: AskFeedbackReportRecentNotHelpfulItem[];
+}
+
+export interface MintFixtureInput {
+  caseId: string;
+  scrub?: boolean;
+}
+
 export type ClerkAnswerDataParams = {[key: string]: string};
+
+export type ClerkAnswerLinkKind = typeof ClerkAnswerLinkKind[keyof typeof ClerkAnswerLinkKind];
+
+
+export const ClerkAnswerLinkKind = {
+  invoice: 'invoice',
+} as const;
+
+export interface ClerkAnswerLink {
+  label: string;
+  kind: ClerkAnswerLinkKind;
+  /** @nullable */
+  id?: string | null;
+}
 
 export interface ClerkAnswer {
   answered: boolean;
@@ -3196,6 +3248,7 @@ export interface ClerkAnswer {
   facts?: ProtectedFact[];
   citation?: string;
   refusalReason?: string;
+  links?: ClerkAnswerLink[];
 }
 
 export type ClerkCaseKind = typeof ClerkCaseKind[keyof typeof ClerkCaseKind];
@@ -3217,6 +3270,17 @@ export const ClerkCaseStatus = {
   rejected: 'rejected',
   escalated: 'escalated',
   failed: 'failed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ClerkCaseFeedback = typeof ClerkCaseFeedback[keyof typeof ClerkCaseFeedback] | null;
+
+
+export const ClerkCaseFeedback = {
+  helpful: 'helpful',
+  not_helpful: 'not_helpful',
 } as const;
 
 export type ClerkCasePreflightItemSeverity = typeof ClerkCasePreflightItemSeverity[keyof typeof ClerkCasePreflightItemSeverity];
@@ -3257,6 +3321,9 @@ export interface ClerkCase {
   sourceHash?: string | null;
   /** @nullable */
   sourceDurationSec?: number | null;
+  fastLaneThreshold?: number;
+  /** @nullable */
+  feedback?: ClerkCaseFeedback;
   /** @nullable */
   preflight?: ClerkCasePreflightItem[] | null;
   extraction?: ClerkExtraction | null;
@@ -4235,6 +4302,7 @@ export interface OffboardClientResult {
   aliasesDeleted: number;
   contactCleared: boolean;
   lastEngagement: boolean;
+  fixturesRetired?: number;
 }
 
 /**

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.42.0
+ * OpenAPI spec version: 0.43.0
  */
 import * as zod from 'zod';
 
@@ -2775,7 +2775,8 @@ export const OffboardClientResponse = zod.object({
   "membershipsRemoved": zod.number(),
   "aliasesDeleted": zod.number(),
   "contactCleared": zod.boolean(),
-  "lastEngagement": zod.boolean()
+  "lastEngagement": zod.boolean(),
+  "fixturesRetired": zod.number().optional()
 })
 
 
@@ -4693,6 +4694,8 @@ export const ListClerkCasesResponseItem = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
   "message": zod.string(),
@@ -4735,7 +4738,12 @@ export const ListClerkCasesResponseItem = zod.object({
   "unit": zod.string().optional()
 })).optional(),
   "citation": zod.string().optional(),
-  "refusalReason": zod.string().optional()
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -4788,6 +4796,8 @@ export const CreateClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
   "message": zod.string(),
@@ -4830,7 +4840,12 @@ export const CreateClerkCaseResponse = zod.object({
   "unit": zod.string().optional()
 })).optional(),
   "citation": zod.string().optional(),
-  "refusalReason": zod.string().optional()
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -4867,6 +4882,8 @@ export const GetClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
   "message": zod.string(),
@@ -4909,7 +4926,12 @@ export const GetClerkCaseResponse = zod.object({
   "unit": zod.string().optional()
 })).optional(),
   "citation": zod.string().optional(),
-  "refusalReason": zod.string().optional()
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -4971,6 +4993,8 @@ export const DecideClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
   "message": zod.string(),
@@ -5013,7 +5037,12 @@ export const DecideClerkCaseResponse = zod.object({
   "unit": zod.string().optional()
 })).optional(),
   "citation": zod.string().optional(),
-  "refusalReason": zod.string().optional()
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -5100,6 +5129,8 @@ export const AskClerkResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
   "message": zod.string(),
@@ -5142,7 +5173,12 @@ export const AskClerkResponse = zod.object({
   "unit": zod.string().optional()
 })).optional(),
   "citation": zod.string().optional(),
-  "refusalReason": zod.string().optional()
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -5213,6 +5249,55 @@ export const GetInvoiceRejectionRiskResponse = zod.object({
 
 
 /**
+ * @summary Rendered source pages of a scanned capture, for the review pane (operator; content only while retention holds it)
+ */
+export const GetClerkCaseSourcePagesParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetClerkCaseSourcePagesResponse = zod.object({
+  "pages": zod.array(zod.string()),
+  "purged": zod.boolean()
+})
+
+
+/**
+ * @summary Record the asker's helpfulness signal on an answered question
+ */
+export const SubmitClerkFeedbackParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const SubmitClerkFeedbackBody = zod.object({
+  "helpful": zod.boolean()
+})
+
+export const SubmitClerkFeedbackResponse = zod.void()
+
+
+/**
+ * @summary Helpfulness mining over answered questions (the refusal-mining sibling)
+ */
+export const GetAskFeedbackReportResponse = zod.object({
+  "totals": zod.object({
+  "helpful": zod.number(),
+  "notHelpful": zod.number(),
+  "unrated": zod.number()
+}),
+  "byIntent": zod.array(zod.object({
+  "intent": zod.string(),
+  "helpful": zod.number(),
+  "notHelpful": zod.number()
+})),
+  "recentNotHelpful": zod.array(zod.object({
+  "caseId": zod.string(),
+  "question": zod.string(),
+  "createdAt": zod.string()
+}))
+})
+
+
+/**
  * @summary Re-run extraction on a failed case from its stored source
  */
 export const RetryClerkCaseParams = zod.object({
@@ -5229,6 +5314,8 @@ export const RetryClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
   "message": zod.string(),
@@ -5271,7 +5358,12 @@ export const RetryClerkCaseResponse = zod.object({
   "unit": zod.string().optional()
 })).optional(),
   "citation": zod.string().optional(),
-  "refusalReason": zod.string().optional()
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -5311,6 +5403,8 @@ export const ClaimClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
   "message": zod.string(),
@@ -5353,7 +5447,12 @@ export const ClaimClerkCaseResponse = zod.object({
   "unit": zod.string().optional()
 })).optional(),
   "citation": zod.string().optional(),
-  "refusalReason": zod.string().optional()
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -5393,6 +5492,8 @@ export const ReleaseClerkCaseResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
   "message": zod.string(),
@@ -5435,7 +5536,12 @@ export const ReleaseClerkCaseResponse = zod.object({
   "unit": zod.string().optional()
 })).optional(),
   "citation": zod.string().optional(),
-  "refusalReason": zod.string().optional()
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -5603,6 +5709,32 @@ export const ListEvalFixturesResponse = zod.object({
 
 
 /**
+ * @summary Promote a decided case into the eval corpus, pseudonymizing known party identities in the document text
+ */
+export const MintFixtureFromCaseBody = zod.object({
+  "caseId": zod.string(),
+  "scrub": zod.boolean().optional()
+})
+
+export const MintFixtureFromCaseResponse = zod.object({
+  "key": zod.string(),
+  "source": zod.enum(['static', 'grown', 'redteam']),
+  "label": zod.string(),
+  "riskLabel": zod.string(),
+  "retired": zod.boolean(),
+  "retiredAt": zod.string().nullish(),
+  "createdAt": zod.string().nullish(),
+  "runs": zod.number().optional(),
+  "lastOutcome": zod.string().nullish(),
+  "fieldsCompared": zod.number().optional(),
+  "fieldsCorrect": zod.number().optional(),
+  "injectionFixtures": zod.number().optional(),
+  "injectionResisted": zod.number().optional(),
+  "lastMismatchedFields": zod.array(zod.string()).optional()
+})
+
+
+/**
  * @summary Retire a grown or red-team fixture from the corpus (static fixtures cannot be retired)
  */
 export const RetireEvalFixtureParams = zod.object({
@@ -5715,6 +5847,8 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "sourceImageB64": zod.string().nullish(),
   "sourceHash": zod.string().nullish(),
   "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
   "preflight": zod.array(zod.object({
   "field": zod.string(),
   "message": zod.string(),
@@ -5757,7 +5891,12 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "unit": zod.string().optional()
 })).optional(),
   "citation": zod.string().optional(),
-  "refusalReason": zod.string().optional()
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),

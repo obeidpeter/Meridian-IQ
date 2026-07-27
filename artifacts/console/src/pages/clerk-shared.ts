@@ -35,13 +35,17 @@ export const STATUS_TONE: Record<string, BadgeTone> = {
 // doesn't print" — inform the reviewer without costing the fast lane; a
 // null/undefined list means pre-flight never ran, which is not the same as
 // clear), and every critical field arrived with a value at high confidence.
-// Purely a triage hint: approval still needs the operator's eyes.
+// The confidence bar is the case's own fastLaneThreshold, derived server-side
+// from calibration evidence (modules/clerk/metrics.ts); 0.9 is only the
+// wire-absent fallback for older servers that don't send one. Purely a
+// triage hint: approval still needs the operator's eyes.
 export function isReadyToApprove(kase: ClerkCase): boolean {
   if (kase.status !== "extracted") return false;
   if (!Array.isArray(kase.preflight)) return false;
   if (kase.preflight.some((i) => i.severity !== "advisory")) return false;
+  const threshold = kase.fastLaneThreshold ?? 0.9;
   return (kase.extraction?.fields ?? []).every(
-    (f) => !f.critical || (f.value != null && f.confidence >= 0.9),
+    (f) => !f.critical || (f.value != null && f.confidence >= threshold),
   );
 }
 
@@ -150,6 +154,21 @@ export function fileIsPdf(file: File): boolean {
     file.type === "application/pdf" ||
     file.name.toLowerCase().endsWith(".pdf")
   );
+}
+
+// Data URI for a stored source image / rendered page. The wire carries plain
+// base64 with no content type, so sniff the subtype from the base64 header
+// bytes (PNG, JPEG and WebP are the only formats the intake accepts; PNG is
+// the fallback because rendered scan pages are always PNG).
+export function imageDataUri(b64: string): string {
+  const subtype = b64.startsWith("iVBORw0KGgo")
+    ? "png"
+    : b64.startsWith("/9j/")
+      ? "jpeg"
+      : b64.startsWith("UklGR")
+        ? "webp"
+        : "png";
+  return `data:image/${subtype};base64,${b64}`;
 }
 
 // Source snippets can quote a whole paragraph; ~300 chars is plenty to verify

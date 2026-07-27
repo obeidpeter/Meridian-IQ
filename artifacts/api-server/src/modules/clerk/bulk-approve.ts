@@ -2,6 +2,7 @@ import { runRequestContext, type ClerkCase } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 import { decideCase, getCase, type CaseDecisionInput } from "./cases";
+import { FAST_LANE_DEFAULT, firmFastLaneThreshold } from "./metrics";
 
 // Fast-lane bulk approval (operator throughput). The console's intake queue
 // marks a case "ready to approve" when extraction succeeded, pre-flight found
@@ -31,17 +32,27 @@ import { decideCase, getCase, type CaseDecisionInput } from "./cases";
 // Mirrors the console's fast-lane predicate `isReadyToApprove`
 // (artifacts/console/src/pages/clerk-shared.ts) — if that predicate changes,
 // change this one too, or the queue will offer bulk approval the server then
-// refuses (and vice versa). The rules, restated server-side because the
-// client is never trusted to enforce them:
+// refuses (and vice versa). The confidence bar itself is PER-FIRM since the
+// adaptive fast lane (round 7): the console reads the server-computed
+// kase.fastLaneThreshold and this module re-derives the same number via
+// firmFastLaneThreshold (metrics.ts) — one derivation, threaded to both, so
+// neither side can drift on the threshold value. The rules, restated
+// server-side because the client is never trusted to enforce them:
 //  - status must be exactly "extracted" (unclaimed fast lane — a claimed,
 //    escalated or failed case needs a human on the single-case path);
 //  - preflight must be a PRESENT array ("never ran" is not the same as
 //    "clear") with no non-advisory issue;
-//  - every critical extraction field must have a value at high confidence.
-export const FAST_LANE_CONFIDENCE = 0.9;
+//  - every critical extraction field must have a value at or above the
+//    firm's fast-lane confidence threshold.
+//
+// Compatibility alias: the historical exported name for the default bar.
+// New code should import FAST_LANE_DEFAULT / FAST_LANE_FLOOR /
+// firmFastLaneThreshold from metrics.ts.
+export const FAST_LANE_CONFIDENCE = FAST_LANE_DEFAULT;
 
 export function fastLaneBlocker(
   kase: Pick<ClerkCase, "status" | "preflight" | "extraction">,
+  threshold: number = FAST_LANE_DEFAULT,
 ): string | null {
   if (kase.status !== "extracted") {
     return `only fast-lane cases awaiting review can be bulk-approved (status is '${kase.status}')`;
@@ -54,8 +65,7 @@ export function fastLaneBlocker(
     return `pre-flight found a blocking issue (${blocking.field}: ${blocking.message})`;
   }
   const weak = (kase.extraction?.fields ?? []).find(
-    (f) =>
-      f.critical && (f.value == null || f.confidence < FAST_LANE_CONFIDENCE),
+    (f) => f.critical && (f.value == null || f.confidence < threshold),
   );
   if (weak) {
     return weak.value == null
@@ -91,6 +101,21 @@ export async function bulkApproveCases(
 ): Promise<BulkApproveResult> {
   const results: BulkApproveRowResult[] = [];
 
+  // Per-firm fast-lane thresholds (adaptive fast lane), memoized for the
+  // batch: one calibration derivation per distinct firm, not per item. The
+  // promise is created inside the first item's bypass transaction and its
+  // resolved number is reused by every later item for that firm.
+  const thresholds = new Map<string, Promise<number>>();
+  const thresholdFor = (firmId: string | null): Promise<number> => {
+    const key = firmId ?? "";
+    let hit = thresholds.get(key);
+    if (!hit) {
+      hit = firmFastLaneThreshold(firmId);
+      thresholds.set(key, hit);
+    }
+    return hit;
+  };
+
   for (const item of items) {
     const skip = (reason: string): void => {
       results.push({ caseId: item.caseId, outcome: "skipped", reason });
@@ -118,9 +143,11 @@ export async function bulkApproveCases(
       await runRequestContext({ bypass: true, firmId: null }, async () => {
         const kase: ClerkCase = await getCase(item.caseId);
         // Server-side fast-lane eligibility BEFORE any decision is applied —
-        // the console computes the same predicate for display, but the
-        // server owns the rule.
-        const blocked = fastLaneBlocker(kase);
+        // the console displays the same predicate (with the same
+        // server-served threshold), but the server owns the rule. The
+        // threshold is the CASE's firm's, resolved here where the firm is
+        // known.
+        const blocked = fastLaneBlocker(kase, await thresholdFor(kase.firmId));
         if (blocked) throw new BulkSkip(blocked);
         await decideCase(item.caseId, item.decision, actorId);
       });
