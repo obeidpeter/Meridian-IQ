@@ -33,8 +33,14 @@ import billingPaymentsRouter from "./billing-payments";
 // Also registers the webhook fan-out/dispatch sweep with the pipeline worker
 // (modules/integrations/webhooks.ts registerSweep at import time).
 import integrationsRouter from "./integrations";
+// Client lifecycle: single-client creation, data-subject export, offboarding.
+import clientsRouter from "./clients";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
+// Platform health watch (rails / dead letters / dead deliveries). Also
+// reached transitively via routes/operator.ts's constant imports; the
+// explicit import keeps sweep registration visible in one place.
+import "../modules/desk/health-watch";
 import "../modules/desk/triage";
 import "../modules/clerk/watchdog";
 import "../modules/clerk/eval-growth";
@@ -82,5 +88,6 @@ router.use(clerkRouter);
 router.use(staffRouter);
 router.use(billingPaymentsRouter);
 router.use(integrationsRouter);
+router.use(clientsRouter);
 
 export default router;

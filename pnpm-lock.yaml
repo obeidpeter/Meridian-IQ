@@ -736,6 +736,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: 'catalog:'
         version: 5.2.0(vite@7.3.5(@types/node@25.9.4)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.49.0)(tsx@4.22.4)(yaml@2.9.0))
+      '@workspace/web-config':
+        specifier: workspace:*
+        version: link:../../lib/web-config
       '@workspace/web-ui':
         specifier: workspace:*
         version: link:../../lib/web-ui

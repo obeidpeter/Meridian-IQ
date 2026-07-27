@@ -54,6 +54,14 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["email", "push"],
     description: "The firm's weekly Clerk digest is ready to view.",
   },
+  // Operator nudge from the platform health watch (desk/health-watch.ts).
+  // Pointer only (SEC-12): the message names no rails, firms or event ids —
+  // the operator opens the Desk to read the durable audit alert itself.
+  platform_health: {
+    key: "platform_health",
+    channels: ["email", "push"],
+    description: "A platform health alert for the Compliance Desk.",
+  },
 };
 
 // Channel failover order when a provider fails. Push is terminal: if the Expo

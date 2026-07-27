@@ -1,6 +1,8 @@
 // Static path-router for the E2E harness: serves the four built frontends the
 // way the production origin does (SPA fallback per prefix) and proxies /api to
 // the api-server. No vite processes — the tests run against real builds.
+// Also hosts the local webhook receiver the integration-layer journey points
+// a firm webhook at (startWebhookReceiver below).
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -92,5 +94,36 @@ export function startStaticServer({ port, apiPort }) {
   });
   return new Promise((resolve) => {
     server.listen(port, "127.0.0.1", () => resolve(server));
+  });
+}
+
+// Local webhook receiver (startStaticServer's factory/lifecycle shape: a
+// node:http server, promise resolves once listening, the caller closes it in
+// its finally). Records every POST — path, the x-meridian-signature /
+// x-meridian-event headers, and the RAW utf-8 body (byte-exact, so the
+// journey can recompute the HMAC over exactly what was signed) — into the
+// `deliveries` array the resolved handle exposes. Always answers 200 so the
+// dispatcher marks the delivery delivered on the first attempt.
+export function startWebhookReceiver({ port }) {
+  const deliveries = [];
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      deliveries.push({
+        method: req.method,
+        path: new URL(req.url, "http://localhost").pathname,
+        signature: req.headers["x-meridian-signature"] ?? null,
+        event: req.headers["x-meridian-event"] ?? null,
+        body: Buffer.concat(chunks).toString("utf8"),
+      });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end('{"received":true}');
+    });
+  });
+  return new Promise((resolve) => {
+    server.listen(port, "127.0.0.1", () =>
+      resolve({ port, deliveries, close: () => server.close() }),
+    );
   });
 }

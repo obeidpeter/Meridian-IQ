@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { StaleBuildBanner } from "@/components/stale-build-banner";
+import { NotificationBell } from "@/components/notification-bell";
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -155,22 +156,25 @@ export function Layout({ children }: { children: ReactNode }) {
       </a>
       <div className="md:hidden flex items-center justify-between p-4 border-b bg-card">
         <BrandMark />
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Open navigation"
-              data-testid="button-menu"
-            >
-              <Menu aria-hidden="true" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-64 p-0">
-            <SheetTitle className="sr-only">Navigation</SheetTitle>
-            <NavLinks onNavigate={() => setSheetOpen(false)} />
-          </SheetContent>
-        </Sheet>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open navigation"
+                data-testid="button-menu"
+              >
+                <Menu aria-hidden="true" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0">
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <NavLinks onNavigate={() => setSheetOpen(false)} />
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       <div className="hidden md:flex w-64 border-r bg-card min-h-screen sticky top-0 max-h-screen flex-col">
@@ -183,6 +187,11 @@ export function Layout({ children }: { children: ReactNode }) {
         tabIndex={-1}
         className="flex-1 p-4 md:p-8 overflow-y-auto max-w-6xl mx-auto w-full focus:outline-none"
       >
+        {/* Desktop header strip: the bell lives in the mobile top bar on
+            small screens, so this row only renders at md+. */}
+        <div className="hidden md:flex justify-end mb-4">
+          <NotificationBell />
+        </div>
         {children}
       </main>
       </div>

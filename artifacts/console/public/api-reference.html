@@ -1,0 +1,1233 @@
+<!-- GENERATED FILE — do not hand-edit.
+     Rendered from lib/api-spec/openapi.yaml (contract 0.42.0) by
+     scripts/render-api-reference.mjs; the console build's prebuild step
+     regenerates it on every build. -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>MeridianIQ API reference — v0.42.0</title>
+<style>
+:root{color-scheme:light dark;
+  --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
+  --accent:#0f6b54;--code-bg:#f1f4f6;
+  --get:#0d6efd;--post:#0f6b54;--put:#8a5a00;--patch:#8a5a00;--delete:#b02a37;
+  --s2:#0f6b54;--s4:#8a5a00;--s5:#b02a37}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#101418;--fg:#e6e9ec;--dim:#98a2ad;--line:#26303a;--card:#161c22;
+  --accent:#4cc3a5;--code-bg:#1d242c;
+  --get:#5ea3ff;--post:#4cc3a5;--put:#d9a441;--patch:#d9a441;--delete:#e4737e;
+  --s2:#4cc3a5;--s4:#d9a441;--s5:#e4737e}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:60rem;margin:0 auto;padding:2rem 1.25rem 5rem}
+h1{font-size:1.7rem;margin:.2rem 0 .3rem}
+h2{font-size:1.15rem;margin:2.2rem 0 .7rem;padding-top:1rem;
+  border-top:1px solid var(--line);text-transform:capitalize}
+h3{font-size:1rem;margin:1.4rem 0 .4rem}
+p{margin:.5rem 0}
+.dim{color:var(--dim)}
+code{background:var(--code-bg);border-radius:4px;padding:.08em .35em;
+  font:.86em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;
+  padding: .8rem 1rem;overflow-x:auto}
+pre code{background:none;padding:0}
+.pill{display:inline-block;background:var(--code-bg);border:1px solid var(--line);
+  border-radius:999px;padding:.05rem .6rem;font-size:.8rem;color:var(--dim)}
+.intro-card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:.9rem 1.1rem;margin:.9rem 0}
+.intro-card h3{margin-top:.1rem}
+ul{margin:.4rem 0 .4rem 1.2rem;padding:0}
+li{margin:.22rem 0}
+nav.toc{display:flex;flex-wrap:wrap;gap:.45rem;margin:1.1rem 0}
+nav.toc a{display:inline-flex;align-items:center;gap:.4rem;text-decoration:none;
+  color:var(--fg);background:var(--card);border:1px solid var(--line);
+  border-radius:999px;padding:.18rem .75rem;font-size:.86rem}
+nav.toc a:hover{border-color:var(--accent)}
+nav.toc .count{color:var(--dim);font-size:.78rem}
+.op{border:1px solid var(--line);border-radius:8px;background:var(--card);
+  margin:.45rem 0;overflow:hidden}
+.op summary{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;
+  padding:.5rem .8rem;cursor:pointer;list-style:none}
+.op summary::-webkit-details-marker{display:none}
+.op[open] summary{border-bottom:1px solid var(--line)}
+.method{font:700 .72rem/1 ui-monospace,monospace;letter-spacing:.03em;
+  padding:.22rem .45rem;border-radius:5px;color:#fff;min-width:3.2rem;text-align:center}
+.m-get{background:var(--get)}.m-post{background:var(--post)}
+.m-put{background:var(--put)}.m-patch{background:var(--patch)}.m-delete{background:var(--delete)}
+.path{background:none;font-size:.88em;word-break:break-all}
+.sum{color:var(--dim);font-size:.86rem}
+.opbody{padding:.55rem .9rem .7rem}
+.req{margin:.15rem 0 .35rem}
+.responses{list-style:none;margin:.2rem 0 0;padding:0}
+.responses li{margin:.28rem 0}
+.status{font:700 .74rem/1 ui-monospace,monospace;padding:.16rem .4rem;
+  border-radius:4px;color:#fff;margin-right:.35rem}
+.s2xx{background:var(--s2)}.s4xx{background:var(--s4)}.s5xx{background:var(--s5)}
+.err{font-weight:600}
+footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
+  border-top:1px solid var(--line);padding-top:1rem}
+</style>
+</head>
+<body>
+<main>
+<h1>MeridianIQ API reference</h1>
+<p><span class="pill">contract v0.42.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p class="dim">The full platform contract, grouped by area. Generated from
+<code>lib/api-spec/openapi.yaml</code> — the same file the server's request
+validation and the apps' typed clients are generated from, so this page can
+never disagree with the running API of the same version
+(<code>GET /api/healthz</code> reports the server's contract version).</p>
+
+<div class="intro-card">
+<h3>Authentication</h3>
+<p>Two credentials, resolved in this order:</p>
+<ul>
+<li><strong>Firm API keys (machine callers)</strong> — <code>Authorization: Bearer mk_…</code>.
+A firm admin mints keys under <em>Console → API &amp; webhooks</em>; the secret is
+shown <strong>once</strong> and only its hash is stored. A key is pinned to its firm and
+carries <em>exactly</em> the capability list it was minted with, from a deliberately
+narrow allowlist: <code>invoice.read</code> (pull invoice data),
+<code>invoice.write</code> (create/edit drafts), <code>statement.write</code> (push bank
+statements). No key can <em>submit</em> to the government rails, touch Clerk,
+billing or identity, or mint further credentials. Revocation is immediate —
+a revoked or unknown key is a clean <code>401</code>, never a fall-through to
+another credential.</li>
+<li><strong>Sessions (the web apps &amp; mobile)</strong> — an HttpOnly cookie (or the same
+signed token as <code>Authorization: Bearer</code> on mobile). Cookie-authenticated
+<em>state-changing</em> requests must also send the CSRF header
+<code>x-meridian-csrf: 1</code>; Bearer requests are exempt (they carry no cookie).</li>
+</ul>
+</div>
+
+<div class="intro-card">
+<h3>Webhooks &amp; signatures</h3>
+<p>A firm admin registers HTTPS endpoints (<code>POST /api/firm-webhooks</code>) against a
+closed event catalogue: <code>invoice.stamped</code>, <code>invoice.settled</code>,
+<code>statement.reconciled</code>. Each delivery is a JSON <code>POST</code> carrying the event in
+<code>x-meridian-event</code> and a signature in <code>x-meridian-signature</code>.</p>
+<p><strong>Signature scheme</strong> — the signing secret (<code>whsec_…</code>) is shown once at
+registration; the HMAC key is its <strong>SHA-256 hash as lowercase hex</strong>, not the
+secret itself. Verify: <code>HMAC-SHA256(rawBody, sha256hex(secret))</code>, hex-encoded,
+must equal the header. Always verify over the <em>raw</em> body bytes:</p>
+<pre><code>import { createHash, createHmac } from &quot;node:crypto&quot;;
+
+// Hash your stored whsec_ secret ONCE — that hash is the HMAC key.
+const key = createHash(&quot;sha256&quot;).update(process.env.WEBHOOK_SECRET).digest(&quot;hex&quot;);
+
+function verify(rawBody, signatureHeader) {
+  const expected = createHmac(&quot;sha256&quot;, key).update(rawBody).digest(&quot;hex&quot;);
+  return expected === signatureHeader; // x-meridian-signature
+}</code></pre>
+<p>Failed deliveries retry with exponential backoff up to <strong>5 attempts</strong>, then
+park as <strong>dead</strong>; the per-endpoint delivery log
+(<code>GET /api/firm-webhooks/{id}/deliveries</code>) shows every attempt, and a dead
+delivery can be re-queued for a fresh attempt cycle
+(<code>POST …/deliveries/{deliveryId}/retry</code>). Disabling an endpoint stops
+deliveries and keeps its history.</p>
+</div>
+
+<div class="intro-card">
+<h3>Pointer-only payloads</h3>
+<p>Everything that leaves the platform — webhook bodies, alert messages — is
+<strong>pointer-only by construction</strong>: an entity type, an id and a timestamp, never
+amounts, party names, TINs or document content. A mis-registered or compromised
+receiver URL learns only that <em>something</em> happened; resolve the details back
+through this authenticated API (typically with an API key holding
+<code>invoice.read</code>).</p>
+</div>
+
+<div class="intro-card">
+<h3>Rate limits &amp; errors</h3>
+<ul>
+<li><strong>600 requests/minute</strong> per principal in general; <strong>60/minute</strong> on
+AI-powered (model-calling) routes. Each API key gets its own budget. A
+<code>429</code> answers with how long to wait.</li>
+<li>Errors are <code>{"error": "human-readable message"}</code> with a conventional status:
+<code>400</code> invalid input, <code>401</code> unauthenticated, <code>403</code> not allowed,
+<code>404</code> outside your scope, <code>409</code> state moved (e.g. a duplicate
+payment intent or a stale lifecycle transition).</li>
+<li>Mutating calls are transactional: a <code>4xx</code>/<code>5xx</code> response means the
+request's writes were rolled back.</li>
+</ul>
+</div>
+
+<h2 style="text-transform:none">Endpoints by area</h2>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">28</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">14</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">10</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">40</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">15</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a></nav>
+<section id="tag-health">
+<h2>health</h2>
+<details class="op" id="healthCheck">
+<summary><span class="method m-get">GET</span><code class="path">/api/healthz</code><span class="sum">Health check</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>HealthStatus</code> <span class="dim">Healthy</span></li></ul></div>
+</details>
+</section>
+<section id="tag-auth">
+<h2>auth</h2>
+<details class="op" id="login">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/login</code><span class="sum">Email + password sign-in; sets the HttpOnly session cookie</span></summary>
+<div class="opbody"><div class="req">Request body: <code>LoginInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>Me</code> <span class="dim">Signed in; principal returned and session cookie set</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="logout">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/logout</code><span class="sum">Clear the session cookie</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Signed out</span></li></ul></div>
+</details>
+<details class="op" id="totpChallenge">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/totp/challenge</code><span class="sum">Redeem a login mfaToken plus a TOTP or recovery code for the session cookie</span></summary>
+<div class="opbody"><div class="req">Request body: <code>TotpChallengeInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>Me</code> <span class="dim">Signed in; principal returned and session cookie set</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="getTotpStatus">
+<summary><span class="method m-get">GET</span><code class="path">/api/auth/totp/status</code><span class="sum">Whether the signed-in user has TOTP enabled</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>TotpStatus</code> <span class="dim">Enrolment state</span></li></ul></div>
+</details>
+<details class="op" id="setupTotp">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/totp/setup</code><span class="sum">Begin TOTP enrolment — returns the secret, otpauth URI and recovery codes (shown once)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>TotpSetup</code> <span class="dim">Pending enrolment; activate with a valid code</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="activateTotp">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/totp/activate</code><span class="sum">Confirm enrolment with a valid code; revokes other sessions</span></summary>
+<div class="opbody"><div class="req">Request body: <code>TotpActivateInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>TotpStatus</code> <span class="dim">TOTP enabled</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="disableTotp">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/totp/disable</code><span class="sum">Disable TOTP — requires the password and a current code; revokes other sessions</span></summary>
+<div class="opbody"><div class="req">Request body: <code>TotpDisableInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>TotpStatus</code> <span class="dim">TOTP disabled</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="changePassword">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/change-password</code><span class="sum">Change the signed-in account's password (SEC-02)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ChangePasswordInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Password changed</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="listFirmApiKeys">
+<summary><span class="method m-get">GET</span><code class="path">/api/firm-api-keys</code><span class="sum">The firm's API keys (metadata only — the secret is never retrievable)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmApiKey[]</code> <span class="dim">API keys, newest first</span></li></ul></div>
+</details>
+<details class="op" id="createFirmApiKey">
+<summary><span class="method m-post">POST</span><code class="path">/api/firm-api-keys</code><span class="sum">Mint a firm API key; the secret is returned once and only its hash is stored</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreateFirmApiKeyInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>FirmApiKeyCreated</code> <span class="dim">API key created (secret shown once)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="revokeFirmApiKey">
+<summary><span class="method m-post">POST</span><code class="path">/api/firm-api-keys/{id}/revoke</code><span class="sum">Revoke a firm API key (irreversible; the key stops authenticating immediately)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmApiKey</code> <span class="dim">Revoked key</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="resetPassword">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/reset-password</code><span class="sum">Redeem a one-time password-reset token and set a new password (public)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ResetPasswordInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Password set; sign in with it (outstanding sessions are revoked)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+</section>
+<section id="tag-identity">
+<h2>identity</h2>
+<details class="op" id="getMe">
+<summary><span class="method m-get">GET</span><code class="path">/api/me</code><span class="sum">Resolve the current principal and capabilities</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Me</code> <span class="dim">Current principal</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="createPasswordReset">
+<summary><span class="method m-post">POST</span><code class="path">/api/password-resets</code><span class="sum">Issue a one-time password-reset link for a user (operator support path); returns the token once</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreatePasswordResetInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>PasswordResetWithToken</code> <span class="dim">Reset issued (token shown once)</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listFirms">
+<summary><span class="method m-get">GET</span><code class="path">/api/firms</code><span class="sum">listFirms</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Firm[]</code> <span class="dim">Firms</span></li></ul></div>
+</details>
+<details class="op" id="createFirm">
+<summary><span class="method m-post">POST</span><code class="path">/api/firms</code><span class="sum">createFirm</span></summary>
+<div class="opbody"><div class="req">Request body: <code>FirmInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>Firm</code> <span class="dim">Created</span></li></ul></div>
+</details>
+<details class="op" id="getFirm">
+<summary><span class="method m-get">GET</span><code class="path">/api/firms/{id}</code><span class="sum">getFirm</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Firm</code> <span class="dim">Firm</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="createUser">
+<summary><span class="method m-post">POST</span><code class="path">/api/users</code><span class="sum">createUser</span></summary>
+<div class="opbody"><div class="req">Request body: <code>UserInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>User</code> <span class="dim">Created</span></li></ul></div>
+</details>
+<details class="op" id="createMembership">
+<summary><span class="method m-post">POST</span><code class="path">/api/memberships</code><span class="sum">createMembership</span></summary>
+<div class="opbody"><div class="req">Request body: <code>MembershipInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>Membership</code> <span class="dim">Created</span></li></ul></div>
+</details>
+</section>
+<section id="tag-parties">
+<h2>parties</h2>
+<details class="op" id="listParties">
+<summary><span class="method m-get">GET</span><code class="path">/api/parties</code><span class="sum">listParties</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Party[]</code> <span class="dim">Parties</span></li></ul></div>
+</details>
+<details class="op" id="createParty">
+<summary><span class="method m-post">POST</span><code class="path">/api/parties</code><span class="sum">createParty</span></summary>
+<div class="opbody"><div class="req">Request body: <code>PartyInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>Party</code> <span class="dim">Created</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getParty">
+<summary><span class="method m-get">GET</span><code class="path">/api/parties/{id}</code><span class="sum">getParty</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Party</code> <span class="dim">Party</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="updateParty">
+<summary><span class="method m-patch">PATCH</span><code class="path">/api/parties/{id}</code><span class="sum">updateParty</span></summary>
+<div class="opbody"><div class="req">Request body: <code>PartyUpdateInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>Party</code> <span class="dim">Updated party</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="getMergeImpact">
+<summary><span class="method m-get">GET</span><code class="path">/api/parties/merge-impact</code><span class="sum">What each side of a proposed party merge carries (deterministic counts)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>MergeImpact</code> <span class="dim">Per-side reference counts; a side is null when the party does not exist</span></li></ul></div>
+</details>
+<details class="op" id="mergeParties">
+<summary><span class="method m-post">POST</span><code class="path">/api/parties/merge</code><span class="sum">mergeParties</span></summary>
+<div class="opbody"><div class="req">Request body: <code>PartyMergeInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Merged</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="splitParty">
+<summary><span class="method m-post">POST</span><code class="path">/api/parties/{id}/split</code><span class="sum">splitParty</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Split</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="validateTin">
+<summary><span class="method m-post">POST</span><code class="path">/api/parties/validate-tin</code><span class="sum">validateTin</span></summary>
+<div class="opbody"><div class="req">Request body: <code>TinCheckInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>IdentifierCheck</code> <span class="dim">Result</span></li></ul></div>
+</details>
+<details class="op" id="validateCac">
+<summary><span class="method m-post">POST</span><code class="path">/api/parties/validate-cac</code><span class="sum">validateCac</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CacCheckInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>IdentifierCheck</code> <span class="dim">Result</span></li></ul></div>
+</details>
+</section>
+<section id="tag-engagements">
+<h2>engagements</h2>
+<details class="op" id="listEngagements">
+<summary><span class="method m-get">GET</span><code class="path">/api/engagements</code><span class="sum">listEngagements</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Engagement[]</code> <span class="dim">Engagements</span></li></ul></div>
+</details>
+<details class="op" id="createEngagement">
+<summary><span class="method m-post">POST</span><code class="path">/api/engagements</code><span class="sum">createEngagement</span></summary>
+<div class="opbody"><div class="req">Request body: <code>EngagementInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>Engagement</code> <span class="dim">Created</span></li></ul></div>
+</details>
+<details class="op" id="getEngagement">
+<summary><span class="method m-get">GET</span><code class="path">/api/engagements/{id}</code><span class="sum">getEngagement</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Engagement</code> <span class="dim">Engagement</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="updateEngagement">
+<summary><span class="method m-patch">PATCH</span><code class="path">/api/engagements/{id}</code><span class="sum">updateEngagement</span></summary>
+<div class="opbody"><div class="req">Request body: <code>EngagementUpdate</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>Engagement</code> <span class="dim">Updated</span></li></ul></div>
+</details>
+</section>
+<section id="tag-invoices">
+<h2>invoices</h2>
+<details class="op" id="listInvoices">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices</code><span class="sum">listInvoices</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Invoice[]</code> <span class="dim">Invoices</span></li></ul></div>
+</details>
+<details class="op" id="createInvoice">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices</code><span class="sum">createInvoice</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>InvoiceDetail</code> <span class="dim">Created</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="exportInvoicesCsv">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/export</code><span class="sum">Download the tenant-scoped invoice list as CSV</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>text/csv</code> <span class="dim">CSV file (Content-Disposition attachment)</span></li></ul></div>
+</details>
+<details class="op" id="getVatPack">
+<summary><span class="method m-get">GET</span><code class="path">/api/vat-pack</code><span class="sum">Firm-level monthly VAT filing pack — per-client output VAT for a closed Lagos month</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>VatPack</code> <span class="dim">Per-client VAT table with firm totals (deterministic — no model involvement)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="exportVatPackCsv">
+<summary><span class="method m-get">GET</span><code class="path">/api/vat-pack/export</code><span class="sum">Download the monthly VAT filing pack as CSV</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>text/csv</code> <span class="dim">CSV file (Content-Disposition attachment)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getBillingStatement">
+<summary><span class="method m-get">GET</span><code class="path">/api/billing/statement</code><span class="sum">Deterministic monthly platform-billing statement for the firm — tier, metered usage, computed fee (nothing stored)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BillingStatement</code> <span class="dim">Billing statement for a closed month</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="exportBillingStatementCsv">
+<summary><span class="method m-get">GET</span><code class="path">/api/billing/statement/export</code><span class="sum">Download the monthly billing statement as CSV</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>text/csv</code> <span class="dim">CSV file (Content-Disposition attachment)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="draftVatPackCoverNote">
+<summary><span class="method m-post">POST</span><code class="path">/api/vat-pack/cover-note</code><span class="sum">Draft a cover note phrasing the VAT pack's computed facts (template fallback; nothing stored — the partner edits and owns it)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>DraftVatCoverNoteInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>VatPackCoverNote</code> <span class="dim">The drafted note plus the pack's basis disclosure</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getVatSettlementCheck">
+<summary><span class="method m-get">GET</span><code class="path">/api/vat-pack/settlement-check</code><span class="sum">Settlement coverage of the pack month's accepted invoices (assurance view — unsettled means unobserved, not unpaid)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>VatSettlementCheck</code> <span class="dim">Settled/outstanding/credited split of the month's accepted value plus the unsettled list (deterministic — no model involvement)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getQuarterlyReview">
+<summary><span class="method m-get">GET</span><code class="path">/api/quarterly-review</code><span class="sum">Firm quarterly review pack — the closed quarter's monthly VAT packs, submissions, rejections, receivables snapshot and Clerk throughput in one deterministic document</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>QuarterlyReview</code> <span class="dim">The assembled quarterly review (deterministic — no model involvement)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="draftQuarterlyCoverNote">
+<summary><span class="method m-post">POST</span><code class="path">/api/quarterly-review/cover-note</code><span class="sum">Draft a cover note phrasing the quarterly review's computed facts (template fallback; nothing stored — the partner edits and owns it)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>DraftQuarterlyNoteInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>QuarterlyReviewCoverNote</code> <span class="dim">The drafted note plus the pack's basis disclosure</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="listLineItemSuggestions">
+<summary><span class="method m-get">GET</span><code class="path">/api/line-item-suggestions</code><span class="sum">A client's frequent line items mined from its own invoices (deterministic — nothing stored, no model)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>LineItemSuggestion[]</code> <span class="dim">Frequent items, strongest habit first</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="listPaymentBehaviour">
+<summary><span class="method m-get">GET</span><code class="path">/api/payment-behaviour</code><span class="sum">Per-buyer days-to-pay medians mined from the client's own accepted reconciliation matches (deterministic — nothing stored, no model)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BuyerPaymentBehaviour[]</code> <span class="dim">Buyers with observed payment behaviour, best-evidenced first</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getUnmatchedCredits">
+<summary><span class="method m-get">GET</span><code class="path">/api/unmatched-credits</code><span class="sum">Bank credits with no invoice behind them — potential off-platform sales (deterministic advisory; nothing stored, no model)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>UnmatchedCredits</code> <span class="dim">Unmatched credits in the trailing window, largest first (capped; totals uncapped)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getProjectionAccuracy">
+<summary><span class="method m-get">GET</span><code class="path">/api/projection-accuracy</code><span class="sum">Cash-flow projection rule replayed against every observed settlement — the forecast auditing itself (deterministic; nothing stored, no model)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ProjectionAccuracy</code> <span class="dim">Signed projection error overall and per buyer (leave-one-out rhythm evaluation)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="recordChaseReminder">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{invoiceId}/chase-log</code><span class="sum">Record that a payment reminder was SENT for this invoice (logged on copy — the platform itself sends nothing)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">201</span> <code>ChaseLogSummary</code> <span class="dim">The updated reminder history (stage = the reminder number just logged)</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The invoice is not an outstanding receivable</span></li></ul></div>
+</details>
+<details class="op" id="bulkSubmitInvoices">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/bulk-submit</code><span class="sum">Validate and submit a client's pending drafts in one batch</span></summary>
+<div class="opbody"><div class="req">Request body: <code>BulkSubmitInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>BulkSubmitResult</code> <span class="dim">Per-invoice outcomes for the processed batch</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li></ul></div>
+</details>
+<details class="op" id="getInvoice">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}</code><span class="sum">getInvoice</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceDetail</code> <span class="dim">Invoice with lines</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="updateInvoice">
+<summary><span class="method m-patch">PATCH</span><code class="path">/api/invoices/{id}</code><span class="sum">updateInvoice</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceUpdateInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceDetail</code> <span class="dim">Updated invoice with lines</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="validateInvoice">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/validate</code><span class="sum">validateInvoice</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ValidationResult</code> <span class="dim">Validation result</span></li></ul></div>
+</details>
+<details class="op" id="submitInvoice">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/submit</code><span class="sum">submitInvoice</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">202</span> <code>Invoice</code> <span class="dim">Accepted for async submission</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="getInvoiceUbl">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/ubl</code><span class="sum">getInvoiceUbl</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>UblDocument</code> <span class="dim">UBL representation</span></li></ul></div>
+</details>
+<details class="op" id="getInvoiceCanonical">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/canonical</code><span class="sum">getInvoiceCanonical</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>CanonicalInvoice</code> <span class="dim">Canonical representation</span></li></ul></div>
+</details>
+<details class="op" id="listPaymentIntents">
+<summary><span class="method m-get">GET</span><code class="path">/api/billing/payments</code><span class="sum">The firm's payment intents, newest first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>PaymentIntent[]</code> <span class="dim">Payment intents</span></li></ul></div>
+</details>
+<details class="op" id="createPaymentIntent">
+<summary><span class="method m-post">POST</span><code class="path">/api/billing/payments</code><span class="sum">Start a payment for a billing month; the provider confirmation webhook is a machine rail off this contract</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreatePaymentIntentInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>PaymentIntent</code> <span class="dim">Payment intent created</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="getInvoiceStatusLight">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/status-light</code><span class="sum">Deterministic red/amber/green light with reasons (no AI involved)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>StatusLight</code> <span class="dim">Status light</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="getInvoicePdf">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/pdf</code><span class="sum">Branded invoice PDF — firm whitelabel theme, stamp reference and verify QR when stamped</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <span class="dim">PDF document (Content-Disposition attachment)</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="getInvoiceRejectionRisk">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/rejection-risk</code><span class="sum">Deterministic pre-submission risk — the firm's own recent rejection history joined to this draft's supplier/buyer (no AI involved)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RejectionRiskReport</code> <span class="dim">Catalogue-grounded rejection signals; empty signals = no recent history implicates this draft</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+</section>
+<section id="tag-lifecycle">
+<h2>lifecycle</h2>
+<details class="op" id="getInvoiceStamp">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/stamp</code><span class="sum">getInvoiceStamp</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>StampRecord</code> <span class="dim">Stamp record</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listSubmissionAttempts">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/attempts</code><span class="sum">listSubmissionAttempts</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>SubmissionAttempt[]</code> <span class="dim">Submission attempts</span></li></ul></div>
+</details>
+<details class="op" id="cancelInvoice">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/cancel</code><span class="sum">cancelInvoice</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CancelInvoiceInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>Invoice</code> <span class="dim">Cancelled</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="creditNoteInvoice">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/credit-note</code><span class="sum">Issue a credit note against a stamped invoice (CORE-09)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreditNoteInput</code></div><ul class="responses"><li><span class="status s2xx">202</span> <code>Invoice</code> <span class="dim">Credit note created and submitted for stamping; the original transitions to credited when the credit note stamps (C1 async).</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="listConfirmations">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/confirmations</code><span class="sum">listConfirmations</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Confirmation[]</code> <span class="dim">Confirmations</span></li></ul></div>
+</details>
+<details class="op" id="createConfirmation">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/confirmations</code><span class="sum">createConfirmation</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ConfirmationInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>Confirmation</code> <span class="dim">Recorded</span></li></ul></div>
+</details>
+<details class="op" id="listSettlements">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/settlements</code><span class="sum">listSettlements</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>SettlementEvent[]</code> <span class="dim">Settlement events</span></li></ul></div>
+</details>
+<details class="op" id="createSettlement">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/settlements</code><span class="sum">createSettlement</span></summary>
+<div class="opbody"><div class="req">Request body: <code>SettlementInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>SettlementEvent</code> <span class="dim">Recorded</span></li></ul></div>
+</details>
+</section>
+<section id="tag-consent">
+<h2>consent</h2>
+<details class="op" id="listConsent">
+<summary><span class="method m-get">GET</span><code class="path">/api/parties/{id}/consent</code><span class="sum">listConsent</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ConsentRecord[]</code> <span class="dim">Consent history</span></li></ul></div>
+</details>
+<details class="op" id="recordConsent">
+<summary><span class="method m-post">POST</span><code class="path">/api/parties/{id}/consent</code><span class="sum">recordConsent</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ConsentInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>ConsentRecord</code> <span class="dim">Recorded</span></li></ul></div>
+</details>
+<details class="op" id="checkConsent">
+<summary><span class="method m-get">GET</span><code class="path">/api/parties/{id}/consent/check/{purpose}</code><span class="sum">checkConsent</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ConsentDecision</code> <span class="dim">Permission decision</span></li></ul></div>
+</details>
+</section>
+<section id="tag-verification">
+<h2>verification</h2>
+<details class="op" id="verifyStamp">
+<summary><span class="method m-post">POST</span><code class="path">/api/verify-stamp</code><span class="sum">verifyStamp</span></summary>
+<div class="opbody"><div class="req">Request body: <code>StampVerifyInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>StampVerifyResult</code> <span class="dim">Verification result</span></li></ul></div>
+</details>
+</section>
+<section id="tag-messaging">
+<h2>messaging</h2>
+<details class="op" id="listNotifications">
+<summary><span class="method m-get">GET</span><code class="path">/api/notifications</code><span class="sum">The signed-in user's own notification feed, resolved from the pointer-only messages ledger</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>NotificationFeed</code> <span class="dim">Newest-first feed</span></li></ul></div>
+</details>
+<details class="op" id="markNotificationsRead">
+<summary><span class="method m-post">POST</span><code class="path">/api/notifications/mark-read</code><span class="sum">Mark the caller's notifications at or before a timestamp as read; returns the refreshed feed</span></summary>
+<div class="opbody"><div class="req">Request body: <code>MarkNotificationsReadInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>NotificationFeed</code> <span class="dim">Refreshed feed after marking</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="listFirmWebhooks">
+<summary><span class="method m-get">GET</span><code class="path">/api/firm-webhooks</code><span class="sum">The firm's outbound webhook endpoints (metadata only — the signing secret is never retrievable)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmWebhook[]</code> <span class="dim">Webhook endpoints, newest first</span></li></ul></div>
+</details>
+<details class="op" id="createFirmWebhook">
+<summary><span class="method m-post">POST</span><code class="path">/api/firm-webhooks</code><span class="sum">Register an outbound webhook endpoint; the signing secret is returned once and only its hash is stored</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreateFirmWebhookInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>FirmWebhookCreated</code> <span class="dim">Webhook created (signing secret shown once)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="disableFirmWebhook">
+<summary><span class="method m-post">POST</span><code class="path">/api/firm-webhooks/{id}/disable</code><span class="sum">Disable a webhook endpoint (deliveries stop; history is retained)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmWebhook</code> <span class="dim">Disabled webhook</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listFirmWebhookDeliveries">
+<summary><span class="method m-get">GET</span><code class="path">/api/firm-webhooks/{id}/deliveries</code><span class="sum">Delivery attempts for one webhook endpoint, newest first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmWebhookDelivery[]</code> <span class="dim">Deliveries</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="retryFirmWebhookDelivery">
+<summary><span class="method m-post">POST</span><code class="path">/api/firm-webhooks/{id}/deliveries/{deliveryId}/retry</code><span class="sum">Re-queue one dead delivery for a fresh attempt cycle (firm admin)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmWebhookDelivery</code> <span class="dim">The delivery, re-queued as pending</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="listMessages">
+<summary><span class="method m-get">GET</span><code class="path">/api/messages</code><span class="sum">Recent outbound messages with delivery status (PL-04)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Message[]</code> <span class="dim">Messages, newest first (bounded)</span></li></ul></div>
+</details>
+<details class="op" id="sendMessage">
+<summary><span class="method m-post">POST</span><code class="path">/api/messages</code><span class="sum">sendMessage</span></summary>
+<div class="opbody"><div class="req">Request body: <code>MessageInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>Message</code> <span class="dim">Sent</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="recordMessageDelivery">
+<summary><span class="method m-post">POST</span><code class="path">/api/messages/{id}/delivery</code><span class="sum">recordMessageDelivery</span></summary>
+<div class="opbody"><div class="req">Request body: <code>MessageDeliveryInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Recorded</span></li></ul></div>
+</details>
+</section>
+<section id="tag-platform">
+<h2>platform</h2>
+<details class="op" id="listFeatureFlags">
+<summary><span class="method m-get">GET</span><code class="path">/api/feature-flags</code><span class="sum">listFeatureFlags</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FeatureFlag[]</code> <span class="dim">Flags</span></li></ul></div>
+</details>
+<details class="op" id="updateFeatureFlag">
+<summary><span class="method m-patch">PATCH</span><code class="path">/api/feature-flags/{key}</code><span class="sum">updateFeatureFlag</span></summary>
+<div class="opbody"><div class="req">Request body: <code>FeatureFlagUpdate</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Updated</span></li></ul></div>
+</details>
+<details class="op" id="setFeatureFlagOverride">
+<summary><span class="method m-post">POST</span><code class="path">/api/feature-flags/{key}/override</code><span class="sum">setFeatureFlagOverride</span></summary>
+<div class="opbody"><div class="req">Request body: <code>FeatureFlagOverrideInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Set</span></li></ul></div>
+</details>
+</section>
+<section id="tag-operator">
+<h2>operator</h2>
+<details class="op" id="listErrorCatalogue">
+<summary><span class="method m-get">GET</span><code class="path">/api/error-catalogue</code><span class="sum">listErrorCatalogue</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ErrorCatalogueEntry[]</code> <span class="dim">Error catalogue</span></li></ul></div>
+</details>
+<details class="op" id="upsertErrorCatalogueEntry">
+<summary><span class="method m-post">POST</span><code class="path">/api/error-catalogue</code><span class="sum">upsertErrorCatalogueEntry</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ErrorCatalogueUpsertInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>ErrorCatalogueEntry</code> <span class="dim">Created or updated catalogue entry</span></li></ul></div>
+</details>
+<details class="op" id="getErrorCatalogueEntry">
+<summary><span class="method m-get">GET</span><code class="path">/api/error-catalogue/{code}</code><span class="sum">getErrorCatalogueEntry</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ErrorCatalogueEntry</code> <span class="dim">Catalogue entry</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="updateErrorCatalogueEntry">
+<summary><span class="method m-patch">PATCH</span><code class="path">/api/error-catalogue/{code}</code><span class="sum">updateErrorCatalogueEntry</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ErrorCatalogueUpdate</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ErrorCatalogueEntry</code> <span class="dim">Updated catalogue entry</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listUnmappedErrorCodes">
+<summary><span class="method m-get">GET</span><code class="path">/api/error-catalogue/unmapped</code><span class="sum">Failure codes seen on submissions with no catalogue entry (INT-02)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>UnmappedErrorCode[]</code> <span class="dim">Unmapped error codes, most recent first</span></li></ul></div>
+</details>
+<details class="op" id="getCatalogueCoverage">
+<summary><span class="method m-get">GET</span><code class="path">/api/error-catalogue/coverage</code><span class="sum">Catalogue coverage &amp; mapping SLA — the INT-02 measurement (pure SQL, platform-wide)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>CatalogueCoverageReport</code> <span class="dim">Coverage of rejection traffic, unmapped-code debt and time-to-mapping</span></li></ul></div>
+</details>
+<details class="op" id="listHealthAlerts">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/health-alerts</code><span class="sum">Recent durable platform-health alerts from the audit ledger, newest first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>HealthAlert[]</code> <span class="dim">Health alerts</span></li></ul></div>
+</details>
+<details class="op" id="getRailConfig">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/rail-config</code><span class="sum">Which env-lit rails are configured on this deployment (booleans only — never values)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RailConfigEntry[]</code> <span class="dim">Per-rail configuration state</span></li></ul></div>
+</details>
+<details class="op" id="getGateMetrics">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/gate-metrics</code><span class="sum">Live measurements of the roadmap release-gate metrics</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>GateMetrics</code> <span class="dim">Gate metrics computed from the spine</span></li></ul></div>
+</details>
+<details class="op" id="listDeadLetters">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/dead-letters</code><span class="sum">listDeadLetters</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OutboxEvent[]</code> <span class="dim">Dead-lettered events</span></li></ul></div>
+</details>
+<details class="op" id="replayDeadLetter">
+<summary><span class="method m-post">POST</span><code class="path">/api/operator/dead-letters/{id}/replay</code><span class="sum">replayDeadLetter</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Replayed</span></li></ul></div>
+</details>
+<details class="op" id="reconcilePipeline">
+<summary><span class="method m-post">POST</span><code class="path">/api/operator/reconcile</code><span class="sum">reconcilePipeline</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ReconcileResult</code> <span class="dim">Reconciliation result</span></li></ul></div>
+</details>
+<details class="op" id="listRailStates">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/rails</code><span class="sum">listRailStates</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RailState[]</code> <span class="dim">Rail states</span></li></ul></div>
+</details>
+<details class="op" id="listOperatorCases">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/cases</code><span class="sum">Cross-tenant operator work queue with playbook prompts</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OperatorCaseView[]</code> <span class="dim">Operator cases</span></li></ul></div>
+</details>
+<details class="op" id="getOperatorQueueStats">
+<summary><span class="method m-get">GET</span><code class="path">/api/operator/cases/stats</code><span class="sum">Queue throughput and handling-time stats</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OperatorQueueStats</code> <span class="dim">Queue stats</span></li></ul></div>
+</details>
+<details class="op" id="claimOperatorCase">
+<summary><span class="method m-post">POST</span><code class="path">/api/operator/cases/{id}/claim</code><span class="sum">Claim a case (starts handling-time tracking)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OperatorCaseView</code> <span class="dim">Claimed case</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="resolveOperatorCase">
+<summary><span class="method m-post">POST</span><code class="path">/api/operator/cases/{id}/resolve</code><span class="sum">One-click catalogue resolution for a case</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ResolveCaseInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>OperatorCaseView</code> <span class="dim">Resolved case</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="draftEscalationReply">
+<summary><span class="method m-post">POST</span><code class="path">/api/escalations/{id}/reply-draft</code><span class="sum">Draft a grounded reply to an escalation (catalogue fix + attempt history; template fallback; operator edits and sends)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EscalationReplyDraft</code> <span class="dim">A reply draft — nothing is sent or stored</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="replyToEscalation">
+<summary><span class="method m-post">POST</span><code class="path">/api/escalations/{id}/reply</code><span class="sum">Send the operator's reply to an escalation (acknowledges an open escalation)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ReplyToEscalationInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>Escalation</code> <span class="dim">The escalation with the reply recorded</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+</section>
+<section id="tag-audit">
+<h2>audit</h2>
+<details class="op" id="exportFirmData">
+<summary><span class="method m-get">GET</span><code class="path">/api/firms/{id}/export</code><span class="sum">Full-firm portability export (operator-gated) — invoices, parties, statements, consent trail, firm-scoped audit events</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmExportBundle</code> <span class="dim">Export bundle</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="verifyAudit">
+<summary><span class="method m-get">GET</span><code class="path">/api/audit/verify</code><span class="sum">verifyAudit</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>AuditVerification</code> <span class="dim">Chain verification</span></li></ul></div>
+</details>
+<details class="op" id="exportAudit">
+<summary><span class="method m-get">GET</span><code class="path">/api/audit/export</code><span class="sum">exportAudit</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>AuditBundle</code> <span class="dim">Verifiable audit bundle</span></li></ul></div>
+</details>
+<details class="op" id="exportAuditCsv">
+<summary><span class="method m-get">GET</span><code class="path">/api/audit/export/csv</code><span class="sum">Download the audit ledger as CSV (spreadsheet-friendly companion to the JSON bundle)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>text/csv</code> <span class="dim">CSV file (Content-Disposition attachment)</span></li></ul></div>
+</details>
+<details class="op" id="exportClientData">
+<summary><span class="method m-get">GET</span><code class="path">/api/clients/{id}/export</code><span class="sum">Data-subject export for one client party (the client's own account, its firm, or an operator)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClientExportBundle</code> <span class="dim">Client export bundle</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+</section>
+<section id="tag-console">
+<h2>console</h2>
+<details class="op" id="getRejectionPatterns">
+<summary><span class="method m-get">GET</span><code class="path">/api/rejection-patterns</code><span class="sum">The firm's recurring rejection causes over a trailing window, catalogue-grounded (pure SQL)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RejectionPatternReport</code> <span class="dim">Recurring rejection causes with a prior-window trend basis</span></li></ul></div>
+</details>
+<details class="op" id="getFirmComplianceCalendar">
+<summary><span class="method m-get">GET</span><code class="path">/api/compliance-calendar</code><span class="sum">The firm's month-ahead statutory calendar — submission windows and VAT dates aggregated across clients (deterministic)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ComplianceCalendar</code> <span class="dim">Upcoming statutory dates plus the overdue backlog</span></li></ul></div>
+</details>
+<details class="op" id="createClient">
+<summary><span class="method m-post">POST</span><code class="path">/api/clients</code><span class="sum">Create one engaged client (party + engagement) for the caller's firm</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreateClientInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>CreatedClient</code> <span class="dim">Party and engagement created</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="offboardClient">
+<summary><span class="method m-post">POST</span><code class="path">/api/clients/{id}/offboard</code><span class="sum">Firm-scoped client offboarding — archive the engagement, remove access, clear contact PII when this was the last engagement (statutory records retained)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>OffboardClientInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>OffboardClientResult</code> <span class="dim">Offboarding actions taken</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="getFirmReceivables">
+<summary><span class="method m-get">GET</span><code class="path">/api/console/receivables</code><span class="sum">Outstanding receivables across the firm's book, worst first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmReceivables</code> <span class="dim">Per-client outstanding totals and top debtors</span></li></ul></div>
+</details>
+<details class="op" id="getOperatorBrief">
+<summary><span class="method m-get">GET</span><code class="path">/api/console/operator-brief</code><span class="sum">The desk's deterministic daily brief — queues, stuck work, platform state, yesterday's throughput</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OperatorBrief</code> <span class="dim">Platform-wide operator summary (pure SQL, computed on demand)</span></li></ul></div>
+</details>
+<details class="op" id="getClerkAdoptionReport">
+<summary><span class="method m-get">GET</span><code class="path">/api/console/clerk-adoption</code><span class="sum">Per-client Clerk adoption and impact from the firm's own cases (pure SQL)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkAdoptionReport</code> <span class="dim">Capture volume, kept-rate and review turnaround per client over the trailing window</span></li></ul></div>
+</details>
+<details class="op" id="getPortfolio">
+<summary><span class="method m-get">GET</span><code class="path">/api/console/portfolio</code><span class="sum">Multi-client portfolio dashboard with penalty risk per client</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>PortfolioSummary</code> <span class="dim">Portfolio summary</span></li></ul></div>
+</details>
+<details class="op" id="getClientPortfolio">
+<summary><span class="method m-get">GET</span><code class="path">/api/console/clients/{id}</code><span class="sum">Per-client risk breakdown with invoice-level drill-down</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClientPortfolioDetail</code> <span class="dim">Client portfolio detail</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listFirmTeam">
+<summary><span class="method m-get">GET</span><code class="path">/api/console/team</code><span class="sum">Firm users with their roles and capabilities</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmMember[]</code> <span class="dim">Firm team members</span></li></ul></div>
+</details>
+<details class="op" id="listPipeline">
+<summary><span class="method m-get">GET</span><code class="path">/api/console/pipeline</code><span class="sum">Client onboarding pipeline for the firm</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OnboardingProspect[]</code> <span class="dim">Onboarding prospects</span></li></ul></div>
+</details>
+<details class="op" id="createProspect">
+<summary><span class="method m-post">POST</span><code class="path">/api/console/pipeline</code><span class="sum">Add a prospect to the onboarding pipeline</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ProspectInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>OnboardingProspect</code> <span class="dim">Prospect created</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="updateProspect">
+<summary><span class="method m-patch">PATCH</span><code class="path">/api/console/pipeline/{id}</code><span class="sum">Advance or edit a pipeline prospect</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ProspectUpdate</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>OnboardingProspect</code> <span class="dim">Updated prospect</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="getUnearnedIncome">
+<summary><span class="method m-get">GET</span><code class="path">/api/console/unearned-income</code><span class="sum">Unconverted eligible clients and the revenue share implied at current tiers</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>UnearnedIncome</code> <span class="dim">Unearned income view</span></li></ul></div>
+</details>
+</section>
+<section id="tag-billing">
+<h2>billing</h2>
+<details class="op" id="listTiers">
+<summary><span class="method m-get">GET</span><code class="path">/api/billing/tiers</code><span class="sum">Configurable commercial tiers</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BillingTier[]</code> <span class="dim">Billing tiers</span></li></ul></div>
+</details>
+<details class="op" id="updateTier">
+<summary><span class="method m-put">PUT</span><code class="path">/api/billing/tiers/{id}</code><span class="sum">Update tier config (price review — writes an audit entry)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>TierUpdate</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>BillingTier</code> <span class="dim">Updated tier</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listPriceReviews">
+<summary><span class="method m-get">GET</span><code class="path">/api/billing/tiers/{id}/price-reviews</code><span class="sum">Price-review history for a tier</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>PriceReview[]</code> <span class="dim">Price reviews</span></li></ul></div>
+</details>
+<details class="op" id="getSubscription">
+<summary><span class="method m-get">GET</span><code class="path">/api/billing/subscription</code><span class="sum">The firm's current subscription and tier</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>SubscriptionView</code> <span class="dim">Subscription</span></li></ul></div>
+</details>
+<details class="op" id="updateSubscription">
+<summary><span class="method m-put">PUT</span><code class="path">/api/billing/subscription</code><span class="sum">Change the firm's tier</span></summary>
+<div class="opbody"><div class="req">Request body: <code>SubscriptionUpdate</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>SubscriptionView</code> <span class="dim">Updated subscription</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="listStatements">
+<summary><span class="method m-get">GET</span><code class="path">/api/billing/statements</code><span class="sum">Monthly revenue-share statements</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RevenueShareStatement[]</code> <span class="dim">Statements</span></li></ul></div>
+</details>
+<details class="op" id="generateStatements">
+<summary><span class="method m-post">POST</span><code class="path">/api/billing/statements/generate</code><span class="sum">Generate/refresh per-firm statements for a period</span></summary>
+<div class="opbody"><div class="req">Request body: <code>GenerateStatementsInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>RevenueShareStatement[]</code> <span class="dim">Generated statements</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+</section>
+<section id="tag-statements">
+<h2>statements</h2>
+<details class="op" id="importBankStatement">
+<summary><span class="method m-post">POST</span><code class="path">/api/statements</code><span class="sum">Ingest a bank statement (validate-then-commit)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>StatementImportInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>StatementImportResult</code> <span class="dim">Parse report (and statement id when committed)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">Unrecognised or empty statement</span></li></ul></div>
+</details>
+<details class="op" id="listBankStatements">
+<summary><span class="method m-get">GET</span><code class="path">/api/statements</code><span class="sum">listBankStatements</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BankStatement[]</code> <span class="dim">Statements</span></li></ul></div>
+</details>
+<details class="op" id="getBankStatement">
+<summary><span class="method m-get">GET</span><code class="path">/api/statements/{id}</code><span class="sum">getBankStatement</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BankStatement</code> <span class="dim">Statement</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listBankStatementLines">
+<summary><span class="method m-get">GET</span><code class="path">/api/statements/{id}/lines</code><span class="sum">listBankStatementLines</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BankStatementLine[]</code> <span class="dim">Statement lines</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listBankStatementProposals">
+<summary><span class="method m-get">GET</span><code class="path">/api/statements/{id}/proposals</code><span class="sum">listBankStatementProposals</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>MatchProposalView[]</code> <span class="dim">Match proposals for the statement</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listStatementConnectors">
+<summary><span class="method m-get">GET</span><code class="path">/api/statement-connectors</code><span class="sum">Registry of available bank-feed connectors</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>StatementConnectorInfo[]</code> <span class="dim">Connector registry</span></li></ul></div>
+</details>
+<details class="op" id="listStatementConnections">
+<summary><span class="method m-get">GET</span><code class="path">/api/statement-connections</code><span class="sum">The firm's configured bank-feed connections</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>StatementConnection[]</code> <span class="dim">Connections</span></li></ul></div>
+</details>
+<details class="op" id="createStatementConnection">
+<summary><span class="method m-post">POST</span><code class="path">/api/statement-connections</code><span class="sum">Configure a bank-feed connection for a client party</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreateStatementConnectionInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>StatementConnection</code> <span class="dim">Created connection</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="syncStatementConnection">
+<summary><span class="method m-post">POST</span><code class="path">/api/statement-connections/{id}/sync</code><span class="sum">Pull new statement lines through the connector; they land via the ordinary ingest flow</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">202</span> <code>StatementSyncRun</code> <span class="dim">Sync queued</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="listStatementSyncRuns">
+<summary><span class="method m-get">GET</span><code class="path">/api/statement-connections/{id}/runs</code><span class="sum">Past sync runs for a connection, newest first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>StatementSyncRun[]</code> <span class="dim">Runs</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+</section>
+<section id="tag-reconciliation">
+<h2>reconciliation</h2>
+<details class="op" id="acceptMatchProposal">
+<summary><span class="method m-post">POST</span><code class="path">/api/reconciliation/proposals/{id}/accept</code><span class="sum">acceptMatchProposal</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>MatchDecisionResult</code> <span class="dim">Accepted; settlement recorded and invoice settled</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="bulkAcceptMatchProposals">
+<summary><span class="method m-post">POST</span><code class="path">/api/reconciliation/statements/{id}/bulk-accept</code><span class="sum">Accept all of a statement's pending high-confidence proposals</span></summary>
+<div class="opbody"><div class="req">Request body: <code>BulkAcceptInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>BulkAcceptResult</code> <span class="dim">Per-proposal outcomes</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="rejectMatchProposal">
+<summary><span class="method m-post">POST</span><code class="path">/api/reconciliation/proposals/{id}/reject</code><span class="sum">rejectMatchProposal</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>MatchDecisionResult</code> <span class="dim">Rejected</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="listStatementFormats">
+<summary><span class="method m-get">GET</span><code class="path">/api/statement-formats</code><span class="sum">Operator-managed custom statement-format mappings</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>StatementFormatView[]</code> <span class="dim">Stored custom formats</span></li></ul></div>
+</details>
+<details class="op" id="createStatementFormat">
+<summary><span class="method m-post">POST</span><code class="path">/api/statement-formats</code><span class="sum">Save a custom format — rejected unless it parses the provided sample</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreateStatementFormatInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>CreateStatementFormatResult</code> <span class="dim">Stored mapping plus its validation run</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The mapping could not parse the sample</span></li></ul></div>
+</details>
+<details class="op" id="deleteStatementFormat">
+<summary><span class="method m-delete">DELETE</span><code class="path">/api/statement-formats/{id}</code><span class="sum">deleteStatementFormat</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Deleted</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+</section>
+<section id="tag-buyer">
+<h2>buyer</h2>
+<details class="op" id="listBuyerInvoices">
+<summary><span class="method m-get">GET</span><code class="path">/api/buyer/invoices</code><span class="sum">Invoices addressed to the caller's buyer organization</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BuyerInvoice[]</code> <span class="dim">Buyer-side invoice list</span></li></ul></div>
+</details>
+<details class="op" id="flagPayment">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/payment-flags</code><span class="sum">Buyer marks an invoice payment as scheduled or paid (BR-04)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>PaymentFlagInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>SettlementEvent</code> <span class="dim">Settlement event recorded with source buyer_flag</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="listBuyerSuppliers">
+<summary><span class="method m-get">GET</span><code class="path">/api/buyer/suppliers</code><span class="sum">Supplier verification view (BR-01)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BuyerSupplier[]</code> <span class="dim">Per-supplier stamp and confirmation status</span></li></ul></div>
+</details>
+<details class="op" id="getBuyerSupplierDetail">
+<summary><span class="method m-get">GET</span><code class="path">/api/buyer/suppliers/{id}</code><span class="sum">One supplier's invoices to the caller's buyer organization, with stamp and confirmation status</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BuyerSupplierDetail</code> <span class="dim">Supplier detail</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="bulkRespondConfirmations">
+<summary><span class="method m-post">POST</span><code class="path">/api/buyer/confirmations/bulk</code><span class="sum">Confirm up to 50 awaiting invoices in one action (per-invoice results; skips are reported, never silent)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>BulkConfirmationsInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>BulkConfirmationsResult</code> <span class="dim">Per-invoice outcomes</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="exportBuyerConfirmations">
+<summary><span class="method m-get">GET</span><code class="path">/api/buyer/confirmations/export</code><span class="sum">CSV of invoices awaiting the buyer's response</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>text/csv</code> <span class="dim">CSV attachment</span></li></ul></div>
+</details>
+<details class="op" id="getBuyerExposure">
+<summary><span class="method m-get">GET</span><code class="path">/api/buyer/exposure</code><span class="sum">Input-VAT exposure, refreshed at least daily (BR-01)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BuyerExposure</code> <span class="dim">Latest exposure snapshot</span></li></ul></div>
+</details>
+<details class="op" id="getBuyerScoreboard">
+<summary><span class="method m-get">GET</span><code class="path">/api/buyer/scoreboard</code><span class="sum">Supplier compliance scoreboard (BR-05)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ScoreboardRow[]</code> <span class="dim">Suppliers ranked by compliance and confirmation status</span></li></ul></div>
+</details>
+</section>
+<section id="tag-b2c">
+<h2>b2c</h2>
+<details class="op" id="listB2cReports">
+<summary><span class="method m-get">GET</span><code class="path">/api/b2c/reports</code><span class="sum">listB2cReports</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>B2cReportBatch[]</code> <span class="dim">B2C report batches with compliance clocks</span></li></ul></div>
+</details>
+<details class="op" id="getB2cReport">
+<summary><span class="method m-get">GET</span><code class="path">/api/b2c/reports/{id}</code><span class="sum">getB2cReport</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>B2cReportBatch</code> <span class="dim">Batch detail</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listB2cReportItems">
+<summary><span class="method m-get">GET</span><code class="path">/api/b2c/reports/{id}/items</code><span class="sum">listB2cReportItems</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>B2cReportItem[]</code> <span class="dim">Batch items</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="submitB2cReport">
+<summary><span class="method m-post">POST</span><code class="path">/api/b2c/reports/{id}/submit</code><span class="sum">submitB2cReport</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>B2cReportBatch</code> <span class="dim">Batch reported inside the window</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+</section>
+<section id="tag-whitelabel">
+<h2>whitelabel</h2>
+<details class="op" id="getPublicTheme">
+<summary><span class="method m-get">GET</span><code class="path">/api/public/theme</code><span class="sum">Resolve firm branding by subdomain (no auth; public shell needs it before login)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>FirmTheme</code> <span class="dim">Firm branding</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="updateFirmTheme">
+<summary><span class="method m-put">PUT</span><code class="path">/api/firms/{id}/theme</code><span class="sum">updateFirmTheme</span></summary>
+<div class="opbody"><div class="req">Request body: <code>FirmThemeInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>Firm</code> <span class="dim">Updated firm</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="importClients">
+<summary><span class="method m-post">POST</span><code class="path">/api/clients/import</code><span class="sum">Bulk client import from a practice-management export (CON-05)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ClientImportInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClientImportResult</code> <span class="dim">Per-row import results</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+</section>
+<section id="tag-certification">
+<h2>certification</h2>
+<details class="op" id="listCpdCourses">
+<summary><span class="method m-get">GET</span><code class="path">/api/certification/courses</code><span class="sum">listCpdCourses</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>CpdCourse[]</code> <span class="dim">Active CPD courses</span></li></ul></div>
+</details>
+<details class="op" id="enrollCpdCourse">
+<summary><span class="method m-post">POST</span><code class="path">/api/certification/courses/{id}/enroll</code><span class="sum">enrollCpdCourse</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">201</span> <code>CpdEnrollment</code> <span class="dim">Enrollment created (idempotent per user/course)</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="completeCpdCourse">
+<summary><span class="method m-post">POST</span><code class="path">/api/certification/courses/{id}/complete</code><span class="sum">completeCpdCourse</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>CpdEnrollment</code> <span class="dim">Completion recorded; certificate serial minted</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="listCpdEnrollments">
+<summary><span class="method m-get">GET</span><code class="path">/api/certification/enrollments</code><span class="sum">listCpdEnrollments</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>CpdEnrollmentView[]</code> <span class="dim">The firm's enrollments</span></li></ul></div>
+</details>
+</section>
+<section id="tag-connectors">
+<h2>connectors</h2>
+<details class="op" id="listConnectors">
+<summary><span class="method m-get">GET</span><code class="path">/api/connectors</code><span class="sum">Registered connector implementations</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ConnectorInfo[]</code> <span class="dim">Connector registry</span></li></ul></div>
+</details>
+<details class="op" id="listErpConnections">
+<summary><span class="method m-get">GET</span><code class="path">/api/connections</code><span class="sum">listErpConnections</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ErpConnection[]</code> <span class="dim">ERP connections</span></li></ul></div>
+</details>
+<details class="op" id="createErpConnection">
+<summary><span class="method m-post">POST</span><code class="path">/api/connections</code><span class="sum">createErpConnection</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ErpConnectionInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>ErpConnection</code> <span class="dim">Connection created</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="syncErpConnection">
+<summary><span class="method m-post">POST</span><code class="path">/api/connections/{id}/sync</code><span class="sum">Enqueue an incremental pull for the connection</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">202</span> <code>ErpSyncRun</code> <span class="dim">Sync enqueued</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="listErpSyncRuns">
+<summary><span class="method m-get">GET</span><code class="path">/api/connections/{id}/runs</code><span class="sum">listErpSyncRuns</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ErpSyncRun[]</code> <span class="dim">Sync run history</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+</section>
+<section id="tag-claims">
+<h2>claims</h2>
+<details class="op" id="listClaims">
+<summary><span class="method m-get">GET</span><code class="path">/api/claims</code><span class="sum">All claim record versions in the register</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClaimRecord[]</code> <span class="dim">Claim records</span></li></ul></div>
+</details>
+<details class="op" id="createClaim">
+<summary><span class="method m-post">POST</span><code class="path">/api/claims</code><span class="sum">Draft a new version of a claim (maker)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ClaimDraftInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>ClaimRecord</code> <span class="dim">Draft claim version</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getClaim">
+<summary><span class="method m-get">GET</span><code class="path">/api/claims/{id}</code><span class="sum">getClaim</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClaimRecord</code> <span class="dim">Claim record</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="updateClaim">
+<summary><span class="method m-patch">PATCH</span><code class="path">/api/claims/{id}</code><span class="sum">Edit a draft claim version</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ClaimUpdateInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClaimRecord</code> <span class="dim">Updated claim record</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="submitClaim">
+<summary><span class="method m-post">POST</span><code class="path">/api/claims/{id}/submit</code><span class="sum">Move a draft claim to review (maker step)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClaimRecord</code> <span class="dim">Claim now in review</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="decideClaim">
+<summary><span class="method m-post">POST</span><code class="path">/api/claims/{id}/decision</code><span class="sum">Approve, reject, suspend or resume a claim (checker — never the author)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ClaimDecisionInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClaimRecord</code> <span class="dim">Decided claim record</span></li><li><span class="status s4xx">403</span> <span class="err">Forbidden</span> <span class="dim">— not allowed for this principal</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+</section>
+<section id="tag-clerk">
+<h2>clerk</h2>
+<details class="op" id="listClerkCases">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/cases</code><span class="sum">Clerk case queue (content columns omitted; see detail)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkCase[]</code> <span class="dim">Clerk cases, newest first</span></li></ul></div>
+</details>
+<details class="op" id="createClerkCase">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/cases</code><span class="sum">Upload an invoice document for extraction</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ClerkCaseCreateInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>ClerkCase</code> <span class="dim">Case with extraction candidates (or escalated/failed)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">413</span> <code>Error</code> <span class="dim">Upload exceeds the 5 MB limit</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">Document unreadable (e.g. PDF with no selectable text)</span></li><li><span class="status s5xx">503</span> <code>Error</code> <span class="dim">Clerk AI disabled by the kill switch</span></li></ul></div>
+</details>
+<details class="op" id="getClerkCase">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/cases/{id}</code><span class="sum">getClerkCase</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkCase</code> <span class="dim">Full clerk case including source content</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="decideClerkCase">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/cases/{id}/decision</code><span class="sum">Operator decision — approve creates a DRAFT invoice only</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ClerkCaseDecisionInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkCase</code> <span class="dim">Decided case</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="bulkApproveClerkCases">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/cases/bulk-approve</code><span class="sum">Human-initiated bulk approval of fast-lane cases — per-case CAS, per-case eligibility, never automatic</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ClerkBulkApproveInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkBulkApproveReport</code> <span class="dim">Per-case outcomes; a skipped case names why</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="askClerk">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/ask</code><span class="sum">Grounded Q&amp;A — approved claims or platform-computed firm-record lookups; refuses anything else</span></summary>
+<div class="opbody"><div class="req">Request body: <code>AskClerkInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkCase</code> <span class="dim">Question case with a register-backed answer or a refusal</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s5xx">503</span> <code>Error</code> <span class="dim">Clerk AI disabled by the kill switch</span></li></ul></div>
+</details>
+<details class="op" id="retryClerkCase">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/cases/{id}/retry</code><span class="sum">Re-run extraction on a failed case from its stored source</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkCase</code> <span class="dim">The re-processed case</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="claimClerkCase">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/cases/{id}/claim</code><span class="sum">Claim a case for active review (one operator at a time)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkCase</code> <span class="dim">The claimed case</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="releaseClerkCase">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/cases/{id}/release</code><span class="sum">Release a claimed case back to the queue</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkCase</code> <span class="dim">The released case</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="getClerkPartySuggestions">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/cases/{id}/party-suggestions</code><span class="sum">Party candidates matched from the extracted names and TINs</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkPartySuggestions</code> <span class="dim">Scored supplier and buyer candidates (best first)</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="runClerkEval">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/run</code><span class="sum">Run the synthetic fixture corpus through the live gateway and score it</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkEvalRun</code> <span class="dim">The completed evaluation run with per-fixture results</span></li></ul></div>
+</details>
+<details class="op" id="getExtractionPrompt">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/prompt</code><span class="sum">The incumbent extraction system prompt and version (start a canary candidate from what actually runs)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ExtractionPromptInfo</code> <span class="dim">The live prompt</span></li></ul></div>
+</details>
+<details class="op" id="runPromptCanary">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/canary</code><span class="sum">Run the eval corpus under a candidate system prompt and the incumbent side by side; deterministic diff and verdict, nothing stored</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RunPromptCanaryInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>PromptCanaryReport</code> <span class="dim">The canary report — candidate vs incumbent with a deterministic verdict</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="listEvalFixtures">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/fixtures</code><span class="sum">The full eval corpus with per-fixture pass history reconstructed from stored runs</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EvalFixtureReport</code> <span class="dim">Corpus inventory — static, grown and red-team fixtures</span></li></ul></div>
+</details>
+<details class="op" id="retireEvalFixture">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/fixtures/{key}/retire</code><span class="sum">Retire a grown or red-team fixture from the corpus (static fixtures cannot be retired)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EvalFixtureSummary</code> <span class="dim">Updated fixture row</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="restoreEvalFixture">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/fixtures/{key}/restore</code><span class="sum">Restore a retired fixture to the corpus</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EvalFixtureSummary</code> <span class="dim">Updated fixture row</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="listClerkEvalRuns">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/runs</code><span class="sum">Past evaluation runs, newest first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkEvalRun[]</code> <span class="dim">Evaluation runs</span></li></ul></div>
+</details>
+<details class="op" id="createClerkCaseBatch">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/cases/batch</code><span class="sum">Split a multi-invoice document into segments and open one case per invoice</span></summary>
+<div class="opbody"><div class="req">Request body: <code>BatchClerkCasesInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>BatchClerkCasesResult</code> <span class="dim">One case per detected invoice (duplicates skipped)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getClerkDigest">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/digest</code><span class="sum">The firm's latest weekly Clerk digest (facts computed by SQL; narrative only phrased)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkDigest</code> <span class="dim">Latest digest for the caller's firm</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="getStaffNotificationPreferences">
+<summary><span class="method m-get">GET</span><code class="path">/api/staff/notification-preferences</code><span class="sum">The signed-in firm member's own notification preferences (opt-in; defaults all off)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>StaffNotificationPreferences</code> <span class="dim">The caller's preferences (defaults when never saved)</span></li></ul></div>
+</details>
+<details class="op" id="updateStaffNotificationPreferences">
+<summary><span class="method m-put">PUT</span><code class="path">/api/staff/notification-preferences</code><span class="sum">Update the signed-in firm member's own notification preferences</span></summary>
+<div class="opbody"><div class="req">Request body: <code>UpdateStaffNotificationPreferencesInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>StaffNotificationPreferences</code> <span class="dim">Saved preferences</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="requestStaffEmailVerification">
+<summary><span class="method m-post">POST</span><code class="path">/api/staff/notification-preferences/request-email-verification</code><span class="sum">Send a verification code to the saved email (requires the outbound relay; 503 while messaging is dark)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">202</span> <span class="dim">Code dispatched (or silently absorbed — no address oracle)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="confirmStaffEmail">
+<summary><span class="method m-post">POST</span><code class="path">/api/staff/notification-preferences/confirm-email</code><span class="sum">Confirm the saved email with the received code</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ConfirmStaffEmailInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>StaffNotificationPreferences</code> <span class="dim">Verified preferences</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="listClientStatements">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/client-statements</code><span class="sum">Monthly per-client compliance statements (facts computed by SQL; narrative only phrased)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkClientStatement[]</code> <span class="dim">Newest-first statements for the resolved client (client_users are pinned to their own party)</span></li></ul></div>
+</details>
+<details class="op" id="draftClaimWithClerk">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/claims/draft</code><span class="sum">Draft a structured claim record from pasted source text (enters the normal maker-checker flow)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>DraftClaimWithClerkInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>ClaimRecord</code> <span class="dim">Draft claim version created for the caller as maker</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="draftCatalogueEntryWithClerk">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/catalogue-draft</code><span class="sum">Draft an error-catalogue entry from observed rail rejections (returned for operator review, never saved directly)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>DraftCatalogueEntryInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>CatalogueEntryDraft</code> <span class="dim">Proposed entry grounded in recent submission attempts carrying the code</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="explainInvoiceFailure">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/explain-failure</code><span class="sum">Plain-language, catalogue-grounded explanation of an invoice's latest failure</span></summary>
+<div class="opbody"><div class="req">Request body: <code>ExplainFailureInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>FailureExplanation</code> <span class="dim">Grounded explanation (Clerk-phrased when available, catalogue text otherwise)</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="draftPaymentChaser">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/draft-chaser</code><span class="sum">A payment-reminder draft for one outstanding receivable, grounded in stored facts (template fallback, nothing stored)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>DraftPaymentChaserInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>PaymentChaserDraft</code> <span class="dim">A sendable reminder (Clerk-phrased when available, deterministic template otherwise)</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">422</span> <span class="dim">The invoice is not an outstanding receivable</span></li></ul></div>
+</details>
+<details class="op" id="getClerkTierReport">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/tier-report</code><span class="sum">Per-purpose model-tier evidence and deterministic recommendations from the inference ledger (pure SQL)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkTierReport</code> <span class="dim">Spend, validity and tier recommendations per purpose over the trailing window</span></li></ul></div>
+</details>
+<details class="op" id="assistMatchProposals">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/reconciliation-assist</code><span class="sum">Grounded explanation of a statement line's match candidates (template fallback)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>AssistMatchProposalsInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>MatchAssist</code> <span class="dim">Deterministic ranking + highlights; Clerk-phrased comparison when available</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="draftInvoiceWithClerk">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/draft-invoice</code><span class="sum">Draft an invoice form from one sentence — returned for review, never saved</span></summary>
+<div class="opbody"><div class="req">Request body: <code>DraftInvoiceWithClerkInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceDraftResult</code> <span class="dim">Normalised form proposal plus deterministic buyer suggestions</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s5xx">502</span> <code>Error</code> <span class="dim">Clerk could not produce a valid draft (fail closed)</span></li><li><span class="status s5xx">503</span> <code>Error</code> <span class="dim">Clerk AI disabled by the kill switch</span></li></ul></div>
+</details>
+<details class="op" id="createClerkBatch">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/batches</code><span class="sum">Queue a month-end bundle — segmentation and extraction run out of band</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreateClerkBatchInput</code></div><ul class="responses"><li><span class="status s2xx">202</span> <code>ClerkBatchView</code> <span class="dim">Queued; poll the batch for progress</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The document could not be processed (unreadable PDF, or a scanned bundle past the 24-page cap)</span></li><li><span class="status s5xx">503</span> <code>Error</code> <span class="dim">Clerk AI disabled by the kill switch</span></li></ul></div>
+</details>
+<details class="op" id="listClerkBatches">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/batches</code><span class="sum">The caller's recent batches, newest first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkBatchView[]</code> <span class="dim">Batches visible to the caller</span></li></ul></div>
+</details>
+<details class="op" id="getClerkBatch">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/batches/{id}</code><span class="sum">One batch's live progress counters</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkBatchView</code> <span class="dim">The batch</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="draftStatementFormatWithClerk">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/format-draft</code><span class="sum">Propose a statement-format column mapping from a sample — validated by the deterministic parser, never stored</span></summary>
+<div class="opbody"><div class="req">Request body: <code>DraftStatementFormatInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>StatementFormatDraft</code> <span class="dim">Draft mapping plus the parser's validation run over the sample</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The sample has no readable header row</span></li><li><span class="status s5xx">502</span> <code>Error</code> <span class="dim">Clerk could not produce a usable mapping (fail closed)</span></li><li><span class="status s5xx">503</span> <code>Error</code> <span class="dim">Clerk AI disabled by the kill switch</span></li></ul></div>
+</details>
+<details class="op" id="draftClientImportWithClerk">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/client-import-draft</code><span class="sum">Propose a column mapping for an arbitrary customer-list CSV — header-verified, parser-proven, never stored</span></summary>
+<div class="opbody"><div class="req">Request body: <code>DraftClientImportInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ClientImportDraft</code> <span class="dim">Verified mapping plus the deterministically parsed rows, ready for the ordinary import validate/commit flow</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The sample has no usable header/data rows</span></li><li><span class="status s5xx">502</span> <code>Error</code> <span class="dim">Clerk could not produce a usable mapping (fail closed)</span></li><li><span class="status s5xx">503</span> <code>Error</code> <span class="dim">Clerk AI disabled by the kill switch</span></li></ul></div>
+</details>
+<details class="op" id="getClerkUsage">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/usage</code><span class="sum">The firm's month-to-date Clerk token consumption against its allowance</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkUsage</code> <span class="dim">Usage for the caller's firm</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getClerkMetrics">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/metrics</code><span class="sum">Operational metrics from cases and the inference ledger (CLK-OBS-04)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkMetrics</code> <span class="dim">Aggregated Clerk health metrics</span></li></ul></div>
+</details>
+<details class="op" id="getClerkClaimGaps">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/claim-gaps</code><span class="sum">Refused Ask Clerk questions clustered by cause — the register's demand signal</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClaimGapReport</code> <span class="dim">Deterministic refusal-clustering report (pure SQL, zero model calls)</span></li></ul></div>
+</details>
+<details class="op" id="runModelCanary">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/model-canary</code><span class="sum">Run the eval corpus under a CANDIDATE model side by side with the incumbent (spends tokens)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RunModelCanaryInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ModelCanaryReport</code> <span class="dim">Side-by-side scores and the deterministic verdict; nothing is stored</span></li></ul></div>
+</details>
+</section>
+<section id="tag-recurring">
+<h2>recurring</h2>
+<details class="op" id="listRecurringInvoices">
+<summary><span class="method m-get">GET</span><code class="path">/api/recurring-invoices</code><span class="sum">List the caller-visible recurring invoice templates</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RecurringInvoiceTemplate[]</code> <span class="dim">Recurring templates</span></li></ul></div>
+</details>
+<details class="op" id="createRecurringInvoice">
+<summary><span class="method m-post">POST</span><code class="path">/api/recurring-invoices</code><span class="sum">Create a standing instruction that drafts the same invoice on a schedule</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RecurringInvoiceTemplateInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>RecurringInvoiceTemplate</code> <span class="dim">Created template</span></li></ul></div>
+</details>
+<details class="op" id="listRecurringSuggestions">
+<summary><span class="method m-get">GET</span><code class="path">/api/recurring-suggestions</code><span class="sum">Deterministic &quot;make this recurring?&quot; suggestions mined from the client's own invoice history</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RecurringSuggestion[]</code> <span class="dim">Detected monthly billing patterns not yet covered by a template (client_users are pinned to their own party)</span></li></ul></div>
+</details>
+<details class="op" id="listUnbilledIncome">
+<summary><span class="method m-get">GET</span><code class="path">/api/unbilled-income</code><span class="sum">Expected-but-absent invoices mined deterministically from the client's own monthly billing patterns</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>UnbilledIncomeAlert[]</code> <span class="dim">Buyers with a monthly billing habit and nothing issued this cycle (client_users are pinned to their own party)</span></li></ul></div>
+</details>
+<details class="op" id="updateRecurringInvoice">
+<summary><span class="method m-patch">PATCH</span><code class="path">/api/recurring-invoices/{id}</code><span class="sum">Pause or resume a recurring template</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RecurringInvoiceTemplateUpdateInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>RecurringInvoiceTemplate</code> <span class="dim">Updated template</span></li></ul></div>
+</details>
+</section>
+<section id="tag-invitation">
+<h2>invitation</h2>
+<details class="op" id="acceptInvite">
+<summary><span class="method m-post">POST</span><code class="path">/api/auth/accept-invite</code><span class="sum">Redeem an invitation token, setting a password and creating the account (public)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>AcceptInvitationInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Account created; sign in with the new password</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">409</span> <span class="dim">An account with this email already exists</span></li></ul></div>
+</details>
+<details class="op" id="listInvitations">
+<summary><span class="method m-get">GET</span><code class="path">/api/invitations</code><span class="sum">List the firm's invitations</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Invitation[]</code> <span class="dim">Invitations</span></li></ul></div>
+</details>
+<details class="op" id="createInvitation">
+<summary><span class="method m-post">POST</span><code class="path">/api/invitations</code><span class="sum">Invite a teammate or client into the caller's firm (operators name a target firm); returns the one-time token</span></summary>
+<div class="opbody"><div class="req">Request body: <code>CreateInvitationInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>InvitationWithToken</code> <span class="dim">Invitation created (token shown once)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="revokeInvitation">
+<summary><span class="method m-post">POST</span><code class="path">/api/invitations/{id}/revoke</code><span class="sum">Revoke a pending invitation</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Invitation</code> <span class="dim">Revoked</span></li><li><span class="status s4xx">404</span> <span class="dim">Invitation not found</span></li></ul></div>
+</details>
+</section>
+<section id="tag-sme">
+<h2>sme</h2>
+<details class="op" id="exportReceivablesCsv">
+<summary><span class="method m-get">GET</span><code class="path">/api/dashboard/receivables/export</code><span class="sum">Download the client's outstanding receivables with aging as CSV</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>text/csv</code> <span class="dim">CSV file (Content-Disposition attachment)</span></li></ul></div>
+</details>
+<details class="op" id="getDashboardSummary">
+<summary><span class="method m-get">GET</span><code class="path">/api/dashboard/summary</code><span class="sum">Compliance dashboard summary for an SME client</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>DashboardSummary</code> <span class="dim">Dashboard summary</span></li></ul></div>
+</details>
+<details class="op" id="getReceivablesSummary">
+<summary><span class="method m-get">GET</span><code class="path">/api/dashboard/receivables</code><span class="sum">Outstanding receivables aged into buckets, with top debtors</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ReceivablesSummary</code> <span class="dim">Receivables aging summary</span></li></ul></div>
+</details>
+<details class="op" id="getCashflowOutlook">
+<summary><span class="method m-get">GET</span><code class="path">/api/dashboard/cashflow</code><span class="sum">Expected inflows by week, projected from each buyer's own payment rhythm (deterministic — nothing stored, no model)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>CashflowOutlook</code> <span class="dim">Week-bucketed expected settlements per currency, with already-late money in its own bucket</span></li></ul></div>
+</details>
+<details class="op" id="getChaseList">
+<summary><span class="method m-get">GET</span><code class="path">/api/dashboard/chase-list</code><span class="sum">Outstanding receivables ranked by days beyond the buyer's OWN expected payment date (deterministic)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ChaseRow[]</code> <span class="dim">The invoices most worth chasing, most beyond expectation first</span></li></ul></div>
+</details>
+<details class="op" id="importInvoices">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/import</code><span class="sum">Bulk validate (and optionally commit) invoices from a spreadsheet</span></summary>
+<div class="opbody"><div class="req">Request body: <code>InvoiceImportInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>InvoiceImportResult</code> <span class="dim">Per-row import results</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getComplianceCalendar">
+<summary><span class="method m-get">GET</span><code class="path">/api/compliance/calendar</code><span class="sum">Per-entity compliance calendar with computed deadlines</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ComplianceDeadline[]</code> <span class="dim">Compliance deadlines</span></li></ul></div>
+</details>
+<details class="op" id="getAlertPreferences">
+<summary><span class="method m-get">GET</span><code class="path">/api/clients/{id}/alert-preferences</code><span class="sum">getAlertPreferences</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>AlertPreferences</code> <span class="dim">Alert preferences</span></li></ul></div>
+</details>
+<details class="op" id="updateAlertPreferences">
+<summary><span class="method m-put">PUT</span><code class="path">/api/clients/{id}/alert-preferences</code><span class="sum">updateAlertPreferences</span></summary>
+<div class="opbody"><div class="req">Request body: <code>AlertPreferencesInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>AlertPreferences</code> <span class="dim">Updated alert preferences</span></li></ul></div>
+</details>
+<details class="op" id="sendTestAlert">
+<summary><span class="method m-post">POST</span><code class="path">/api/clients/{id}/alerts/test</code><span class="sum">Send a test alert across the client's enabled channels</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>AlertDeliveryResult[]</code> <span class="dim">Per-channel delivery results</span></li></ul></div>
+</details>
+<details class="op" id="listPushDevices">
+<summary><span class="method m-get">GET</span><code class="path">/api/sme/push/devices</code><span class="sum">List the signed-in user's registered push devices</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>PushDevice[]</code> <span class="dim">Registered devices</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="registerPushDevice">
+<summary><span class="method m-post">POST</span><code class="path">/api/sme/push/devices</code><span class="sum">Register (or refresh) an Expo push token for this user</span></summary>
+<div class="opbody"><div class="req">Request body: <code>PushDeviceInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>PushDevice</code> <span class="dim">Device registered</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="unregisterPushDevice">
+<summary><span class="method m-post">POST</span><code class="path">/api/sme/push/devices/unregister</code><span class="sum">Remove an Expo push token (sign-out or notifications off)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>PushDeviceUnregisterInput</code></div><ul class="responses"><li><span class="status s2xx">204</span> <span class="dim">Device removed (idempotent)</span></li><li><span class="status s4xx">401</span> <span class="err">Unauthorized</span> <span class="dim">— not signed in / bad credential</span></li></ul></div>
+</details>
+<details class="op" id="listEscalations">
+<summary><span class="method m-get">GET</span><code class="path">/api/invoices/{id}/escalations</code><span class="sum">listEscalations</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Escalation[]</code> <span class="dim">Escalations for this invoice</span></li></ul></div>
+</details>
+<details class="op" id="escalateInvoice">
+<summary><span class="method m-post">POST</span><code class="path">/api/invoices/{id}/escalations</code><span class="sum">Escalate a failed invoice to a human operator</span></summary>
+<div class="opbody"><div class="req">Request body: <code>EscalationInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>Escalation</code> <span class="dim">Escalation created</span></li></ul></div>
+</details>
+</section>
+<section id="tag-advisory">
+<h2>advisory</h2>
+<details class="op" id="getAssessmentQuestionnaire">
+<summary><span class="method m-get">GET</span><code class="path">/api/assessments/questionnaire</code><span class="sum">getAssessmentQuestionnaire</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>QuestionnaireTemplate</code> <span class="dim">Readiness-assessment questionnaire template</span></li></ul></div>
+</details>
+<details class="op" id="runAssessment">
+<summary><span class="method m-post">POST</span><code class="path">/api/assessments</code><span class="sum">runAssessment</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RunAssessmentInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>AssessmentReport</code> <span class="dim">Completed readiness assessment</span></li></ul></div>
+</details>
+<details class="op" id="getAssessment">
+<summary><span class="method m-get">GET</span><code class="path">/api/assessments/{id}</code><span class="sum">getAssessment</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>AssessmentReport</code> <span class="dim">Persisted readiness assessment</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="analyzeVatRisk">
+<summary><span class="method m-post">POST</span><code class="path">/api/vat-risk/analyze</code><span class="sum">analyzeVatRisk</span></summary>
+<div class="opbody"><div class="req">Request body: <code>VatRiskInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>VatRiskReport</code> <span class="dim">VAT-risk exposure report and buyer-supplier graph</span></li></ul></div>
+</details>
+<details class="op" id="draftEngagementNarrative">
+<summary><span class="method m-post">POST</span><code class="path">/api/engagements/{id}/narrative</code><span class="sum">Clerk-drafted client letter body from an engagement's computed findings (template fallback, never stored)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EngagementNarrative</code> <span class="dim">Letter body for the firm to edit and own</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The engagement's findings do not match the expected shape</span></li></ul></div>
+</details>
+</section>
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.42.0)
+by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
+edit the spec and rebuild.</footer>
+</main>
+</body>
+</html>

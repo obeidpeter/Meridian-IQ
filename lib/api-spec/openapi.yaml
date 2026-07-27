@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.41.0
+  version: 0.42.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1018,6 +1018,29 @@ paths:
                   $ref: "#/components/schemas/FirmWebhookDelivery"
         "404":
           $ref: "#/components/responses/NotFound"
+  /firm-webhooks/{id}/deliveries/{deliveryId}/retry:
+    post:
+      operationId: retryFirmWebhookDelivery
+      tags: [messaging]
+      summary: Re-queue one dead delivery for a fresh attempt cycle (firm admin)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: deliveryId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The delivery, re-queued as pending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirmWebhookDelivery"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /firms/{id}/export:
     get:
       operationId: exportFirmData
@@ -1722,6 +1745,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CatalogueCoverageReport"
+  /operator/health-alerts:
+    get:
+      operationId: listHealthAlerts
+      tags: [operator]
+      summary: Recent durable platform-health alerts from the audit ledger, newest first
+      responses:
+        "200":
+          description: Health alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HealthAlert"
+  /operator/rail-config:
+    get:
+      operationId: getRailConfig
+      tags: [operator]
+      summary: Which env-lit rails are configured on this deployment (booleans only — never values)
+      responses:
+        "200":
+          description: Per-rail configuration state
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RailConfigEntry"
   /operator/gate-metrics:
     get:
       operationId: getGateMetrics
@@ -2120,6 +2171,70 @@ paths:
                 items:
                   $ref: "#/components/schemas/ComplianceDeadline"
 
+  /clients:
+    post:
+      operationId: createClient
+      tags: [console]
+      summary: Create one engaged client (party + engagement) for the caller's firm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientInput"
+      responses:
+        "201":
+          description: Party and engagement created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedClient"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clients/{id}/export:
+    get:
+      operationId: exportClientData
+      tags: [audit]
+      summary: Data-subject export for one client party (the client's own account, its firm, or an operator)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Client export bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientExportBundle"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clients/{id}/offboard:
+    post:
+      operationId: offboardClient
+      tags: [console]
+      summary: Firm-scoped client offboarding — archive the engagement, remove access, clear contact PII when this was the last engagement (statutory records retained)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OffboardClientInput"
+      responses:
+        "200":
+          description: Offboarding actions taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OffboardClientResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /clients/{id}/alert-preferences:
     get:
       operationId: getAlertPreferences
@@ -2919,6 +3034,54 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/BuyerSupplier"
+  /buyer/suppliers/{id}:
+    get:
+      operationId: getBuyerSupplierDetail
+      tags: [buyer]
+      summary: One supplier's invoices to the caller's buyer organization, with stamp and confirmation status
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Supplier detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuyerSupplierDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /buyer/confirmations/bulk:
+    post:
+      operationId: bulkRespondConfirmations
+      tags: [buyer]
+      summary: Confirm up to 50 awaiting invoices in one action (per-invoice results; skips are reported, never silent)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkConfirmationsInput"
+      responses:
+        "200":
+          description: Per-invoice outcomes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkConfirmationsResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /buyer/confirmations/export:
+    get:
+      operationId: exportBuyerConfirmations
+      tags: [buyer]
+      summary: CSV of invoices awaiting the buyer's response
+      responses:
+        "200":
+          description: CSV attachment
+          content:
+            text/csv:
+              schema:
+                type: string
   /buyer/exposure:
     get:
       operationId: getBuyerExposure
@@ -10230,6 +10393,164 @@ components:
                 type: integer
               truncated:
                 type: boolean
+    CreateClientInput:
+      type: object
+      required: [legalName]
+      properties:
+        legalName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        tin:
+          type: string
+        cacNumber:
+          type: string
+        street:
+          type: string
+        city:
+          type: string
+    CreatedClient:
+      type: object
+      required: [partyId, engagementId, legalName]
+      properties:
+        partyId:
+          type: string
+        engagementId:
+          type: string
+        legalName:
+          type: string
+    ClientExportBundle:
+      type: object
+      required: [partyId, exportedAt, sections]
+      properties:
+        partyId:
+          type: string
+        firmId:
+          type: ["string", "null"]
+        exportedAt:
+          type: string
+        # Section name -> rows, mirroring FirmExportBundle: capped per section
+        # with a truncation marker in `counts`.
+        sections:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
+        counts:
+          type: array
+          items:
+            type: object
+            required: [section, rows, truncated]
+            properties:
+              section:
+                type: string
+              rows:
+                type: integer
+              truncated:
+                type: boolean
+    OffboardClientInput:
+      type: object
+      required: [confirmLegalName]
+      properties:
+        # Typed-back legal name as the destructive-action guard.
+        confirmLegalName:
+          type: string
+          minLength: 1
+    OffboardClientResult:
+      type: object
+      required: [engagementsArchived, membershipsRemoved, aliasesDeleted, contactCleared, lastEngagement]
+      properties:
+        engagementsArchived:
+          type: integer
+        membershipsRemoved:
+          type: integer
+        aliasesDeleted:
+          type: integer
+        # True only when this firm held the party's last active engagement, so
+        # the shared contact PII (alert preferences, push devices) was cleared.
+        contactCleared:
+          type: boolean
+        lastEngagement:
+          type: boolean
+    HealthAlert:
+      type: object
+      required: [seq, action, entityType, entityId, createdAt]
+      properties:
+        seq:
+          type: integer
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        createdAt:
+          type: string
+        detail:
+          type: ["object", "null"]
+          additionalProperties: true
+    RailConfigEntry:
+      type: object
+      required: [key, label, configured, note]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        # Presence only — the endpoint never returns secret values.
+        configured:
+          type: boolean
+        note:
+          type: string
+    BulkConfirmationsInput:
+      type: object
+      required: [invoiceIds, method]
+      properties:
+        invoiceIds:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+        method:
+          type: string
+          minLength: 1
+          maxLength: 60
+        noSetOff:
+          type: boolean
+    BulkConfirmationsResult:
+      type: object
+      required: [confirmed, skipped, items]
+      properties:
+        confirmed:
+          type: integer
+        skipped:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            required: [invoiceId, status]
+            properties:
+              invoiceId:
+                type: string
+              status:
+                type: string
+                enum: [confirmed, skipped]
+              reason:
+                type: ["string", "null"]
+    BuyerSupplierDetail:
+      type: object
+      required: [supplier, invoices]
+      properties:
+        supplier:
+          $ref: "#/components/schemas/BuyerSupplier"
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuyerInvoice"
     ConfirmStaffEmailInput:
       type: object
       required: [code]

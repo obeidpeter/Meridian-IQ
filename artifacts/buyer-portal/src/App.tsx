@@ -10,6 +10,7 @@ import { RequireSession } from "@/components/require-session";
 import { Confirmations } from "@/pages/confirmations";
 import { InvoiceRespond } from "@/pages/invoice-respond";
 import { Suppliers } from "@/pages/suppliers";
+import { SupplierDetail } from "@/pages/supplier-detail";
 import { Scoreboard } from "@/pages/scoreboard";
 
 // Feature-gated routes answer 404 while dark — retrying will not light them
@@ -33,6 +34,7 @@ function Router() {
         <Route path="/" component={Confirmations} />
         <Route path="/invoices/:id" component={InvoiceRespond} />
         <Route path="/suppliers" component={Suppliers} />
+        <Route path="/suppliers/:id" component={SupplierDetail} />
         <Route path="/scoreboard" component={Scoreboard} />
         <Route component={NotFound} />
       </Switch>

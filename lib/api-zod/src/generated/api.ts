@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.41.0
+ * OpenAPI spec version: 0.42.0
  */
 import * as zod from 'zod';
 
@@ -1125,6 +1125,25 @@ export const ListFirmWebhookDeliveriesResponse = zod.array(ListFirmWebhookDelive
 
 
 /**
+ * @summary Re-queue one dead delivery for a fresh attempt cycle (firm admin)
+ */
+export const RetryFirmWebhookDeliveryParams = zod.object({
+  "id": zod.coerce.string(),
+  "deliveryId": zod.coerce.string()
+})
+
+export const RetryFirmWebhookDeliveryResponse = zod.object({
+  "id": zod.string(),
+  "eventType": zod.string(),
+  "status": zod.enum(['pending', 'delivered', 'failed', 'dead']),
+  "attempts": zod.number(),
+  "lastError": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "deliveredAt": zod.coerce.date().nullable()
+})
+
+
+/**
  * @summary Full-firm portability export (operator-gated) — invoices, parties, statements, consent trail, firm-scoped audit events
  */
 export const ExportFirmDataParams = zod.object({
@@ -2069,6 +2088,32 @@ export const GetCatalogueCoverageResponse = zod.object({
 
 
 /**
+ * @summary Recent durable platform-health alerts from the audit ledger, newest first
+ */
+export const ListHealthAlertsResponseItem = zod.object({
+  "seq": zod.number(),
+  "action": zod.string(),
+  "entityType": zod.string(),
+  "entityId": zod.string(),
+  "createdAt": zod.string(),
+  "detail": zod.record(zod.string(), zod.unknown()).nullish()
+})
+export const ListHealthAlertsResponse = zod.array(ListHealthAlertsResponseItem)
+
+
+/**
+ * @summary Which env-lit rails are configured on this deployment (booleans only — never values)
+ */
+export const GetRailConfigResponseItem = zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "configured": zod.boolean(),
+  "note": zod.string()
+})
+export const GetRailConfigResponse = zod.array(GetRailConfigResponseItem)
+
+
+/**
  * @summary Live measurements of the roadmap release-gate metrics
  */
 export const GetGateMetricsResponse = zod.object({
@@ -2667,6 +2712,71 @@ export const GetComplianceCalendarResponseItem = zod.object({
   "invoiceId": zod.string().nullish()
 })
 export const GetComplianceCalendarResponse = zod.array(GetComplianceCalendarResponseItem)
+
+
+/**
+ * @summary Create one engaged client (party + engagement) for the caller's firm
+ */
+export const createClientBodyLegalNameMax = 200;
+
+
+
+export const CreateClientBody = zod.object({
+  "legalName": zod.string().min(1).max(createClientBodyLegalNameMax),
+  "tin": zod.string().optional(),
+  "cacNumber": zod.string().optional(),
+  "street": zod.string().optional(),
+  "city": zod.string().optional()
+})
+
+export const CreateClientResponse = zod.object({
+  "partyId": zod.string(),
+  "engagementId": zod.string(),
+  "legalName": zod.string()
+})
+
+
+/**
+ * @summary Data-subject export for one client party (the client's own account, its firm, or an operator)
+ */
+export const ExportClientDataParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ExportClientDataResponse = zod.object({
+  "partyId": zod.string(),
+  "firmId": zod.string().nullish(),
+  "exportedAt": zod.string(),
+  "sections": zod.record(zod.string(), zod.array(zod.record(zod.string(), zod.unknown()))),
+  "counts": zod.array(zod.object({
+  "section": zod.string(),
+  "rows": zod.number(),
+  "truncated": zod.boolean()
+})).optional()
+})
+
+
+/**
+ * @summary Firm-scoped client offboarding — archive the engagement, remove access, clear contact PII when this was the last engagement (statutory records retained)
+ */
+export const OffboardClientParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const OffboardClientBody = zod.object({
+  "confirmLegalName": zod.string().min(1)
+})
+
+export const OffboardClientResponse = zod.object({
+  "engagementsArchived": zod.number(),
+  "membershipsRemoved": zod.number(),
+  "aliasesDeleted": zod.number(),
+  "contactCleared": zod.boolean(),
+  "lastEngagement": zod.boolean()
+})
 
 
 export const GetAlertPreferencesParams = zod.object({
@@ -3852,6 +3962,75 @@ export const ListBuyerSuppliersResponseItem = zod.object({
   "vatAtRisk": zod.string()
 })
 export const ListBuyerSuppliersResponse = zod.array(ListBuyerSuppliersResponseItem)
+
+
+/**
+ * @summary One supplier's invoices to the caller's buyer organization, with stamp and confirmation status
+ */
+export const GetBuyerSupplierDetailParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetBuyerSupplierDetailResponse = zod.object({
+  "supplier": zod.object({
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "supplierTin": zod.string().nullish(),
+  "tinValidated": zod.boolean().nullish(),
+  "invoiceCount": zod.number(),
+  "stampedCount": zod.number(),
+  "eligibleCount": zod.number(),
+  "totalAmount": zod.string(),
+  "vatProtected": zod.string(),
+  "vatAtRisk": zod.string()
+}),
+  "invoices": zod.array(zod.object({
+  "id": zod.string(),
+  "invoiceNumber": zod.string(),
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "status": zod.string(),
+  "grandTotal": zod.string(),
+  "vatTotal": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "confirmationState": zod.enum(['none', 'requested', 'confirmed', 'queried', 'rejected']),
+  "stampValid": zod.boolean().nullish(),
+  "eligible": zod.boolean().nullish()
+}))
+})
+
+
+/**
+ * @summary Confirm up to 50 awaiting invoices in one action (per-invoice results; skips are reported, never silent)
+ */
+export const bulkRespondConfirmationsBodyInvoiceIdsMax = 50;
+
+export const bulkRespondConfirmationsBodyMethodMax = 60;
+
+
+
+export const BulkRespondConfirmationsBody = zod.object({
+  "invoiceIds": zod.array(zod.string()).min(1).max(bulkRespondConfirmationsBodyInvoiceIdsMax),
+  "method": zod.string().min(1).max(bulkRespondConfirmationsBodyMethodMax),
+  "noSetOff": zod.boolean().optional()
+})
+
+export const BulkRespondConfirmationsResponse = zod.object({
+  "confirmed": zod.number(),
+  "skipped": zod.number(),
+  "items": zod.array(zod.object({
+  "invoiceId": zod.string(),
+  "status": zod.enum(['confirmed', 'skipped']),
+  "reason": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary CSV of invoices awaiting the buyer's response
+ */
+export const ExportBuyerConfirmationsResponse = zod.unknown()
 
 
 /**

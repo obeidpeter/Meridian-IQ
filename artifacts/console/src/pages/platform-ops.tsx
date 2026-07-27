@@ -5,11 +5,17 @@ import {
   useReconcilePipeline,
   useListRailStates,
   useListMessages,
+  useListHealthAlerts,
+  useGetRailConfig,
   getListDeadLettersQueryKey,
   getListRailStatesQueryKey,
   getListMessagesQueryKey,
 } from "@workspace/api-client-react";
-import type { OutboxEvent, Message } from "@workspace/api-client-react";
+import type {
+  OutboxEvent,
+  Message,
+  HealthAlert,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +28,8 @@ import {
   Activity,
   CheckCircle2,
   AlertTriangle,
+  BellRing,
+  Plug,
   RefreshCw,
   RotateCcw,
   Inbox,
@@ -29,11 +37,54 @@ import {
 } from "lucide-react";
 import {
   formatDateTime,
+  humanize,
+  pillClasses,
+  relativeTime,
   railBadgeClasses,
   railStateLabel,
   messageBadgeClasses,
   messageStatusLabel,
 } from "@/lib/format";
+
+// ---- Health-alert vocabulary -------------------------------------------------
+// Humanized labels for the durable platform-health alerts the sweeps write to
+// the audit ledger. A MIRROR of the known alert actions server-side — an
+// action from a newer build degrades to humanize(), never to a blank row.
+export const HEALTH_ALERT_ACTION_LABELS: Record<string, string> = {
+  "ops.rail.circuit_open": "Rail circuit open",
+  "ops.outbox.dead": "Dead-lettered event",
+  "ops.webhook.delivery_dead": "Webhook delivery dead",
+  "clerk.spend.anomaly": "Firm spend anomaly",
+  "clerk.quality.drop": "Extraction quality drop",
+  "clerk.injection_resistance.dropped": "Injection resistance drop",
+};
+
+export function healthAlertLabel(action: string): string {
+  return HEALTH_ALERT_ACTION_LABELS[action] ?? humanize(action);
+}
+
+/** The "what tripped it" pointer: entity type · entity id. */
+export function healthAlertEntityRef(
+  alert: Pick<HealthAlert, "entityType" | "entityId">,
+): string {
+  return `${alert.entityType} · ${alert.entityId}`;
+}
+
+export const HEALTH_ALERTS_EMPTY = "No health alerts — the platform is quiet.";
+
+// ---- Rail configuration (presence only) --------------------------------------
+// The endpoint answers booleans only — never values — so the card can say
+// which rails are lit without ever holding a secret client-side.
+export const RAIL_CONFIG_INTRO =
+  "Which environment-lit rails this deployment has configured. Values are never shown.";
+
+export function railConfiguredLabel(configured: boolean): string {
+  return configured ? "Configured" : "Dark";
+}
+
+export function railConfiguredBadgeClasses(configured: boolean): string {
+  return pillClasses(configured ? "emerald" : "slate");
+}
 
 function RailsSection() {
   const { data, isLoading, error, refetch } = useListRailStates();
@@ -75,6 +126,118 @@ function RailsSection() {
                 </div>
                 <span className={`${railBadgeClasses(rail.state)} shrink-0`}>
                   {railStateLabel(rail.state)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Durable platform-health alerts (audit-ledger feed, newest first): the
+// "what needs an operator" digest of circuit trips, dead letters, dead
+// webhook deliveries and Clerk anomaly detectors.
+function HealthAlertsSection() {
+  const { data, isLoading, error, refetch } = useListHealthAlerts();
+
+  return (
+    <Card data-testid="card-health-alerts">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <BellRing className="w-5 h-5 text-primary" aria-hidden="true" />{" "}
+          Health alerts
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-16" />
+        ) : error ? (
+          // A failed fetch must never read as "all quiet".
+          <QueryError thing="health alerts" onRetry={() => refetch()} />
+        ) : (data ?? []).length === 0 ? (
+          <p
+            className="text-sm text-muted-foreground flex items-center gap-2"
+            data-testid="text-health-alerts-empty"
+          >
+            <CheckCircle2
+              className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
+              aria-hidden="true"
+            />
+            {HEALTH_ALERTS_EMPTY}
+          </p>
+        ) : (
+          <div className="divide-y">
+            {(data ?? []).map((alert) => (
+              <div
+                key={alert.seq}
+                className="py-2.5 flex items-center justify-between gap-3"
+                data-testid={`health-alert-${alert.seq}`}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {healthAlertLabel(alert.action)}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {healthAlertEntityRef(alert)}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                  {relativeTime(alert.createdAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Which env-lit rails this deployment has configured — presence booleans
+// only, so a fail-closed rail (token unset → dark) is visible at a glance
+// without the endpoint ever returning a value.
+function RailConfigSection() {
+  const { data, isLoading, error, refetch } = useGetRailConfig();
+
+  return (
+    <Card data-testid="card-rail-config">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Plug className="w-5 h-5 text-primary" aria-hidden="true" /> Rail
+          configuration
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-xs text-muted-foreground mb-3">{RAIL_CONFIG_INTRO}</p>
+        {isLoading ? (
+          <Skeleton className="h-16" />
+        ) : error ? (
+          <QueryError thing="rail configuration" onRetry={() => refetch()} />
+        ) : (data ?? []).length === 0 ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-rail-config-empty"
+          >
+            No rails registered on this build.
+          </p>
+        ) : (
+          <div className="divide-y">
+            {(data ?? []).map((entry) => (
+              <div
+                key={entry.key}
+                className="py-2.5 flex items-center justify-between gap-3"
+                data-testid={`rail-config-${entry.key}`}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{entry.label}</p>
+                  <p className="text-xs text-muted-foreground">{entry.note}</p>
+                </div>
+                <span
+                  className={`${railConfiguredBadgeClasses(entry.configured)} shrink-0`}
+                >
+                  {railConfiguredLabel(entry.configured)}
                 </span>
               </div>
             ))}
@@ -303,7 +466,9 @@ export function PlatformOps() {
         </Button>
       </div>
 
+      <HealthAlertsSection />
       <RailsSection />
+      <RailConfigSection />
       <DeadLettersSection />
       <MessagesSection />
     </div>

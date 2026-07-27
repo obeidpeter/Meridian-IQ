@@ -11,12 +11,14 @@ import {
   getListFirmWebhooksQueryKey,
   useListFirmWebhookDeliveries,
   getListFirmWebhookDeliveriesQueryKey,
+  useRetryFirmWebhookDelivery,
 } from "@workspace/api-client-react";
 import type {
   FirmApiKey,
   FirmApiKeyCreated,
   FirmWebhook,
   FirmWebhookCreated,
+  FirmWebhookDelivery,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,7 +47,7 @@ import {
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { serverErrorMessage } from "@/lib/errors";
+import { errorStatus, serverErrorMessage } from "@/lib/errors";
 import { formatDateTime, humanize, pillClasses } from "@/lib/format";
 import type { BadgeTone } from "@/lib/format";
 import {
@@ -53,8 +55,10 @@ import {
   CheckCircle2,
   ChevronDown,
   Copy,
+  ExternalLink,
   KeyRound,
   Plus,
+  RotateCcw,
   Webhook,
 } from "lucide-react";
 
@@ -164,6 +168,50 @@ export function deliveryStatusLabel(status: string): string {
 
 export function deliveryBadgeClasses(status: string): string {
   return pillClasses(DELIVERY_TONES[status] ?? "slate");
+}
+
+/**
+ * Only a dead delivery can be re-queued — the server 409s anything else, so
+ * the button only appears where the click can succeed.
+ */
+export function canRetryDelivery(
+  delivery: Pick<FirmWebhookDelivery, "status">,
+): boolean {
+  return delivery.status === "dead";
+}
+
+/**
+ * Inline note for a failed retry. A 409 means the world moved between render
+ * and click — the delivery is no longer dead, or the endpoint was disabled —
+ * so say that; anything else relays the server's words with a plain fallback.
+ */
+export function retryDeliveryErrorNote(err: unknown): string {
+  if (errorStatus(err) === 409) {
+    return "This delivery is not dead / endpoint disabled.";
+  }
+  return serverErrorMessage(err) ?? "Could not retry the delivery. Try again.";
+}
+
+type RetryCallbacks = {
+  onSuccess: () => void;
+  onError: (err: unknown) => void;
+  onSettled: () => void;
+};
+
+/**
+ * The one place the retry path params are ordered: the webhook id is the
+ * collection, the delivery id the member — swapping them would 404 every
+ * retry. The component hands this its mutate; the tests hand it a mock.
+ */
+export function fireDeliveryRetry(
+  mutate: (
+    vars: { id: string; deliveryId: string },
+    cbs: RetryCallbacks,
+  ) => void,
+  ids: { webhookId: string; deliveryId: string },
+  cbs: RetryCallbacks,
+): void {
+  mutate({ id: ids.webhookId, deliveryId: ids.deliveryId }, cbs);
 }
 
 /**
@@ -577,6 +625,7 @@ function ApiKeysCard() {
 // ---- Webhooks card ----------------------------------------------------------
 
 function WebhookDeliveries({ webhookId }: { webhookId: string }) {
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useListFirmWebhookDeliveries(
     webhookId,
     {
@@ -586,6 +635,38 @@ function WebhookDeliveries({ webhookId }: { webhookId: string }) {
       },
     },
   );
+  const retry = useRetryFirmWebhookDelivery();
+  // Only the row whose Retry fired disables; a failed retry keeps its note
+  // inline on that row until the next attempt.
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [retryNotes, setRetryNotes] = useState<Record<string, string>>({});
+
+  const handleRetry = (deliveryId: string) => {
+    setRetryingId(deliveryId);
+    setRetryNotes((notes) => {
+      const next = { ...notes };
+      delete next[deliveryId];
+      return next;
+    });
+    fireDeliveryRetry(
+      retry.mutate,
+      { webhookId, deliveryId },
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries({
+            queryKey: getListFirmWebhookDeliveriesQueryKey(webhookId),
+          });
+        },
+        onError: (err) =>
+          setRetryNotes((notes) => ({
+            ...notes,
+            [deliveryId]: retryDeliveryErrorNote(err),
+          })),
+        onSettled: () => setRetryingId(null),
+      },
+    );
+  };
+
   if (isLoading) return <Skeleton className="h-12" />;
   if (isError)
     return <QueryError thing="the deliveries" onRetry={() => refetch()} />;
@@ -606,22 +687,50 @@ function WebhookDeliveries({ webhookId }: { webhookId: string }) {
           className="rounded-md border p-2 text-xs"
           data-testid={`row-delivery-${d.id}`}
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={deliveryBadgeClasses(d.status)}>
-              {deliveryStatusLabel(d.status)}
-            </span>
-            <code className="font-mono">{d.eventType}</code>
-            <span className="text-muted-foreground">
-              {d.attempts} attempt{d.attempts === 1 ? "" : "s"}
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={deliveryBadgeClasses(d.status)}>
+                {deliveryStatusLabel(d.status)}
+              </span>
+              <code className="font-mono">{d.eventType}</code>
+              <span className="text-muted-foreground">
+                {d.attempts} attempt{d.attempts === 1 ? "" : "s"}
+              </span>
+            </div>
+            {canRetryDelivery(d) && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-6 px-2 text-xs"
+                disabled={retryingId === d.id}
+                onClick={() => handleRetry(d.id)}
+                data-testid={`button-retry-delivery-${d.id}`}
+              >
+                <RotateCcw
+                  className={`w-3 h-3 mr-1 ${retryingId === d.id ? "animate-spin" : ""}`}
+                  aria-hidden="true"
+                />
+                {retryingId === d.id ? "Retrying…" : "Retry"}
+              </Button>
+            )}
           </div>
-          <p className="mt-1 text-muted-foreground">
+          <p className="mt-1 text-muted-foreground" aria-live="polite">
             Created {formatDateTime(d.createdAt)}
             {d.deliveredAt && <> · delivered {formatDateTime(d.deliveredAt)}</>}
+            {retryingId === d.id && <> · retrying…</>}
           </p>
           {d.lastError && (
             <p className="mt-1 break-all text-red-700 dark:text-red-400">
               {d.lastError}
+            </p>
+          )}
+          {retryNotes[d.id] && (
+            <p
+              className="mt-1 text-amber-700 dark:text-amber-400"
+              role="alert"
+              data-testid={`text-retry-note-${d.id}`}
+            >
+              {retryNotes[d.id]}
             </p>
           )}
         </li>
@@ -995,6 +1104,16 @@ export function ApiAccess() {
           authenticate with, and webhook endpoints we push events to. Secrets
           are shown once at creation and never again.
         </p>
+        <a
+          href="/console/api-reference.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          data-testid="link-api-reference"
+        >
+          API reference
+          <ExternalLink className="w-3 h-3" aria-hidden="true" />
+        </a>
       </div>
       <ApiKeysCard />
       <WebhooksCard />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  exportClientData,
   useGetMe,
   useListConsent,
   useRecordConsent,
@@ -23,8 +24,10 @@ import {
   Info,
   FileCheck2,
   BarChart3,
+  Download,
   Landmark,
 } from "lucide-react";
+import { triggerDownload } from "@/lib/download";
 import { formatDate, humanize, pillClasses } from "@/lib/format";
 
 // Consent flows v1 (R1, CORE-03/C6): the three-layer architecture surfaced.
@@ -69,6 +72,16 @@ function scopeTitle(scope: string): string {
   return SCOPE_TITLES[scope] ?? humanize(scope);
 }
 
+// Save in-memory bytes as a named download — the console's downloadBlob idiom
+// (console/src/lib/download.ts): wrap them in a Blob, click a temporary
+// object-URL anchor via triggerDownload, then revoke the URL. Local to this
+// page: SME's @/lib/download re-exports only the anchor helper.
+function downloadBlob(filename: string, content: BlobPart, type: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  triggerDownload(url, filename);
+  URL.revokeObjectURL(url);
+}
+
 // Latest grant/revoke wins per layer.
 function layerStatus(records: ConsentRecord[], layer: number): ConsentRecord | null {
   const forLayer = records
@@ -99,6 +112,29 @@ export function Consent() {
   const record = useRecordConsent();
   // Only the control that fired shows pending state.
   const [actingLayer, setActingLayer] = useState<number | null>(null);
+
+  // Data-subject export (CORE-03 companion): fetched on demand — not a
+  // mounted query — so nothing is pulled until the client asks for it.
+  const [exporting, setExporting] = useState(false);
+  const [exportFailed, setExportFailed] = useState(false);
+
+  const downloadMyData = async () => {
+    if (exporting || !clientPartyId) return;
+    setExporting(true);
+    setExportFailed(false);
+    try {
+      const bundle = await exportClientData(clientPartyId);
+      downloadBlob(
+        `client-data-${clientPartyId}.json`,
+        JSON.stringify(bundle, null, 2),
+        "application/json",
+      );
+    } catch {
+      setExportFailed(true);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const act = (layer: number, scope: string, action: "grant" | "revoke") => {
     setActingLayer(layer);
@@ -267,6 +303,35 @@ export function Consent() {
               </Card>
             </>
           )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Your data</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Download a complete copy of the data MeridianIQ holds about
+                your business.
+              </p>
+              {exportFailed ? (
+                <QueryError
+                  thing="your data export"
+                  onRetry={() => void downloadMyData()}
+                />
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={exporting}
+                  onClick={() => void downloadMyData()}
+                  data-testid="button-download-my-data"
+                >
+                  <Download className="w-4 h-4 mr-1" aria-hidden="true" />
+                  {exporting ? "Preparing…" : "Download my data"}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </RequireClientScope>
     </div>

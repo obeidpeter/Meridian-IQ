@@ -25,6 +25,8 @@ import {
   getGetClerkDigestQueryKey,
   useListStatementConnections,
   getListStatementConnectionsQueryKey,
+  useListInvitations,
+  getListInvitationsQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,7 @@ import {
   isFirmMemberRole,
 } from "@/components/staff-notification-prefs-card";
 import { StatementConnectionsCard } from "@/components/statement-connections-card";
+import { AddClientDialog } from "@/components/add-client-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
@@ -53,6 +56,11 @@ import {
   FileWarning,
   Clock,
   ChevronRight,
+  CheckCircle2,
+  Circle,
+  Info,
+  ListChecks,
+  Plus,
   Upload,
   GitBranch,
   Download,
@@ -61,6 +69,7 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -140,6 +149,251 @@ export function visiblePortfolioGroups(occupied: {
       : g.id === "connections"
         ? occupied.connections
         : true,
+  );
+}
+
+// ---- Getting-started checklist -----------------------------------------------
+// First-run guidance: five steps from an empty book to the first stamped
+// invoice, computed from data the page already holds (portfolio counts +
+// the invitations list). Consent (step 3) is deliberately an info row — the
+// client grants it themselves and the portfolio payload cannot see it, so
+// the card never pretends to know.
+
+export const GETTING_STARTED_DISMISS_KEY = "console.gettingStarted.dismissed";
+
+export type GettingStartedStep = {
+  id: "add-client" | "invite-owner" | "consent" | "first-invoice" | "stamping";
+  label: string;
+  /** "step" rows carry a checkbox; "info" rows are explanatory only. */
+  kind: "step" | "info";
+  done: boolean;
+};
+
+/** Sum of the book's invoices — ClientRisk.totalInvoices per client. */
+export function portfolioInvoiceCount(
+  clients: ReadonlyArray<{ totalInvoices: number }>,
+): number {
+  return clients.reduce((sum, c) => sum + c.totalInvoices, 0);
+}
+
+/**
+ * Invoices that reached the rails: stamped (accepted) plus pending (submitted,
+ * awaiting the verdict) — the two portfolio fields that prove a submission
+ * happened.
+ */
+export function portfolioSubmittedCount(
+  clients: ReadonlyArray<{ stampedCount: number; pendingCount: number }>,
+): number {
+  return clients.reduce((sum, c) => sum + c.stampedCount + c.pendingCount, 0);
+}
+
+/** Step 2's predicate: any client_user invitation, whatever its status. */
+export function hasClientOwnerInvite(
+  invitations: ReadonlyArray<{ role: string }> | undefined,
+): boolean {
+  return (invitations ?? []).some((i) => i.role === "client_user");
+}
+
+export function gettingStartedSteps(input: {
+  clientCount: number;
+  hasClientInvite: boolean;
+  invoiceCount: number;
+  submittedCount: number;
+}): GettingStartedStep[] {
+  return [
+    {
+      id: "add-client",
+      label: "Add your first client",
+      kind: "step",
+      done: input.clientCount > 0,
+    },
+    {
+      id: "invite-owner",
+      label: "Invite the client's owner",
+      kind: "step",
+      done: input.hasClientInvite,
+    },
+    { id: "consent", label: "Client grants consent", kind: "info", done: false },
+    {
+      id: "first-invoice",
+      label: "Create the first invoice",
+      kind: "step",
+      done: input.invoiceCount > 0,
+    },
+    {
+      id: "stamping",
+      label: "Submit for stamping",
+      kind: "step",
+      done: input.submittedCount > 0,
+    },
+  ];
+}
+
+export function completedStepCount(steps: GettingStartedStep[]): number {
+  return steps.filter((s) => s.kind === "step" && s.done).length;
+}
+
+/**
+ * Show while the firm is still finding its feet: an empty book, or fewer
+ * than 3 of the 4 checkable steps done — unless the partner dismissed it.
+ */
+export function shouldShowGettingStarted(args: {
+  clientCount: number;
+  steps: GettingStartedStep[];
+  dismissed: boolean;
+}): boolean {
+  if (args.dismissed) return false;
+  return args.clientCount === 0 || completedStepCount(args.steps) < 3;
+}
+
+// Storage access is parameterized so the helpers stay testable under node
+// and a privacy mode that throws simply means "the card reappears".
+export function readGettingStartedDismissed(
+  storage: Pick<Storage, "getItem"> | null,
+): boolean {
+  try {
+    return storage?.getItem(GETTING_STARTED_DISMISS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeGettingStartedDismissed(
+  storage: Pick<Storage, "setItem"> | null,
+): void {
+  try {
+    storage?.setItem(GETTING_STARTED_DISMISS_KEY, "1");
+  } catch {
+    // Private mode — the dismissal simply doesn't stick.
+  }
+}
+
+function browserStorage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function GettingStartedCard({
+  steps,
+  onAddClient,
+  onDismiss,
+}: {
+  steps: GettingStartedStep[];
+  onAddClient: () => void;
+  onDismiss: () => void;
+}) {
+  const icon = (step: GettingStartedStep) =>
+    step.kind === "info" ? (
+      <Info
+        className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+    ) : step.done ? (
+      <CheckCircle2
+        className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+        aria-hidden="true"
+      />
+    ) : (
+      <Circle
+        className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+    );
+
+  return (
+    <Card
+      className="rounded-lg border-teal-200 bg-teal-50/30 shadow-sm dark:border-teal-900 dark:bg-teal-950/20"
+      data-testid="card-getting-started"
+    >
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between gap-3 text-base">
+          <span className="flex items-center gap-2">
+            <ListChecks className="w-4 h-4 text-primary" aria-hidden="true" />
+            Getting started
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-muted-foreground hover:text-foreground"
+            onClick={onDismiss}
+            data-testid="button-dismiss-getting-started"
+          >
+            <X className="w-3.5 h-3.5 mr-1" aria-hidden="true" /> Dismiss
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <ol className="space-y-1.5">
+          {steps.map((step) => (
+            <li
+              key={step.id}
+              className="flex items-start gap-2.5 text-sm"
+              data-testid={`getting-started-${step.id}`}
+            >
+              {icon(step)}
+              <div className="min-w-0">
+                <span
+                  className={
+                    step.done ? "text-muted-foreground" : "font-medium"
+                  }
+                >
+                  {step.kind === "step" && (
+                    <span className="sr-only">
+                      {step.done ? "Done — " : "To do — "}
+                    </span>
+                  )}
+                  {step.label}
+                </span>
+                {step.id === "add-client" && !step.done && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 ml-2 text-sm"
+                    onClick={onAddClient}
+                    data-testid="button-checklist-add-client"
+                  >
+                    Add a client
+                  </Button>
+                )}
+                {step.id === "invite-owner" && !step.done && (
+                  <Link
+                    href="/invitations"
+                    className="ml-2 text-primary hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    data-testid="link-checklist-invitations"
+                  >
+                    Send an invite
+                  </Link>
+                )}
+                {step.id === "consent" && (
+                  <span className="text-xs text-muted-foreground">
+                    {" "}
+                    — the client signs in and grants Layer 1 sharing consent
+                    from their own workspace (manual anchor: #consent). Not
+                    tracked here.
+                  </span>
+                )}
+                {step.id === "first-invoice" && !step.done && (
+                  <span className="text-xs text-muted-foreground">
+                    {" "}
+                    — raised by the client, or drafted by Clerk from their
+                    documents.
+                  </span>
+                )}
+                {step.id === "stamping" && !step.done && (
+                  <span className="text-xs text-muted-foreground">
+                    {" "}
+                    — done once any invoice is pending or stamped on the rails.
+                  </span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1145,9 +1399,11 @@ export function PortfolioSkeleton() {
 function PortfolioHeader({
   description,
   canImport,
+  onAddClient,
 }: {
   description: string;
   canImport: boolean;
+  onAddClient: () => void;
 }) {
   return (
     <div className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-6 sm:flex-row sm:items-end">
@@ -1172,6 +1428,14 @@ function PortfolioHeader({
             Onboarding
           </Link>
         </Button>
+        <Button
+          variant="outline"
+          onClick={onAddClient}
+          data-testid="button-add-client"
+        >
+          <Plus className="size-4" aria-hidden="true" />
+          Add client
+        </Button>
         {canImport && (
           <Button asChild>
             <Link href="/clients/import">
@@ -1190,6 +1454,22 @@ export function Portfolio() {
   const { data: me } = useGetMe();
   const { data, isLoading, error, refetch } = useGetPortfolio();
   const canImport = (me?.capabilities ?? []).includes("clients.import");
+
+  // Getting-started checklist state: single-client intake dialog + the
+  // localStorage-backed dismissal.
+  const [addClientOpen, setAddClientOpen] = useState(false);
+  const [gettingStartedDismissed, setGettingStartedDismissed] = useState(() =>
+    readGettingStartedDismissed(browserStorage()),
+  );
+  // Step 2's evidence. Fetched only while the checklist could still show —
+  // a dismissed card costs nothing.
+  const { data: invitations } = useListInvitations({
+    query: {
+      queryKey: getListInvitationsQueryKey(),
+      retry: false,
+      enabled: !gettingStartedDismissed && !!data,
+    },
+  });
 
   // Section occupancy: observe the SAME queries the section's self-gating
   // cards gate on — identical query keys, so react-query dedupes each to a
@@ -1262,6 +1542,30 @@ export function Portfolio() {
     connections: connectionsOccupied,
   });
 
+  // Checklist inputs, computed from data already on the page (portfolio
+  // counts + the invitations list above).
+  const steps = gettingStartedSteps({
+    clientCount: data?.clients.length ?? 0,
+    hasClientInvite: hasClientOwnerInvite(invitations),
+    invoiceCount: portfolioInvoiceCount(data?.clients ?? []),
+    submittedCount: portfolioSubmittedCount(data?.clients ?? []),
+  });
+  const showGettingStarted =
+    !!data &&
+    shouldShowGettingStarted({
+      clientCount: data.clients.length,
+      steps,
+      dismissed: gettingStartedDismissed,
+    });
+  const handleDismissGettingStarted = () => {
+    writeGettingStartedDismissed(browserStorage());
+    setGettingStartedDismissed(true);
+  };
+  const openAddClient = () => setAddClientOpen(true);
+  const addClientDialog = (
+    <AddClientDialog open={addClientOpen} onOpenChange={setAddClientOpen} />
+  );
+
   if (isLoading) {
     return <PortfolioSkeleton />;
   }
@@ -1272,8 +1576,10 @@ export function Portfolio() {
         <PortfolioHeader
           description="Penalty exposure, filing deadlines and receivables across your client book."
           canImport={canImport}
+          onAddClient={openAddClient}
         />
         <QueryError thing="your portfolio" onRetry={() => refetch()} />
+        {addClientDialog}
       </div>
     );
   }
@@ -1291,7 +1597,15 @@ export function Portfolio() {
         <PortfolioHeader
           description="Set up the client book to start tracking risk, deadlines and receivables."
           canImport={canImport}
+          onAddClient={openAddClient}
         />
+        {showGettingStarted && (
+          <GettingStartedCard
+            steps={steps}
+            onAddClient={openAddClient}
+            onDismiss={handleDismissGettingStarted}
+          />
+        )}
         <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
           <EmptyState
             icon={Users}
@@ -1323,6 +1637,7 @@ export function Portfolio() {
             </div>
           </EmptyState>
         </Card>
+        {addClientDialog}
       </div>
     );
   }
@@ -1334,7 +1649,16 @@ export function Portfolio() {
           data.clientCount === 1 ? "" : "s"
         }.`}
         canImport={canImport}
+        onAddClient={openAddClient}
       />
+
+      {showGettingStarted && (
+        <GettingStartedCard
+          steps={steps}
+          onAddClient={openAddClient}
+          onDismiss={handleDismissGettingStarted}
+        />
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
@@ -1471,6 +1795,8 @@ export function Portfolio() {
           <StaffNotificationPrefsCard />
         </PortfolioSection>
       )}
+
+      {addClientDialog}
     </div>
   );
 }

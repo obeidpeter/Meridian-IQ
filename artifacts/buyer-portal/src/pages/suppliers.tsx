@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { useGetBuyerExposure } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -26,6 +27,9 @@ import { isFeatureDisabled } from "@/lib/errors";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
+
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 function StatCard({
   label,
@@ -223,7 +227,14 @@ export function Suppliers() {
                       data-testid={`row-supplier-${s.supplierPartyId}`}
                     >
                       <TableCell className="font-medium">
-                        {s.supplierName}
+                        <Link
+                          href={`/suppliers/${s.supplierPartyId}`}
+                          className={`text-primary hover:underline rounded-sm ${FOCUS_RING}`}
+                          aria-label={`View ${s.supplierName}'s invoices`}
+                          data-testid={`link-supplier-${s.supplierPartyId}`}
+                        >
+                          {s.supplierName}
+                        </Link>
                       </TableCell>
                       <TableCell>
                         <span className="inline-flex items-center gap-1.5">

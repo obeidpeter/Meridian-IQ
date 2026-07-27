@@ -9,7 +9,14 @@ import {
   stampRecordsTable,
   confirmationsTable,
 } from "@workspace/db";
-import { computeScoreboard } from "./service.ts";
+import {
+  computeExposure,
+  computeScoreboard,
+  respondBulk,
+  supplierDetail,
+} from "./service.ts";
+import { DomainError } from "../errors.ts";
+import type { Principal } from "../auth/rbac.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Supplier compliance scoreboard (BR-05). Pinned invariants:
@@ -155,4 +162,70 @@ test("computeScoreboard weights stamped 0.6 and confirmed 0.4 over the visible b
 
   // A foreign buyer party sees an empty scoreboard.
   assert.deepEqual(await computeScoreboard(randomUUID()), []);
+});
+
+test("supplierDetail: the drill-down runs the exposure breakdown's aggregation and scopes to the caller's book", async () => {
+  const detail = await supplierDetail(buyerId, supplierOne);
+
+  // Same numbers as the exposure breakdown entry — one aggregation, two
+  // surfaces.
+  const exposure = await computeExposure(buyerId);
+  const breakdownEntry = exposure.breakdown.find(
+    (b) => b.supplierPartyId === supplierOne,
+  );
+  assert.deepEqual(detail.supplier, breakdownEntry);
+  assert.equal(detail.supplier.supplierName, `SB Supplier One ${SALT}`);
+  assert.equal(detail.supplier.invoiceCount, 4, "the draft is invisible");
+  assert.equal(detail.supplier.stampedCount, 3);
+  assert.equal(detail.supplier.eligibleCount, 3);
+  assert.equal(detail.supplier.totalAmount, "4000.00");
+  assert.equal(detail.supplier.vatProtected, "300.00");
+  assert.equal(detail.supplier.vatAtRisk, "100.00", "only the unstamped I4");
+
+  // The invoice rows carry the latest-lineage confirmation state and stamp
+  // facts, and belong exclusively to this supplier.
+  assert.equal(detail.invoices.length, 4);
+  assert.ok(detail.invoices.every((i) => i.supplierPartyId === supplierOne));
+  const byId = new Map(detail.invoices.map((i) => [i.id, i]));
+  assert.equal(byId.get(i1)?.confirmationState, "confirmed");
+  assert.equal(byId.get(i3)?.confirmationState, "queried", "newest lineage row wins");
+  assert.equal(byId.get(i4)?.confirmationState, "requested");
+  assert.equal(byId.get(i4)?.stampValid, false);
+  assert.equal(byId.get(i1)?.eligible, true);
+
+  // No invoices to the caller = 404: an unknown supplier, and equally a
+  // real supplier viewed by a buyer it never invoiced.
+  await assert.rejects(supplierDetail(buyerId, randomUUID()), (err: unknown) => {
+    assert.ok(err instanceof DomainError);
+    assert.equal(err.status, 404);
+    return true;
+  });
+  await assert.rejects(supplierDetail(randomUUID(), supplierOne), (err: unknown) => {
+    assert.ok(err instanceof DomainError);
+    assert.equal(err.status, 404);
+    return true;
+  });
+});
+
+test("respondBulk refuses an over-cap batch outright", async () => {
+  const buyerPrincipal: Principal = {
+    userId: randomUUID(),
+    role: "buyer_user",
+    firmId: null,
+    clientPartyId: null,
+    buyerPartyId: buyerId,
+  };
+  await assert.rejects(
+    respondBulk(
+      buyerPrincipal,
+      Array.from({ length: 51 }, () => randomUUID()),
+      "portal",
+      false,
+    ),
+    (err: unknown) => {
+      assert.ok(err instanceof DomainError);
+      assert.equal(err.status, 400);
+      return true;
+    },
+  );
 });

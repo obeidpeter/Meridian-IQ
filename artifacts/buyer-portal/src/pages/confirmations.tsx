@@ -1,12 +1,41 @@
-import { useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useListBuyerInvoices } from "@workspace/api-client-react";
-import type { BuyerInvoice } from "@workspace/api-client-react";
+import {
+  useListBuyerInvoices,
+  useBulkRespondConfirmations,
+  getListBuyerInvoicesQueryKey,
+  getExportBuyerConfirmationsUrl,
+} from "@workspace/api-client-react";
+import type {
+  BuyerInvoice,
+  BulkConfirmationsResult,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Pagination,
   PaginationContent,
@@ -14,7 +43,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { ChevronRight, Inbox, SearchX } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { ChevronRight, Download, Inbox, SearchX } from "lucide-react";
 import {
   formatNaira,
   formatDate,
@@ -24,6 +54,7 @@ import {
   eligibleBadge,
 } from "@/lib/format";
 import { isFeatureDisabled } from "@/lib/errors";
+import { errorDescription } from "@/lib/respond";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -40,6 +71,11 @@ const FILTERS = [
 type FilterKey = (typeof FILTERS)[number]["key"];
 
 const PAGE_SIZE = 25;
+
+// The bulk endpoint accepts at most this many invoice ids per call — the
+// header "Select all" stops here, and a hand-picked overflow disables the
+// button with a reason instead of collecting a guaranteed 400.
+const BULK_LIMIT = 50;
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -62,7 +98,20 @@ function StampBadges({ invoice }: { invoice: BuyerInvoice }) {
   );
 }
 
-function InvoiceRow({ invoice }: { invoice: BuyerInvoice }) {
+function InvoiceRow({
+  invoice,
+  showSelectionColumn,
+  checked,
+  onToggle,
+}: {
+  invoice: BuyerInvoice;
+  // The selection column renders whenever the filtered list contains any
+  // awaiting rows, so checkboxes and their non-selectable neighbours align.
+  showSelectionColumn: boolean;
+  checked: boolean;
+  onToggle: (selected: boolean) => void;
+}) {
+  const selectable = invoice.confirmationState === "requested";
   // The API does not expose when the confirmation was requested, so the age
   // shown for awaiting rows is measured from the invoice's issue date.
   const age =
@@ -70,57 +119,75 @@ function InvoiceRow({ invoice }: { invoice: BuyerInvoice }) {
       ? daysSince(invoice.issueDate)
       : undefined;
   return (
-    <Link
-      href={`/invoices/${invoice.id}`}
-      data-testid={`row-invoice-${invoice.id}`}
-      className={`flex items-center gap-3 py-3 -mx-2 px-2 rounded-md hover:bg-muted/50 transition-colors ${FOCUS_RING}`}
-    >
-      <div className="flex-1 min-w-0">
-        <p className="font-medium truncate">{invoice.invoiceNumber}</p>
-        <p className="text-xs text-muted-foreground truncate">
-          {invoice.supplierName} · {formatDate(invoice.issueDate)}
-          <span className="sm:hidden tabular-nums">
-            {" · "}
-            {formatNaira(invoice.grandTotal)}
-          </span>
-          {age !== undefined && (
-            <span className="text-amber-700 dark:text-amber-400">
-              {" · "}issued {age === 0 ? "today" : `${age}d ago`}
-            </span>
-          )}
-        </p>
-      </div>
-      <StampBadges invoice={invoice} />
-      <p className="text-sm font-medium tabular-nums hidden sm:block">
-        {formatNaira(invoice.grandTotal)}
-      </p>
-      <span
-        className={confirmationBadgeClasses(invoice.confirmationState)}
-        data-testid={`badge-confirmation-${invoice.id}`}
+    <div className="flex items-center gap-3">
+      {showSelectionColumn &&
+        (selectable ? (
+          <Checkbox
+            checked={checked}
+            onCheckedChange={(v) => onToggle(v === true)}
+            aria-label={`Select ${invoice.invoiceNumber} for bulk confirmation`}
+            data-testid={`check-confirm-${invoice.id}`}
+          />
+        ) : (
+          <span className="w-4 shrink-0" aria-hidden="true" />
+        ))}
+      <Link
+        href={`/invoices/${invoice.id}`}
+        data-testid={`row-invoice-${invoice.id}`}
+        className={`flex-1 min-w-0 flex items-center gap-3 py-3 rounded-md hover:bg-muted/50 transition-colors ${
+          showSelectionColumn ? "px-2" : "-mx-2 px-2"
+        } ${FOCUS_RING}`}
       >
-        {confirmationLabel(invoice.confirmationState)}
-      </span>
-      <ChevronRight
-        className="w-4 h-4 text-muted-foreground shrink-0"
-        aria-hidden="true"
-      />
-    </Link>
+        <div className="flex-1 min-w-0">
+          <p className="font-medium truncate">{invoice.invoiceNumber}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {invoice.supplierName} · {formatDate(invoice.issueDate)}
+            <span className="sm:hidden tabular-nums">
+              {" · "}
+              {formatNaira(invoice.grandTotal)}
+            </span>
+            {age !== undefined && (
+              <span className="text-amber-700 dark:text-amber-400">
+                {" · "}issued {age === 0 ? "today" : `${age}d ago`}
+              </span>
+            )}
+          </p>
+        </div>
+        <StampBadges invoice={invoice} />
+        <p className="text-sm font-medium tabular-nums hidden sm:block">
+          {formatNaira(invoice.grandTotal)}
+        </p>
+        <span
+          className={confirmationBadgeClasses(invoice.confirmationState)}
+          data-testid={`badge-confirmation-${invoice.id}`}
+        >
+          {confirmationLabel(invoice.confirmationState)}
+        </span>
+        <ChevronRight
+          className="w-4 h-4 text-muted-foreground shrink-0"
+          aria-hidden="true"
+        />
+      </Link>
+    </div>
   );
 }
 
-function PageHeader() {
+function PageHeader({ actions }: { actions?: ReactNode }) {
   return (
-    <div>
-      <h1
-        className="text-2xl md:text-3xl font-bold"
-        data-testid="text-page-title"
-      >
-        Confirmations
-      </h1>
-      <p className="text-muted-foreground mt-1">
-        Invoices addressed to your organization. Respond to confirmation
-        requests to keep your input VAT protected.
-      </p>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1
+          className="text-2xl md:text-3xl font-bold"
+          data-testid="text-page-title"
+        >
+          Confirmations
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Invoices addressed to your organization. Respond to confirmation
+          requests to keep your input VAT protected.
+        </p>
+      </div>
+      {actions}
     </div>
   );
 }
@@ -131,8 +198,37 @@ export function Confirmations() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const { data, isLoading, error, refetch } = useListBuyerInvoices();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Bulk confirmation: the picked awaiting rows, the method/no-set-off pair
+  // (same semantics as the single-response form), and the per-invoice report
+  // from the last run.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMethod, setBulkMethod] = useState("portal");
+  const [bulkNoSetOff, setBulkNoSetOff] = useState(false);
+  const [bulkResults, setBulkResults] = useState<BulkConfirmationsResult | null>(
+    null,
+  );
+  const bulk = useBulkRespondConfirmations();
 
   const invoices = useMemo(() => data ?? [], [data]);
+
+  // A refetch can flip a selected row out of the awaiting state (someone
+  // else responded, or our own bulk run landed) — drop it from the selection
+  // instead of resubmitting a guaranteed skip.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const awaitingIds = new Set(
+        invoices
+          .filter((i) => i.confirmationState === "requested")
+          .map((i) => i.id),
+      );
+      const next = new Set([...prev].filter((id) => awaitingIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [invoices]);
 
   const query = search.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -210,9 +306,88 @@ export function Confirmations() {
   const isFirstRun = invoices.length === 0;
   const hasActiveNarrowing = filter !== "all" || query !== "";
 
+  // Bulk selection derivations: the awaiting rows in the CURRENT filtered
+  // view are what "Select all" covers, capped at the endpoint's batch size.
+  const awaitingFiltered = filtered.filter(
+    (i) => i.confirmationState === "requested",
+  );
+  const showSelectionColumn = awaitingFiltered.length > 0;
+  const selectAllTargets = awaitingFiltered.slice(0, BULK_LIMIT);
+  const allSelected =
+    selectAllTargets.length > 0 &&
+    selectAllTargets.every((i) => selected.has(i.id));
+  const overLimit = selected.size > BULK_LIMIT;
+  const selectAllCapped =
+    allSelected && awaitingFiltered.length > BULK_LIMIT && !overLimit;
+  const numbersById = new Map(invoices.map((i) => [i.id, i.invoiceNumber]));
+
+  const toggleRow = (id: string, on: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const runBulk = () => {
+    if (selected.size === 0 || overLimit || bulk.isPending) return;
+    bulk.mutate(
+      {
+        data: {
+          invoiceIds: [...selected],
+          method: bulkMethod,
+          noSetOff: bulkNoSetOff,
+        },
+      },
+      {
+        onSuccess: (res) => {
+          setBulkResults(res);
+          setSelected(new Set());
+          setBulkNoSetOff(false);
+          void queryClient.invalidateQueries({
+            queryKey: getListBuyerInvoicesQueryKey(),
+          });
+          toast({
+            title: `${res.confirmed} ${
+              res.confirmed === 1 ? "invoice" : "invoices"
+            } confirmed`,
+            description:
+              res.skipped > 0
+                ? `${res.skipped} skipped — the results below say why.`
+                : "The suppliers have been notified of your response.",
+          });
+        },
+        onError: (err) =>
+          toast({
+            title: "Could not confirm the selected invoices",
+            description: errorDescription(err),
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  const skippedItems = (bulkResults?.items ?? []).filter(
+    (i) => i.status === "skipped",
+  );
+
   return (
     <div className="space-y-6">
-      <PageHeader />
+      <PageHeader
+        actions={
+          // CSV of the confirmation queue, as a plain same-origin navigation
+          // (no react-query): the endpoint answers with a Content-Disposition
+          // attachment and auth rides the session cookie, so the browser just
+          // downloads the file.
+          <Button asChild variant="outline" data-testid="button-export-confirmations">
+            <a href={getExportBuyerConfirmationsUrl()}>
+              <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+              Export CSV
+            </a>
+          </Button>
+        }
+      />
 
       {awaiting.length > 0 && (
         <Card
@@ -244,6 +419,63 @@ export function Confirmations() {
             >
               View requested
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {bulkResults !== null && (
+        <Card data-testid="card-bulk-results">
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <CardTitle>Bulk confirmation results</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setBulkResults(null)}
+                data-testid="button-dismiss-bulk-results"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm" data-testid="text-bulk-outcome">
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                {bulkResults.confirmed} confirmed
+              </span>
+              {" · "}
+              <span
+                className={`tabular-nums ${
+                  bulkResults.skipped > 0
+                    ? "font-semibold text-amber-700 dark:text-amber-400"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {bulkResults.skipped} skipped
+              </span>
+            </p>
+            {skippedItems.length > 0 && (
+              <div className="rounded-md border divide-y">
+                {skippedItems.map((item) => (
+                  <div
+                    key={item.invoiceId}
+                    className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3 text-sm"
+                    data-testid={`row-bulk-skipped-${item.invoiceId}`}
+                  >
+                    <Link
+                      href={`/invoices/${item.invoiceId}`}
+                      className={`font-medium text-primary hover:underline rounded-sm ${FOCUS_RING}`}
+                      data-testid={`link-bulk-skipped-${item.invoiceId}`}
+                    >
+                      {numbersById.get(item.invoiceId) ?? item.invoiceId}
+                    </Link>
+                    <p className="text-muted-foreground">
+                      {item.reason ?? "Skipped"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -294,9 +526,139 @@ export function Confirmations() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Invoices</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>Invoices</CardTitle>
+            {showSelectionColumn && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="select-all-awaiting"
+                  checked={allSelected}
+                  onCheckedChange={(v) =>
+                    setSelected(
+                      v === true
+                        ? new Set(selectAllTargets.map((i) => i.id))
+                        : new Set(),
+                    )
+                  }
+                  aria-label="Select all invoices awaiting your response"
+                  data-testid="check-select-all"
+                />
+                <Label
+                  htmlFor="select-all-awaiting"
+                  className="text-sm font-normal text-muted-foreground"
+                >
+                  Select all
+                </Label>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
+          {selected.size > 0 && (
+            <div
+              className="mb-4 rounded-md border bg-muted/40 p-3 space-y-2"
+              data-testid="bar-bulk-actions"
+            >
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <p
+                  className="text-sm font-semibold tabular-nums"
+                  data-testid="text-bulk-selected"
+                >
+                  {selected.size} selected
+                  {selectAllCapped && (
+                    <span className="font-normal text-muted-foreground">
+                      {" "}
+                      (bulk limit)
+                    </span>
+                  )}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="bulk-method" className="text-sm">
+                    Method
+                  </Label>
+                  <Select value={bulkMethod} onValueChange={setBulkMethod}>
+                    <SelectTrigger
+                      id="bulk-method"
+                      className="h-9 w-32"
+                      data-testid="select-bulk-method"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="portal">Portal</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                      <SelectItem value="phone">Phone</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="bulk-no-set-off"
+                    checked={bulkNoSetOff}
+                    onCheckedChange={(v) => setBulkNoSetOff(v === true)}
+                    data-testid="checkbox-bulk-no-set-off"
+                  />
+                  <Label
+                    htmlFor="bulk-no-set-off"
+                    className="text-sm font-normal leading-snug"
+                  >
+                    We acknowledge no set-off will be applied against these
+                    invoices
+                  </Label>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      disabled={overLimit || bulk.isPending}
+                      data-testid="button-bulk-confirm"
+                    >
+                      {bulk.isPending ? (
+                        <>
+                          <Spinner className="mr-2 size-4" /> Confirming…
+                        </>
+                      ) : (
+                        "Confirm selected"
+                      )}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Confirm {selected.size}{" "}
+                        {selected.size === 1 ? "invoice" : "invoices"}?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Each records who confirmed and how, permanently.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid="button-cancel-bulk">
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={runBulk}
+                        disabled={bulk.isPending}
+                        data-testid="button-confirm-bulk"
+                      >
+                        Confirm invoices
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+              {overLimit && (
+                <p
+                  className="text-xs text-destructive"
+                  data-testid="text-bulk-limit"
+                >
+                  Bulk confirm handles up to {BULK_LIMIT} invoices at a time —
+                  narrow your selection.
+                </p>
+              )}
+            </div>
+          )}
+
           {filtered.length === 0 ? (
             <div className="py-12 flex flex-col items-center text-center gap-2">
               {isFirstRun ? (
@@ -349,7 +711,13 @@ export function Confirmations() {
             <>
               <div className="divide-y">
                 {visible.map((inv) => (
-                  <InvoiceRow key={inv.id} invoice={inv} />
+                  <InvoiceRow
+                    key={inv.id}
+                    invoice={inv}
+                    showSelectionColumn={showSelectionColumn}
+                    checked={selected.has(inv.id)}
+                    onToggle={(on) => toggleRow(inv.id, on)}
+                  />
                 ))}
               </div>
               {pageCount > 1 && (

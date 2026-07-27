@@ -150,8 +150,13 @@ scheduler pings `GET /api/internal/sweep` to run one full pass on demand.
   identity) — staff deliberately do NOT also see their firm's party rows,
   which would leak per-client alert traffic to every teammate (the operator
   message log, `GET /messages`, is the firm-wide monitor, behind its own
-  gate); operator/auditor/bank/buyer roles get an empty feed (no send rail
-  stamps identities for them). Rows STAY pointer-only in
+  gate); `operator` → its own `userId` (the identity the platform-health
+  offer rail stamps on operator nudges — see the health watch under
+  Integration layer); `buyer_user` → its own `buyerPartyId`
+  (buyer-addressed sends stamp the buyer party; the equality keeps one
+  buyer organization out of another's feed exactly as it does for sibling
+  clients); auditor/bank_user get an empty feed (no send rail stamps
+  identities for them). Rows STAY pointer-only in
   the feed: the only server-side resolution is a human title from the
   template registry's static description (unknown/retired keys are
   humanized, never fail the feed); entity pointers pass through opaque. The
@@ -277,6 +282,59 @@ All reconciliation surfaces are gated by the `reconciliation` feature flag.
   (`GET /dashboard/receivables/export`), audit trail (`GET /audit/export` +
   `/audit/export/csv`).
 
+## Client lifecycle (NDPA)
+
+The data-subject lifecycle for one client party (`routes/clients.ts`),
+designed around one constraint: **parties are the SHARED SPINE** (no tenant
+key, no RLS, one party may be engaged by several firms), so lifecycle
+actions are firm-scoped relationship changes, never party mutations.
+
+- **Creation** (`POST /clients`, `engagement.write` + `party.write`, the
+  console's Add-client dialog): one party (through `createParty` —
+  provenance + `party.create` audit) plus the retainer engagement that
+  places the client inside the firm's tenant boundary, in a single commit.
+  A duplicate guard (normalized TIN, then exact legal name) is scoped to
+  THIS firm's engaged clients only — an unscoped lookup over the shared
+  spine would be a cross-tenant oracle for harvesting other firms' rosters;
+  a TIN that exists elsewhere simply creates a new party here, and the
+  operator merge workflow (CORE-08) reconciles duplicates with lineage.
+- **Data-subject export** (`modules/audit/client-export.ts`,
+  `GET /clients/{id}/export` — the client's own account, its engaging firm,
+  or an operator/auditor): the per-client sibling of the firm export — one
+  deterministic, read-only bundle of everything the platform holds ABOUT
+  one party, sectioned (the party row whole — legal name/TIN/CAC *are* the
+  subject's data; consent records; the party's own alert-preferences
+  contact row; supplier-side invoices + lines; engagements; statement
+  summary rows only — raw bank lines omitted; memberships as identity +
+  role only, never hashes/TOTP secrets/session epochs; party-entity audit
+  events). A **tenant lens** does the tenancy in app code (the module reads
+  on the base client): firm callers get only their own firm's slice of
+  every firm-keyed section; the data subject and cross-tenant staff get all
+  engaging firms — which is what a data-subject access request means. Every
+  section is capped (cap+1 probe) with rows + a `truncated` flag in
+  `counts`; the export action itself is audited pointer-only AFTER
+  assembly. The SME app's consent page surfaces it as "Download my data".
+- **Offboarding** (`modules/party/offboard.ts`,
+  `POST /clients/{id}/offboard`, explicit `firm_admin` role — the
+  integrations-route precedent — plus a typed-back `confirmLegalName`
+  guard): a FIRM-SCOPED teardown, never a deletion. The party's statutory
+  identity (legal name, TIN, CAC) is retained under the legal-obligation
+  basis (FIRS record-keeping — the same retention wall that makes invoice
+  rows immutable); what goes is exactly the firm's relationship surface:
+  engagements → `archived` (still present, so retention-era reads keep
+  passing `assertPartyAccess`), the firm's client_user memberships →
+  deleted, its party-name aliases → deleted, pending invitations → revoked
+  (CAS). **Last-engagement rule:** the party-keyed contact PII
+  (alert-preferences channels/addresses, push devices) is shared across
+  engaging firms, so it is cleared ONLY when no other firm still holds a
+  non-archived engagement — that one cross-tenant existence bit is probed
+  on the base client (firm-keyed RLS would otherwise always answer "last")
+  and returned as `lastEngagement`. Consent records are CLIENT-owned
+  (CORE-03) and never touched. The result body reports exactly what
+  happened (`engagementsArchived`, `membershipsRemoved`, `aliasesDeleted`,
+  `contactCleared`, `lastEngagement`), and the action is audited
+  pointer-only.
+
 ## Integration layer (payments, API keys, webhooks)
 
 - **Payment collection** (`modules/billing/payments.ts`, `routes/billing-payments.ts`,
@@ -317,7 +375,38 @@ All reconciliation surfaces are gated by the `reconciliation` feature flag.
   https/public-host SSRF guards, a pointer-only body (SEC-12) and an
   `X-Meridian-Signature` HMAC-SHA256 keyed by the sha256 of the shown-once
   `whsec_` secret; five failures dead-letter the delivery. Per-firm delivery
-  logs are the firm's own audit of what left.
+  logs are the firm's own audit of what left, and a dead delivery can be
+  re-queued for a fresh attempt cycle
+  (`POST /firm-webhooks/{id}/deliveries/{deliveryId}/retry`, firm_admin): a
+  compare-and-set on `status='dead'` resets attempts/backoff so only a
+  genuinely given-up delivery ever re-enters the queue (retrying a
+  pending/delivered row is a 409, as is a disabled endpoint — the console's
+  Deliveries view carries the Retry button).
+- **Operator health visibility** (`modules/desk/health-watch.ts`,
+  `routes/operator.ts`): the ops sibling of the Clerk watch trio — an
+  `atMostHourly` sweep over three degraded conditions the platform already
+  records but nobody was paged about: a rail circuit breaker stuck open
+  (keyed per outage instance — `rail:openedAt` — so a recover-and-retrip is
+  a new alert while a long outage stays one), dead-lettered outbox events,
+  and firm webhook deliveries that exhausted their retries (this one stamps
+  the owning `firmId` on the alert row). Zero model calls, no automatic
+  remediation — replay/close stay operator judgements on the Desk. Alert
+  discipline is `alertOnceViaAuditLedger`: the append-only audit ledger's
+  `(action, entityId)` pair IS the cross-instance dedup key, so an alert is
+  durable, deduplicated and readable back without a second alert table —
+  `GET /operator/health-alerts` (operator/auditor) is exactly that
+  ledger-backed read, and the Desk's Platform ops page renders it as the
+  health-alerts card. NEW alerts are additionally OFFERED to operators over
+  the messaging rail (`platform_health` template, recipient identity = the
+  operator's own userId, entity pointer names only the alert KIND):
+  best-effort and gated on `messaging_notifications` — the audit alert is
+  the source of truth, a lost nudge is never a lost alert.
+  `GET /operator/rail-config` rounds out the visibility: which env-lit rails
+  (inbound email/WhatsApp, the messaging relay, payment provider +
+  confirmation webhook, the metrics token) are configured on this
+  deployment — presence booleans ONLY, never values, so the Desk's
+  rail-configuration card can say "this rail is dark" without becoming a
+  secrets oracle.
 - **Notification read-state & retention**: the feed carries `read` /
   `unreadCount` computed under the same recipient-identity predicate that is
   the inbox's isolation wall; `POST /notifications/mark-read` is an

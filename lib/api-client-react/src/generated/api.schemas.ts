@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.41.0
+ * OpenAPI spec version: 0.42.0
  */
 export interface HealthStatus {
   status: string;
@@ -4185,6 +4185,118 @@ export interface FirmExportBundle {
   exportedAt: string;
   sections: FirmExportBundleSections;
   counts?: FirmExportBundleCountsItem[];
+}
+
+export interface CreateClientInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  legalName: string;
+  tin?: string;
+  cacNumber?: string;
+  street?: string;
+  city?: string;
+}
+
+export interface CreatedClient {
+  partyId: string;
+  engagementId: string;
+  legalName: string;
+}
+
+export type ClientExportBundleSectionsItem = { [key: string]: unknown };
+
+export type ClientExportBundleSections = {[key: string]: ClientExportBundleSectionsItem[]};
+
+export type ClientExportBundleCountsItem = {
+  section: string;
+  rows: number;
+  truncated: boolean;
+};
+
+export interface ClientExportBundle {
+  partyId: string;
+  /** @nullable */
+  firmId?: string | null;
+  exportedAt: string;
+  sections: ClientExportBundleSections;
+  counts?: ClientExportBundleCountsItem[];
+}
+
+export interface OffboardClientInput {
+  /** @minLength 1 */
+  confirmLegalName: string;
+}
+
+export interface OffboardClientResult {
+  engagementsArchived: number;
+  membershipsRemoved: number;
+  aliasesDeleted: number;
+  contactCleared: boolean;
+  lastEngagement: boolean;
+}
+
+/**
+ * @nullable
+ */
+export type HealthAlertDetail = { [key: string]: unknown } | null;
+
+export interface HealthAlert {
+  seq: number;
+  action: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+  /** @nullable */
+  detail?: HealthAlertDetail;
+}
+
+export interface RailConfigEntry {
+  key: string;
+  label: string;
+  configured: boolean;
+  note: string;
+}
+
+export interface BulkConfirmationsInput {
+  /**
+     * @minItems 1
+     * @maxItems 50
+     */
+  invoiceIds: string[];
+  /**
+     * @minLength 1
+     * @maxLength 60
+     */
+  method: string;
+  noSetOff?: boolean;
+}
+
+export type BulkConfirmationsResultItemsItemStatus = typeof BulkConfirmationsResultItemsItemStatus[keyof typeof BulkConfirmationsResultItemsItemStatus];
+
+
+export const BulkConfirmationsResultItemsItemStatus = {
+  confirmed: 'confirmed',
+  skipped: 'skipped',
+} as const;
+
+export type BulkConfirmationsResultItemsItem = {
+  invoiceId: string;
+  status: BulkConfirmationsResultItemsItemStatus;
+  /** @nullable */
+  reason?: string | null;
+};
+
+export interface BulkConfirmationsResult {
+  confirmed: number;
+  skipped: number;
+  items: BulkConfirmationsResultItemsItem[];
+}
+
+export interface BuyerSupplierDetail {
+  supplier: BuyerSupplier;
+  invoices: BuyerInvoice[];
 }
 
 export interface ConfirmStaffEmailInput {

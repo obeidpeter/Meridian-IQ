@@ -134,7 +134,9 @@ import {
 import { serializeToUbl } from "../modules/invoice/canonical";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
-import { requireFlag } from "../modules/flags/flags";
+import { isFeatureEnabled, requireFlag } from "../modules/flags/flags";
+import { sendMessage } from "../modules/messaging/messaging";
+import { pointerEntityRef } from "../modules/messaging/recipient-ref";
 
 const router: IRouter = Router();
 
@@ -1030,6 +1032,35 @@ router.post("/invoices/:id/confirmations", requireFlag("buyer_confirmations"), a
         actorId: req.principal.userId,
         actorRole: req.principal.role,
       });
+    }
+  }
+  if (isRequest) {
+    // Best-effort nudge to the buyer organization: a confirmation request is
+    // only useful if the buyer learns of it. Gated like every send rail by
+    // the messaging_notifications flag (dark flag = no ledger row, PL-02) and
+    // pointer-only throughout (SEC-12) — the message carries an opaque party
+    // ref and an invoice entity pointer, never amounts, names or the raw ids.
+    // The buyer-party identity stamp (recipientPartyId) is what the
+    // notification feed resolves by. Failures are absorbed: the confirmation
+    // row above is the source of truth and must never be lost to a messaging
+    // hiccup — the send runs in its own nested transaction (savepoint under
+    // the request transaction) so even an aborted insert cannot poison the
+    // surrounding commit.
+    try {
+      if (await isFeatureEnabled("messaging_notifications", null)) {
+        await getDb().transaction(async () => {
+          await sendMessage({
+            channel: "email",
+            recipientRef: pointerEntityRef("pty", invoice.buyerPartyId),
+            recipientPartyId: invoice.buyerPartyId,
+            templateKey: "confirmation_request",
+            entityType: "invoice",
+            entityId: pointerEntityRef("inv", invoice.id),
+          });
+        });
+      }
+    } catch (err) {
+      req.log.warn({ err }, "confirmation request notification failed");
     }
   }
   await appendAudit({

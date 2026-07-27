@@ -12,10 +12,13 @@ import {
   confirmationsTable,
   settlementEventsTable,
   invoiceLifecycleEventsTable,
+  messagesTable,
 } from "@workspace/db";
 import buyerRouter from "./buyer.ts";
 import invoicesRouter from "./invoices.ts";
 import { setFlag } from "../modules/flags/flags.ts";
+import { pointerEntityRef } from "../modules/messaging/recipient-ref.ts";
+import { parseCsv } from "../lib/csv.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import {
   appFor,
@@ -39,14 +42,17 @@ const SALT = makeRunSalt();
 
 const RAILS_FLAG = "buyer_rails";
 const CONFIRM_FLAG = "buyer_confirmations";
+const MESSAGING_FLAG = "messaging_notifications";
 let railsWasEnabled: boolean | null = null;
 let confirmWasEnabled: boolean | null = null;
+let messagingWasEnabled: boolean | null = null;
 
 const firmId = randomUUID();
 const staffUserId = randomUUID();
 const buyerUser1 = randomUUID();
 const buyerUser2 = randomUUID();
 const supplier = randomUUID();
+const evilSupplier = randomUUID(); // legal name is a formula-injection probe
 const buyer1 = randomUUID();
 const buyer2 = randomUUID();
 const buyerNoTin = randomUUID();
@@ -57,6 +63,17 @@ const invConfirmId = randomUUID(); // confirmation happy path (stamped)
 const invQueryId = randomUUID(); // query/re-request path (stamped)
 const invNoTinId = randomUUID(); // TIN gate target (stamped)
 const invB2Id = randomUUID(); // buyer two's invoice (scoping)
+const invBulkAId = randomUUID(); // bulk confirm — open request, confirms
+const invBulkBId = randomUUID(); // bulk confirm — no lineage, skips
+const invBulkTinId = randomUUID(); // bulk confirm — unvalidated buyer party
+const invCsvInjId = randomUUID(); // CSV export — injection-shaped free text
+const invNotifyId = randomUUID(); // confirmation-request notification target
+const invNotifyDarkId = randomUUID(); // notification target while flag is dark
+
+// CSV formula-injection probes (CWE-1236): tenant-authored free text opened
+// in Excel by the buyer's staff.
+const EVIL_SUPPLIER_NAME = `=Evil Supplier ${SALT}`;
+const EVIL_INVOICE_NUMBER = `=2+5+BRT${SALT}`;
 
 const admin: Principal = {
   userId: staffUserId,
@@ -135,6 +152,7 @@ function invoiceSeed(over: {
 before(async () => {
   railsWasEnabled = await saveAndEnable(RAILS_FLAG);
   confirmWasEnabled = await saveAndEnable(CONFIRM_FLAG);
+  messagingWasEnabled = await saveAndEnable(MESSAGING_FLAG);
   const db = getDb();
   await db
     .insert(usersTable)
@@ -173,6 +191,13 @@ before(async () => {
       legalName: `BRT Buyer NoTin ${SALT}`,
       tinValidated: false,
     },
+    {
+      id: evilSupplier,
+      type: "client_business",
+      legalName: EVIL_SUPPLIER_NAME,
+      tin: "10000000-0032",
+      tinValidated: true,
+    },
   ]);
   await db.insert(invoicesTable).values([
     invoiceSeed({ id: invFlagId, buyerPartyId: buyer1, status: "stamped" }),
@@ -181,12 +206,33 @@ before(async () => {
     invoiceSeed({ id: invQueryId, buyerPartyId: buyer1, status: "stamped" }),
     invoiceSeed({ id: invNoTinId, buyerPartyId: buyerNoTin, status: "stamped" }),
     invoiceSeed({ id: invB2Id, buyerPartyId: buyer2, status: "submitted" }),
+    invoiceSeed({ id: invBulkAId, buyerPartyId: buyer1, status: "stamped" }),
+    invoiceSeed({ id: invBulkBId, buyerPartyId: buyer1, status: "stamped" }),
+    invoiceSeed({ id: invBulkTinId, buyerPartyId: buyerNoTin, status: "stamped" }),
+    invoiceSeed({ id: invNotifyId, buyerPartyId: buyer1, status: "stamped" }),
+    invoiceSeed({ id: invNotifyDarkId, buyerPartyId: buyer1, status: "stamped" }),
+    {
+      // From the injection-named supplier, with an injection-shaped invoice
+      // number and a due date — the CSV export must neutralize both cells.
+      id: invCsvInjId,
+      firmId,
+      supplierPartyId: evilSupplier,
+      buyerPartyId: buyer1,
+      invoiceNumber: EVIL_INVOICE_NUMBER,
+      issueDate: "2026-07-01",
+      dueDate: "2026-08-01",
+      status: "stamped" as never,
+      grandTotal: "120000.00",
+      subtotal: "111627.91",
+      vatTotal: "8372.09",
+    },
   ]);
 });
 
 after(async () => {
   await restore(RAILS_FLAG, railsWasEnabled);
   await restore(CONFIRM_FLAG, confirmWasEnabled);
+  await restore(MESSAGING_FLAG, messagingWasEnabled);
   await closeAllServers();
 });
 
@@ -455,4 +501,299 @@ test("buyer scoping: a buyer_user sees only its own party's book", async () => {
   });
   assert.equal(crossFlag.status, 403);
   assert.match(((await crossFlag.json()) as { error: string }).error, /not addressed to your buyer organization/);
+});
+
+interface BulkItem {
+  invoiceId: string;
+  status: "confirmed" | "skipped";
+  reason: string | null;
+}
+
+test("bulk confirm: per-item outcomes — one bad row never aborts (or silently passes) the batch", async () => {
+  const base1 = await listen(appFor(buyerOne, buyerRouter));
+  await getDb().insert(confirmationsTable).values({
+    invoiceId: invBulkAId,
+    buyerPartyId: buyer1,
+    state: "requested",
+  });
+
+  const unknownId = randomUUID();
+  const res = await fetch(`${base1}/buyer/confirmations/bulk`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      invoiceIds: [invBulkAId, invBulkBId, invB2Id, unknownId, invBulkAId],
+      method: "portal-bulk",
+      noSetOff: true,
+    }),
+  });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    confirmed: number;
+    skipped: number;
+    items: BulkItem[];
+  };
+  assert.equal(body.confirmed, 1);
+  assert.equal(body.skipped, 4);
+  assert.equal(body.items.length, 5, "one result per requested id, in order");
+
+  // The open request confirms with the exact single-response semantics.
+  assert.deepEqual(body.items[0], {
+    invoiceId: invBulkAId,
+    status: "confirmed",
+    reason: null,
+  });
+  assert.equal(await invoiceStatus(invBulkAId), "confirmed");
+  const rowsA = await getDb()
+    .select()
+    .from(confirmationsTable)
+    .where(eq(confirmationsTable.invoiceId, invBulkAId));
+  const confirmedRow = rowsA.find((r) => r.state === "confirmed");
+  assert.ok(confirmedRow, "the append-only confirmed row exists");
+  assert.equal(confirmedRow.method, "portal-bulk");
+  assert.equal(confirmedRow.noSetOff, true);
+  assert.equal(confirmedRow.confirmingUserId, buyerUser1, "BR-02 lineage");
+
+  // No open request → skipped with the single-path refusal, nothing written.
+  assert.equal(body.items[1].status, "skipped");
+  assert.match(body.items[1].reason ?? "", /requires an open request/);
+  assert.equal(await invoiceStatus(invBulkBId), "stamped");
+  const rowsB = await getDb()
+    .select()
+    .from(confirmationsTable)
+    .where(eq(confirmationsTable.invoiceId, invBulkBId));
+  assert.equal(rowsB.length, 0, "the skipped item's savepoint rolled back");
+
+  // Another buyer's invoice is refused per item — the batch continues.
+  assert.equal(body.items[2].status, "skipped");
+  assert.match(body.items[2].reason ?? "", /not addressed to your buyer organization/);
+  assert.equal(await invoiceStatus(invB2Id), "submitted");
+
+  // An unknown id is reported, never silently dropped.
+  assert.equal(body.items[3].status, "skipped");
+  assert.match(body.items[3].reason ?? "", /not found/i);
+
+  // The duplicate finds the lane its first occurrence just closed.
+  assert.equal(body.items[4].status, "skipped");
+  assert.match(body.items[4].reason ?? "", /requires an open request/);
+
+  // The TIN gate holds inside the batch exactly as on the single path.
+  await getDb().insert(confirmationsTable).values({
+    invoiceId: invBulkTinId,
+    buyerPartyId: buyerNoTin,
+    state: "requested",
+  });
+  const noTinBase = await listen(appFor(buyerNoTinUser, buyerRouter));
+  const tinRes = await fetch(`${noTinBase}/buyer/confirmations/bulk`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ invoiceIds: [invBulkTinId], method: "portal" }),
+  });
+  assert.equal(tinRes.status, 200);
+  const tinBody = (await tinRes.json()) as { confirmed: number; items: BulkItem[] };
+  assert.equal(tinBody.confirmed, 0);
+  assert.match(tinBody.items[0].reason ?? "", /TIN must be validated/);
+  assert.equal(await invoiceStatus(invBulkTinId), "stamped");
+
+  // The capability gate: a firm principal cannot respond for a buyer.
+  const staffBase = await listen(appFor(admin, buyerRouter));
+  const staffRes = await fetch(`${staffBase}/buyer/confirmations/bulk`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ invoiceIds: [invBulkBId], method: "portal" }),
+  });
+  assert.equal(staffRes.status, 403);
+});
+
+test("pending-confirmations CSV: awaiting-only rows, buyer-scoped, formula injection neutralized", async () => {
+  const base1 = await listen(appFor(buyerOne, buyerRouter));
+  const requestedAt = new Date(Date.now() - 5 * 60_000);
+  await getDb().insert(confirmationsTable).values({
+    invoiceId: invCsvInjId,
+    buyerPartyId: buyer1,
+    state: "requested",
+    createdAt: requestedAt,
+  });
+
+  const res = await fetch(`${base1}/buyer/confirmations/export`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type") ?? "", /^text\/csv/);
+  assert.match(
+    res.headers.get("content-disposition") ?? "",
+    /attachment; filename="pending-confirmations\.csv"/,
+  );
+  // fetch's text() strips a leading BOM per the WHATWG encoding spec, so the
+  // Excel-friendliness check reads the raw bytes.
+  const raw = new Uint8Array(await res.arrayBuffer());
+  assert.deepEqual([...raw.slice(0, 3)], [0xef, 0xbb, 0xbf], "BOM for Excel UTF-8");
+  const text = new TextDecoder().decode(raw.slice(3));
+  const rows = parseCsv(text);
+  assert.deepEqual(rows[0], [
+    "invoiceNumber",
+    "supplierName",
+    "issueDate",
+    "dueDate",
+    "currency",
+    "grandTotal",
+    "requestedAt",
+  ]);
+
+  // Only invoices whose LATEST lineage row is `requested` appear: the
+  // re-requested invoice and the freshly seeded one — never the confirmed,
+  // settled, lineage-less or draft ones, and never another buyer's book.
+  const numbers = rows.slice(1).map((r) => r[0]);
+  assert.ok(numbers.includes(`BRT-${invQueryId.slice(0, 8)}-${SALT}`));
+  assert.ok(!numbers.includes(`BRT-${invConfirmId.slice(0, 8)}-${SALT}`));
+  assert.ok(!numbers.includes(`BRT-${invBulkAId.slice(0, 8)}-${SALT}`));
+  assert.ok(!numbers.includes(`BRT-${invBulkBId.slice(0, 8)}-${SALT}`));
+  assert.ok(!numbers.includes(`BRT-${invFlagId.slice(0, 8)}-${SALT}`));
+  assert.ok(!numbers.includes(`BRT-${invDraftId.slice(0, 8)}-${SALT}`));
+  assert.ok(!numbers.includes(`BRT-${invB2Id.slice(0, 8)}-${SALT}`));
+
+  // CWE-1236: the formula-shaped invoice number and supplier name are
+  // apostrophe-prefixed so Excel renders text, not a live formula — no cell
+  // in the file may open with a bare `=`.
+  const injRow = rows.slice(1).find((r) => r[0] === `'${EVIL_INVOICE_NUMBER}`);
+  assert.ok(injRow, "the injection-shaped invoice is present, neutralized");
+  assert.equal(injRow[1], `'${EVIL_SUPPLIER_NAME}`);
+  assert.equal(injRow[2], "2026-07-01");
+  assert.equal(injRow[3], "2026-08-01");
+  assert.equal(injRow[4], "NGN");
+  assert.equal(injRow[5], "120000.00");
+  assert.equal(injRow[6], requestedAt.toISOString());
+  for (const line of text.split("\r\n")) {
+    assert.ok(!line.startsWith("="), "no leading formula trigger survives");
+  }
+  assert.ok(!text.includes(",="), "no mid-row cell opens a formula either");
+
+  // Buyer two awaits nothing: header only — buyer one's book never leaks.
+  const base2 = await listen(appFor(buyerTwo, buyerRouter));
+  const res2 = await fetch(`${base2}/buyer/confirmations/export`);
+  assert.equal(res2.status, 200);
+  assert.equal(parseCsv(await res2.text()).length, 1);
+});
+
+test("supplier drill-down: same numbers as the breakdown, own-book invoices only, foreign supplier 404", async () => {
+  const base1 = await listen(appFor(buyerOne, buyerRouter));
+  const base2 = await listen(appFor(buyerTwo, buyerRouter));
+
+  // The breakdown entry and the drill-down aggregate must be the same
+  // numbers — supplierSummaryOf is the single aggregation behind both.
+  const list = await fetch(`${base1}/buyer/suppliers`);
+  assert.equal(list.status, 200);
+  const entries = (await list.json()) as Record<string, unknown>[];
+  const listEntry = entries.find((e) => e.supplierPartyId === supplier);
+  assert.ok(listEntry);
+
+  const detailRes = await fetch(`${base1}/buyer/suppliers/${supplier}`);
+  assert.equal(detailRes.status, 200);
+  const detail = (await detailRes.json()) as {
+    supplier: Record<string, unknown>;
+    invoices: {
+      id: string;
+      supplierPartyId: string;
+      confirmationState: string;
+      stampValid: boolean;
+    }[];
+  };
+  assert.deepEqual(detail.supplier, listEntry);
+
+  const ids = new Set(detail.invoices.map((i) => i.id));
+  assert.ok(ids.has(invFlagId));
+  assert.ok(ids.has(invConfirmId));
+  assert.ok(ids.has(invBulkAId));
+  assert.ok(!ids.has(invDraftId), "drafts never leave the supplier firm");
+  assert.ok(!ids.has(invB2Id), "another buyer's invoice is invisible");
+  assert.ok(!ids.has(invCsvInjId), "another supplier's invoice never mixes in");
+  assert.ok(detail.invoices.every((i) => i.supplierPartyId === supplier));
+  const bulkRow = detail.invoices.find((i) => i.id === invBulkAId);
+  assert.equal(bulkRow?.confirmationState, "confirmed");
+
+  // Buyer two drilling into the SHARED supplier sees only its own invoice.
+  const detail2Res = await fetch(`${base2}/buyer/suppliers/${supplier}`);
+  assert.equal(detail2Res.status, 200);
+  const detail2 = (await detail2Res.json()) as { invoices: { id: string }[] };
+  assert.deepEqual(
+    detail2.invoices.map((i) => i.id),
+    [invB2Id],
+  );
+
+  // A supplier that never invoiced the caller is a plain 404 — whether it
+  // exists for another buyer or not at all.
+  assert.equal((await fetch(`${base2}/buyer/suppliers/${evilSupplier}`)).status, 404);
+  assert.equal((await fetch(`${base1}/buyer/suppliers/${randomUUID()}`)).status, 404);
+});
+
+test("confirmation request stamps a pointer-only notification for the buyer party; dark flag writes no row", async () => {
+  const staffBase = await listen(appFor(admin, invoicesRouter));
+  const invPointer = pointerEntityRef("inv", invNotifyId);
+  const rowsFor = () =>
+    getDb()
+      .select()
+      .from(messagesTable)
+      .where(
+        and(
+          eq(messagesTable.recipientPartyId, buyer1),
+          eq(messagesTable.templateKey, "confirmation_request"),
+          eq(messagesTable.entityId, invPointer),
+        ),
+      );
+  const beforeCount = (await rowsFor()).length;
+
+  const requested = await fetch(`${staffBase}/invoices/${invNotifyId}/confirmations`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ buyerPartyId: buyer1, state: "requested" }),
+  });
+  assert.equal(requested.status, 201);
+
+  const after = await rowsFor();
+  assert.equal(after.length, beforeCount + 1, "exactly one send per request");
+  const msg = after[after.length - 1];
+  // The ledger row's REAL identity is the buyer-party stamp — the feed
+  // resolves by it; the ref and entity pointer stay display/correlation only
+  // (SEC-12: letters-only derivations, never the raw ids, never amounts).
+  assert.equal(msg.recipientPartyId, buyer1);
+  assert.equal(msg.recipientUserId, null);
+  assert.equal(msg.channel, "email");
+  assert.equal(msg.recipientRef, pointerEntityRef("pty", buyer1));
+  assert.equal(msg.entityType, "invoice");
+  assert.equal(msg.status, "sent");
+
+  // Dark messaging flag: the request itself still lands (201, lineage row),
+  // but no message row exists anywhere for it (PL-02 — flag off = rail dark).
+  await setFlag(MESSAGING_FLAG, false);
+  try {
+    const allBefore = (
+      await getDb()
+        .select({ id: messagesTable.id })
+        .from(messagesTable)
+        .where(
+          and(
+            eq(messagesTable.recipientPartyId, buyer1),
+            eq(messagesTable.templateKey, "confirmation_request"),
+          ),
+        )
+    ).length;
+    const dark = await fetch(`${staffBase}/invoices/${invNotifyDarkId}/confirmations`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ buyerPartyId: buyer1, state: "requested" }),
+    });
+    assert.equal(dark.status, 201, "the confirmation request never depends on messaging");
+    const allAfter = (
+      await getDb()
+        .select({ id: messagesTable.id })
+        .from(messagesTable)
+        .where(
+          and(
+            eq(messagesTable.recipientPartyId, buyer1),
+            eq(messagesTable.templateKey, "confirmation_request"),
+          ),
+        )
+    ).length;
+    assert.equal(allAfter, allBefore, "dark flag = no ledger row");
+  } finally {
+    await setFlag(MESSAGING_FLAG, true);
+  }
 });
