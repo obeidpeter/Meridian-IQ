@@ -1,12 +1,25 @@
-// Reconciliation v1 matching engine (SME-07). Pure functions: statement credit
-// lines in, scored invoice-match proposals out — no I/O, so the 85% acceptance
+// Reconciliation v1 matching engine (SME-07). Pure functions: statement lines
+// in, scored invoice-match proposals out — no I/O, so the 85% acceptance
 // bar is provable on a fixture book and every confidence is deterministically
 // recomputable from its recorded features.
+//
+// Two lanes since the payables round (contract 0.44.0), split by the
+// candidate's ORIENTATION discriminator:
+//  - credits settle RECEIVABLES (the client is the supplier; the narration
+//    counterparty is the buyer) — the original lane, unchanged;
+//  - debits pay BILLS (the client is the buyer of a captured supplier
+//    invoice; the narration counterparty is the SUPPLIER).
+// A credit never matches a bill and a debit never matches a receivable.
+
+export type CandidateOrientation = "receivable" | "bill";
 
 export interface MatchCandidate {
   invoiceId: string;
   invoiceNumber: string;
-  buyerName: string;
+  // The name expected in the bank narration: the BUYER for a receivable
+  // (who paid us), the SUPPLIER for a bill (who we paid).
+  counterpartyName: string;
+  orientation: CandidateOrientation;
   grandTotal: number;
   issueDate: string; // ISO yyyy-mm-dd
   dueDate: string | null;
@@ -31,6 +44,7 @@ export interface MatchFeatures {
 export interface ScoredMatch {
   lineId: string;
   invoiceId: string;
+  orientation: CandidateOrientation;
   confidence: number;
   features: MatchFeatures;
 }
@@ -96,12 +110,16 @@ export function dateScore(
   return 1 - days / DATE_WINDOW_DAYS;
 }
 
-// Buyer-name tokens present in the narration (banks truncate and uppercase, so
-// this is token containment, not equality).
-export function nameScore(buyerName: string, narration: string | null): number {
+// Counterparty-name tokens present in the narration (banks truncate and
+// uppercase, so this is token containment, not equality). The counterparty is
+// the buyer for a receivable, the supplier for a bill.
+export function nameScore(
+  counterpartyName: string,
+  narration: string | null,
+): number {
   if (!narration) return 0;
   const hay = normalizeToken(narration);
-  const tokens = buyerName
+  const tokens = counterpartyName
     .toUpperCase()
     .split(/[^A-Z0-9]+/)
     .filter((t) => t.length >= 4);
@@ -122,7 +140,7 @@ export function scorePair(
       line.counterpartyRef,
     ),
     dateScore: dateScore(line.valueDate, candidate.issueDate),
-    nameScore: nameScore(candidate.buyerName, line.narration),
+    nameScore: nameScore(candidate.counterpartyName, line.narration),
   };
   const confidence =
     WEIGHTS.amount * features.amountScore +
@@ -132,24 +150,33 @@ export function scorePair(
   return { confidence: Math.round(confidence * 10000) / 10000, features };
 }
 
-// Propose matches for every credit line: candidates scored, filtered by the
-// threshold, amount agreement required, best three per line.
+// Propose matches: candidates scored, filtered by the threshold, amount
+// agreement required, best three per line. Direction picks the lane — only
+// credits can settle a receivable, only debits can pay a bill — so a line
+// only ever scores against candidates of its own orientation.
 export function proposeMatches(
   lines: MatchableLine[],
   candidates: MatchCandidate[],
 ): ScoredMatch[] {
   const proposals: ScoredMatch[] = [];
   for (const line of lines) {
-    // Only credits can settle a receivable.
-    if (line.direction !== "credit" || line.amount <= 0) continue;
+    const lane: CandidateOrientation | null =
+      line.direction === "credit"
+        ? "receivable"
+        : line.direction === "debit"
+          ? "bill"
+          : null;
+    if (lane === null || line.amount <= 0) continue;
     const scored: ScoredMatch[] = [];
     for (const candidate of candidates) {
+      if (candidate.orientation !== lane) continue;
       const { confidence, features } = scorePair(line, candidate);
       if (features.amountScore === 0) continue;
       if (confidence < PROPOSAL_THRESHOLD) continue;
       scored.push({
         lineId: line.lineId,
         invoiceId: candidate.invoiceId,
+        orientation: candidate.orientation,
         confidence,
         features,
       });

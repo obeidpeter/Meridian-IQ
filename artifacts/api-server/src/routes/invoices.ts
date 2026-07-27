@@ -118,6 +118,7 @@ import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { likePattern } from "../lib/sql";
 import { resolveClientAnalyticsScope } from "../lib/client-scope";
 import {
+  assertReceivableOriented,
   createDraft,
   getInvoiceWithLines,
   buildCanonical,
@@ -685,6 +686,10 @@ router.post("/invoices/:id/credit-note", async (req, res): Promise<void> => {
   const params = parseOrThrow(CreditNoteInvoiceParams, req.params);
   const body = parseOrThrow(CreditNoteInvoiceBody, req.body);
   const { invoice: original, lines } = await loadForTenant(req, params.id);
+  // Payables guard: the credit note copies the original's parties, so a
+  // non-receivable original (e.g. a captured supplier bill) would inherit
+  // the submit-guard gap through this composed draft+validate+submit path.
+  await assertReceivableOriented(original);
   if (!canTransition(original.status, "credited")) {
     throw new DomainError(
       "NOT_CREDITABLE",

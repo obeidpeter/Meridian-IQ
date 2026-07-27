@@ -13,7 +13,12 @@ import {
   listChaseRows,
   receivableProjections,
 } from "../invoice/cashflow";
-import { OUTSTANDING } from "../invoice/receivables";
+import {
+  BILL_ORIENTATION,
+  OUTSTANDING,
+  RECEIVABLE_ORIENTATION,
+} from "../invoice/receivables";
+import { BILL_UNPAID } from "../invoice/payables";
 import { firmClerkUsage } from "./budget";
 import { isAre, MONTH_NAMES, plural } from "./text";
 
@@ -106,9 +111,14 @@ async function invoiceAggregate(
   predicate: SQL,
   params?: DataIntentParams,
 ): Promise<InvoiceAggregate> {
+  // Per client the filter is supplier-pinned (the client key resolves from
+  // the firm's engaged-client list, so orientation is implied); firm-wide,
+  // the receivable-orientation predicate keeps captured supplier BILLS —
+  // draft forever by design — out of the unsubmitted/overdue answers
+  // (payables round). Bills answer through the data.payables_* intents.
   const clientFilter = params?.clientPartyId
     ? sql` AND i.supplier_party_id = ${params.clientPartyId}`
-    : sql``;
+    : sql` AND ${RECEIVABLE_ORIENTATION}`;
   const rows = (
     await getDb().execute<{
       n: number;
@@ -148,6 +158,53 @@ async function invoiceAggregate(
     totalNgn: String(r?.total ?? "0"),
     sample: r?.sample ?? [],
     sampleRows: r?.sample_rows ?? [],
+  };
+}
+
+// The buyer-side mirror of invoiceAggregate (payables round): count + value
+// total + sample over the firm's captured supplier BILLS. Per client the
+// filter pins the BUYER side (a bill belongs to the client that must pay
+// it); the bill-orientation fragment scopes the firm-wide branch. Same
+// closed-catalogue posture: `predicate` is always a literal fragment from
+// the catalogue below, never model output. Deliberately NO answer links:
+// bills are not invoice-detail linkable for a client asker (the SEC-03
+// invoice detail routes are supplier-pinned), so these intents emit none.
+async function billAggregate(
+  firmId: string,
+  predicate: SQL,
+  params?: DataIntentParams,
+): Promise<InvoiceAggregate> {
+  const clientFilter = params?.clientPartyId
+    ? sql` AND i.buyer_party_id = ${params.clientPartyId}`
+    : sql``;
+  const rows = (
+    await getDb().execute<{
+      n: number;
+      total: string;
+      sample: string[] | null;
+    }>(sql`
+      WITH hits AS (
+        SELECT i.id, i.invoice_number, i.issue_date, i.grand_total
+        FROM invoices i
+        WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}
+          AND ${BILL_ORIENTATION}${clientFilter} AND (${predicate})
+      )
+      SELECT
+        (SELECT COUNT(*) FROM hits)::int AS n,
+        (SELECT COALESCE(SUM(grand_total), 0) FROM hits)::text AS total,
+        (SELECT COALESCE(array_agg(invoice_number), ARRAY[]::text[]) FROM (
+          SELECT invoice_number FROM hits
+          ORDER BY issue_date, invoice_number
+          LIMIT ${SAMPLE_LIMIT}
+        ) s) AS sample
+    `)
+  ).rows;
+  const r = rows[0];
+  return {
+    count: Number(r?.n ?? 0),
+    totalNgn: String(r?.total ?? "0"),
+    sample: r?.sample ?? [],
+    sampleRows: [],
   };
 }
 
@@ -559,6 +616,47 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     },
   },
   {
+    key: "data.payables_due",
+    title:
+      "supplier bills due within the next 7 days or already overdue (unpaid captured vendor invoices)",
+    accepts: { client: true },
+    async run(firmId, params) {
+      const agg = await billAggregate(
+        firmId,
+        sql`${BILL_UNPAID}
+          AND i.due_date IS NOT NULL
+          AND i.due_date <= ${lagosTodaySql()} + 7`,
+        params,
+      );
+      return {
+        text:
+          agg.count === 0
+            ? `No supplier bills${forClient(params)} are due within the next 7 days or overdue.`
+            : `${plural(agg.count, "supplier bill")}${forClient(params)} ${isAre(agg.count)} due within the next 7 days or already overdue, NGN ${agg.totalNgn} in total: ${nameSample(agg)}. Worth scheduling the payments.`,
+        facts: invoiceFacts(agg, "Bills due within 7 days or overdue", true),
+        // No links (see billAggregate): bill rows are not invoice-detail
+        // linkable for a client asker.
+      };
+    },
+  },
+  {
+    key: "data.total_owed",
+    title:
+      "the total owed to suppliers right now (unpaid captured vendor bills, whatever their due date)",
+    accepts: { client: true },
+    async run(firmId, params) {
+      const agg = await billAggregate(firmId, sql`${BILL_UNPAID}`, params);
+      return {
+        text:
+          agg.count === 0
+            ? `Nothing is owed to suppliers${forClient(params)} — every captured bill has payment evidence.`
+            : `${plural(agg.count, "supplier bill")}${forClient(params)} ${isAre(agg.count)} unpaid, NGN ${agg.totalNgn} owed in total: ${nameSample(agg)}.`,
+        facts: invoiceFacts(agg, "Unpaid supplier bills", true),
+        // No links (see billAggregate).
+      };
+    },
+  },
+  {
     key: "data.clerk_allowance",
     title: "the firm's Clerk AI token allowance and usage this month",
     accepts: {},
@@ -623,6 +721,12 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // Pure invoiceAggregate with the client predicate, exactly like the five
   // above — no firm-wide content anywhere in its answer.
   "data.aged_receivables",
+  // Buyer-side billAggregate with the forced own-party pin on the BUYER
+  // column — a client asker only ever sees its own bills, and the answers
+  // deliberately carry no links (bill rows are not invoice-detail linkable
+  // for clients).
+  "data.payables_due",
+  "data.total_owed",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

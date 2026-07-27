@@ -9,6 +9,7 @@ import {
   firmsTable,
   partiesTable,
   invoicesTable,
+  settlementEventsTable,
   usersTable,
   submissionAttemptsTable,
 } from "@workspace/db";
@@ -47,6 +48,9 @@ const firmB = randomUUID();
 const partyA = randomUUID();
 const partyA2 = randomUUID();
 const partyB = randomUUID();
+// Non-engaged vendor: the SUPPLIER on the captured bills below (bill
+// orientation = buyer engaged, supplier not).
+const vendorParty = randomUUID();
 const askerId = randomUUID();
 // Client-facing Ask (SEC-03): a client_user pinned to partyA2, and a second
 // staff user for the cross-user multi-turn assertions.
@@ -70,6 +74,9 @@ const ACCEPTED_OLD_NUM = `ACO-${SALT}`;
 const CLIENT2_OVERDUE_NUM = `OV2-${SALT}`;
 const RECEIVABLE_NUM = `REC-${SALT}`;
 const FOREIGN_NUM = `FOREIGN-${SALT}`;
+const BILL_DUE_NUM = `BILL-DUE-${SALT}`;
+const BILL_OLD_NUM = `BILL-OLD-${SALT}`;
+const BILL_PAID_NUM = `BILL-PAID-${SALT}`;
 
 // Month options as ask.ts offers them: [0] = current, [2] = two months back.
 const MONTHS = lagosMonthOptions();
@@ -87,9 +94,12 @@ before(async () => {
     // the database collation.
     { id: partyA2, type: "client_business", legalName: `DI Party Z ${SALT}` },
     { id: partyB, type: "client_business", legalName: `DI Party B ${SALT}` },
+    { id: vendorParty, type: "buyer", legalName: `DI Vendor ${SALT}` },
   ]);
   // Engagements make both parties firm A's clients — the source of the
-  // closed client-key list ask.ts offers the classifier.
+  // closed client-key list ask.ts offers the classifier — and, since the
+  // payables round, the receivable orientation of the firm-wide counters
+  // (firm B engages partyB for the same reason).
   await db.insert(engagementsTable).values([
     {
       firmId: firmA,
@@ -102,6 +112,12 @@ before(async () => {
       clientPartyId: partyA2,
       type: "readiness_assessment",
       title: `DI engagement Z ${SALT}`,
+    },
+    {
+      firmId: firmB,
+      clientPartyId: partyB,
+      type: "readiness_assessment",
+      title: `DI engagement B ${SALT}`,
     },
   ]);
   await db
@@ -125,6 +141,7 @@ before(async () => {
   });
   const acceptedId = randomUUID();
   const acceptedOldId = randomUUID();
+  const billPaidId = randomUUID();
   await db.insert(invoicesTable).values([
     // Past the statutory window and still unsubmitted.
     invoice({
@@ -193,7 +210,51 @@ before(async () => {
       status: "draft",
       issueDate: lagosDateOffset(-30),
     },
+    // Captured supplier BILLS (payables round): the engaged client is the
+    // BUYER, the vendor the supplier. Draft forever. BILL_OLD's ancient
+    // issue date is the counter-hygiene probe: without the receivable
+    // orientation on the firm-wide branch it would read as a 4th "overdue
+    // submission".
+    {
+      firmId: firmA,
+      supplierPartyId: vendorParty,
+      buyerPartyId: partyA,
+      invoiceNumber: BILL_DUE_NUM,
+      status: "draft",
+      issueDate: lagosDateOffset(-4),
+      dueDate: lagosDateOffset(3),
+      grandTotal: "200.00",
+    },
+    {
+      id: billPaidId,
+      firmId: firmA,
+      supplierPartyId: vendorParty,
+      buyerPartyId: partyA,
+      invoiceNumber: BILL_PAID_NUM,
+      status: "draft",
+      issueDate: lagosDateOffset(-4),
+      dueDate: lagosDateOffset(2),
+      grandTotal: "400.00",
+    },
+    {
+      firmId: firmA,
+      supplierPartyId: vendorParty,
+      buyerPartyId: partyA2,
+      invoiceNumber: BILL_OLD_NUM,
+      status: "draft",
+      issueDate: lagosDateOffset(-30),
+      grandTotal: "300.00",
+    },
   ]);
+  // Payment evidence retires BILL_PAID from every unpaid-bill answer.
+  await db.insert(settlementEventsTable).values({
+    invoiceId: billPaidId,
+    source: "payer_flag",
+    amount: "400.00",
+    paymentStatus: "paid",
+    actorId: askerId,
+    occurredAt: new Date(),
+  });
   await db.insert(submissionAttemptsTable).values([
     {
       invoiceId: acceptedId,
@@ -596,6 +657,49 @@ test("money intents: outstanding, expected inflows and chase list", async () => 
   const foreign = await lookup("data.outstanding_receivables", firmB);
   assert.ok(foreign);
   assert.match(foreign.text, /Nothing is outstanding/);
+});
+
+test("payables intents: bills due and total owed are buyer-side, client-pinnable and linkless", async () => {
+  // Firm-wide bills due within 7 days: only BILL_DUE (BILL_OLD has no due
+  // date; BILL_PAID carries payment evidence).
+  const due = await lookup("data.payables_due");
+  assert.ok(due);
+  assert.equal(due.facts.find((f) => f.key === "count")?.value, "1");
+  assert.equal(due.facts.find((f) => f.key === "total_value")?.value, "200.00");
+  assert.ok(due.text.includes(BILL_DUE_NUM));
+  assert.ok(!due.text.includes(BILL_PAID_NUM), "paid bills never answer");
+  assert.equal(due.links, undefined, "bill answers carry NO links (SEC-03)");
+
+  // Total owed: every unpaid bill whatever the due date.
+  const owed = await lookup("data.total_owed");
+  assert.ok(owed);
+  assert.equal(owed.facts.find((f) => f.key === "count")?.value, "2");
+  assert.equal(owed.facts.find((f) => f.key === "total_value")?.value, "500.00");
+  assert.ok(owed.text.includes(BILL_OLD_NUM));
+  assert.equal(owed.links, undefined);
+
+  // The client pin lands on the BUYER column: partyA2 owes only BILL_OLD.
+  const pinned = await inClerkScope(firmA, () =>
+    runDataIntent("data.total_owed", firmA, {
+      clientPartyId: partyA2,
+      clientName: `DI Party Z ${SALT}`,
+    }),
+  );
+  assert.equal(pinned?.facts.find((f) => f.key === "count")?.value, "1");
+  assert.ok(pinned?.text.includes(BILL_OLD_NUM));
+  assert.ok(!pinned?.text.includes(BILL_DUE_NUM));
+  assert.ok(pinned?.text.includes(`for DI Party Z ${SALT}`));
+
+  // Firm isolation: firm B has no bills.
+  const foreign = await lookup("data.total_owed", firmB);
+  assert.equal(foreign?.facts.find((f) => f.key === "count")?.value, "0");
+
+  // Counter hygiene closes the loop: the ancient draft BILL_OLD must NOT
+  // read as an overdue submission (the firm-wide branch is receivable-
+  // oriented) — the earlier overdue test's count of 3 already pins this;
+  // here the sample is checked by name.
+  const overdue = await lookup("data.overdue_submissions");
+  assert.ok(!overdue?.facts.find((f) => f.key === "sample")?.value.includes(BILL_OLD_NUM));
 });
 
 test("multi-turn: a previous data answer threads follow-up context by keys only", async () => {

@@ -39,6 +39,7 @@ import {
 import { parseOrThrow } from "../lib/parse";
 import {
   lagosDateString,
+  lagosMidnight,
   lagosMidnightFor,
   lagosParts,
 } from "../lib/lagos-time";
@@ -59,6 +60,10 @@ import {
   computeCashflowOutlook,
   listChaseRows,
 } from "../modules/invoice/cashflow";
+import {
+  listBillDeadlines,
+  type BillDeadlineRow,
+} from "../modules/invoice/payables";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { isFeatureEnabled } from "../modules/flags/flags";
 import { openBatchesFor } from "../modules/b2c/service";
@@ -86,7 +91,12 @@ const MAX_IMPORT_ROWS = 5000;
 type Deadline = {
   id: string;
   clientPartyId: string;
-  kind: "vat_return" | "b2c_report" | "invoice_submission" | "penalty_watch";
+  kind:
+    | "vat_return"
+    | "b2c_report"
+    | "invoice_submission"
+    | "penalty_watch"
+    | "bill_due";
   title: string;
   description: string | null;
   dueDate: string;
@@ -103,6 +113,7 @@ function computeDeadlines(
   clientPartyId: string,
   invoices: Invoice[],
   b2cBatches: B2cReportBatch[] | null,
+  bills: BillDeadlineRow[] = [],
 ): Deadline[] {
   const now = new Date();
   const deadlines: Deadline[] = [];
@@ -188,6 +199,33 @@ function computeDeadlines(
     });
   }
 
+  // Supplier bills with a due date and no payment evidence (payables round,
+  // kind=bill_due). The due instant is Lagos midnight AFTER the due day —
+  // the whole due date is still payable, mirroring the payables summary
+  // where due-today sits in the first due week, not in overdue. Severity
+  // follows proximity exactly like invoice_submission.
+  for (const bill of bills) {
+    const payBy = lagosMidnight(bill.dueDate);
+    payBy.setUTCDate(payBy.getUTCDate() + 1);
+    const days = daysUntil(payBy, now);
+    const overdue = days < 0;
+    deadlines.push({
+      id: `bill-${bill.invoiceId}`,
+      clientPartyId,
+      kind: "bill_due",
+      title: overdue
+        ? `Overdue: pay bill ${bill.invoiceNumber} (${bill.supplierName})`
+        : `Pay bill ${bill.invoiceNumber} (${bill.supplierName})`,
+      description: overdue
+        ? "This supplier bill is past its due date with no payment recorded."
+        : "A captured supplier bill falls due — schedule the payment.",
+      dueDate: payBy.toISOString(),
+      status: overdue ? "overdue" : days <= 3 ? "due_soon" : "upcoming",
+      severity: overdue ? "critical" : days <= 3 ? "warning" : "info",
+      invoiceId: bill.invoiceId,
+    });
+  }
+
   return deadlines.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
 
@@ -238,7 +276,8 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
   const b2cBatches = (await isFeatureEnabled("b2c_reporting", req.principal.firmId))
     ? await openBatchesFor(clientPartyId, tenant)
     : null;
-  const deadlines = computeDeadlines(clientPartyId, invoices, b2cBatches);
+  const bills = await listBillDeadlines(clientPartyId, tenant);
+  const deadlines = computeDeadlines(clientPartyId, invoices, b2cBatches, bills);
   const overdue = deadlines.filter((d) => d.status === "overdue");
   const upcoming = deadlines.filter((d) => d.status !== "met");
   const nextDeadline = upcoming[0] ?? null;
@@ -410,7 +449,8 @@ router.get("/compliance/calendar", async (req, res): Promise<void> => {
   const b2cBatches = (await isFeatureEnabled("b2c_reporting", req.principal.firmId))
     ? await openBatchesFor(clientPartyId, tenant)
     : null;
-  const deadlines = computeDeadlines(clientPartyId, invoices, b2cBatches);
+  const bills = await listBillDeadlines(clientPartyId, tenant);
+  const deadlines = computeDeadlines(clientPartyId, invoices, b2cBatches, bills);
   res.json(GetComplianceCalendarResponse.parse(deadlines));
 });
 

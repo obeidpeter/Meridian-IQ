@@ -17,6 +17,8 @@ import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
 import { lagosTodaySql } from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
+import { RECEIVABLE_ORIENTATION } from "../invoice/receivables";
+import { countFirmPayablesDue } from "../invoice/payables";
 import { countFirmUnbilled } from "../invoice/unbilled-income";
 import { firmMoneySummary } from "../invoice/cashflow";
 import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
@@ -48,7 +50,8 @@ const DELIVERY_BATCH = 50;
 
 // v2 (round 14): the user facts gained the unmatched-credit and 2+-reminder
 // lines, so the model path can never lag the template path (review M1).
-const DIGEST_PROMPT_VERSION = "digest.v2";
+// v3 (payables round): + the supplier-bills-due line, same reasoning.
+const DIGEST_PROMPT_VERSION = "digest.v3";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -96,6 +99,9 @@ export interface DigestFacts {
   unmatchedCreditCount: number;
   unmatchedCreditClients: number;
   chasedTwiceCount: number;
+  // Payables round: unpaid supplier bills due within the next 7 days or
+  // already overdue (payables.ts countFirmPayablesDue).
+  payablesDueCount: number;
 }
 
 // Monday 00:00 UTC of the week containing `now` — the digest's identity key.
@@ -124,11 +130,18 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
       recv_over_60: number;
     }>(sql`
       SELECT
+        -- Orientation on the unsubmitted-state counters (payables round):
+        -- captured supplier BILLS are draft forever, so without the
+        -- receivable-orientation predicate every bill would pollute the
+        -- unsubmitted/due-soon/overdue numbers with deadlines that do not
+        -- exist for them.
         COUNT(*) FILTER (
           WHERE i.status IN ('draft', 'validated')
+            AND ${RECEIVABLE_ORIENTATION}
         )::int AS unsubmitted,
         COUNT(*) FILTER (
           WHERE i.status IN ('draft', 'validated')
+            AND ${RECEIVABLE_ORIENTATION}
             AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int > ${today}
             AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${today} + 7
         )::int AS due_soon,
@@ -137,6 +150,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
         -- dashboards, reminders and the Ask Clerk data intents.
         COUNT(*) FILTER (
           WHERE i.status IN ('draft', 'validated')
+            AND ${RECEIVABLE_ORIENTATION}
             AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${today}
         )::int AS overdue,
         COUNT(*) FILTER (WHERE i.status = 'failed')::int AS failed,
@@ -153,6 +167,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const money = await firmMoneySummary(firmId);
   const unmatched = await countFirmUnmatchedCredits(firmId);
   const chasedTwice = await countFirmChasedTwice(firmId);
+  const payablesDue = await countFirmPayablesDue(firmId);
   return {
     unsubmittedCount: Number(r?.unsubmitted ?? 0),
     dueSoonCount: Number(r?.due_soon ?? 0),
@@ -167,6 +182,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     unmatchedCreditCount: unmatched.credits,
     unmatchedCreditClients: unmatched.clients,
     chasedTwiceCount: chasedTwice,
+    payablesDueCount: payablesDue,
   };
 }
 
@@ -225,6 +241,11 @@ export function buildTemplateDigest(facts: DigestFacts): {
   if (facts.chasedTwiceCount > 0) {
     bullets.push(
       `${plural(facts.chasedTwiceCount, "invoice")} ${facts.chasedTwiceCount === 1 ? "has" : "have"} taken 2 or more payment reminders and ${isAre(facts.chasedTwiceCount)} still unpaid.`,
+    );
+  }
+  if (facts.payablesDueCount > 0) {
+    bullets.push(
+      `${plural(facts.payablesDueCount, "supplier bill")} ${isAre(facts.payablesDueCount)} due within the next 7 days or already overdue — worth scheduling the payments.`,
     );
   }
   const urgent = facts.overdueCount + facts.failedCount;
@@ -290,6 +311,7 @@ export async function generateFirmDigest(
       `- Receivables worth chasing (past due date AND the customer's usual rhythm): ${facts.chaseWorthyCount}`,
       `- Bank credits matching no invoice on the platform: ${facts.unmatchedCreditCount} (across ${facts.unmatchedCreditClients} client(s))`,
       `- Invoices with 2+ payment reminders sent and still unpaid: ${facts.chasedTwiceCount}`,
+      `- Unpaid supplier bills due within the next 7 days or overdue: ${facts.payablesDueCount}`,
       `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
     ].join("\n");
     const result = await gateway.infer<z.infer<typeof digestOutput>>({

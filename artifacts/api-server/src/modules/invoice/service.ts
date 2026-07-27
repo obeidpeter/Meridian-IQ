@@ -29,8 +29,29 @@ import {
   type LineInput,
 } from "./lines";
 import { computeLinesWithTotals, type ComputedLine } from "./line-totals";
+import { invoiceOrientation } from "./payables";
 
 export { computeLineFinancials, type LineInput };
+
+// Payables guard (contract 0.44.0): only a RECEIVABLE-oriented invoice — one
+// whose supplier is a client the firm engages — may enter the stamping
+// lifecycle. A captured supplier BILL (the client is the buyer) must stay a
+// draft forever; without this guard a firm principal could submit a vendor's
+// document to the rails under the client's name, and only the vendor's
+// missing consent would (accidentally) block it. Shared by validateInvoice,
+// submitInvoice and the credit-note route (routes/invoices.ts).
+export const NOT_SUBMITTABLE_MESSAGE =
+  "Only your own issued invoices can be submitted for stamping — this document's supplier is not a client of your practice.";
+
+export async function assertReceivableOriented(invoice: {
+  firmId: string;
+  supplierPartyId: string;
+  buyerPartyId: string;
+}): Promise<void> {
+  if ((await invoiceOrientation(invoice)) !== "receivable") {
+    throw new DomainError("NOT_SUBMITTABLE", NOT_SUBMITTABLE_MESSAGE, 409);
+  }
+}
 
 export interface CreateInvoiceInput {
   firmId: string;
@@ -470,6 +491,9 @@ export async function validateInvoice(
 ): Promise<{ ok: boolean; errors: FieldError[] }> {
   const bundle = await getInvoiceWithLines(invoiceId);
   if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
+  // A supplier bill (or any non-receivable document) never enters the
+  // stamping lifecycle — refuse before any field validation runs.
+  await assertReceivableOriented(bundle.invoice);
   const canonical = await buildCanonical(invoiceId);
   const errors = validateCanonical(canonical);
   if (errors.length > 0) {
@@ -507,6 +531,9 @@ export async function submitInvoice(
 ): Promise<Invoice> {
   const bundle = await getInvoiceWithLines(invoiceId);
   if (!bundle) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
+  // Orientation before consent: a bill must refuse as NOT_SUBMITTABLE, not
+  // ride on the vendor's (correctly absent) consent record.
+  await assertReceivableOriented(bundle.invoice);
   const permitted = await isPurposePermitted(
     bundle.invoice.supplierPartyId,
     "compliance_submission",

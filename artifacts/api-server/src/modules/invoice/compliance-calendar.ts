@@ -6,6 +6,7 @@ import {
   lagosParts,
 } from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS } from "./compliance-window";
+import { RECEIVABLE_ORIENTATION } from "./receivables";
 
 // Firm-level compliance calendar (round-6 idea #5). The SME dashboard already
 // computes per-client deadlines (routes/sme.ts computeDeadlines); this is the
@@ -52,6 +53,9 @@ export async function computeComplianceCalendar(
   // aggregates and the reminder sweep all give unsubmitted credit notes and
   // corrections submission deadlines too — the calendar must count exactly
   // what they count or the portfolio page contradicts itself.
+  // Receivable orientation (payables round): captured supplier BILLS are
+  // draft forever and have no submission deadline — without the predicate
+  // every bill would sit on the calendar as an eternally overdue submission.
   const rows = (
     await getDb().execute<{
       due: string;
@@ -59,12 +63,13 @@ export async function computeComplianceCalendar(
       clients: number;
     }>(sql`
       SELECT
-        to_char((issue_date + make_interval(days => ${SUBMISSION_WINDOW_DAYS}))::date, 'YYYY-MM-DD') AS due,
+        to_char((i.issue_date + make_interval(days => ${SUBMISSION_WINDOW_DAYS}))::date, 'YYYY-MM-DD') AS due,
         COUNT(*)::int AS invoices,
-        COUNT(DISTINCT supplier_party_id)::int AS clients
-      FROM invoices
-      WHERE firm_id = ${firmId}
-        AND status IN ('draft', 'validated')
+        COUNT(DISTINCT i.supplier_party_id)::int AS clients
+      FROM invoices i
+      WHERE i.firm_id = ${firmId}
+        AND i.status IN ('draft', 'validated')
+        AND ${RECEIVABLE_ORIENTATION}
       GROUP BY 1
       ORDER BY 1
     `)
@@ -98,11 +103,12 @@ export async function computeComplianceCalendar(
   // on several overdue days; summing per-day distincts would overcount).
   const [overdueRow] = (
     await getDb().execute<{ clients: number }>(sql`
-      SELECT COUNT(DISTINCT supplier_party_id)::int AS clients
-      FROM invoices
-      WHERE firm_id = ${firmId}
-        AND status IN ('draft', 'validated')
-        AND (issue_date + make_interval(days => ${SUBMISSION_WINDOW_DAYS}))::date <= ${today}::date
+      SELECT COUNT(DISTINCT i.supplier_party_id)::int AS clients
+      FROM invoices i
+      WHERE i.firm_id = ${firmId}
+        AND i.status IN ('draft', 'validated')
+        AND ${RECEIVABLE_ORIENTATION}
+        AND (i.issue_date + make_interval(days => ${SUBMISSION_WINDOW_DAYS}))::date <= ${today}::date
     `)
   ).rows;
 

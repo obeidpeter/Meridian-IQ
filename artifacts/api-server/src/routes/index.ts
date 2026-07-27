@@ -8,6 +8,9 @@ import partiesRouter from "./parties";
 import consentRouter from "./consent";
 import engagementsRouter from "./engagements";
 import invoicesRouter from "./invoices";
+// Supplier payables: buyer-side bill access lives on its own router — the
+// invoice routes' SEC-03 loaders stay supplier-pinned.
+import billsRouter from "./bills";
 import recurringRouter from "./recurring";
 import verificationRouter from "./verification";
 import messagingRouter from "./messaging";
@@ -65,6 +68,7 @@ router.use(partiesRouter);
 router.use(consentRouter);
 router.use(engagementsRouter);
 router.use(invoicesRouter);
+router.use(billsRouter);
 router.use(recurringRouter);
 router.use(verificationRouter);
 router.use(messagingRouter);

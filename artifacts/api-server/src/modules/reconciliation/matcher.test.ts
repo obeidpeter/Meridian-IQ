@@ -43,7 +43,8 @@ function buildFixture(): {
     const invoice: MatchCandidate = {
       invoiceId: `inv-${i}`,
       invoiceNumber: `INV-${1000 + i}`,
-      buyerName: buyer,
+      counterpartyName: buyer,
+      orientation: "receivable",
       grandTotal: total,
       issueDate,
       dueDate: isoDate(issueDate, 30),
@@ -164,7 +165,8 @@ test("proposals are capped at three per line, sorted by confidence", () => {
   const candidates: MatchCandidate[] = Array.from({ length: 10 }, (_, i) => ({
     invoiceId: `same-${i}`,
     invoiceNumber: `SAME-${9000 + i}`,
-    buyerName: "Duplicate Buyer Ltd",
+    counterpartyName: "Duplicate Buyer Ltd",
+    orientation: "receivable",
     grandTotal: 100_000,
     issueDate: "2027-01-10",
     dueDate: null,
@@ -192,7 +194,8 @@ test("amount agreement is necessary evidence: narration alone never proposes", (
   const candidate: MatchCandidate = {
     invoiceId: "inv-x",
     invoiceNumber: "INV-7777",
-    buyerName: "Zenith Retail Group",
+    counterpartyName: "Zenith Retail Group",
+    orientation: "receivable",
     grandTotal: 500_000,
     issueDate: "2027-01-01",
     dueDate: null,
@@ -211,6 +214,95 @@ test("amount agreement is necessary evidence: narration alone never proposes", (
     [candidate],
   );
   assert.equal(proposals.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Debit lane (payables round): debits pay BILLS, credits settle RECEIVABLES —
+// a line only ever scores against candidates of its own orientation.
+// ---------------------------------------------------------------------------
+
+const BILL_CANDIDATE: MatchCandidate = {
+  invoiceId: "bill-1",
+  invoiceNumber: "BILL-2001",
+  counterpartyName: "Lagos Packaging Supplies Ltd",
+  orientation: "bill",
+  grandTotal: 129_000,
+  issueDate: "2027-01-05",
+  dueDate: "2027-01-19",
+};
+
+test("a debit line proposes against a bill candidate, name-scored on the supplier", () => {
+  const proposals = proposeMatches(
+    [
+      {
+        lineId: "debit-1",
+        valueDate: "2027-01-12",
+        amount: 129_000,
+        direction: "debit",
+        narration: "NIP TRF LAGOS PACKAGING SUPPLIES/BILL-2001",
+        counterpartyRef: null,
+      },
+    ],
+    [BILL_CANDIDATE],
+  );
+  assert.equal(proposals.length, 1);
+  assert.equal(proposals[0].invoiceId, "bill-1");
+  assert.equal(proposals[0].orientation, "bill");
+  assert.equal(proposals[0].features.referenceScore, 1);
+  assert.ok(
+    proposals[0].features.nameScore > 0,
+    "the SUPPLIER name in the narration scores the bill",
+  );
+});
+
+test("credits never propose against bills; debits never propose against receivables", () => {
+  const receivable: MatchCandidate = {
+    invoiceId: "recv-1",
+    invoiceNumber: "INV-5001",
+    counterpartyName: "Zenith Retail Group",
+    orientation: "receivable",
+    grandTotal: 129_000,
+    issueDate: "2027-01-05",
+    dueDate: null,
+  };
+  // Identical amounts on both candidates: only the lane decides.
+  const credit = proposeMatches(
+    [
+      {
+        lineId: "credit-1",
+        valueDate: "2027-01-12",
+        amount: 129_000,
+        direction: "credit",
+        narration: "TRANSFER RECEIVED",
+        counterpartyRef: null,
+      },
+    ],
+    [BILL_CANDIDATE, receivable],
+  );
+  assert.deepEqual(
+    credit.map((p) => p.invoiceId),
+    ["recv-1"],
+    "a credit must only settle receivables",
+  );
+
+  const debit = proposeMatches(
+    [
+      {
+        lineId: "debit-2",
+        valueDate: "2027-01-12",
+        amount: 129_000,
+        direction: "debit",
+        narration: "OUTWARD TRANSFER",
+        counterpartyRef: null,
+      },
+    ],
+    [BILL_CANDIDATE, receivable],
+  );
+  assert.deepEqual(
+    debit.map((p) => p.invoiceId),
+    ["bill-1"],
+    "a debit must only pay bills",
+  );
 });
 
 test("scoring bands behave at their edges", () => {
