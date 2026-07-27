@@ -152,8 +152,8 @@ the challenge until the window passes.
 your current password *and* a live code (or a recovery code), and signs out
 every other session.
 
-> The mobile companion app does not yet support the 2FA challenge — if your
-> account has 2FA enabled, sign in through the web workspaces.
+The mobile companion supports the same challenge — see
+[section 10](#10-the-mobile-companion).
 
 ### Security you'll notice
 
@@ -405,6 +405,15 @@ data, each grantable and revocable **by you** (the client account):
 Every grant and revocation is a **ledger event** with a full history —
 revoking takes effect immediately.
 
+**Download my data** — the same page carries your data-subject access
+right: one click downloads a JSON bundle of everything the platform holds
+about your business — your party record, the full consent history, your
+alert contact details, your invoices (with line items) and engagements,
+bank-statement summaries, account memberships (identity and role only —
+never passwords or security codes), and the party-level audit trail. Very
+large sections are capped and marked *truncated* rather than silently
+shortened, and the download itself is recorded on the audit trail.
+
 ---
 
 ## 5. Clerk — the AI assistant
@@ -548,6 +557,30 @@ The summary tiles show client count, high-risk count, unsubmitted invoice
 value, and overdue deadlines. Click any client to drill down to their full
 invoice list — a partner can reach any failing invoice in three clicks.
 
+- **Add client** — one dialog (legal name, optional TIN / CAC / street /
+  city) creates the client *and* its engagement in a single step, with the
+  same duplicate guard as the bulk importer (an existing engaged client
+  with that TIN or exact name is refused, never silently doubled). The new
+  client appears in the book immediately; invite its owner from **Team
+  invitations** when ready.
+- **Getting started** — a new firm's portfolio opens with a short
+  checklist: *Add your first client → Invite the client's owner → Client
+  grants consent → Create the first invoice → Submit for stamping.* Steps
+  tick themselves off as the underlying data appears (consent is the
+  client's own decision, so that step is informational), and the card can
+  be dismissed once you know your way around.
+- **Client export & offboarding** — a client's drill-down page carries the
+  data-lifecycle actions. **Export data** downloads the client's sectioned
+  JSON bundle (the same data-subject export the client can pull itself —
+  your firm's slice of it). **Offboard client** (firm admins; you type the
+  client's legal name to confirm) ends the relationship without touching
+  history: the engagement is archived, the client's logins and pending
+  invites are removed, and — only if yours was the party's last active
+  engagement anywhere — its alert contact details and push devices are
+  cleared. Stamped invoices and the party's legal identity are retained
+  under statutory record-keeping rules, and consent remains the client's
+  own (offboarding never revokes it).
+
 Below the client list, the portfolio gathers the firm-wide working cards
 (each appears when its data exists), grouped under anchor chips **Clients /
 Money / Compliance / Connections & delivery**:
@@ -677,8 +710,16 @@ delivery is signed: the `x-meridian-signature` header carries an HMAC-SHA256
 of the raw body, keyed by the **SHA-256 hash of your signing secret** (hash
 the stored `whsec_…` secret once, then verify each body against that key).
 Failed deliveries retry with backoff up to 5 attempts, then park as **dead**;
-the **Deliveries** view shows every attempt. Disabling an endpoint stops
-deliveries but keeps its history.
+the **Deliveries** view shows every attempt, and a dead delivery has a
+**Retry** button that re-queues it for a fresh attempt cycle (only dead
+deliveries can be retried, and only on an active endpoint). Disabling an
+endpoint stops deliveries but keeps its history.
+
+The page links to the **full API reference** — every endpoint, grouped by
+area, with request/response schema names and the auth, webhook-signature,
+rate-limit and pointer-only rules up top. It is generated from the same
+contract the server validates against, and also reachable directly at
+`/console/api-reference.html`.
 
 ### Client import *(feature-flagged)*
 
@@ -779,6 +820,18 @@ Live health of the machinery:
 
 - **Submission rails** — each transmission rail's circuit-breaker state
   (Healthy / Half-open / Circuit open) and recent failure count.
+- **Health alerts** — the platform pages *itself*: an hourly watch raises a
+  durable alert the first time it sees a rail circuit stuck open, a
+  dead-lettered pipeline event, or a firm webhook delivery that exhausted
+  its retries. Each condition alerts **once** (the tamper-evident audit
+  ledger is the dedup record, so alerts survive restarts and never spam),
+  and this card lists them newest first with their evidence. When
+  notifications are switched on, new alerts also land in each operator's
+  own notification bell.
+- **Rail configuration** — which deployment-configured rails are lit on
+  this installation (inbound email / WhatsApp intake, the messaging relay,
+  the payment provider and its confirmation webhook, the metrics token):
+  configured or dark, presence only — the page never shows secret values.
 - **Dead-lettered events** — queued work the pipeline gave up on, with the
   error and a **Replay** button.
 - **Reconcile pipeline** — one click re-queues anything stuck.
@@ -841,7 +894,9 @@ sweep trips the kill switch automatically if extraction quality collapses.
 Sign in as a buyer and you land at `/buyer/`. *(Feature-flagged — the
 operator switches Buyer Rails on.)* A buyer account sees **only invoices
 addressed to its own organisation**. Three pages: **Confirmations,
-Suppliers, Scoreboard**.
+Suppliers, Scoreboard** — plus a **notification bell** in the header that
+collects alerts addressed to your organisation, exactly as in the other
+apps.
 
 ### Confirmations
 
@@ -858,11 +913,25 @@ The queue of supplier invoices awaiting your response. Open one and choose:
 Every response records who confirmed and how, permanently. Confirming is in
 your own interest: your input-VAT claim rests on valid supplier invoices.
 
+Working a big queue:
+
+- **Bulk confirm** — tick the invoices you're happy with (or **Select
+  all**, capped at 50 per batch), choose the method and — optionally — the
+  no-set-off acknowledgment for the whole batch, and confirm them in one
+  action. The result is per-invoice: anything that couldn't be confirmed
+  (someone responded moments earlier, an invoice left the awaiting state)
+  is listed with its reason — skips are reported, never silent. Queries
+  and rejections stay one-at-a-time on purpose: they carry your words.
+- **Export CSV** — download the awaiting queue for review offline or in
+  procurement meetings.
+
 ### Suppliers
 
 Continuous verification across your supplier base: which suppliers' invoices
 carry valid stamps, and your **input-VAT exposure** from ones that don't —
-refreshed daily.
+refreshed daily. Click a supplier to **drill down** to that supplier's own
+invoices to you — each with its stamp verdict and confirmation status — so
+"this supplier keeps failing" is always one click from the evidence.
 
 ### Scoreboard
 
@@ -903,8 +972,11 @@ device's light/dark appearance, shows a "You're offline" banner when the
 connection drops, and deep-links from push notifications straight to the
 relevant screen.
 
-> Accounts with two-factor authentication enabled cannot yet complete mobile
-> sign-in — use the web workspaces.
+If your account has two-factor authentication enabled, the app shows the
+same **"Enter your code"** step after your password: type the current
+6-digit code from your authenticator (a recovery code works too). A wrong
+code lets you retry; the prompt is valid for 5 minutes, after which the app
+returns you to the password step to start over.
 
 Six tabs — **Home, Deadlines, B2C Reports, New Invoice, Estimator,
 Settings** — plus screens reached from Home:
@@ -1110,12 +1182,17 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **47 headless user-journey checks** (auth incl.
-  throttling, password change and reset, the full 2FA enrol → challenge →
-  disable journey, the operator Desk, admin advisory, the auditor's
-  read-only boundary, consent round-trip, the credit-note lifecycle, and
-  the SME dashboard/search/bulk-submit/recurring flows) against a freshly
-  seeded database.
+  path-router and drives **56 headless user-journey checks** on the
+  standard seeded run (a few legs adapt to what the database holds — e.g.
+  an already-collected billing month) covering: auth incl. throttling,
+  password change and reset, the full 2FA enrol → challenge → disable
+  journey, the operator Desk, admin advisory, the auditor's read-only
+  boundary, consent round-trip, the credit-note lifecycle, the SME
+  dashboard/search/bulk-submit/recurring flows, and the integration layer
+  end-to-end (API-key mint / bearer auth / revocation, a webhook delivery
+  driven by a real stamping and verified against its HMAC signature, and
+  the payment-intent + confirmation-webhook rail) against a freshly seeded
+  database.
 
 Run the E2E suite locally with a scratch database:
 

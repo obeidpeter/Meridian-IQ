@@ -16,12 +16,14 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { startStaticServer } from "./serve.mjs";
+import { startStaticServer, startWebhookReceiver } from "./serve.mjs";
 import { runJourneys } from "./journeys.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const API_PORT = Number(process.env.E2E_API_PORT ?? 5100);
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 8091);
+// Local receiver the integration journey registers a firm webhook against.
+const HOOK_PORT = Number(process.env.E2E_HOOK_PORT ?? 8093);
 const BASE = `http://127.0.0.1:${WEB_PORT}`;
 
 const REQUIRED = [
@@ -80,6 +82,10 @@ const api = spawn("node", ["--enable-source-maps", "artifacts/api-server/dist/in
     ...process.env,
     PORT: String(API_PORT),
     NODE_ENV: "development",
+    // Lights the payment-confirmation machine rail (fail-closed: 404 while
+    // unset). The env is read per call server-side; the integration journey
+    // presents this token as x-op-token to settle its payment intent.
+    PAYMENT_WEBHOOK_TOKEN: "e2e-pay-hook",
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -88,11 +94,13 @@ api.stdout.on("data", (d) => (apiLog += d));
 api.stderr.on("data", (d) => (apiLog += d));
 
 let staticServer;
+let hookReceiver;
 let browser;
 let exitCode;
 try {
   await waitForApi();
   staticServer = await startStaticServer({ port: WEB_PORT, apiPort: API_PORT });
+  hookReceiver = await startWebhookReceiver({ port: HOOK_PORT });
 
   browser = await chromium.launch({
     headless: true,
@@ -100,7 +108,7 @@ try {
   });
   const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
 
-  await runJourneys(page, BASE, check);
+  await runJourneys(page, BASE, check, { hookReceiver });
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
@@ -111,6 +119,7 @@ try {
   exitCode = 2;
 } finally {
   await browser?.close().catch(() => {});
+  hookReceiver?.close();
   staticServer?.close();
   api.kill("SIGTERM");
 }
