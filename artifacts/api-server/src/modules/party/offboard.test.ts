@@ -1,14 +1,17 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   getDb,
   alertPreferencesTable,
   auditEventsTable,
+  clerkCasesTable,
+  clerkEvalFixturesTable,
   engagementsTable,
   firmsTable,
   invitationsTable,
+  invoicesTable,
   membershipsTable,
   partiesTable,
   partyNameAliasesTable,
@@ -31,6 +34,10 @@ import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 // calling firm's relationship surface and leave the party's shared contact
 // rails untouched; the LAST offboarding firm additionally clears the
 // party-keyed contact PII. Statutory identity on the party row survives both.
+// Round 7 adds the Clerk lifecycle leg: grown eval fixtures traced to the
+// offboarded party (case -> created invoice -> supplier party) are retired
+// with their content emptied on the FIRST offboard (party-scoped, not
+// last-engagement-gated), while another client's fixture stays untouched.
 
 const SALT = makeRunSalt();
 
@@ -44,6 +51,20 @@ const userA = randomUUID(); // client_user under firm A
 const userB = randomUUID(); // client_user under firm B
 const engagementA = randomUUID();
 const engagementB = randomUUID();
+
+// Clerk lifecycle fixtures: one grown eval fixture traced to the offboarded
+// party through its approved invoice, and one traced to an UNRELATED client
+// (the sibling-firm fixture that must survive).
+const buyerPartyId = randomUUID();
+const otherPartyId = randomUUID(); // another firm's client, never offboarded
+// The sibling case's creator: NOT a member of the offboarded party (userB is
+// — a case created by a member of the party is correctly traced to it).
+const userC = randomUUID();
+const invoiceOff = randomUUID();
+const invoiceOther = randomUUID();
+const caseOff = randomUUID();
+const caseOther = randomUUID();
+const FIXTURE_TEXT = `INVOICE OFFBOARD-${randomUUID().slice(0, 8)} from Offboard Subject`;
 
 const adminA: Principal = {
   userId: randomUUID(),
@@ -161,9 +182,93 @@ before(async () => {
       platform: "android",
     },
   ]);
+
+  // Grown eval fixtures: caseOff traces to the offboarded party via its
+  // approved invoice's supplier (the eval-growth join); caseOther traces to
+  // an unrelated client under firm C and must survive untouched.
+  await db.insert(partiesTable).values([
+    { id: buyerPartyId, type: "buyer", legalName: `Off Buyer ${SALT}` },
+    {
+      id: otherPartyId,
+      type: "client_business",
+      legalName: `Off Sibling Client ${SALT}`,
+      tin: "30000003-0003",
+    },
+  ]);
+  await db.insert(usersTable).values({
+    id: userC,
+    email: `off-c-${SALT}@test.local`,
+    fullName: `Off C ${SALT}`,
+    passwordHash: `hash-${SALT}`,
+  });
+  await db.insert(invoicesTable).values([
+    {
+      id: invoiceOff,
+      firmId: firmA,
+      supplierPartyId: partyId,
+      buyerPartyId,
+      invoiceNumber: `OFF-INV-${SALT}`,
+      issueDate: "2026-06-01",
+    },
+    {
+      id: invoiceOther,
+      firmId: firmC,
+      supplierPartyId: otherPartyId,
+      buyerPartyId,
+      invoiceNumber: `OFF-OTHER-${SALT}`,
+      issueDate: "2026-06-01",
+    },
+  ]);
+  await db.insert(clerkCasesTable).values([
+    {
+      id: caseOff,
+      kind: "extraction",
+      status: "approved",
+      sourceType: "text",
+      sourceText: FIXTURE_TEXT,
+      createdBy: userA,
+      createdInvoiceId: invoiceOff,
+    },
+    {
+      id: caseOther,
+      kind: "extraction",
+      status: "approved",
+      sourceType: "text",
+      sourceText: `sibling ${FIXTURE_TEXT}`,
+      createdBy: userC,
+      createdInvoiceId: invoiceOther,
+    },
+  ]);
+  await db.insert(clerkEvalFixturesTable).values([
+    {
+      caseId: caseOff,
+      label: `offboard fixture ${SALT}`,
+      sourceText: FIXTURE_TEXT,
+      expected: { grandTotal: "1000.00" },
+      supplierName: LEGAL_NAME,
+      supplierTin: TIN,
+    },
+    {
+      caseId: caseOther,
+      label: `offboard sibling fixture ${SALT}`,
+      sourceText: `sibling ${FIXTURE_TEXT}`,
+      expected: { grandTotal: "2000.00" },
+      supplierName: `Off Sibling Client ${SALT}`,
+      supplierTin: "30000003-0003",
+    },
+  ]);
 });
 
 after(async () => {
+  // Keep the grown corpus clean for other suites (the invoices stay — the
+  // retention guard blocks deleting them, same posture as the clerk suites).
+  const db = getDb();
+  await db
+    .delete(clerkEvalFixturesTable)
+    .where(inArray(clerkEvalFixturesTable.caseId, [caseOff, caseOther]));
+  await db
+    .delete(clerkCasesTable)
+    .where(inArray(clerkCasesTable.id, [caseOff, caseOther]));
   await closeAllServers();
 });
 
@@ -202,6 +307,7 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
     aliasesDeleted: number;
     contactCleared: boolean;
     lastEngagement: boolean;
+    fixturesRetired: number;
   };
   assert.deepEqual(outcome, {
     engagementsArchived: 1,
@@ -209,6 +315,9 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
     aliasesDeleted: 1,
     contactCleared: false,
     lastEngagement: false,
+    // Party-scoped, NOT last-engagement-gated: the client's grown eval
+    // fixture retires on the FIRST offboard.
+    fixturesRetired: 1,
   });
 
   const [engA] = await getDb()
@@ -257,6 +366,27 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
     .where(eq(pushDevicesTable.clientPartyId, partyId));
   assert.equal(devices.length, 2, "push devices NOT deleted");
 
+  // Clerk lifecycle: the party's grown fixture is retired AND emptied —
+  // retiredAt frees the corpus slot, sourceText goes to '' (NOT NULL kept),
+  // the supplier-memory identity columns go NULL. The sibling client's
+  // fixture is untouched in full.
+  const [retiredFixture] = await getDb()
+    .select()
+    .from(clerkEvalFixturesTable)
+    .where(eq(clerkEvalFixturesTable.caseId, caseOff));
+  assert.ok(retiredFixture.retiredAt, "fixture retired on first offboard");
+  assert.equal(retiredFixture.sourceText, "", "document content emptied");
+  assert.equal(retiredFixture.supplierName, null);
+  assert.equal(retiredFixture.supplierTin, null);
+  const [siblingFixture] = await getDb()
+    .select()
+    .from(clerkEvalFixturesTable)
+    .where(eq(clerkEvalFixturesTable.caseId, caseOther));
+  assert.equal(siblingFixture.retiredAt, null, "sibling fixture untouched");
+  assert.equal(siblingFixture.sourceText, `sibling ${FIXTURE_TEXT}`);
+  assert.equal(siblingFixture.supplierName, `Off Sibling Client ${SALT}`);
+  assert.equal(siblingFixture.supplierTin, "30000003-0003");
+
   const events = await getDb()
     .select()
     .from(auditEventsTable)
@@ -271,6 +401,7 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
   const afterPayload = events[0].after as Record<string, unknown>;
   assert.equal(afterPayload.engagementsArchived, 1);
   assert.equal(afterPayload.lastEngagement, false);
+  assert.equal(afterPayload.fixturesRetired, 1);
   assert.ok(
     !JSON.stringify(events).includes("+2348099990001"),
     "the ledger never carries contact values",
@@ -288,6 +419,8 @@ test("last firm offboards: contact PII cleared, devices removed, statutory ident
     aliasesDeleted: 1,
     contactCleared: true,
     lastEngagement: true,
+    // Already retired by firm A's offboard — retirement is idempotent.
+    fixturesRetired: 0,
   });
 
   const [prefs] = await getDb()

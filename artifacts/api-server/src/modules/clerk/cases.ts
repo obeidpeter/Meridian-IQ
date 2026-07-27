@@ -45,6 +45,7 @@ import { preflightChecks } from "./preflight";
 import { registerPreflightChecks } from "./register-preflight";
 import { findExtractionExemplar, type ExtractionExemplar } from "./exemplar";
 import { recordPartyAliases } from "./alias";
+import { firmFastLaneThreshold } from "./metrics";
 import { inClerkScope } from "./scope";
 
 // Clerk capture cases (Task #40, C1). The Clerk PROPOSES, the operator
@@ -646,6 +647,27 @@ export function imageUserContent(contentType: string, b64: string): UserContent 
   ];
 }
 
+// Per-firm fast-lane threshold attachment (round 7): every listed/fetched
+// case carries the confidence threshold in force for ITS firm, so the review
+// queue and the bulk-approve re-verify read the same number. Memoized per
+// call via a Map keyed by firmId — a 50-row page costs at most a few
+// firmFastLaneThreshold lookups, not one per row.
+async function attachFastLaneThreshold<T extends { firmId: string | null }>(
+  rows: T[],
+): Promise<(T & { fastLaneThreshold: number })[]> {
+  const byFirm = new Map<string | null, number>();
+  const out: (T & { fastLaneThreshold: number })[] = [];
+  for (const row of rows) {
+    let threshold = byFirm.get(row.firmId);
+    if (threshold === undefined) {
+      threshold = await firmFastLaneThreshold(row.firmId);
+      byFirm.set(row.firmId, threshold);
+    }
+    out.push({ ...row, fastLaneThreshold: threshold });
+  }
+  return out;
+}
+
 // List omits the bulky/untrusted content columns (sourceImageB64, sourceText,
 // sourceScanPagesB64); the detail endpoint returns the row, from which the
 // response schema strips the scan pages (server-side retry material only).
@@ -660,7 +682,9 @@ export async function listCases(filter: {
   firmId?: string;
   createdBy?: string;
 }): Promise<
-  Omit<ClerkCase, "sourceImageB64" | "sourceText" | "sourceScanPagesB64">[]
+  (Omit<ClerkCase, "sourceImageB64" | "sourceText" | "sourceScanPagesB64"> & {
+    fastLaneThreshold: number;
+  })[]
 > {
   const conditions = [];
   if (filter.kind) conditions.push(eq(clerkCasesTable.kind, filter.kind));
@@ -681,6 +705,7 @@ export async function listCases(filter: {
       preflight: clerkCasesTable.preflight,
       question: clerkCasesTable.question,
       answer: clerkCasesTable.answer,
+      feedback: clerkCasesTable.feedback,
       firmId: clerkCasesTable.firmId,
       batchId: clerkCasesTable.batchId,
       claimedBy: clerkCasesTable.claimedBy,
@@ -703,17 +728,79 @@ export async function listCases(filter: {
   if (filter.limit !== undefined || filter.offset !== undefined) {
     builder = builder.limit(filter.limit ?? 100).offset(filter.offset ?? 0);
   }
-  return builder;
+  return attachFastLaneThreshold(await builder);
 }
 
-export async function getCase(id: string): Promise<ClerkCase> {
+export async function getCase(
+  id: string,
+): Promise<ClerkCase & { fastLaneThreshold: number }> {
   const [row] = await getDb()
     .select()
     .from(clerkCasesTable)
     .where(eq(clerkCasesTable.id, id))
     .limit(1);
   if (!row) throw new DomainError("CASE_NOT_FOUND", "Clerk case not found", 404);
-  return row;
+  const [withThreshold] = await attachFastLaneThreshold([row]);
+  return withThreshold;
+}
+
+// Source pages for the scanned-capture review pane (round 7): the ONLY path
+// that returns sourceScanPagesB64 over the API — the scoped carve-out from
+// the response schemas' blanket strip. `purged` is an honest marker for the
+// review pane: true only when a pdf case's content (scan pages AND any text
+// layer) has been retention-cleared in a terminal state — a text-layer pdf
+// still holding its text, or a non-pdf case, answers pages [] purged false
+// (there were never pages to show, nothing was purged away).
+const PURGEABLE_STATUSES: ReadonlySet<ClerkCase["status"]> = new Set([
+  "approved",
+  "rejected",
+  "failed",
+]);
+
+export function caseSourcePages(row: ClerkCase): {
+  pages: string[];
+  purged: boolean;
+} {
+  const pages = row.sourceScanPagesB64 ?? [];
+  const purged =
+    pages.length === 0 &&
+    row.sourceType === "pdf" &&
+    row.sourceText == null &&
+    PURGEABLE_STATUSES.has(row.status);
+  return { pages, purged };
+}
+
+// The asker's helpfulness signal on a question case (round 7 review
+// integrity). Creator-only for EVERY role — the rating is the asker's own
+// signal, so even an operator or a firm admin cannot rate someone else's
+// question — with the same 404 non-disclosure as the case-detail route for
+// both the tenant mismatch and the non-creator case. Refusals are ratable
+// (an unhelpful refusal is exactly the signal the ask-feedback report
+// mines); re-rating overwrites (the asker changed their mind).
+export async function setCaseFeedback(
+  caseId: string,
+  principalUserId: string,
+  tenant: string | null,
+  helpful: boolean,
+): Promise<void> {
+  const existing = await getCase(caseId);
+  if (
+    (tenant && existing.firmId !== tenant) ||
+    existing.createdBy !== principalUserId
+  ) {
+    throw new DomainError("CASE_NOT_FOUND", "Clerk case not found", 404);
+  }
+  if (existing.kind !== "question") {
+    throw new DomainError(
+      "NOT_A_QUESTION",
+      "Only question cases take helpfulness feedback",
+      409,
+    );
+  }
+  await getDb()
+    .update(clerkCasesTable)
+    .set({ feedback: helpful ? "helpful" : "not_helpful" })
+    .where(eq(clerkCasesTable.id, caseId));
 }
 
 // RLS on the firm data is bypassed for operators, so firm membership of the

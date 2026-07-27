@@ -196,8 +196,10 @@ router.get("/clients/:id/export", async (req, res): Promise<void> => {
 // Firm-scoped offboarding. firm_admin only (see firmAdminScope), pinned to
 // the caller's tenant, behind the engagement wall — then the module does the
 // teardown: archive engagements, remove access, clear shared contact PII
-// only on the last engagement, one pointer-only audit event. Statutory
-// identity on the party row is retained (legal-obligation basis).
+// only on the last engagement, retire + empty the client's grown Clerk eval
+// fixtures (fixturesRetired rides back on the parsed OffboardClientResult),
+// one pointer-only audit event. Statutory identity on the party row is
+// retained (legal-obligation basis).
 router.post("/clients/:id/offboard", async (req, res): Promise<void> => {
   const firmId = firmAdminScope(req.principal);
   const params = parseOrThrow(OffboardClientParams, req.params);

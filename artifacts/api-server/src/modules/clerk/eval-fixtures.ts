@@ -25,6 +25,12 @@ export interface EvalFixture {
   riskLabel: "clean" | "skewed" | "injection" | "correction";
   sourceText: string;
   expected: Record<CanonicalField, string | null>;
+  // Vision lane (round 7, vision-fixtures.ts): rendered page images (base64
+  // PNG, document order). When set, the eval runner sends the pages through
+  // the scan-extraction user-content shape instead of fencing sourceText —
+  // sourceText is then only a human-readable placeholder. Text fixtures
+  // (this file, grown, red-team) leave it unset.
+  scanPagesB64?: string[];
 }
 
 export const EVAL_FIXTURES: EvalFixture[] = [

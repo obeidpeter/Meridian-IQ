@@ -9,6 +9,7 @@ import {
   ListClientStatementsResponse,
   GetClerkClaimGapsQueryParams,
   GetClerkClaimGapsResponse,
+  GetAskFeedbackReportResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import {
@@ -28,6 +29,7 @@ import { DomainError } from "../../modules/errors";
 import { computeTierReport } from "../../modules/clerk/tier-report";
 import { getClerkMetrics } from "../../modules/clerk/metrics";
 import { computeClaimGaps } from "../../modules/clerk/claim-gaps";
+import { computeAskFeedback } from "../../modules/clerk/ask-feedback";
 
 const router: IRouter = Router();
 
@@ -49,6 +51,15 @@ router.get("/clerk/claim-gaps", async (req, res): Promise<void> => {
   const windowDays = query.success ? (query.data.windowDays ?? 90) : 90;
   const report = await computeClaimGaps(windowDays);
   res.json(GetClerkClaimGapsResponse.parse(report));
+});
+
+// Ask-feedback mining (round 7): the claim-gaps sibling over the asker's own
+// helpfulness ratings — totals, per-intent split and the newest not-helpful
+// questions. Deterministic SQL, zero model calls; same operator gate.
+router.get("/clerk/ask-feedback", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const report = await computeAskFeedback();
+  res.json(GetAskFeedbackReportResponse.parse(report));
 });
 
 // Tier-suggestion report (round-9 idea #3): pure ledger SQL joined with the

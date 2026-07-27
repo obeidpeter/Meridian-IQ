@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
+import { retireFixturesForClientParty } from "../clerk/eval-curation";
 import { getParty } from "./party";
 
 // Firm-scoped client offboarding (NDPA data lifecycle, POST
@@ -38,7 +39,12 @@ import { getParty } from "./party";
 //      channel toggles) and push_devices are PARTY-keyed and shared across
 //      engaging firms, so they are cleared ONLY when no OTHER firm still
 //      holds a non-archived engagement for the party. While another firm
-//      still serves the client, its alert rails keep working untouched.
+//      still serves the client, its alert rails keep working untouched;
+//  (f) grown Clerk eval fixtures traced to the party (verbatim client
+//      document text — modules/clerk/eval-curation.ts
+//      retireFixturesForClientParty) -> retired with their content emptied.
+//      Party-scoped like (e)'s data but NOT last-engagement-gated: the
+//      fixture is the client's own document whichever firm approved it.
 //
 // Consent is CLIENT-owned (CORE-03): a firm cannot revoke the client's
 // consent, so consent_records are never touched here.
@@ -75,6 +81,8 @@ export interface OffboardClientOutcome {
   aliasesDeleted: number;
   contactCleared: boolean;
   lastEngagement: boolean;
+  // Grown Clerk eval fixtures retired (and content-emptied) by step (f).
+  fixturesRetired: number;
 }
 
 export async function offboardClient(
@@ -208,6 +216,17 @@ export async function offboardClient(
     contactCleared = clearedPreferences + removedDevices > 0;
   }
 
+  // (f) Clerk data lifecycle: retire + empty every grown eval fixture traced
+  // to this party. Runs in its OWN bypass transaction inside the module call
+  // (the fixture tables are bypass-only RLS, invisible to this firm-scoped
+  // request transaction) and reads the party's memberships from its own
+  // snapshot — (b)'s delete above is uncommitted here, so the member list the
+  // trace needs is still visible. Like the raw-pool audit posture, this write
+  // is durable even if the surrounding request later fails: retiring a
+  // fixture twice-offboarded is a no-op, and over-retiring is the safe
+  // direction for a data-lifecycle step.
+  const fixturesRetired = await retireFixturesForClientParty(partyId);
+
   // ONE ledger event for the whole teardown, pointer-only (counts, never
   // contact values or names beyond the statutory identity the row keeps).
   await appendAudit({
@@ -226,6 +245,7 @@ export async function offboardClient(
       pushDevicesRemoved: removedDevices,
       contactCleared,
       lastEngagement,
+      fixturesRetired,
     },
   });
 
@@ -235,5 +255,6 @@ export async function offboardClient(
     aliasesDeleted: deletedAliases.length,
     contactCleared,
     lastEngagement,
+    fixturesRetired,
   };
 }

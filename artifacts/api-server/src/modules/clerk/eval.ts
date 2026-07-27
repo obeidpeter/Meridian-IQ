@@ -7,7 +7,7 @@ import {
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";
-import { fenceDocument, normalizeExtraction } from "./cases";
+import { fenceDocument, normalizeExtraction, scanUserContent } from "./cases";
 import {
   CANONICAL_FIELDS,
   CRITICAL_FIELDS,
@@ -21,6 +21,7 @@ import {
 import { EVAL_FIXTURES, type EvalFixture } from "./eval-fixtures";
 import { loadGrownFixtures } from "./eval-growth";
 import { loadRedTeamFixtures } from "./red-team";
+import { loadVisionFixtures } from "./vision-fixtures";
 
 // Evaluation-run harness (§13.1). An operator presses "run evaluation"; the
 // synthetic corpus goes through the LIVE gateway — same prompt version, same
@@ -123,7 +124,10 @@ export async function runEvalCorpus(
   // Static corpus plus every fixture grown from the human-corrected exhaust
   // (expansion B) AND the model-generated adversarial corpus (idea #9) — both
   // corrections and red-team attempts feed straight back into what gets
-  // measured. includeGrown=false pins a run to the hand-written static corpus.
+  // measured — AND the deterministic vision-injection lane (round 7; +8
+  // vision model calls per full run). includeGrown=false pins a run to the
+  // hand-written static TEXT corpus (vision fixtures ride the full-corpus
+  // path only).
   const fixtures =
     opts.includeGrown === false
       ? [...EVAL_FIXTURES]
@@ -131,19 +135,24 @@ export async function runEvalCorpus(
           ...EVAL_FIXTURES,
           ...(await loadGrownFixtures()),
           ...(await loadRedTeamFixtures()),
+          ...(await loadVisionFixtures()),
         ];
 
   for (const fixture of fixtures) {
+    // Vision fixtures travel as rendered page images through the exact
+    // user-content shape scan intake uses (attack text lives INSIDE the
+    // image, no text fence exists); text fixtures keep the historical fence.
+    const vision = fixture.scanPagesB64 ?? null;
     const inferred = await gateway.infer<ExtractionOutput>({
       purpose: "eval_extract",
       caseId: null,
       promptVersion: EXTRACT_PROMPT_VERSION,
       system: EXTRACT_SYSTEM,
-      user: fenceDocument(fixture.sourceText),
+      user: vision ? scanUserContent(vision) : fenceDocument(fixture.sourceText),
       schemaName: "invoice_extraction",
       jsonSchema: EXTRACT_JSON_SCHEMA,
       validator: extractionOutputSchema,
-      inputForHash: fixture.sourceText,
+      inputForHash: vision ? vision.join("") : fixture.sourceText,
     });
     if (inferred.ok) {
       results.push(scoreFixture(fixture, inferred.data));

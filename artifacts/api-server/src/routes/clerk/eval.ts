@@ -4,6 +4,8 @@ import {
   ListClerkEvalRunsQueryParams,
   ListClerkEvalRunsResponse,
   ListEvalFixturesResponse,
+  MintFixtureFromCaseBody,
+  MintFixtureFromCaseResponse,
   RetireEvalFixtureParams,
   RetireEvalFixtureResponse,
   RestoreEvalFixtureParams,
@@ -24,6 +26,7 @@ import {
 } from "../../modules/clerk/eval";
 import {
   listEvalFixtures,
+  mintFixtureFromCase,
   restoreFixture,
   retireFixture,
 } from "../../modules/clerk/eval-curation";
@@ -60,6 +63,22 @@ router.get("/clerk/eval/fixtures", async (req, res): Promise<void> => {
   const report = await listEvalFixtures();
   res.json(ListEvalFixturesResponse.parse(report));
 });
+
+// Mint a fixture from a decided case (round 7): the operator-curated sibling
+// of the automatic growth sweep, with pseudonymization (scrub.ts) required
+// whenever the case is traceable to a live client. The module owns every
+// refusal (404 unknown case, 409 NOT_DECIDED/ALREADY_FIXTURE, 400
+// CONTENT_PURGED/TEXT_ONLY/SCRUB_REQUIRED); success is a 201 with the same
+// summary shape the curation inventory lists.
+router.post(
+  "/clerk/eval/fixtures/from-case",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const body = parseOrThrow(MintFixtureFromCaseBody, req.body);
+    const row = await mintFixtureFromCase(body, req.principal.userId);
+    res.status(201).json(MintFixtureFromCaseResponse.parse(row));
+  },
+);
 
 // Retire/restore a grown or red-team fixture. The row survives (past runs
 // keep their meaning); the loaders exclude retired rows before their caps,
