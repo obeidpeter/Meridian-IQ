@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useAskClerk } from "@workspace/api-client-react";
+import { useAskClerk, useSubmitClerkFeedback } from "@workspace/api-client-react";
 import type { ClerkAnswer } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,14 @@ import { PageHeader } from "@/components/page-header";
 import { SuggestedQuestions } from "@/components/suggested-questions";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
-import { dataAnswerScope, handleClerkGatewayError } from "@/lib/clerk";
-import { ShieldCheck } from "lucide-react";
+import {
+  dataAnswerScope,
+  feedbackToSubmit,
+  handleClerkGatewayError,
+  invoiceLinks,
+  type AskFeedback,
+} from "@/lib/clerk";
+import { ShieldCheck, ThumbsDown, ThumbsUp } from "lucide-react";
 
 // Register-grounded Q&A behind clerk.ask. Firm principals ask across their
 // portfolio; since contract 0.36.0 a client_user can ask too, pinned
@@ -45,7 +51,42 @@ const SUGGESTED_QUESTIONS = [
   "What's been outstanding longest?",
 ];
 
-function AnswerCard({ answer }: { answer: ClerkAnswer }) {
+function AnswerCard({
+  answer,
+  caseId,
+}: {
+  answer: ClerkAnswer;
+  caseId: string | null;
+}) {
+  const { toast } = useToast();
+  // The asker's helpfulness signal, held per answer (the card remounts per
+  // case via its key). Optimistic: the thumb fills on press and reverts if
+  // the server rejects the write.
+  const [feedback, setFeedback] = useState<AskFeedback | null>(null);
+  const submitFeedback = useSubmitClerkFeedback();
+  const links = invoiceLinks(answer.links);
+
+  const pressFeedback = (pressed: AskFeedback) => {
+    if (!caseId || submitFeedback.isPending) return;
+    const next = feedbackToSubmit(feedback, pressed);
+    if (next == null) return; // same thumb again — the server already knows
+    const previous = feedback;
+    setFeedback(next);
+    submitFeedback.mutate(
+      { id: caseId, data: { helpful: next === "helpful" } },
+      {
+        onError: () => {
+          // Quietly: feedback is best-effort, never destructive-toned.
+          setFeedback(previous);
+          toast({
+            title: "Couldn't record your feedback",
+            description: "Please try again in a moment.",
+          });
+        },
+      },
+    );
+  };
+
   if (!answer.answered) {
     return (
       <Alert data-testid="card-clerk-refusal">
@@ -76,6 +117,23 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
             ))}
           </div>
         )}
+        {/* Deep links to the records the answer named: invoice-kind links
+            with an id only — anything else was dropped by invoiceLinks. */}
+        {links.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Open</span>
+            {links.map((l) => (
+              <Button key={l.id} asChild size="sm" variant="outline">
+                <Link
+                  href={`/invoices/${l.id}`}
+                  data-testid={`link-answer-invoice-${l.id}`}
+                >
+                  {l.label}
+                </Link>
+              </Button>
+            ))}
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">
           {answer.dataIntent ? (
             // Data-grounded answer: computed live from the asker's own
@@ -95,6 +153,33 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
             </>
           )}
         </p>
+        {caseId && (
+          <div className="flex items-center gap-1.5 pt-1">
+            <span className="text-xs text-muted-foreground">
+              Was this helpful?
+            </span>
+            <Button
+              size="sm"
+              variant={feedback === "helpful" ? "default" : "ghost"}
+              aria-pressed={feedback === "helpful"}
+              aria-label="This answer was helpful"
+              onClick={() => pressFeedback("helpful")}
+              data-testid="button-feedback-helpful"
+            >
+              <ThumbsUp className="h-4 w-4" aria-hidden="true" />
+            </Button>
+            <Button
+              size="sm"
+              variant={feedback === "not_helpful" ? "default" : "ghost"}
+              aria-pressed={feedback === "not_helpful"}
+              aria-label="This answer was not helpful"
+              onClick={() => pressFeedback("not_helpful")}
+              data-testid="button-feedback-not-helpful"
+            >
+              <ThumbsDown className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -115,6 +200,10 @@ export function AskContent() {
   // here it stays visible through the in-flight follow-up, survives a
   // follow-up error, and is replaced only by the next answer.
   const [lastAnswer, setLastAnswer] = useState<ClerkAnswer | null>(null);
+  // The answered case's id, held alongside the answer: the feedback thumbs
+  // and any deep links act on THIS case, which outlives the mutation's data
+  // for the same reason the answer does.
+  const [lastCaseId, setLastCaseId] = useState<string | null>(null);
 
   const ask = useAskClerk({
     mutation: {
@@ -125,6 +214,7 @@ export function AskContent() {
         // answer payload clears a stale one instead of leaving it on
         // screen; an error (onError below) keeps the previous answer.
         setLastAnswer(row.answer ?? null);
+        setLastCaseId(row.answer ? row.id : null);
         // Only a DATA answer carries scope worth threading — keeping the
         // last data-answered id preserves the thread across a refusal or
         // register-claim answer in between.
@@ -222,7 +312,14 @@ export function AskContent() {
         {/* Persistent polite live region: the answer arrives asynchronously
             after "Ask", so screen readers hear it without hunting for it. */}
         <div aria-live="polite">
-          {lastAnswer && <AnswerCard answer={lastAnswer} />}
+          {lastAnswer && (
+            // Keyed by case so the feedback selection resets per answer.
+            <AnswerCard
+              key={lastCaseId ?? "answer"}
+              answer={lastAnswer}
+              caseId={lastCaseId}
+            />
+          )}
         </div>
         <p className="text-xs text-muted-foreground">
           Looking to send an invoice instead?{" "}

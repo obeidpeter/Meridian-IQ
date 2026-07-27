@@ -1,3 +1,4 @@
+import type { ClerkAnswerLink } from "@workspace/api-client-react";
 import { humanize, pillClasses, type BadgeTone } from "@/lib/format";
 import { clerkBudgetExhausted, killSwitchTripped } from "@workspace/api-errors";
 import { serverErrorMessage } from "@/lib/errors";
@@ -87,6 +88,37 @@ export function dataAnswerScope(
   return Object.values(dataParams ?? {})
     .filter((v) => v.trim().length > 0)
     .join(" · ");
+}
+
+/**
+ * Deep-linkable invoice references from an answer's links row. Only the
+ * invoice kind is navigable in this app, and a link whose id is null/absent
+ * (the server named a record the asker cannot open) is dropped rather than
+ * rendered as a dead button. The id narrows to a plain string so callers
+ * build hrefs without re-checking.
+ */
+export function invoiceLinks(
+  links: ClerkAnswerLink[] | undefined,
+): { label: string; id: string }[] {
+  return (links ?? []).flatMap((l) =>
+    l.kind === "invoice" && l.id != null ? [{ label: l.label, id: l.id }] : [],
+  );
+}
+
+/** The asker's helpfulness signal as held in page state. */
+export type AskFeedback = "helpful" | "not_helpful";
+
+/**
+ * What a thumb press should submit: pressing the other thumb switches the
+ * signal (the server keeps the latest), while pressing the already-selected
+ * thumb again is a no-op (null) — the server already holds that signal, so
+ * there is nothing to send.
+ */
+export function feedbackToSubmit(
+  current: AskFeedback | null,
+  pressed: AskFeedback,
+): AskFeedback | null {
+  return current === pressed ? null : pressed;
 }
 
 // ---- Usage meter -----------------------------------------------------------

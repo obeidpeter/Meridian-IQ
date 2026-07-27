@@ -20,11 +20,22 @@ const harness = vi.hoisted(() => ({
     onSuccess?: (row: unknown) => void;
     onError?: (err: unknown) => void;
   },
+  // The feedback mutation (AnswerCard): a plain generated hook, stubbed so
+  // the card needs no QueryClientProvider. Per-call options (onError) are
+  // held so a test can settle the write either way.
+  feedback: {
+    calls: [] as unknown[],
+    lastOptions: null as null | { onError?: (err: unknown) => void },
+    isPending: false,
+  },
   reset() {
     this.state.data = undefined;
     this.state.isPending = false;
     this.mutateCalls = [];
     this.callbacks = null;
+    this.feedback.calls = [];
+    this.feedback.lastOptions = null;
+    this.feedback.isPending = false;
   },
 }));
 
@@ -51,6 +62,16 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
         },
       };
     },
+    useSubmitClerkFeedback: () => ({
+      isPending: harness.feedback.isPending,
+      mutate: (
+        vars: unknown,
+        options?: { onError?: (err: unknown) => void },
+      ) => {
+        harness.feedback.calls.push(vars);
+        harness.feedback.lastOptions = options ?? null;
+      },
+    }),
   };
 });
 
@@ -169,5 +190,93 @@ describe("AskContent answer persistence", () => {
     // client_users (CLIENT_SAFE_DATA_INTENTS).
     expect(chips.textContent).toContain("What's been outstanding longest?");
     expect(chips.textContent).not.toContain("Who owes us?");
+  });
+});
+
+describe("AnswerCard links and feedback", () => {
+  test("invoice links render as root-relative /invoices/<id> buttons; id-less links are dropped", () => {
+    render(<AskContent />);
+    askQuestion("What's overdue?");
+    deliver(
+      answeredCase("case-1", {
+        ...dataAnswer("2 invoices are overdue."),
+        links: [
+          { label: "INV-001", kind: "invoice", id: "inv-1" },
+          { label: "INV-002", kind: "invoice", id: null },
+        ],
+      }),
+    );
+    const link = screen.getByTestId("link-answer-invoice-inv-1");
+    expect(link.getAttribute("href")).toBe("/invoices/inv-1");
+    expect(link.textContent).toBe("INV-001");
+    // The id-less link never becomes a dead button.
+    expect(screen.queryByText("INV-002")).toBeNull();
+  });
+
+  test("thumbs submit feedback on the answered case, reflect the selection, allow switching, and ignore a repeat press", () => {
+    render(<AskContent />);
+    askQuestion("What's overdue?");
+    deliver(answeredCase("case-1", dataAnswer("2 invoices are overdue.")));
+
+    const helpful = () => screen.getByTestId("button-feedback-helpful");
+    const notHelpful = () => screen.getByTestId("button-feedback-not-helpful");
+    expect(helpful().getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(helpful());
+    expect(harness.feedback.calls).toEqual([
+      { id: "case-1", data: { helpful: true } },
+    ]);
+    expect(helpful().getAttribute("aria-pressed")).toBe("true");
+
+    // The same thumb again is a no-op — nothing new to tell the server.
+    fireEvent.click(helpful());
+    expect(harness.feedback.calls).toHaveLength(1);
+
+    // Switching submits the new signal and moves the selection.
+    fireEvent.click(notHelpful());
+    expect(harness.feedback.calls[1]).toEqual({
+      id: "case-1",
+      data: { helpful: false },
+    });
+    expect(notHelpful().getAttribute("aria-pressed")).toBe("true");
+    expect(helpful().getAttribute("aria-pressed")).toBe("false");
+  });
+
+  test("a failed feedback write reverts the optimistic selection", () => {
+    render(<AskContent />);
+    askQuestion("What's overdue?");
+    deliver(answeredCase("case-1", dataAnswer("2 invoices are overdue.")));
+
+    fireEvent.click(screen.getByTestId("button-feedback-helpful"));
+    expect(
+      screen.getByTestId("button-feedback-helpful").getAttribute("aria-pressed"),
+    ).toBe("true");
+    act(() => {
+      harness.feedback.lastOptions?.onError?.({ status: 500 });
+    });
+    expect(
+      screen.getByTestId("button-feedback-helpful").getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  test("a fresh answer resets the feedback selection — the card is keyed by case", () => {
+    render(<AskContent />);
+    askQuestion("What's overdue?");
+    deliver(answeredCase("case-1", dataAnswer("2 invoices are overdue.")));
+    fireEvent.click(screen.getByTestId("button-feedback-helpful"));
+    expect(
+      screen.getByTestId("button-feedback-helpful").getAttribute("aria-pressed"),
+    ).toBe("true");
+
+    askQuestion("and for June?");
+    deliver(answeredCase("case-2", dataAnswer("June: 1 invoice is overdue.")));
+    expect(
+      screen.getByTestId("button-feedback-helpful").getAttribute("aria-pressed"),
+    ).toBe("false");
+    fireEvent.click(screen.getByTestId("button-feedback-not-helpful"));
+    expect(harness.feedback.calls[1]).toEqual({
+      id: "case-2",
+      data: { helpful: false },
+    });
   });
 });

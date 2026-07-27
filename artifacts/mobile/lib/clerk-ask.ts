@@ -30,6 +30,18 @@ export const SUGGESTED_QUESTIONS: readonly string[] = [
 ];
 
 /**
+ * The answer held on screen after an ask settles, together with the id of
+ * the case that produced it — the feedback thumbs and any deep links act on
+ * THAT case, so the id must survive the mutation reset exactly like the
+ * answer does. caseId is null when the payload carried an answer but the
+ * caller had no id for it (defensive; the contract always sends one).
+ */
+export interface HeldAnswer {
+  answer: ClerkAnswer;
+  caseId: string | null;
+}
+
+/**
  * The answer held on screen after an ask settles — the console Ask page's
  * tested semantic, mirrored here and in the SME web app: a success REPLACES
  * the held answer with whatever it carried (a refusal IS the newest answer,
@@ -38,12 +50,49 @@ export const SUGGESTED_QUESTIONS: readonly string[] = [
  * the newest truth the asker was given.
  */
 export function heldAnswer(
-  previous: ClerkAnswer | null,
+  previous: HeldAnswer | null,
   outcome:
-    | { type: "success"; answer: ClerkAnswer | null | undefined }
+    | {
+        type: "success";
+        answer: ClerkAnswer | null | undefined;
+        caseId?: string | null;
+      }
     | { type: "error" },
-): ClerkAnswer | null {
-  return outcome.type === "success" ? (outcome.answer ?? null) : previous;
+): HeldAnswer | null {
+  if (outcome.type === "error") return previous;
+  return outcome.answer
+    ? { answer: outcome.answer, caseId: outcome.caseId ?? null }
+    : null;
+}
+
+/**
+ * Deep-linkable invoice references from an answer's links row. Only the
+ * invoice kind is navigable in this app, and a link whose id is null/absent
+ * (the server named a record the asker cannot open) is dropped rather than
+ * rendered as a dead button. Mirrors the SME web app's invoiceLinks.
+ */
+export function answerLinks(
+  answer: Pick<ClerkAnswer, "links">,
+): { label: string; id: string }[] {
+  return (answer.links ?? []).flatMap((l) =>
+    l.kind === "invoice" && l.id != null ? [{ label: l.label, id: l.id }] : [],
+  );
+}
+
+/** The asker's helpfulness signal as held in screen state. */
+export type AskFeedback = "helpful" | "not_helpful";
+
+/**
+ * What a thumb press should submit: pressing the other thumb switches the
+ * signal (the server keeps the latest), while pressing the already-selected
+ * thumb again is a no-op (null) — the server already holds that signal, so
+ * there is nothing to send. Mirrors the SME web app's feedbackToSubmit.
+ */
+export function feedbackToSubmit(
+  current: AskFeedback | null,
+  pressed: AskFeedback,
+): AskFeedback | null {
+  return current === pressed ? null : pressed;
 }
 
 /**

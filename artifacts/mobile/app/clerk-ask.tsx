@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
-import { useAskClerk } from "@workspace/api-client-react";
+import { useAskClerk, useSubmitClerkFeedback } from "@workspace/api-client-react";
 import type { ClerkAnswer } from "@workspace/api-client-react";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,11 +22,15 @@ import {
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage, hasStatus } from "@/lib/api-error";
 import {
+  answerLinks,
   answerSourceNote,
   askableQuestion,
+  feedbackToSubmit,
   heldAnswer,
   QUESTION_MAX,
   SUGGESTED_QUESTIONS,
+  type AskFeedback,
+  type HeldAnswer,
 } from "@/lib/clerk-ask";
 import { useSession } from "@/lib/session";
 
@@ -56,7 +60,9 @@ export default function ClerkAskScreen() {
   // follow-up error; every SUCCESS replaces it via heldAnswer — including a
   // success with no answer payload, which clears a stale one. That is the
   // console Ask page's tested semantic, mirrored in the SME web app too.
-  const [lastAnswer, setLastAnswer] = useState<ClerkAnswer | null>(null);
+  // The carrier also threads the answered case's id, which the feedback
+  // thumbs and deep links act on.
+  const [lastAnswer, setLastAnswer] = useState<HeldAnswer | null>(null);
 
   const ask = useAskClerk();
 
@@ -74,7 +80,7 @@ export default function ClerkAskScreen() {
         },
       });
       setLastAnswer((prev) =>
-        heldAnswer(prev, { type: "success", answer: row.answer }),
+        heldAnswer(prev, { type: "success", answer: row.answer, caseId: row.id }),
       );
       // Only a DATA answer carries scope worth threading — keeping the last
       // data-answered id preserves the thread across a refusal or a
@@ -184,7 +190,14 @@ export default function ClerkAskScreen() {
               />
             </Card>
 
-            {lastAnswer ? <AnswerCard answer={lastAnswer} /> : null}
+            {lastAnswer ? (
+              // Keyed by case so the feedback selection resets per answer.
+              <AnswerCard
+                key={lastAnswer.caseId ?? "answer"}
+                answer={lastAnswer.answer}
+                caseId={lastAnswer.caseId}
+              />
+            ) : null}
           </View>
         )}
       </KeyboardAwareScrollViewCompat>
@@ -192,8 +205,35 @@ export default function ClerkAskScreen() {
   );
 }
 
-function AnswerCard({ answer }: { answer: ClerkAnswer }) {
+function AnswerCard({
+  answer,
+  caseId,
+}: {
+  answer: ClerkAnswer;
+  caseId: string | null;
+}) {
   const colors = useColors();
+  const router = useRouter();
+  // The asker's helpfulness signal, held per answer (the card remounts per
+  // case via its key). Optimistic: the thumb fills on press and reverts if
+  // the server rejects the write — feedback is best-effort, never noisy.
+  const [feedback, setFeedback] = useState<AskFeedback | null>(null);
+  // Plain generated mutation, same client idiom as the ask call above —
+  // session auth rides on the shared fetch, no per-call headers.
+  const submitFeedback = useSubmitClerkFeedback();
+
+  const pressFeedback = (pressed: AskFeedback) => {
+    if (!caseId || submitFeedback.isPending) return;
+    const next = feedbackToSubmit(feedback, pressed);
+    if (next == null) return; // same thumb again — the server already knows
+    const previous = feedback;
+    setFeedback(next);
+    submitFeedback.mutate(
+      { id: caseId, data: { helpful: next === "helpful" } },
+      { onError: () => setFeedback(previous) },
+    );
+  };
+
   if (!answer.answered) {
     return (
       <Card style={{ gap: 10 }}>
@@ -208,6 +248,7 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
       </Card>
     );
   }
+  const links = answerLinks(answer);
   return (
     <Card style={{ gap: 12 }}>
       <AppText variant="body">{answer.proposition ?? ""}</AppText>
@@ -229,9 +270,91 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
           </View>
         </>
       ) : null}
+      {/* Deep links to the records the answer named: invoice-kind links with
+          an id only — anything else was dropped by answerLinks. */}
+      {links.length > 0 ? (
+        <View style={styles.linkRow}>
+          {links.map((l) => (
+            <AppButton
+              key={l.id}
+              label={`Open ${l.label}`}
+              icon="arrow-right"
+              variant="ghost"
+              fullWidth={false}
+              onPress={() => router.push(`/invoices/${l.id}`)}
+              testID={`link-answer-invoice-${l.id}`}
+            />
+          ))}
+        </View>
+      ) : null}
       <AppText variant="caption" color={colors.mutedForeground}>
         {answerSourceNote(answer)}
       </AppText>
+      {caseId ? (
+        <View style={styles.feedbackRow}>
+          <AppText variant="caption" color={colors.mutedForeground}>
+            Was this helpful?
+          </AppText>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="This answer was helpful"
+            accessibilityState={{ selected: feedback === "helpful" }}
+            hitSlop={8}
+            onPress={() => pressFeedback("helpful")}
+            style={({ pressed }) => [
+              styles.thumb,
+              {
+                borderColor:
+                  feedback === "helpful" ? colors.primary : colors.border,
+                backgroundColor:
+                  feedback === "helpful" ? colors.secondary : "transparent",
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+            testID="button-feedback-helpful"
+          >
+            <Feather
+              name="thumbs-up"
+              size={16}
+              color={
+                feedback === "helpful"
+                  ? colors.primary
+                  : colors.mutedForeground
+              }
+            />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="This answer was not helpful"
+            accessibilityState={{ selected: feedback === "not_helpful" }}
+            hitSlop={8}
+            onPress={() => pressFeedback("not_helpful")}
+            style={({ pressed }) => [
+              styles.thumb,
+              {
+                borderColor:
+                  feedback === "not_helpful" ? colors.primary : colors.border,
+                backgroundColor:
+                  feedback === "not_helpful"
+                    ? colors.secondary
+                    : "transparent",
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+            testID="button-feedback-not-helpful"
+          >
+            <Feather
+              name="thumbs-down"
+              size={16}
+              color={
+                feedback === "not_helpful"
+                  ? colors.primary
+                  : colors.mutedForeground
+              }
+            />
+          </Pressable>
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -262,5 +385,20 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     marginLeft: 12,
     textAlign: "right",
+  },
+  linkRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  feedbackRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  thumb: {
+    padding: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

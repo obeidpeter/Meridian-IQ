@@ -1,15 +1,56 @@
 import { test, expect, describe } from "vitest";
+import type { ClerkAnswerLink } from "@workspace/api-client-react";
 import {
   batchSummary,
   captureStatusLabel,
   captureBadgeClasses,
   dataAnswerScope,
+  feedbackToSubmit,
   formatTokens,
   handleClerkGatewayError,
+  invoiceLinks,
   usageBreakdown,
   usagePct,
   fieldLabel,
 } from "./clerk";
+
+describe("invoiceLinks", () => {
+  test("keeps only invoice links that carry an id, preserving order", () => {
+    const links: ClerkAnswerLink[] = [
+      { label: "INV-001", kind: "invoice", id: "inv-1" },
+      // The server named an invoice the asker cannot open — no dead button.
+      { label: "INV-002", kind: "invoice", id: null },
+      { label: "INV-003", kind: "invoice" },
+      { label: "INV-004", kind: "invoice", id: "inv-4" },
+    ];
+    expect(invoiceLinks(links)).toEqual([
+      { label: "INV-001", id: "inv-1" },
+      { label: "INV-004", id: "inv-4" },
+    ]);
+  });
+
+  test("a missing or empty links array yields no row", () => {
+    expect(invoiceLinks(undefined)).toEqual([]);
+    expect(invoiceLinks([])).toEqual([]);
+  });
+});
+
+describe("feedbackToSubmit", () => {
+  test("a first press submits the pressed thumb", () => {
+    expect(feedbackToSubmit(null, "helpful")).toBe("helpful");
+    expect(feedbackToSubmit(null, "not_helpful")).toBe("not_helpful");
+  });
+
+  test("switching thumbs submits the new signal", () => {
+    expect(feedbackToSubmit("helpful", "not_helpful")).toBe("not_helpful");
+    expect(feedbackToSubmit("not_helpful", "helpful")).toBe("helpful");
+  });
+
+  test("pressing the already-selected thumb again is a no-op", () => {
+    expect(feedbackToSubmit("helpful", "helpful")).toBeNull();
+    expect(feedbackToSubmit("not_helpful", "not_helpful")).toBeNull();
+  });
+});
 
 describe("dataAnswerScope", () => {
   test("joins the resolved display labels into one scope clause", () => {

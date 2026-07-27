@@ -3,6 +3,7 @@ import {
   useListClerkCases,
   useListClerkBatches,
   useGetClerkCase,
+  useGetClerkCaseSourcePages,
   useCreateClerkCase,
   useCreateClerkCaseBatch,
   useDecideClerkCase,
@@ -20,6 +21,7 @@ import {
   getListClerkCasesQueryKey,
   getListClerkBatchesQueryKey,
   getGetClerkCaseQueryKey,
+  getGetClerkCaseSourcePagesQueryKey,
   getGetClerkMetricsQueryKey,
   getGetClerkPartySuggestionsQueryKey,
 } from "@workspace/api-client-react";
@@ -84,6 +86,7 @@ import {
   fileIsPdf,
   fileToBase64,
   groupQueueByBatch,
+  imageDataUri,
   intakeKind,
   isReadyToApprove,
   relativeTime,
@@ -224,6 +227,36 @@ export function ClerkWorkspace() {
     query: {
       queryKey: getGetClerkCaseQueryKey(selectedId ?? ""),
       enabled: selectedId != null,
+    },
+  });
+
+  // Source-document panels in the review pane. A single captured image rides
+  // along on the case row itself (sourceImageB64) — expanded by default, the
+  // operator can fold it away. A scanned PDF's rendered pages are heavier, so
+  // they are fetched lazily: only after "View pages", and only for the case
+  // on screen. Both reset when the operator moves to another case.
+  const [imageOpen, setImageOpen] = useState(true);
+  const [pagesOpen, setPagesOpen] = useState(false);
+  useEffect(() => {
+    setImageOpen(true);
+    setPagesOpen(false);
+  }, [selectedId]);
+  const pagesEnabled =
+    pagesOpen &&
+    selected != null &&
+    selected.sourceType === "pdf" &&
+    !selected.sourceText &&
+    !selected.sourceImageB64;
+  const {
+    data: sourcePages,
+    isLoading: sourcePagesLoading,
+    error: sourcePagesError,
+    refetch: refetchSourcePages,
+  } = useGetClerkCaseSourcePages(selectedId ?? "", {
+    query: {
+      queryKey: getGetClerkCaseSourcePagesQueryKey(selectedId ?? ""),
+      enabled: pagesEnabled,
+      retry: false,
     },
   });
 
@@ -1244,6 +1277,104 @@ export function ClerkWorkspace() {
                         <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
                           {selected.sourceText}
                         </p>
+                      </div>
+                    ) : null}
+                    {/* The captured document itself: a single photographed/
+                        uploaded image rides on the case row, so it renders
+                        with no extra fetch. Expanded by default — seeing the
+                        paper is the whole point of the review pane. */}
+                    {selected.sourceImageB64 ? (
+                      <div
+                        className="rounded-xl border bg-muted/30 p-4 space-y-2.5"
+                        data-testid="card-source-image"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">Document</p>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setImageOpen((o) => !o)}
+                            aria-expanded={imageOpen}
+                            data-testid="button-toggle-source-image"
+                          >
+                            {imageOpen ? "Collapse" : "Expand"}
+                          </Button>
+                        </div>
+                        {imageOpen && (
+                          <div className="max-h-96 overflow-auto rounded-md border bg-background">
+                            <img
+                              src={imageDataUri(selected.sourceImageB64)}
+                              alt={`Captured document for ${selected.sourceName ?? "this case"}`}
+                              className="w-full"
+                              data-testid="img-source-document"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                    {/* A scanned PDF has neither text nor an inline image —
+                        its rendered pages are fetched lazily, only when the
+                        operator asks, and only while retention still holds
+                        the document content. */}
+                    {selected.sourceType === "pdf" &&
+                    !selected.sourceText &&
+                    !selected.sourceImageB64 ? (
+                      <div
+                        className="rounded-xl border bg-muted/30 p-4 space-y-2.5"
+                        data-testid="card-source-pages"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">
+                            Scanned document
+                          </p>
+                          {!pagesOpen && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => setPagesOpen(true)}
+                              data-testid="button-view-source-pages"
+                            >
+                              View pages
+                            </Button>
+                          )}
+                        </div>
+                        {pagesOpen &&
+                          (sourcePagesLoading ? (
+                            <Skeleton
+                              className="h-40"
+                              data-testid="skeleton-source-pages"
+                            />
+                          ) : sourcePagesError || !sourcePages ? (
+                            <QueryError
+                              thing="the scanned pages"
+                              onRetry={() => refetchSourcePages()}
+                              detail={
+                                sourcePagesError instanceof Error
+                                  ? sourcePagesError.message
+                                  : undefined
+                              }
+                            />
+                          ) : sourcePages.purged ? (
+                            <p
+                              className="text-sm text-muted-foreground"
+                              data-testid="text-source-purged"
+                            >
+                              The document content has been cleared by
+                              retention.
+                            </p>
+                          ) : (
+                            <div className="max-h-96 space-y-2 overflow-auto rounded-md border bg-background p-2">
+                              {sourcePages.pages.map((page, i) => (
+                                <img
+                                  key={i}
+                                  src={imageDataUri(page)}
+                                  alt={`Page ${i + 1} of ${selected.sourceName ?? "the scanned document"}`}
+                                  className="w-full"
+                                  data-testid={`img-source-page-${i + 1}`}
+                                />
+                              ))}
+                            </div>
+                          ))}
                       </div>
                     ) : null}
                     {selected.extraction && (
