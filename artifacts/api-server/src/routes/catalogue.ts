@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { assertCan } from "../modules/auth/rbac";
+import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
 import {
   listCatalogue,
@@ -85,8 +86,7 @@ router.get("/error-catalogue/:code", async (req, res): Promise<void> => {
   const params = parseOrThrow(GetErrorCatalogueEntryParams, req.params);
   const entry = await getCatalogueEntry(params.code);
   if (!entry) {
-    res.status(404).json({ error: "Catalogue entry not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Catalogue entry not found", 404);
   }
   res.json(GetErrorCatalogueEntryResponse.parse(entry));
 });
@@ -115,8 +115,7 @@ router.patch("/error-catalogue/:code", async (req, res): Promise<void> => {
     req.principal.userId,
   );
   if (!entry) {
-    res.status(404).json({ error: "Catalogue entry not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Catalogue entry not found", 404);
   }
   await appendAudit({
     actorId: req.principal.userId,

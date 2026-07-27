@@ -1,17 +1,15 @@
 /**
  * Duck-typed helpers for errors thrown by the generated API client. The
  * generated ApiError class isn't re-exported from the package index, so
- * screens read its `status`/`data` shape structurally instead.
+ * screens read its `status`/`data` shape structurally instead. The status
+ * duck-typing itself lives in @workspace/api-errors (shared with the web
+ * apps); this module re-exports it and keeps the mobile-specific wrappers.
  */
 
+import { errorStatus } from "@workspace/api-errors";
+
 /** The HTTP status carried by a thrown API error, if it has a numeric one. */
-export function errorStatus(error: unknown): number | undefined {
-  if (typeof error === "object" && error !== null && "status" in error) {
-    const status = (error as { status?: unknown }).status;
-    if (typeof status === "number") return status;
-  }
-  return undefined;
-}
+export { errorStatus };
 
 /** Whether a thrown error carries the given HTTP status code. */
 export function hasStatus(error: unknown, code: number): boolean {

@@ -18,13 +18,12 @@ import { createDraft, type LineInput } from "../invoice/service";
 import { computeCorrections, computeLineCorrections } from "./corrections";
 import {
   assertClerkEnabled,
-  recordExternalCall,
   sha256,
   type ClerkGateway,
   type UserContent,
 } from "./gateway";
 import {
-  TRANSCRIBE_MODEL,
+  transcribeAndLedger,
   transcribeVoiceProd,
   type VoiceTranscriber,
 } from "./provider";
@@ -483,38 +482,11 @@ export async function createExtractionCase(
       );
     }
     const buf = decodeBase64Checked(input.audioBase64, "Audio");
-    const audioB64 = buf.toString("base64");
-    const startedAt = Date.now();
-    let transcript: string;
-    try {
-      transcript = (await transcriber(buf)).trim();
-    } catch (err) {
-      await recordExternalCall({
-        firmId: ctx.firmId ?? null,
-        purpose: "transcribe_voice",
-        model: TRANSCRIBE_MODEL,
-        promptVersion: "transcribe-v1",
-        inputForHash: audioB64,
-        outcome: "error",
-        errorText: err instanceof Error ? err.message : String(err),
-        latencyMs: Date.now() - startedAt,
-      });
-      throw new DomainError(
-        "VOICE_UNREADABLE",
-        "The voice note could not be transcribed. Re-record it in a quieter spot, or type the details instead.",
-        422,
-      );
-    }
-    await recordExternalCall({
-      firmId: ctx.firmId ?? null,
-      purpose: "transcribe_voice",
-      model: TRANSCRIBE_MODEL,
-      promptVersion: "transcribe-v1",
-      inputForHash: audioB64,
-      outcome: "ok",
-      outputChars: transcript.length,
-      latencyMs: Date.now() - startedAt,
-    });
+    const transcript = await transcribeAndLedger(
+      buf,
+      ctx.firmId ?? null,
+      transcriber,
+    );
     if (!transcript) {
       throw new DomainError(
         "VOICE_NO_SPEECH",

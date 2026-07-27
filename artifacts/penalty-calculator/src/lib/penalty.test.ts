@@ -11,6 +11,12 @@ import {
   type PenaltyResult,
 } from "./penalty.ts";
 
+// PARITY PIN — the mobile app ports a subset of this model in
+// `artifacts/mobile/lib/penalty.ts`, pinned by
+// `artifacts/mobile/lib/penalty.test.ts`, whose constants and
+// section103/section104 cases are copied verbatim from this suite. A change
+// to the published model here must land there too. Change one, change both.
+
 /**
  * Hand-calculated fixtures. Each `total` is worked out by hand from the
  * published model:

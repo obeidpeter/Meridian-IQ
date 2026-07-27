@@ -11,11 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { Download, FileText } from "lucide-react";
 import { formatNaira, formatDate, formatPct, humanize } from "@/lib/format";
+import { downloadBlob } from "@/lib/download";
 
 const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -102,13 +104,7 @@ export function Statements() {
   };
 
   const exportCsv = (rows: RevenueShareStatement[], label: string) => {
-    const blob = new Blob([toCsv(rows)], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `revenue-share-${label}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(`revenue-share-${label}.csv`, toCsv(rows), "text/csv");
   };
 
   const statements = data ?? [];
@@ -196,19 +192,11 @@ export function Statements() {
         <QueryError thing="statements" onRetry={() => refetch()} />
       ) : statements.length === 0 ? (
         <Card>
-          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-            <FileText
-              className="w-10 h-10 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <p className="font-semibold" data-testid="text-empty">
-              No statements generated yet
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Pick a closed month above and generate the first revenue-share
-              statement — each firm's share is reconciled to billing.
-            </p>
-          </CardContent>
+          <EmptyState
+            icon={FileText}
+            title="No statements generated yet"
+            description="Pick a closed month above and generate the first revenue-share statement — each firm's share is reconciled to billing."
+          />
         </Card>
       ) : (
         <div className="space-y-4">

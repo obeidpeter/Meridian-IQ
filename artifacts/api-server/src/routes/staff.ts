@@ -14,6 +14,7 @@ import {
   ConfirmStaffEmailResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
+import { sendThrottled429 } from "../lib/throttle-response";
 import { isUuid } from "../lib/uuid";
 import { appendAudit } from "../modules/audit/audit";
 import {
@@ -200,10 +201,7 @@ router.post(
     const throttleKey = `everify:${req.principal.userId}`;
     const retryAfter = await isActionThrottled(throttleKey);
     if (retryAfter !== null) {
-      res.setHeader("Retry-After", String(retryAfter));
-      res.status(429).json({
-        error: `Too many requests. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
-      });
+      sendThrottled429(res, retryAfter, "Too many requests");
       return;
     }
 
@@ -278,10 +276,7 @@ router.post(
     const throttleKey = `everifyc:${req.principal.userId}`;
     const retryAfter = await isActionThrottled(throttleKey);
     if (retryAfter !== null) {
-      res.setHeader("Retry-After", String(retryAfter));
-      res.status(429).json({
-        error: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
-      });
+      sendThrottled429(res, retryAfter, "Too many attempts");
       return;
     }
 

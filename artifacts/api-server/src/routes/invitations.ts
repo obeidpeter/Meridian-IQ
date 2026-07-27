@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { assertCan } from "../modules/auth/rbac";
+import { DomainError } from "../modules/errors";
 import {
   createInvitation,
   listInvitations,
@@ -44,8 +45,7 @@ router.post("/invitations/:id/revoke", async (req, res): Promise<void> => {
   const params = parseOrThrow(RevokeInvitationParams, req.params);
   const row = await revokeInvitation(req.principal, params.id);
   if (!row) {
-    res.status(404).json({ error: "Invitation not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Invitation not found", 404);
   }
   res.json(RevokeInvitationResponse.parse(row));
 });

@@ -31,10 +31,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { roleLabel } from "@/components/capability-gate";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { errorStatus } from "@/lib/errors";
 import { formatDateTime, pillClasses } from "@/lib/format";
 import {
   acceptInviteLink,
@@ -269,9 +271,8 @@ export function Invitations() {
         description: "Copy the one-time link below — it is shown once.",
       });
     } catch (err) {
-      const status = (err as { status?: number })?.status;
       const message =
-        status === 404
+        errorStatus(err) === 404
           ? "No account with that email."
           : err instanceof Error
             ? err.message
@@ -718,19 +719,12 @@ export function Invitations() {
           ) : error ? (
             <QueryError thing="invitations" onRetry={() => refetch()} />
           ) : (invitations ?? []).length === 0 ? (
-            <div className="py-10 flex flex-col items-center text-center gap-2">
-              <Mail
-                className="w-10 h-10 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <p className="font-semibold" data-testid="text-empty">
-                No invitations yet
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Invite a teammate or client above — pending invitations appear
-                here.
-              </p>
-            </div>
+            <EmptyState
+              icon={Mail}
+              title="No invitations yet"
+              description="Invite a teammate or client above — pending invitations appear here."
+              className="py-10 px-0"
+            />
           ) : (
             <div className="overflow-x-auto">
               <table

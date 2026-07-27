@@ -20,6 +20,7 @@ import {
   requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
+import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
 
 const router: IRouter = Router();
@@ -76,8 +77,7 @@ router.get("/engagements/:id", async (req, res): Promise<void> => {
     .where(eq(engagementsTable.id, params.id))
     .limit(1);
   if (!row) {
-    res.status(404).json({ error: "Engagement not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Engagement not found", 404);
   }
   assertSameTenant(req.principal, row.firmId);
   // SEC-03: a client_user may only read its own client party's engagement,
@@ -96,8 +96,7 @@ router.patch("/engagements/:id", async (req, res): Promise<void> => {
     .where(eq(engagementsTable.id, params.id))
     .limit(1);
   if (!existing) {
-    res.status(404).json({ error: "Engagement not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Engagement not found", 404);
   }
   assertSameTenant(req.principal, existing.firmId);
   // SEC-03: keep the sub-tenant guard consistent with the read paths even

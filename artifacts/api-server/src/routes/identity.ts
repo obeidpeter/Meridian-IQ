@@ -23,6 +23,7 @@ import {
   assertSameTenant,
   tenantFirmId,
 } from "../modules/auth/rbac";
+import { DomainError } from "../modules/errors";
 import { createPasswordReset } from "../modules/auth/password-reset";
 import { normalizeEmail } from "../modules/auth/session";
 
@@ -90,8 +91,7 @@ router.get("/firms/:id", async (req, res): Promise<void> => {
     .where(eq(firmsTable.id, params.id))
     .limit(1);
   if (!row) {
-    res.status(404).json({ error: "Firm not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Firm not found", 404);
   }
   res.json(GetFirmResponse.parse(row));
 });

@@ -248,3 +248,9 @@ export function confirmationBadgeClasses(state: string): string {
     (CONFIRMATION_TONES as Partial<Record<string, BadgeTone>>)[state] ?? "slate",
   );
 }
+
+// ---- Notification bell vocabulary -----------------------------------------
+// Channel labels/tones, relative-time buckets and the badge/mark-read
+// helpers shared by the console and SME notification bells.
+
+export * from "./notifications";

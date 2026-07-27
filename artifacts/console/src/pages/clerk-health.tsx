@@ -241,6 +241,84 @@ const VERDICT_TONE: Record<string, BadgeTone> = {
   regression: "red",
 };
 
+// One side of a canary report (incumbent or candidate): accuracy and
+// injection resistance for that side. `meta` is the card-specific header
+// suffix — the prompt canary shows the prompt version, the model canary its
+// font-mono model id.
+function CanarySide({
+  label,
+  meta,
+  stats,
+  testId,
+}: {
+  label: string;
+  meta: ReactNode;
+  stats: {
+    fieldsCompared: number;
+    fieldsCorrect: number;
+    accuracy: number | null;
+    injectionFixtures: number;
+    injectionResisted: number;
+    failures: number;
+  };
+  testId: string;
+}) {
+  return (
+    <div className="rounded-md border p-3 space-y-1 text-sm" data-testid={testId}>
+      <p className="text-xs font-medium text-muted-foreground uppercase">
+        {label} · {meta}
+      </p>
+      <p>
+        Accuracy:{" "}
+        <span className="font-semibold tabular-nums">
+          {stats.accuracy != null ? formatPct(stats.accuracy) : "—"}
+        </span>{" "}
+        <span className="text-muted-foreground">
+          ({stats.fieldsCorrect}/{stats.fieldsCompared} fields)
+        </span>
+      </p>
+      <p>
+        Injection resisted:{" "}
+        <span className="font-semibold tabular-nums">
+          {stats.injectionResisted}/{stats.injectionFixtures}
+        </span>
+        {stats.failures > 0 && (
+          <span className="text-muted-foreground"> · {stats.failures} failed call(s)</span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+// The deterministic verdict pill plus the server's one-line reason.
+function CanaryVerdict({ verdict, reason }: { verdict: string; reason: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className={pillClasses(VERDICT_TONE[verdict] ?? "slate")}>
+        {verdict}
+      </span>
+      <p className="text-sm">{reason}</p>
+    </div>
+  );
+}
+
+// The trailing corpus-size footnote both canary reports end with.
+function CanaryFootnote({
+  fixtureCount,
+  truncated,
+}: {
+  fixtureCount: number;
+  truncated: boolean;
+}) {
+  return (
+    <p className="text-xs text-muted-foreground">
+      {fixtureCount} fixture(s)
+      {truncated ? " (corpus truncated to the canary cap)" : ""} ·
+      both sides ran the same corpus through the live gateway.
+    </p>
+  );
+}
+
 // When the incumbent-prompt fetch fails, the prefill button cannot work —
 // say WHY next to the permanently disabled control instead of leaving a dead
 // button: the canary itself still runs fine on a hand-pasted candidate.
@@ -271,29 +349,12 @@ function PromptCanaryCard() {
   });
 
   const side = (label: string, s: PromptCanaryReport["incumbent"]) => (
-    <div className="rounded-md border p-3 space-y-1 text-sm" data-testid={`canary-${label}`}>
-      <p className="text-xs font-medium text-muted-foreground uppercase">
-        {label} · {s.promptVersion}
-      </p>
-      <p>
-        Accuracy:{" "}
-        <span className="font-semibold tabular-nums">
-          {s.accuracy != null ? formatPct(s.accuracy) : "—"}
-        </span>{" "}
-        <span className="text-muted-foreground">
-          ({s.fieldsCorrect}/{s.fieldsCompared} fields)
-        </span>
-      </p>
-      <p>
-        Injection resisted:{" "}
-        <span className="font-semibold tabular-nums">
-          {s.injectionResisted}/{s.injectionFixtures}
-        </span>
-        {s.failures > 0 && (
-          <span className="text-muted-foreground"> · {s.failures} failed call(s)</span>
-        )}
-      </p>
-    </div>
+    <CanarySide
+      label={label}
+      meta={s.promptVersion}
+      stats={s}
+      testId={`canary-${label}`}
+    />
   );
 
   return (
@@ -350,12 +411,7 @@ function PromptCanaryCard() {
         </Button>
         {report && (
           <div className="space-y-3" data-testid="canary-report">
-            <div className="flex items-center gap-2">
-              <span className={pillClasses(VERDICT_TONE[report.verdict] ?? "slate")}>
-                {report.verdict}
-              </span>
-              <p className="text-sm">{report.verdictReason}</p>
-            </div>
+            <CanaryVerdict verdict={report.verdict} reason={report.verdictReason} />
             <div className="grid gap-3 sm:grid-cols-2">
               {side("incumbent", report.incumbent)}
               {side("candidate", report.candidate)}
@@ -369,11 +425,10 @@ function PromptCanaryCard() {
                   .join("; ")}
               </div>
             )}
-            <p className="text-xs text-muted-foreground">
-              {report.fixtureCount} fixture(s)
-              {report.truncated ? " (corpus truncated to the canary cap)" : ""} ·
-              both sides ran the same corpus through the live gateway.
-            </p>
+            <CanaryFootnote
+              fixtureCount={report.fixtureCount}
+              truncated={report.truncated}
+            />
           </div>
         )}
       </CardContent>
@@ -404,32 +459,12 @@ function ModelCanaryCard() {
   });
 
   const side = (label: string, s: ModelCanaryReport["incumbent"]) => (
-    <div
-      className="rounded-md border p-3 space-y-1 text-sm"
-      data-testid={`model-canary-${label}`}
-    >
-      <p className="text-xs font-medium text-muted-foreground uppercase">
-        {label} · <span className="normal-case font-mono">{s.model}</span>
-      </p>
-      <p>
-        Accuracy:{" "}
-        <span className="font-semibold tabular-nums">
-          {s.accuracy != null ? formatPct(s.accuracy) : "—"}
-        </span>{" "}
-        <span className="text-muted-foreground">
-          ({s.fieldsCorrect}/{s.fieldsCompared} fields)
-        </span>
-      </p>
-      <p>
-        Injection resisted:{" "}
-        <span className="font-semibold tabular-nums">
-          {s.injectionResisted}/{s.injectionFixtures}
-        </span>
-        {s.failures > 0 && (
-          <span className="text-muted-foreground"> · {s.failures} failed call(s)</span>
-        )}
-      </p>
-    </div>
+    <CanarySide
+      label={label}
+      meta={<span className="normal-case font-mono">{s.model}</span>}
+      stats={s}
+      testId={`model-canary-${label}`}
+    />
   );
 
   return (
@@ -468,12 +503,7 @@ function ModelCanaryCard() {
         </Button>
         {report && (
           <div className="space-y-3" data-testid="model-canary-report">
-            <div className="flex items-center gap-2">
-              <span className={pillClasses(VERDICT_TONE[report.verdict] ?? "slate")}>
-                {report.verdict}
-              </span>
-              <p className="text-sm">{report.verdictReason}</p>
-            </div>
+            <CanaryVerdict verdict={report.verdict} reason={report.verdictReason} />
             <div className="grid gap-3 sm:grid-cols-2">
               {side("incumbent", report.incumbent)}
               {side("candidate", report.candidate)}
@@ -528,11 +558,10 @@ function ModelCanaryCard() {
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {report.fixtureCount} fixture(s)
-              {report.truncated ? " (corpus truncated to the canary cap)" : ""} ·
-              both sides ran the same corpus through the live gateway.
-            </p>
+            <CanaryFootnote
+              fixtureCount={report.fixtureCount}
+              truncated={report.truncated}
+            />
           </div>
         )}
       </CardContent>

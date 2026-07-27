@@ -373,7 +373,7 @@ export function computeCorrectionShapes(
         correction.extracted,
         correction.final,
       );
-      const key = `${field} ${shape}`;
+      const key = `${field}\0${shape}`;
       const row = acc.get(key);
       if (row) {
         row.count += 1;

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
+import { downloadBlob } from "@/lib/download";
 import { usePageTitle } from "@/hooks/use-page-title";
 import {
   ShieldCheck,
@@ -39,15 +40,11 @@ export function AuditEvidence() {
     setExporting(true);
     try {
       const { data: bundle } = await exportQuery.refetch({ throwOnError: true });
-      const blob = new Blob([JSON.stringify(bundle, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `meridianiq-audit-bundle-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(
+        `meridianiq-audit-bundle-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(bundle, null, 2),
+        "application/json",
+      );
       toast({
         title: "Audit bundle downloaded",
         description: `${bundle?.events.length ?? 0} events with chain verification attached.`,

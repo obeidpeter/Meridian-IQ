@@ -153,6 +153,14 @@ export interface ResolvedInboundClient {
   clientPartyId: string | null;
 }
 
+// What both rails' detached processors report: whether the sender resolved,
+// plus the caseIds/skipped arrays their pointer-only receipt is built from.
+export interface InboundProcessResult {
+  resolved: boolean;
+  caseIds: string[];
+  skipped: { filename: string; reason: string }[];
+}
+
 // The per-item capture closure both rails share: budget gate BEFORE the
 // provider (the capture-route idiom — the gateway enforces it again as a
 // backstop), gateway resolved lazily so a message whose items all skip never

@@ -15,6 +15,7 @@ import {
 } from "../invoice/cashflow";
 import { OUTSTANDING } from "../invoice/receivables";
 import { firmClerkUsage } from "./budget";
+import { isAre, MONTH_NAMES, plural } from "./text";
 
 // Grounded firm-data Q&A (Clerk idea #6). Ask Clerk gains a SECOND closed
 // catalogue next to the claims register: data intents — live lookups over the
@@ -124,14 +125,6 @@ async function invoiceAggregate(
     totalNgn: String(r?.total ?? "0"),
     sample: r?.sample ?? [],
   };
-}
-
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
-function isAre(n: number): string {
-  return n === 1 ? "is" : "are";
 }
 
 // "INV-1, INV-2 and 3 more" — the named sample plus an honest remainder.
@@ -579,21 +572,6 @@ export interface MonthOption {
   label: string;
   monthStart: string; // YYYY-MM-01
 }
-
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
 
 export function lagosMonthOptions(count = 12, now = new Date()): MonthOption[] {
   const { year, monthIndex } = lagosParts(now);

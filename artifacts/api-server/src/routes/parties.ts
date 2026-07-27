@@ -28,6 +28,7 @@ import {
   can,
   tenantFirmId,
 } from "../modules/auth/rbac";
+import { DomainError } from "../modules/errors";
 import {
   createParty,
   getParty,
@@ -148,8 +149,7 @@ router.get("/parties/:id", async (req, res): Promise<void> => {
   await assertPartyAccessOrInvoiceRef(req.principal, params.id);
   const party = await getParty(params.id);
   if (!party) {
-    res.status(404).json({ error: "Party not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Party not found", 404);
   }
   res.json(GetPartyResponse.parse(party));
 });

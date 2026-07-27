@@ -115,6 +115,34 @@ test("a failing transport drives the failover walk", async () => {
   }
 });
 
+test("failover skips a channel the template does not permit instead of stopping", async () => {
+  // invoice_stamped permits whatsapp + email only; the chain is whatsapp →
+  // sms → email, so a whatsapp failure must skip sms (never attempted) and
+  // still reach email, with failover_from naming the channel that FAILED.
+  const hits: string[] = [];
+  setMessageTransport(async (channel) => {
+    hits.push(channel);
+    return channel === "whatsapp"
+      ? { ok: false, error: "provider down" }
+      : { ok: true, providerMessageId: `skip_${SALT}` };
+  });
+  try {
+    const row = await sendMessage({
+      channel: "whatsapp",
+      recipientRef: makeRef(),
+      templateKey: "invoice_stamped",
+      entityType: "invoice",
+      entityId: "inv-abc",
+    });
+    assert.equal(row.status, "sent");
+    assert.equal(row.channel, "email", "fell over whatsapp → email, past sms");
+    assert.equal(row.failoverFrom, "whatsapp");
+    assert.deepEqual(hits, ["whatsapp", "email"], "sms was never attempted");
+  } finally {
+    resetMessageTransport();
+  }
+});
+
 test("a throwing transport is a channel failure; all-fail lands the historical failed row", async () => {
   setMessageTransport(async () => {
     throw new Error("relay exploded");

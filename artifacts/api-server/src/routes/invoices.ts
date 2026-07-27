@@ -116,6 +116,7 @@ import { renderInvoicePdf, sendPdfAttachment } from "../modules/invoice/pdf";
 import { computeBillingStatement } from "../modules/invoice/billing-statement";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
 import { likePattern } from "../lib/sql";
+import { resolveClientAnalyticsScope } from "../lib/client-scope";
 import {
   createDraft,
   getInvoiceWithLines,
@@ -510,13 +511,11 @@ router.get("/billing/statement/export", async (req, res): Promise<void> => {
 router.get("/line-item-suggestions", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(ListLineItemSuggestionsQueryParams, req.query);
-  const firmId = requireFirmScope(req.principal);
-  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
-  if (!target) {
-    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
-  }
-  assertClientPartyScope(req.principal, target);
-  const items = await listLineItemSuggestions(firmId, target);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const items = await listLineItemSuggestions(firmId, clientPartyId);
   res.json(ListLineItemSuggestionsResponse.parse(items));
 });
 
@@ -526,13 +525,11 @@ router.get("/line-item-suggestions", async (req, res): Promise<void> => {
 router.get("/payment-behaviour", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(ListPaymentBehaviourQueryParams, req.query);
-  const firmId = requireFirmScope(req.principal);
-  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
-  if (!target) {
-    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
-  }
-  assertClientPartyScope(req.principal, target);
-  const behaviour = await listPaymentBehaviour(firmId, target);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const behaviour = await listPaymentBehaviour(firmId, clientPartyId);
   res.json(ListPaymentBehaviourResponse.parse(behaviour));
 });
 
@@ -543,13 +540,11 @@ router.get("/payment-behaviour", async (req, res): Promise<void> => {
 router.get("/unmatched-credits", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(GetUnmatchedCreditsQueryParams, req.query);
-  const firmId = requireFirmScope(req.principal);
-  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
-  if (!target) {
-    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
-  }
-  assertClientPartyScope(req.principal, target);
-  const credits = await listUnmatchedCredits(firmId, target);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const credits = await listUnmatchedCredits(firmId, clientPartyId);
   res.json(GetUnmatchedCreditsResponse.parse(credits));
 });
 
@@ -559,13 +554,11 @@ router.get("/unmatched-credits", async (req, res): Promise<void> => {
 router.get("/projection-accuracy", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
   const query = parseOrThrow(GetProjectionAccuracyQueryParams, req.query);
-  const firmId = requireFirmScope(req.principal);
-  const target = clientPartyScope(req.principal) ?? query.clientPartyId;
-  if (!target) {
-    throw new DomainError("MISSING_CLIENT", "clientPartyId is required", 400);
-  }
-  assertClientPartyScope(req.principal, target);
-  const accuracy = await computeProjectionAccuracy(firmId, target);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const accuracy = await computeProjectionAccuracy(firmId, clientPartyId);
   res.json(GetProjectionAccuracyResponse.parse(accuracy));
 });
 
@@ -826,8 +819,7 @@ router.get("/invoices/:id/stamp", async (req, res): Promise<void> => {
     .orderBy(asc(stampRecordsTable.createdAt))
     .limit(1);
   if (!stamp) {
-    res.status(404).json({ error: "No stamp for this invoice" });
-    return;
+    throw new DomainError("NOT_FOUND", "No stamp for this invoice", 404);
   }
   res.json(GetInvoiceStampResponse.parse(stamp));
 });

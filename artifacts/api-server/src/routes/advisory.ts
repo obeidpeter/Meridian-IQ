@@ -19,6 +19,7 @@ import {
   assertSameTenant,
   requireFirmScope,
 } from "../modules/auth/rbac";
+import { DomainError } from "../modules/errors";
 import { appendAudit } from "../modules/audit/audit";
 import {
   getQuestionnaireTemplate,
@@ -99,8 +100,7 @@ router.get("/assessments/:id", async (req, res): Promise<void> => {
     .where(eq(engagementsTable.id, params.id))
     .limit(1);
   if (!row || row.type !== "readiness_assessment" || !row.findings) {
-    res.status(404).json({ error: "Assessment not found" });
-    return;
+    throw new DomainError("NOT_FOUND", "Assessment not found", 404);
   }
   assertSameTenant(req.principal, row.firmId);
   // SEC-03: a client_user may only read its own client party's assessment,

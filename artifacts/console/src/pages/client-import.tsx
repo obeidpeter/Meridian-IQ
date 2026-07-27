@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { StatTile } from "@/components/stat-tile";
+import { downloadBlob } from "@/lib/download";
 import { isFeatureDisabled } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -104,16 +105,6 @@ function parseClientRows(text: string): ClientImportRow[] {
       city: optional("city"),
     };
   });
-}
-
-function download(filename: string, text: string) {
-  const blob = new Blob([text], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 export function ClientImport() {
@@ -247,7 +238,9 @@ export function ClientImport() {
             </Button>
             <Button
               variant="ghost"
-              onClick={() => download("meridianiq-clients-template.csv", TEMPLATE)}
+              onClick={() =>
+                downloadBlob("meridianiq-clients-template.csv", TEMPLATE, "text/csv")
+              }
               data-testid="button-template"
             >
               <Download className="w-4 h-4 mr-2" aria-hidden="true" /> CSV template

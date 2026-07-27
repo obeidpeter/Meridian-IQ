@@ -844,13 +844,16 @@ function periodBounds(period: string): { start: Date; end: Date } {
   return { start, end };
 }
 
-async function firmName(firmId: string): Promise<string | null> {
-  const [f] = await getDb()
-    .select({ name: firmsTable.name })
+// Batched firm-name lookup (same idiom as caseViews): one query for the whole
+// statement page, not one per firm. Missing firms simply have no entry.
+async function firmNames(firmIds: string[]): Promise<Map<string, string>> {
+  const uniq = [...new Set(firmIds)];
+  if (uniq.length === 0) return new Map();
+  const firms = await getDb()
+    .select({ id: firmsTable.id, name: firmsTable.name })
     .from(firmsTable)
-    .where(eq(firmsTable.id, firmId))
-    .limit(1);
-  return f?.name ?? null;
+    .where(inArray(firmsTable.id, uniq));
+  return new Map(firms.map((f) => [f.id, f.name]));
 }
 
 router.get("/billing/statements", async (req, res): Promise<void> => {
@@ -865,10 +868,7 @@ router.get("/billing/statements", async (req, res): Promise<void> => {
     .where(scope ? eq(revenueShareStatementsTable.firmId, scope) : undefined)
     .orderBy(desc(revenueShareStatementsTable.period));
 
-  const names = new Map<string, string | null>();
-  for (const r of rows) {
-    if (!names.has(r.firmId)) names.set(r.firmId, await firmName(r.firmId));
-  }
+  const names = await firmNames(rows.map((r) => r.firmId));
   res.json(
     ListStatementsResponse.parse(
       rows.map((r) => ({ ...r, firmName: names.get(r.firmId) ?? null })),
@@ -940,10 +940,11 @@ router.post("/billing/statements/generate", async (req, res): Promise<void> => {
     firmIds = subs.map((s) => s.firmId);
   }
 
+  const names = await firmNames(firmIds);
   const out = [];
   for (const firmId of firmIds) {
     const row = await generateStatement(firmId, parsed.period);
-    out.push({ ...row, firmName: await firmName(firmId) });
+    out.push({ ...row, firmName: names.get(firmId) ?? null });
   }
   await appendAudit({
     actorId: req.principal.userId,
@@ -1149,28 +1150,21 @@ router.get("/operator/cases", async (req, res): Promise<void> => {
 
 router.get("/operator/cases/stats", async (req, res): Promise<void> => {
   assertCan(req.principal, "operator.queue.read");
-  const rows = await getDb().select().from(operatorCasesTable);
-  const resolved = rows.filter(
-    (r) => r.status === "resolved" && r.handleSeconds != null,
-  );
-  const avg = resolved.length
-    ? Math.round(
-        resolved.reduce((n, r) => n + (r.handleSeconds ?? 0), 0) /
-          resolved.length,
-      )
-    : null;
-  const clientsServed = new Set(
-    rows.map((r) => r.clientPartyId).filter(Boolean),
-  ).size;
-  res.json(
-    GetOperatorQueueStatsResponse.parse({
-      openCount: rows.filter((r) => r.status === "open").length,
-      inProgressCount: rows.filter((r) => r.status === "in_progress").length,
-      resolvedCount: rows.filter((r) => r.status === "resolved").length,
-      clientsServed,
-      avgHandleSeconds: avg,
-    }),
-  );
+  // One aggregate pass instead of loading every case row into JS.
+  // count(DISTINCT) ignores NULL client ids (the old .filter(Boolean) Set);
+  // the FILTERed avg is NULL when no resolved row carries handle_seconds.
+  const [stats] = await getDb()
+    .select({
+      openCount: sql<number>`(count(*) filter (where ${operatorCasesTable.status} = 'open'))::int`,
+      inProgressCount: sql<number>`(count(*) filter (where ${operatorCasesTable.status} = 'in_progress'))::int`,
+      resolvedCount: sql<number>`(count(*) filter (where ${operatorCasesTable.status} = 'resolved'))::int`,
+      clientsServed: sql<number>`(count(distinct ${operatorCasesTable.clientPartyId}))::int`,
+      avgHandleSeconds: sql<
+        number | null
+      >`(round(avg(${operatorCasesTable.handleSeconds}) filter (where ${operatorCasesTable.status} = 'resolved' and ${operatorCasesTable.handleSeconds} is not null)))::int`,
+    })
+    .from(operatorCasesTable);
+  res.json(GetOperatorQueueStatsResponse.parse(stats));
 });
 
 async function loadCase(id: string): Promise<OperatorCase> {

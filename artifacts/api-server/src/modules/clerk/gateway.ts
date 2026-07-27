@@ -345,3 +345,24 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
     },
   };
 }
+
+// One phrasing call under the digest posture: the validated output, or null —
+// no provider, kill switch off, a failed call or discarded output all mean
+// "the caller's deterministic template answers", never an error. There is
+// deliberately NO budget pre-check: the gateway backstop turns an exhausted
+// allowance into a typed failure, which answers with the template — never a
+// 429. The try/catch closes the kill-switch TOCTOU: if clerk_ai flips off
+// between the check here and the call, the gateway's own assert throws — and
+// for these surfaces even that must answer with the template.
+export async function inferPhrasing<T>(
+  gateway: ClerkGateway | null,
+  params: InferParams<T>,
+): Promise<T | null> {
+  if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) return null;
+  try {
+    const result = await gateway.infer(params);
+    return result.ok ? result.data : null;
+  } catch {
+    return null;
+  }
+}

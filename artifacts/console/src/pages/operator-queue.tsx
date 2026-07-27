@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { PORTAL_URL } from "@/components/require-session";
 import { StatTile } from "@/components/stat-tile";
@@ -563,19 +564,11 @@ export function OperatorQueue() {
         <QueryError thing="the work queue" onRetry={() => refetch()} />
       ) : (data ?? []).length === 0 ? (
         <Card>
-          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-            <Inbox
-              className="w-10 h-10 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <p className="font-semibold" data-testid="text-empty">
-              No {humanize(status).toLowerCase()} cases
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Cases land here when submissions fail or clients escalate —
-              switch tabs to see other states.
-            </p>
-          </CardContent>
+          <EmptyState
+            icon={Inbox}
+            title={`No ${humanize(status).toLowerCase()} cases`}
+            description="Cases land here when submissions fail or clients escalate — switch tabs to see other states."
+          />
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">

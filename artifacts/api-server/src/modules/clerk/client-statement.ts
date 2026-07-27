@@ -17,7 +17,8 @@ import { logger } from "../../lib/logger";
 import { lagosParts, lagosWindowSql } from "../../lib/lagos-time";
 import { assertFirmClerkBudget } from "./budget";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
-import { getClerkGateway } from "./provider";
+import { gatewayOrNull } from "./provider";
+import { MONTH_NAMES, plural } from "./text";
 
 // Per-client monthly statement (Clerk idea #5). The weekly digest's posture,
 // per client party and per CLOSED Lagos calendar month: "your compliance
@@ -77,21 +78,6 @@ export function lagosMonthStart(monthsBack: number, now: Date = new Date()): str
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `${d.getUTCFullYear()}-${mm}-01`;
 }
-
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
 
 /** "2026-06-01" -> "June 2026" (the statement's display period). */
 export function monthLabel(monthStart: string): string {
@@ -174,10 +160,6 @@ export async function computeClientStatementFacts(
     failedCount: Number(r?.failed ?? 0),
     stillUnsubmittedCount: Number(r?.unsubmitted ?? 0),
   };
-}
-
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 export function statementIsQuiet(facts: ClientStatementFacts): boolean {
@@ -482,12 +464,7 @@ export async function sweepClientStatements(): Promise<void> {
     if (pairs.length > 0) {
       // No provider configured (or kill switch off) still produces
       // statements — just from the template path.
-      let gateway: ClerkGateway | null = null;
-      try {
-        gateway = await getClerkGateway();
-      } catch {
-        gateway = null;
-      }
+      const gateway = await gatewayOrNull();
       let generated = 0;
       for (const pair of pairs) {
         await generateClientStatement(

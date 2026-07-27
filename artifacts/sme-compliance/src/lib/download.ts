@@ -17,16 +17,5 @@ export function invoicePdfFilename(invoiceNumber: string): string {
   return safe ? `invoice-${safe}.pdf` : "invoice.pdf";
 }
 
-/**
- * Navigate an href as a named download: a temporary anchor click, same as
- * the import page's results download. Same-origin, so the session cookie
- * authenticates the request and the download attribute is honoured.
- */
-export function triggerDownload(href: string, filename: string): void {
-  const a = document.createElement("a");
-  a.href = href;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
+// The anchor-click helper itself lives in the workspace package.
+export { triggerDownload } from "@workspace/web-ui";
