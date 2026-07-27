@@ -929,3 +929,10 @@ export async function getClerkMetrics(
     ...(correctionShapes.length > 0 ? { correctionShapes } : {}),
   };
 }
+
+// Per-firm fast-lane confidence threshold. Stub pending the calibration-based
+// derivation (this round): callers already thread it so the queue and the
+// bulk-approve re-verify can never disagree once the derivation lands.
+export async function firmFastLaneThreshold(_firmId: string | null): Promise<number> {
+  return 0.9;
+}

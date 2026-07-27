@@ -633,7 +633,7 @@ export function fenceDocument(text: string): string {
 // The image counterpart of fenceDocument: an anti-prompt-injection preamble
 // plus the data-URL image part. Shared by first-time intake and retries so the
 // injection-hardening text for images is maintained in one place.
-function imageUserContent(contentType: string, b64: string): UserContent {
+export function imageUserContent(contentType: string, b64: string): UserContent {
   return [
     {
       type: "text",

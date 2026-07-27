@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.42.0
+  version: 0.43.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -3731,6 +3731,54 @@ paths:
           $ref: "#/components/responses/NotFound"
 
 
+  /clerk/cases/{id}/source-pages:
+    get:
+      operationId: getClerkCaseSourcePages
+      tags: [clerk]
+      summary: Rendered source pages of a scanned capture, for the review pane (operator; content only while retention holds it)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Source pages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkCaseSourcePages"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clerk/cases/{id}/feedback:
+    post:
+      operationId: submitClerkFeedback
+      tags: [clerk]
+      summary: Record the asker's helpfulness signal on an answered question
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClerkFeedbackInput"
+      responses:
+        "204":
+          description: Recorded
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/ask-feedback:
+    get:
+      operationId: getAskFeedbackReport
+      tags: [clerk]
+      summary: Helpfulness mining over answered questions (the refusal-mining sibling)
+      responses:
+        "200":
+          description: Feedback report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AskFeedbackReport"
   /clerk/cases/{id}/retry:
     post:
       operationId: retryClerkCase
@@ -3859,6 +3907,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EvalFixtureReport"
+  /clerk/eval/fixtures/from-case:
+    post:
+      operationId: mintFixtureFromCase
+      tags: [clerk]
+      summary: Promote a decided case into the eval corpus, pseudonymizing known party identities in the document text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MintFixtureInput"
+      responses:
+        "201":
+          description: Minted fixture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalFixtureSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /clerk/eval/fixtures/{key}/retire:
     post:
       operationId: retireEvalFixture
@@ -8960,6 +9032,74 @@ components:
           type: string
         model:
           type: string
+    ClerkCaseSourcePages:
+      type: object
+      required: [pages, purged]
+      properties:
+        # Base64 PNG pages in document order; empty when purged.
+        pages:
+          type: array
+          items:
+            type: string
+        # True when the retention sweep has already cleared the content.
+        purged:
+          type: boolean
+    ClerkFeedbackInput:
+      type: object
+      required: [helpful]
+      properties:
+        helpful:
+          type: boolean
+    AskFeedbackReport:
+      type: object
+      required: [totals, byIntent, recentNotHelpful]
+      properties:
+        totals:
+          type: object
+          required: [helpful, notHelpful, unrated]
+          properties:
+            helpful:
+              type: integer
+            notHelpful:
+              type: integer
+            unrated:
+              type: integer
+        byIntent:
+          type: array
+          items:
+            type: object
+            required: [intent, helpful, notHelpful]
+            properties:
+              # A data-intent key, "register" for claim answers, or "refused".
+              intent:
+                type: string
+              helpful:
+                type: integer
+              notHelpful:
+                type: integer
+        recentNotHelpful:
+          type: array
+          items:
+            type: object
+            required: [caseId, question, createdAt]
+            properties:
+              caseId:
+                type: string
+              question:
+                type: string
+              createdAt:
+                type: string
+    MintFixtureInput:
+      type: object
+      required: [caseId]
+      properties:
+        caseId:
+          type: string
+        # Pseudonymize known party identities (names, TINs) in the stored
+        # document text. Defaults true; the server refuses false for cases
+        # still traceable to a live client.
+        scrub:
+          type: boolean
     ClerkAnswer:
       type: object
       required: [answered]
@@ -8992,6 +9132,23 @@ components:
           type: string
         refusalReason:
           type: string
+        # Deterministic action links derived from the data-intent facts by the
+        # app (never the model): each names a surface the asker may open.
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkAnswerLink"
+    ClerkAnswerLink:
+      type: object
+      required: [label, kind]
+      properties:
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [invoice]
+        id:
+          type: ["string", "null"]
     ClerkCase:
       type: object
       required: [id, kind, status, createdBy, createdAt, updatedAt]
@@ -9016,6 +9173,15 @@ components:
           type: ["string", "null"]
         sourceDurationSec:
           type: ["integer", "null"]
+        # Per-firm fast-lane confidence threshold in force for this case,
+        # derived deterministically from the firm's own calibration history
+        # (floored; defaults to the global constant when history is thin).
+        fastLaneThreshold:
+          type: number
+        # Asker's helpfulness signal on a question case (null = unrated).
+        feedback:
+          type: ["string", "null"]
+          enum: [helpful, not_helpful, null]
         # Deterministic pre-flight issues computed at extraction time (empty =
         # clean; null = computed before this feature existed). "advisory"
         # issues inform the reviewer without blocking the fast lane.
@@ -10474,6 +10640,10 @@ components:
           type: boolean
         lastEngagement:
           type: boolean
+        # Grown Clerk eval fixtures derived from this client's documents,
+        # retired with their content nulled as part of the offboarding.
+        fixturesRetired:
+          type: integer
     HealthAlert:
       type: object
       required: [seq, action, entityType, entityId, createdAt]
