@@ -36,11 +36,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { AlertTriangle, BookOpen, Pencil, Plus, Search, Sparkles } from "lucide-react";
-import { formatDateTime, pillClasses } from "@/lib/format";
+import { formatDateTime, formatPct, pillClasses } from "@/lib/format";
 
 // ADV-03: the living error catalogue, updatable by operators within one
 // working day of a new failure appearing. INT-02: codes seen on submissions
@@ -318,8 +319,6 @@ function CatalogueCoverageCard({ enabled }: { enabled: boolean }) {
     },
   });
   if (!enabled || !isSuccess || !coverage) return null;
-  const pct = (v: number | null | undefined) =>
-    v == null ? "—" : `${(v * 100).toFixed(1)}%`;
   return (
     <Card data-testid="card-catalogue-coverage">
       <CardHeader>
@@ -332,7 +331,7 @@ function CatalogueCoverageCard({ enabled }: { enabled: boolean }) {
           <div data-testid="coverage-mapped-share">
             <p className="text-xs text-muted-foreground">Rejections mapped</p>
             <p className="text-lg font-semibold tabular-nums">
-              {pct(coverage.mappedShare)}
+              {formatPct(coverage.mappedShare)}
             </p>
             <p className="text-xs text-muted-foreground">
               {coverage.mappedAttempts} of {coverage.codedRejections} coded
@@ -351,7 +350,7 @@ function CatalogueCoverageCard({ enabled }: { enabled: boolean }) {
               Mapped within a day
             </p>
             <p className="text-lg font-semibold tabular-nums">
-              {pct(coverage.sla.withinOneDayShare)}
+              {formatPct(coverage.sla.withinOneDayShare)}
             </p>
             <p className="text-xs text-muted-foreground">
               {coverage.sla.judged} entr{coverage.sla.judged === 1 ? "y" : "ies"}{" "}
@@ -603,21 +602,19 @@ export function Catalogue() {
         <QueryError thing="the error catalogue" onRetry={() => refetch()} />
       ) : filtered.length === 0 ? (
         <Card>
-          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-            <BookOpen
-              className="w-10 h-10 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <p className="font-semibold" data-testid="text-empty">
-              {search.trim()
+          <EmptyState
+            icon={BookOpen}
+            title={
+              search.trim()
                 ? "No entries match your search"
-                : "No catalogue entries yet"}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {search.trim()
+                : "No catalogue entries yet"
+            }
+            description={
+              search.trim()
                 ? "Try a different code, cause or fix."
-                : "Entries appear as operators map failure codes to plain-language causes and fixes."}
-            </p>
+                : "Entries appear as operators map failure codes to plain-language causes and fixes."
+            }
+          >
             {search.trim() && (
               <Button
                 variant="outline"
@@ -628,7 +625,7 @@ export function Catalogue() {
                 Clear search
               </Button>
             )}
-          </CardContent>
+          </EmptyState>
         </Card>
       ) : (
         <div className="space-y-3">

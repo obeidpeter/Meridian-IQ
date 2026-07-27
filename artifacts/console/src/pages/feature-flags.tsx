@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -165,19 +166,11 @@ export function FeatureFlags() {
         <QueryError thing="feature flags" onRetry={() => refetch()} />
       ) : groups.length === 0 ? (
         <Card>
-          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-            <ToggleRight
-              className="w-10 h-10 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <p className="font-semibold" data-testid="text-empty">
-              No flags seeded yet
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Release flags are seeded by the platform — they appear here once
-              the spine registers them.
-            </p>
-          </CardContent>
+          <EmptyState
+            icon={ToggleRight}
+            title="No flags seeded yet"
+            description="Release flags are seeded by the platform — they appear here once the spine registers them."
+          />
         </Card>
       ) : (
         groups.map((group) => (

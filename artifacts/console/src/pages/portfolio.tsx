@@ -44,6 +44,7 @@ import {
   isFirmMemberRole,
 } from "@/components/staff-notification-prefs-card";
 import { StatementConnectionsCard } from "@/components/statement-connections-card";
+import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { StatTile } from "@/components/stat-tile";
 import {
@@ -74,14 +75,16 @@ import { usePageTitle } from "@/hooks/use-page-title";
 // Receivables amounts arrive as decimal strings. NGN rows use the shared
 // naira formatter; anything else gets a plain grouped number plus its
 // currency code so a foreign-currency row never masquerades as naira.
+const FOREIGN_AMOUNT_FORMAT = new Intl.NumberFormat("en-NG", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 function formatMoney(value: string, currency: string): string {
   if (currency === "NGN") return formatNaira(value);
   const n = Number(value);
   if (Number.isNaN(n)) return "—";
-  return `${new Intl.NumberFormat("en-NG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n)} ${currency}`;
+  return `${FOREIGN_AMOUNT_FORMAT.format(n)} ${currency}`;
 }
 
 // The portfolio's many cards, grouped for scanning. Grouping is layout only —
@@ -207,6 +210,92 @@ function packMonthLabel(monthStart: string): string {
   return `${PACK_MONTHS[Number(m) - 1] ?? m} ${y}`;
 }
 
+// Both cover-note drafts land the same way: keep the response for the
+// caption, seed the editable text, toast on failure.
+function coverNoteHandlers<T extends { note: string }>(
+  setNote: (note: T) => void,
+  setNoteText: (text: string) => void,
+  toast: ReturnType<typeof useToast>["toast"],
+) {
+  return {
+    onSuccess: (res: T) => {
+      setNote(res);
+      setNoteText(res.note);
+    },
+    onError: () =>
+      toast({ title: "Could not draft the note", variant: "destructive" }),
+  };
+}
+
+// The drafted cover-note panel the VAT pack and quarterly review cards share:
+// a source-dependent caption, the editable text, a clipboard Copy button and
+// Discard. Each card passes its own testids so the DOM stays byte-identical.
+function CoverNotePanel({
+  periodLabel,
+  source,
+  destinationWord,
+  text,
+  onChange,
+  onDiscard,
+  testIds,
+}: {
+  periodLabel: string;
+  source: string;
+  destinationWord: string;
+  text: string;
+  onChange: (text: string) => void;
+  onDiscard: () => void;
+  testIds: { panel: string; input: string; copy: string; discard: string };
+}) {
+  const { toast } = useToast();
+  return (
+    <div className="rounded-md border p-3 space-y-2" data-testid={testIds.panel}>
+      <p className="text-xs font-medium text-muted-foreground">
+        Cover note for {periodLabel} —{" "}
+        {source === "clerk"
+          ? "Clerk phrased the pack's own numbers; edit before sending."
+          : "template text (Clerk unavailable); edit before sending."}{" "}
+        Nothing is stored — copy it into your {destinationWord}.
+      </p>
+      <Textarea
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+        className="min-h-[110px] text-sm"
+        data-testid={testIds.input}
+      />
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(text);
+              toast({ title: "Copied" });
+            } catch {
+              toast({
+                title: "Could not copy",
+                description: "Select the text and copy it manually.",
+                variant: "destructive",
+              });
+            }
+          }}
+          data-testid={testIds.copy}
+        >
+          <Copy className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" /> Copy
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onDiscard}
+          data-testid={testIds.discard}
+        >
+          Discard
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // Monthly VAT filing pack (exhaust idea #2): per-client output VAT for a
 // closed Lagos month, deterministic end to end — the numbers mirror the
 // per-client statements. Renders only on success (a 403 for roles without
@@ -227,14 +316,7 @@ function VatPackCard() {
   const draftNote = (monthStart: string) => {
     coverNote.mutate(
       { data: { month: monthStart } },
-      {
-        onSuccess: (res) => {
-          setNote(res);
-          setNoteText(res.note);
-        },
-        onError: () =>
-          toast({ title: "Could not draft the note", variant: "destructive" }),
-      },
+      coverNoteHandlers<VatPackCoverNote>(setNote, setNoteText, toast),
     );
   };
 
@@ -356,53 +438,20 @@ function VatPackCard() {
         )}
         <p className="text-xs text-muted-foreground">{pack.note}</p>
         {note && (
-          <div
-            className="rounded-md border p-3 space-y-2"
-            data-testid="vat-cover-note"
-          >
-            <p className="text-xs font-medium text-muted-foreground">
-              Cover note for {note.monthLabel} —{" "}
-              {note.source === "clerk"
-                ? "Clerk phrased the pack's own numbers; edit before sending."
-                : "template text (Clerk unavailable); edit before sending."}{" "}
-              Nothing is stored — copy it into your email.
-            </p>
-            <Textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              className="min-h-[110px] text-sm"
-              data-testid="input-vat-cover-note"
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(noteText);
-                    toast({ title: "Copied" });
-                  } catch {
-                    toast({
-                      title: "Could not copy",
-                      description: "Select the text and copy it manually.",
-                      variant: "destructive",
-                    });
-                  }
-                }}
-                data-testid="button-copy-cover-note"
-              >
-                <Copy className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" /> Copy
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setNote(null)}
-                data-testid="button-discard-cover-note"
-              >
-                Discard
-              </Button>
-            </div>
-          </div>
+          <CoverNotePanel
+            periodLabel={note.monthLabel}
+            source={note.source}
+            destinationWord="email"
+            text={noteText}
+            onChange={setNoteText}
+            onDiscard={() => setNote(null)}
+            testIds={{
+              panel: "vat-cover-note",
+              input: "input-vat-cover-note",
+              copy: "button-copy-cover-note",
+              discard: "button-discard-cover-note",
+            }}
+          />
         )}
       </CardContent>
     </Card>
@@ -582,17 +631,11 @@ function QuarterlyReviewCard() {
               onClick={() =>
                 coverNote.mutate(
                   { data: { quarter: review.quarterStart } },
-                  {
-                    onSuccess: (res) => {
-                      setNote(res);
-                      setNoteText(res.note);
-                    },
-                    onError: () =>
-                      toast({
-                        title: "Could not draft the note",
-                        variant: "destructive",
-                      }),
-                  },
+                  coverNoteHandlers<QuarterlyReviewCoverNote>(
+                    setNote,
+                    setNoteText,
+                    toast,
+                  ),
                 )
               }
               data-testid="button-quarterly-cover-note"
@@ -698,53 +741,20 @@ function QuarterlyReviewCard() {
         </div>
         <p className="text-xs text-muted-foreground">{review.note}</p>
         {note && (
-          <div
-            className="rounded-md border p-3 space-y-2"
-            data-testid="quarterly-cover-note"
-          >
-            <p className="text-xs font-medium text-muted-foreground">
-              Cover note for {note.quarterLabel} —{" "}
-              {note.source === "clerk"
-                ? "Clerk phrased the pack's own numbers; edit before sending."
-                : "template text (Clerk unavailable); edit before sending."}{" "}
-              Nothing is stored — copy it into your letter.
-            </p>
-            <Textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              className="min-h-[110px] text-sm"
-              data-testid="input-quarterly-cover-note"
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(noteText);
-                    toast({ title: "Copied" });
-                  } catch {
-                    toast({
-                      title: "Could not copy",
-                      description: "Select the text and copy it manually.",
-                      variant: "destructive",
-                    });
-                  }
-                }}
-                data-testid="button-copy-quarterly-note"
-              >
-                <Copy className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" /> Copy
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setNote(null)}
-                data-testid="button-discard-quarterly-note"
-              >
-                Discard
-              </Button>
-            </div>
-          </div>
+          <CoverNotePanel
+            periodLabel={note.quarterLabel}
+            source={note.source}
+            destinationWord="letter"
+            text={noteText}
+            onChange={setNoteText}
+            onDiscard={() => setNote(null)}
+            testIds={{
+              panel: "quarterly-cover-note",
+              input: "input-quarterly-cover-note",
+              copy: "button-copy-quarterly-note",
+              discard: "button-discard-quarterly-note",
+            }}
+          />
         )}
       </CardContent>
     </Card>
@@ -1283,19 +1293,17 @@ export function Portfolio() {
           canImport={canImport}
         />
         <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
-          <CardContent className="py-12 flex flex-col items-center text-center gap-2">
-            <Users
-              className="w-10 h-10 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <p className="font-semibold" data-testid="text-empty">
-              Import your client book
-            </p>
-            <p className="text-sm text-muted-foreground max-w-md">
-              Clients appear here once they're on the platform. Bring your book
-              across from a practice-management export, or track prospects
-              through onboarding.
-            </p>
+          <EmptyState
+            icon={Users}
+            title="Import your client book"
+            description={
+              <span className="block max-w-md">
+                Clients appear here once they're on the platform. Bring your
+                book across from a practice-management export, or track
+                prospects through onboarding.
+              </span>
+            }
+          >
             <div className="flex flex-wrap justify-center gap-2 mt-2">
               {canImport && (
                 <Button asChild data-testid="button-empty-import">
@@ -1313,7 +1321,7 @@ export function Portfolio() {
                 <Link href="/pipeline">Open the onboarding pipeline</Link>
               </Button>
             </div>
-          </CardContent>
+          </EmptyState>
         </Card>
       </div>
     );

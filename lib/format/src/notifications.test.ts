@@ -1,18 +1,19 @@
 import { describe, expect, test } from "vitest";
 import {
+  badgeText,
   channelBadgeClasses,
   channelLabel,
+  markReadTimestamp,
   NOTIFICATION_FEED_LIMIT,
   relativeTime,
 } from "./notifications";
 
-// PARITY PIN — the console app mirrors this module in its own
-// src/lib/notifications.ts (no cross-app shared lib exists). The canonical
-// channel vocabulary below is asserted verbatim in BOTH apps' suites, the
-// mobile chip-parity idiom: a divergence fails one side's test and points
-// at the other.
+// The one home for the bells' display vocabulary — the console and SME apps
+// both re-export this module from their src/lib/notifications.ts, so the
+// canonical channel set below is asserted once, here, instead of the old
+// per-app parity-pin pair.
 
-describe("channel vocabulary parity", () => {
+describe("channel vocabulary", () => {
   test("labels match the canonical set exactly", () => {
     expect(channelLabel("email")).toBe("Email");
     expect(channelLabel("push")).toBe("Push");
@@ -64,5 +65,45 @@ describe("relativeTime", () => {
 
   test("an unparseable timestamp renders the shared placeholder", () => {
     expect(relativeTime("not-a-date", now)).toBe("—");
+  });
+});
+
+describe("badgeText", () => {
+  test("hides at zero or below, shows exact counts, caps at the page size", () => {
+    expect(badgeText(0)).toBeNull();
+    expect(badgeText(-1)).toBeNull();
+    expect(badgeText(1)).toBe("1");
+    expect(badgeText(19)).toBe("19");
+    expect(badgeText(20)).toBe("20+");
+    expect(badgeText(80)).toBe("20+");
+  });
+});
+
+describe("markReadTimestamp", () => {
+  const item = (id: string, createdAt: string) => ({
+    id,
+    channel: "email",
+    templateKey: "t",
+    title: "T",
+    status: "sent",
+    read: false,
+    createdAt,
+  });
+
+  test("uses the newest (first) item's createdAt", () => {
+    expect(
+      markReadTimestamp({
+        items: [
+          item("a", "2026-07-20T10:00:00Z"),
+          item("b", "2026-07-19T10:00:00Z"),
+        ],
+        unreadCount: 2,
+      }),
+    ).toBe("2026-07-20T10:00:00Z");
+  });
+
+  test("null when there is nothing to mark", () => {
+    expect(markReadTimestamp({ items: [], unreadCount: 0 })).toBeNull();
+    expect(markReadTimestamp(undefined)).toBeNull();
   });
 });
