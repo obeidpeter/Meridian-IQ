@@ -97,3 +97,44 @@ export function confidenceBadgeClasses(confidence: string | number): string {
   if (n >= 0.5) return pillClasses("amber");
   return pillClasses("red");
 }
+
+// ---- Supplier bills (payables) --------------------------------------------
+
+export function billPayStatusLabel(payStatus: string): string {
+  switch (payStatus) {
+    case "open":
+      return "Unpaid";
+    case "scheduled":
+      return "Scheduled";
+    case "paid":
+      return "Paid";
+    default:
+      return humanize(payStatus);
+  }
+}
+
+export function billPayStatusBadgeClasses(payStatus: string): string {
+  switch (payStatus) {
+    case "scheduled":
+      return pillClasses("amber");
+    case "paid":
+      return pillClasses("emerald");
+    default:
+      return pillClasses("slate");
+  }
+}
+
+/**
+ * Payment flags record settlement evidence on a bill (they never edit the
+ * document): "paid" is terminal — no further flags — and re-flagging
+ * "scheduled" over itself is a no-op the UI shouldn't offer. Off-contract
+ * statuses from a newer server stay flaggable rather than dead-ending.
+ */
+export function canFlagBill(
+  payStatus: string,
+  target: "scheduled" | "paid",
+): boolean {
+  if (payStatus === "paid") return false;
+  if (target === "scheduled") return payStatus !== "scheduled";
+  return true;
+}
