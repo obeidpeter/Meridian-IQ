@@ -1,10 +1,31 @@
-import { Link, useParams } from "wouter";
-import { useGetClientPortfolio } from "@workspace/api-client-react";
+import { useState } from "react";
+import { Link, useParams, useLocation } from "wouter";
+import {
+  useGetClientPortfolio,
+  useGetMe,
+  useExportClientData,
+  getExportClientDataQueryKey,
+  useOffboardClient,
+  getGetPortfolioQueryKey,
+} from "@workspace/api-client-react";
+import type { OffboardClientResult } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { InvoiceStatusLight } from "@/components/status-light";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Archive, Download } from "lucide-react";
 import {
   formatNaira,
   formatDate,
@@ -13,13 +34,136 @@ import {
   severityBadgeClasses,
   humanize,
 } from "@/lib/format";
+import { downloadBlob } from "@/lib/download";
+import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
+
+// ---- Export & offboarding helpers -------------------------------------------
+// The data-subject export saves the server's bundle verbatim as JSON; the
+// offboard flow is firm_admin-only with a typed-name confirm the SERVER
+// verifies (the dialog only requires non-blank — the authority stays with
+// the 400 CONFIRM_MISMATCH).
+
+export function exportFilename(id: string): string {
+  return `client-data-${id}.json`;
+}
+
+export function canOffboardClient(role: string | undefined): boolean {
+  return role === "firm_admin";
+}
+
+/** The dialog's own gate: something typed. Exact matching is the server's. */
+export function offboardConfirmReady(input: string): boolean {
+  return input.trim().length > 0;
+}
+
+/** What offboarding does, in the words the confirm dialog shows. */
+export const OFFBOARD_EXPLANATION =
+  "Statutory invoice records are retained. The client's sign-in access is removed and this engagement is archived. Contact details are cleared when yours was their last engagement.";
+
+/**
+ * Inline note for a failed offboard. The endpoint's one 400 is the
+ * CONFIRM_MISMATCH guard, so say that in words; anything else relays the
+ * server's own message with a plain fallback.
+ */
+export function offboardErrorNote(err: unknown): string {
+  if (errorStatus(err) === 400) {
+    return "That doesn't match this client's legal name — type it exactly as shown.";
+  }
+  return serverErrorMessage(err) ?? "Could not offboard the client. Try again.";
+}
+
+/** Success-toast summary of what the offboard actually did. */
+export function offboardSummary(result: OffboardClientResult): string {
+  const n = (count: number, one: string, many: string) =>
+    `${count} ${count === 1 ? one : many}`;
+  const parts = [
+    n(result.engagementsArchived, "engagement archived", "engagements archived"),
+    n(result.membershipsRemoved, "sign-in removed", "sign-ins removed"),
+  ];
+  if (result.aliasesDeleted > 0) {
+    parts.push(
+      n(result.aliasesDeleted, "intake alias deleted", "intake aliases deleted"),
+    );
+  }
+  parts.push(
+    result.contactCleared
+      ? "contact details cleared"
+      : "contact details kept (still engaged elsewhere)",
+  );
+  return parts.join(" · ");
+}
 
 export function ClientDetail() {
   const params = useParams();
   const id = params.id as string;
   const { data, isLoading, error, refetch } = useGetClientPortfolio(id);
   usePageTitle(data?.client.legalName ?? "Client detail");
+
+  const { data: me } = useGetMe();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+
+  // Data-subject export: the query sits armed but idle; the button fetches
+  // once and saves the server's bundle verbatim.
+  const exportQuery = useExportClientData(id, {
+    query: {
+      queryKey: getExportClientDataQueryKey(id),
+      enabled: false,
+      retry: false,
+    },
+  });
+  const handleExport = async () => {
+    const res = await exportQuery.refetch();
+    if (res.error || !res.data) {
+      toast({
+        title: "Could not export the client's data",
+        description: serverErrorMessage(res.error),
+        variant: "destructive",
+      });
+      return;
+    }
+    downloadBlob(
+      exportFilename(id),
+      JSON.stringify(res.data, null, 2),
+      "application/json",
+    );
+  };
+
+  // Offboarding (firm_admin only): typed-name confirm, server-verified.
+  const offboard = useOffboardClient();
+  const [offboardOpen, setOffboardOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [offboardNote, setOffboardNote] = useState<string | null>(null);
+
+  const openOffboard = () => {
+    setConfirmText("");
+    setOffboardNote(null);
+    setOffboardOpen(true);
+  };
+
+  const handleOffboard = () => {
+    setOffboardNote(null);
+    offboard.mutate(
+      { id, data: { confirmLegalName: confirmText.trim() } },
+      {
+        onSuccess: (result) => {
+          toast({
+            title: "Client offboarded",
+            description: offboardSummary(result),
+          });
+          // The book changed — refresh the portfolio the navigation lands on.
+          void queryClient.invalidateQueries({
+            queryKey: getGetPortfolioQueryKey(),
+          });
+          navigate("/");
+        },
+        onError: (err) => setOffboardNote(offboardErrorNote(err)),
+      },
+    );
+  };
 
   if (isLoading) {
     return (
@@ -89,17 +233,46 @@ export function ClientDetail() {
         <ArrowLeft className="w-4 h-4" aria-hidden="true" /> Back to portfolio
       </Link>
 
-      <div>
-        <h1
-          className="text-2xl md:text-3xl font-bold"
-          data-testid="text-client-name"
-        >
-          {client.legalName}
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          {client.totalInvoices} invoices · {humanize(client.penaltyRisk)}{" "}
-          penalty risk
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1
+            className="text-2xl md:text-3xl font-bold"
+            data-testid="text-client-name"
+          >
+            {client.legalName}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {client.totalInvoices} invoices · {humanize(client.penaltyRisk)}{" "}
+            penalty risk
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            disabled={exportQuery.isFetching}
+            data-testid="button-export-client-data"
+          >
+            <Download
+              className={`w-4 h-4 mr-1 ${exportQuery.isFetching ? "animate-pulse" : ""}`}
+              aria-hidden="true"
+            />
+            {exportQuery.isFetching ? "Exporting…" : "Export data"}
+          </Button>
+          {canOffboardClient(me?.role) && (
+            <Button
+              variant="destructive"
+              onClick={openOffboard}
+              data-testid="button-offboard-client"
+            >
+              <Archive className="w-4 h-4 mr-1" aria-hidden="true" />
+              Offboard client
+            </Button>
+          )}
+        </div>
+        <span className="sr-only" aria-live="polite">
+          {exportQuery.isFetching ? "Preparing the data export…" : ""}
+        </span>
       </div>
 
       {client.failingInvoiceIds.length > 0 && (
@@ -217,6 +390,64 @@ export function ClientDetail() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={offboardOpen}
+        onOpenChange={(o) => {
+          if (!o) setOffboardOpen(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Offboard {client.legalName}?</DialogTitle>
+            <DialogDescription>{OFFBOARD_EXPLANATION}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="offboard-confirm">
+              Type the client's legal name to confirm
+            </Label>
+            <Input
+              id="offboard-confirm"
+              value={confirmText}
+              autoComplete="off"
+              placeholder={client.legalName}
+              onChange={(e) => setConfirmText(e.target.value)}
+              aria-invalid={offboardNote !== null}
+              aria-describedby={
+                offboardNote !== null ? "offboard-confirm-error" : undefined
+              }
+              data-testid="input-offboard-confirm"
+            />
+            {offboardNote && (
+              <p
+                id="offboard-confirm-error"
+                className="text-sm text-destructive"
+                role="alert"
+                data-testid="text-offboard-error"
+              >
+                {offboardNote}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setOffboardOpen(false)}
+              disabled={offboard.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleOffboard}
+              disabled={!offboardConfirmReady(confirmText) || offboard.isPending}
+              data-testid="button-confirm-offboard"
+            >
+              {offboard.isPending ? "Offboarding…" : "Offboard client"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { test, expect, describe } from "vitest";
+import { test, expect, describe, vi } from "vitest";
 import {
   MACHINE_CAPABILITY_OPTIONS,
   WEBHOOK_EVENT_OPTIONS,
@@ -12,6 +12,9 @@ import {
   deliveryBadgeClasses,
   webhookUrlProblem,
   lastUsedLine,
+  canRetryDelivery,
+  retryDeliveryErrorNote,
+  fireDeliveryRetry,
 } from "./api-access";
 
 // Helpers for the firm-admin API & webhooks page. The two option catalogues
@@ -147,5 +150,84 @@ describe("lastUsedLine", () => {
       "Last used",
     );
     expect(lastUsedLine({ lastUsedAt: null })).toBe("Never used");
+  });
+});
+
+// ---- Dead-delivery retry ----------------------------------------------------
+// The Retry button appears only where a click can succeed (the server 409s
+// anything that isn't dead), fires with the path params in webhook-then-
+// delivery order, and a mid-flight 409 explains itself inline.
+
+describe("canRetryDelivery", () => {
+  test("only a dead delivery offers Retry", () => {
+    expect(canRetryDelivery({ status: "dead" })).toBe(true);
+    for (const status of ["pending", "delivered", "failed"] as const) {
+      expect(canRetryDelivery({ status })).toBe(false);
+    }
+  });
+});
+
+describe("retryDeliveryErrorNote", () => {
+  test("a 409 names the race — no longer dead, or the endpoint is disabled", () => {
+    expect(retryDeliveryErrorNote({ status: 409 })).toBe(
+      "This delivery is not dead / endpoint disabled.",
+    );
+  });
+
+  test("other failures relay the server's words when it sent any", () => {
+    expect(
+      retryDeliveryErrorNote({ status: 500, data: { error: "outbox is full" } }),
+    ).toBe("outbox is full");
+  });
+
+  test("a wordless failure falls back to the plain try-again line", () => {
+    expect(retryDeliveryErrorNote(new Error("network"))).toBe(
+      "Could not retry the delivery. Try again.",
+    );
+  });
+});
+
+describe("fireDeliveryRetry", () => {
+  test("fires the mutation once with webhook-then-delivery path params", () => {
+    const mutate = vi.fn();
+    const cbs = {
+      onSuccess: vi.fn(),
+      onError: vi.fn(),
+      onSettled: vi.fn(),
+    };
+    fireDeliveryRetry(mutate, { webhookId: "wh_1", deliveryId: "d_9" }, cbs);
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate).toHaveBeenCalledWith(
+      { id: "wh_1", deliveryId: "d_9" },
+      cbs,
+    );
+  });
+
+  test("the 409 path lands in the inline note via the wired onError", () => {
+    // Mimic the mutation rejecting: call the handed-over onError with a 409
+    // and check the note the component would render.
+    const notes: string[] = [];
+    const mutate = vi.fn(
+      (
+        _vars: { id: string; deliveryId: string },
+        cbs: { onError: (err: unknown) => void; onSettled: () => void },
+      ) => {
+        cbs.onError({ status: 409 });
+        cbs.onSettled();
+      },
+    );
+    fireDeliveryRetry(
+      mutate,
+      { webhookId: "wh_1", deliveryId: "d_9" },
+      {
+        onSuccess: () => notes.push("success"),
+        onError: (err) => notes.push(retryDeliveryErrorNote(err)),
+        onSettled: () => notes.push("settled"),
+      },
+    );
+    expect(notes).toEqual([
+      "This delivery is not dead / endpoint disabled.",
+      "settled",
+    ]);
   });
 });
