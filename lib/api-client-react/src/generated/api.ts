@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.41.0
+ * OpenAPI spec version: 0.42.0
  */
 import {
   useMutation,
@@ -40,12 +40,15 @@ import type {
   BillingTier,
   BulkAcceptInput,
   BulkAcceptResult,
+  BulkConfirmationsInput,
+  BulkConfirmationsResult,
   BulkSubmitInput,
   BulkSubmitResult,
   BuyerExposure,
   BuyerInvoice,
   BuyerPaymentBehaviour,
   BuyerSupplier,
+  BuyerSupplierDetail,
   CacCheckInput,
   CancelInvoiceInput,
   CanonicalInvoice,
@@ -74,6 +77,7 @@ import type {
   ClerkPartySuggestions,
   ClerkTierReport,
   ClerkUsage,
+  ClientExportBundle,
   ClientImportDraft,
   ClientImportInput,
   ClientImportResult,
@@ -92,6 +96,7 @@ import type {
   CpdEnrollment,
   CpdEnrollmentView,
   CreateClerkBatchInput,
+  CreateClientInput,
   CreateFirmApiKeyInput,
   CreateFirmWebhookInput,
   CreateInvitationInput,
@@ -100,6 +105,7 @@ import type {
   CreateStatementConnectionInput,
   CreateStatementFormatInput,
   CreateStatementFormatResult,
+  CreatedClient,
   CreditNoteInput,
   DashboardSummary,
   DraftCatalogueEntryInput,
@@ -166,6 +172,7 @@ import type {
   GetUnmatchedCreditsParams,
   GetVatPackParams,
   GetVatSettlementCheckParams,
+  HealthAlert,
   HealthStatus,
   IdentifierCheck,
   Invitation,
@@ -210,6 +217,8 @@ import type {
   ModelCanaryReport,
   NotFoundResponse,
   NotificationFeed,
+  OffboardClientInput,
+  OffboardClientResult,
   OnboardingProspect,
   OperatorBrief,
   OperatorCaseView,
@@ -235,6 +244,7 @@ import type {
   QuarterlyReview,
   QuarterlyReviewCoverNote,
   QuestionnaireTemplate,
+  RailConfigEntry,
   RailState,
   ReceivablesSummary,
   ReconcileResult,
@@ -4218,6 +4228,78 @@ export function useListFirmWebhookDeliveries<TData = Awaited<ReturnType<typeof l
 
 
 
+export const getRetryFirmWebhookDeliveryUrl = (id: string,
+    deliveryId: string,) => {
+
+
+
+
+  return `/api/firm-webhooks/${id}/deliveries/${deliveryId}/retry`
+}
+
+/**
+ * @summary Re-queue one dead delivery for a fresh attempt cycle (firm admin)
+ */
+export const retryFirmWebhookDelivery = async (id: string,
+    deliveryId: string, options?: RequestInit): Promise<FirmWebhookDelivery> => {
+
+  return customFetch<FirmWebhookDelivery>(getRetryFirmWebhookDeliveryUrl(id,deliveryId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetryFirmWebhookDeliveryMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryFirmWebhookDelivery>>, TError,{id: string;deliveryId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryFirmWebhookDelivery>>, TError,{id: string;deliveryId: string}, TContext> => {
+
+const mutationKey = ['retryFirmWebhookDelivery'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryFirmWebhookDelivery>>, {id: string;deliveryId: string}> = (props) => {
+          const {id,deliveryId} = props ?? {};
+
+          return  retryFirmWebhookDelivery(id,deliveryId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryFirmWebhookDeliveryMutationResult = NonNullable<Awaited<ReturnType<typeof retryFirmWebhookDelivery>>>
+
+    export type RetryFirmWebhookDeliveryMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Re-queue one dead delivery for a fresh attempt cycle (firm admin)
+ */
+export const useRetryFirmWebhookDelivery = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryFirmWebhookDelivery>>, TError,{id: string;deliveryId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryFirmWebhookDelivery>>,
+        TError,
+        {id: string;deliveryId: string},
+        TContext
+      > => {
+      return useMutation(getRetryFirmWebhookDeliveryMutationOptions(options));
+    }
+
 export const getExportFirmDataUrl = (id: string,) => {
 
 
@@ -7085,6 +7167,160 @@ export function useGetCatalogueCoverage<TData = Awaited<ReturnType<typeof getCat
 
 
 
+export const getListHealthAlertsUrl = () => {
+
+
+
+
+  return `/api/operator/health-alerts`
+}
+
+/**
+ * @summary Recent durable platform-health alerts from the audit ledger, newest first
+ */
+export const listHealthAlerts = async ( options?: RequestInit): Promise<HealthAlert[]> => {
+
+  return customFetch<HealthAlert[]>(getListHealthAlertsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListHealthAlertsQueryKey = () => {
+    return [
+    `/api/operator/health-alerts`
+    ] as const;
+    }
+
+
+export const getListHealthAlertsQueryOptions = <TData = Awaited<ReturnType<typeof listHealthAlerts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHealthAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListHealthAlertsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listHealthAlerts>>> = ({ signal }) => listHealthAlerts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listHealthAlerts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListHealthAlertsQueryResult = NonNullable<Awaited<ReturnType<typeof listHealthAlerts>>>
+export type ListHealthAlertsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Recent durable platform-health alerts from the audit ledger, newest first
+ */
+
+export function useListHealthAlerts<TData = Awaited<ReturnType<typeof listHealthAlerts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHealthAlerts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListHealthAlertsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetRailConfigUrl = () => {
+
+
+
+
+  return `/api/operator/rail-config`
+}
+
+/**
+ * @summary Which env-lit rails are configured on this deployment (booleans only — never values)
+ */
+export const getRailConfig = async ( options?: RequestInit): Promise<RailConfigEntry[]> => {
+
+  return customFetch<RailConfigEntry[]>(getGetRailConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRailConfigQueryKey = () => {
+    return [
+    `/api/operator/rail-config`
+    ] as const;
+    }
+
+
+export const getGetRailConfigQueryOptions = <TData = Awaited<ReturnType<typeof getRailConfig>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRailConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRailConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRailConfig>>> = ({ signal }) => getRailConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRailConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRailConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getRailConfig>>>
+export type GetRailConfigQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Which env-lit rails are configured on this deployment (booleans only — never values)
+ */
+
+export function useGetRailConfig<TData = Awaited<ReturnType<typeof getRailConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRailConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRailConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetGateMetricsUrl = () => {
 
 
@@ -8866,6 +9102,224 @@ export function useGetComplianceCalendar<TData = Awaited<ReturnType<typeof getCo
 
 
 
+
+export const getCreateClientUrl = () => {
+
+
+
+
+  return `/api/clients`
+}
+
+/**
+ * @summary Create one engaged client (party + engagement) for the caller's firm
+ */
+export const createClient = async (createClientInput: CreateClientInput, options?: RequestInit): Promise<CreatedClient> => {
+
+  return customFetch<CreatedClient>(getCreateClientUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createClientInput)
+  }
+);}
+
+
+
+
+export const getCreateClientMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClient>>, TError,{data: BodyType<CreateClientInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClient>>, TError,{data: BodyType<CreateClientInput>}, TContext> => {
+
+const mutationKey = ['createClient'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClient>>, {data: BodyType<CreateClientInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createClient(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateClientMutationResult = NonNullable<Awaited<ReturnType<typeof createClient>>>
+    export type CreateClientMutationBody = BodyType<CreateClientInput>
+    export type CreateClientMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Create one engaged client (party + engagement) for the caller's firm
+ */
+export const useCreateClient = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClient>>, TError,{data: BodyType<CreateClientInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createClient>>,
+        TError,
+        {data: BodyType<CreateClientInput>},
+        TContext
+      > => {
+      return useMutation(getCreateClientMutationOptions(options));
+    }
+
+export const getExportClientDataUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}/export`
+}
+
+/**
+ * @summary Data-subject export for one client party (the client's own account, its firm, or an operator)
+ */
+export const exportClientData = async (id: string, options?: RequestInit): Promise<ClientExportBundle> => {
+
+  return customFetch<ClientExportBundle>(getExportClientDataUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportClientDataQueryKey = (id: string,) => {
+    return [
+    `/api/clients/${id}/export`
+    ] as const;
+    }
+
+
+export const getExportClientDataQueryOptions = <TData = Awaited<ReturnType<typeof exportClientData>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportClientData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportClientDataQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportClientData>>> = ({ signal }) => exportClientData(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportClientData>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportClientDataQueryResult = NonNullable<Awaited<ReturnType<typeof exportClientData>>>
+export type ExportClientDataQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Data-subject export for one client party (the client's own account, its firm, or an operator)
+ */
+
+export function useExportClientData<TData = Awaited<ReturnType<typeof exportClientData>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportClientData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportClientDataQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getOffboardClientUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}/offboard`
+}
+
+/**
+ * @summary Firm-scoped client offboarding — archive the engagement, remove access, clear contact PII when this was the last engagement (statutory records retained)
+ */
+export const offboardClient = async (id: string,
+    offboardClientInput: OffboardClientInput, options?: RequestInit): Promise<OffboardClientResult> => {
+
+  return customFetch<OffboardClientResult>(getOffboardClientUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(offboardClientInput)
+  }
+);}
+
+
+
+
+export const getOffboardClientMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof offboardClient>>, TError,{id: string;data: BodyType<OffboardClientInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof offboardClient>>, TError,{id: string;data: BodyType<OffboardClientInput>}, TContext> => {
+
+const mutationKey = ['offboardClient'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof offboardClient>>, {id: string;data: BodyType<OffboardClientInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  offboardClient(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type OffboardClientMutationResult = NonNullable<Awaited<ReturnType<typeof offboardClient>>>
+    export type OffboardClientMutationBody = BodyType<OffboardClientInput>
+    export type OffboardClientMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Firm-scoped client offboarding — archive the engagement, remove access, clear contact PII when this was the last engagement (statutory records retained)
+ */
+export const useOffboardClient = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof offboardClient>>, TError,{id: string;data: BodyType<OffboardClientInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof offboardClient>>,
+        TError,
+        {id: string;data: BodyType<OffboardClientInput>},
+        TContext
+      > => {
+      return useMutation(getOffboardClientMutationOptions(options));
+    }
 
 export const getGetAlertPreferencesUrl = (id: string,) => {
 
@@ -12155,6 +12609,230 @@ export function useListBuyerSuppliers<TData = Awaited<ReturnType<typeof listBuye
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListBuyerSuppliersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBuyerSupplierDetailUrl = (id: string,) => {
+
+
+
+
+  return `/api/buyer/suppliers/${id}`
+}
+
+/**
+ * @summary One supplier's invoices to the caller's buyer organization, with stamp and confirmation status
+ */
+export const getBuyerSupplierDetail = async (id: string, options?: RequestInit): Promise<BuyerSupplierDetail> => {
+
+  return customFetch<BuyerSupplierDetail>(getGetBuyerSupplierDetailUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBuyerSupplierDetailQueryKey = (id: string,) => {
+    return [
+    `/api/buyer/suppliers/${id}`
+    ] as const;
+    }
+
+
+export const getGetBuyerSupplierDetailQueryOptions = <TData = Awaited<ReturnType<typeof getBuyerSupplierDetail>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBuyerSupplierDetail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBuyerSupplierDetailQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBuyerSupplierDetail>>> = ({ signal }) => getBuyerSupplierDetail(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBuyerSupplierDetail>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBuyerSupplierDetailQueryResult = NonNullable<Awaited<ReturnType<typeof getBuyerSupplierDetail>>>
+export type GetBuyerSupplierDetailQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary One supplier's invoices to the caller's buyer organization, with stamp and confirmation status
+ */
+
+export function useGetBuyerSupplierDetail<TData = Awaited<ReturnType<typeof getBuyerSupplierDetail>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBuyerSupplierDetail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBuyerSupplierDetailQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getBulkRespondConfirmationsUrl = () => {
+
+
+
+
+  return `/api/buyer/confirmations/bulk`
+}
+
+/**
+ * @summary Confirm up to 50 awaiting invoices in one action (per-invoice results; skips are reported, never silent)
+ */
+export const bulkRespondConfirmations = async (bulkConfirmationsInput: BulkConfirmationsInput, options?: RequestInit): Promise<BulkConfirmationsResult> => {
+
+  return customFetch<BulkConfirmationsResult>(getBulkRespondConfirmationsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkConfirmationsInput)
+  }
+);}
+
+
+
+
+export const getBulkRespondConfirmationsMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkRespondConfirmations>>, TError,{data: BodyType<BulkConfirmationsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkRespondConfirmations>>, TError,{data: BodyType<BulkConfirmationsInput>}, TContext> => {
+
+const mutationKey = ['bulkRespondConfirmations'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkRespondConfirmations>>, {data: BodyType<BulkConfirmationsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkRespondConfirmations(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkRespondConfirmationsMutationResult = NonNullable<Awaited<ReturnType<typeof bulkRespondConfirmations>>>
+    export type BulkRespondConfirmationsMutationBody = BodyType<BulkConfirmationsInput>
+    export type BulkRespondConfirmationsMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Confirm up to 50 awaiting invoices in one action (per-invoice results; skips are reported, never silent)
+ */
+export const useBulkRespondConfirmations = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkRespondConfirmations>>, TError,{data: BodyType<BulkConfirmationsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkRespondConfirmations>>,
+        TError,
+        {data: BodyType<BulkConfirmationsInput>},
+        TContext
+      > => {
+      return useMutation(getBulkRespondConfirmationsMutationOptions(options));
+    }
+
+export const getExportBuyerConfirmationsUrl = () => {
+
+
+
+
+  return `/api/buyer/confirmations/export`
+}
+
+/**
+ * @summary CSV of invoices awaiting the buyer's response
+ */
+export const exportBuyerConfirmations = async ( options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportBuyerConfirmationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportBuyerConfirmationsQueryKey = () => {
+    return [
+    `/api/buyer/confirmations/export`
+    ] as const;
+    }
+
+
+export const getExportBuyerConfirmationsQueryOptions = <TData = Awaited<ReturnType<typeof exportBuyerConfirmations>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportBuyerConfirmations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportBuyerConfirmationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportBuyerConfirmations>>> = ({ signal }) => exportBuyerConfirmations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportBuyerConfirmations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportBuyerConfirmationsQueryResult = NonNullable<Awaited<ReturnType<typeof exportBuyerConfirmations>>>
+export type ExportBuyerConfirmationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary CSV of invoices awaiting the buyer's response
+ */
+
+export function useExportBuyerConfirmations<TData = Awaited<ReturnType<typeof exportBuyerConfirmations>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportBuyerConfirmations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportBuyerConfirmationsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

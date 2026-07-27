@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.41.0
+ * OpenAPI spec version: 0.42.0
  */
 import type { ClerkPartySuggestion } from './clerkPartySuggestion';
 import type { InvoiceDraftProposal } from './invoiceDraftProposal';

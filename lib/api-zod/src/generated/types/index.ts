@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.41.0
+ * OpenAPI spec version: 0.42.0
  */
 
 export * from './acceptInvitationInput';
@@ -46,6 +46,10 @@ export * from './bulkAcceptInput';
 export * from './bulkAcceptResult';
 export * from './bulkAcceptResultRowsItem';
 export * from './bulkAcceptResultRowsItemOutcome';
+export * from './bulkConfirmationsInput';
+export * from './bulkConfirmationsResult';
+export * from './bulkConfirmationsResultItemsItem';
+export * from './bulkConfirmationsResultItemsItemStatus';
 export * from './bulkSubmitInput';
 export * from './bulkSubmitResult';
 export * from './bulkSubmitRowResult';
@@ -55,6 +59,7 @@ export * from './buyerInvoice';
 export * from './buyerInvoiceConfirmationState';
 export * from './buyerPaymentBehaviour';
 export * from './buyerSupplier';
+export * from './buyerSupplierDetail';
 export * from './cacCheckInput';
 export * from './cancelInvoiceInput';
 export * from './canonicalInvoice';
@@ -155,6 +160,10 @@ export * from './clerkTierReportRowsItemRecommendation';
 export * from './clerkUsage';
 export * from './clerkUsageByPurposeItem';
 export * from './clerkUsagePaceBand';
+export * from './clientExportBundle';
+export * from './clientExportBundleCountsItem';
+export * from './clientExportBundleSections';
+export * from './clientExportBundleSectionsItem';
 export * from './clientImportDraft';
 export * from './clientImportDraftColumns';
 export * from './clientImportDraftValidation';
@@ -196,6 +205,8 @@ export * from './cpdEnrollmentView';
 export * from './cpdEnrollmentViewStatus';
 export * from './createClerkBatchInput';
 export * from './createClerkBatchInputSourceType';
+export * from './createClientInput';
+export * from './createdClient';
 export * from './createFirmApiKeyInput';
 export * from './createFirmWebhookInput';
 export * from './createInvitationInput';
@@ -308,6 +319,8 @@ export * from './getVatSettlementCheckParams';
 export * from './graphEdge';
 export * from './graphNode';
 export * from './graphNodeKind';
+export * from './healthAlert';
+export * from './healthAlertDetail';
 export * from './healthStatus';
 export * from './identifierCheck';
 export * from './invitation';
@@ -387,6 +400,8 @@ export * from './modelCanarySide';
 export * from './notFoundResponse';
 export * from './notificationFeed';
 export * from './notificationFeedItemsItem';
+export * from './offboardClientInput';
+export * from './offboardClientResult';
 export * from './onboardingProspect';
 export * from './onboardingProspectStage';
 export * from './operatorBrief';
@@ -454,6 +469,7 @@ export * from './quarterlyReviewVatTotals';
 export * from './questionnaireQuestion';
 export * from './questionnaireSection';
 export * from './questionnaireTemplate';
+export * from './railConfigEntry';
 export * from './railState';
 export * from './railStateState';
 export * from './receivablesBucket';
