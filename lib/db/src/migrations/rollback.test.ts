@@ -272,6 +272,11 @@ const LADDER: LadderStep[] = [
       not(pol("firm_webhook_deliveries")),
     ],
   },
+  {
+    version: 23, // bill-verification guardrails (+ purge covers bill_verifications/chase_log)
+    atTop: [clerkTenant("bill_verifications")],
+    afterRollback: [not(clerkTenant("bill_verifications"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

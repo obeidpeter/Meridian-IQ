@@ -17,4 +17,5 @@ export * from "./certification.ts";
 export * from "./connectors.ts";
 export * from "./clerk.ts";
 export * from "./chase.ts";
+export * from "./bills.ts";
 export * from "./integrations.ts";

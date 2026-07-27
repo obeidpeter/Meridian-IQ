@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.43.0
+  version: 0.44.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2070,6 +2070,90 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
+  /bills:
+    get:
+      operationId: listBills
+      tags: [sme]
+      summary: Supplier bills — captured invoices where the client is the buyer — with derived payment status
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Bills, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BillSummary"
+  /bills/{id}/payment-flag:
+    post:
+      operationId: flagBillPayment
+      tags: [sme]
+      summary: Record that a bill's payment is scheduled or was made (settlement evidence, source payer_flag — the bill's status never transitions)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillPaymentFlagInput"
+      responses:
+        "201":
+          description: Settlement event recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettlementEvent"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /bills/{id}/verify-stamp:
+    post:
+      operationId: verifyBillStamp
+      tags: [sme]
+      summary: Verify a supplier bill's stamp against the national record and keep the result on the bill (input-VAT protection)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StampVerifyInput"
+      responses:
+        "201":
+          description: Verification recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillVerification"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /dashboard/payables:
+    get:
+      operationId: getPayablesSummary
+      tags: [sme]
+      summary: Committed outflows — bills aged and bucketed by due date, with top suppliers (deterministic)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payables summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayablesSummary"
   /dashboard/receivables:
     get:
       operationId: getReceivablesSummary
@@ -5550,7 +5634,7 @@ components:
           type: string
         source:
           type: string
-          enum: [statement_match, buyer_flag, collection_account, uploaded_evidence]
+          enum: [statement_match, buyer_flag, collection_account, uploaded_evidence, payer_flag]
         amount:
           type: string
         confidence:
@@ -5574,7 +5658,7 @@ components:
       properties:
         source:
           type: string
-          enum: [statement_match, buyer_flag, collection_account, uploaded_evidence]
+          enum: [statement_match, buyer_flag, collection_account, uploaded_evidence, payer_flag]
         amount:
           type: string
         confidence:
@@ -5583,6 +5667,117 @@ components:
           type: string
           format: date-time
 
+    BillSummary:
+      type: object
+      required: [invoiceId, invoiceNumber, supplierPartyId, supplierName, issueDate, currency, grandTotal, payStatus]
+      properties:
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        supplierPartyId:
+          type: string
+        supplierName:
+          type: string
+        issueDate:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+        currency:
+          type: string
+        grandTotal:
+          type: string
+        # Derived from settlement evidence only — a bill's invoice status
+        # never transitions: paid when a paid/statement event exists,
+        # scheduled when the latest flag is scheduled, else open.
+        payStatus:
+          type: string
+          enum: [open, scheduled, paid]
+        lastVerification:
+          type: ["object", "null"]
+          required: [valid, checkedAt]
+          properties:
+            valid:
+              type: boolean
+            eligible:
+              type: ["boolean", "null"]
+            checkedAt:
+              type: string
+    BillPaymentFlagInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [scheduled, paid]
+        amount:
+          type: string
+    BillVerification:
+      type: object
+      required: [invoiceId, irn, csid, valid, checkedAt]
+      properties:
+        invoiceId:
+          type: string
+        irn:
+          type: string
+        csid:
+          type: string
+        valid:
+          type: boolean
+        # Null when the stamp is unknown to this platform (validity comes
+        # from the rail record; eligibility needs the invoice lifecycle).
+        eligible:
+          type: ["boolean", "null"]
+        checkedAt:
+          type: string
+    PayablesSummary:
+      type: object
+      required: [clientPartyId, groups, topSuppliers]
+      properties:
+        clientPartyId:
+          type: string
+        groups:
+          type: array
+          items:
+            type: object
+            required: [currency, overdue, dueWeeks, later, total]
+            properties:
+              currency:
+                type: string
+              # Bills whose due date has passed with no payment evidence.
+              overdue:
+                $ref: "#/components/schemas/CashflowBucket"
+              # Four consecutive 7-day due buckets starting today.
+              dueWeeks:
+                type: array
+                items:
+                  type: object
+                  required: [startDate, amount, count]
+                  properties:
+                    startDate:
+                      type: string
+                    amount:
+                      type: string
+                    count:
+                      type: integer
+              later:
+                $ref: "#/components/schemas/CashflowBucket"
+              total:
+                $ref: "#/components/schemas/CashflowBucket"
+        topSuppliers:
+          type: array
+          items:
+            type: object
+            required: [supplierPartyId, supplierName, amount, count]
+            properties:
+              supplierPartyId:
+                type: string
+              supplierName:
+                type: string
+              amount:
+                type: string
+              count:
+                type: integer
     StampVerifyInput:
       type: object
       required: [irn, csid]
@@ -7438,7 +7633,7 @@ components:
           type: string
         kind:
           type: string
-          enum: [vat_return, b2c_report, invoice_submission, penalty_watch]
+          enum: [vat_return, b2c_report, invoice_submission, penalty_watch, bill_due]
         title:
           type: string
         description:
