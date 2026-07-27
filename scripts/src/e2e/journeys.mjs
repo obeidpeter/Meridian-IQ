@@ -1,8 +1,10 @@
 // The user journeys that prove MeridianIQ's surfaces against a freshly seeded
 // database: portal auth, the operator's Compliance Desk, firm admin tooling,
-// the auditor's read-only boundary, consent, and the credit-note lifecycle.
-// Journeys restore what they mutate (flags, consent, passwords) so the suite
-// reruns cleanly on the same seed.
+// the auditor's read-only boundary, consent, supplier bills (payables), and
+// the credit-note lifecycle. Journeys restore what they mutate (flags,
+// consent, passwords) so the suite reruns cleanly on the same seed — with one
+// deliberate exception: the payables journey's payment flags are append-only
+// settlement evidence and stay behind (see journeyPayables).
 
 import { createHash, createHmac } from "node:crypto";
 import { totpStep, totpCodeAtStep } from "./totp.mjs";
@@ -300,6 +302,98 @@ async function journeyTotp(page, BASE, check) {
 
   // Leave nothing signed in for the journeys that follow.
   await page.goto(BASE + "/login", { waitUntil: "networkidle" });
+  await signOutFromApp(page, BASE);
+}
+
+// ---------- SME staff: supplier bills (payables) ----------
+// The payables round against the seeded vendor bill (BILL-2001 from "Lagos
+// Packaging Supplies Ltd", buyer = the demo client): the bills list and page,
+// the payables dashboard summary, evidence-only payment flags (payer_flag
+// settlement events — the derived payStatus moves, the bill's invoice status
+// never transitions), and the orientation guard that refuses to stamp a
+// supplier document. Signs in as demo.staff (the SME workflow account) and
+// signs out after; it creates no invoices, so the credit-note journey's
+// target pick is undisturbed. One deliberate non-restore: payment flags are
+// append-only settlement evidence, so the seeded bill stays "paid" after this
+// run — fine for the standard fresh-seed run (run.mjs requires a scratch
+// database), but a rerun on a kept database sees payStatus "paid" up front.
+async function journeyPayables(page, BASE, check) {
+  const CSRF = { "x-meridian-csrf": "1" };
+  const CLIENT = "22222222-2222-4222-8222-222222222222";
+  const billFromList = async () => {
+    const r = await page.request.get(
+      BASE + `/api/bills?clientPartyId=${CLIENT}`,
+    );
+    if (r.status() !== 200) return null;
+    return (await r.json()).find((b) => b.invoiceNumber === "BILL-2001") ?? null;
+  };
+
+  await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
+
+  // The bills ledger lists the seeded vendor bill. payStatus derives from
+  // settlement evidence ONLY, and the fresh seed has none, so it is open.
+  const bill = await billFromList();
+  check(
+    "bills API lists the seeded vendor bill with payStatus open",
+    bill?.payStatus === "open",
+    bill ? `payStatus ${bill.payStatus}` : "BILL-2001 not in the list",
+  );
+
+  // The SME Bills page renders it.
+  await page.goto(BASE + "/app/bills", { waitUntil: "networkidle" });
+  await page.waitForSelector("text=BILL-2001", { timeout: 15000 });
+  check("SME bills page renders the seeded bill", true);
+
+  // The payables summary — read while the bill is still unpaid, because
+  // committed outflows only count bills without payment evidence.
+  const payablesRes = await page.request.get(
+    BASE + `/api/dashboard/payables?clientPartyId=${CLIENT}`,
+  );
+  const payables =
+    payablesRes.status() === 200 ? await payablesRes.json() : null;
+  check(
+    "payables summary carries a group with a positive committed total",
+    (payables?.groups ?? []).some((g) => Number(g.total?.amount) > 0),
+    `status ${payablesRes.status()}`,
+  );
+
+  // Payment flags are settlement EVIDENCE (source payer_flag): each flag is
+  // a 201-created settlement event the derived payStatus follows — the
+  // underlying invoice status never transitions.
+  const flagAndSee = async (status) => {
+    const flagged = await page.request.post(
+      BASE + `/api/bills/${bill?.invoiceId}/payment-flag`,
+      { data: { status }, headers: CSRF },
+    );
+    const seen = await pollUntil(
+      async () => (await billFromList())?.payStatus === status,
+      { tries: 5, delayMs: 500, page },
+    );
+    return flagged.status() === 201 && seen;
+  };
+  check(
+    "scheduled payment flag derives payStatus scheduled",
+    await flagAndSee("scheduled"),
+  );
+  check("paid payment flag derives payStatus paid", await flagAndSee("paid"));
+
+  // The orientation guard: a bill's supplier is not an engaged client, so
+  // validate and submit both refuse (409 NOT_SUBMITTABLE) — a supplier
+  // document can never be submitted for stamping.
+  const validateRes = await page.request.post(
+    BASE + `/api/invoices/${bill?.invoiceId}/validate`,
+    { headers: CSRF },
+  );
+  const submitRes = await page.request.post(
+    BASE + `/api/invoices/${bill?.invoiceId}/submit`,
+    { headers: CSRF },
+  );
+  check(
+    "orientation guard answers 409 for validate and submit of a bill",
+    validateRes.status() === 409 && submitRes.status() === 409,
+    `validate ${validateRes.status()}, submit ${submitRes.status()}`,
+  );
+
   await signOutFromApp(page, BASE);
 }
 
@@ -648,15 +742,27 @@ async function journeyIntegrationLayer(page, BASE, check, hookReceiver) {
   // validate → submit → the pipeline stamps it. GET /api/internal/sweep runs
   // one full worker pass synchronously (public wake-up trigger), so the poll
   // forces drain + webhook fan-out/dispatch instead of waiting out timers.
+  // The pattern MUST be a demo-CLIENT invoice (supplier = the seeded client
+  // party): since the payables round the book also carries BILLS — captured
+  // vendor invoices whose supplier is NOT an engaged client — and copying a
+  // bill's supplier would build a probe the orientation guard refuses to
+  // submit (409 NOT_SUBMITTABLE). No un-scoped fallback: a seed without a
+  // demo-client invoice is broken, so fail loudly here instead of limping
+  // into misleading downstream failures.
   const book = await (await page.request.get(BASE + "/api/invoices")).json();
-  const pattern =
-    book.find(
-      (i) => i.kind === "invoice" && i.supplierPartyId?.startsWith("22222222"),
-    ) ?? book.find((i) => i.kind === "invoice");
+  const pattern = book.find(
+    (i) => i.kind === "invoice" && i.supplierPartyId?.startsWith("22222222"),
+  );
+  if (!pattern) {
+    throw new Error(
+      "integration journey: no demo-client invoice (supplier 22222222…) in " +
+        "the seeded book to pattern the webhook probe on",
+    );
+  }
   const createdRes = await page.request.post(BASE + "/api/invoices", {
     data: {
-      supplierPartyId: pattern?.supplierPartyId,
-      buyerPartyId: pattern?.buyerPartyId,
+      supplierPartyId: pattern.supplierPartyId,
+      buyerPartyId: pattern.buyerPartyId,
       invoiceNumber: `E2E-INT-${Date.now()}`,
       issueDate: new Date().toISOString().slice(0, 10),
       lines: [
@@ -821,6 +927,7 @@ export async function runJourneys(page, BASE, check, { hookReceiver } = {}) {
   await journeyAuditorReadOnly(page, BASE, check);
   await journeyOwnerConsent(page, BASE, check);
   await journeyTotp(page, BASE, check);
+  await journeyPayables(page, BASE, check);
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
   await journeyPasswordReset(page, BASE, check);

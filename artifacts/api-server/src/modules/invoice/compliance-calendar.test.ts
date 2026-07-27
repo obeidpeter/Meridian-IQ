@@ -1,7 +1,13 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { getDb, firmsTable, partiesTable, invoicesTable } from "@workspace/db";
+import {
+  getDb,
+  engagementsTable,
+  firmsTable,
+  partiesTable,
+  invoicesTable,
+} from "@workspace/db";
 import { computeComplianceCalendar } from "./compliance-calendar.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
@@ -9,8 +15,10 @@ import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 //  - the submit-by date is issue_date + SUBMISSION_WINDOW_DAYS, the same
 //  expression the dashboard and reminder sweep use — due today or earlier is
 //  ALREADY overdue (the statutory instant is Lagos midnight at day start);
-//  - only unsubmitted (draft/validated) invoices produce events; the horizon
-//  bounds the days; the overdue backlog counts distinct clients exactly;
+//  - only unsubmitted (draft/validated) RECEIVABLE-oriented invoices produce
+//  events (payables round: a captured supplier BILL is draft forever and has
+//  no submission deadline); the horizon bounds the days; the overdue backlog
+//  counts distinct clients exactly;
 //  - the current month's VAT 21st appears while still ahead;
 //  - another firm's book never leaks in.
 
@@ -19,6 +27,7 @@ const firmA = randomUUID();
 const firmB = randomUUID();
 const clientA = randomUUID();
 const buyer = randomUUID();
+const vendor = randomUUID();
 
 // Fixed "now" so every date assertion is deterministic: 2026-07-10 Lagos.
 const NOW = new Date("2026-07-10T12:00:00Z");
@@ -32,6 +41,13 @@ before(async () => {
   await db.insert(partiesTable).values([
     { id: clientA, type: "client_business", legalName: `Cal Client ${SALT}` },
     { id: buyer, type: "buyer", legalName: `Cal Buyer ${SALT}` },
+    { id: vendor, type: "buyer", legalName: `Cal Vendor ${SALT}` },
+  ]);
+  // The calendar counts RECEIVABLE-oriented paper only: the supplier must be
+  // an engaged client of the counting firm.
+  await db.insert(engagementsTable).values([
+    { firmId: firmA, clientPartyId: clientA, type: "readiness_assessment", title: `cal A ${SALT}` },
+    { firmId: firmB, clientPartyId: clientA, type: "readiness_assessment", title: `cal B ${SALT}` },
   ]);
   const mk = (
     firmId: string,
@@ -65,6 +81,19 @@ before(async () => {
     mk(firmA, `CAL-s-${SALT}`, "2026-07-08", "submitted"),
     // Firm B's book is invisible to firm A.
     mk(firmB, `CAL-b-${SALT}`, "2026-07-08"),
+    // A captured supplier BILL (client is the buyer, vendor the supplier):
+    // draft forever, would be "overdue" since 2026-06-08 if the calendar
+    // failed to filter by orientation.
+    {
+      id: randomUUID(),
+      firmId: firmA,
+      supplierPartyId: vendor,
+      buyerPartyId: clientA,
+      invoiceNumber: `CAL-bill-${SALT}`,
+      issueDate: "2026-06-01",
+      status: "draft" as never,
+      kind: "invoice" as never,
+    },
   ]);
 });
 
@@ -72,7 +101,11 @@ test("aggregates the firm's statutory dates on the Lagos calendar", async () => 
   const cal = await computeComplianceCalendar(firmA, NOW);
   assert.equal(cal.horizonDays, 35);
 
-  assert.equal(cal.overdue.invoices, 2, "due-today counts as overdue");
+  assert.equal(
+    cal.overdue.invoices,
+    2,
+    "due-today counts as overdue; the draft supplier bill never does",
+  );
   assert.equal(cal.overdue.clients, 1, "distinct clients, not per-day sums");
 
   const submitDay = cal.days.find((d) => d.date === "2026-07-15");

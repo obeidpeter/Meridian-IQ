@@ -197,7 +197,7 @@ the firm connects. It carries only the capabilities the firm admin granted it
 ## 4. The Compliance App — for SMEs
 
 Sign in as the SME owner or firm staff and you land at `/app/`. The sidebar:
-**Dashboard, Invoices, Recurring, Import, Send to Clerk, Ask Clerk,
+**Dashboard, Invoices, Bills, Recurring, Import, Send to Clerk, Ask Clerk,
 Reconciliation, B2C reports, Calendar, Alert settings, Consent** (the two
 Clerk entries appear only for accounts with Clerk access). A **notification
 bell** in the header collects every alert the platform has sent you — see
@@ -219,6 +219,9 @@ set of cards that appear as their data becomes relevant:
   record), and **Worth chasing** — outstanding invoices ranked by how far
   past *that buyer's* usual payment time they are, each with a **Chase**
   shortcut.
+- **Payables** — the money you owe: your unpaid supplier bills bucketed into
+  overdue and coming-due weeks, with your top suppliers. See
+  "Supplier bills" below.
 - **Money you usually bill** — months where a customer you normally invoice
   hasn't been invoiced yet ("Draft invoice" raises it), and **Money in with
   no invoice** — bank credits on reconciled statements with no invoice
@@ -262,6 +265,10 @@ rate) before **Create invoice** is offered.
 ### On an invoice
 
 - **Submit for stamping** validates it and queues it for transmission.
+  Only your **own sales invoices** can be submitted — a supplier's document
+  (a bill — see "Supplier bills" below) can never be submitted for stamping
+  from your account, and the platform refuses the attempt outright: stamping
+  a supplier's invoice is the supplier's own job.
   Stamping is **asynchronous** — the invoice shows **Pending stamp** until
   the national platform answers. Transmission is reliable by design:
   automatic retries with backoff, duplicate protection (retrying can never
@@ -319,6 +326,32 @@ confirm it inside Buyer Rails. The confirmation timeline on the invoice shows
 every response (confirmed / queried / rejected). A confirmed invoice is worth
 more than a stamped one — it's the buyer saying *"yes, we owe this."*
 
+### Supplier bills
+
+**Bills** is your purchases ledger — the other side of the invoice book. A
+bill is a supplier's invoice captured into MeridianIQ (usually through Send
+to Clerk) with **your business as the buyer**. Bills exist to be tracked and
+checked, never filed: a supplier document can never be submitted for
+stamping from your account.
+
+- **Payment status** — each bill shows **Open / Scheduled / Paid**, derived
+  purely from evidence. Mark a bill **Payment scheduled** or **Paid** and
+  your flag is recorded as a settlement event against the bill;
+  bank-statement matches count as evidence too (see Reconciliation). The
+  bill itself is never edited — its status is *read from* the evidence, so
+  it is always honest, and unflagging isn't a thing: evidence is permanent.
+- **Verify the stamp** — type the IRN and CSID printed on the supplier's
+  invoice and MeridianIQ checks them against the national record, keeping
+  the result on the bill. This protects your **input VAT**: your VAT claim
+  rests on valid supplier invoices, and an invalid or missing stamp is
+  exactly what an inspection would find — better you find it first, before
+  you pay.
+- **Payables card** — the dashboard's **Payables** card totals what you owe,
+  split into overdue and coming-due weekly buckets, with your top suppliers.
+- **Calendar** — each bill's due date appears on your compliance calendar as
+  a *bill due* entry, so committed outflows sit beside your statutory
+  deadlines.
+
 ### Recurring invoices
 
 **Recurring** holds standing templates that turn into ordinary draft invoices
@@ -362,9 +395,15 @@ silently.
    per statement line in one action (click twice — it asks you to confirm).
    For a low-confidence match, **Why this match?** has Clerk explain the
    candidate comparison — accepting stays your decision.
+4. **Debits match bills** — money going *out* is proposed against your
+   unpaid **supplier bills** (matched by supplier name). Accepting records
+   payment evidence on the bill, so its payment status reads **Paid** —
+   nothing else about the bill changes. Credit lines (money coming in) still
+   match your own invoices only.
 
 This is the honest way an invoice becomes "paid" in MeridianIQ — a real,
-source-tagged settlement event, never a manual tick-box.
+source-tagged settlement event, never a manual tick-box — and the same
+evidence rule drives a bill's payment status.
 
 ### B2C reports *(feature-flagged)*
 
@@ -377,7 +416,8 @@ not after.
 ### Calendar and alerts
 
 - **Calendar** — every compliance deadline for your business: invoice
-  submission windows, B2C report windows, penalty-watch items.
+  submission windows, B2C report windows, penalty-watch items, and *bill
+  due* entries for your unpaid supplier bills.
 - **Alert settings** — choose the channels (WhatsApp / SMS / email) for
   urgent alerts, enter the contact details for each, pick what to be alerted
   about (deadline reminders, submission failures, penalty watch), and send
@@ -500,7 +540,8 @@ rather than improvising:
   it). The answer names the claim and version it came from.
 - **Your own numbers** — "What's overdue?", "What did we submit this
   month?", "Who owes us?", "What's expected this week?", "Who's worth
-  chasing?" The platform runs a fixed query over your own records and Clerk
+  chasing?", "What bills are due?", "How much do we owe?" The platform runs
+  a fixed query over your own records and Clerk
   phrases the result; the source line says exactly what was computed and for
   which month/client. Follow-ups thread ("and for June?"). Answers that name
   invoices come with **Open** buttons (on the web and in the mobile app)
@@ -1004,7 +1045,8 @@ Six tabs — **Home, Deadlines, B2C Reports, New Invoice, Estimator,
 Settings** — plus screens reached from Home:
 
 - **Home** — greeting, penalty-risk card, the same stat tiles and
-  receivables aging as the web dashboard, next deadline, recent activity,
+  receivables aging as the web dashboard, a **bills tile** (what you owe,
+  opening the bills screen), next deadline, recent activity,
   and quick actions (create/browse invoices, reconcile, estimator, and —
   when your account has them — Send to Clerk, Ask Clerk, Digests &
   statements).
@@ -1014,6 +1056,10 @@ Settings** — plus screens reached from Home:
   failed invoices (the fields the error implicates are highlighted; a
   content-frozen invoice points you to the web console for a credit note).
   PDFs, credit notes and cancellation are web-only.
+- **Bills** — the supplier-bills ledger from the web app
+  ([section 4](#4-the-compliance-app--for-smes) → Supplier bills): each
+  bill's payment status at a glance, with the same **scheduled / paid**
+  payment flagging.
 - **New Invoice** — the guided form, plus **"Speak it"**: record a voice
   note and Clerk drafts the invoice ("Heard: … — check every field before
   saving"). **Create & submit invoice** runs create → validate → submit in
@@ -1204,13 +1250,15 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **56 headless user-journey checks** on the
+  path-router and drives **62 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month) covering: auth incl. throttling,
   password change and reset, the full 2FA enrol → challenge → disable
   journey, the operator Desk, admin advisory, the auditor's read-only
-  boundary, consent round-trip, the credit-note lifecycle, the SME
-  dashboard/search/bulk-submit/recurring flows, and the integration layer
+  boundary, consent round-trip, supplier bills (payment flags, the payables
+  summary, and the guard that refuses to stamp a supplier document), the
+  credit-note lifecycle, the SME dashboard/search/bulk-submit/recurring
+  flows, and the integration layer
   end-to-end (API-key mint / bearer auth / revocation, a webhook delivery
   driven by a real stamping and verified against its HMAC signature, and
   the payment-intent + confirmation-webhook rail) against a freshly seeded
@@ -1375,7 +1423,8 @@ on the invoice itself.
 | **Case** | A unit of Compliance Desk work: an escalation, a dead-lettered failure, or an unmapped code. |
 | **Confirmation** | A buyer's formal acknowledgment of an invoice in Buyer Rails. |
 | **No-set-off** | The buyer's acknowledgment that it won't offset the invoice against counterclaims. |
-| **Settlement event** | Evidence an invoice was paid, from an allowed source: statement match, buyer flag, or (later) a collection-account feed. |
+| **Settlement event** | Evidence an invoice was paid, from an allowed source: statement match, buyer flag, payer flag (on a supplier bill), or (later) a collection-account feed. |
+| **Bill** | A captured supplier invoice where your business is the *buyer*. Tracked (payment status, stamp verification) but never submitted for stamping — its payment status is derived from settlement evidence only. |
 | **Credit note** | A stamped document that formally reverses an invoice; the only way an invoice becomes **Credited**. |
 | **Consent layer** | One of three permission tiers over client data: compliance, benchmarking, credit. |
 | **Feature flag** | The switch that keeps a release-gated capability dark until its evidence gate passes. |

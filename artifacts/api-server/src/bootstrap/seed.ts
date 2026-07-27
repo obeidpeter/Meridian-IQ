@@ -132,6 +132,10 @@ export const DEMO = {
   engagementId: "77777777-7777-4777-8777-777777777777",
   buyerOneId: "55555555-5555-4555-8555-555555555555",
   buyerTwoId: "66666666-6666-4666-8666-666666666666",
+  // Vendor party for the payables demo: the SUPPLIER on BILL-2001, where the
+  // SME client is the BUYER (a captured supplier bill). Parties have no
+  // vendor type — counterparties are "buyer" whichever side they trade on.
+  vendorPartyId: "ab111111-1111-4111-8111-1111111111ab",
 } as const;
 
 function isoDate(daysFromNow: number): string {
@@ -155,6 +159,7 @@ async function seedInvoice(input: {
   status: "draft" | "validated" | "submitted" | "stamped" | "failed";
   category: "b2b" | "b2c";
   issueDate: string;
+  dueDate?: string;
   lines: SeedLine[];
 }): Promise<void> {
   let subtotal = 0;
@@ -186,6 +191,7 @@ async function seedInvoice(input: {
       invoiceNumber: input.invoiceNumber,
       category: input.category,
       issueDate: input.issueDate,
+      dueDate: input.dueDate ?? null,
       status: input.status,
       subtotal: subtotal.toFixed(2),
       vatTotal: vatTotal.toFixed(2),
@@ -275,6 +281,17 @@ async function seedDemo(): Promise<void> {
         tinValidated: true,
         street: "9 Aminu Kano Crescent",
         city: "Abuja",
+        countryCode: "NG",
+      },
+      {
+        // Payables vendor: supplier on BILL-2001 (the SME is the buyer).
+        id: DEMO.vendorPartyId,
+        type: "buyer",
+        legalName: "Lagos Packaging Supplies Ltd",
+        tin: "80000000-0008",
+        tinValidated: true,
+        street: "5 Oshodi Industrial Way",
+        city: "Lagos",
         countryCode: "NG",
       },
     ])
@@ -420,6 +437,25 @@ async function seedDemo(): Promise<void> {
     issueDate: isoDate(-1),
     lines: [
       { description: "Retail groceries (consolidated)", quantity: "1", unitPrice: "480000", vatRate: "0.075" },
+    ],
+  });
+
+  // Payables demo: a captured supplier BILL — the SME client is the BUYER,
+  // the vendor party the supplier. Bills stay 'draft' forever (the submit
+  // guard refuses them); payment state derives from settlement evidence
+  // only, so the bills ledger shows it as open until flagged or matched.
+  // Number deliberately outside the INV-100* namespace the e2e pins.
+  await seedInvoice({
+    id: "b1112001-0000-4000-8000-000000002001",
+    supplierPartyId: DEMO.vendorPartyId,
+    buyerPartyId: DEMO.clientPartyId,
+    invoiceNumber: "BILL-2001",
+    status: "draft",
+    category: "b2b",
+    issueDate: isoDate(-4),
+    dueDate: isoDate(10),
+    lines: [
+      { description: "Corrugated cartons (bulk)", quantity: "100", unitPrice: "1200", vatRate: "0.075" },
     ],
   });
 }

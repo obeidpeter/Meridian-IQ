@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import {
   getDb,
+  engagementsTable,
   firmsTable,
+  invoicesTable,
+  partiesTable,
   type ClerkExtraction,
   type ExtractionLine,
 } from "@workspace/db";
@@ -38,6 +41,7 @@ const digestFirmId = randomUUID();
 const clerkDigestFirmId = randomUUID();
 const supplierId = randomUUID();
 const buyerId = randomUUID();
+const digestVendorId = randomUUID();
 
 before(async () => {
   await saveAndEnableClerkFlag();
@@ -55,6 +59,35 @@ before(async () => {
     { id: digestFirmId, name: `Digest Firm ${SALT}` },
     { id: clerkDigestFirmId, name: `Clerk Digest Firm ${SALT}` },
   ]);
+  // The digest facts are RECEIVABLE-oriented (payables round): the counted
+  // supplier must be an engaged client of the digest firm, or every count
+  // below reads zero.
+  await getDb().insert(engagementsTable).values({
+    firmId: digestFirmId,
+    clientPartyId: supplierId,
+    type: "readiness_assessment",
+    title: `Digest engagement ${SALT}`,
+  });
+  // A captured supplier BILL in the digest firm (the engaged client is the
+  // BUYER): draft forever, so it must NOT pollute the unsubmitted counters —
+  // it surfaces only through the payables fact (due within 7 days).
+  await getDb().insert(partiesTable).values({
+    id: digestVendorId,
+    type: "buyer",
+    legalName: `Digest Vendor ${SALT}`,
+  });
+  const billDue = new Date();
+  billDue.setUTCDate(billDue.getUTCDate() + 3);
+  await getDb().insert(invoicesTable).values({
+    firmId: digestFirmId,
+    supplierPartyId: digestVendorId,
+    buyerPartyId: supplierId,
+    invoiceNumber: `DIG-BILL-${SALT}`,
+    status: "draft",
+    issueDate: new Date().toISOString().slice(0, 10),
+    dueDate: billDue.toISOString().slice(0, 10),
+    grandTotal: "500.00",
+  });
 });
 
 after(async () => {
@@ -329,6 +362,7 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     unmatchedCreditCount: 0,
     unmatchedCreditClients: 0,
     chasedTwiceCount: 0,
+    payablesDueCount: 0,
   });
   assert.match(quiet.headline, /on track/);
   assert.equal(quiet.bullets.length, 1);
@@ -347,9 +381,10 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     unmatchedCreditCount: 2,
     unmatchedCreditClients: 1,
     chasedTwiceCount: 1,
+    payablesDueCount: 2,
   });
   assert.equal(busy.headline, "3 invoices need attention this week.");
-  assert.equal(busy.bullets.length, 10);
+  assert.equal(busy.bullets.length, 11);
   assert.match(busy.bullets[0], /2 invoices are past the 7-day submission window/);
   assert.match(busy.bullets[5], /2 regular invoices look unraised across 1 client/);
   assert.match(
@@ -364,6 +399,10 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
   assert.match(
     busy.bullets[9],
     /1 invoice has taken 2 or more payment reminders and is still unpaid/,
+  );
+  assert.match(
+    busy.bullets[10],
+    /2 supplier bills are due within the next 7 days or already overdue/,
   );
 });
 
@@ -416,11 +455,20 @@ test("computeDigestFacts counts from the firm's invoices via SQL", async () => {
     userId,
   );
   const facts = await computeDigestFacts(digestFirmId);
-  assert.equal(facts.unsubmittedCount, 2);
+  assert.equal(
+    facts.unsubmittedCount,
+    2,
+    "the captured supplier bill (draft forever) must not pollute unsubmitted",
+  );
   assert.equal(facts.overdueCount, 1);
   assert.equal(facts.dueSoonCount, 1);
   assert.equal(facts.failedCount, 0);
   assert.equal(facts.receivablesOver60Count, 0);
+  assert.equal(
+    facts.payablesDueCount,
+    1,
+    "the unpaid bill due in 3 days is the payables fact",
+  );
 });
 
 test("generateFirmDigest without a gateway stores the template narrative once", async () => {

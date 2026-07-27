@@ -12,6 +12,7 @@ import {
   Store,
   Menu,
   LogOut,
+  Receipt,
   Repeat,
   Grid2x2,
   ShieldCheck,
@@ -45,6 +46,7 @@ type NavLink = {
 const LINKS: NavLink[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/bills", label: "Bills", icon: Receipt },
   { href: "/recurring", label: "Recurring", icon: Repeat },
   { href: "/import", label: "Import", icon: Upload },
   {

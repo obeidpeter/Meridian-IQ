@@ -114,6 +114,10 @@ export const settlementSourceEnum = pgEnum("settlement_source", [
   "buyer_flag",
   "collection_account",
   "uploaded_evidence",
+  // The payer's own flag on a supplier bill (payables side): evidence only —
+  // a bill's invoice status never transitions. Appended last: drizzle push
+  // emits ALTER TYPE ... ADD VALUE for trailing additions.
+  "payer_flag",
 ]);
 
 // Buyer payment-status flags (BR-04). `scheduled` is an intent signal only;

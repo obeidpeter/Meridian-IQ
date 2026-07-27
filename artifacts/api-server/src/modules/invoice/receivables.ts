@@ -43,6 +43,34 @@ export interface ReceivablesSummary {
 export const OUTSTANDING = sql`i.kind = 'invoice'
   AND i.status IN ('submitted', 'stamped', 'confirmed')`;
 
+// ---------------------------------------------------------------------------
+// Invoice ORIENTATION (payables round, contract 0.44.0) — the ONE home for
+// which side of an invoice the firm's practice sits on, written against
+// alias `i` like OUTSTANDING so every consumer spells it identically:
+//
+//  - RECEIVABLE: the invoice's SUPPLIER is one of the firm's engaged clients
+//    — the firm's client issued it, so it can be validated/submitted/stamped
+//    and it feeds the receivables/cash-flow surfaces.
+//  - BILL: the invoice's BUYER is one of the firm's engaged clients AND the
+//    supplier is NOT — a captured vendor invoice (supplier-payables). Bills
+//    stay status 'draft' forever; their payment state is derived from
+//    settlement evidence only, and they must never reach the stamping rails.
+//
+// An invoice engaged on BOTH sides (two clients of the same firm trading with
+// each other) counts as a RECEIVABLE — the supplier side wins, so exactly one
+// orientation holds and the submit path stays open for the issuing client.
+export const RECEIVABLE_ORIENTATION = sql`EXISTS (
+  SELECT 1 FROM engagements e
+  WHERE e.firm_id = i.firm_id
+    AND e.client_party_id = i.supplier_party_id
+)`;
+
+export const BILL_ORIENTATION = sql`(EXISTS (
+  SELECT 1 FROM engagements e
+  WHERE e.firm_id = i.firm_id
+    AND e.client_party_id = i.buyer_party_id
+) AND NOT ${RECEIVABLE_ORIENTATION})`;
+
 // The single definition of a receivable's reference date: age is measured
 // against the due date where one exists, otherwise the issue date.
 const REF_DATE = sql`COALESCE(i.due_date, i.issue_date)`;

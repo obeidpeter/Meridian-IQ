@@ -11,7 +11,7 @@ import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { CalendarClock, AlertTriangle, ChevronRight } from "lucide-react";
+import { CalendarClock, AlertTriangle, ChevronRight, Receipt } from "lucide-react";
 import { formatDate, severityBadgeClasses } from "@/lib/format";
 
 function daysAway(due: string): string | null {
@@ -75,8 +75,13 @@ export function Calendar() {
                 <CardContent className="flex items-start justify-between gap-3 p-4">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className="mt-0.5">
+                      {/* Kind picks the glyph only — overdue always wins, and
+                          kinds without a mapping (including ones newer than
+                          this build) fall through to the calendar glyph. */}
                       {d.status === "overdue" ? (
                         <AlertTriangle className="w-5 h-5 text-destructive" aria-hidden="true" />
+                      ) : d.kind === "bill_due" ? (
+                        <Receipt className="w-5 h-5 text-muted-foreground" aria-hidden="true" />
                       ) : (
                         <CalendarClock className="w-5 h-5 text-muted-foreground" aria-hidden="true" />
                       )}
@@ -100,9 +105,16 @@ export function Calendar() {
                       </div>
                     </div>
                   </div>
+                  {/* A bill_due deadline's invoice is a supplier bill, which
+                      lives on the /bills surface — the invoice vault's detail
+                      route can't show it for client users. */}
                   {d.invoiceId && (
                     <Link
-                      href={`/invoices/${d.invoiceId}`}
+                      href={
+                        d.kind === "bill_due"
+                          ? "/bills"
+                          : `/invoices/${d.invoiceId}`
+                      }
                       className="text-primary text-sm inline-flex items-center shrink-0 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                     >
                       Open <ChevronRight className="w-4 h-4" aria-hidden="true" />

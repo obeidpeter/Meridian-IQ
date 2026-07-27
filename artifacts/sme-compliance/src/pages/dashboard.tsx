@@ -20,8 +20,15 @@ import {
   getGetUnmatchedCreditsQueryKey,
   useGetProjectionAccuracy,
   getGetProjectionAccuracyQueryKey,
+  useGetPayablesSummary,
+  getGetPayablesSummaryQueryKey,
 } from "@workspace/api-client-react";
-import type { ReceivablesBucket, ReceivablesSummary } from "@workspace/api-client-react";
+import type {
+  CashflowBucket,
+  PayablesSummaryGroupsItem,
+  ReceivablesBucket,
+  ReceivablesSummary,
+} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +45,7 @@ import {
   Activity,
   Sparkles,
   CalendarCheck,
+  Receipt,
   Wallet,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -303,6 +311,119 @@ function ReceivablesCard({
             )}
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * The payables card keeps three visual buckets (mirroring the receivables
+ * card's at-a-glance shape): Overdue, Due this week (dueWeeks[0]), and
+ * everything beyond — the remaining weekly buckets folded into `later`.
+ * Exported for the unit tests.
+ */
+export function dueLaterBucket(group: PayablesSummaryGroupsItem): CashflowBucket {
+  const rest = group.dueWeeks.slice(1);
+  const amount =
+    rest.reduce((sum, w) => sum + Number(w.amount), 0) +
+    Number(group.later.amount);
+  const count =
+    rest.reduce((sum, w) => sum + w.count, 0) + group.later.count;
+  return { amount: amount.toFixed(2), count };
+}
+
+// Committed outflows — the payables mirror of the receivables card, fed by
+// the bills book (supplier invoices where this client is the buyer).
+// Render-on-success: while loading, on error, or with nothing committed the
+// card is simply absent, like the other advisory dashboard cards.
+export function PayablesCard({ clientPartyId }: { clientPartyId: string }) {
+  const { data: summary, isSuccess } = useGetPayablesSummary(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetPayablesSummaryQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  const primary = summary?.groups[0];
+  if (!isSuccess || !summary || !primary) return null;
+  return (
+    <Card data-testid="card-payables">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Receipt className="w-5 h-5" aria-hidden="true" /> Payables
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div>
+            <p
+              className="text-2xl font-bold tabular-nums"
+              data-testid="text-payables-total"
+            >
+              {formatNaira(primary.total.amount)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Committed across {primary.total.count} bill
+              {primary.total.count === 1 ? "" : "s"}
+              {summary.groups.length > 1
+                ? ` · +${summary.groups.length - 1} more ${
+                    summary.groups.length === 2 ? "currency" : "currencies"
+                  }`
+                : ""}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <AgingBucketRow
+              label="Overdue"
+              bucket={primary.overdue}
+              tone="danger"
+            />
+            <AgingBucketRow
+              label="Due this week"
+              bucket={primary.dueWeeks[0] ?? { amount: "0", count: 0 }}
+              tone="warning"
+            />
+            <AgingBucketRow label="Due later" bucket={dueLaterBucket(primary)} />
+          </div>
+          {summary.topSuppliers.length > 0 && (
+            <div className="pt-3 border-t">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Top suppliers
+              </p>
+              <div className="space-y-2">
+                {summary.topSuppliers.map((supplier) => (
+                  <div
+                    key={supplier.supplierPartyId}
+                    className="flex items-center justify-between gap-3 text-sm"
+                    data-testid={`payables-supplier-${supplier.supplierPartyId}`}
+                  >
+                    <span className="min-w-0 truncate">
+                      {supplier.supplierName}
+                    </span>
+                    <span className="shrink-0 font-medium tabular-nums">
+                      {formatNaira(supplier.amount)}
+                      <span className="text-xs text-muted-foreground font-normal">
+                        {" "}
+                        · {supplier.count} bill{supplier.count === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <Link
+            href="/bills"
+            className="text-primary text-sm inline-block hover:underline"
+            data-testid="link-view-bills"
+          >
+            View bills
+          </Link>
+        </div>
       </CardContent>
     </Card>
   );
@@ -903,6 +1024,10 @@ export function Dashboard() {
                 totalInvoices={summary?.totalInvoices}
                 onRetry={() => refetchReceivables()}
               />
+
+              {me?.clientPartyId && (
+                <PayablesCard clientPartyId={me.clientPartyId} />
+              )}
 
               {canAskClerk && <ClerkDigestCard />}
 

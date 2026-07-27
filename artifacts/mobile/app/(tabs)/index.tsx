@@ -221,6 +221,12 @@ export default function HomeScreen() {
                 testID="action-reconcile"
               />
               <ActionTile
+                label="Supplier bills"
+                icon="shopping-bag"
+                onPress={() => router.push("/bills")}
+                testID="action-supplier-bills"
+              />
+              <ActionTile
                 label="Penalty estimator"
                 icon="trending-up"
                 onPress={() => router.push("/estimator")}

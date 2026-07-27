@@ -132,6 +132,16 @@ review.
 - Review/decide is operator-only (`clerk.use`) and compare-and-set on case
   status, so concurrent decisions can never double-apply. Approval creates a
   DRAFT invoice only.
+- **Vendor bootstrap (payables).** Approval validates the chosen parties'
+  firm membership explicitly (`assertPartyInFirm` in cases.ts — operators
+  run with RLS bypassed, so the check cannot be left to policy): an
+  engagement, an existing invoice reference, or — the payables round's
+  addition — the firm-created provenance arm (`created_by_firm_id`, the
+  party sphere's third leg). Without it, the FIRST bill from a vendor party
+  the firm just created could never approve — a fresh vendor has no
+  engagement and no invoice yet, so approval refused with
+  `PARTY_NOT_IN_FIRM`. The approved bill itself never stamps: see the
+  orientation guard in `docs/platform.md` § Payables.
 - **Source-document display** — the review pane shows the reviewer the
   captured document, not just its extraction: single-image captures render
   from the case's existing `sourceImageB64`; scanned-PDF pages come from
@@ -177,10 +187,13 @@ review.
 
 - `modules/clerk/data-intents.ts`: Ask carries a second closed catalogue next
   to the claims register — data intents ("what's overdue?", "what did we
-  submit this month?", and the money intents "who owes us?" / "what's
+  submit this month?", the money intents "who owes us?" / "what's
   expected this week?" / "who's worth chasing?" backed by the
-  receivables/cashflow modules), offered in the intent enum only to
-  firm-scoped askers. The model only CLASSIFIES; the app runs the matching
+  receivables/cashflow modules, and the payables intents
+  `data.payables_due` ("what bills are due?") / `data.total_owed` ("how
+  much do we owe?") backed by the same evidence-only payables predicate as
+  the Bills surfaces — see `docs/platform.md` § Payables), offered in the
+  intent enum only to firm-scoped askers. The model only CLASSIFIES; the app runs the matching
   FIXED, fully-parameterized query. Runtime inputs: the principal-resolved
   firmId plus optional month/client parameters the model can only pick from
   CLOSED app-built option lists — the last 12 Lagos months and the firm's
@@ -204,8 +217,10 @@ review.
 - **Client access** (SEC-03-pinned): Ask is open to `client_user`s. The
   offered data intents narrow to a vetted ALLOWLIST
   (`CLIENT_SAFE_DATA_INTENTS` — firm-wide money intents that name other
-  clients' buyers, and the firm's own budget, are excluded and refuse); the
-  client option list is exactly the caller's own party; the executed party
+  clients' buyers, and the firm's own budget, are excluded and refuse; the
+  two payables intents `data.payables_due` / `data.total_owed` ARE
+  client-safe and on the allowlist — they answer over the caller's own
+  bills only); the client option list is exactly the caller's own party; the executed party
   filter is FORCED from the principal regardless of the model's pick;
   multi-turn threads only from the client's own previous case (`createdBy`
   check); and `GET /clerk/digest` explicitly refuses client_user now that
@@ -324,9 +339,13 @@ without a human owner.
   SQL — including the money facts from `firmMoneySummary` (payments expected
   in the coming week per each buyer's rhythm, and the chase-worthy count
   past BOTH due date and rhythm), firm-wide unmatched credits, unbilled
-  income (`countFirmUnbilled`), and outstanding invoices with 2+ logged
-  reminders — and lets the model phrase them, falling back to deterministic
-  template text.
+  income (`countFirmUnbilled`), outstanding invoices with 2+ logged
+  reminders, and a payables-due fact (bills falling due or overdue, from the
+  same evidence-only payables predicate as the Bills surfaces) — and lets
+  the model phrase them, falling back to deterministic template text. The
+  digest's unsubmitted/overdue compliance facts use the explicit
+  receivable-orientation predicate, so captured supplier bills never count
+  as "invoices to file" (`docs/platform.md` § Payables).
 - **Digest delivery**: `clerk_digests.delivered_at` + `deliverFirmDigests`
   (every sweep pass, claim-first CAS, dark messaging claims silently) offer
   the digest to the firm's staff who opted in via **staff notification

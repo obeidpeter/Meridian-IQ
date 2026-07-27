@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.43.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.44.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.43.0</title>
+<title>MeridianIQ API reference — v0.44.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.43.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.44.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -156,7 +156,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">28</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">14</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">10</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">44</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">15</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">28</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">14</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">10</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">44</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">19</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -1165,6 +1165,22 @@ request's writes were rolled back.</li>
 <summary><span class="method m-get">GET</span><code class="path">/api/dashboard/summary</code><span class="sum">Compliance dashboard summary for an SME client</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>DashboardSummary</code> <span class="dim">Dashboard summary</span></li></ul></div>
 </details>
+<details class="op" id="listBills">
+<summary><span class="method m-get">GET</span><code class="path">/api/bills</code><span class="sum">Supplier bills — captured invoices where the client is the buyer — with derived payment status</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>BillSummary[]</code> <span class="dim">Bills, newest first</span></li></ul></div>
+</details>
+<details class="op" id="flagBillPayment">
+<summary><span class="method m-post">POST</span><code class="path">/api/bills/{id}/payment-flag</code><span class="sum">Record that a bill's payment is scheduled or was made (settlement evidence, source payer_flag — the bill's status never transitions)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>BillPaymentFlagInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>SettlementEvent</code> <span class="dim">Settlement event recorded</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
+</details>
+<details class="op" id="verifyBillStamp">
+<summary><span class="method m-post">POST</span><code class="path">/api/bills/{id}/verify-stamp</code><span class="sum">Verify a supplier bill's stamp against the national record and keep the result on the bill (input-VAT protection)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>StampVerifyInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>BillVerification</code> <span class="dim">Verification recorded</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="getPayablesSummary">
+<summary><span class="method m-get">GET</span><code class="path">/api/dashboard/payables</code><span class="sum">Committed outflows — bills aged and bucketed by due date, with top suppliers (deterministic)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>PayablesSummary</code> <span class="dim">Payables summary</span></li></ul></div>
+</details>
 <details class="op" id="getReceivablesSummary">
 <summary><span class="method m-get">GET</span><code class="path">/api/dashboard/receivables</code><span class="sum">Outstanding receivables aged into buckets, with top debtors</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ReceivablesSummary</code> <span class="dim">Receivables aging summary</span></li></ul></div>
@@ -1241,7 +1257,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EngagementNarrative</code> <span class="dim">Letter body for the firm to edit and own</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The engagement's findings do not match the expected shape</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.43.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.44.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   getDb,
   bankStatementsTable,
@@ -32,6 +32,8 @@ import {
   type MatchCandidate,
   type MatchableLine,
 } from "../reconciliation/matcher.ts";
+import { BILL_ORIENTATION } from "../invoice/receivables.ts";
+import { BILL_UNPAID } from "../invoice/payables.ts";
 
 // Bank-statement ingestion and reconciliation v1 (INT-05, SME-07).
 //
@@ -186,8 +188,14 @@ export async function ingestStatement(input: IngestInput): Promise<IngestResult>
   return { ...base, statementId: statement.id, committed: true };
 }
 
-// Candidate set for matching: the client's own invoices that are stamped or
-// confirmed (still awaiting settlement) and presentable as eligible (CORE-09).
+// Candidate set for matching, two lanes (payables round):
+//  - RECEIVABLES (credit lane): the client's own invoices that are stamped or
+//    confirmed (still awaiting settlement) and presentable as eligible
+//    (CORE-09); the narration counterparty is the BUYER.
+//  - BILLS (debit lane): captured supplier invoices where this client is the
+//    BUYER (BILL_ORIENTATION), still unpaid (no payment evidence — bills
+//    never transition, so status alone says nothing), any non-cancelled
+//    status; the narration counterparty is the SUPPLIER.
 async function loadCandidates(
   firmId: string,
   clientPartyId: string,
@@ -211,16 +219,51 @@ async function loadCandidates(
         inArray(invoicesTable.status, ["stamped", "confirmed"]),
       ),
     );
-  return rows
+  const receivables: MatchCandidate[] = rows
     .filter((r) => isPresentableAsEligible(r.status))
     .map((r) => ({
       invoiceId: r.id,
       invoiceNumber: r.invoiceNumber,
-      buyerName: r.buyerName,
+      counterpartyName: r.buyerName,
+      orientation: "receivable" as const,
       grandTotal: Number(r.grandTotal),
       issueDate: r.issueDate,
       dueDate: r.dueDate,
     }));
+
+  const billRows = (
+    await getDb().execute<{
+      id: string;
+      invoice_number: string;
+      grand_total: string;
+      issue_date: string;
+      due_date: string | null;
+      supplier_name: string;
+    }>(sql`
+      SELECT i.id, i.invoice_number, i.grand_total::text AS grand_total,
+        i.issue_date::text AS issue_date, i.due_date::text AS due_date,
+        p.legal_name AS supplier_name
+      FROM invoices i
+      JOIN parties p ON p.id = i.supplier_party_id
+      WHERE i.firm_id = ${firmId}
+        AND i.buyer_party_id = ${clientPartyId}
+        AND i.kind = 'invoice'
+        AND i.status <> 'cancelled'
+        AND ${BILL_ORIENTATION}
+        AND ${BILL_UNPAID}
+    `)
+  ).rows;
+  const bills: MatchCandidate[] = billRows.map((r) => ({
+    invoiceId: r.id,
+    invoiceNumber: r.invoice_number,
+    counterpartyName: r.supplier_name,
+    orientation: "bill" as const,
+    grandTotal: Number(r.grand_total),
+    issueDate: r.issue_date,
+    dueDate: r.due_date,
+  }));
+
+  return [...receivables, ...bills];
 }
 
 // Outbox handler: generate proposals for a committed statement. Idempotent —
@@ -327,13 +370,18 @@ async function loadProposal(
 }
 
 // Accept a proposal: the accepted match is recorded once, as a source-tagged
-// SettlementEvent (source=statement_match, SME-07/CR-01), and the invoice
-// transitions to `settled` with full lineage.
+// SettlementEvent (source=statement_match, SME-07/CR-01). For a RECEIVABLE
+// the invoice also transitions to `settled` with full lineage. For a BILL
+// there is NO transition of any kind: bills live and die as drafts (their
+// payment state is derived from settlement evidence alone), applyTransition
+// would correctly 409 a draft→settled move, and recordTransition would
+// fabricate lifecycle lineage for a move that never happened — so the bill
+// branch writes the evidence, decides the proposal and audits, nothing more.
 export async function acceptProposal(
   proposalId: string,
   actor: { userId: string; role: string },
 ): Promise<DecisionResult> {
-  const { proposal, line } = await loadProposal(proposalId);
+  const { proposal, line, statement } = await loadProposal(proposalId);
   if (proposal.status !== "proposed") {
     throw new DomainError(
       "PROPOSAL_DECIDED",
@@ -347,18 +395,44 @@ export async function acceptProposal(
     .where(eq(invoicesTable.id, proposal.invoiceId))
     .limit(1);
   if (!invoice) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
-  // CORE-09: a cancelled/credited invoice can never be settled by acceptance.
-  if (!isPresentableAsEligible(invoice.status)) {
-    throw new DomainError(
-      "INVOICE_NOT_ELIGIBLE",
-      `Invoice is ${invoice.status} and cannot be settled`,
-      409,
+  // Orientation, resolved exactly as the candidate sets were loaded: a bill
+  // proposal is one whose invoice names the statement's client as the BUYER
+  // (and not as the supplier — a self-trade counts as a receivable, matching
+  // the orientation fragments' precedence).
+  const isBill =
+    invoice.buyerPartyId === statement.clientPartyId &&
+    invoice.supplierPartyId !== statement.clientPartyId;
+
+  let invoiceStatus = invoice.status;
+  if (isBill) {
+    // CORE-09 mirror for the debit lane: a cancelled bill takes no payment
+    // evidence (candidates exclude cancelled; this guards the race).
+    if (invoice.status === "cancelled") {
+      throw new DomainError(
+        "INVOICE_NOT_ELIGIBLE",
+        `Invoice is ${invoice.status} and cannot take payment evidence`,
+        409,
+      );
+    }
+  } else {
+    // CORE-09: a cancelled/credited invoice can never be settled by acceptance.
+    if (!isPresentableAsEligible(invoice.status)) {
+      throw new DomainError(
+        "INVOICE_NOT_ELIGIBLE",
+        `Invoice is ${invoice.status} and cannot be settled`,
+        409,
+      );
+    }
+    // Compare-and-set FIRST: if a concurrent cancel/credit moved the invoice
+    // after the read above, this rejects instead of resurrecting a dead
+    // invoice, and no settlement event is written.
+    const updated = await applyTransition(
+      invoice.id,
+      invoice.status,
+      "settled",
     );
+    invoiceStatus = updated.status;
   }
-  // Compare-and-set FIRST: if a concurrent cancel/credit moved the invoice
-  // after the read above, this rejects instead of resurrecting a dead invoice,
-  // and no settlement event is written.
-  const updated = await applyTransition(invoice.id, invoice.status, "settled");
 
   const occurredAt = line.valueDate
     ? new Date(`${line.valueDate}T00:00:00Z`)
@@ -383,8 +457,8 @@ export async function acceptProposal(
       decidedAt: new Date(),
     })
     .where(eq(matchProposalsTable.id, proposal.id));
-  // Sibling proposals for the same statement line are superseded: one credit
-  // settles one invoice.
+  // Sibling proposals for the same statement line are superseded: one bank
+  // line settles (or pays) one invoice.
   await getDb()
     .update(matchProposalsTable)
     .set({ status: "superseded" })
@@ -394,15 +468,17 @@ export async function acceptProposal(
         eq(matchProposalsTable.status, "proposed"),
       ),
     );
-  await recordTransition({
-    invoiceId: invoice.id,
-    firmId: invoice.firmId,
-    fromStatus: invoice.status,
-    toStatus: "settled",
-    actorId: actor.userId,
-    actorRole: actor.role,
-    reason: `statement_match:${line.id}`,
-  });
+  if (!isBill) {
+    await recordTransition({
+      invoiceId: invoice.id,
+      firmId: invoice.firmId,
+      fromStatus: invoice.status,
+      toStatus: "settled",
+      actorId: actor.userId,
+      actorRole: actor.role,
+      reason: `statement_match:${line.id}`,
+    });
+  }
   await appendAudit({
     actorId: actor.userId,
     firmId: invoice.firmId,
@@ -419,7 +495,7 @@ export async function acceptProposal(
     proposalId: proposal.id,
     status: "accepted",
     invoiceId: invoice.id,
-    invoiceStatus: updated.status,
+    invoiceStatus,
     settlementEventId: settlement.id,
   };
 }

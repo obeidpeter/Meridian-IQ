@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.43.0
+ * OpenAPI spec version: 0.44.0
  */
 import {
   useMutation,
@@ -37,6 +37,9 @@ import type {
   BankStatementLine,
   BatchClerkCasesInput,
   BatchClerkCasesResult,
+  BillPaymentFlagInput,
+  BillSummary,
+  BillVerification,
   BillingStatement,
   BillingTier,
   BulkAcceptInput,
@@ -168,6 +171,7 @@ import type {
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
   GetMergeImpactParams,
+  GetPayablesSummaryParams,
   GetProjectionAccuracyParams,
   GetPublicThemeParams,
   GetQuarterlyReviewParams,
@@ -190,6 +194,7 @@ import type {
   LineItemSuggestion,
   ListB2cReportsParams,
   ListBankStatementsParams,
+  ListBillsParams,
   ListBuyerInvoicesParams,
   ListClaimsParams,
   ListClerkCasesParams,
@@ -233,6 +238,7 @@ import type {
   PartyMergeInput,
   PartyUpdateInput,
   PasswordResetWithToken,
+  PayablesSummary,
   PaymentChaserDraft,
   PaymentFlagInput,
   PaymentIntent,
@@ -8689,6 +8695,316 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardSummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListBillsUrl = (params: ListBillsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bills?${stringifiedParams}` : `/api/bills`
+}
+
+/**
+ * @summary Supplier bills — captured invoices where the client is the buyer — with derived payment status
+ */
+export const listBills = async (params: ListBillsParams, options?: RequestInit): Promise<BillSummary[]> => {
+
+  return customFetch<BillSummary[]>(getListBillsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBillsQueryKey = (params?: ListBillsParams,) => {
+    return [
+    `/api/bills`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListBillsQueryOptions = <TData = Awaited<ReturnType<typeof listBills>>, TError = ErrorType<unknown>>(params: ListBillsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBills>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBillsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBills>>> = ({ signal }) => listBills(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBills>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBillsQueryResult = NonNullable<Awaited<ReturnType<typeof listBills>>>
+export type ListBillsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Supplier bills — captured invoices where the client is the buyer — with derived payment status
+ */
+
+export function useListBills<TData = Awaited<ReturnType<typeof listBills>>, TError = ErrorType<unknown>>(
+ params: ListBillsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBills>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBillsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getFlagBillPaymentUrl = (id: string,) => {
+
+
+
+
+  return `/api/bills/${id}/payment-flag`
+}
+
+/**
+ * @summary Record that a bill's payment is scheduled or was made (settlement evidence, source payer_flag — the bill's status never transitions)
+ */
+export const flagBillPayment = async (id: string,
+    billPaymentFlagInput: BillPaymentFlagInput, options?: RequestInit): Promise<SettlementEvent> => {
+
+  return customFetch<SettlementEvent>(getFlagBillPaymentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(billPaymentFlagInput)
+  }
+);}
+
+
+
+
+export const getFlagBillPaymentMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagBillPayment>>, TError,{id: string;data: BodyType<BillPaymentFlagInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof flagBillPayment>>, TError,{id: string;data: BodyType<BillPaymentFlagInput>}, TContext> => {
+
+const mutationKey = ['flagBillPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof flagBillPayment>>, {id: string;data: BodyType<BillPaymentFlagInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  flagBillPayment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FlagBillPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof flagBillPayment>>>
+    export type FlagBillPaymentMutationBody = BodyType<BillPaymentFlagInput>
+    export type FlagBillPaymentMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Record that a bill's payment is scheduled or was made (settlement evidence, source payer_flag — the bill's status never transitions)
+ */
+export const useFlagBillPayment = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagBillPayment>>, TError,{id: string;data: BodyType<BillPaymentFlagInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof flagBillPayment>>,
+        TError,
+        {id: string;data: BodyType<BillPaymentFlagInput>},
+        TContext
+      > => {
+      return useMutation(getFlagBillPaymentMutationOptions(options));
+    }
+
+export const getVerifyBillStampUrl = (id: string,) => {
+
+
+
+
+  return `/api/bills/${id}/verify-stamp`
+}
+
+/**
+ * @summary Verify a supplier bill's stamp against the national record and keep the result on the bill (input-VAT protection)
+ */
+export const verifyBillStamp = async (id: string,
+    stampVerifyInput: StampVerifyInput, options?: RequestInit): Promise<BillVerification> => {
+
+  return customFetch<BillVerification>(getVerifyBillStampUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(stampVerifyInput)
+  }
+);}
+
+
+
+
+export const getVerifyBillStampMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyBillStamp>>, TError,{id: string;data: BodyType<StampVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyBillStamp>>, TError,{id: string;data: BodyType<StampVerifyInput>}, TContext> => {
+
+const mutationKey = ['verifyBillStamp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyBillStamp>>, {id: string;data: BodyType<StampVerifyInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  verifyBillStamp(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyBillStampMutationResult = NonNullable<Awaited<ReturnType<typeof verifyBillStamp>>>
+    export type VerifyBillStampMutationBody = BodyType<StampVerifyInput>
+    export type VerifyBillStampMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Verify a supplier bill's stamp against the national record and keep the result on the bill (input-VAT protection)
+ */
+export const useVerifyBillStamp = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyBillStamp>>, TError,{id: string;data: BodyType<StampVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyBillStamp>>,
+        TError,
+        {id: string;data: BodyType<StampVerifyInput>},
+        TContext
+      > => {
+      return useMutation(getVerifyBillStampMutationOptions(options));
+    }
+
+export const getGetPayablesSummaryUrl = (params: GetPayablesSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/payables?${stringifiedParams}` : `/api/dashboard/payables`
+}
+
+/**
+ * @summary Committed outflows — bills aged and bucketed by due date, with top suppliers (deterministic)
+ */
+export const getPayablesSummary = async (params: GetPayablesSummaryParams, options?: RequestInit): Promise<PayablesSummary> => {
+
+  return customFetch<PayablesSummary>(getGetPayablesSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPayablesSummaryQueryKey = (params?: GetPayablesSummaryParams,) => {
+    return [
+    `/api/dashboard/payables`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPayablesSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getPayablesSummary>>, TError = ErrorType<unknown>>(params: GetPayablesSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPayablesSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPayablesSummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPayablesSummary>>> = ({ signal }) => getPayablesSummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPayablesSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPayablesSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getPayablesSummary>>>
+export type GetPayablesSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Committed outflows — bills aged and bucketed by due date, with top suppliers (deterministic)
+ */
+
+export function useGetPayablesSummary<TData = Awaited<ReturnType<typeof getPayablesSummary>>, TError = ErrorType<unknown>>(
+ params: GetPayablesSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPayablesSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPayablesSummaryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

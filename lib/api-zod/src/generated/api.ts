@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.43.0
+ * OpenAPI spec version: 0.44.0
  */
 import * as zod from 'zod';
 
@@ -1833,7 +1833,7 @@ export const ListSettlementsParams = zod.object({
 export const ListSettlementsResponseItem = zod.object({
   "id": zod.string(),
   "invoiceId": zod.string(),
-  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence']),
+  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence', 'payer_flag']),
   "amount": zod.string(),
   "confidence": zod.string().nullish(),
   "paymentStatus": zod.union([zod.literal('scheduled'),zod.literal('paid'),zod.literal(null)]).nullish(),
@@ -1850,7 +1850,7 @@ export const CreateSettlementParams = zod.object({
 })
 
 export const CreateSettlementBody = zod.object({
-  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence']),
+  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence', 'payer_flag']),
   "amount": zod.string(),
   "confidence": zod.string().optional(),
   "occurredAt": zod.coerce.date()
@@ -1859,7 +1859,7 @@ export const CreateSettlementBody = zod.object({
 export const CreateSettlementResponse = zod.object({
   "id": zod.string(),
   "invoiceId": zod.string(),
-  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence']),
+  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence', 'payer_flag']),
   "amount": zod.string(),
   "confidence": zod.string().nullish(),
   "paymentStatus": zod.union([zod.literal('scheduled'),zod.literal('paid'),zod.literal(null)]).nullish(),
@@ -2535,7 +2535,7 @@ export const GetDashboardSummaryResponse = zod.object({
   "nextDeadline": zod.union([zod.object({
   "id": zod.string(),
   "clientPartyId": zod.string(),
-  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch', 'bill_due']),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "dueDate": zod.coerce.date(),
@@ -2552,6 +2552,118 @@ export const GetDashboardSummaryResponse = zod.object({
   "label": zod.string(),
   "status": zod.string().nullish(),
   "at": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Supplier bills — captured invoices where the client is the buyer — with derived payment status
+ */
+export const ListBillsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const ListBillsResponseItem = zod.object({
+  "invoiceId": zod.string(),
+  "invoiceNumber": zod.string(),
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "issueDate": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "currency": zod.string(),
+  "grandTotal": zod.string(),
+  "payStatus": zod.enum(['open', 'scheduled', 'paid']),
+  "lastVerification": zod.object({
+  "valid": zod.boolean(),
+  "eligible": zod.boolean().nullish(),
+  "checkedAt": zod.string()
+}).nullish()
+})
+export const ListBillsResponse = zod.array(ListBillsResponseItem)
+
+
+/**
+ * @summary Record that a bill's payment is scheduled or was made (settlement evidence, source payer_flag — the bill's status never transitions)
+ */
+export const FlagBillPaymentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const FlagBillPaymentBody = zod.object({
+  "status": zod.enum(['scheduled', 'paid']),
+  "amount": zod.string().optional()
+})
+
+export const FlagBillPaymentResponse = zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence', 'payer_flag']),
+  "amount": zod.string(),
+  "confidence": zod.string().nullish(),
+  "paymentStatus": zod.union([zod.literal('scheduled'),zod.literal('paid'),zod.literal(null)]).nullish(),
+  "statementLineId": zod.string().nullish(),
+  "actorId": zod.string().nullish(),
+  "occurredAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Verify a supplier bill's stamp against the national record and keep the result on the bill (input-VAT protection)
+ */
+export const VerifyBillStampParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const VerifyBillStampBody = zod.object({
+  "irn": zod.string(),
+  "csid": zod.string()
+})
+
+export const VerifyBillStampResponse = zod.object({
+  "invoiceId": zod.string(),
+  "irn": zod.string(),
+  "csid": zod.string(),
+  "valid": zod.boolean(),
+  "eligible": zod.boolean().nullish(),
+  "checkedAt": zod.string()
+})
+
+
+/**
+ * @summary Committed outflows — bills aged and bucketed by due date, with top suppliers (deterministic)
+ */
+export const GetPayablesSummaryQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const GetPayablesSummaryResponse = zod.object({
+  "clientPartyId": zod.string(),
+  "groups": zod.array(zod.object({
+  "currency": zod.string(),
+  "overdue": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "dueWeeks": zod.array(zod.object({
+  "startDate": zod.string(),
+  "amount": zod.string(),
+  "count": zod.number()
+})),
+  "later": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "total": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+})
+})),
+  "topSuppliers": zod.array(zod.object({
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "amount": zod.string(),
+  "count": zod.number()
 }))
 })
 
@@ -2703,7 +2815,7 @@ export const GetComplianceCalendarQueryParams = zod.object({
 export const GetComplianceCalendarResponseItem = zod.object({
   "id": zod.string(),
   "clientPartyId": zod.string(),
-  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch', 'bill_due']),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "dueDate": zod.coerce.date(),
@@ -3051,7 +3163,7 @@ export const GetPortfolioResponse = zod.object({
   "nextDeadline": zod.union([zod.object({
   "id": zod.string(),
   "clientPartyId": zod.string(),
-  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch', 'bill_due']),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "dueDate": zod.coerce.date(),
@@ -3086,7 +3198,7 @@ export const GetClientPortfolioResponse = zod.object({
   "nextDeadline": zod.union([zod.object({
   "id": zod.string(),
   "clientPartyId": zod.string(),
-  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch', 'bill_due']),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "dueDate": zod.coerce.date(),
@@ -3109,7 +3221,7 @@ export const GetClientPortfolioResponse = zod.object({
   "deadlines": zod.array(zod.object({
   "id": zod.string(),
   "clientPartyId": zod.string(),
-  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch']),
+  "kind": zod.enum(['vat_return', 'b2c_report', 'invoice_submission', 'penalty_watch', 'bill_due']),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "dueDate": zod.coerce.date(),
@@ -3936,7 +4048,7 @@ export const FlagPaymentBody = zod.object({
 export const FlagPaymentResponse = zod.object({
   "id": zod.string(),
   "invoiceId": zod.string(),
-  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence']),
+  "source": zod.enum(['statement_match', 'buyer_flag', 'collection_account', 'uploaded_evidence', 'payer_flag']),
   "amount": zod.string(),
   "confidence": zod.string().nullish(),
   "paymentStatus": zod.union([zod.literal('scheduled'),zod.literal('paid'),zod.literal(null)]).nullish(),

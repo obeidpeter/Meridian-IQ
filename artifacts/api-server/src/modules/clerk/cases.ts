@@ -8,6 +8,7 @@ import {
   invoicesTable,
   firmsTable,
   membershipsTable,
+  partiesTable,
   type ClerkCase,
   type ExtractionField,
   type ExtractionLine,
@@ -805,8 +806,11 @@ export async function setCaseFeedback(
 
 // RLS on the firm data is bypassed for operators, so firm membership of the
 // chosen parties is validated explicitly: a party belongs to a firm when it is
-// a client of one of the firm's engagements or already appears on one of the
-// firm's invoices.
+// a client of one of the firm's engagements, already appears on one of the
+// firm's invoices, or was created BY the firm (created_by_firm_id provenance —
+// the party-sphere arm). The provenance arm is what lets the FIRST bill from a
+// freshly created vendor party approve: a brand-new vendor has no engagement
+// and, by definition, no invoice yet.
 async function assertPartyInFirm(firmId: string, partyId: string, label: string) {
   const [viaEngagement] = await getDb()
     .select({ id: engagementsTable.id })
@@ -833,9 +837,20 @@ async function assertPartyInFirm(firmId: string, partyId: string, label: string)
     )
     .limit(1);
   if (viaInvoice) return;
+  const [viaProvenance] = await getDb()
+    .select({ id: partiesTable.id })
+    .from(partiesTable)
+    .where(
+      and(
+        eq(partiesTable.id, partyId),
+        eq(partiesTable.createdByFirmId, firmId),
+      ),
+    )
+    .limit(1);
+  if (viaProvenance) return;
   throw new DomainError(
     "PARTY_NOT_IN_FIRM",
-    `The chosen ${label} party is not linked to the chosen firm (no engagement or invoice references it)`,
+    `The chosen ${label} party is not linked to the chosen firm (no engagement, invoice or party record created by the firm references it)`,
     400,
   );
 }

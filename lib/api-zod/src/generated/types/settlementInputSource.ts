@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.43.0
+ * OpenAPI spec version: 0.44.0
  */
 
 export type SettlementInputSource = typeof SettlementInputSource[keyof typeof SettlementInputSource];
@@ -14,4 +14,5 @@ export const SettlementInputSource = {
   buyer_flag: 'buyer_flag',
   collection_account: 'collection_account',
   uploaded_evidence: 'uploaded_evidence',
+  payer_flag: 'payer_flag',
 } as const;

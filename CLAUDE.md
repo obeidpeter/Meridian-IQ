@@ -43,7 +43,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.43.0`).
+contract change (it is currently `0.44.0`).
 
 ## Clerk AI — the principles (details: docs/clerk-ai.md)
 
@@ -87,8 +87,9 @@ you must not learn the hard way:
 `docs/platform.md` also covers auth & sessions (invites, TOTP, rate
 limiting), the pipeline worker & sweeps (idempotent, multi-instance-safe,
 Lagos day boundaries), messaging & the notification inbox, statements & bank
-feeds & scanned intake, billing/PDF/export surfaces, and observability
-(`/api/healthz`, `/api/readyz`, `/api/metrics`).
+feeds & scanned intake, payables/bills (evidence-only payStatus, the 409
+NOT_SUBMITTABLE orientation guard), billing/PDF/export surfaces, and
+observability (`/api/healthz`, `/api/readyz`, `/api/metrics`).
 
 ## Verify battery (run before shipping)
 
@@ -110,7 +111,7 @@ pnpm --filter @workspace/buyer-portal run test
 pnpm --filter @workspace/landing run test
 pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-ui run test
 # web builds (each needs BASE_PATH + PORT), then the e2e journeys:
-pnpm --filter @workspace/scripts run e2e        # 56 checks vs real builds + DB (standard seed run)
+pnpm --filter @workspace/scripts run e2e        # 62 checks vs real builds + DB (standard seed run)
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of the above.

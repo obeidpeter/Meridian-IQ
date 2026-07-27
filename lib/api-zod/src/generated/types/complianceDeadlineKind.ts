@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.43.0
+ * OpenAPI spec version: 0.44.0
  */
 
 export type ComplianceDeadlineKind = typeof ComplianceDeadlineKind[keyof typeof ComplianceDeadlineKind];
@@ -14,4 +14,5 @@ export const ComplianceDeadlineKind = {
   b2c_report: 'b2c_report',
   invoice_submission: 'invoice_submission',
   penalty_watch: 'penalty_watch',
+  bill_due: 'bill_due',
 } as const;

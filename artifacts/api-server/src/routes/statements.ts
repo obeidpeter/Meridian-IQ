@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   getDb,
   runRequestContext,
@@ -236,7 +237,7 @@ router.get("/statements/:id/lines", requireFlag("reconciliation"), async (req, r
 router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "reconciliation.read");
   const params = parseOrThrow(ListBankStatementProposalsParams, req.params);
-  await loadStatementForTenant(req, params.id);
+  const statement = await loadStatementForTenant(req, params.id);
   const lines = await getDb()
     .select({
       id: bankStatementLinesTable.id,
@@ -252,6 +253,12 @@ router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (re
     res.json(ListBankStatementProposalsResponse.parse([]));
     return;
   }
+  // Both parties are joined so the display name can follow the proposal's
+  // orientation: for a RECEIVABLE the narration counterparty is the buyer;
+  // for a BILL (this client is the invoice's buyer) it is the SUPPLIER. The
+  // response field keeps its contract name (buyerName) — it has always meant
+  // "the name to show against the bank line".
+  const supplierParties = alias(partiesTable, "supplier_parties");
   const proposals = await getDb()
     .select({
       id: matchProposalsTable.id,
@@ -264,11 +271,18 @@ router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (re
       invoiceNumber: invoicesTable.invoiceNumber,
       invoiceStatus: invoicesTable.status,
       invoiceTotal: invoicesTable.grandTotal,
+      invoiceSupplierPartyId: invoicesTable.supplierPartyId,
+      invoiceBuyerPartyId: invoicesTable.buyerPartyId,
       buyerName: partiesTable.legalName,
+      supplierName: supplierParties.legalName,
     })
     .from(matchProposalsTable)
     .innerJoin(invoicesTable, eq(invoicesTable.id, matchProposalsTable.invoiceId))
     .innerJoin(partiesTable, eq(partiesTable.id, invoicesTable.buyerPartyId))
+    .innerJoin(
+      supplierParties,
+      eq(supplierParties.id, invoicesTable.supplierPartyId),
+    )
     .where(
       inArray(
         matchProposalsTable.statementLineId,
@@ -278,6 +292,9 @@ router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (re
     .orderBy(desc(matchProposalsTable.confidence));
   const view = proposals.map((p) => {
     const line = lineById.get(p.statementLineId);
+    const isBill =
+      p.invoiceBuyerPartyId === statement.clientPartyId &&
+      p.invoiceSupplierPartyId !== statement.clientPartyId;
     return {
       id: p.id,
       statementId: params.id,
@@ -286,7 +303,7 @@ router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (re
       invoiceNumber: p.invoiceNumber,
       invoiceStatus: p.invoiceStatus,
       invoiceTotal: p.invoiceTotal,
-      buyerName: p.buyerName,
+      buyerName: isBill ? p.supplierName : p.buyerName,
       lineNo: line?.lineNo,
       lineAmount: line?.amount ?? null,
       lineDate: line?.valueDate ?? null,

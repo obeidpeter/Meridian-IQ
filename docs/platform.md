@@ -223,6 +223,56 @@ All reconciliation surfaces are gated by the `reconciliation` feature flag.
   rendered to generic CSV and fed through the ORDINARY `ingestStatement`
   flow — consent, parse invariants and the reconcile outbox all apply.
 
+## Payables (bills)
+
+The invoice spine read in the other direction: a **bill** is a captured
+supplier invoice — the firm's client is the BUYER — living in the same
+`invoices` table (Clerk approval is how most arrive). What separates a bill
+from a receivable is pure **orientation**: whether the supplier party is one
+of the firm's engaged clients. That one predicate now runs in both
+directions:
+
+- **Evidence-only payStatus.** `GET /bills` (`clientPartyId` required;
+  client-facing, so the usual tenant + SEC-03 scoping applies) derives
+  `open | scheduled | paid` from settlement evidence ONLY — `payer_flag`
+  settlement events written by `POST /bills/{id}/payment-flag` plus debit
+  statement matches: paid when a paid/statement event exists, scheduled when
+  the latest flag is scheduled, else open (the spec's own comment on
+  `BillSummary`). A bill's invoice status NEVER transitions: there is no
+  lifecycle to run — stamping a supplier document is the supplier's own job.
+- **The orientation guard (409 `NOT_SUBMITTABLE`).** validate / submit /
+  credit-note refuse any invoice whose supplier is not an engaged client of
+  the firm. This closes a real gap: previously a vendor's captured invoice
+  could be submitted for stamping in the client's name if layer-1 consent
+  happened to exist.
+- **The debit reconciliation lane.** Debit statement lines propose against
+  unpaid bills (supplier-name matching); accepting records
+  `statement_match` settlement evidence WITHOUT any status transition — the
+  accept-without-transition sibling of the credit lane. Credits still match
+  receivables only.
+- **Bill verifications** (`POST /bills/{id}/verify-stamp`, stored per bill
+  in `bill_verifications` — firm+invoice keyed,
+  `lib/db/src/schema/bills.ts`): the payer types the supplier's IRN + CSID
+  and the ordinary verify path checks the national record; the newest result
+  rides the bills list (`lastVerification`) so the input-VAT posture is
+  visible per bill. Migration 0023 adds the firm-keyed RLS AND extends
+  `meridian_purge_expired` to delete `bill_verifications` and `chase_log`
+  child rows before invoices — the chase_log arm fixes a latent FK violation
+  (migration 0018 never taught the purge function about its table).
+- **Counter hygiene.** Firm-wide counters that mean "invoices we must file"
+  — the digest's unsubmitted/overdue facts, the compliance calendar,
+  firm-wide Ask aggregates — now use an explicit receivable-orientation
+  predicate (supplier IS an engaged client), so draft bills no longer
+  pollute compliance counts.
+- **Surfaces.** The SME **Bills** page (flag scheduled/paid, verify stamp)
+  plus the dashboard **Payables** card (`GET /dashboard/payables` —
+  overdue/due-week buckets and top suppliers, deterministic) and `bill_due`
+  compliance-calendar deadlines; mobile mirrors the bills screen and a home
+  tile. Vendor parties bootstrap through Clerk approval's firm-created
+  provenance arm (`docs/clerk-ai.md` § Review & approval). The demo seed
+  carries the vendor party "Lagos Packaging Supplies Ltd" and draft bill
+  `BILL-2001`, which the e2e payables journey rides.
+
 ## Billing, PDF & exports
 
 - **Branded invoice PDF** (`modules/invoice/pdf.ts`,

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.43.0
+ * OpenAPI spec version: 0.44.0
  */
 export interface HealthStatus {
   status: string;
@@ -762,6 +762,7 @@ export const SettlementEventSource = {
   buyer_flag: 'buyer_flag',
   collection_account: 'collection_account',
   uploaded_evidence: 'uploaded_evidence',
+  payer_flag: 'payer_flag',
 } as const;
 
 /**
@@ -800,6 +801,7 @@ export const SettlementInputSource = {
   buyer_flag: 'buyer_flag',
   collection_account: 'collection_account',
   uploaded_evidence: 'uploaded_evidence',
+  payer_flag: 'payer_flag',
 } as const;
 
 export interface SettlementInput {
@@ -807,6 +809,95 @@ export interface SettlementInput {
   amount: string;
   confidence?: string;
   occurredAt: string;
+}
+
+export type BillSummaryPayStatus = typeof BillSummaryPayStatus[keyof typeof BillSummaryPayStatus];
+
+
+export const BillSummaryPayStatus = {
+  open: 'open',
+  scheduled: 'scheduled',
+  paid: 'paid',
+} as const;
+
+/**
+ * @nullable
+ */
+export type BillSummaryLastVerification = {
+  valid: boolean;
+  /** @nullable */
+  eligible?: boolean | null;
+  checkedAt: string;
+} | null;
+
+export interface BillSummary {
+  invoiceId: string;
+  invoiceNumber: string;
+  supplierPartyId: string;
+  supplierName: string;
+  issueDate: string;
+  /** @nullable */
+  dueDate?: string | null;
+  currency: string;
+  grandTotal: string;
+  payStatus: BillSummaryPayStatus;
+  /** @nullable */
+  lastVerification?: BillSummaryLastVerification;
+}
+
+export type BillPaymentFlagInputStatus = typeof BillPaymentFlagInputStatus[keyof typeof BillPaymentFlagInputStatus];
+
+
+export const BillPaymentFlagInputStatus = {
+  scheduled: 'scheduled',
+  paid: 'paid',
+} as const;
+
+export interface BillPaymentFlagInput {
+  status: BillPaymentFlagInputStatus;
+  amount?: string;
+}
+
+export interface BillVerification {
+  invoiceId: string;
+  irn: string;
+  csid: string;
+  valid: boolean;
+  /** @nullable */
+  eligible?: boolean | null;
+  checkedAt: string;
+}
+
+export type PayablesSummaryGroupsItemDueWeeksItem = {
+  startDate: string;
+  amount: string;
+  count: number;
+};
+
+export interface CashflowBucket {
+  amount: string;
+  count: number;
+}
+
+export type PayablesSummaryGroupsItem = {
+  currency: string;
+  overdue: CashflowBucket;
+  dueWeeks: PayablesSummaryGroupsItemDueWeeksItem[];
+  later: CashflowBucket;
+  total: CashflowBucket;
+};
+
+export type PayablesSummaryTopSuppliersItem = {
+  supplierPartyId: string;
+  supplierName: string;
+  amount: string;
+  count: number;
+};
+
+export interface PayablesSummary {
+  clientPartyId: string;
+  groups: PayablesSummaryGroupsItem[];
+  topSuppliers: PayablesSummaryTopSuppliersItem[];
 }
 
 export interface StampVerifyInput {
@@ -1612,11 +1703,6 @@ export interface ReceivablesBucket {
   count: number;
 }
 
-export interface CashflowBucket {
-  amount: string;
-  count: number;
-}
-
 export type CashflowOutlookGroupsItemWeeksItem = {
   startDate: string;
   amount: string;
@@ -1794,6 +1880,7 @@ export const ComplianceDeadlineKind = {
   b2c_report: 'b2c_report',
   invoice_submission: 'invoice_submission',
   penalty_watch: 'penalty_watch',
+  bill_due: 'bill_due',
 } as const;
 
 export type ComplianceDeadlineStatus = typeof ComplianceDeadlineStatus[keyof typeof ComplianceDeadlineStatus];
@@ -4981,6 +5068,14 @@ clientPartyId?: string;
 };
 
 export type GetDashboardSummaryParams = {
+clientPartyId: string;
+};
+
+export type ListBillsParams = {
+clientPartyId: string;
+};
+
+export type GetPayablesSummaryParams = {
 clientPartyId: string;
 };
 
