@@ -21,6 +21,7 @@ import {
   WEBHOOK_EVENTS,
   SIGNATURE_HEADER,
   createFirmWebhook,
+  disableFirmWebhook,
   fanOutWebhookEvents,
   dispatchWebhookDeliveries,
   vetWebhookUrl,
@@ -458,6 +459,114 @@ test("routes: create shows the secret once, disable is CAS, deliveries list newe
   // Explicit role gate: staff (and any non-admin) is refused.
   const staffBase = await listen(appFor(staff, integrationsRouter));
   assert.equal((await fetch(`${staffBase}/firm-webhooks`)).status, 403);
+});
+
+test("retry: dead → pending requeue the dispatcher picks up; live rows, foreign firms and disabled hooks refuse", async () => {
+  const base = await listen(appFor(admin, integrationsRouter));
+  const hook = await createFirmWebhook(firmA, `${receiverBase}/ok`, ["invoice.stamped"]);
+  const [dead] = await getDb()
+    .insert(firmWebhookDeliveriesTable)
+    .values({
+      webhookId: hook.row.id,
+      firmId: firmA,
+      eventType: "invoice.stamped",
+      eventKey: `test:retry:${SALT}`,
+      payload: { entityType: "invoice", entityId: invoiceA },
+      status: "dead",
+      attempts: 5,
+      lastError: "HTTP 500",
+      // Far-future backoff left over from the failed cycle — the retry must
+      // reset it, or the requeued row would sit undue for hours.
+      nextAttemptAt: new Date(Date.now() + 3_600_000),
+    })
+    .returning();
+
+  // Cross-firm: another firm's admin sees 404, and the row is untouched.
+  const foreignBase = await listen(appFor(adminB, integrationsRouter));
+  const cross = await fetch(
+    `${foreignBase}/firm-webhooks/${hook.row.id}/deliveries/${dead.id}/retry`,
+    { method: "POST", headers: JSON_HEADERS },
+  );
+  assert.equal(cross.status, 404);
+
+  // A delivery id that does not live under the addressed webhook is 404 too.
+  const otherHook = await createFirmWebhook(firmA, `${receiverBase}/ok`, ["invoice.stamped"]);
+  const wrongHook = await fetch(
+    `${base}/firm-webhooks/${otherHook.row.id}/deliveries/${dead.id}/retry`,
+    { method: "POST", headers: JSON_HEADERS },
+  );
+  assert.equal(wrongHook.status, 404);
+
+  // The retry itself: dead → pending, counters reset, due immediately.
+  const retried = await fetch(
+    `${base}/firm-webhooks/${hook.row.id}/deliveries/${dead.id}/retry`,
+    { method: "POST", headers: JSON_HEADERS },
+  );
+  assert.equal(retried.status, 200);
+  const body = (await retried.json()) as {
+    id: string;
+    status: string;
+    attempts: number;
+    lastError: string | null;
+  };
+  assert.equal(body.id, dead.id);
+  assert.equal(body.status, "pending");
+  assert.equal(body.attempts, 0);
+  assert.equal(body.lastError, null);
+
+  // The ordinary sweep dispatcher picks the requeued row up and delivers it.
+  captured.length = 0;
+  await dispatchWebhookDeliveries();
+  assert.equal(captured.length, 1, "the requeued delivery was POSTed");
+  assert.equal(captured[0].path, "/ok");
+  const [after] = await getDb()
+    .select()
+    .from(firmWebhookDeliveriesTable)
+    .where(eq(firmWebhookDeliveriesTable.id, dead.id))
+    .limit(1);
+  assert.equal(after.status, "delivered");
+  assert.equal(after.attempts, 1, "the fresh cycle counts from zero");
+
+  // Not dead any more: a second retry is refused with 409.
+  const again = await fetch(
+    `${base}/firm-webhooks/${hook.row.id}/deliveries/${dead.id}/retry`,
+    { method: "POST", headers: JSON_HEADERS },
+  );
+  assert.equal(again.status, 409);
+  assert.match(
+    ((await again.json()) as { error: string }).error,
+    /only dead deliveries can be retried/,
+  );
+
+  // A dead row on a DISABLED endpoint cannot be requeued — the dispatcher
+  // would never drain it.
+  const disabledHook = await createFirmWebhook(firmA, `${receiverBase}/ok`, ["invoice.stamped"]);
+  const [deadOnDisabled] = await getDb()
+    .insert(firmWebhookDeliveriesTable)
+    .values({
+      webhookId: disabledHook.row.id,
+      firmId: firmA,
+      eventType: "invoice.stamped",
+      eventKey: `test:retry-disabled:${SALT}`,
+      payload: { entityType: "invoice", entityId: invoiceA },
+      status: "dead",
+      attempts: 5,
+      lastError: "HTTP 500",
+    })
+    .returning();
+  await disableFirmWebhook(firmA, disabledHook.row.id);
+  const ontoDisabled = await fetch(
+    `${base}/firm-webhooks/${disabledHook.row.id}/deliveries/${deadOnDisabled.id}/retry`,
+    { method: "POST", headers: JSON_HEADERS },
+  );
+  assert.equal(ontoDisabled.status, 409);
+  assert.match(((await ontoDisabled.json()) as { error: string }).error, /disabled/);
+  const [still] = await getDb()
+    .select()
+    .from(firmWebhookDeliveriesTable)
+    .where(eq(firmWebhookDeliveriesTable.id, deadOnDisabled.id))
+    .limit(1);
+  assert.equal(still.status, "dead", "refusals never touch the row");
 });
 
 test("RLS: webhook and delivery rows are firm-isolated at the data layer", async () => {

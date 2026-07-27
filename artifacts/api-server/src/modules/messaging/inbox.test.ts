@@ -27,7 +27,11 @@ import {
 //  - rows predating the identity columns (null identity) drop from feeds;
 //  - firm staff see exactly their own user-identity rows — NOT the firm's
 //    party alerts (those belong to the client they were addressed to);
-//  - roles with no recipient identity in the ledger (operator here) get an
+//  - an operator sees exactly its own user-identity rows (the platform-health
+//    offer rail), never a sibling operator's;
+//  - a buyer_user sees exactly its own buyer party's rows, never another
+//    buyer organization's;
+//  - roles with no recipient identity in the ledger (auditor here) get an
 //    empty feed;
 //  - titles resolve from the template registry (unknown keys humanize, never
 //    throw), rows stay pointer-only, newest-first, limit clamped to 1..100.
@@ -44,6 +48,10 @@ const partyB = randomUUID();
 const collidingParty = randomUUID();
 const staffUserId = randomUUID();
 const collidingStaffUser = randomUUID();
+const opUserId = randomUUID();
+const otherOpUserId = randomUUID();
+const buyerPartyC = randomUUID();
+const buyerPartyD = randomUUID();
 
 const refA = recipientRefFor(partyA);
 const refStaff = pointerEntityRef("usr", staffUserId);
@@ -72,6 +80,27 @@ const staff: Principal = {
 const operator: Principal = {
   userId: randomUUID(),
   role: "operator",
+  firmId: null,
+  clientPartyId: null,
+  buyerPartyId: null,
+};
+const operatorWithFeed: Principal = {
+  userId: opUserId,
+  role: "operator",
+  firmId: null,
+  clientPartyId: null,
+  buyerPartyId: null,
+};
+const buyerC: Principal = {
+  userId: randomUUID(),
+  role: "buyer_user",
+  firmId: null,
+  clientPartyId: null,
+  buyerPartyId: buyerPartyC,
+};
+const auditor: Principal = {
+  userId: randomUUID(),
+  role: "auditor",
   firmId: null,
   clientPartyId: null,
   buyerPartyId: null,
@@ -169,6 +198,45 @@ before(async () => {
         status: "sent",
         createdAt: at(4),
       },
+      // Operator platform-health nudge (the health-watch offer rail's shape),
+      // plus a second operator's row that must never surface for the first.
+      {
+        channel: "email",
+        recipientRef: pointerEntityRef("usr", opUserId),
+        recipientUserId: opUserId,
+        templateKey: "platform_health",
+        entityType: "health_alert",
+        entityId: "ops-opsout",
+        status: "sent",
+        createdAt: at(3),
+      },
+      {
+        channel: "email",
+        recipientRef: pointerEntityRef("usr", otherOpUserId),
+        recipientUserId: otherOpUserId,
+        templateKey: "platform_health",
+        status: "sent",
+        createdAt: at(2),
+      },
+      // Buyer Rails rows: buyer C's own and a second buyer organization's.
+      {
+        channel: "email",
+        recipientRef: recipientRefFor(buyerPartyC),
+        recipientPartyId: buyerPartyC,
+        templateKey: "confirmation_request",
+        entityType: "invoice",
+        entityId: "inv-buyerc",
+        status: "sent",
+        createdAt: at(7),
+      },
+      {
+        channel: "email",
+        recipientRef: recipientRefFor(buyerPartyD),
+        recipientPartyId: buyerPartyD,
+        templateKey: "confirmation_request",
+        status: "sent",
+        createdAt: at(2),
+      },
     ]);
 });
 
@@ -235,7 +303,54 @@ test("firm staff see their own user-identity rows only — never the firm's part
   assert.equal(items[0].title, TEMPLATES.firm_digest_ready.description);
 });
 
+test("an operator sees exactly its own user-identity rows — never a sibling operator's", async () => {
+  const { items, unreadCount } = await notificationFeedFor(operatorWithFeed);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].templateKey, "platform_health");
+  assert.equal(items[0].title, TEMPLATES.platform_health.description);
+  assert.equal(items[0].entityType, "health_alert");
+  assert.equal(items[0].entityId, "ops-opsout", "the pointer passes through opaque");
+  assert.equal(unreadCount, 1);
+  // Marking mine rides the same identity wall: the sibling operator's row
+  // stays unread.
+  const marked = await markNotificationsRead(operatorWithFeed, new Date());
+  assert.equal(marked.unreadCount, 0);
+  const [siblingRow] = await getDb()
+    .select({ readAt: messagesTable.readAt })
+    .from(messagesTable)
+    .where(eq(messagesTable.recipientUserId, otherOpUserId));
+  assert.equal(siblingRow.readAt, null);
+});
+
+test("a buyer_user sees exactly its own buyer party's rows — never another buyer's", async () => {
+  const { items, unreadCount } = await notificationFeedFor(buyerC);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].templateKey, "confirmation_request");
+  assert.equal(items[0].entityId, "inv-buyerc");
+  assert.equal(unreadCount, 1);
+  // A buyer principal missing its party scope resolves to no identity —
+  // empty, never someone else's rows.
+  assert.deepEqual(await notificationFeedFor({ ...buyerC, buyerPartyId: null }), {
+    items: [],
+    unreadCount: 0,
+  });
+  // Marking C's feed leaves the other buyer organization's row untouched.
+  const marked = await markNotificationsRead(buyerC, new Date());
+  assert.equal(marked.unreadCount, 0);
+  const [otherBuyerRow] = await getDb()
+    .select({ readAt: messagesTable.readAt })
+    .from(messagesTable)
+    .where(eq(messagesTable.recipientPartyId, buyerPartyD));
+  assert.equal(otherBuyerRow.readAt, null);
+});
+
 test("roles without a recipient identity in the ledger get an empty feed", async () => {
+  // No send rail stamps an identity for auditor (or bank_user).
+  assert.deepEqual(await notificationFeedFor(auditor), {
+    items: [],
+    unreadCount: 0,
+  });
+  // An operator nobody has offered an alert to holds an identity but no rows.
   assert.deepEqual(await notificationFeedFor(operator), {
     items: [],
     unreadCount: 0,
@@ -344,7 +459,7 @@ test("staff marking marks their own user-identity row only, never the colliding 
 });
 
 test("roles without a recipient identity mark nothing and get the empty feed", async () => {
-  assert.deepEqual(await markNotificationsRead(operator, new Date()), {
+  assert.deepEqual(await markNotificationsRead(auditor, new Date()), {
     items: [],
     unreadCount: 0,
   });
@@ -368,7 +483,8 @@ test("GET /notifications serves the feed to any authenticated principal; bad lim
   const bad = await fetch(`${base}/notifications?limit=0`);
   assert.equal(bad.status, 400);
 
-  // The operator's empty feed is a 200 with no items, not an error.
+  // An operator nobody has offered an alert to gets a 200 with no items,
+  // not an error (auditor, with no identity at all, behaves the same).
   const opBase = await listen(appFor(operator, messagingRouter));
   const opRes = await fetch(`${opBase}/notifications`);
   assert.equal(opRes.status, 200);

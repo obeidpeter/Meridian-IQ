@@ -12,6 +12,8 @@ import {
   DisableFirmWebhookResponse,
   ListFirmWebhookDeliveriesParams,
   ListFirmWebhookDeliveriesResponse,
+  RetryFirmWebhookDeliveryParams,
+  RetryFirmWebhookDeliveryResponse,
 } from "@workspace/api-zod";
 import type {
   FirmApiKeyRow,
@@ -32,6 +34,7 @@ import {
   disableFirmWebhook,
   listFirmWebhooks,
   listWebhookDeliveries,
+  retryDelivery,
 } from "../modules/integrations/webhooks";
 
 // Firm integrations (contract 0.41.0): API keys + outbound webhooks.
@@ -200,6 +203,28 @@ router.get(
     const params = parseOrThrow(ListFirmWebhookDeliveriesParams, req.params);
     const rows = await listWebhookDeliveries(firmId, params.id);
     res.json(ListFirmWebhookDeliveriesResponse.parse(rows.map(deliveryBody)));
+  },
+);
+
+// Re-queue one dead delivery (contract 0.42.0): the CAS + ownership vetting
+// live in the module (404 unknown/foreign, 409 when live or when the endpoint
+// is disabled); the sweep dispatcher picks the pending row up on its next
+// pass. Same explicit firm_admin pin as every other integrations surface.
+router.post(
+  "/firm-webhooks/:id/deliveries/:deliveryId/retry",
+  async (req, res): Promise<void> => {
+    const firmId = firmAdminScope(req.principal);
+    const params = parseOrThrow(RetryFirmWebhookDeliveryParams, req.params);
+    const row = await retryDelivery(firmId, params.id, params.deliveryId);
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId,
+      action: "webhook.delivery_retry",
+      entityType: "firm_webhook_delivery",
+      entityId: row.id,
+      after: { eventType: row.eventType, status: row.status },
+    });
+    res.json(RetryFirmWebhookDeliveryResponse.parse(deliveryBody(row)));
   },
 );
 

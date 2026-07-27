@@ -10,6 +10,10 @@ import {
   ListBuyerSuppliersResponse,
   GetBuyerExposureResponse,
   GetBuyerScoreboardResponse,
+  GetBuyerSupplierDetailParams,
+  GetBuyerSupplierDetailResponse,
+  BulkRespondConfirmationsBody,
+  BulkRespondConfirmationsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import {
@@ -28,7 +32,11 @@ import {
   loadBuyerBook,
   getOrRefreshExposure,
   computeScoreboard,
+  buyerInvoiceView,
+  supplierDetail,
+  respondBulk,
 } from "../modules/buyer/service";
+import { sendCsvAttachment, toCsv } from "../lib/csv";
 
 // Buyer Rails v1 (BR-01, BR-02, BR-04, BR-05). Every surface is scoped to the
 // caller's buyer Party (buyer principals run RLS-bypassed, so this route-level
@@ -62,24 +70,79 @@ router.get("/buyer/invoices", requireBuyerRails, async (req, res): Promise<void>
             ? (f.latestConfirmation ?? "none") === stateFilter
             : true,
         )
-        .map((f) => ({
-          id: f.invoice.id,
-          invoiceNumber: f.invoice.invoiceNumber,
-          supplierPartyId: f.invoice.supplierPartyId,
-          supplierName:
-            nameById.get(f.invoice.supplierPartyId) ?? "Unknown supplier",
-          status: f.invoice.status,
-          grandTotal: f.invoice.grandTotal,
-          vatTotal: f.invoice.vatTotal,
-          issueDate: f.invoice.issueDate,
-          dueDate: f.invoice.dueDate,
-          confirmationState: f.latestConfirmation ?? "none",
-          stampValid: f.stamped,
-          eligible: f.stamped && f.eligible,
-        })),
+        .map((f) =>
+          buyerInvoiceView(f, nameById.get(f.invoice.supplierPartyId)),
+        ),
     ),
   );
 });
+
+// Awaiting-confirmation worklist as a CSV attachment (contract 0.42.0): the
+// same book/latest-lineage read as the list above with
+// confirmationState=requested, shipped through the shared CSV helpers
+// (formula-injection-safe — supplier names and invoice numbers are
+// tenant-authored free text opened in Excel).
+router.get("/buyer/confirmations/export", requireBuyerRails, async (req, res): Promise<void> => {
+  assertCan(req.principal, "buyer.rails.read");
+  const party = buyerPartyId(req.principal);
+  const awaiting = (await loadBuyerBook(party)).filter(
+    (f) => f.latestConfirmation === "requested",
+  );
+  const supplierIds = [
+    ...new Set(awaiting.map((f) => f.invoice.supplierPartyId)),
+  ];
+  const suppliers = supplierIds.length
+    ? await getDb()
+        .select({ id: partiesTable.id, legalName: partiesTable.legalName })
+        .from(partiesTable)
+        .where(inArray(partiesTable.id, supplierIds))
+    : [];
+  const nameById = new Map(suppliers.map((s) => [s.id, s.legalName]));
+  const csv = toCsv(
+    [
+      "invoiceNumber",
+      "supplierName",
+      "issueDate",
+      "dueDate",
+      "currency",
+      "grandTotal",
+      "requestedAt",
+    ],
+    awaiting.map((f) => [
+      f.invoice.invoiceNumber,
+      nameById.get(f.invoice.supplierPartyId) ?? "Unknown supplier",
+      f.invoice.issueDate,
+      f.invoice.dueDate,
+      f.invoice.currency,
+      f.invoice.grandTotal,
+      f.latestConfirmationAt?.toISOString() ?? "",
+    ]),
+  );
+  sendCsvAttachment(res, "pending-confirmations.csv", csv);
+});
+
+// Bulk confirmation response (contract 0.42.0): per-invoice outcomes, skips
+// reported never silent — the semantics live in the service
+// (modules/buyer/service.ts respondBulk), one savepoint per item. Gated by
+// BOTH buyer_rails (this is a buyer-portal surface) and buyer_confirmations
+// (a dark confirmation workflow must be unreachable through the batch door
+// exactly as it is through the single-invoice door, PL-02).
+router.post(
+  "/buyer/confirmations/bulk",
+  requireBuyerRails,
+  requireFlag("buyer_confirmations", { global: true }),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "confirmation.respond");
+    const body = parseOrThrow(BulkRespondConfirmationsBody, req.body);
+    const result = await respondBulk(
+      req.principal,
+      body.invoiceIds,
+      body.method,
+      body.noSetOff ?? false,
+    );
+    res.json(BulkRespondConfirmationsResponse.parse(result));
+  },
+);
 
 // BR-04: buyer marks an invoice payment as scheduled or paid. Each flag is one
 // append-only SettlementEvent with source=buyer_flag and the flagging user
@@ -175,6 +238,18 @@ router.get("/buyer/suppliers", requireBuyerRails, async (req, res): Promise<void
   const party = buyerPartyId(req.principal);
   const exposure = await getOrRefreshExposure(party);
   res.json(ListBuyerSuppliersResponse.parse(exposure.breakdown));
+});
+
+// Supplier drill-down (contract 0.42.0): the one-supplier aggregate plus the
+// buyer's invoices from that supplier, always computed live from the caller's
+// own book — a supplier with no invoices to this buyer is a 404 in the
+// service, indistinguishable from one that does not exist.
+router.get("/buyer/suppliers/:id", requireBuyerRails, async (req, res): Promise<void> => {
+  assertCan(req.principal, "buyer.rails.read");
+  const party = buyerPartyId(req.principal);
+  const params = parseOrThrow(GetBuyerSupplierDetailParams, req.params);
+  const detail = await supplierDetail(party, params.id);
+  res.json(GetBuyerSupplierDetailResponse.parse(detail));
 });
 
 router.get("/buyer/exposure", requireBuyerRails, async (req, res): Promise<void> => {

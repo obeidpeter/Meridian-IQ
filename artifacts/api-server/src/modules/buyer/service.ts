@@ -9,9 +9,16 @@ import {
   buyerExposureSnapshotsTable,
   type Invoice,
 } from "@workspace/db";
-import { isPresentableAsEligible } from "../invoice/lifecycle.ts";
+import {
+  canTransition,
+  isPresentableAsEligible,
+  recordTransition,
+} from "../invoice/lifecycle.ts";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
+import { appendAudit } from "../audit/audit";
+import { DomainError } from "../errors";
+import { assertBuyerPartyAccess, type Principal } from "../auth/rbac";
 
 // Buyer Rails v1 read models (BR-01, BR-05).
 //
@@ -50,11 +57,15 @@ function money(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 
-interface InvoiceFacts {
+export interface InvoiceFacts {
   invoice: Invoice;
   stamped: boolean;
   eligible: boolean;
   latestConfirmation: string | null;
+  // When the latest lineage row was written — for an invoice whose latest
+  // state is `requested`, this is when the confirmation was requested (the
+  // pending-confirmations CSV's requestedAt column).
+  latestConfirmationAt: Date | null;
 }
 
 // Statuses visible to the buyer organization. Drafts (and locally-validated
@@ -103,18 +114,78 @@ export async function loadBuyerBook(
     .from(confirmationsTable)
     .where(inArray(confirmationsTable.invoiceId, ids))
     .orderBy(desc(confirmationsTable.createdAt));
-  const latestByInvoice = new Map<string, string>();
+  const latestByInvoice = new Map<string, { state: string; createdAt: Date }>();
   for (const c of confirmations) {
     if (!latestByInvoice.has(c.invoiceId)) {
-      latestByInvoice.set(c.invoiceId, c.state);
+      latestByInvoice.set(c.invoiceId, { state: c.state, createdAt: c.createdAt });
     }
   }
-  return invoices.map((invoice) => ({
-    invoice,
-    stamped: stampedIds.has(invoice.id),
-    eligible: isPresentableAsEligible(invoice.status),
-    latestConfirmation: latestByInvoice.get(invoice.id) ?? null,
-  }));
+  return invoices.map((invoice) => {
+    const latest = latestByInvoice.get(invoice.id);
+    return {
+      invoice,
+      stamped: stampedIds.has(invoice.id),
+      eligible: isPresentableAsEligible(invoice.status),
+      latestConfirmation: latest?.state ?? null,
+      latestConfirmationAt: latest?.createdAt ?? null,
+    };
+  });
+}
+
+function groupBySupplier(book: InvoiceFacts[]): Map<string, InvoiceFacts[]> {
+  const groups = new Map<string, InvoiceFacts[]>();
+  for (const fact of book) {
+    const key = fact.invoice.supplierPartyId;
+    const group = groups.get(key);
+    if (group) group.push(fact);
+    else groups.set(key, [fact]);
+  }
+  return groups;
+}
+
+// One supplier's summary from its facts — the SINGLE aggregation both the
+// exposure breakdown (BR-01) and the supplier drill-down (contract 0.42.0)
+// run, so the two surfaces can never disagree on the numbers. VAT on a
+// purchase is protected when the supplier invoice is stamped AND still
+// lifecycle-eligible (CORE-09 — a cancelled or credited stamped invoice is
+// exposure, not protection).
+function supplierSummaryOf(
+  supplierPartyId: string,
+  facts: InvoiceFacts[],
+  supplier:
+    | { legalName: string; tin: string | null; tinValidated: boolean }
+    | undefined,
+): SupplierSummary {
+  const agg = {
+    invoiceCount: 0,
+    stampedCount: 0,
+    eligibleCount: 0,
+    totalAmount: 0,
+    vatProtected: 0,
+    vatAtRisk: 0,
+  };
+  for (const fact of facts) {
+    const vat = Number(fact.invoice.vatTotal);
+    const protectedVat = fact.stamped && fact.eligible;
+    agg.invoiceCount++;
+    if (fact.stamped) agg.stampedCount++;
+    if (fact.stamped && fact.eligible) agg.eligibleCount++;
+    agg.totalAmount += Number(fact.invoice.grandTotal);
+    if (protectedVat) agg.vatProtected += vat;
+    else agg.vatAtRisk += vat;
+  }
+  return {
+    supplierPartyId,
+    supplierName: supplier?.legalName ?? "Unknown supplier",
+    supplierTin: supplier?.tin ?? null,
+    tinValidated: supplier?.tinValidated ?? false,
+    invoiceCount: agg.invoiceCount,
+    stampedCount: agg.stampedCount,
+    eligibleCount: agg.eligibleCount,
+    totalAmount: money(agg.totalAmount),
+    vatProtected: money(agg.vatProtected),
+    vatAtRisk: money(agg.vatAtRisk),
+  };
 }
 
 // Input-VAT exposure (BR-01): VAT on a buyer's purchase is protected when the
@@ -138,54 +209,9 @@ export async function computeExposure(
     : [];
   const supplierById = new Map(suppliers.map((s) => [s.id, s]));
 
-  const perSupplier = new Map<
-    string,
-    {
-      invoiceCount: number;
-      stampedCount: number;
-      eligibleCount: number;
-      totalAmount: number;
-      vatProtected: number;
-      vatAtRisk: number;
-    }
-  >();
-  for (const fact of book) {
-    const key = fact.invoice.supplierPartyId;
-    const agg = perSupplier.get(key) ?? {
-      invoiceCount: 0,
-      stampedCount: 0,
-      eligibleCount: 0,
-      totalAmount: 0,
-      vatProtected: 0,
-      vatAtRisk: 0,
-    };
-    const vat = Number(fact.invoice.vatTotal);
-    const protectedVat = fact.stamped && fact.eligible;
-    agg.invoiceCount++;
-    if (fact.stamped) agg.stampedCount++;
-    if (fact.stamped && fact.eligible) agg.eligibleCount++;
-    agg.totalAmount += Number(fact.invoice.grandTotal);
-    if (protectedVat) agg.vatProtected += vat;
-    else agg.vatAtRisk += vat;
-    perSupplier.set(key, agg);
-  }
-
-  const breakdown: SupplierSummary[] = [...perSupplier.entries()].map(
-    ([supplierPartyId, agg]) => {
-      const supplier = supplierById.get(supplierPartyId);
-      return {
-        supplierPartyId,
-        supplierName: supplier?.legalName ?? "Unknown supplier",
-        supplierTin: supplier?.tin ?? null,
-        tinValidated: supplier?.tinValidated ?? false,
-        invoiceCount: agg.invoiceCount,
-        stampedCount: agg.stampedCount,
-        eligibleCount: agg.eligibleCount,
-        totalAmount: money(agg.totalAmount),
-        vatProtected: money(agg.vatProtected),
-        vatAtRisk: money(agg.vatAtRisk),
-      };
-    },
+  const breakdown: SupplierSummary[] = [...groupBySupplier(book).entries()].map(
+    ([supplierPartyId, facts]) =>
+      supplierSummaryOf(supplierPartyId, facts, supplierById.get(supplierPartyId)),
   );
   breakdown.sort((a, b) => Number(b.vatAtRisk) - Number(a.vatAtRisk));
 
@@ -377,4 +403,259 @@ export async function computeScoreboard(
     e.rank = i + 1;
   });
   return entries;
+}
+
+// The buyer-portal invoice row (contract BuyerInvoice) — ONE serializer so the
+// invoice list, the pending-confirmations CSV and the supplier drill-down can
+// never drift apart on what a buyer sees of an invoice.
+export interface BuyerInvoiceView {
+  id: string;
+  invoiceNumber: string;
+  supplierPartyId: string;
+  supplierName: string;
+  status: string;
+  grandTotal: string;
+  vatTotal: string;
+  issueDate: string;
+  dueDate: string | null;
+  confirmationState: string;
+  stampValid: boolean;
+  eligible: boolean;
+}
+
+export function buyerInvoiceView(
+  fact: InvoiceFacts,
+  supplierName: string | undefined,
+): BuyerInvoiceView {
+  return {
+    id: fact.invoice.id,
+    invoiceNumber: fact.invoice.invoiceNumber,
+    supplierPartyId: fact.invoice.supplierPartyId,
+    supplierName: supplierName ?? "Unknown supplier",
+    status: fact.invoice.status,
+    grandTotal: fact.invoice.grandTotal,
+    vatTotal: fact.invoice.vatTotal,
+    issueDate: fact.invoice.issueDate,
+    dueDate: fact.invoice.dueDate,
+    confirmationState: fact.latestConfirmation ?? "none",
+    stampValid: fact.stamped,
+    eligible: fact.stamped && fact.eligible,
+  };
+}
+
+export interface SupplierDetailView {
+  supplier: SupplierSummary;
+  invoices: BuyerInvoiceView[];
+}
+
+// Supplier drill-down (contract 0.42.0): one supplier's aggregate — computed
+// by the same supplierSummaryOf the exposure breakdown runs — plus the
+// buyer's invoices from that supplier. Scoped to the caller's buyer party by
+// construction (only invoices addressed to buyerPartyId are loaded), so a
+// supplier that has never invoiced this buyer — including another buyer's
+// supplier, or one whose only invoices are still private drafts (CORE-02) —
+// is a plain 404, indistinguishable from a supplier that does not exist.
+export async function supplierDetail(
+  buyerPartyId: string,
+  supplierPartyId: string,
+): Promise<SupplierDetailView> {
+  const facts = (await loadBuyerBook(buyerPartyId)).filter(
+    (f) => f.invoice.supplierPartyId === supplierPartyId,
+  );
+  if (facts.length === 0) {
+    throw new DomainError("NOT_FOUND", "Supplier not found", 404);
+  }
+  const [supplier] = await getDb()
+    .select({
+      legalName: partiesTable.legalName,
+      tin: partiesTable.tin,
+      tinValidated: partiesTable.tinValidated,
+    })
+    .from(partiesTable)
+    .where(eq(partiesTable.id, supplierPartyId))
+    .limit(1);
+  return {
+    supplier: supplierSummaryOf(supplierPartyId, facts, supplier),
+    invoices: facts.map((f) => buyerInvoiceView(f, supplier?.legalName)),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Bulk confirmation response (contract 0.42.0). A buyer clears up to 50
+// awaiting invoices in one action while the per-invoice machinery stays
+// EXACTLY what a single response runs. confirmInvoiceForBuyer below is a
+// deliberate re-implementation of the respond branch of
+// routes/invoices.ts POST /invoices/:id/confirmations — mirrored line by
+// line rather than extracted, because that route's edit budget is pinned
+// elsewhere this round; if the single route's semantics change, change this
+// helper too. The mirrored source, piece by piece:
+//   - :916-919  load the invoice, 404 unknown, assertBuyerPartyAccess scope;
+//   - :922-931  body/invoice buyerPartyId mismatch — structurally impossible
+//               here (bulk carries no body buyerPartyId; the row below is
+//               always written with the invoice's own buyer);
+//   - :934-945  TIN gate: an unvalidated buyer party never enters the
+//               workflow (TIN_NOT_VALIDATED, the 422 becomes a skip reason);
+//   - :948-953, :972-978  the latest lineage row must be an open `requested`
+//               (NO_OPEN_REQUEST) — a duplicate id later in the same batch
+//               lands here too, because the first occurrence closed the lane;
+//   - :979-985  METHOD_REQUIRED — the bulk contract requires `method`
+//               (minLength 1), so every item carries the caller's method;
+//   - :987-995  CORE-09: a cancelled/credited invoice collects no
+//               confirmation (INVOICE_NOT_ELIGIBLE);
+//   - :998-1010 the append-only row, confirmingUserId captured (BR-02);
+//   - :1011-1034 compare-and-set status transition + lifecycle ledger row;
+//   - :1035-1042 the invoice.confirmation audit event.
+// ---------------------------------------------------------------------------
+
+async function confirmInvoiceForBuyer(
+  principal: Principal,
+  invoiceId: string,
+  method: string,
+  noSetOff: boolean,
+): Promise<void> {
+  const [invoice] = await getDb()
+    .select()
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, invoiceId))
+    .limit(1);
+  if (!invoice) throw new DomainError("NOT_FOUND", "Invoice not found", 404);
+  assertBuyerPartyAccess(principal, invoice.buyerPartyId);
+  const [buyer] = await getDb()
+    .select({ tinValidated: partiesTable.tinValidated })
+    .from(partiesTable)
+    .where(eq(partiesTable.id, invoice.buyerPartyId))
+    .limit(1);
+  if (!buyer?.tinValidated) {
+    throw new DomainError(
+      "TIN_NOT_VALIDATED",
+      "Buyer TIN must be validated before entering the confirmation workflow",
+      422,
+    );
+  }
+  const [latest] = await getDb()
+    .select()
+    .from(confirmationsTable)
+    .where(eq(confirmationsTable.invoiceId, invoiceId))
+    .orderBy(desc(confirmationsTable.createdAt))
+    .limit(1);
+  if (!latest || latest.state !== "requested") {
+    throw new DomainError(
+      "NO_OPEN_REQUEST",
+      "A confirmation response requires an open request",
+      409,
+    );
+  }
+  if (!isPresentableAsEligible(invoice.status)) {
+    throw new DomainError(
+      "INVOICE_NOT_ELIGIBLE",
+      `Invoice is ${invoice.status}; the confirmation request is void`,
+      409,
+    );
+  }
+  const [row] = await getDb()
+    .insert(confirmationsTable)
+    .values({
+      invoiceId,
+      buyerPartyId: invoice.buyerPartyId,
+      state: "confirmed",
+      method,
+      noSetOff,
+      note: null,
+      confirmingUserId: principal.userId,
+    })
+    .returning();
+  if (canTransition(invoice.status, "confirmed")) {
+    // Compare-and-set: if the invoice moved concurrently (cancel/credit), the
+    // confirmation row stands as lineage but the status transition is skipped.
+    const [moved] = await getDb()
+      .update(invoicesTable)
+      .set({ status: "confirmed" })
+      .where(
+        and(
+          eq(invoicesTable.id, invoiceId),
+          eq(invoicesTable.status, invoice.status),
+        ),
+      )
+      .returning({ id: invoicesTable.id });
+    if (moved) {
+      await recordTransition({
+        invoiceId: invoice.id,
+        firmId: invoice.firmId,
+        fromStatus: invoice.status,
+        toStatus: "confirmed",
+        actorId: principal.userId,
+        actorRole: principal.role,
+      });
+    }
+  }
+  await appendAudit({
+    actorId: principal.userId,
+    firmId: invoice.firmId,
+    action: "invoice.confirmation",
+    entityType: "confirmation",
+    entityId: row.id,
+    after: { state: row.state, method: row.method, noSetOff: row.noSetOff },
+  });
+}
+
+export interface BulkConfirmItem {
+  invoiceId: string;
+  status: "confirmed" | "skipped";
+  reason: string | null;
+}
+
+export interface BulkConfirmResult {
+  confirmed: number;
+  skipped: number;
+  items: BulkConfirmItem[];
+}
+
+export const BULK_CONFIRM_MAX = 50;
+
+// Confirm a batch, one savepoint per item (the bulk-approve idiom,
+// modules/clerk/bulk-approve.ts): each item runs in a nested transaction
+// under the caller's request transaction, so a refused or failed item rolls
+// back ONLY its own writes and the batch keeps going — skips are reported
+// per item, never silent, and one bad row can never abort (or half-commit)
+// its neighbours. Nothing here is automatic: the buyer chose every id and
+// the method is the caller's own statement of how it confirmed.
+export async function respondBulk(
+  principal: Principal,
+  invoiceIds: string[],
+  method: string,
+  noSetOff: boolean,
+): Promise<BulkConfirmResult> {
+  // The contract caps the batch at 50; restated here because the service is
+  // callable without the route's schema in front of it.
+  if (invoiceIds.length > BULK_CONFIRM_MAX) {
+    throw new DomainError(
+      "BATCH_TOO_LARGE",
+      `At most ${BULK_CONFIRM_MAX} invoices can be confirmed in one batch`,
+      400,
+    );
+  }
+  const items: BulkConfirmItem[] = [];
+  for (const invoiceId of invoiceIds) {
+    try {
+      await getDb().transaction(async () => {
+        await confirmInvoiceForBuyer(principal, invoiceId, method, noSetOff);
+      });
+      items.push({ invoiceId, status: "confirmed", reason: null });
+    } catch (err) {
+      // A domain refusal (cross-buyer, TIN gate, closed lane, dead invoice)
+      // marks THIS row skipped with the refusal's own message; anything else
+      // is reported generically — raw internals are a log concern, not a
+      // response payload.
+      items.push({
+        invoiceId,
+        status: "skipped",
+        reason:
+          err instanceof DomainError
+            ? err.message
+            : "Confirmation failed unexpectedly",
+      });
+    }
+  }
+  const confirmed = items.filter((i) => i.status === "confirmed").length;
+  return { confirmed, skipped: items.length - confirmed, items };
 }

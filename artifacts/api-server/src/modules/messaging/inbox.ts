@@ -38,9 +38,16 @@ import { TEMPLATES } from "./messaging";
 //    staff feed would leak per-client alert traffic to every teammate and
 //    turn the feed into a firm-wide monitor, which the operator message log
 //    (GET /messages) already is, behind its own operator gate.
-//  - operator / auditor / bank_user / buyer_user → empty feed: no send rail
-//    stamps a recipient identity for these roles, so the ledger simply has
-//    no rows for them to claim.
+//  - operator → recipient_user_id = their own userId, the identity the
+//    platform-health offer rail (desk/health-watch.ts) stamps on its
+//    operator nudges.
+//  - buyer_user → recipient_party_id = its own buyerPartyId: buyer-addressed
+//    sends stamp the buyer Party, and the equality keeps one buyer
+//    organization out of another's feed exactly as it does for sibling
+//    clients.
+//  - auditor / bank_user → empty feed: no send rail stamps a recipient
+//    identity for these roles, so the ledger simply has no rows for them to
+//    claim.
 
 export interface NotificationItem {
   id: string;
@@ -91,6 +98,16 @@ function recipientIdentityFor(
   if (principal.role === "firm_admin" || principal.role === "firm_staff") {
     return isUuid(principal.userId)
       ? { column: messagesTable.recipientUserId, value: principal.userId }
+      : null;
+  }
+  if (principal.role === "operator") {
+    return isUuid(principal.userId)
+      ? { column: messagesTable.recipientUserId, value: principal.userId }
+      : null;
+  }
+  if (principal.role === "buyer_user") {
+    return principal.buyerPartyId && isUuid(principal.buyerPartyId)
+      ? { column: messagesTable.recipientPartyId, value: principal.buyerPartyId }
       : null;
   }
   return null;

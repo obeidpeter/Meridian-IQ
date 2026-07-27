@@ -278,6 +278,74 @@ function rowsOf<T>(result: unknown): T[] {
   );
 }
 
+// Operator-triggered second life for a dead delivery (contract 0.42.0): a
+// firm_admin re-queues one DEAD row for a fresh attempt cycle. Compare-and-set
+// on status='dead' — a delivery still live in the retry queue (pending/failed)
+// or already delivered is refused with 409, so a double-click or a concurrent
+// dispatcher pass can never reset an in-flight row's backoff. The webhook must
+// be the caller's own (404 otherwise, indistinguishable from absent) and still
+// enabled: the dispatcher only claims ACTIVE webhooks' rows, so re-queueing
+// onto a disabled endpoint would park a pending row nothing ever drains.
+export async function retryDelivery(
+  firmId: string,
+  webhookId: string,
+  deliveryId: string,
+): Promise<FirmWebhookDeliveryRow> {
+  const [webhook] = await getDb()
+    .select({ id: firmWebhooksTable.id, active: firmWebhooksTable.active })
+    .from(firmWebhooksTable)
+    .where(
+      and(
+        eq(firmWebhooksTable.id, webhookId),
+        eq(firmWebhooksTable.firmId, firmId),
+      ),
+    )
+    .limit(1);
+  if (!webhook) throw new DomainError("NOT_FOUND", "Webhook not found", 404);
+  if (!webhook.active) {
+    throw new DomainError(
+      "WEBHOOK_DISABLED",
+      "Webhook endpoint is disabled; deliveries cannot be re-queued",
+      409,
+    );
+  }
+  const [requeued] = await getDb()
+    .update(firmWebhookDeliveriesTable)
+    .set({
+      status: "pending",
+      attempts: 0,
+      nextAttemptAt: new Date(),
+      lastError: null,
+    })
+    .where(
+      and(
+        eq(firmWebhookDeliveriesTable.id, deliveryId),
+        eq(firmWebhookDeliveriesTable.webhookId, webhookId),
+        eq(firmWebhookDeliveriesTable.status, "dead"),
+      ),
+    )
+    .returning();
+  if (requeued) return requeued;
+  // The CAS missed: distinguish "no such delivery under this webhook" (404)
+  // from "delivery exists but is not dead" (409).
+  const [existing] = await getDb()
+    .select({ status: firmWebhookDeliveriesTable.status })
+    .from(firmWebhookDeliveriesTable)
+    .where(
+      and(
+        eq(firmWebhookDeliveriesTable.id, deliveryId),
+        eq(firmWebhookDeliveriesTable.webhookId, webhookId),
+      ),
+    )
+    .limit(1);
+  if (!existing) throw new DomainError("NOT_FOUND", "Delivery not found", 404);
+  throw new DomainError(
+    "DELIVERY_NOT_DEAD",
+    `Delivery is ${existing.status}; only dead deliveries can be retried`,
+    409,
+  );
+}
+
 // Fan domain events out into delivery rows. Set-based INSERT..SELECT per
 // source ledger; the unique (webhook_id, event_key) index + ON CONFLICT DO
 // NOTHING makes concurrent sweep instances (and every re-scan of the
