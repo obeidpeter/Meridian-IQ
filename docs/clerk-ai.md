@@ -79,7 +79,9 @@ review.
   renders a textless PDF's pages (max 4) to images and walks the ordinary
   vision-extraction path. Pages are stored on the case for retry
   (`source_scan_pages_b64`, purged by the content-retention sweep, stripped
-  from API responses); text detection relies on `pageJoiner: ""` (pdf-parse's
+  from ordinary case responses — the review pane reads them through the
+  operator-only source-pages route, see Review & approval); text detection
+  relies on `pageJoiner: ""` (pdf-parse's
   page markers otherwise make every scan look like it "has text").
 - **Batch intake** (`modules/clerk/batch.ts`) — text-only; only proposes
   segment boundaries. Every segment then walks the normal capture path.
@@ -130,14 +132,32 @@ review.
 - Review/decide is operator-only (`clerk.use`) and compare-and-set on case
   status, so concurrent decisions can never double-apply. Approval creates a
   DRAFT invoice only.
+- **Source-document display** — the review pane shows the reviewer the
+  captured document, not just its extraction: single-image captures render
+  from the case's existing `sourceImageB64`; scanned-PDF pages come from
+  `GET /clerk/cases/{id}/source-pages` (`clerk.use`, operator-only), which
+  returns the rendered pages plus a `purged` flag once the content-retention
+  sweep has cleared them (the pane says so instead of rendering nothing).
+  This closes the gap where a photo/scan capture could be approved without
+  the reviewer ever seeing the document.
 - **Fast-lane bulk approval** (`modules/clerk/bulk-approve.ts`,
   `POST /clerk/cases/bulk-approve`, same gate) is the bulk-submit idiom
   pointed at the queue: up to 50 approve decisions walk the EXISTING
   `decideCase` one by one, each in a savepoint, but only cases the server
   itself re-verifies as fast-lane (extracted, present preflight with no
-  blocking issue, critical confidences ≥0.9 — mirroring the console's
-  `isReadyToApprove`). Everything else skips with its reason; the console
-  queue's "Approve fast lane" action is its human-initiated consumer.
+  blocking issue, critical confidences at or above the case's OWN threshold
+  — mirroring the console's `isReadyToApprove`). Everything else skips with
+  its reason; the console queue's "Approve fast lane" action is its
+  human-initiated consumer.
+- **Adaptive fast-lane threshold** — the confidence bar is per-firm, derived
+  deterministically from the firm's own calibration history
+  (`firmFastLaneThreshold` in metrics.ts): the 0.8–1.0 band must show ≥200
+  fields at a ≥97% kept-rate to earn 0.8; otherwise the 0.9 default holds
+  (0.8 is the hard floor — history can loosen the bar one notch, never
+  below it). The threshold in force rides each case row
+  (`fastLaneThreshold`), so the console's fast-lane predicate and the
+  server's bulk-approve re-verify read the SAME number and can never
+  disagree.
 - The console weights review-queue effort and shows per-field "historically
   corrected" hints from `metrics.corrections` (`fieldWeights` /
   `correctionHint` in console `clerk-shared` — never auto-accept, ordering
@@ -191,6 +211,20 @@ review.
   check); and `GET /clerk/digest` explicitly refuses client_user now that
   the capability is shared. The SME app carries the client Ask surface; the
   mobile app carries an Ask screen too (`mobile/app/clerk-ask.tsx`).
+- **Action links** — a data-intent answer carries deterministic app-derived
+  links (`answer.links`, `ClerkAnswerLink`, kind `invoice`) built from ids
+  threaded through the SAME scoped queries that computed the facts — never
+  model-produced, so a link can only ever point at a row the asker's own
+  scope already surfaced. The SME app and mobile render them as "Open"
+  buttons straight to the invoice.
+- **Ask feedback** — askers rate answers helpful/not-helpful
+  (`POST /clerk/cases/{id}/feedback`, creator-only, question cases including
+  refusals; the signal lands on the case row, `feedback`).
+  `GET /clerk/ask-feedback` (`clerk.use`, console health page card) mines
+  the ratings — totals, a per-intent split (`register` / `refused` /
+  data-intent keys), the newest not-helpful questions — the
+  answered-question sibling of claim-gap mining: refusals say what to draft
+  next, not-helpful says what to fix next.
 - **Claim-gap mining** (`modules/clerk/claim-gaps.ts`,
   `GET /clerk/claim-gaps`, `clerk.use`, pure SQL, console claims-page card):
   Ask's refusals are themselves mined — a trailing window's refused answers
@@ -428,7 +462,8 @@ without a human owner.
 - **Injection-resistance trend** (`metrics.injectionTrend`, pure SQL over
   the stored eval runs): monthly resistance buckets and the
   per-prompt-version split — whether a promoted prompt actually held the
-  line the canary predicted.
+  line the canary predicted. Text and vision injection fixtures fold into
+  the SAME buckets, so the trend measures the image channel too.
 - **Kept-rate trend** (`metrics.keptRateTrend`) and `metrics.qualityAlert` /
   `metrics.resistanceAlert` banners come from the SAME shared buckets as
   the watches below, so chart, banner and alert can never disagree.
@@ -441,8 +476,10 @@ call the model.
 - **Supplier memory** (`modules/clerk/exemplar.ts`) deterministically matches
   a new text document against the firm's OWN approved fixtures
   (TIN/name-token containment, newest first, same-firm join — never
-  cross-firm) and rides the match along as a fenced one-shot with its own
-  ledger prompt version (`extract.v1+ex1`, `extraction.exemplarCaseId` for
+  cross-firm; a fixture with nulled identity never matches, which is how
+  promotion-scrubbed fixtures and an offboarded client's retired fixtures
+  stay out — see Evals) and rides the match along as a fenced one-shot
+  with its own ledger prompt version (`extract.v1+ex1`, `extraction.exemplarCaseId` for
   audit — the console review pane's "supplier memory" badge navigates to
   that exemplar case; eval replay never uses exemplars). **Exemplar
   hygiene**: a candidate whose descendant approvals (matched via
@@ -542,7 +579,22 @@ shared computation as the corresponding chart.
 
 - **Learning loop** (`modules/clerk/eval-growth.ts`) turns corrected
   approvals into eval fixtures on the sweep loop; the nightly auto-eval is
-  opt-in behind `clerk_auto_eval` (spends tokens).
+  opt-in behind `clerk_auto_eval` (spends tokens). Grown fixtures are
+  deliberately NOT scrubbed at mint — they double as the supplier-memory
+  exemplar store for active clients (see Memories) — so their lifecycle is
+  tied to the client's: **offboarding retires them**. Grown fixtures traced
+  to the departing client (via the approved invoice's supplier party, or
+  the creator's client membership) are retired with document text and
+  supplier identity nulled; the count rides the offboard result
+  (`fixturesRetired`) and its audit event.
+- **Vision injection fixtures** — the corpus carries 8 deterministic vision
+  fixtures: pdfkit-built single-page invoices rasterized through the REAL
+  scan path — 6 adversarial variants embedding the attack in the document
+  image itself, plus 2 clean controls. Every full corpus run sends them
+  through the ordinary vision-extraction payload (+8 calls per run) and
+  folds their injection outcomes into the same resistance buckets, so the
+  health page's resistance trend measures the image channel, not just
+  pasted text.
 - **Curation** (`modules/clerk/eval-curation.ts`, `GET /clerk/eval/fixtures`
   + retire/restore, `clerk.use`, console corpus card): nullable `retired_at`
   on grown and red-team fixtures; loaders exclude retired rows BEFORE the
@@ -551,6 +603,14 @@ shared computation as the corresponding chart.
   from the newest stored runs (field NAMES only); static fixtures never
   retirable; red-team generation still counts retired rows against its
   minting cap.
+- **Corpus promotion** (`POST /clerk/eval/fixtures/from-case`, `clerk.use`,
+  console health page promote row) mints a decided case into the corpus. A
+  deterministic scrubber pseudonymizes known party names/TINs in the stored
+  document text (`scrub` defaults true; the server REFUSES `scrub: false`
+  for any case still traceable to a live client), and promoted fixtures
+  never serve supplier memory — their identity columns stay null, so the
+  exemplar matcher can never nominate a pseudonymized document as a
+  one-shot.
 - **Prompt canary** (`modules/clerk/prompt-canary.ts`,
   `POST /clerk/eval/canary` + `GET /clerk/eval/prompt`, `clerk.use`, spends
   2× a corpus pass): the corpus runs under a CANDIDATE system prompt and the

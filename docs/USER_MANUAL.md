@@ -468,7 +468,13 @@ for human review — nothing files itself.
 ### Review and approval (accountants & operators)
 
 Captured documents queue for human review (in the console's **Clerk → Intake
-queue**). The reviewer sees every extracted field with its confidence, the
+queue**). The review pane shows the **captured document itself** — the photo
+or the scanned pages Clerk read — beside what was extracted, so approving is
+always a comparison against the source. On older cases whose content the
+retention window has already cleared, the pane says **"cleared by
+retention"** instead: the extraction and the decision record are kept
+permanently, but the document image is deliberately not stored forever. The
+reviewer also sees every extracted field with its confidence, the
 source snippet it came from, "historically corrected" hints on fields Clerk
 tends to get wrong for you, a **pre-flight** check (duplicate invoice
 numbers, VAT-rate deviations, suspicious dates or amounts against that
@@ -496,12 +502,20 @@ rather than improvising:
   month?", "Who owes us?", "What's expected this week?", "Who's worth
   chasing?" The platform runs a fixed query over your own records and Clerk
   phrases the result; the source line says exactly what was computed and for
-  which month/client. Follow-ups thread ("and for June?").
+  which month/client. Follow-ups thread ("and for June?"). Answers that name
+  invoices come with **Open** buttons (on the web and in the mobile app)
+  that jump straight to the invoice — the links are built by the platform
+  from the same query that produced the answer, never by the AI.
+
+Every answer — including a refusal — carries a **"Was this helpful?"**
+prompt; a one-tap thumbs-up or thumbs-down (yours to give as the asker)
+tells the operators which answers are landing and which need fixing.
 
 Client accounts can ask too — pinned to their own business, with the
 firm-wide questions excluded. Refused questions aren't wasted: the console
 mines them into a "register gaps" list, so the firm can see which claims to
-draft next.
+draft next — and the helpfulness ratings feed a matching operator view of
+the questions Clerk *did* answer.
 
 ### Digests, statements and drafting helpers
 
@@ -575,9 +589,12 @@ invoice list — a partner can reach any failing invoice in three clicks.
   your firm's slice of it). **Offboard client** (firm admins; you type the
   client's legal name to confirm) ends the relationship without touching
   history: the engagement is archived, the client's logins and pending
-  invites are removed, and — only if yours was the party's last active
-  engagement anywhere — its alert contact details and push devices are
-  cleared. Stamped invoices and the party's legal identity are retained
+  invites are removed, any Clerk evaluation fixtures grown from the
+  client's documents are retired with their stored text and supplier
+  identity blanked (the offboard result reports the count), and — only if
+  yours was the party's last active engagement anywhere — its alert
+  contact details and push devices are cleared. Stamped invoices and the
+  party's legal identity are retained
   under statutory record-keeping rules, and consent remains the client's
   own (offboarding never revokes it).
 
@@ -881,8 +898,13 @@ operator's side of [section 5](#5-clerk--the-ai-assistant). Beyond review
 and the claims register, the **Health** page carries the operating evidence:
 volume/latency/cost tiles, confidence calibration, per-field and per-supplier
 correction patterns, kept-rate and injection-resistance trends with alert
-banners, unit economics per purpose, the **evaluation corpus** (run an eval
-on demand; retire/restore grown and red-team fixtures), and **canaries** —
+banners, unit economics per purpose, **Ask answer feedback**
+(helpful/not-helpful totals split by question type, with the latest
+not-helpful questions — the answered-question sibling of the register-gaps
+list), the **evaluation corpus** (run an eval on demand; retire/restore
+grown and red-team fixtures; **promote a decided case into the corpus** —
+known party names and TINs are pseudonymized in the stored text first), and
+**canaries** —
 try a candidate system prompt or a candidate model side-by-side against the
 incumbent on the same fixtures, and only promote on evidence. A watchdog
 sweep trips the kill switch automatically if extraction quality collapses.
