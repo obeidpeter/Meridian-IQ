@@ -52,6 +52,11 @@ export function modelForPurpose(
   if (purpose === "eval_extract" || purpose === "eval_canary") {
     return tiers.get("extract_invoice") ?? base;
   }
+  // The intent eval must measure the model that actually classifies
+  // production Ask traffic (round-15 review M1).
+  if (purpose === "eval_intent") {
+    return tiers.get("classify_intent") ?? base;
+  }
   return base;
 }
 

@@ -15,6 +15,9 @@ import {
   RunPromptCanaryResponse,
   RunModelCanaryBody,
   RunModelCanaryResponse,
+  RunIntentEvalBody,
+  RunIntentEvalResponse,
+  ListIntentEvalRunsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import { assertCan } from "../../modules/auth/rbac";
@@ -24,6 +27,11 @@ import {
   runEvalCorpus,
   withAccuracy,
 } from "../../modules/clerk/eval";
+import {
+  listIntentEvalRuns,
+  runIntentCanary,
+  runIntentEval,
+} from "../../modules/clerk/intent-eval";
 import {
   listEvalFixtures,
   mintFixtureFromCase,
@@ -52,6 +60,31 @@ router.get("/clerk/eval/runs", async (req, res): Promise<void> => {
   const limit = query.success ? (query.data.limit ?? 20) : 20;
   const runs = await listEvalRuns(limit);
   res.json(ListClerkEvalRunsResponse.parse(runs.map(withAccuracy)));
+});
+
+// Intent-classification eval lane (round 15): the Ask classifier's fixed
+// corpus replayed against the LIVE intent prompt and scored
+// deterministically. Without a candidate prompt the run is STORED (the
+// trend's raw material); with one, corpus runs side by side and the
+// deterministic verdict comes back — nothing stored, the prompt-canary
+// contract (promotion is a code change the operator makes with evidence).
+router.post("/clerk/eval/intent", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const body = parseOrThrow(RunIntentEvalBody, req.body ?? {});
+  const gateway = await getClerkGateway();
+  if (body.candidateSystem) {
+    const report = await runIntentCanary(gateway, body.candidateSystem);
+    res.json(RunIntentEvalResponse.parse({ canary: report, run: null }));
+    return;
+  }
+  const run = await runIntentEval(req.principal.userId, gateway);
+  res.json(RunIntentEvalResponse.parse({ canary: null, run }));
+});
+
+router.get("/clerk/eval/intent-runs", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const runs = await listIntentEvalRuns();
+  res.json(ListIntentEvalRunsResponse.parse(runs));
 });
 
 // Corpus curation (round 15): the inventory of every fixture the eval run

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.44.0
+ * OpenAPI spec version: 0.45.0
  */
 export interface HealthStatus {
   status: string;
@@ -1056,6 +1056,34 @@ export interface VatSettlementCheck {
   note: string;
 }
 
+export type VatPositionUnverifiedItem = {
+  invoiceId: string;
+  invoiceNumber: string;
+  clientName: string;
+  supplierName: string;
+  issueDate: string;
+  currency: string;
+  vatTotal: string;
+};
+
+export interface VatPosition {
+  monthStart: string;
+  monthLabel: string;
+  months: string[];
+  outputVat: string;
+  outputNetVat: string;
+  billCount: number;
+  billVat: string;
+  verifiedCount: number;
+  verifiedVat: string;
+  unverifiedCount: number;
+  unverifiedVat: string;
+  netPosition: string;
+  unverified: VatPositionUnverifiedItem[];
+  unverifiedTruncated: boolean;
+  note: string;
+}
+
 export type QuarterlyReviewMonthsItem = {
   monthStart: string;
   monthLabel: string;
@@ -1720,6 +1748,32 @@ export type CashflowOutlookGroupsItem = {
 export interface CashflowOutlook {
   asOf: string;
   groups: CashflowOutlookGroupsItem[];
+}
+
+export type NetCashPositionGroupsItemWeeksItem = {
+  startDate: string;
+  inflow: string;
+  inflowCount: number;
+  outflow: string;
+  outflowCount: number;
+  net: string;
+  squeeze: boolean;
+};
+
+export type NetCashPositionGroupsItem = {
+  currency: string;
+  overdueInflow: CashflowBucket;
+  overdueOutflow: CashflowBucket;
+  weeks: NetCashPositionGroupsItemWeeksItem[];
+  laterInflow: CashflowBucket;
+  laterOutflow: CashflowBucket;
+  squeezeWeeks: number;
+};
+
+export interface NetCashPosition {
+  asOf: string;
+  groups: NetCashPositionGroupsItem[];
+  note: string;
 }
 
 export type ChaseRowBasis = typeof ChaseRowBasis[keyof typeof ChaseRowBasis];
@@ -3944,6 +3998,89 @@ export interface PromptCanaryReport {
   verdictReason: string;
 }
 
+export type IntentEvalFixtureResultRiskLabel = typeof IntentEvalFixtureResultRiskLabel[keyof typeof IntentEvalFixtureResultRiskLabel];
+
+
+export const IntentEvalFixtureResultRiskLabel = {
+  clean: 'clean',
+  injection: 'injection',
+} as const;
+
+export type IntentEvalFixtureResultOutcome = typeof IntentEvalFixtureResultOutcome[keyof typeof IntentEvalFixtureResultOutcome];
+
+
+export const IntentEvalFixtureResultOutcome = {
+  ok: 'ok',
+  invalid: 'invalid',
+  error: 'error',
+} as const;
+
+export type IntentEvalFixtureResultClassified = {
+  claimKey: string;
+  month: string;
+  client: string;
+} | null;
+
+export interface IntentEvalFixtureResult {
+  key: string;
+  label: string;
+  riskLabel: IntentEvalFixtureResultRiskLabel;
+  outcome: IntentEvalFixtureResultOutcome;
+  classified: IntentEvalFixtureResultClassified;
+  correct: boolean;
+  resisted: boolean | null;
+}
+
+export interface IntentEvalReport {
+  fixtureCount: number;
+  correctCount: number;
+  injectionFixtures: number;
+  injectionResisted: number;
+  results: IntentEvalFixtureResult[];
+}
+
+export interface IntentEvalRun {
+  id: string;
+  model: string;
+  promptVersion: string;
+  fixtureCount: number;
+  correctCount: number;
+  injectionFixtures: number;
+  injectionResisted: number;
+  results: IntentEvalFixtureResult[];
+  durationMs: number;
+  createdAt: string;
+}
+
+export interface RunIntentEvalInput {
+  /** @maxLength 20000 */
+  candidateSystem?: string;
+}
+
+export type IntentEvalOutcomeCanaryIncumbent = IntentEvalReport & {
+  promptVersion: string;
+};
+
+export type IntentEvalOutcomeCanaryVerdict = typeof IntentEvalOutcomeCanaryVerdict[keyof typeof IntentEvalOutcomeCanaryVerdict];
+
+
+export const IntentEvalOutcomeCanaryVerdict = {
+  promote: 'promote',
+  reject: 'reject',
+  inconclusive: 'inconclusive',
+} as const;
+
+export type IntentEvalOutcomeCanary = {
+  incumbent: IntentEvalOutcomeCanaryIncumbent;
+  candidate: IntentEvalReport;
+  verdict: IntentEvalOutcomeCanaryVerdict;
+} | null;
+
+export interface IntentEvalOutcome {
+  canary: IntentEvalOutcomeCanary;
+  run: IntentEvalRun | null;
+}
+
 export interface ModelCanarySide {
   model: string;
   fieldsCompared: number;
@@ -5023,6 +5160,14 @@ export type GetVatSettlementCheckParams = {
 month?: string;
 };
 
+export type GetVatPositionParams = {
+/**
+ * A closed Lagos month's first day (YYYY-MM-01); defaults to the newest closed month.
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
+};
+
 export type GetQuarterlyReviewParams = {
 /**
  * First month of a closed Lagos quarter (YYYY-MM-01); defaults to the newest closed quarter.
@@ -5084,6 +5229,10 @@ clientPartyId: string;
 };
 
 export type GetCashflowOutlookParams = {
+clientPartyId: string;
+};
+
+export type GetNetCashPositionParams = {
 clientPartyId: string;
 };
 

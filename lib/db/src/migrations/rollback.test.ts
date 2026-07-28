@@ -277,6 +277,11 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("bill_verifications")],
     afterRollback: [not(clerkTenant("bill_verifications"))],
   },
+  {
+    version: 24, // intent-eval run guardrails
+    atTop: [bypass("clerk_intent_eval_runs")],
+    afterRollback: [not(bypass("clerk_intent_eval_runs"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

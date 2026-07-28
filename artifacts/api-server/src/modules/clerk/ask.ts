@@ -57,6 +57,62 @@ export function renderProposition(claim: ClaimRecord): string {
 const REFUSAL_PREFIX =
   "I can only answer from the approved claims register. ";
 
+// The classifier's user prompt, assembled in ONE place. The intent eval
+// lane (intent-eval.ts) calls this with a FIXED synthetic context, so the
+// corpus measures the exact prompt shape production sends — a drift here is
+// a drift there, never a silent divergence.
+export interface IntentPromptContext {
+  claims: { claimKey: string; title: string }[];
+  dataIntents: readonly { key: string; title: string }[];
+  months: { key: string; label: string }[];
+  clients: { key: string; name: string }[];
+  clientsTruncated: boolean;
+  previousContext?: string[];
+  question: string;
+}
+
+export function buildIntentUser(ctx: IntentPromptContext): string {
+  const registerIndex = ctx.claims
+    .map((c) => `- ${c.claimKey}: ${c.title}`)
+    .join("\n");
+  return [
+    "Available claim keys (approved register):",
+    registerIndex || "(none)",
+    ...(ctx.dataIntents.length > 0
+      ? [
+          "",
+          "Available data keys (live lookups over the asker's own firm records):",
+          ctx.dataIntents.map((i) => `- ${i.key}: ${i.title}`).join("\n"),
+          "",
+          "Month keys (for data lookups that take a month):",
+          ctx.months.map((m) => `- ${m.key}: ${m.label}`).join("\n"),
+          ...(ctx.clients.length > 0
+            ? [
+                "",
+                "Client keys (the asker's own clients, for data lookups):",
+                // Client legal names are user-authored — they ride inside a
+                // fence so a name can never smuggle instructions; the c1..cN
+                // keys around them are app-built and trusted.
+                fenceUntrusted(
+                  "client name directory (match names to keys only)",
+                  "CLIENT_NAMES",
+                  ctx.clients.map((c) => `- ${c.key}: ${c.name}`).join("\n"),
+                ),
+                ...(ctx.clientsTruncated
+                  ? [
+                      'This client list is INCOMPLETE. If the question names a client that is not listed, answer claimKey "none" — never answer a client-scoped question firm-wide.',
+                    ]
+                  : []),
+              ]
+            : []),
+        ]
+      : []),
+    ...(ctx.previousContext ?? []),
+    "",
+    fenceUntrusted("question", "QUESTION", ctx.question),
+  ].join("\n");
+}
+
 export async function askClerk(
   question: string,
   actorId: string,
@@ -259,45 +315,15 @@ export async function askClerk(
     }
   }
 
-  const registerIndex = active
-    .map((c) => `- ${c.claimKey}: ${c.title}`)
-    .join("\n");
-  const user = [
-    "Available claim keys (approved register):",
-    registerIndex || "(none)",
-    ...(dataIntents.length > 0
-      ? [
-          "",
-          "Available data keys (live lookups over the asker's own firm records):",
-          dataIntents.map((i) => `- ${i.key}: ${i.title}`).join("\n"),
-          "",
-          "Month keys (for data lookups that take a month):",
-          months.map((m) => `- ${m.key}: ${m.label}`).join("\n"),
-          ...(clientOptions.length > 0
-            ? [
-                "",
-                "Client keys (the asker's own clients, for data lookups):",
-                // Client legal names are user-authored — they ride inside a
-                // fence so a name can never smuggle instructions; the c1..cN
-                // keys around them are app-built and trusted.
-                fenceUntrusted(
-                  "client name directory (match names to keys only)",
-                  "CLIENT_NAMES",
-                  clientOptions.map((c) => `- ${c.key}: ${c.name}`).join("\n"),
-                ),
-                ...(clientsTruncated
-                  ? [
-                      'This client list is INCOMPLETE. If the question names a client that is not listed, answer claimKey "none" — never answer a client-scoped question firm-wide.',
-                    ]
-                  : []),
-              ]
-            : []),
-        ]
-      : []),
-    ...previousContext,
-    "",
-    fenceUntrusted("question", "QUESTION", question),
-  ].join("\n");
+  const user = buildIntentUser({
+    claims: active,
+    dataIntents,
+    months,
+    clients: clientOptions,
+    clientsTruncated,
+    previousContext,
+    question,
+  });
 
   const monthKeys = months.map((m) => m.key);
   const clientKeys = clientOptions.map((c) => c.key);

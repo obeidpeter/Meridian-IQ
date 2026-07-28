@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString, lagosTodaySql } from "../../lib/lagos-time";
 import { addDays, daysBetween } from "./date-math";
+import { WEEK_COUNT } from "./cashflow";
 import { BILL_ORIENTATION, RECEIVABLE_ORIENTATION } from "./receivables";
 
 // Supplier payables (contract 0.44.0). A BILL is an invoice row where the
@@ -133,7 +134,7 @@ export async function listBills(
         SELECT v.valid, v.eligible, v.checked_at
         FROM bill_verifications v
         WHERE v.invoice_id = i.id
-        ORDER BY v.checked_at DESC, v.created_at DESC
+        ORDER BY v.checked_at DESC, v.created_at DESC, v.id DESC
         LIMIT 1
       ) bv ON true
       WHERE ${BILL_OF_CLIENT(firmId, clientPartyId)}
@@ -184,19 +185,18 @@ export interface PayablesSummary {
   }[];
 }
 
-const WEEK_COUNT = 4;
-
 // Committed outflows: the client's UNPAID bills (no payment evidence),
-// bucketed by DUE DATE into overdue / four consecutive 7-day due weeks /
-// later, per currency — the cashflow outlook's bucket shapes pointed at the
-// payables side. A bill without a due date cannot be "due" on any week, so
-// it lands in `later`. Due today is week 0, not overdue (mirrors
+// bucketed by DUE DATE into overdue / consecutive 7-day due weeks (the
+// SHARED cashflow geometry — the net-position merge pairs weeks by index) /
+// later, per currency. A bill without a due date cannot be "due" on any
+// week, so it lands in `later`. Due today is week 0, not overdue (mirrors
 // bucketProjections: money is late only once its date has passed).
 export async function payablesSummary(
   firmId: string,
   clientPartyId: string,
+  now: Date = new Date(),
 ): Promise<PayablesSummary> {
-  const today = lagosDateString();
+  const today = lagosDateString(now);
   const bills = (
     await getDb().execute<{
       currency: string;

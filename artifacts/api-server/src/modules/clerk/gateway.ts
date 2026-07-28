@@ -91,6 +91,10 @@ export type ClerkPurpose =
   // Prompt canary (prompt-canary.ts): candidate-vs-incumbent corpus passes;
   // its own purpose so canary spend never blends into the eval cohort.
   | "eval_canary"
+  // Intent-classification eval lane (round 15): the Ask classifier's fixed
+  // corpus replayed through the live gateway; its own purpose so intent
+  // regression spend never blends into the extraction eval cohort.
+  | "eval_intent"
   // Scanned-bundle segmentation (batch-async): one vision call proposing
   // page ranges; the app validates coverage before anything else runs.
   | "segment_scan"

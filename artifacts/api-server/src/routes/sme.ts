@@ -15,6 +15,8 @@ import {
   GetReceivablesSummaryQueryParams,
   GetCashflowOutlookQueryParams,
   GetCashflowOutlookResponse,
+  GetNetCashPositionQueryParams,
+  GetNetCashPositionResponse,
   GetChaseListQueryParams,
   GetChaseListResponse,
   GetReceivablesSummaryResponse,
@@ -60,6 +62,7 @@ import {
   computeCashflowOutlook,
   listChaseRows,
 } from "../modules/invoice/cashflow";
+import { computeNetPosition } from "../modules/invoice/net-position";
 import {
   listBillDeadlines,
   type BillDeadlineRow,
@@ -382,6 +385,20 @@ router.get("/dashboard/cashflow", async (req, res): Promise<void> => {
   const firmId = requireFirmScope(req.principal);
   const outlook = await computeCashflowOutlook(firmId, clientPartyId);
   res.json(GetCashflowOutlookResponse.parse(outlook));
+});
+
+// Net cash position (round-15 idea #2): the cash-flow outlook's projected
+// inflows merged with the payables summary's committed outflows, per
+// currency and week — both sides computed by their own existing functions,
+// nothing recomputed. Same access posture as the outlook it extends.
+router.get("/dashboard/net-position", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetNetCashPositionQueryParams, req.query);
+  const clientPartyId = query.clientPartyId;
+  await assertPartyAccess(req.principal, clientPartyId);
+  const firmId = requireFirmScope(req.principal);
+  const position = await computeNetPosition(firmId, clientPartyId);
+  res.json(GetNetCashPositionResponse.parse(position));
 });
 
 // Chase list (round-10 idea #2): the same projections, ranked by days beyond
