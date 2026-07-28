@@ -3,6 +3,9 @@ import {
   useGetClerkMetrics,
   useRunClerkEval,
   useListClerkEvalRuns,
+  useRunIntentEval,
+  useListIntentEvalRuns,
+  getListIntentEvalRunsQueryKey,
   useListEvalFixtures,
   useMintFixtureFromCase,
   useRetireEvalFixture,
@@ -201,6 +204,78 @@ export function qualityAlertText(alert: ClerkMetricsQualityAlert): string {
     `Extraction kept-rate dropped from ${formatPct(alert.fromRate)} ` +
     `(${alert.fromMonth}) to ${formatPct(alert.toRate)} (${alert.toMonth}) ` +
     `over ${alert.fields} fields — review recent corrections.`
+  );
+}
+
+// Intent-classification eval lane (round 15): the Ask classifier's own
+// regression card — run the fixed question corpus, see accuracy and
+// injection resistance per stored run. Deterministic scoring server-side.
+function IntentEvalCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: runs, isSuccess } = useListIntentEvalRuns({
+    query: { queryKey: getListIntentEvalRunsQueryKey(), retry: false },
+  });
+  const runEval = useRunIntentEval({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: getListIntentEvalRunsQueryKey(),
+        });
+      },
+      onError: () =>
+        toast({ title: "Intent eval failed", variant: "destructive" }),
+    },
+  });
+  if (!isSuccess) return null;
+  const newest = runs?.[0];
+  return (
+    <Card data-testid="section-intent-eval">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base">Ask classifier evaluation</CardTitle>
+        <Button
+          size="sm"
+          onClick={() => runEval.mutate({ data: {} })}
+          disabled={runEval.isPending}
+          data-testid="button-run-intent-eval"
+        >
+          {runEval.isPending ? "Running…" : "Run intent eval"}
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Replays a fixed corpus of questions against the live intent prompt
+          (one classify call per fixture) and scores the classification
+          deterministically — including two prompt-injection questions.
+        </p>
+        {!newest ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-intent-eval-empty"
+          >
+            No intent eval runs yet — run one to baseline the classifier.
+          </p>
+        ) : (
+          <div className="space-y-1" data-testid="intent-eval-latest">
+            <p className="text-sm">
+              Latest: {newest.correctCount}/{newest.fixtureCount} correct ·
+              injection {newest.injectionResisted}/{newest.injectionFixtures}{" "}
+              resisted · <code>{newest.promptVersion}</code> ·{" "}
+              {formatDateTime(newest.createdAt)}
+            </p>
+            {newest.results.filter((r) => !r.correct).length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Missed:{" "}
+                {newest.results
+                  .filter((r) => !r.correct)
+                  .map((r) => r.key)
+                  .join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -2036,6 +2111,8 @@ export function HealthPanel() {
           forceMount
           className="mt-4 space-y-4 data-[state=inactive]:hidden"
         >
+      <IntentEvalCard />
+
       <Card data-testid="section-evaluation">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">Evaluation</CardTitle>

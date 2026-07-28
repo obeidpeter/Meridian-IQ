@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.44.0
+ * OpenAPI spec version: 0.45.0
  */
 
 export * from './acceptInvitationInput';
@@ -324,6 +324,7 @@ export * from './getClerkMetricsParams';
 export * from './getComplianceCalendarParams';
 export * from './getDashboardSummaryParams';
 export * from './getMergeImpactParams';
+export * from './getNetCashPositionParams';
 export * from './getPayablesSummaryParams';
 export * from './getProjectionAccuracyParams';
 export * from './getPublicThemeParams';
@@ -331,6 +332,7 @@ export * from './getQuarterlyReviewParams';
 export * from './getReceivablesSummaryParams';
 export * from './getUnmatchedCreditsParams';
 export * from './getVatPackParams';
+export * from './getVatPositionParams';
 export * from './getVatSettlementCheckParams';
 export * from './graphEdge';
 export * from './graphNode';
@@ -339,6 +341,16 @@ export * from './healthAlert';
 export * from './healthAlertDetail';
 export * from './healthStatus';
 export * from './identifierCheck';
+export * from './intentEvalFixtureResult';
+export * from './intentEvalFixtureResultClassified';
+export * from './intentEvalFixtureResultOutcome';
+export * from './intentEvalFixtureResultRiskLabel';
+export * from './intentEvalOutcome';
+export * from './intentEvalOutcomeCanary';
+export * from './intentEvalOutcomeCanaryIncumbent';
+export * from './intentEvalOutcomeCanaryVerdict';
+export * from './intentEvalReport';
+export * from './intentEvalRun';
 export * from './invitation';
 export * from './invitationRole';
 export * from './invitationStatus';
@@ -415,6 +427,9 @@ export * from './modelCanaryReport';
 export * from './modelCanaryReportFixturesItem';
 export * from './modelCanaryReportVerdict';
 export * from './modelCanarySide';
+export * from './netCashPosition';
+export * from './netCashPositionGroupsItem';
+export * from './netCashPositionGroupsItemWeeksItem';
 export * from './notFoundResponse';
 export * from './notificationFeed';
 export * from './notificationFeedItemsItem';
@@ -517,6 +532,7 @@ export * from './resetPasswordInput';
 export * from './resolveCaseInput';
 export * from './revenueShareStatement';
 export * from './runAssessmentInput';
+export * from './runIntentEvalInput';
 export * from './runModelCanaryInput';
 export * from './runPromptCanaryInput';
 export * from './scoreboardRow';
@@ -577,6 +593,8 @@ export * from './vatPackCoverNote';
 export * from './vatPackCoverNoteSource';
 export * from './vatPackRowsItem';
 export * from './vatPackTotals';
+export * from './vatPosition';
+export * from './vatPositionUnverifiedItem';
 export * from './vatRiskInput';
 export * from './vatRiskLedgerRow';
 export * from './vatRiskReport';

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.44.0
+ * OpenAPI spec version: 0.45.0
  */
 import {
   useMutation,
@@ -171,6 +171,7 @@ import type {
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
   GetMergeImpactParams,
+  GetNetCashPositionParams,
   GetPayablesSummaryParams,
   GetProjectionAccuracyParams,
   GetPublicThemeParams,
@@ -178,10 +179,13 @@ import type {
   GetReceivablesSummaryParams,
   GetUnmatchedCreditsParams,
   GetVatPackParams,
+  GetVatPositionParams,
   GetVatSettlementCheckParams,
   HealthAlert,
   HealthStatus,
   IdentifierCheck,
+  IntentEvalOutcome,
+  IntentEvalRun,
   Invitation,
   InvitationWithToken,
   Invoice,
@@ -224,6 +228,7 @@ import type {
   MessageInput,
   MintFixtureInput,
   ModelCanaryReport,
+  NetCashPosition,
   NotFoundResponse,
   NotificationFeed,
   OffboardClientInput,
@@ -269,6 +274,7 @@ import type {
   ResolveCaseInput,
   RevenueShareStatement,
   RunAssessmentInput,
+  RunIntentEvalInput,
   RunModelCanaryInput,
   RunPromptCanaryInput,
   ScoreboardRow,
@@ -308,6 +314,7 @@ import type {
   ValidationResult,
   VatPack,
   VatPackCoverNote,
+  VatPosition,
   VatRiskInput,
   VatRiskReport,
   VatSettlementCheck
@@ -4529,6 +4536,90 @@ export function useGetVatSettlementCheck<TData = Awaited<ReturnType<typeof getVa
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetVatSettlementCheckQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetVatPositionUrl = (params?: GetVatPositionParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/vat-pack/position?${stringifiedParams}` : `/api/vat-pack/position`
+}
+
+/**
+ * @summary Net VAT position — the pack's output VAT minus VERIFIED input VAT on the month's supplier bills (deterministic; unverified bills are the CTA)
+ */
+export const getVatPosition = async (params?: GetVatPositionParams, options?: RequestInit): Promise<VatPosition> => {
+
+  return customFetch<VatPosition>(getGetVatPositionUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVatPositionQueryKey = (params?: GetVatPositionParams,) => {
+    return [
+    `/api/vat-pack/position`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetVatPositionQueryOptions = <TData = Awaited<ReturnType<typeof getVatPosition>>, TError = ErrorType<BadRequestResponse>>(params?: GetVatPositionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatPosition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVatPositionQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVatPosition>>> = ({ signal }) => getVatPosition(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVatPosition>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVatPositionQueryResult = NonNullable<Awaited<ReturnType<typeof getVatPosition>>>
+export type GetVatPositionQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Net VAT position — the pack's output VAT minus VERIFIED input VAT on the month's supplier bills (deterministic; unverified bills are the CTA)
+ */
+
+export function useGetVatPosition<TData = Awaited<ReturnType<typeof getVatPosition>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetVatPositionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatPosition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVatPositionQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -9173,6 +9264,90 @@ export function useGetCashflowOutlook<TData = Awaited<ReturnType<typeof getCashf
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCashflowOutlookQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetNetCashPositionUrl = (params: GetNetCashPositionParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/net-position?${stringifiedParams}` : `/api/dashboard/net-position`
+}
+
+/**
+ * @summary Projected inflows merged with committed bill outflows per week — squeeze weeks flagged (deterministic; both sides from their own existing computations)
+ */
+export const getNetCashPosition = async (params: GetNetCashPositionParams, options?: RequestInit): Promise<NetCashPosition> => {
+
+  return customFetch<NetCashPosition>(getGetNetCashPositionUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNetCashPositionQueryKey = (params?: GetNetCashPositionParams,) => {
+    return [
+    `/api/dashboard/net-position`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetNetCashPositionQueryOptions = <TData = Awaited<ReturnType<typeof getNetCashPosition>>, TError = ErrorType<unknown>>(params: GetNetCashPositionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNetCashPosition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNetCashPositionQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNetCashPosition>>> = ({ signal }) => getNetCashPosition(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNetCashPosition>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNetCashPositionQueryResult = NonNullable<Awaited<ReturnType<typeof getNetCashPosition>>>
+export type GetNetCashPositionQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Projected inflows merged with committed bill outflows per week — squeeze weeks flagged (deterministic; both sides from their own existing computations)
+ */
+
+export function useGetNetCashPosition<TData = Awaited<ReturnType<typeof getNetCashPosition>>, TError = ErrorType<unknown>>(
+ params: GetNetCashPositionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNetCashPosition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNetCashPositionQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -16284,6 +16459,153 @@ export const useRunPromptCanary = <TError = ErrorType<BadRequestResponse>,
       > => {
       return useMutation(getRunPromptCanaryMutationOptions(options));
     }
+
+export const getRunIntentEvalUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/intent`
+}
+
+/**
+ * @summary Run the Ask classifier's fixed intent corpus (deterministic scoring); with a candidate prompt, side-by-side canary — nothing stored
+ */
+export const runIntentEval = async (runIntentEvalInput?: RunIntentEvalInput, options?: RequestInit): Promise<IntentEvalOutcome> => {
+
+  return customFetch<IntentEvalOutcome>(getRunIntentEvalUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(runIntentEvalInput)
+  }
+);}
+
+
+
+
+export const getRunIntentEvalMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runIntentEval>>, TError,{data?: BodyType<RunIntentEvalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runIntentEval>>, TError,{data?: BodyType<RunIntentEvalInput>}, TContext> => {
+
+const mutationKey = ['runIntentEval'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runIntentEval>>, {data?: BodyType<RunIntentEvalInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runIntentEval(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunIntentEvalMutationResult = NonNullable<Awaited<ReturnType<typeof runIntentEval>>>
+    export type RunIntentEvalMutationBody = BodyType<RunIntentEvalInput> | undefined
+    export type RunIntentEvalMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Run the Ask classifier's fixed intent corpus (deterministic scoring); with a candidate prompt, side-by-side canary — nothing stored
+ */
+export const useRunIntentEval = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runIntentEval>>, TError,{data?: BodyType<RunIntentEvalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runIntentEval>>,
+        TError,
+        {data?: BodyType<RunIntentEvalInput>},
+        TContext
+      > => {
+      return useMutation(getRunIntentEvalMutationOptions(options));
+    }
+
+export const getListIntentEvalRunsUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/intent-runs`
+}
+
+/**
+ * @summary Stored intent-classification eval runs, newest first
+ */
+export const listIntentEvalRuns = async ( options?: RequestInit): Promise<IntentEvalRun[]> => {
+
+  return customFetch<IntentEvalRun[]>(getListIntentEvalRunsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListIntentEvalRunsQueryKey = () => {
+    return [
+    `/api/clerk/eval/intent-runs`
+    ] as const;
+    }
+
+
+export const getListIntentEvalRunsQueryOptions = <TData = Awaited<ReturnType<typeof listIntentEvalRuns>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listIntentEvalRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListIntentEvalRunsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listIntentEvalRuns>>> = ({ signal }) => listIntentEvalRuns({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listIntentEvalRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListIntentEvalRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listIntentEvalRuns>>>
+export type ListIntentEvalRunsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Stored intent-classification eval runs, newest first
+ */
+
+export function useListIntentEvalRuns<TData = Awaited<ReturnType<typeof listIntentEvalRuns>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listIntentEvalRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListIntentEvalRunsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListEvalFixturesUrl = () => {
 

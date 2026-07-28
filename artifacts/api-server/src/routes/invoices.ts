@@ -65,6 +65,8 @@ import {
   DraftVatPackCoverNoteResponse,
   GetVatSettlementCheckQueryParams,
   GetVatSettlementCheckResponse,
+  GetVatPositionQueryParams,
+  GetVatPositionResponse,
   GetQuarterlyReviewQueryParams,
   GetQuarterlyReviewResponse,
   DraftQuarterlyCoverNoteBody,
@@ -100,6 +102,7 @@ import {
 } from "../modules/clerk/vat-pack";
 import { draftVatCoverNote } from "../modules/clerk/vat-note";
 import { computeVatSettlementCheck } from "../modules/clerk/vat-settlement";
+import { computeVatPosition } from "../modules/clerk/vat-input";
 import {
   closedLagosQuarters,
   computeQuarterlyReview,
@@ -409,6 +412,24 @@ router.get("/vat-pack/settlement-check", async (req, res): Promise<void> => {
   );
   const check = await computeVatSettlementCheck(firmId, month);
   res.json(GetVatSettlementCheckResponse.parse(check));
+});
+
+// Net VAT position (round-15 idea #1): the pack's output VAT joined to the
+// bills ledger's input side — input VAT counts only when the bill's newest
+// stamp verification says valid, so the position is a filing number, not a
+// hope. Same gate and month discipline as the pack; deterministic, nothing
+// stored.
+router.get("/vat-pack/position", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const firmId = requireFirmScope(req.principal);
+  const query = parseOrThrow(GetVatPositionQueryParams, req.query);
+  const month = resolveClosedPeriod(
+    query.month,
+    closedLagosMonths(),
+    "BAD_MONTH",
+  );
+  const position = await computeVatPosition(firmId, month);
+  res.json(GetVatPositionResponse.parse(position));
 });
 
 // Quarterly review pack (round-13 idea #4): the firm's closed quarter in one

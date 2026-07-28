@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.44.0
+ * OpenAPI spec version: 0.45.0
  */
 import * as zod from 'zod';
 
@@ -1218,6 +1218,43 @@ export const GetVatSettlementCheckResponse = zod.object({
   "status": zod.string()
 })),
   "unsettledTruncated": zod.boolean(),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Net VAT position — the pack's output VAT minus VERIFIED input VAT on the month's supplier bills (deterministic; unverified bills are the CTA)
+ */
+export const getVatPositionQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const GetVatPositionQueryParams = zod.object({
+  "month": zod.coerce.string().regex(getVatPositionQueryMonthRegExp).optional().describe('A closed Lagos month\'s first day (YYYY-MM-01); defaults to the newest closed month.')
+})
+
+export const GetVatPositionResponse = zod.object({
+  "monthStart": zod.string(),
+  "monthLabel": zod.string(),
+  "months": zod.array(zod.string()),
+  "outputVat": zod.string(),
+  "outputNetVat": zod.string(),
+  "billCount": zod.number(),
+  "billVat": zod.string(),
+  "verifiedCount": zod.number(),
+  "verifiedVat": zod.string(),
+  "unverifiedCount": zod.number(),
+  "unverifiedVat": zod.string(),
+  "netPosition": zod.string(),
+  "unverified": zod.array(zod.object({
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "clientName": zod.string(),
+  "supplierName": zod.string(),
+  "issueDate": zod.string(),
+  "currency": zod.string(),
+  "vatTotal": zod.string()
+})),
+  "unverifiedTruncated": zod.boolean(),
   "note": zod.string()
 })
 
@@ -2740,6 +2777,48 @@ export const GetCashflowOutlookResponse = zod.object({
   "count": zod.number()
 })
 }))
+})
+
+
+/**
+ * @summary Projected inflows merged with committed bill outflows per week — squeeze weeks flagged (deterministic; both sides from their own existing computations)
+ */
+export const GetNetCashPositionQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const GetNetCashPositionResponse = zod.object({
+  "asOf": zod.string(),
+  "groups": zod.array(zod.object({
+  "currency": zod.string(),
+  "overdueInflow": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "overdueOutflow": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "weeks": zod.array(zod.object({
+  "startDate": zod.string(),
+  "inflow": zod.string(),
+  "inflowCount": zod.number(),
+  "outflow": zod.string(),
+  "outflowCount": zod.number(),
+  "net": zod.string(),
+  "squeeze": zod.boolean()
+})),
+  "laterInflow": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "laterOutflow": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "squeezeWeeks": zod.number()
+})),
+  "note": zod.string()
 })
 
 
@@ -5794,6 +5873,118 @@ export const RunPromptCanaryResponse = zod.object({
   "verdict": zod.enum(['improvement', 'comparable', 'regression']),
   "verdictReason": zod.string()
 })
+
+
+/**
+ * @summary Run the Ask classifier's fixed intent corpus (deterministic scoring); with a candidate prompt, side-by-side canary — nothing stored
+ */
+export const runIntentEvalBodyCandidateSystemMax = 20000;
+
+
+
+export const RunIntentEvalBody = zod.object({
+  "candidateSystem": zod.string().max(runIntentEvalBodyCandidateSystemMax).optional()
+})
+
+export const RunIntentEvalResponse = zod.object({
+  "canary": zod.object({
+  "incumbent": zod.object({
+  "fixtureCount": zod.number(),
+  "correctCount": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "classified": zod.object({
+  "claimKey": zod.string(),
+  "month": zod.string(),
+  "client": zod.string()
+}).nullable(),
+  "correct": zod.boolean(),
+  "resisted": zod.boolean().nullable()
+}))
+}).and(zod.object({
+  "promptVersion": zod.string()
+})),
+  "candidate": zod.object({
+  "fixtureCount": zod.number(),
+  "correctCount": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "classified": zod.object({
+  "claimKey": zod.string(),
+  "month": zod.string(),
+  "client": zod.string()
+}).nullable(),
+  "correct": zod.boolean(),
+  "resisted": zod.boolean().nullable()
+}))
+}),
+  "verdict": zod.enum(['promote', 'reject', 'inconclusive'])
+}).nullable(),
+  "run": zod.object({
+  "id": zod.string().uuid(),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "fixtureCount": zod.number(),
+  "correctCount": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "classified": zod.object({
+  "claimKey": zod.string(),
+  "month": zod.string(),
+  "client": zod.string()
+}).nullable(),
+  "correct": zod.boolean(),
+  "resisted": zod.boolean().nullable()
+})),
+  "durationMs": zod.number(),
+  "createdAt": zod.coerce.date()
+}).nullable()
+})
+
+
+/**
+ * @summary Stored intent-classification eval runs, newest first
+ */
+export const ListIntentEvalRunsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "fixtureCount": zod.number(),
+  "correctCount": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "classified": zod.object({
+  "claimKey": zod.string(),
+  "month": zod.string(),
+  "client": zod.string()
+}).nullable(),
+  "correct": zod.boolean(),
+  "resisted": zod.boolean().nullable()
+})),
+  "durationMs": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListIntentEvalRunsResponse = zod.array(ListIntentEvalRunsResponseItem)
 
 
 /**

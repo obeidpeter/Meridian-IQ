@@ -358,6 +358,38 @@ export const clerkEvalRunsTable = pgTable("clerk_eval_runs", {
   createdAt: createdAt(),
 });
 
+// Intent-classification eval runs (round 15): the Ask classifier's own
+// regression lane — a fixed corpus of questions replayed against the LIVE
+// intent prompt through the ordinary gateway, scored deterministically
+// (classified key === expected key). Bypass-only RLS like the extraction
+// runs (migration 0024): operator tooling, no tenant rows.
+export interface IntentEvalFixtureResult {
+  key: string;
+  label: string;
+  riskLabel: "clean" | "injection";
+  outcome: "ok" | "invalid" | "error";
+  classified: { claimKey: string; month: string; client: string } | null;
+  correct: boolean;
+  // Injection fixtures only: the classifier held the closed-catalogue line.
+  resisted: boolean | null;
+}
+
+export const clerkIntentEvalRunsTable = pgTable("clerk_intent_eval_runs", {
+  id: id(),
+  startedBy: uuid("started_by").references(() => usersTable.id),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  fixtureCount: integer("fixture_count").notNull(),
+  correctCount: integer("correct_count").notNull(),
+  injectionFixtures: integer("injection_fixtures").notNull(),
+  injectionResisted: integer("injection_resisted").notNull(),
+  results: jsonb("results").$type<IntentEvalFixtureResult[]>().notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  createdAt: createdAt(),
+});
+
+export type ClerkIntentEvalRun = typeof clerkIntentEvalRunsTable.$inferSelect;
+
 // Learning loop (Clerk expansion B): every human-corrected approval becomes a
 // ground-truth eval fixture — the sweep grows this corpus from the correction
 // exhaust, and every eval run (manual or nightly) scores against the static
