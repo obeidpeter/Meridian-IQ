@@ -12,6 +12,7 @@ import { Invoices } from "@/pages/invoices";
 import { InvoiceNew } from "@/pages/invoice-new";
 import { InvoiceDetail } from "@/pages/invoice-detail";
 import { Bills } from "@/pages/bills";
+import { Vat } from "@/pages/vat";
 import { Recurring } from "@/pages/recurring";
 import { Import } from "@/pages/import";
 import { Reconciliation } from "@/pages/reconciliation";
@@ -44,6 +45,7 @@ function Router() {
         <Route path="/invoices/new" component={InvoiceNew} />
         <Route path="/invoices/:id" component={InvoiceDetail} />
         <Route path="/bills" component={Bills} />
+        <Route path="/vat" component={Vat} />
         <Route path="/recurring" component={Recurring} />
         <Route path="/import" component={Import} />
         {/* Both pages self-gate on their capability (clerk.capture /

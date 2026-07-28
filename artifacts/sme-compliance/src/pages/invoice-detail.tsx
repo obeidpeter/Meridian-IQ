@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import {
   useGetInvoice,
+  useApproveInvoice,
+  useListInvoiceApprovals,
+  getListInvoiceApprovalsQueryKey,
   useListSubmissionAttempts,
   useGetInvoiceStamp,
   useListEscalations,
@@ -38,6 +41,7 @@ import type {
   Confirmation,
   Escalation,
   Invoice,
+  InvoiceApproval,
   SettlementEvent,
   StatusLight,
   StatusLightLight,
@@ -104,6 +108,7 @@ import {
   FileQuestion,
   FilePlus,
   Sparkles,
+  UserCheck,
   Wrench,
   Plus,
 } from "lucide-react";
@@ -654,6 +659,141 @@ export function PaymentReminderCard({ invoice }: { invoice: Invoice }) {
   );
 }
 
+// ---- Submission approvals (maker-checker, contract 0.45.0) -----------------
+// A firm can require a second approver before any invoice is submitted for
+// stamping. Approvals are recorded facts, so the card shows them to everyone
+// who can see the invoice; only firm members can RECORD one, and only while
+// the invoice is still submittable (draft/validated, or failed awaiting a
+// retry) — the server stays the authority (its 409 carries the real reason,
+// e.g. the approver matching the eventual submitter).
+
+export function canApproveInvoice(
+  role: string | undefined,
+  status: string,
+): boolean {
+  const firmRole = role === "firm_admin" || role === "firm_staff";
+  return firmRole && ["draft", "validated", "failed"].includes(status);
+}
+
+/**
+ * Status-keyed toast title for a failed submit (the billing paymentErrorCopy
+ * pattern): a 409 is the server refusing on purpose — an orientation guard
+ * or the approval policy — not a transport error, so the title says
+ * "blocked" and the description relays the server's own words.
+ */
+export function submitErrorTitle(status: number | undefined): string {
+  return status === 409 ? "Submission blocked" : "Submission error";
+}
+
+export function ApprovalsCard({
+  invoiceId,
+  role,
+  status,
+}: {
+  invoiceId: string;
+  role: string | undefined;
+  status: string;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const approvalsQuery = useListInvoiceApprovals(invoiceId, {
+    query: {
+      enabled: !!invoiceId,
+      queryKey: getListInvoiceApprovalsQueryKey(invoiceId),
+      retry: false,
+    },
+  });
+  const approve = useApproveInvoice();
+  const canApprove = canApproveInvoice(role, status);
+  const approvals = approvalsQuery.data;
+
+  // Render-on-success: an older server build (404) or a scope refusal simply
+  // means no card. An empty ledger is only worth a card to someone who can
+  // add to it.
+  if (!approvalsQuery.isSuccess || !approvals) return null;
+  if (approvals.length === 0 && !canApprove) return null;
+
+  const handleApprove = async () => {
+    try {
+      await approve.mutateAsync({ id: invoiceId });
+      queryClient.invalidateQueries({
+        queryKey: getListInvoiceApprovalsQueryKey(invoiceId),
+      });
+      toast({
+        title: "Approval recorded",
+        description:
+          "This invoice now carries your submission approval — the submitter must be someone else.",
+      });
+    } catch (e) {
+      toast({
+        title: "Could not record approval",
+        description: serverErrorMessage(e),
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <Card data-testid="card-approvals">
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <UserCheck className="w-4 h-4" aria-hidden="true" /> Approvals
+        </CardTitle>
+        {canApprove && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void handleApprove()}
+            disabled={approve.isPending}
+            data-testid="button-approve-invoice"
+          >
+            {approve.isPending ? "Approving…" : "Approve for submission"}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {approvals.length === 0 ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-no-approvals"
+          >
+            No approvals recorded yet. If your firm requires a second approver
+            before submission, record yours here.
+          </p>
+        ) : (
+          approvals.map((a: InvoiceApproval) => (
+            <div
+              key={a.id}
+              className="text-sm border rounded-md px-3 py-2"
+              data-testid={`row-approval-${a.id}`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium">
+                  {a.approvedByName ?? a.approvedByUserId}
+                </span>
+                <span className="flex items-center gap-2">
+                  {a.revokedAt && (
+                    <span
+                      className={pillClasses("red")}
+                      data-testid={`pill-approval-revoked-${a.id}`}
+                    >
+                      Revoked
+                    </span>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {formatDateTime(a.createdAt)}
+                  </span>
+                </span>
+              </div>
+              {a.note && <p className="text-muted-foreground mt-1">{a.note}</p>}
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function InvoiceDetail() {
   const [, params] = useRoute("/invoices/:id");
   const id = params?.id || "";
@@ -802,7 +942,7 @@ export function InvoiceDetail() {
       });
     } catch (e) {
       toast({
-        title: "Submission error",
+        title: submitErrorTitle(errorStatus(e)),
         description: serverErrorMessage(e),
         variant: "destructive",
       });
@@ -987,6 +1127,8 @@ export function InvoiceDetail() {
       buyerPartyId: invoice.buyerPartyId,
       issueDate: todayIsoDate(),
       dueDate: "",
+      currency: invoice.currency || "NGN",
+      fxRateToNgn: invoice.fxRateToNgn ?? "",
       lines: lines.length > 0 ? lines : [emptyLine()],
     };
   };
@@ -1243,6 +1385,10 @@ export function InvoiceDetail() {
       />
 
       <ComplianceStatusCard statusLight={statusLight} isLoading={statusLightLoading} />
+
+      {/* Maker-checker ledger: informational for client users, actionable
+          for firm roles while the invoice is still submittable. */}
+      <ApprovalsCard invoiceId={id} role={me?.role} status={invoice.status} />
 
       {/* Advisory only, gated on the same still-editable statuses as the
           query so a cached report never outlives a submission. */}

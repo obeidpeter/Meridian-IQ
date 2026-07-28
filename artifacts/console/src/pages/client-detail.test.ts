@@ -2,10 +2,12 @@ import { test, expect, describe } from "vitest";
 import {
   OFFBOARD_EXPLANATION,
   canOffboardClient,
+  currentMonthStart,
   exportFilename,
   offboardConfirmReady,
   offboardErrorNote,
   offboardSummary,
+  packPdfFilename,
 } from "./client-detail";
 
 // Export & offboarding helpers. The offboard guard is deliberately split:
@@ -88,6 +90,26 @@ describe("offboardSummary", () => {
     ).toBe(
       "1 engagement archived · 0 sign-ins removed · contact details kept (still engaged elsewhere)",
     );
+  });
+});
+
+describe("packPdfFilename", () => {
+  test("names the saved pack after its month", () => {
+    expect(packPdfFilename("2026-07-01")).toBe("compliance-pack-2026-07.pdf");
+    expect(packPdfFilename("2025-12-01")).toBe("compliance-pack-2025-12.pdf");
+  });
+
+  test("a malformed month start still yields a usable filename", () => {
+    expect(packPdfFilename("")).toBe("compliance-pack.pdf");
+  });
+});
+
+describe("currentMonthStart", () => {
+  test("first day of the given date's month, zero-padded", () => {
+    // Local-time constructor so the assertion is timezone-proof.
+    expect(currentMonthStart(new Date(2026, 6, 28))).toBe("2026-07-01");
+    expect(currentMonthStart(new Date(2026, 0, 3))).toBe("2026-01-01");
+    expect(currentMonthStart(new Date(2025, 11, 31))).toBe("2025-12-01");
   });
 });
 

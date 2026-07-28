@@ -12,6 +12,7 @@ import {
   Store,
   Menu,
   LogOut,
+  Percent,
   Receipt,
   Repeat,
   Grid2x2,
@@ -47,6 +48,7 @@ const LINKS: NavLink[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/bills", label: "Bills", icon: Receipt },
+  { href: "/vat", label: "VAT", icon: Percent },
   { href: "/recurring", label: "Recurring", icon: Repeat },
   { href: "/import", label: "Import", icon: Upload },
   {
