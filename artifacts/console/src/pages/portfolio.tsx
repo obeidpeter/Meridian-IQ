@@ -16,6 +16,8 @@ import {
   useDraftVatPackCoverNote,
   type VatPackCoverNote,
   useGetVatSettlementCheck,
+  useGetVatPosition,
+  getGetVatPositionQueryKey,
   getGetVatSettlementCheckQueryKey,
   useGetFirmVatPositions,
   getGetFirmVatPositionsQueryKey,
@@ -720,6 +722,104 @@ function VatPackCard() {
 // month's accepted value the platform has OBSERVED settling. Deliberately an
 // assurance view — the server's note says "unobserved, not unpaid" and it
 // renders with every state.
+// Net VAT position (round-15 idea #1): output VAT from the pack minus
+// VERIFIED input VAT on the month's supplier bills — the filing number,
+// with the unverified list as the recovery CTA.
+function VatPositionCard() {
+  const [month, setMonth] = useState<string | undefined>(undefined);
+  const params = month ? { month } : undefined;
+  const { data: position, isSuccess } = useGetVatPosition(params, {
+    query: { queryKey: getGetVatPositionQueryKey(params), retry: false },
+  });
+  if (!isSuccess || !position) return null;
+  return (
+    <Card
+      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid="card-vat-position"
+    >
+      <CardHeader>
+        <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
+          <span>Net VAT position — {position.monthLabel}</span>
+          <Select value={position.monthStart} onValueChange={(m) => setMonth(m)}>
+            <SelectTrigger
+              className="h-8 w-44 text-xs"
+              data-testid="select-vat-position-month"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {position.months.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {packMonthLabel(m)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile
+            label="Output VAT (net)"
+            value={formatNaira(position.outputNetVat)}
+            testId="tile-vat-output"
+          />
+          <StatTile
+            label="Verified input VAT"
+            value={formatNaira(position.verifiedVat)}
+            detail={`${position.verifiedCount} of ${position.billCount} bills`}
+            testId="tile-vat-input"
+          />
+          <StatTile
+            label="Net position"
+            value={formatNaira(position.netPosition)}
+            testId="tile-vat-net"
+          />
+          <StatTile
+            label="Unverified input VAT"
+            value={formatNaira(position.unverifiedVat)}
+            detail={`${position.unverifiedCount} bill(s) to verify`}
+            tone={position.unverifiedCount > 0 ? "warning" : undefined}
+            testId="tile-vat-unverified"
+          />
+        </div>
+        {position.unverified.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="table-vat-unverified-bills">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Bill</th>
+                  <th className="py-2 pr-3 font-medium">Client</th>
+                  <th className="py-2 pr-3 font-medium">Supplier</th>
+                  <th className="py-2 font-medium text-right">Input VAT</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {position.unverified.map((r) => (
+                  <tr key={r.invoiceId}>
+                    <td className="py-2 pr-3">{r.invoiceNumber}</td>
+                    <td className="py-2 pr-3">{r.clientName}</td>
+                    <td className="py-2 pr-3">{r.supplierName}</td>
+                    <td className="py-2 text-right tabular-nums">
+                      {formatMoney(r.vatTotal, r.currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {position.unverifiedTruncated && (
+              <p className="pt-1 text-xs text-muted-foreground">
+                Showing the largest {position.unverified.length} — more exist.
+              </p>
+            )}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">{position.note}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function VatSettlementCard() {
   const [month, setMonth] = useState<string | undefined>(undefined);
   const params = month ? { month } : undefined;
@@ -1788,6 +1888,8 @@ export function Portfolio() {
           <VatPackCard />
           <VatPositionsCard />
           <VatSettlementCard />
+
+          <VatPositionCard />
           <QuarterlyReviewCard />
           <RejectionPatternsCard />
           {/* Practice governance lives with the compliance surfaces it

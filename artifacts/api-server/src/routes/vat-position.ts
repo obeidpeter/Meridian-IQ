@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
-  GetVatPositionQueryParams,
-  GetVatPositionResponse,
+  GetClientVatPositionQueryParams,
+  GetClientVatPositionResponse,
   ExportVatPositionCsvQueryParams,
   GetFirmVatPositionsQueryParams,
   GetFirmVatPositionsResponse,
@@ -58,7 +58,7 @@ function firmScope(principal: Principal): string {
 
 router.get("/vat-position", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
-  const query = parseOrThrow(GetVatPositionQueryParams, req.query);
+  const query = parseOrThrow(GetClientVatPositionQueryParams, req.query);
   // SEC-03: a client_user is pinned to its own party; a firm principal names
   // the client — the bills/analytics routes' exact scope resolution.
   const { firmId, clientPartyId } = resolveClientAnalyticsScope(
@@ -67,7 +67,7 @@ router.get("/vat-position", async (req, res): Promise<void> => {
   );
   const month = resolvePositionMonth(query.month);
   const position = await computeVatPosition(firmId, clientPartyId, month);
-  res.json(GetVatPositionResponse.parse(position));
+  res.json(GetClientVatPositionResponse.parse(position));
 });
 
 // The same position as a file — one row per document (signed vatNgn, so each

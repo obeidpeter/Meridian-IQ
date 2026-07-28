@@ -7,13 +7,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { VatPosition } from "@workspace/api-client-react";
+import type { ClientVatPosition } from "@workspace/api-client-react";
 
 const harness = vi.hoisted(() => ({
   position: null as unknown,
   isLoading: false,
   isError: false,
-  // Every params object useGetVatPosition was called with, in order.
+  // Every params object useGetClientVatPosition was called with, in order.
   calls: [] as unknown[],
   reset() {
     this.position = null;
@@ -29,7 +29,7 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
   return {
     ...actual,
     useGetMe: () => ({ data: { clientPartyId: "cp-1" } }),
-    useGetVatPosition: (params: unknown) => {
+    useGetClientVatPosition: (params: unknown) => {
       harness.calls.push(params);
       return {
         data: harness.position,
@@ -44,7 +44,7 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
 // Import AFTER the mock so the page module binds the stand-ins.
 import { Vat, fxExcludedLine, vatCsvHref, vatMonthLabel, vatRows } from "./vat";
 
-function position(over: Partial<VatPosition> = {}): VatPosition {
+function position(over: Partial<ClientVatPosition> = {}): ClientVatPosition {
   return {
     clientPartyId: "cp-1",
     monthStart: "2026-07-01",

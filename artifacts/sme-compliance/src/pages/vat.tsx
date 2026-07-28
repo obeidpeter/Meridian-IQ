@@ -1,13 +1,13 @@
 import { useState } from "react";
 import {
   useGetMe,
-  useGetVatPosition,
-  getGetVatPositionQueryKey,
+  useGetClientVatPosition,
+  getGetClientVatPositionQueryKey,
   getExportVatPositionCsvUrl,
 } from "@workspace/api-client-react";
 import type {
-  GetVatPositionParams,
-  VatPosition as VatPositionPayload,
+  GetClientVatPositionParams,
+  ClientVatPosition as VatPositionPayload,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -136,7 +136,7 @@ export function Vat() {
   // undefined = the server's default (current Lagos month); a picked month
   // rides the query string.
   const [month, setMonth] = useState<string | undefined>(undefined);
-  const params: GetVatPositionParams = month
+  const params: GetClientVatPositionParams = month
     ? { clientPartyId, month }
     : { clientPartyId };
 
@@ -145,10 +145,10 @@ export function Vat() {
     isLoading,
     isError,
     refetch,
-  } = useGetVatPosition(params, {
+  } = useGetClientVatPosition(params, {
     query: {
       enabled: !!clientPartyId,
-      queryKey: getGetVatPositionQueryKey(params),
+      queryKey: getGetClientVatPositionQueryKey(params),
     },
   });
 

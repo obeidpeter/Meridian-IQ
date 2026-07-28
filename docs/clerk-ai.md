@@ -411,6 +411,16 @@ without a human owner.
     unsettled list (cap+1 truncation flag) and a note pinning the semantics:
     unsettled means UNOBSERVED, not unpaid — an assurance view, never an
     accusation.
+  - **Net VAT position** (`modules/clerk/vat-input.ts`,
+    `GET /vat-pack/position`, same gate + month discipline, deterministic,
+    nothing stored) joins the pack's output VAT to the bills ledger's input
+    side: input VAT counts toward the position ONLY when the bill's NEWEST
+    stamp verification says valid (`bill_verifications`, newest-verdict
+    wins), so net position = output net VAT − verified input VAT is a
+    filing number, not a hope. Bills are bucketed by ISSUE month — the
+    pack's own basis — and the capped largest-first unverified list is the
+    recovery CTA ("verify these to move ₦X into the position"). Console
+    portfolio card next to the pack.
 - **Quarterly review pack** (`modules/advisory/quarterly-pack.ts`,
   `GET /quarterly-review`, same gate, console portfolio card) assembles a
   CLOSED Lagos quarter into one deterministic document — the three monthly
@@ -582,6 +592,15 @@ call the model.
   itself, 3+ other settlements required), else due-date terms, else 30 days
   — reporting signed median error, a ±7-day share and a per-buyer table;
   surfaced as a confidence line under the SME outlook card (5+ settlements).
+- **Net cash position** (`modules/invoice/net-position.ts`,
+  `GET /dashboard/net-position`, nothing stored) merges the outlook's
+  projected inflows with the payables summary's committed outflows per
+  currency and week — BOTH sides computed by their own existing functions
+  (identical 7-day bucket geometry), nothing recomputed, so the merged view
+  can never disagree with either card. Weeks where committed bills exceed
+  projected receipts are flagged SQUEEZE weeks (a prompt to look, never a
+  prediction); already-late money on both sides stays out of the weekly
+  nets and is reported separately. SME dashboard card.
 - **Line-item memory** (`modules/invoice/line-items.ts`,
   `GET /line-item-suggestions`, nothing stored) mines the client's own
   invoice lines into an item catalogue (order-insensitive item key, 2+
@@ -620,6 +639,22 @@ shared computation as the corresponding chart.
 
 ## Evals, canaries & curation
 
+- **Intent-classification eval lane** (`modules/clerk/intent-eval.ts`,
+  `POST /clerk/eval/intent` + `GET /clerk/eval/intent-runs`, `clerk.use`,
+  `clerk_intent_eval_runs` bypass-only RLS migration 0024, console health
+  card): the Ask classifier's own regression corpus — a FIXED set of
+  questions (register, data intents incl. payables, refusals, month/client
+  guards, two prompt-injection questions) replayed against the LIVE intent
+  prompt through the ordinary gateway (purpose `eval_intent`, one classify
+  call per fixture) and scored DETERMINISTICALLY: classified key ===
+  expected key (plus pinned month/client keys); no model judges a model.
+  The user prompt is assembled by the SAME `buildIntentUser` production
+  uses (exported from ask.ts), and the frozen synthetic context carries
+  the REAL data-intent catalogue — a new intent that steals traffic from
+  an existing one shows up as a regression. With a `candidateSystem` the
+  corpus runs side by side and returns the prompt-canary verdict
+  (injection resistance may never drop; accuracy judged outside a
+  one-fixture noise band) with nothing stored.
 - **Learning loop** (`modules/clerk/eval-growth.ts`) turns corrected
   approvals into eval fixtures on the sweep loop; the nightly auto-eval is
   opt-in behind `clerk_auto_eval` (spends tokens). Grown fixtures are

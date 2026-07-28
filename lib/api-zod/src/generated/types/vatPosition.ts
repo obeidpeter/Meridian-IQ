@@ -3,22 +3,24 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.45.0
+ * OpenAPI spec version: 0.46.0
  */
+import type { VatPositionUnverifiedItem } from './vatPositionUnverifiedItem';
 
 export interface VatPosition {
-  clientPartyId: string;
   monthStart: string;
   monthLabel: string;
   months: string[];
   outputVat: string;
-  outputInvoiceCount: number;
-  inputVat: string;
-  inputVatVerified: string;
-  inputVatUnverified: string;
+  outputNetVat: string;
   billCount: number;
-  netVat: string;
-  defensibleNetVat: string;
-  excludedForFx: number;
+  billVat: string;
+  verifiedCount: number;
+  verifiedVat: string;
+  unverifiedCount: number;
+  unverifiedVat: string;
+  netPosition: string;
+  unverified: VatPositionUnverifiedItem[];
+  unverifiedTruncated: boolean;
   note: string;
 }

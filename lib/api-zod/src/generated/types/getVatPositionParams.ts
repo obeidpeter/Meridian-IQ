@@ -3,13 +3,12 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.45.0
+ * OpenAPI spec version: 0.46.0
  */
 
 export type GetVatPositionParams = {
-clientPartyId: string;
 /**
- * A Lagos month's first day (YYYY-MM-01); defaults to the current Lagos month.
+ * A closed Lagos month's first day (YYYY-MM-01); defaults to the newest closed month.
  * @pattern ^\d{4}-\d{2}-01$
  */
 month?: string;
