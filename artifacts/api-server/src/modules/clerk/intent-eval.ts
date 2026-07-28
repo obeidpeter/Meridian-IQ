@@ -1,8 +1,11 @@
-import { desc } from "drizzle-orm";
+import { desc, eq, isNull, sql } from "drizzle-orm";
 import {
   getDb,
   clerkIntentEvalRunsTable,
+  clerkIntentFixturesTable,
+  clerkCasesTable,
   type ClerkIntentEvalRun,
+  type ClerkIntentFixture,
   type IntentEvalFixtureResult,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
@@ -174,6 +177,170 @@ export const INTENT_FIXTURES: IntentFixture[] = [
   },
 ];
 
+// ---- Grown corpus (round 16) ----------------------------------------------
+// Question cases promoted into the corpus. The question text is SCRUBBED
+// deterministically before storage: every engaged-client name (and the firm
+// name) is mapped onto the frozen synthetic directory in order of first
+// appearance — the same pseudonym discipline the extraction corpus uses. A
+// question naming more than the directory can represent is REFUSED, never
+// stored partially scrubbed.
+
+const GROWN_INTENT_CAP = 40;
+
+// Pure, exported for tests. Returns null when the question cannot be
+// represented in the frozen two-client directory.
+export function scrubIntentQuestion(
+  question: string,
+  knownNames: string[],
+): string | null {
+  const directory = INTENT_EVAL_CONTEXT.clients.map((c) => c.name);
+  let scrubbed = question;
+  let used = 0;
+  // Longest names first so "Acme Ventures Nigeria" wins over "Acme".
+  const names = [...new Set(knownNames.filter((n) => n.trim().length >= 3))].sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const name of names) {
+    if (!scrubbed.toLowerCase().includes(name.toLowerCase())) continue;
+    if (used >= directory.length) return null;
+    const pattern = new RegExp(
+      name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "gi",
+    );
+    scrubbed = scrubbed.replace(pattern, directory[used]);
+    used += 1;
+  }
+  return scrubbed;
+}
+
+export async function mintIntentFixture(
+  input: {
+    caseId: string;
+    label?: string;
+    expected: { claimKey: string; month?: string; client?: string };
+  },
+  actorId: string,
+): Promise<ClerkIntentFixture> {
+  // Expected values must live inside the frozen offered context — the
+  // corpus can only pin keys the eval prompt actually offers (fail-closed).
+  const offeredKeys = new Set([
+    "none",
+    ...INTENT_EVAL_CONTEXT.claims.map((c) => c.claimKey),
+    ...INTENT_EVAL_CONTEXT.dataIntents.map((i) => i.key),
+  ]);
+  const offeredMonths = new Set([
+    "none",
+    ...INTENT_EVAL_CONTEXT.months.map((m) => m.key),
+  ]);
+  const offeredClients = new Set([
+    "none",
+    ...INTENT_EVAL_CONTEXT.clients.map((c) => c.key),
+  ]);
+  if (
+    !offeredKeys.has(input.expected.claimKey) ||
+    (input.expected.month !== undefined &&
+      !offeredMonths.has(input.expected.month)) ||
+    (input.expected.client !== undefined &&
+      !offeredClients.has(input.expected.client))
+  ) {
+    throw new DomainError(
+      "BAD_EXPECTED",
+      "Expected keys must come from the eval's frozen offered context",
+      400,
+    );
+  }
+
+  const [row] = await getDb()
+    .select({
+      id: clerkCasesTable.id,
+      kind: clerkCasesTable.kind,
+      question: clerkCasesTable.question,
+      firmId: clerkCasesTable.firmId,
+    })
+    .from(clerkCasesTable)
+    .where(eq(clerkCasesTable.id, input.caseId))
+    .limit(1);
+  if (!row || row.kind !== "question" || !row.question) {
+    throw new DomainError("NOT_FOUND", "Question case not found", 404);
+  }
+
+  // Names that must not survive into the corpus: the firm's engaged client
+  // parties and the firm itself. A firm-less (operator) question has no
+  // tenant vocabulary to scrub.
+  let knownNames: string[] = [];
+  if (row.firmId) {
+    const names = (
+      await getDb().execute<{ name: string }>(sql`
+        SELECT p.legal_name AS name
+        FROM parties p
+        JOIN engagements e ON e.client_party_id = p.id
+        WHERE e.firm_id = ${row.firmId}
+        UNION
+        SELECT f.name FROM firms f WHERE f.id = ${row.firmId}
+      `)
+    ).rows;
+    knownNames = names.map((n) => n.name);
+  }
+  const scrubbed = scrubIntentQuestion(row.question, knownNames);
+  if (scrubbed === null) {
+    throw new DomainError(
+      "UNREPRESENTABLE",
+      "The question names more parties than the frozen directory can represent — rewrite it as a static fixture instead",
+      422,
+    );
+  }
+
+  const [fixture] = await getDb()
+    .insert(clerkIntentFixturesTable)
+    .values({
+      caseId: input.caseId,
+      label: input.label?.trim() || `grown: ${scrubbed.slice(0, 60)}`,
+      question: scrubbed,
+      expected: input.expected,
+    })
+    .onConflictDoNothing()
+    .returning();
+  if (!fixture) {
+    throw new DomainError(
+      "ALREADY_MINTED",
+      "This case is already in the intent corpus",
+      409,
+    );
+  }
+  await appendAudit({
+    actorId,
+    action: "clerk.intent-fixture.mint",
+    entityType: "clerk_intent_fixture",
+    entityId: fixture.id,
+    after: { caseId: input.caseId, expected: input.expected },
+  });
+  return fixture;
+}
+
+export async function loadGrownIntentFixtures(): Promise<IntentFixture[]> {
+  const rows = await getDb()
+    .select()
+    .from(clerkIntentFixturesTable)
+    .where(isNull(clerkIntentFixturesTable.retiredAt))
+    .orderBy(desc(clerkIntentFixturesTable.createdAt))
+    .limit(GROWN_INTENT_CAP);
+  return rows.map((r) => ({
+    key: `grown-${r.id.slice(0, 8)}`,
+    label: r.label,
+    question: r.question,
+    riskLabel: "clean" as const,
+    expected: r.expected,
+  }));
+}
+
+export async function listIntentFixtures(): Promise<ClerkIntentFixture[]> {
+  return getDb()
+    .select()
+    .from(clerkIntentFixturesTable)
+    .orderBy(desc(clerkIntentFixturesTable.createdAt))
+    .limit(200);
+}
+
 export interface IntentEvalReport {
   fixtureCount: number;
   correctCount: number;
@@ -185,6 +352,7 @@ export interface IntentEvalReport {
 async function classifyCorpus(
   gateway: ClerkGateway,
   system: string,
+  fixtures: IntentFixture[],
 ): Promise<IntentEvalReport> {
   // NO explicit "none" here: intentJsonSchema/intentValidator append it
   // themselves, exactly as ask.ts builds the production request — a
@@ -197,7 +365,7 @@ async function classifyCorpus(
   const monthKeys = INTENT_EVAL_CONTEXT.months.map((m) => m.key);
   const clientKeys = INTENT_EVAL_CONTEXT.clients.map((c) => c.key);
   const results: IntentEvalFixtureResult[] = [];
-  for (const fixture of INTENT_FIXTURES) {
+  for (const fixture of fixtures) {
     const inferred = await gateway.infer<{
       claimKey: string;
       month?: string;
@@ -264,10 +432,17 @@ async function classifyCorpus(
 export async function runIntentEval(
   actorId: string | null,
   gateway: ClerkGateway,
+  // includeGrown=false pins a run to the hand-written static corpus (the
+  // runEvalCorpus precedent — tests assert exact corpus-shape expectations).
+  opts: { includeGrown?: boolean } = {},
 ): Promise<ClerkIntentEvalRun> {
   await assertClerkEnabled();
   const startedAt = Date.now();
-  const report = await classifyCorpus(gateway, INTENT_SYSTEM);
+  const fixtures =
+    opts.includeGrown === false
+      ? [...INTENT_FIXTURES]
+      : [...INTENT_FIXTURES, ...(await loadGrownIntentFixtures())];
+  const report = await classifyCorpus(gateway, INTENT_SYSTEM, fixtures);
   const [run] = await getDb()
     .insert(clerkIntentEvalRunsTable)
     .values({
@@ -314,6 +489,7 @@ const MIN_CANDIDATE_CHARS = 100;
 export async function runIntentCanary(
   gateway: ClerkGateway,
   candidateSystem: string,
+  opts: { includeGrown?: boolean } = {},
 ): Promise<IntentCanaryReport> {
   if (candidateSystem.trim().length < MIN_CANDIDATE_CHARS) {
     throw new DomainError(
@@ -323,8 +499,12 @@ export async function runIntentCanary(
     );
   }
   await assertClerkEnabled();
-  const incumbent = await classifyCorpus(gateway, INTENT_SYSTEM);
-  const candidate = await classifyCorpus(gateway, candidateSystem);
+  const fixtures =
+    opts.includeGrown === false
+      ? [...INTENT_FIXTURES]
+      : [...INTENT_FIXTURES, ...(await loadGrownIntentFixtures())];
+  const incumbent = await classifyCorpus(gateway, INTENT_SYSTEM, fixtures);
+  const candidate = await classifyCorpus(gateway, candidateSystem, fixtures);
   // Symmetric one-fixture noise band (round-15 review M3): a single flipped
   // fixture on a 14-question corpus is noise in EITHER direction — promote
   // and reject both require clearing the band.

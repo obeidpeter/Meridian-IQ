@@ -282,6 +282,11 @@ const LADDER: LadderStep[] = [
     atTop: [bypass("clerk_intent_eval_runs")],
     afterRollback: [not(bypass("clerk_intent_eval_runs"))],
   },
+  {
+    version: 25, // grown intent fixture guardrails
+    atTop: [bypass("clerk_intent_fixtures")],
+    afterRollback: [not(bypass("clerk_intent_fixtures"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.45.0
+ * OpenAPI spec version: 0.46.0
  */
 import {
   useMutation,
@@ -60,6 +60,7 @@ import type {
   CatalogueCoverageReport,
   CatalogueEntryDraft,
   ChangePasswordInput,
+  ChaseEffectiveness,
   ChaseLogSummary,
   ChaseRow,
   ClaimDecisionInput,
@@ -114,6 +115,7 @@ import type {
   CreatedClient,
   CreditNoteInput,
   DashboardSummary,
+  DoublePaymentCheck,
   DraftCatalogueEntryInput,
   DraftClaimWithClerkInput,
   DraftClientImportInput,
@@ -165,11 +167,13 @@ import type {
   GenerateStatementsInput,
   GetBillingStatementParams,
   GetCashflowOutlookParams,
+  GetChaseEffectivenessParams,
   GetChaseListParams,
   GetClerkClaimGapsParams,
   GetClerkMetricsParams,
   GetComplianceCalendarParams,
   GetDashboardSummaryParams,
+  GetDoublePaymentCheckParams,
   GetMergeImpactParams,
   GetNetCashPositionParams,
   GetPayablesSummaryParams,
@@ -186,6 +190,7 @@ import type {
   IdentifierCheck,
   IntentEvalOutcome,
   IntentEvalRun,
+  IntentFixtureSummary,
   Invitation,
   InvitationWithToken,
   Invoice,
@@ -227,6 +232,7 @@ import type {
   MessageDeliveryInput,
   MessageInput,
   MintFixtureInput,
+  MintIntentFixtureInput,
   ModelCanaryReport,
   NetCashPosition,
   NotFoundResponse,
@@ -5122,6 +5128,90 @@ export function useGetProjectionAccuracy<TData = Awaited<ReturnType<typeof getPr
 
 
 
+export const getGetChaseEffectivenessUrl = (params?: GetChaseEffectivenessParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/chase-effectiveness?${stringifiedParams}` : `/api/chase-effectiveness`
+}
+
+/**
+ * @summary Chase-ladder reminders joined to observed settlements — did reminded invoices settle, and how fast (correlation only; deterministic, nothing stored)
+ */
+export const getChaseEffectiveness = async (params?: GetChaseEffectivenessParams, options?: RequestInit): Promise<ChaseEffectiveness> => {
+
+  return customFetch<ChaseEffectiveness>(getGetChaseEffectivenessUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetChaseEffectivenessQueryKey = (params?: GetChaseEffectivenessParams,) => {
+    return [
+    `/api/chase-effectiveness`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetChaseEffectivenessQueryOptions = <TData = Awaited<ReturnType<typeof getChaseEffectiveness>>, TError = ErrorType<BadRequestResponse>>(params?: GetChaseEffectivenessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChaseEffectiveness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetChaseEffectivenessQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getChaseEffectiveness>>> = ({ signal }) => getChaseEffectiveness(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getChaseEffectiveness>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetChaseEffectivenessQueryResult = NonNullable<Awaited<ReturnType<typeof getChaseEffectiveness>>>
+export type GetChaseEffectivenessQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Chase-ladder reminders joined to observed settlements — did reminded invoices settle, and how fast (correlation only; deterministic, nothing stored)
+ */
+
+export function useGetChaseEffectiveness<TData = Awaited<ReturnType<typeof getChaseEffectiveness>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetChaseEffectivenessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChaseEffectiveness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetChaseEffectivenessQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getRecordChaseReminderUrl = (invoiceId: string,) => {
 
 
@@ -9023,6 +9113,90 @@ export const useVerifyBillStamp = <TError = ErrorType<NotFoundResponse>,
       > => {
       return useMutation(getVerifyBillStampMutationOptions(options));
     }
+
+export const getGetDoublePaymentCheckUrl = (params?: GetDoublePaymentCheckParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bills/double-payment-check?${stringifiedParams}` : `/api/bills/double-payment-check`
+}
+
+/**
+ * @summary Advisory double-payment guard — bills paid twice by the evidence, and unpaid near-duplicate bills that would become one (deterministic, nothing stored)
+ */
+export const getDoublePaymentCheck = async (params?: GetDoublePaymentCheckParams, options?: RequestInit): Promise<DoublePaymentCheck> => {
+
+  return customFetch<DoublePaymentCheck>(getGetDoublePaymentCheckUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDoublePaymentCheckQueryKey = (params?: GetDoublePaymentCheckParams,) => {
+    return [
+    `/api/bills/double-payment-check`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDoublePaymentCheckQueryOptions = <TData = Awaited<ReturnType<typeof getDoublePaymentCheck>>, TError = ErrorType<BadRequestResponse>>(params?: GetDoublePaymentCheckParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDoublePaymentCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDoublePaymentCheckQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDoublePaymentCheck>>> = ({ signal }) => getDoublePaymentCheck(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDoublePaymentCheck>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDoublePaymentCheckQueryResult = NonNullable<Awaited<ReturnType<typeof getDoublePaymentCheck>>>
+export type GetDoublePaymentCheckQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Advisory double-payment guard — bills paid twice by the evidence, and unpaid near-duplicate bills that would become one (deterministic, nothing stored)
+ */
+
+export function useGetDoublePaymentCheck<TData = Awaited<ReturnType<typeof getDoublePaymentCheck>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetDoublePaymentCheckParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDoublePaymentCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDoublePaymentCheckQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetPayablesSummaryUrl = (params: GetPayablesSummaryParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -16606,6 +16780,153 @@ export function useListIntentEvalRuns<TData = Awaited<ReturnType<typeof listInte
 
 
 
+
+export const getListIntentFixturesUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/intent-fixtures`
+}
+
+/**
+ * @summary The grown intent corpus — question cases promoted into the eval, scrubbed onto the synthetic directory, newest first
+ */
+export const listIntentFixtures = async ( options?: RequestInit): Promise<IntentFixtureSummary[]> => {
+
+  return customFetch<IntentFixtureSummary[]>(getListIntentFixturesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListIntentFixturesQueryKey = () => {
+    return [
+    `/api/clerk/eval/intent-fixtures`
+    ] as const;
+    }
+
+
+export const getListIntentFixturesQueryOptions = <TData = Awaited<ReturnType<typeof listIntentFixtures>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listIntentFixtures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListIntentFixturesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listIntentFixtures>>> = ({ signal }) => listIntentFixtures({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listIntentFixtures>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListIntentFixturesQueryResult = NonNullable<Awaited<ReturnType<typeof listIntentFixtures>>>
+export type ListIntentFixturesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The grown intent corpus — question cases promoted into the eval, scrubbed onto the synthetic directory, newest first
+ */
+
+export function useListIntentFixtures<TData = Awaited<ReturnType<typeof listIntentFixtures>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listIntentFixtures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListIntentFixturesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getMintIntentFixtureUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/intent-fixtures/from-case`
+}
+
+/**
+ * @summary Promote a real question case into the intent eval corpus (deterministic scrub onto the frozen synthetic directory; refused when unrepresentable)
+ */
+export const mintIntentFixture = async (mintIntentFixtureInput: MintIntentFixtureInput, options?: RequestInit): Promise<IntentFixtureSummary> => {
+
+  return customFetch<IntentFixtureSummary>(getMintIntentFixtureUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(mintIntentFixtureInput)
+  }
+);}
+
+
+
+
+export const getMintIntentFixtureMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mintIntentFixture>>, TError,{data: BodyType<MintIntentFixtureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof mintIntentFixture>>, TError,{data: BodyType<MintIntentFixtureInput>}, TContext> => {
+
+const mutationKey = ['mintIntentFixture'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof mintIntentFixture>>, {data: BodyType<MintIntentFixtureInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  mintIntentFixture(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MintIntentFixtureMutationResult = NonNullable<Awaited<ReturnType<typeof mintIntentFixture>>>
+    export type MintIntentFixtureMutationBody = BodyType<MintIntentFixtureInput>
+    export type MintIntentFixtureMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse | Error>
+
+    /**
+ * @summary Promote a real question case into the intent eval corpus (deterministic scrub onto the frozen synthetic directory; refused when unrepresentable)
+ */
+export const useMintIntentFixture = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse | Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mintIntentFixture>>, TError,{data: BodyType<MintIntentFixtureInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof mintIntentFixture>>,
+        TError,
+        {data: BodyType<MintIntentFixtureInput>},
+        TContext
+      > => {
+      return useMutation(getMintIntentFixtureMutationOptions(options));
+    }
 
 export const getListEvalFixturesUrl = () => {
 

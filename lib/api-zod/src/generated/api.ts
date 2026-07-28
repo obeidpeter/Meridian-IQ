@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.45.0
+ * OpenAPI spec version: 0.46.0
  */
 import * as zod from 'zod';
 
@@ -1426,6 +1426,26 @@ export const GetProjectionAccuracyResponse = zod.object({
 
 
 /**
+ * @summary Chase-ladder reminders joined to observed settlements — did reminded invoices settle, and how fast (correlation only; deterministic, nothing stored)
+ */
+export const GetChaseEffectivenessQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetChaseEffectivenessResponse = zod.object({
+  "asOf": zod.string(),
+  "withinDays": zod.number(),
+  "remindedCount": zod.number(),
+  "remindedSettledCount": zod.number(),
+  "settledWithinShare": zod.number().nullable(),
+  "medianDaysReminderToSettle": zod.number().nullable(),
+  "medianDaysToSettleReminded": zod.number().nullable(),
+  "medianDaysToSettleUnreminded": zod.number().nullable(),
+  "note": zod.string()
+})
+
+
+/**
  * @summary Record that a payment reminder was SENT for this invoice (logged on copy — the platform itself sends nothing)
  */
 export const RecordChaseReminderParams = zod.object({
@@ -2664,6 +2684,44 @@ export const VerifyBillStampResponse = zod.object({
   "valid": zod.boolean(),
   "eligible": zod.boolean().nullish(),
   "checkedAt": zod.string()
+})
+
+
+/**
+ * @summary Advisory double-payment guard — bills paid twice by the evidence, and unpaid near-duplicate bills that would become one (deterministic, nothing stored)
+ */
+export const GetDoublePaymentCheckQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetDoublePaymentCheckResponse = zod.object({
+  "multiPaid": zod.array(zod.object({
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "supplierName": zod.string(),
+  "currency": zod.string(),
+  "grandTotal": zod.string(),
+  "evidenceCount": zod.number(),
+  "firstPaidAt": zod.string(),
+  "lastPaidAt": zod.string()
+})),
+  "duplicateCandidates": zod.array(zod.object({
+  "supplierName": zod.string(),
+  "currency": zod.string(),
+  "grandTotal": zod.string(),
+  "first": zod.object({
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "issueDate": zod.string()
+}),
+  "second": zod.object({
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "issueDate": zod.string()
+}),
+  "daysApart": zod.number()
+})),
+  "note": zod.string()
 })
 
 
@@ -5985,6 +6043,79 @@ export const ListIntentEvalRunsResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const ListIntentEvalRunsResponse = zod.array(ListIntentEvalRunsResponseItem)
+
+
+/**
+ * @summary The grown intent corpus — question cases promoted into the eval, scrubbed onto the synthetic directory, newest first
+ */
+export const listIntentFixturesResponseExpectedClaimKeyMax = 120;
+
+export const listIntentFixturesResponseExpectedMonthMax = 40;
+
+export const listIntentFixturesResponseExpectedClientMax = 40;
+
+
+
+export const ListIntentFixturesResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "caseId": zod.string().uuid(),
+  "label": zod.string(),
+  "question": zod.string(),
+  "expected": zod.object({
+  "claimKey": zod.string().min(1).max(listIntentFixturesResponseExpectedClaimKeyMax),
+  "month": zod.string().max(listIntentFixturesResponseExpectedMonthMax).optional(),
+  "client": zod.string().max(listIntentFixturesResponseExpectedClientMax).optional()
+}),
+  "retiredAt": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListIntentFixturesResponse = zod.array(ListIntentFixturesResponseItem)
+
+
+/**
+ * @summary Promote a real question case into the intent eval corpus (deterministic scrub onto the frozen synthetic directory; refused when unrepresentable)
+ */
+export const mintIntentFixtureBodyLabelMax = 160;
+
+export const mintIntentFixtureBodyExpectedClaimKeyMax = 120;
+
+export const mintIntentFixtureBodyExpectedMonthMax = 40;
+
+export const mintIntentFixtureBodyExpectedClientMax = 40;
+
+
+
+export const MintIntentFixtureBody = zod.object({
+  "caseId": zod.string().uuid(),
+  "label": zod.string().max(mintIntentFixtureBodyLabelMax).optional(),
+  "expected": zod.object({
+  "claimKey": zod.string().min(1).max(mintIntentFixtureBodyExpectedClaimKeyMax),
+  "month": zod.string().max(mintIntentFixtureBodyExpectedMonthMax).optional(),
+  "client": zod.string().max(mintIntentFixtureBodyExpectedClientMax).optional()
+})
+})
+
+export const mintIntentFixtureResponseExpectedClaimKeyMax = 120;
+
+export const mintIntentFixtureResponseExpectedMonthMax = 40;
+
+export const mintIntentFixtureResponseExpectedClientMax = 40;
+
+
+
+export const MintIntentFixtureResponse = zod.object({
+  "id": zod.string().uuid(),
+  "caseId": zod.string().uuid(),
+  "label": zod.string(),
+  "question": zod.string(),
+  "expected": zod.object({
+  "claimKey": zod.string().min(1).max(mintIntentFixtureResponseExpectedClaimKeyMax),
+  "month": zod.string().max(mintIntentFixtureResponseExpectedMonthMax).optional(),
+  "client": zod.string().max(mintIntentFixtureResponseExpectedClientMax).optional()
+}),
+  "retiredAt": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
 
 
 /**

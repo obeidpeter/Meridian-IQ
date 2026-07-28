@@ -568,6 +568,27 @@ call the model.
   itself, 3+ other settlements required), else due-date terms, else 30 days
   — reporting signed median error, a ±7-day share and a per-buyer table;
   surfaced as a confidence line under the SME outlook card (5+ settlements).
+- **Reminder effectiveness** (`modules/invoice/chase-effectiveness.ts`,
+  `GET /chase-effectiveness`, nothing stored) — the chase ladder auditing
+  itself: `chase_log` reminders joined to observed payment evidence over the
+  trailing year. Counts a reminded invoice as settled only when the
+  settlement lands AFTER its first reminder (an earlier settlement never
+  credits the reminder); the within-14-day share divides by MATURE reminders
+  only (settled, or first reminder old enough for the window to have run —
+  a reminder sent yesterday cannot deflate it); reminded vs unreminded
+  issue-to-settle medians carry the comparison; every aggregate honours a
+  3-sample floor and the note pins correlation-not-causation. Surfaced as a
+  footnote under the SME chase list.
+- **Double-payment guard** (`modules/invoice/double-payment.ts`,
+  `GET /bills/double-payment-check`, nothing stored) — advisory payables
+  safety over the SAME canonical bill fragments (`BILL_OF_CLIENT` +
+  `BILL_UNPAID`): bills carrying 2+ independent payment evidences (paid
+  flag / statement match — the money may have left twice), plus unpaid
+  same-supplier same-currency same-amount bills issued within 14 days of
+  each other (a re-captured vendor invoice waiting to become a double
+  payment), paired once (`a.id < b.id`) and capped at 20 per lane. Amber
+  advisory card on the SME bills page; nothing is blocked, and the note
+  warns that a recurring standing charge can match legitimately.
 - **Net cash position** (`modules/invoice/net-position.ts`,
   `GET /dashboard/net-position`, nothing stored) merges the outlook's
   projected inflows with the payables summary's committed outflows per
@@ -631,7 +652,20 @@ shared computation as the corresponding chart.
   corpus runs side by side and returns the prompt-canary verdict
   (injection resistance may never drop; accuracy judged outside a
   one-fixture noise band) with nothing stored.
-- **Learning loop** (`modules/clerk/eval-growth.ts`) turns corrected
+- **Grown intent corpus** (`clerk_intent_fixtures`, bypass-only RLS
+  migration 0025; `POST /clerk/eval/intent-fixtures/from-case` +
+  `GET /clerk/eval/intent-fixtures`, `clerk.use`; console promote row on
+  the ask-feedback card): promotes a real QUESTION case — typically one an
+  asker marked not-helpful — into the intent corpus. The operator names the
+  key the classifier SHOULD have chosen, validated fail-closed against the
+  eval's frozen offered context; the stored question is ALWAYS scrubbed
+  deterministically (every engaged-client and firm name maps onto the
+  frozen synthetic directory, longest names first), and a question naming
+  more parties than the directory can represent is REFUSED (422) — never
+  stored partially scrubbed. Minting is idempotent per case (409). Default
+  eval runs and intent canaries load active grown fixtures (newest 40,
+  `retired_at` null) alongside the static set; tests pin the static corpus
+  via `includeGrown: false`. Grown intent fixtures never serve memory.
   approvals into eval fixtures on the sweep loop; the nightly auto-eval is
   opt-in behind `clerk_auto_eval` (spends tokens). Grown fixtures are
   deliberately NOT scrubbed at mint — they double as the supplier-memory

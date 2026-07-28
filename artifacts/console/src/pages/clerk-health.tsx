@@ -6,6 +6,9 @@ import {
   useRunIntentEval,
   useListIntentEvalRuns,
   getListIntentEvalRunsQueryKey,
+  useListIntentFixtures,
+  useMintIntentFixture,
+  getListIntentFixturesQueryKey,
   useListEvalFixtures,
   useMintFixtureFromCase,
   useRetireEvalFixture,
@@ -216,6 +219,9 @@ function IntentEvalCard() {
   const { data: runs, isSuccess } = useListIntentEvalRuns({
     query: { queryKey: getListIntentEvalRunsQueryKey(), retry: false },
   });
+  const { data: grownFixtures } = useListIntentFixtures({
+    query: { queryKey: getListIntentFixturesQueryKey(), retry: false },
+  });
   const runEval = useRunIntentEval({
     mutation: {
       onSuccess: () => {
@@ -248,6 +254,20 @@ function IntentEvalCard() {
           (one classify call per fixture) and scores the classification
           deterministically — including two prompt-injection questions.
         </p>
+        {grownFixtures && (
+          <p
+            className="text-xs text-muted-foreground"
+            data-testid="text-grown-intent-count"
+          >
+            Grown corpus:{" "}
+            {grownFixtures.filter((f) => f.retiredAt === null).length} promoted
+            question{grownFixtures.filter((f) => f.retiredAt === null).length === 1 ? "" : "s"}{" "}
+            run alongside the static fixtures
+            {grownFixtures.some((f) => f.retiredAt !== null) &&
+              ` (${grownFixtures.filter((f) => f.retiredAt !== null).length} retired)`}
+            .
+          </p>
+        )}
         {!newest ? (
           <p
             className="text-sm text-muted-foreground"
@@ -276,6 +296,81 @@ function IntentEvalCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Promote a not-helpful question into the grown intent corpus (round 16).
+// The operator supplies the key the classifier SHOULD have chosen; the
+// server validates it against the eval's frozen offered context, scrubs the
+// question onto the synthetic directory, and refuses anything it cannot
+// represent — every failure carries the reason.
+function PromoteToIntentCorpus({ caseId }: { caseId: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [claimKey, setClaimKey] = useState("");
+  const mint = useMintIntentFixture({
+    mutation: {
+      onSuccess: () => {
+        setOpen(false);
+        setClaimKey("");
+        queryClient.invalidateQueries({
+          queryKey: getListIntentFixturesQueryKey(),
+        });
+        toast({ title: "Added to the intent eval corpus" });
+      },
+      onError: (e) =>
+        toast({
+          title: "Could not promote the question",
+          description:
+            serverErrorMessage(e) ??
+            "The expected key must come from the eval's offered context.",
+          variant: "destructive",
+        }),
+    },
+  });
+  if (!open) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-6 px-2 text-xs"
+        onClick={() => setOpen(true)}
+        data-testid={`button-promote-${caseId}`}
+      >
+        Promote to corpus
+      </Button>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1">
+      <Input
+        value={claimKey}
+        onChange={(e) => setClaimKey(e.target.value)}
+        placeholder="expected key, e.g. data.chase_list"
+        className="h-6 w-56 text-xs"
+        data-testid={`input-promote-key-${caseId}`}
+      />
+      <Button
+        size="sm"
+        className="h-6 px-2 text-xs"
+        disabled={mint.isPending || claimKey.trim().length === 0}
+        onClick={() =>
+          mint.mutate({ data: { caseId, expected: { claimKey: claimKey.trim() } } })
+        }
+        data-testid={`button-promote-confirm-${caseId}`}
+      >
+        {mint.isPending ? "Minting…" : "Mint"}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-6 px-2 text-xs"
+        onClick={() => setOpen(false)}
+      >
+        Cancel
+      </Button>
+    </span>
   );
 }
 
@@ -1850,6 +1945,7 @@ export function HealthPanel() {
                           <span className="whitespace-nowrap text-xs text-muted-foreground">
                             {formatDateTime(q.createdAt)}
                           </span>
+                          <PromoteToIntentCorpus caseId={q.caseId} />
                         </li>
                       ))}
                     </ul>

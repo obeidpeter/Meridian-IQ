@@ -18,6 +18,8 @@ import {
   VerifyBillStampParams,
   VerifyBillStampBody,
   VerifyBillStampResponse,
+  GetDoublePaymentCheckQueryParams,
+  GetDoublePaymentCheckResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { resolveClientAnalyticsScope } from "../lib/client-scope";
@@ -32,6 +34,7 @@ import {
   listBills,
   payablesSummary,
 } from "../modules/invoice/payables";
+import { computeDoublePaymentCheck } from "../modules/invoice/double-payment";
 import { verifyStamp } from "../modules/rails/adapter";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
@@ -100,6 +103,21 @@ router.get("/dashboard/payables", async (req, res): Promise<void> => {
   );
   const summary = await payablesSummary(firmId, clientPartyId);
   res.json(GetPayablesSummaryResponse.parse(summary));
+});
+
+// Double-payment guard (round-16 idea #3): bills already paid twice by the
+// evidence, and unpaid near-duplicate pairs that would become a double
+// payment. Advisory only — nothing blocked, nothing stored, no model. Same
+// scope resolution as the bills ledger above.
+router.get("/bills/double-payment-check", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetDoublePaymentCheckQueryParams, req.query);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const check = await computeDoublePaymentCheck(firmId, clientPartyId);
+  res.json(GetDoublePaymentCheckResponse.parse(check));
 });
 
 // The payer's own payment flag (the buyer route's mirror, routes/buyer.ts

@@ -18,6 +18,9 @@ import {
   RunIntentEvalBody,
   RunIntentEvalResponse,
   ListIntentEvalRunsResponse,
+  MintIntentFixtureBody,
+  MintIntentFixtureResponse,
+  ListIntentFixturesResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import { assertCan } from "../../modules/auth/rbac";
@@ -29,9 +32,12 @@ import {
 } from "../../modules/clerk/eval";
 import {
   listIntentEvalRuns,
+  listIntentFixtures,
+  mintIntentFixture,
   runIntentCanary,
   runIntentEval,
 } from "../../modules/clerk/intent-eval";
+import type { ClerkIntentFixture } from "@workspace/db";
 import {
   listEvalFixtures,
   mintFixtureFromCase,
@@ -85,6 +91,41 @@ router.get("/clerk/eval/intent-runs", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
   const runs = await listIntentEvalRuns();
   res.json(ListIntentEvalRunsResponse.parse(runs));
+});
+
+// Grown intent corpus (round 16): promote a real question case into the
+// intent eval corpus. The module owns every refusal (400 BAD_EXPECTED off
+// the frozen offered context, 404 not-a-question-case, 422 UNREPRESENTABLE
+// when scrubbing can't map every name onto the synthetic directory, 409
+// ALREADY_MINTED); the stored question is ALWAYS the scrubbed text.
+const intentFixtureSummary = (f: ClerkIntentFixture) => ({
+  id: f.id,
+  caseId: f.caseId,
+  label: f.label,
+  question: f.question,
+  expected: f.expected,
+  retiredAt: f.retiredAt ? f.retiredAt.toISOString() : null,
+  createdAt: f.createdAt.toISOString(),
+});
+
+router.post(
+  "/clerk/eval/intent-fixtures/from-case",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const body = parseOrThrow(MintIntentFixtureBody, req.body);
+    const fixture = await mintIntentFixture(body, req.principal.userId);
+    res
+      .status(201)
+      .json(MintIntentFixtureResponse.parse(intentFixtureSummary(fixture)));
+  },
+);
+
+router.get("/clerk/eval/intent-fixtures", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const fixtures = await listIntentFixtures();
+  res.json(
+    ListIntentFixturesResponse.parse(fixtures.map(intentFixtureSummary)),
+  );
 });
 
 // Corpus curation (round 15): the inventory of every fixture the eval run

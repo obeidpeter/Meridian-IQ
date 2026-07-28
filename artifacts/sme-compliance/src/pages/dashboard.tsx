@@ -18,6 +18,8 @@ import {
   getGetCashflowOutlookQueryKey,
   useGetChaseList,
   getGetChaseListQueryKey,
+  useGetChaseEffectiveness,
+  getGetChaseEffectivenessQueryKey,
   useGetUnmatchedCredits,
   getGetUnmatchedCreditsQueryKey,
   useGetProjectionAccuracy,
@@ -846,6 +848,20 @@ function ChaseListCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
+  // Reminder effectiveness (round 16): what past reminders actually did,
+  // joined from the chase ladder and observed payments. Shown only once the
+  // share clears its server-side sample floor.
+  const { data: effectiveness } = useGetChaseEffectiveness(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetChaseEffectivenessQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
   if (!isSuccess || !rows || rows.length === 0) return null;
   return (
     <Card data-testid="chase-list">
@@ -887,6 +903,18 @@ function ChaseListCard({ clientPartyId }: { clientPartyId: string }) {
         <p className="text-xs text-muted-foreground pt-3 border-t">
           Ranked by how far each invoice is past that customer&apos;s own
           payment rhythm. Open one to draft a reminder.
+          {effectiveness && effectiveness.settledWithinShare != null && (
+            <span data-testid="chase-effectiveness">
+              {" "}
+              Of your past reminders,{" "}
+              {Math.round(effectiveness.settledWithinShare * 100)}% were
+              followed by payment within {effectiveness.withinDays} days
+              {effectiveness.medianDaysReminderToSettle != null
+                ? ` (typically ${Math.round(effectiveness.medianDaysReminderToSettle)} days after the reminder)`
+                : ""}
+              .
+            </span>
+          )}
         </p>
       </CardContent>
     </Card>
