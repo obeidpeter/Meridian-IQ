@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.44.0
+ * OpenAPI spec version: 0.45.0
  */
 import {
   useMutation,
@@ -24,6 +24,7 @@ import type {
   AlertDeliveryResult,
   AlertPreferences,
   AlertPreferencesInput,
+  ApproveInvoiceInput,
   AskClerkInput,
   AskFeedbackReport,
   AssessmentReport,
@@ -88,8 +89,10 @@ import type {
   ClientImportInput,
   ClientImportResult,
   ClientPortfolioDetail,
+  CollectionAccount,
   ComplianceCalendar,
   ComplianceDeadline,
+  CompliancePackNotifyInput,
   ConfirmStaffEmailInput,
   Confirmation,
   ConfirmationInput,
@@ -103,6 +106,7 @@ import type {
   CpdEnrollmentView,
   CreateClerkBatchInput,
   CreateClientInput,
+  CreateCollectionAccountInput,
   CreateFirmApiKeyInput,
   CreateFirmWebhookInput,
   CreateInvitationInput,
@@ -143,6 +147,7 @@ import type {
   ExportInvoicesCsvParams,
   ExportReceivablesCsvParams,
   ExportVatPackCsvParams,
+  ExportVatPositionCsvParams,
   ExtractionPromptInfo,
   FailureExplanation,
   FeatureFlag,
@@ -154,9 +159,11 @@ import type {
   FirmExportBundle,
   FirmInput,
   FirmMember,
+  FirmPolicies,
   FirmReceivables,
   FirmTheme,
   FirmThemeInput,
+  FirmVatPositions,
   FirmWebhook,
   FirmWebhookCreated,
   FirmWebhookDelivery,
@@ -169,7 +176,9 @@ import type {
   GetClerkClaimGapsParams,
   GetClerkMetricsParams,
   GetComplianceCalendarParams,
+  GetCompliancePackParams,
   GetDashboardSummaryParams,
+  GetFirmVatPositionsParams,
   GetMergeImpactParams,
   GetPayablesSummaryParams,
   GetProjectionAccuracyParams,
@@ -178,6 +187,7 @@ import type {
   GetReceivablesSummaryParams,
   GetUnmatchedCreditsParams,
   GetVatPackParams,
+  GetVatPositionParams,
   GetVatSettlementCheckParams,
   HealthAlert,
   HealthStatus,
@@ -185,6 +195,7 @@ import type {
   Invitation,
   InvitationWithToken,
   Invoice,
+  InvoiceApproval,
   InvoiceDetail,
   InvoiceDraftResult,
   InvoiceImportInput,
@@ -200,6 +211,7 @@ import type {
   ListClerkCasesParams,
   ListClerkEvalRunsParams,
   ListClientStatementsParams,
+  ListCollectionAccountsParams,
   ListErpConnectionsParams,
   ListInvoicesParams,
   ListLineItemSuggestionsParams,
@@ -302,12 +314,14 @@ import type {
   UnearnedIncome,
   UnmappedErrorCode,
   UnmatchedCredits,
+  UpdateFirmPoliciesInput,
   UpdateStaffNotificationPreferencesInput,
   User,
   UserInput,
   ValidationResult,
   VatPack,
   VatPackCoverNote,
+  VatPosition,
   VatRiskInput,
   VatRiskReport,
   VatSettlementCheck
@@ -9016,6 +9030,931 @@ export function useGetPayablesSummary<TData = Awaited<ReturnType<typeof getPayab
 
 
 
+
+export const getGetVatPositionUrl = (params: GetVatPositionParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/vat-position?${stringifiedParams}` : `/api/vat-position`
+}
+
+/**
+ * @summary Per-client monthly VAT position — output VAT from issued documents vs input VAT from supplier bills, with verified-input posture (deterministic)
+ */
+export const getVatPosition = async (params: GetVatPositionParams, options?: RequestInit): Promise<VatPosition> => {
+
+  return customFetch<VatPosition>(getGetVatPositionUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVatPositionQueryKey = (params?: GetVatPositionParams,) => {
+    return [
+    `/api/vat-position`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetVatPositionQueryOptions = <TData = Awaited<ReturnType<typeof getVatPosition>>, TError = ErrorType<BadRequestResponse>>(params: GetVatPositionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatPosition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVatPositionQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVatPosition>>> = ({ signal }) => getVatPosition(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVatPosition>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVatPositionQueryResult = NonNullable<Awaited<ReturnType<typeof getVatPosition>>>
+export type GetVatPositionQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Per-client monthly VAT position — output VAT from issued documents vs input VAT from supplier bills, with verified-input posture (deterministic)
+ */
+
+export function useGetVatPosition<TData = Awaited<ReturnType<typeof getVatPosition>>, TError = ErrorType<BadRequestResponse>>(
+ params: GetVatPositionParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVatPosition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVatPositionQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportVatPositionCsvUrl = (params: ExportVatPositionCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/vat-position/export?${stringifiedParams}` : `/api/vat-position/export`
+}
+
+/**
+ * @summary Download the monthly VAT position as CSV — one row per document, verified posture included
+ */
+export const exportVatPositionCsv = async (params: ExportVatPositionCsvParams, options?: RequestInit): Promise<string> => {
+
+  return customFetch<string>(getExportVatPositionCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportVatPositionCsvQueryKey = (params?: ExportVatPositionCsvParams,) => {
+    return [
+    `/api/vat-position/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportVatPositionCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportVatPositionCsv>>, TError = ErrorType<BadRequestResponse>>(params: ExportVatPositionCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportVatPositionCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportVatPositionCsvQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportVatPositionCsv>>> = ({ signal }) => exportVatPositionCsv(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportVatPositionCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportVatPositionCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportVatPositionCsv>>>
+export type ExportVatPositionCsvQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Download the monthly VAT position as CSV — one row per document, verified posture included
+ */
+
+export function useExportVatPositionCsv<TData = Awaited<ReturnType<typeof exportVatPositionCsv>>, TError = ErrorType<BadRequestResponse>>(
+ params: ExportVatPositionCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportVatPositionCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportVatPositionCsvQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFirmVatPositionsUrl = (params?: GetFirmVatPositionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/console/vat-positions?${stringifiedParams}` : `/api/console/vat-positions`
+}
+
+/**
+ * @summary VAT position across the firm's book — per-client output vs input VAT for a Lagos month
+ */
+export const getFirmVatPositions = async (params?: GetFirmVatPositionsParams, options?: RequestInit): Promise<FirmVatPositions> => {
+
+  return customFetch<FirmVatPositions>(getGetFirmVatPositionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFirmVatPositionsQueryKey = (params?: GetFirmVatPositionsParams,) => {
+    return [
+    `/api/console/vat-positions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFirmVatPositionsQueryOptions = <TData = Awaited<ReturnType<typeof getFirmVatPositions>>, TError = ErrorType<BadRequestResponse>>(params?: GetFirmVatPositionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFirmVatPositions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFirmVatPositionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFirmVatPositions>>> = ({ signal }) => getFirmVatPositions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFirmVatPositions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFirmVatPositionsQueryResult = NonNullable<Awaited<ReturnType<typeof getFirmVatPositions>>>
+export type GetFirmVatPositionsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary VAT position across the firm's book — per-client output vs input VAT for a Lagos month
+ */
+
+export function useGetFirmVatPositions<TData = Awaited<ReturnType<typeof getFirmVatPositions>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetFirmVatPositionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFirmVatPositions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFirmVatPositionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFirmPoliciesUrl = () => {
+
+
+
+
+  return `/api/firm/policies`
+}
+
+/**
+ * @summary The firm's governance policies (submission approval requirement)
+ */
+export const getFirmPolicies = async ( options?: RequestInit): Promise<FirmPolicies> => {
+
+  return customFetch<FirmPolicies>(getGetFirmPoliciesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFirmPoliciesQueryKey = () => {
+    return [
+    `/api/firm/policies`
+    ] as const;
+    }
+
+
+export const getGetFirmPoliciesQueryOptions = <TData = Awaited<ReturnType<typeof getFirmPolicies>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFirmPolicies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFirmPoliciesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFirmPolicies>>> = ({ signal }) => getFirmPolicies({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFirmPolicies>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFirmPoliciesQueryResult = NonNullable<Awaited<ReturnType<typeof getFirmPolicies>>>
+export type GetFirmPoliciesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm's governance policies (submission approval requirement)
+ */
+
+export function useGetFirmPolicies<TData = Awaited<ReturnType<typeof getFirmPolicies>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFirmPolicies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFirmPoliciesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateFirmPoliciesUrl = () => {
+
+
+
+
+  return `/api/firm/policies`
+}
+
+/**
+ * @summary Update the firm's governance policies — firm admins only
+ */
+export const updateFirmPolicies = async (updateFirmPoliciesInput: UpdateFirmPoliciesInput, options?: RequestInit): Promise<FirmPolicies> => {
+
+  return customFetch<FirmPolicies>(getUpdateFirmPoliciesUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateFirmPoliciesInput)
+  }
+);}
+
+
+
+
+export const getUpdateFirmPoliciesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFirmPolicies>>, TError,{data: BodyType<UpdateFirmPoliciesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateFirmPolicies>>, TError,{data: BodyType<UpdateFirmPoliciesInput>}, TContext> => {
+
+const mutationKey = ['updateFirmPolicies'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFirmPolicies>>, {data: BodyType<UpdateFirmPoliciesInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateFirmPolicies(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateFirmPoliciesMutationResult = NonNullable<Awaited<ReturnType<typeof updateFirmPolicies>>>
+    export type UpdateFirmPoliciesMutationBody = BodyType<UpdateFirmPoliciesInput>
+    export type UpdateFirmPoliciesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update the firm's governance policies — firm admins only
+ */
+export const useUpdateFirmPolicies = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFirmPolicies>>, TError,{data: BodyType<UpdateFirmPoliciesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateFirmPolicies>>,
+        TError,
+        {data: BodyType<UpdateFirmPoliciesInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateFirmPoliciesMutationOptions(options));
+    }
+
+export const getApproveInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/approve`
+}
+
+/**
+ * @summary Record a submission approval on a draft/validated invoice (maker-checker — the approver must differ from the eventual submitter)
+ */
+export const approveInvoice = async (id: string,
+    approveInvoiceInput?: ApproveInvoiceInput, options?: RequestInit): Promise<InvoiceApproval> => {
+
+  return customFetch<InvoiceApproval>(getApproveInvoiceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(approveInvoiceInput)
+  }
+);}
+
+
+
+
+export const getApproveInvoiceMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveInvoice>>, TError,{id: string;data?: BodyType<ApproveInvoiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveInvoice>>, TError,{id: string;data?: BodyType<ApproveInvoiceInput>}, TContext> => {
+
+const mutationKey = ['approveInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveInvoice>>, {id: string;data?: BodyType<ApproveInvoiceInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  approveInvoice(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof approveInvoice>>>
+    export type ApproveInvoiceMutationBody = BodyType<ApproveInvoiceInput> | undefined
+    export type ApproveInvoiceMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Record a submission approval on a draft/validated invoice (maker-checker — the approver must differ from the eventual submitter)
+ */
+export const useApproveInvoice = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveInvoice>>, TError,{id: string;data?: BodyType<ApproveInvoiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveInvoice>>,
+        TError,
+        {id: string;data?: BodyType<ApproveInvoiceInput>},
+        TContext
+      > => {
+      return useMutation(getApproveInvoiceMutationOptions(options));
+    }
+
+export const getListInvoiceApprovalsUrl = (id: string,) => {
+
+
+
+
+  return `/api/invoices/${id}/approvals`
+}
+
+/**
+ * @summary Approvals recorded on an invoice, newest first (revoked ones included)
+ */
+export const listInvoiceApprovals = async (id: string, options?: RequestInit): Promise<InvoiceApproval[]> => {
+
+  return customFetch<InvoiceApproval[]>(getListInvoiceApprovalsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInvoiceApprovalsQueryKey = (id: string,) => {
+    return [
+    `/api/invoices/${id}/approvals`
+    ] as const;
+    }
+
+
+export const getListInvoiceApprovalsQueryOptions = <TData = Awaited<ReturnType<typeof listInvoiceApprovals>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoiceApprovals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInvoiceApprovalsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInvoiceApprovals>>> = ({ signal }) => listInvoiceApprovals(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInvoiceApprovals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInvoiceApprovalsQueryResult = NonNullable<Awaited<ReturnType<typeof listInvoiceApprovals>>>
+export type ListInvoiceApprovalsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Approvals recorded on an invoice, newest first (revoked ones included)
+ */
+
+export function useListInvoiceApprovals<TData = Awaited<ReturnType<typeof listInvoiceApprovals>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoiceApprovals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInvoiceApprovalsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCollectionAccountsUrl = (params: ListCollectionAccountsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/collection-accounts?${stringifiedParams}` : `/api/collection-accounts`
+}
+
+/**
+ * @summary Collection accounts provisioned for a client — virtual account references that auto-observe settlements
+ */
+export const listCollectionAccounts = async (params: ListCollectionAccountsParams, options?: RequestInit): Promise<CollectionAccount[]> => {
+
+  return customFetch<CollectionAccount[]>(getListCollectionAccountsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCollectionAccountsQueryKey = (params?: ListCollectionAccountsParams,) => {
+    return [
+    `/api/collection-accounts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCollectionAccountsQueryOptions = <TData = Awaited<ReturnType<typeof listCollectionAccounts>>, TError = ErrorType<unknown>>(params: ListCollectionAccountsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCollectionAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCollectionAccountsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCollectionAccounts>>> = ({ signal }) => listCollectionAccounts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCollectionAccounts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCollectionAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof listCollectionAccounts>>>
+export type ListCollectionAccountsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Collection accounts provisioned for a client — virtual account references that auto-observe settlements
+ */
+
+export function useListCollectionAccounts<TData = Awaited<ReturnType<typeof listCollectionAccounts>>, TError = ErrorType<unknown>>(
+ params: ListCollectionAccountsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCollectionAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCollectionAccountsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateCollectionAccountUrl = () => {
+
+
+
+
+  return `/api/collection-accounts`
+}
+
+/**
+ * @summary Provision a collection account for a client via the configured provider
+ */
+export const createCollectionAccount = async (createCollectionAccountInput: CreateCollectionAccountInput, options?: RequestInit): Promise<CollectionAccount> => {
+
+  return customFetch<CollectionAccount>(getCreateCollectionAccountUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createCollectionAccountInput)
+  }
+);}
+
+
+
+
+export const getCreateCollectionAccountMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCollectionAccount>>, TError,{data: BodyType<CreateCollectionAccountInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCollectionAccount>>, TError,{data: BodyType<CreateCollectionAccountInput>}, TContext> => {
+
+const mutationKey = ['createCollectionAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCollectionAccount>>, {data: BodyType<CreateCollectionAccountInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCollectionAccount(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCollectionAccountMutationResult = NonNullable<Awaited<ReturnType<typeof createCollectionAccount>>>
+    export type CreateCollectionAccountMutationBody = BodyType<CreateCollectionAccountInput>
+    export type CreateCollectionAccountMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Provision a collection account for a client via the configured provider
+ */
+export const useCreateCollectionAccount = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCollectionAccount>>, TError,{data: BodyType<CreateCollectionAccountInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCollectionAccount>>,
+        TError,
+        {data: BodyType<CreateCollectionAccountInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCollectionAccountMutationOptions(options));
+    }
+
+export const getDeactivateCollectionAccountUrl = (id: string,) => {
+
+
+
+
+  return `/api/collection-accounts/${id}/deactivate`
+}
+
+/**
+ * @summary Deactivate a collection account — inbound payments on its reference stop being recorded
+ */
+export const deactivateCollectionAccount = async (id: string, options?: RequestInit): Promise<CollectionAccount> => {
+
+  return customFetch<CollectionAccount>(getDeactivateCollectionAccountUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getDeactivateCollectionAccountMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateCollectionAccount>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deactivateCollectionAccount>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deactivateCollectionAccount'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deactivateCollectionAccount>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deactivateCollectionAccount(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeactivateCollectionAccountMutationResult = NonNullable<Awaited<ReturnType<typeof deactivateCollectionAccount>>>
+
+    export type DeactivateCollectionAccountMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Deactivate a collection account — inbound payments on its reference stop being recorded
+ */
+export const useDeactivateCollectionAccount = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateCollectionAccount>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deactivateCollectionAccount>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeactivateCollectionAccountMutationOptions(options));
+    }
+
+export const getGetCompliancePackUrl = (params: GetCompliancePackParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/compliance-pack?${stringifiedParams}` : `/api/compliance-pack`
+}
+
+/**
+ * @summary Monthly client compliance pack PDF — cover note, document register, receivables, payables, VAT position and deadlines
+ */
+export const getCompliancePack = async (params: GetCompliancePackParams, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetCompliancePackUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompliancePackQueryKey = (params?: GetCompliancePackParams,) => {
+    return [
+    `/api/compliance-pack`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCompliancePackQueryOptions = <TData = Awaited<ReturnType<typeof getCompliancePack>>, TError = ErrorType<BadRequestResponse | NotFoundResponse>>(params: GetCompliancePackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompliancePack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompliancePackQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompliancePack>>> = ({ signal }) => getCompliancePack(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompliancePack>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCompliancePackQueryResult = NonNullable<Awaited<ReturnType<typeof getCompliancePack>>>
+export type GetCompliancePackQueryError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+
+/**
+ * @summary Monthly client compliance pack PDF — cover note, document register, receivables, payables, VAT position and deadlines
+ */
+
+export function useGetCompliancePack<TData = Awaited<ReturnType<typeof getCompliancePack>>, TError = ErrorType<BadRequestResponse | NotFoundResponse>>(
+ params: GetCompliancePackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompliancePack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCompliancePackQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getNotifyCompliancePackUrl = () => {
+
+
+
+
+  return `/api/compliance-pack/notify`
+}
+
+/**
+ * @summary Tell the client their monthly pack is ready — consent-gated, pointer-only channel fan-out
+ */
+export const notifyCompliancePack = async (compliancePackNotifyInput: CompliancePackNotifyInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getNotifyCompliancePackUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(compliancePackNotifyInput)
+  }
+);}
+
+
+
+
+export const getNotifyCompliancePackMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof notifyCompliancePack>>, TError,{data: BodyType<CompliancePackNotifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof notifyCompliancePack>>, TError,{data: BodyType<CompliancePackNotifyInput>}, TContext> => {
+
+const mutationKey = ['notifyCompliancePack'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof notifyCompliancePack>>, {data: BodyType<CompliancePackNotifyInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  notifyCompliancePack(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type NotifyCompliancePackMutationResult = NonNullable<Awaited<ReturnType<typeof notifyCompliancePack>>>
+    export type NotifyCompliancePackMutationBody = BodyType<CompliancePackNotifyInput>
+    export type NotifyCompliancePackMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Tell the client their monthly pack is ready — consent-gated, pointer-only channel fan-out
+ */
+export const useNotifyCompliancePack = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof notifyCompliancePack>>, TError,{data: BodyType<CompliancePackNotifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof notifyCompliancePack>>,
+        TError,
+        {data: BodyType<CompliancePackNotifyInput>},
+        TContext
+      > => {
+      return useMutation(getNotifyCompliancePackMutationOptions(options));
+    }
 
 export const getGetReceivablesSummaryUrl = (params: GetReceivablesSummaryParams,) => {
   const normalizedParams = new URLSearchParams();

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.44.0
+ * OpenAPI spec version: 0.45.0
  */
 import type { InvoiceCategory } from './invoiceCategory';
 import type { InvoiceKind } from './invoiceKind';
@@ -20,6 +20,8 @@ export interface Invoice {
   relatedInvoiceId?: string | null;
   invoiceNumber: string;
   currency: string;
+  /** @nullable */
+  fxRateToNgn?: string | null;
   issueDate: string;
   /** @nullable */
   dueDate?: string | null;

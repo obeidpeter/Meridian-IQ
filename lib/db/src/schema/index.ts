@@ -19,3 +19,5 @@ export * from "./clerk.ts";
 export * from "./chase.ts";
 export * from "./bills.ts";
 export * from "./integrations.ts";
+export * from "./governance.ts";
+export * from "./collections.ts";

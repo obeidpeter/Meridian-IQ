@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.44.0
+  version: 0.45.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2154,6 +2154,255 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PayablesSummary"
+  /vat-position:
+    get:
+      operationId: getVatPosition
+      tags: [sme]
+      summary: Per-client monthly VAT position — output VAT from issued documents vs input VAT from supplier bills, with verified-input posture (deterministic)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: month
+          in: query
+          required: false
+          description: A Lagos month's first day (YYYY-MM-01); defaults to the current Lagos month.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: VAT position for the month
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VatPosition"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /vat-position/export:
+    get:
+      operationId: exportVatPositionCsv
+      tags: [sme]
+      summary: Download the monthly VAT position as CSV — one row per document, verified posture included
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: CSV file (Content-Disposition attachment)
+          content:
+            text/csv:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /console/vat-positions:
+    get:
+      operationId: getFirmVatPositions
+      tags: [console]
+      summary: VAT position across the firm's book — per-client output vs input VAT for a Lagos month
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: Per-client VAT positions with firm totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirmVatPositions"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /firm/policies:
+    get:
+      operationId: getFirmPolicies
+      tags: [console]
+      summary: The firm's governance policies (submission approval requirement)
+      responses:
+        "200":
+          description: Current policies (defaults when never set)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirmPolicies"
+    put:
+      operationId: updateFirmPolicies
+      tags: [console]
+      summary: Update the firm's governance policies — firm admins only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFirmPoliciesInput"
+      responses:
+        "200":
+          description: Updated policies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirmPolicies"
+  /invoices/{id}/approve:
+    post:
+      operationId: approveInvoice
+      tags: [invoices]
+      summary: Record a submission approval on a draft/validated invoice (maker-checker — the approver must differ from the eventual submitter)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveInvoiceInput"
+      responses:
+        "201":
+          description: Approval recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceApproval"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /invoices/{id}/approvals:
+    get:
+      operationId: listInvoiceApprovals
+      tags: [invoices]
+      summary: Approvals recorded on an invoice, newest first (revoked ones included)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Approvals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvoiceApproval"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /collection-accounts:
+    get:
+      operationId: listCollectionAccounts
+      tags: [statements]
+      summary: Collection accounts provisioned for a client — virtual account references that auto-observe settlements
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Collection accounts, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CollectionAccount"
+    post:
+      operationId: createCollectionAccount
+      tags: [statements]
+      summary: Provision a collection account for a client via the configured provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCollectionAccountInput"
+      responses:
+        "201":
+          description: Collection account provisioned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionAccount"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /collection-accounts/{id}/deactivate:
+    post:
+      operationId: deactivateCollectionAccount
+      tags: [statements]
+      summary: Deactivate a collection account — inbound payments on its reference stop being recorded
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Account deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionAccount"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /compliance-pack:
+    get:
+      operationId: getCompliancePack
+      tags: [console]
+      summary: Monthly client compliance pack PDF — cover note, document register, receivables, payables, VAT position and deadlines
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: PDF document (Content-Disposition attachment)
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /compliance-pack/notify:
+    post:
+      operationId: notifyCompliancePack
+      tags: [console]
+      summary: Tell the client their monthly pack is ready — consent-gated, pointer-only channel fan-out
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompliancePackNotifyInput"
+      responses:
+        "202":
+          description: Notification queued (or skipped without consent — indistinguishable by design)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /dashboard/receivables:
     get:
       operationId: getReceivablesSummary
@@ -5320,6 +5569,11 @@ components:
           type: string
         currency:
           type: string
+        # NGN per one unit of `currency`, captured at issue time for naira
+        # reporting (VAT position, exports). Null for NGN documents or when
+        # no rate was captured.
+        fxRateToNgn:
+          type: ["string", "null"]
         issueDate:
           type: string
         dueDate:
@@ -5406,6 +5660,8 @@ components:
           minLength: 1
         currency:
           type: string
+        fxRateToNgn:
+          type: string
         issueDate:
           type: string
         dueDate:
@@ -5434,6 +5690,8 @@ components:
         issueDate:
           type: string
         dueDate:
+          type: ["string", "null"]
+        fxRateToNgn:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
@@ -5929,6 +6187,195 @@ components:
           type: string
         overdueDays:
           type: integer
+    VatPosition:
+      type: object
+      required:
+        [
+          clientPartyId,
+          monthStart,
+          monthLabel,
+          months,
+          outputVat,
+          outputInvoiceCount,
+          inputVat,
+          inputVatVerified,
+          inputVatUnverified,
+          billCount,
+          netVat,
+          defensibleNetVat,
+          excludedForFx,
+          note,
+        ]
+      properties:
+        clientPartyId:
+          type: string
+        monthStart:
+          type: string
+        monthLabel:
+          type: string
+        # Requestable Lagos months, newest first — the current month is
+        # included (a live position), unlike the closed-month VAT pack.
+        months:
+          type: array
+          items:
+            type: string
+        # All amounts are NGN: non-NGN documents convert via their captured
+        # fxRateToNgn; documents without a rate are excluded and counted in
+        # excludedForFx (see note).
+        outputVat:
+          type: string
+        outputInvoiceCount:
+          type: integer
+        inputVat:
+          type: string
+        # Input VAT on bills whose newest stamp verification found the stamp
+        # on the national record (valid = true).
+        inputVatVerified:
+          type: string
+        inputVatUnverified:
+          type: string
+        billCount:
+          type: integer
+        netVat:
+          type: string
+        # outputVat minus verified input VAT only — the position defensible
+        # under an input-VAT audit today.
+        defensibleNetVat:
+          type: string
+        excludedForFx:
+          type: integer
+        note:
+          type: string
+    FirmVatPositions:
+      type: object
+      required: [monthStart, monthLabel, months, rows, totals, note]
+      properties:
+        monthStart:
+          type: string
+        monthLabel:
+          type: string
+        months:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/FirmVatPositionRow"
+        totals:
+          type: object
+          required: [outputVat, inputVat, inputVatVerified, netVat, defensibleNetVat]
+          properties:
+            outputVat:
+              type: string
+            inputVat:
+              type: string
+            inputVatVerified:
+              type: string
+            netVat:
+              type: string
+            defensibleNetVat:
+              type: string
+        note:
+          type: string
+    FirmVatPositionRow:
+      type: object
+      required:
+        [clientPartyId, clientName, outputVat, inputVat, inputVatVerified, netVat, defensibleNetVat]
+      properties:
+        clientPartyId:
+          type: string
+          format: uuid
+        clientName:
+          type: string
+        outputVat:
+          type: string
+        inputVat:
+          type: string
+        inputVatVerified:
+          type: string
+        netVat:
+          type: string
+        defensibleNetVat:
+          type: string
+    FirmPolicies:
+      type: object
+      required: [submitApprovalRequired]
+      properties:
+        # When true, submitting any invoice for stamping requires a live
+        # approval recorded by a different principal (maker-checker).
+        submitApprovalRequired:
+          type: boolean
+    UpdateFirmPoliciesInput:
+      type: object
+      required: [submitApprovalRequired]
+      properties:
+        submitApprovalRequired:
+          type: boolean
+    InvoiceApproval:
+      type: object
+      required: [id, invoiceId, approvedByUserId, approvedByName, note, revokedAt, createdAt]
+      properties:
+        id:
+          type: string
+        invoiceId:
+          type: string
+        approvedByUserId:
+          type: string
+        approvedByName:
+          type: ["string", "null"]
+        note:
+          type: ["string", "null"]
+        # Set when the invoice's content changed after approval — a revoked
+        # approval no longer satisfies the submission policy.
+        revokedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    ApproveInvoiceInput:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+    CollectionAccount:
+      type: object
+      required: [id, clientPartyId, provider, accountReference, label, active, createdAt]
+      properties:
+        id:
+          type: string
+        clientPartyId:
+          type: string
+        provider:
+          type: string
+        accountReference:
+          type: string
+        label:
+          type: ["string", "null"]
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    CreateCollectionAccountInput:
+      type: object
+      required: [clientPartyId]
+      properties:
+        clientPartyId:
+          type: string
+        label:
+          type: string
+          maxLength: 200
+    CompliancePackNotifyInput:
+      type: object
+      required: [clientPartyId]
+      properties:
+        clientPartyId:
+          type: string
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}-01$'
     VatPack:
       type: object
       required: [monthStart, monthLabel, months, rows, totals, note]

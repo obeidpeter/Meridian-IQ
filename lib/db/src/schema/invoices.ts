@@ -63,6 +63,11 @@ export const invoicesTable = pgTable("invoices", {
   ),
   invoiceNumber: text("invoice_number").notNull(),
   currency: text("currency").notNull().default("NGN"),
+  // NGN per one unit of `currency`, captured at issue time so naira
+  // reporting (VAT position, exports) can convert non-NGN documents.
+  // Null for NGN documents or when no rate was captured — converters must
+  // treat null as "unconvertible", never assume 1.
+  fxRateToNgn: numeric("fx_rate_to_ngn", { precision: 18, scale: 6 }),
   issueDate: date("issue_date", { mode: "string" }).notNull(),
   dueDate: date("due_date", { mode: "string" }),
   status: invoiceStatusEnum("status").notNull().default("draft"),

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.44.0
+ * OpenAPI spec version: 0.45.0
  */
 export interface HealthStatus {
   status: string;
@@ -524,6 +524,8 @@ export interface Invoice {
   relatedInvoiceId?: string | null;
   invoiceNumber: string;
   currency: string;
+  /** @nullable */
+  fxRateToNgn?: string | null;
   issueDate: string;
   /** @nullable */
   dueDate?: string | null;
@@ -590,6 +592,7 @@ export interface InvoiceInput {
   /** @minLength 1 */
   invoiceNumber: string;
   currency?: string;
+  fxRateToNgn?: string;
   issueDate: string;
   dueDate?: string;
   kind?: InvoiceInputKind;
@@ -605,6 +608,8 @@ export interface InvoiceUpdateInput {
   issueDate?: string;
   /** @nullable */
   dueDate?: string | null;
+  /** @nullable */
+  fxRateToNgn?: string | null;
   /** @nullable */
   notes?: string | null;
   /** @minItems 1 */
@@ -988,6 +993,99 @@ export interface UnbilledIncomeAlert {
   lastIssueDate: string;
   expectedByDate: string;
   overdueDays: number;
+}
+
+export interface VatPosition {
+  clientPartyId: string;
+  monthStart: string;
+  monthLabel: string;
+  months: string[];
+  outputVat: string;
+  outputInvoiceCount: number;
+  inputVat: string;
+  inputVatVerified: string;
+  inputVatUnverified: string;
+  billCount: number;
+  netVat: string;
+  defensibleNetVat: string;
+  excludedForFx: number;
+  note: string;
+}
+
+export type FirmVatPositionsTotals = {
+  outputVat: string;
+  inputVat: string;
+  inputVatVerified: string;
+  netVat: string;
+  defensibleNetVat: string;
+};
+
+export interface FirmVatPositionRow {
+  clientPartyId: string;
+  clientName: string;
+  outputVat: string;
+  inputVat: string;
+  inputVatVerified: string;
+  netVat: string;
+  defensibleNetVat: string;
+}
+
+export interface FirmVatPositions {
+  monthStart: string;
+  monthLabel: string;
+  months: string[];
+  rows: FirmVatPositionRow[];
+  totals: FirmVatPositionsTotals;
+  note: string;
+}
+
+export interface FirmPolicies {
+  submitApprovalRequired: boolean;
+}
+
+export interface UpdateFirmPoliciesInput {
+  submitApprovalRequired: boolean;
+}
+
+export interface InvoiceApproval {
+  id: string;
+  invoiceId: string;
+  approvedByUserId: string;
+  /** @nullable */
+  approvedByName: string | null;
+  /** @nullable */
+  note: string | null;
+  /** @nullable */
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export interface ApproveInvoiceInput {
+  /** @maxLength 1000 */
+  note?: string;
+}
+
+export interface CollectionAccount {
+  id: string;
+  clientPartyId: string;
+  provider: string;
+  accountReference: string;
+  /** @nullable */
+  label: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface CreateCollectionAccountInput {
+  clientPartyId: string;
+  /** @maxLength 200 */
+  label?: string;
+}
+
+export interface CompliancePackNotifyInput {
+  clientPartyId: string;
+  /** @pattern ^\d{4}-\d{2}-01$ */
+  month?: string;
 }
 
 export type VatPackRowsItem = {
@@ -5077,6 +5175,42 @@ clientPartyId: string;
 
 export type GetPayablesSummaryParams = {
 clientPartyId: string;
+};
+
+export type GetVatPositionParams = {
+clientPartyId: string;
+/**
+ * A Lagos month's first day (YYYY-MM-01); defaults to the current Lagos month.
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
+};
+
+export type ExportVatPositionCsvParams = {
+clientPartyId: string;
+/**
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
+};
+
+export type GetFirmVatPositionsParams = {
+/**
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
+};
+
+export type ListCollectionAccountsParams = {
+clientPartyId: string;
+};
+
+export type GetCompliancePackParams = {
+clientPartyId: string;
+/**
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
 };
 
 export type GetReceivablesSummaryParams = {

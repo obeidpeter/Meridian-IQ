@@ -277,6 +277,19 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("bill_verifications")],
     afterRollback: [not(clerkTenant("bill_verifications"))],
   },
+  {
+    version: 24, // governance + collections guardrails (+ purge covers invoice_approvals)
+    atTop: [
+      clerkTenant("firm_policies"),
+      clerkTenant("invoice_approvals"),
+      clerkTenant("collection_accounts"),
+    ],
+    afterRollback: [
+      not(clerkTenant("firm_policies")),
+      not(clerkTenant("invoice_approvals")),
+      not(clerkTenant("collection_accounts")),
+    ],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except
