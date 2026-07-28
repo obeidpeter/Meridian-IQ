@@ -8,6 +8,8 @@ import {
   getListIntentEvalRunsQueryKey,
   useListIntentFixtures,
   useMintIntentFixture,
+  useRetireIntentFixture,
+  useRestoreIntentFixture,
   getListIntentFixturesQueryKey,
   useListEvalFixtures,
   useMintFixtureFromCase,
@@ -222,6 +224,16 @@ function IntentEvalCard() {
   const { data: grownFixtures } = useListIntentFixtures({
     query: { queryKey: getListIntentFixturesQueryKey(), retry: false },
   });
+  const invalidateFixtures = () =>
+    queryClient.invalidateQueries({
+      queryKey: getListIntentFixturesQueryKey(),
+    });
+  const retireFx = useRetireIntentFixture({
+    mutation: { onSuccess: invalidateFixtures },
+  });
+  const restoreFx = useRestoreIntentFixture({
+    mutation: { onSuccess: invalidateFixtures },
+  });
   const runEval = useRunIntentEval({
     mutation: {
       onSuccess: () => {
@@ -254,19 +266,50 @@ function IntentEvalCard() {
           (one classify call per fixture) and scores the classification
           deterministically — including two prompt-injection questions.
         </p>
-        {grownFixtures && (
-          <p
-            className="text-xs text-muted-foreground"
-            data-testid="text-grown-intent-count"
-          >
-            Grown corpus:{" "}
-            {grownFixtures.filter((f) => f.retiredAt === null).length} promoted
-            question{grownFixtures.filter((f) => f.retiredAt === null).length === 1 ? "" : "s"}{" "}
-            run alongside the static fixtures
-            {grownFixtures.some((f) => f.retiredAt !== null) &&
-              ` (${grownFixtures.filter((f) => f.retiredAt !== null).length} retired)`}
-            .
-          </p>
+        {grownFixtures && grownFixtures.length > 0 && (
+          <div className="space-y-1" data-testid="grown-intent-list">
+            <p
+              className="text-xs font-medium text-muted-foreground uppercase"
+              data-testid="text-grown-intent-count"
+            >
+              Grown corpus —{" "}
+              {grownFixtures.filter((f) => f.retiredAt === null).length} active
+              {grownFixtures.some((f) => f.retiredAt !== null)
+                ? `, ${grownFixtures.filter((f) => f.retiredAt !== null).length} retired`
+                : ""}{" "}
+              (runs with the static fixtures)
+            </p>
+            {grownFixtures.slice(0, 8).map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-2 text-xs"
+                data-testid={`grown-fixture-${f.id}`}
+              >
+                <span
+                  className={`min-w-0 flex-1 truncate ${f.retiredAt ? "text-muted-foreground line-through" : ""}`}
+                >
+                  {f.question}
+                </span>
+                <span className="font-mono text-muted-foreground">
+                  {f.expected.claimKey}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs"
+                  disabled={retireFx.isPending || restoreFx.isPending}
+                  onClick={() =>
+                    f.retiredAt
+                      ? restoreFx.mutate({ id: f.id })
+                      : retireFx.mutate({ id: f.id })
+                  }
+                  data-testid={`button-grown-toggle-${f.id}`}
+                >
+                  {f.retiredAt ? "Restore" : "Retire"}
+                </Button>
+              </div>
+            ))}
+          </div>
         )}
         {!newest ? (
           <p
@@ -309,15 +352,24 @@ function PromoteToIntentCorpus({ caseId }: { caseId: string }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [claimKey, setClaimKey] = useState("");
+  const [month, setMonth] = useState("");
+  const [client, setClient] = useState("");
   const mint = useMintIntentFixture({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (fixture) => {
         setOpen(false);
         setClaimKey("");
+        setMonth("");
+        setClient("");
         queryClient.invalidateQueries({
           queryKey: getListIntentFixturesQueryKey(),
         });
-        toast({ title: "Added to the intent eval corpus" });
+        // Surface the SCRUBBED text so the operator can immediately judge
+        // (and retire) a mangled mint from the eval card's grown list.
+        toast({
+          title: "Added to the intent eval corpus",
+          description: fixture.question,
+        });
       },
       onError: (e) =>
         toast({
@@ -348,15 +400,38 @@ function PromoteToIntentCorpus({ caseId }: { caseId: string }) {
         value={claimKey}
         onChange={(e) => setClaimKey(e.target.value)}
         placeholder="expected key, e.g. data.chase_list"
-        className="h-6 w-56 text-xs"
+        className="h-6 w-48 text-xs"
         data-testid={`input-promote-key-${caseId}`}
+      />
+      <Input
+        value={month}
+        onChange={(e) => setMonth(e.target.value)}
+        placeholder="month pin"
+        className="h-6 w-24 text-xs"
+        data-testid={`input-promote-month-${caseId}`}
+      />
+      <Input
+        value={client}
+        onChange={(e) => setClient(e.target.value)}
+        placeholder="client pin"
+        className="h-6 w-20 text-xs"
+        data-testid={`input-promote-client-${caseId}`}
       />
       <Button
         size="sm"
         className="h-6 px-2 text-xs"
         disabled={mint.isPending || claimKey.trim().length === 0}
         onClick={() =>
-          mint.mutate({ data: { caseId, expected: { claimKey: claimKey.trim() } } })
+          mint.mutate({
+            data: {
+              caseId,
+              expected: {
+                claimKey: claimKey.trim(),
+                ...(month.trim() ? { month: month.trim() } : {}),
+                ...(client.trim() ? { client: client.trim() } : {}),
+              },
+            },
+          })
         }
         data-testid={`button-promote-confirm-${caseId}`}
       >

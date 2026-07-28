@@ -4142,6 +4142,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /clerk/eval/intent-fixtures/{id}/retire:
+    post:
+      operationId: retireIntentFixture
+      tags: [clerk]
+      summary: Retire a grown intent fixture — the row survives, the eval loaders exclude it
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The updated fixture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentFixtureSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clerk/eval/intent-fixtures/{id}/restore:
+    post:
+      operationId: restoreIntentFixture
+      tags: [clerk]
+      summary: Restore a retired grown intent fixture into the eval loaders
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The updated fixture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentFixtureSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /clerk/eval/fixtures:
     get:
       operationId: listEvalFixtures
@@ -11879,7 +11911,8 @@ components:
       type: object
       required: [multiPaid, duplicateCandidates, note]
       properties:
-        # Bills carrying two or more independent payment evidences.
+        # Bills matched to two or more distinct bank-statement debits whose
+        # amounts sum to more than the bill (installments never flag).
         multiPaid:
           type: array
           items:
@@ -11913,14 +11946,23 @@ components:
                 type: string
               lastPaidAt:
                 type: string
-        # Unpaid bill pairs from the same supplier for the same amount with
-        # issue dates within the near-duplicate window.
+        # Same-supplier same-amount bill pairs issued within the
+        # near-duplicate window where the second side is still unpaid —
+        # including a paid original next to its unpaid copy.
         duplicateCandidates:
           type: array
           items:
             type: object
             required:
-              [supplierName, currency, grandTotal, first, second, daysApart]
+              [
+                supplierName,
+                currency,
+                grandTotal,
+                pairKind,
+                first,
+                second,
+                daysApart,
+              ]
             properties:
               supplierName:
                 type: string
@@ -11928,6 +11970,11 @@ components:
                 type: string
               grandTotal:
                 type: string
+              # paid_original: `first` is already paid, `second` is the
+              # unpaid copy. both_unpaid: neither has payment evidence.
+              pairKind:
+                type: string
+                enum: [both_unpaid, paid_original]
               first:
                 $ref: "#/components/schemas/DuplicateBillRef"
               second:

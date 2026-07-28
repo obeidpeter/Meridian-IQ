@@ -16928,6 +16928,146 @@ export const useMintIntentFixture = <TError = ErrorType<BadRequestResponse | Not
       return useMutation(getMintIntentFixtureMutationOptions(options));
     }
 
+export const getRetireIntentFixtureUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/eval/intent-fixtures/${id}/retire`
+}
+
+/**
+ * @summary Retire a grown intent fixture — the row survives, the eval loaders exclude it
+ */
+export const retireIntentFixture = async (id: string, options?: RequestInit): Promise<IntentFixtureSummary> => {
+
+  return customFetch<IntentFixtureSummary>(getRetireIntentFixtureUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetireIntentFixtureMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireIntentFixture>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retireIntentFixture>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['retireIntentFixture'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retireIntentFixture>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  retireIntentFixture(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetireIntentFixtureMutationResult = NonNullable<Awaited<ReturnType<typeof retireIntentFixture>>>
+
+    export type RetireIntentFixtureMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Retire a grown intent fixture — the row survives, the eval loaders exclude it
+ */
+export const useRetireIntentFixture = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retireIntentFixture>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retireIntentFixture>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRetireIntentFixtureMutationOptions(options));
+    }
+
+export const getRestoreIntentFixtureUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/eval/intent-fixtures/${id}/restore`
+}
+
+/**
+ * @summary Restore a retired grown intent fixture into the eval loaders
+ */
+export const restoreIntentFixture = async (id: string, options?: RequestInit): Promise<IntentFixtureSummary> => {
+
+  return customFetch<IntentFixtureSummary>(getRestoreIntentFixtureUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreIntentFixtureMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreIntentFixture>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreIntentFixture>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['restoreIntentFixture'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreIntentFixture>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  restoreIntentFixture(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreIntentFixtureMutationResult = NonNullable<Awaited<ReturnType<typeof restoreIntentFixture>>>
+
+    export type RestoreIntentFixtureMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Restore a retired grown intent fixture into the eval loaders
+ */
+export const useRestoreIntentFixture = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreIntentFixture>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreIntentFixture>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRestoreIntentFixtureMutationOptions(options));
+    }
+
 export const getListEvalFixturesUrl = () => {
 
 

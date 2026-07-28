@@ -17,6 +17,8 @@ import {
   listIntentFixtures,
   loadGrownIntentFixtures,
   mintIntentFixture,
+  restoreIntentFixture,
+  retireIntentFixture,
   runIntentEval,
   scrubIntentQuestion,
 } from "./intent-eval.ts";
@@ -128,13 +130,15 @@ after(async () => {
   await restoreClerkFlag();
 });
 
-test("scrub maps known names onto the synthetic directory, longest first", () => {
-  // Longest known name claims the first directory slot; matching is
-  // case-insensitive; a short fragment of an already-replaced name no
-  // longer appears, so it consumes no slot.
+const ids = (names: string[], tins: string[] = []) => ({ names, tins });
+
+test("scrub maps known names onto the synthetic directory in appearance order", () => {
+  // The longest surface form claims its whole span (the contained "Akintola"
+  // fragment consumes no slot); directory slots go in order of first
+  // appearance in the question; matching is case-insensitive.
   const out = scrubIntentQuestion(
     "Invoice AKINTOLA HAULAGE WEST for the Dangote job",
-    ["Akintola Haulage West", "Dangote", "Akintola"],
+    ids(["Akintola Haulage West", "Dangote", "Akintola"]),
   );
   assert.equal(
     out,
@@ -142,23 +146,68 @@ test("scrub maps known names onto the synthetic directory, longest first", () =>
   );
 });
 
-test("scrub leaves an unrelated question untouched and ignores tiny names", () => {
+test("scrub is word-bounded: unrelated words survive known short names", () => {
   assert.equal(
-    scrubIntentQuestion("What VAT rate applies to rice?", [
-      "Zenith Holdings",
-      "at", // <3 chars: never scrubbed (would shred ordinary words)
-    ]),
+    scrubIntentQuestion(
+      "What VAT rate applies to rice?",
+      ids(["Zenith Holdings", "at"]),
+    ),
     "What VAT rate applies to rice?",
   );
 });
 
 test("scrub refuses a question naming more parties than the directory", () => {
   assert.equal(
-    scrubIntentQuestion("Alpha Co vs Bravo Co vs Charlie Co", [
-      "Alpha Co",
-      "Bravo Co",
-      "Charlie Co",
-    ]),
+    scrubIntentQuestion(
+      "Alpha Co vs Bravo Co vs Charlie Co",
+      ids(["Alpha Co", "Bravo Co", "Charlie Co"]),
+    ),
+    null,
+  );
+});
+
+test("scrub catches surface variants: NBSP, homoglyphs, informal short forms", () => {
+  // NBSP inside the name (routine in pasted text) — NFKC + whitespace
+  // collapse still matches.
+  assert.equal(
+    scrubIntentQuestion(
+      "When is VAT due for Acme Ltd?",
+      ids(["Acme Ltd"]),
+    ),
+    "When is VAT due for Alpha Ventures Ltd?",
+  );
+  // Kelvin-sign K homoglyph folds to K under NFKC and scrubs.
+  assert.equal(
+    scrubIntentQuestion("Has Kobo Ltd paid us?", ids(["Kobo Ltd"])),
+    "Has Alpha Ventures Ltd paid us?",
+  );
+  // The informal short form of a long legal name shares its slot.
+  assert.equal(
+    scrubIntentQuestion(
+      "What is unsubmitted for Acme?",
+      ids(["Acme Ventures Nigeria Ltd"]),
+    ),
+    "What is unsubmitted for Alpha Ventures Ltd?",
+  );
+});
+
+test("scrub scrubs known TINs and refuses residual detections", () => {
+  // A known TIN (spacing-tolerant) becomes the shaped synthetic.
+  assert.equal(
+    scrubIntentQuestion(
+      "Is TIN 12345678-0001 registered to us?",
+      ids([], ["12345678-0001"]),
+    ),
+    "Is TIN 00000001-0001 registered to us?",
+  );
+  // A known name that would still match INSIDE the directory replacement
+  // ("Ventures" inside "Alpha Ventures Ltd") is a refusal, never a hybrid
+  // or a leak — the verification pass fails closed.
+  assert.equal(
+    scrubIntentQuestion(
+      "What does Acme Ventures owe us?",
+      ids(["Acme Ventures", "Ventures"]),
+    ),
     null,
   );
 });
@@ -235,7 +284,7 @@ test("minting stores the SCRUBBED question; a second mint is a 409", async () =>
   );
 });
 
-test("retirement removes a fixture from the loader but not the list", async () => {
+test("retire/restore drive the loader without deleting the row", async () => {
   const second = await mintIntentFixture(
     {
       caseId: retireCaseId,
@@ -244,15 +293,24 @@ test("retirement removes a fixture from the loader but not the list", async () =
     },
     operatorId,
   );
-  await getDb()
-    .update(clerkIntentFixturesTable)
-    .set({ retiredAt: new Date() })
-    .where(eq(clerkIntentFixturesTable.id, second.id));
+  const retired = await retireIntentFixture(second.id, operatorId);
+  assert.ok(retired.retiredAt, "retirement is stamped");
   const loaded = await loadGrownIntentFixtures();
   assert.equal(loaded.length, 1);
   assert.equal(loaded[0].question, SCRUBBED_QUESTION);
   assert.match(loaded[0].key, /^grown-/);
   assert.equal((await listIntentFixtures()).length, 2, "the row survives");
+  const restored = await restoreIntentFixture(second.id, operatorId);
+  assert.equal(restored.retiredAt, null);
+  assert.equal((await loadGrownIntentFixtures()).length, 2);
+  // Retire again so the grown-run test below sees exactly one active
+  // fixture; an unknown id is a 404.
+  await retireIntentFixture(second.id, operatorId);
+  await assert.rejects(
+    () => retireIntentFixture(randomUUID(), operatorId),
+    (err: unknown) =>
+      err instanceof DomainError && err.code === "NOT_FOUND",
+  );
 });
 
 test("a default run classifies static + grown fixtures together", async () => {

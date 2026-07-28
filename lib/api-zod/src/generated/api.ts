@@ -2709,6 +2709,7 @@ export const GetDoublePaymentCheckResponse = zod.object({
   "supplierName": zod.string(),
   "currency": zod.string(),
   "grandTotal": zod.string(),
+  "pairKind": zod.enum(['both_unpaid', 'paid_original']),
   "first": zod.object({
   "invoiceId": zod.string().uuid(),
   "invoiceNumber": zod.string(),
@@ -6112,6 +6113,66 @@ export const MintIntentFixtureResponse = zod.object({
   "claimKey": zod.string().min(1).max(mintIntentFixtureResponseExpectedClaimKeyMax),
   "month": zod.string().max(mintIntentFixtureResponseExpectedMonthMax).optional(),
   "client": zod.string().max(mintIntentFixtureResponseExpectedClientMax).optional()
+}),
+  "retiredAt": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Retire a grown intent fixture — the row survives, the eval loaders exclude it
+ */
+export const RetireIntentFixtureParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const retireIntentFixtureResponseExpectedClaimKeyMax = 120;
+
+export const retireIntentFixtureResponseExpectedMonthMax = 40;
+
+export const retireIntentFixtureResponseExpectedClientMax = 40;
+
+
+
+export const RetireIntentFixtureResponse = zod.object({
+  "id": zod.string().uuid(),
+  "caseId": zod.string().uuid(),
+  "label": zod.string(),
+  "question": zod.string(),
+  "expected": zod.object({
+  "claimKey": zod.string().min(1).max(retireIntentFixtureResponseExpectedClaimKeyMax),
+  "month": zod.string().max(retireIntentFixtureResponseExpectedMonthMax).optional(),
+  "client": zod.string().max(retireIntentFixtureResponseExpectedClientMax).optional()
+}),
+  "retiredAt": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Restore a retired grown intent fixture into the eval loaders
+ */
+export const RestoreIntentFixtureParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const restoreIntentFixtureResponseExpectedClaimKeyMax = 120;
+
+export const restoreIntentFixtureResponseExpectedMonthMax = 40;
+
+export const restoreIntentFixtureResponseExpectedClientMax = 40;
+
+
+
+export const RestoreIntentFixtureResponse = zod.object({
+  "id": zod.string().uuid(),
+  "caseId": zod.string().uuid(),
+  "label": zod.string(),
+  "question": zod.string(),
+  "expected": zod.object({
+  "claimKey": zod.string().min(1).max(restoreIntentFixtureResponseExpectedClaimKeyMax),
+  "month": zod.string().max(restoreIntentFixtureResponseExpectedMonthMax).optional(),
+  "client": zod.string().max(restoreIntentFixtureResponseExpectedClientMax).optional()
 }),
   "retiredAt": zod.string().nullable(),
   "createdAt": zod.coerce.date()

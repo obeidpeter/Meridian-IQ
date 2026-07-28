@@ -60,12 +60,18 @@ export function summarizeChaseEffectiveness(
     (r) =>
       r.settledAt !== null && r.settledAt > (r.firstReminderAt as string),
   );
-  const nowMs = new Date(`${asOf}T23:59:59Z`).getTime();
+  // End of the Lagos day (asOf is a Lagos date string).
+  const nowMs = new Date(`${asOf}T23:59:59+01:00`).getTime();
+  // The share's denominator: reminders whose window has RUN — settled after
+  // the reminder, or unsettled with the window elapsed. An invoice already
+  // settled when its reminder went out had no window at all, so it belongs
+  // in neither side of the share.
   const mature = reminded.filter(
     (r) =>
-      r.settledAt !== null ||
-      nowMs - new Date(r.firstReminderAt as string).getTime() >=
-        WITHIN_DAYS * 86_400_000,
+      (r.settledAt !== null && r.settledAt > (r.firstReminderAt as string)) ||
+      (r.settledAt === null &&
+        nowMs - new Date(r.firstReminderAt as string).getTime() >=
+          WITHIN_DAYS * 86_400_000),
   );
   const withinCount = remindedSettled.filter(
     (r) =>

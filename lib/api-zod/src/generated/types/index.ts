@@ -238,6 +238,7 @@ export * from './dashboardSummary';
 export * from './dashboardSummaryPenaltyRisk';
 export * from './doublePaymentCheck';
 export * from './doublePaymentCheckDuplicateCandidatesItem';
+export * from './doublePaymentCheckDuplicateCandidatesItemPairKind';
 export * from './doublePaymentCheckMultiPaidItem';
 export * from './draftCatalogueEntryInput';
 export * from './draftClaimWithClerkInput';

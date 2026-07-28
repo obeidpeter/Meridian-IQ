@@ -19,6 +19,7 @@ import {
 } from "./prompts";
 import { buildIntentUser, type IntentPromptContext } from "./ask";
 import { DATA_INTENTS } from "./data-intents";
+import { createScrubber } from "./scrub";
 
 // Intent-classification eval lane (round-15 idea #3). Extraction and
 // injection resistance are measured; the Ask classifier — now serving
@@ -179,38 +180,99 @@ export const INTENT_FIXTURES: IntentFixture[] = [
 
 // ---- Grown corpus (round 16) ----------------------------------------------
 // Question cases promoted into the corpus. The question text is SCRUBBED
-// deterministically before storage: every engaged-client name (and the firm
-// name) is mapped onto the frozen synthetic directory in order of first
-// appearance — the same pseudonym discipline the extraction corpus uses. A
-// question naming more than the directory can represent is REFUSED, never
-// stored partially scrubbed.
+// deterministically before storage through the SAME span-claim machinery the
+// extraction corpus uses (scrub.ts: word boundaries, longest-first claims,
+// spacing-tolerant TIN matching): every identity the platform can name for
+// the firm — engaged clients, invoice counterparties, the firm itself, their
+// TINs — is mapped onto the frozen synthetic directory in order of first
+// appearance in the question. A question naming more parties than the
+// directory can represent is REFUSED, never stored partially scrubbed, and a
+// final verification pass re-runs detection over the output so any residual
+// match refuses instead of leaking.
 
 const GROWN_INTENT_CAP = 40;
 
+// Impossible-in-text sentinel: allocated when a THIRD distinct name identity
+// appears, turning directory overflow into a refusal.
+const DIRECTORY_OVERFLOW = "@@DIRECTORY_OVERFLOW@@";
+
+// NFKC folds homoglyphs and width/space variants (NBSP, Kelvin-sign K…);
+// whitespace runs collapse so "Acme  Ltd" and "Acme Ltd" match "Acme
+// Ltd". Applied to the question AND every identity before matching.
+function normalizeForScrub(s: string): string {
+  return s.normalize("NFKC").replace(/\s+/g, " ").trim();
+}
+
+// Informal-form variants: iteratively strip trailing legal/descriptor tokens
+// so "Acme Ventures Nigeria Ltd" also scrubs as "Acme Ventures Nigeria",
+// "Acme Ventures" and "Acme". Every variant shares the full name's identity
+// (one directory slot). Over-scrubbing an ordinary word is the safe failure
+// direction; leaking a name is not.
+const LEGAL_TAIL =
+  /\s+(limited|ltd|plc|gte|llc|llp|inc|nigeria|nig|enterprises?|ventures?|company|co|global|international|intl|group|holdings?|industries|services|solutions|resources|investments?|trading|stores?|farms?|motors|foods?|logistics)\.?$/i;
+
+function nameVariants(name: string): string[] {
+  const variants = [name];
+  let current = name;
+  for (let i = 0; i < 8; i += 1) {
+    const next = current.replace(LEGAL_TAIL, "").trim();
+    if (next === current) break;
+    current = next;
+    if (current.length >= 4 && /[A-Za-z]{3,}/.test(current)) {
+      variants.push(current);
+    }
+  }
+  return variants;
+}
+
 // Pure, exported for tests. Returns null when the question cannot be
-// represented in the frozen two-client directory.
+// represented in the frozen two-client directory (a third distinct party, or
+// any identity still detectable after scrubbing).
 export function scrubIntentQuestion(
   question: string,
-  knownNames: string[],
+  identities: { names: string[]; tins: string[] },
 ): string | null {
   const directory = INTENT_EVAL_CONTEXT.clients.map((c) => c.name);
-  let scrubbed = question;
-  let used = 0;
-  // Longest names first so "Acme Ventures Nigeria" wins over "Acme".
-  const names = [...new Set(knownNames.filter((n) => n.trim().length >= 3))].sort(
-    (a, b) => b.length - a.length,
-  );
-  for (const name of names) {
-    if (!scrubbed.toLowerCase().includes(name.toLowerCase())) continue;
-    if (used >= directory.length) return null;
-    const pattern = new RegExp(
-      name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      "gi",
-    );
-    scrubbed = scrubbed.replace(pattern, directory[used]);
-    used += 1;
+  const normalized = normalizeForScrub(question);
+
+  // Canonical grouping: each known name and its informal variants share one
+  // identity key. Sorted intake keeps collisions (two clients sharing a
+  // variant) deterministic — first owner wins; a mis-grouped variant can
+  // mislabel WHICH synthetic name is used, never leak.
+  const canonical = new Map<string, string>();
+  const surfaceForms: string[] = [];
+  const baseNames = [...new Set(identities.names.map(normalizeForScrub))]
+    .filter((n) => n.length >= 2)
+    .sort();
+  for (const base of baseNames) {
+    for (const variant of nameVariants(base)) {
+      const key = variant.toLowerCase();
+      if (!canonical.has(key)) {
+        canonical.set(key, base.toLowerCase());
+        surfaceForms.push(variant);
+      }
+    }
   }
-  return scrubbed;
+
+  const scrubber = createScrubber(
+    { names: surfaceForms, tins: identities.tins },
+    {
+      nameKey: (name) => canonical.get(name.toLowerCase()) ?? name.toLowerCase(),
+      nameLabel: (index) => directory[index] ?? DIRECTORY_OVERFLOW,
+    },
+  );
+  const { text } = scrubber.scrub(normalized);
+  if (text.includes(DIRECTORY_OVERFLOW)) return null;
+
+  // Fail-closed verification: a FRESH scrubber over the output must find
+  // nothing. Any residual detection (replacement collisions, an identity
+  // that survived) refuses the mint instead of storing a partial scrub.
+  const verify = createScrubber({
+    names: surfaceForms,
+    tins: identities.tins,
+  }).scrub(text);
+  if (verify.replacements > 0) return null;
+  return text;
 }
 
 export async function mintIntentFixture(
@@ -264,24 +326,38 @@ export async function mintIntentFixture(
     throw new DomainError("NOT_FOUND", "Question case not found", 404);
   }
 
-  // Names that must not survive into the corpus: the firm's engaged client
-  // parties and the firm itself. A firm-less (operator) question has no
+  // Identities that must not survive into the corpus: every party the
+  // platform can name for this firm — engaged clients, the counterparties on
+  // the firm's invoices (Ask questions canonically name the client's own
+  // customers), the firm itself, and their TINs — the same breadth the
+  // extraction-mint scrubber uses. A firm-less (operator) question has no
   // tenant vocabulary to scrub.
-  let knownNames: string[] = [];
+  const identities: { names: string[]; tins: string[] } = {
+    names: [],
+    tins: [],
+  };
   if (row.firmId) {
-    const names = (
-      await getDb().execute<{ name: string }>(sql`
-        SELECT p.legal_name AS name
+    const rows = (
+      await getDb().execute<{ name: string; tin: string | null }>(sql`
+        SELECT p.legal_name AS name, p.tin
         FROM parties p
-        JOIN engagements e ON e.client_party_id = p.id
-        WHERE e.firm_id = ${row.firmId}
+        WHERE p.id IN (
+          SELECT e.client_party_id FROM engagements e WHERE e.firm_id = ${row.firmId}
+          UNION
+          SELECT i.supplier_party_id FROM invoices i WHERE i.firm_id = ${row.firmId}
+          UNION
+          SELECT i.buyer_party_id FROM invoices i WHERE i.firm_id = ${row.firmId}
+        )
         UNION
-        SELECT f.name FROM firms f WHERE f.id = ${row.firmId}
+        SELECT f.name, NULL FROM firms f WHERE f.id = ${row.firmId}
       `)
     ).rows;
-    knownNames = names.map((n) => n.name);
+    for (const r of rows) {
+      identities.names.push(r.name);
+      if (r.tin) identities.tins.push(r.tin);
+    }
   }
-  const scrubbed = scrubIntentQuestion(row.question, knownNames);
+  const scrubbed = scrubIntentQuestion(row.question, identities);
   if (scrubbed === null) {
     throw new DomainError(
       "UNREPRESENTABLE",
@@ -322,7 +398,10 @@ export async function loadGrownIntentFixtures(): Promise<IntentFixture[]> {
     .select()
     .from(clerkIntentFixturesTable)
     .where(isNull(clerkIntentFixturesTable.retiredAt))
-    .orderBy(desc(clerkIntentFixturesTable.createdAt))
+    .orderBy(
+      desc(clerkIntentFixturesTable.createdAt),
+      desc(clerkIntentFixturesTable.id),
+    )
     .limit(GROWN_INTENT_CAP);
   return rows.map((r) => ({
     key: `grown-${r.id.slice(0, 8)}`,
@@ -337,8 +416,54 @@ export async function listIntentFixtures(): Promise<ClerkIntentFixture[]> {
   return getDb()
     .select()
     .from(clerkIntentFixturesTable)
-    .orderBy(desc(clerkIntentFixturesTable.createdAt))
+    .orderBy(
+      desc(clerkIntentFixturesTable.createdAt),
+      desc(clerkIntentFixturesTable.id),
+    )
     .limit(200);
+}
+
+// Retire/restore: the extraction-corpus lifecycle, mirrored. The row
+// survives (past runs keep their meaning); the loader excludes retired rows
+// before its cap, so retirement frees a corpus slot — and gives a mis-mint
+// (wrong expected key, mangled scrub) an exit that is not manual SQL.
+async function setIntentFixtureRetired(
+  id: string,
+  retired: boolean,
+  actorId: string,
+): Promise<ClerkIntentFixture> {
+  const [row] = await getDb()
+    .update(clerkIntentFixturesTable)
+    .set({ retiredAt: retired ? new Date() : null })
+    .where(eq(clerkIntentFixturesTable.id, id))
+    .returning();
+  if (!row) {
+    throw new DomainError("NOT_FOUND", "Intent fixture not found", 404);
+  }
+  await appendAudit({
+    actorId,
+    action: retired
+      ? "clerk.intent-fixture.retire"
+      : "clerk.intent-fixture.restore",
+    entityType: "clerk_intent_fixture",
+    entityId: row.id,
+    after: { retiredAt: row.retiredAt?.toISOString() ?? null },
+  });
+  return row;
+}
+
+export async function retireIntentFixture(
+  id: string,
+  actorId: string,
+): Promise<ClerkIntentFixture> {
+  return setIntentFixtureRetired(id, true, actorId);
+}
+
+export async function restoreIntentFixture(
+  id: string,
+  actorId: string,
+): Promise<ClerkIntentFixture> {
+  return setIntentFixtureRetired(id, false, actorId);
 }
 
 export interface IntentEvalReport {
@@ -482,8 +607,8 @@ export interface IntentCanaryReport {
   verdict: "promote" | "reject" | "inconclusive";
 }
 
-// The prompt-canary floor: a stub candidate must not burn a 28-call corpus
-// (round-15 review L3).
+// The prompt-canary floor: a stub candidate must not burn a double corpus
+// pass — up to ~108 calls with a full grown corpus (round-15 review L3).
 const MIN_CANDIDATE_CHARS = 100;
 
 export async function runIntentCanary(

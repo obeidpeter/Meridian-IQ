@@ -69,7 +69,9 @@ test("shares and medians follow the reminder/settlement geometry", () => {
   );
   assert.equal(report.remindedCount, 4);
   assert.equal(report.remindedSettledCount, 2, "the pre-reminder settlement is excluded");
-  assert.equal(report.settledWithinShare, 0.25, "1 within-window over 4 mature");
+  // The pre-reminder-settled invoice had no window to run, so it is in
+  // NEITHER side of the share: 1 within-window over 3 mature.
+  assert.equal(report.settledWithinShare, 0.3333);
   assert.equal(
     report.medianDaysReminderToSettle,
     null,

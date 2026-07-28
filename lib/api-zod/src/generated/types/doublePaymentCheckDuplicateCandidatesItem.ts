@@ -5,12 +5,14 @@
  * MeridianIQ platform API — data spine, compliance rails and consent.
  * OpenAPI spec version: 0.46.0
  */
+import type { DoublePaymentCheckDuplicateCandidatesItemPairKind } from './doublePaymentCheckDuplicateCandidatesItemPairKind';
 import type { DuplicateBillRef } from './duplicateBillRef';
 
 export type DoublePaymentCheckDuplicateCandidatesItem = {
   supplierName: string;
   currency: string;
   grandTotal: string;
+  pairKind: DoublePaymentCheckDuplicateCandidatesItemPairKind;
   first: DuplicateBillRef;
   second: DuplicateBillRef;
   daysApart: number;

@@ -4903,6 +4903,14 @@ export type DoublePaymentCheckMultiPaidItem = {
   lastPaidAt: string;
 };
 
+export type DoublePaymentCheckDuplicateCandidatesItemPairKind = typeof DoublePaymentCheckDuplicateCandidatesItemPairKind[keyof typeof DoublePaymentCheckDuplicateCandidatesItemPairKind];
+
+
+export const DoublePaymentCheckDuplicateCandidatesItemPairKind = {
+  both_unpaid: 'both_unpaid',
+  paid_original: 'paid_original',
+} as const;
+
 export interface DuplicateBillRef {
   invoiceId: string;
   invoiceNumber: string;
@@ -4913,6 +4921,7 @@ export type DoublePaymentCheckDuplicateCandidatesItem = {
   supplierName: string;
   currency: string;
   grandTotal: string;
+  pairKind: DoublePaymentCheckDuplicateCandidatesItemPairKind;
   first: DuplicateBillRef;
   second: DuplicateBillRef;
   daysApart: number;

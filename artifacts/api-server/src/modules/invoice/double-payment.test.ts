@@ -13,12 +13,14 @@ import { computeDoublePaymentCheck } from "./double-payment.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Double-payment guard (round-16 idea #3). Pinned here:
-//  - a bill carrying TWO independent payment evidences (payer flag + a
-//    statement match) is flagged as multi-paid, with the evidence span;
-//  - one payment evidence alone is NOT multi-paid;
-//  - unpaid bills from the same supplier for the same amount issued within
-//    the near-duplicate window pair up exactly once; a paid sibling and a
-//    far-apart sibling never pair;
+//  - "paid twice" means TWO DISTINCT bank debits totalling MORE than the
+//    bill: a payer flag plus its confirming statement match (the ordinary
+//    lifecycle) never flags, and two partial matches summing to the total
+//    (installments) never flag;
+//  - near-duplicate pairs: same supplier, same amount, within the window,
+//    second side unpaid — both-unpaid pairs appear once, and a PAID
+//    original next to its unpaid copy is reported as pairKind
+//    "paid_original" (the riskiest shape); a far-apart sibling never pairs;
 //  - the check is client-scoped: a sibling client's identical bill does not
 //    appear (SEC-03 through BILL_OF_CLIENT);
 //  - the note pins the advisory posture.
@@ -32,6 +34,7 @@ const vendorParty = randomUUID(); // the bills' supplier (not engaged)
 let paidTwiceId: string;
 let dupAId: string;
 let dupBId: string;
+let paidDupId: string;
 
 async function seedBill(input: {
   buyerPartyId: string;
@@ -55,6 +58,20 @@ async function seedBill(input: {
   return id;
 }
 
+function statementMatch(
+  invoiceId: string,
+  amount: string,
+  occurredAt: string,
+) {
+  return {
+    invoiceId,
+    source: "statement_match" as const,
+    statementLineId: randomUUID(),
+    amount,
+    occurredAt: new Date(occurredAt),
+  };
+}
+
 before(async () => {
   const db = getDb();
   await db.insert(firmsTable).values({ id: firmId, name: `DP Firm ${SALT}` });
@@ -68,28 +85,52 @@ before(async () => {
     { firmId, clientPartyId: siblingParty, type: "retainer", title: `dp B ${SALT}` },
   ]);
 
-  // Paid twice: a payer flag AND a statement match.
+  // Paid twice: two DISTINCT statement-line debits, 2× the bill.
   paidTwiceId = await seedBill({
     buyerPartyId: clientParty,
     invoiceNumber: `DP-TWICE-${SALT}`,
     grandTotal: "900.00",
     issueDate: "2026-07-01",
   });
+  await db
+    .insert(settlementEventsTable)
+    .values([
+      statementMatch(paidTwiceId, "900.00", "2026-07-05T09:00:00Z"),
+      statementMatch(paidTwiceId, "900.00", "2026-07-09T09:00:00Z"),
+    ]);
+
+  // The ORDINARY lifecycle: a payer flag then its confirming statement
+  // match — one payment, never "paid twice".
+  const ordinary = await seedBill({
+    buyerPartyId: clientParty,
+    invoiceNumber: `DP-ORDINARY-${SALT}`,
+    grandTotal: "700.00",
+    issueDate: "2026-06-20",
+  });
   await db.insert(settlementEventsTable).values([
     {
-      invoiceId: paidTwiceId,
+      invoiceId: ordinary,
       source: "payer_flag",
-      amount: "900.00",
+      amount: "700.00",
       paymentStatus: "paid",
-      occurredAt: new Date("2026-07-05T09:00:00Z"),
+      occurredAt: new Date("2026-06-25T09:00:00Z"),
     },
-    {
-      invoiceId: paidTwiceId,
-      source: "statement_match",
-      amount: "900.00",
-      occurredAt: new Date("2026-07-09T09:00:00Z"),
-    },
+    statementMatch(ordinary, "700.00", "2026-06-27T09:00:00Z"),
   ]);
+
+  // Installments: two partial debits summing EXACTLY to the bill.
+  const installments = await seedBill({
+    buyerPartyId: clientParty,
+    invoiceNumber: `DP-INSTAL-${SALT}`,
+    grandTotal: "600.00",
+    issueDate: "2026-06-10",
+  });
+  await db
+    .insert(settlementEventsTable)
+    .values([
+      statementMatch(installments, "300.00", "2026-06-15T09:00:00Z"),
+      statementMatch(installments, "300.00", "2026-06-29T09:00:00Z"),
+    ]);
 
   // The near-duplicate pair: same supplier, same total, 5 days apart, unpaid.
   dupAId = await seedBill({
@@ -111,19 +152,21 @@ before(async () => {
     grandTotal: "500.00",
     issueDate: "2026-05-01",
   });
-  // Same total inside the window but PAID: payment evidence removes it from
-  // the duplicate lane (one evidence — not multi-paid either).
-  const paidDup = await seedBill({
+  // Same total inside the window and already PAID: the riskiest shape — a
+  // paid original next to unpaid copies — reported as pairKind
+  // "paid_original" with the paid bill in the first seat.
+  paidDupId = await seedBill({
     buyerPartyId: clientParty,
     invoiceNumber: `DP-PAIDDUP-${SALT}`,
     grandTotal: "500.00",
     issueDate: "2026-07-12",
   });
   await db.insert(settlementEventsTable).values({
-    invoiceId: paidDup,
+    invoiceId: paidDupId,
     source: "payer_flag",
     amount: "500.00",
     paymentStatus: "paid",
+    actorId: null,
     occurredAt: new Date("2026-07-13T09:00:00Z"),
   });
   // The sibling client's identical bill: out of scope.
@@ -135,9 +178,9 @@ before(async () => {
   });
 });
 
-test("two payment evidences flag a bill as multi-paid; one does not", async () => {
+test("only distinct over-total bank debits flag a bill as paid twice", async () => {
   const check = await computeDoublePaymentCheck(firmId, clientParty);
-  assert.equal(check.multiPaid.length, 1);
+  assert.equal(check.multiPaid.length, 1, "flag+match and installments never flag");
   const hit = check.multiPaid[0];
   assert.equal(hit.invoiceId, paidTwiceId);
   assert.equal(hit.evidenceCount, 2);
@@ -146,17 +189,26 @@ test("two payment evidences flag a bill as multi-paid; one does not", async () =
   assert.match(check.note, /Advisory only/);
 });
 
-test("unpaid same-supplier same-amount bills pair once inside the window", async () => {
+test("duplicate pairs: both-unpaid once, paid original against each unpaid copy", async () => {
   const check = await computeDoublePaymentCheck(firmId, clientParty);
-  assert.equal(check.duplicateCandidates.length, 1);
-  const pair = check.duplicateCandidates[0];
-  assert.deepEqual(
-    [pair.first.invoiceId, pair.second.invoiceId].sort(),
-    [dupAId, dupBId].sort(),
-    "the far, paid and sibling bills never pair",
+  const bothUnpaid = check.duplicateCandidates.filter(
+    (p) => p.pairKind === "both_unpaid",
   );
-  assert.equal(pair.daysApart, 5);
-  assert.equal(pair.grandTotal, "500.00");
+  assert.equal(bothUnpaid.length, 1);
+  assert.deepEqual(
+    [bothUnpaid[0].first.invoiceId, bothUnpaid[0].second.invoiceId].sort(),
+    [dupAId, dupBId].sort(),
+    "the far and sibling bills never pair",
+  );
+  assert.equal(bothUnpaid[0].daysApart, 5);
+  const paidOriginal = check.duplicateCandidates.filter(
+    (p) => p.pairKind === "paid_original",
+  );
+  assert.equal(paidOriginal.length, 2, "the paid bill pairs with each unpaid copy");
+  for (const pair of paidOriginal) {
+    assert.equal(pair.first.invoiceId, paidDupId, "the paid side takes the first seat");
+    assert.ok([dupAId, dupBId].includes(pair.second.invoiceId));
+  }
 });
 
 test("the sibling client's view is empty — scope is per client", async () => {

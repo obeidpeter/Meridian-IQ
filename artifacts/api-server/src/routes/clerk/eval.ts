@@ -21,6 +21,10 @@ import {
   MintIntentFixtureBody,
   MintIntentFixtureResponse,
   ListIntentFixturesResponse,
+  RetireIntentFixtureParams,
+  RetireIntentFixtureResponse,
+  RestoreIntentFixtureParams,
+  RestoreIntentFixtureResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import { assertCan } from "../../modules/auth/rbac";
@@ -34,6 +38,8 @@ import {
   listIntentEvalRuns,
   listIntentFixtures,
   mintIntentFixture,
+  restoreIntentFixture,
+  retireIntentFixture,
   runIntentCanary,
   runIntentEval,
 } from "../../modules/clerk/intent-eval";
@@ -127,6 +133,29 @@ router.get("/clerk/eval/intent-fixtures", async (req, res): Promise<void> => {
     ListIntentFixturesResponse.parse(fixtures.map(intentFixtureSummary)),
   );
 });
+
+// Retire/restore a grown intent fixture — the extraction-corpus lifecycle
+// mirrored: the row survives, the loaders exclude retired rows before their
+// cap, and a mis-mint has an exit that is not manual SQL.
+router.post(
+  "/clerk/eval/intent-fixtures/:id/retire",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const params = parseOrThrow(RetireIntentFixtureParams, req.params);
+    const row = await retireIntentFixture(params.id, req.principal.userId);
+    res.json(RetireIntentFixtureResponse.parse(intentFixtureSummary(row)));
+  },
+);
+
+router.post(
+  "/clerk/eval/intent-fixtures/:id/restore",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const params = parseOrThrow(RestoreIntentFixtureParams, req.params);
+    const row = await restoreIntentFixture(params.id, req.principal.userId);
+    res.json(RestoreIntentFixtureResponse.parse(intentFixtureSummary(row)));
+  },
+);
 
 // Corpus curation (round 15): the inventory of every fixture the eval run
 // measures — static, corrections-grown and red-team — with per-fixture pass
