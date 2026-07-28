@@ -32,7 +32,10 @@ import {
 // Buyers with no behaviour and no due date are projected at standard terms.
 // Exported: projection-accuracy replays the same three-tier rule.
 export const DEFAULT_TERMS_DAYS = 30;
-const WEEK_COUNT = 4;
+// Exported: payables and the net-position merge MUST share this geometry —
+// a week the outflow side buckets that the merge doesn't read would simply
+// vanish from the net view (round-15 review L1).
+export const WEEK_COUNT = 4;
 const MAX_CHASE_ROWS = 8;
 
 export type ProjectionBasis = "rhythm" | "dueDate" | "terms";

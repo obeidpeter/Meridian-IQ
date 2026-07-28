@@ -73,7 +73,7 @@ function monthBills(firmId: string, monthStart: string) {
 const VERIFIED = sql`COALESCE((
   SELECT v.valid FROM bill_verifications v
   WHERE v.invoice_id = i.id
-  ORDER BY v.checked_at DESC, v.created_at DESC
+  ORDER BY v.checked_at DESC, v.created_at DESC, v.id DESC
   LIMIT 1
 ), false)`;
 

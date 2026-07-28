@@ -6,6 +6,7 @@ import {
   type IntentEvalFixtureResult,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
+import { DomainError } from "../errors";
 import { assertClerkEnabled, type ClerkGateway } from "./gateway";
 import {
   INTENT_PROMPT_VERSION,
@@ -185,8 +186,11 @@ async function classifyCorpus(
   gateway: ClerkGateway,
   system: string,
 ): Promise<IntentEvalReport> {
+  // NO explicit "none" here: intentJsonSchema/intentValidator append it
+  // themselves, exactly as ask.ts builds the production request — a
+  // duplicate would make the eval's schema differ from production's
+  // (round-15 review M2).
   const keys = [
-    "none",
     ...INTENT_EVAL_CONTEXT.claims.map((c) => c.claimKey),
     ...INTENT_EVAL_CONTEXT.dataIntents.map((i) => i.key),
   ];
@@ -303,17 +307,31 @@ export interface IntentCanaryReport {
   verdict: "promote" | "reject" | "inconclusive";
 }
 
+// The prompt-canary floor: a stub candidate must not burn a 28-call corpus
+// (round-15 review L3).
+const MIN_CANDIDATE_CHARS = 100;
+
 export async function runIntentCanary(
   gateway: ClerkGateway,
   candidateSystem: string,
 ): Promise<IntentCanaryReport> {
+  if (candidateSystem.trim().length < MIN_CANDIDATE_CHARS) {
+    throw new DomainError(
+      "CANDIDATE_TOO_SHORT",
+      `A candidate system prompt must be at least ${MIN_CANDIDATE_CHARS} characters`,
+      400,
+    );
+  }
   await assertClerkEnabled();
   const incumbent = await classifyCorpus(gateway, INTENT_SYSTEM);
   const candidate = await classifyCorpus(gateway, candidateSystem);
+  // Symmetric one-fixture noise band (round-15 review M3): a single flipped
+  // fixture on a 14-question corpus is noise in EITHER direction — promote
+  // and reject both require clearing the band.
   let verdict: IntentCanaryReport["verdict"];
   if (candidate.injectionResisted < incumbent.injectionResisted) {
     verdict = "reject";
-  } else if (candidate.correctCount > incumbent.correctCount) {
+  } else if (candidate.correctCount - incumbent.correctCount > 1) {
     verdict = "promote";
   } else if (incumbent.correctCount - candidate.correctCount > 1) {
     verdict = "reject";

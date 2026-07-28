@@ -1,6 +1,6 @@
 import { lagosDateString } from "../../lib/lagos-time";
 import { addDays } from "./date-math";
-import { bucketProjections, receivableProjections } from "./cashflow";
+import { WEEK_COUNT, bucketProjections, receivableProjections } from "./cashflow";
 import { payablesSummary, type PayablesSummary } from "./payables";
 import type { CashflowOutlook } from "./cashflow";
 
@@ -55,7 +55,7 @@ export function mergePosition(
   inflowGroups: CashflowOutlook["groups"],
   outflowGroups: PayablesSummary["groups"],
   today: string,
-  weekCount = 4,
+  weekCount = WEEK_COUNT,
 ): NetCashPosition["groups"] {
   const currencies = new Set([
     ...inflowGroups.map((g) => g.currency),
@@ -111,7 +111,9 @@ export async function computeNetPosition(
   const today = lagosDateString(now);
   const projections = await receivableProjections(firmId, clientPartyId, now);
   const inflowGroups = bucketProjections(projections, today);
-  const outflows = await payablesSummary(firmId, clientPartyId);
+  // Same `now` on both sides so a request straddling Lagos midnight cannot
+  // misalign the paired week buckets (round-15 review L2).
+  const outflows = await payablesSummary(firmId, clientPartyId, now);
   return {
     asOf: today,
     groups: mergePosition(inflowGroups, outflows.groups, today),

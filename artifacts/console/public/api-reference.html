@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.44.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.45.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.44.0</title>
+<title>MeridianIQ API reference — v0.45.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.44.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.45.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -156,7 +156,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">28</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">14</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">10</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">44</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">19</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">29</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">14</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">10</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">46</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">20</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -341,6 +341,10 @@ request's writes were rolled back.</li>
 <details class="op" id="getVatSettlementCheck">
 <summary><span class="method m-get">GET</span><code class="path">/api/vat-pack/settlement-check</code><span class="sum">Settlement coverage of the pack month's accepted invoices (assurance view — unsettled means unobserved, not unpaid)</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>VatSettlementCheck</code> <span class="dim">Settled/outstanding/credited split of the month's accepted value plus the unsettled list (deterministic — no model involvement)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getVatPosition">
+<summary><span class="method m-get">GET</span><code class="path">/api/vat-pack/position</code><span class="sum">Net VAT position — the pack's output VAT minus VERIFIED input VAT on the month's supplier bills (deterministic; unverified bills are the CTA)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>VatPosition</code> <span class="dim">Output vs verified-input VAT with the unverified-bill recovery list</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
 </details>
 <details class="op" id="getQuarterlyReview">
 <summary><span class="method m-get">GET</span><code class="path">/api/quarterly-review</code><span class="sum">Firm quarterly review pack — the closed quarter's monthly VAT packs, submissions, rejections, receivables snapshot and Clerk throughput in one deterministic document</span></summary>
@@ -1000,6 +1004,14 @@ request's writes were rolled back.</li>
 <summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/canary</code><span class="sum">Run the eval corpus under a candidate system prompt and the incumbent side by side; deterministic diff and verdict, nothing stored</span></summary>
 <div class="opbody"><div class="req">Request body: <code>RunPromptCanaryInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>PromptCanaryReport</code> <span class="dim">The canary report — candidate vs incumbent with a deterministic verdict</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
 </details>
+<details class="op" id="runIntentEval">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/intent</code><span class="sum">Run the Ask classifier's fixed intent corpus (deterministic scoring); with a candidate prompt, side-by-side canary — nothing stored</span></summary>
+<div class="opbody"><div class="req">Request body: <code>RunIntentEvalInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>IntentEvalOutcome</code> <span class="dim">The stored run (incumbent mode) or the canary report (candidate mode)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="listIntentEvalRuns">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/intent-runs</code><span class="sum">Stored intent-classification eval runs, newest first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>IntentEvalRun[]</code> <span class="dim">Intent eval runs</span></li></ul></div>
+</details>
 <details class="op" id="listEvalFixtures">
 <summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/fixtures</code><span class="sum">The full eval corpus with per-fixture pass history reconstructed from stored runs</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EvalFixtureReport</code> <span class="dim">Corpus inventory — static, grown and red-team fixtures</span></li></ul></div>
@@ -1189,6 +1201,10 @@ request's writes were rolled back.</li>
 <summary><span class="method m-get">GET</span><code class="path">/api/dashboard/cashflow</code><span class="sum">Expected inflows by week, projected from each buyer's own payment rhythm (deterministic — nothing stored, no model)</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>CashflowOutlook</code> <span class="dim">Week-bucketed expected settlements per currency, with already-late money in its own bucket</span></li></ul></div>
 </details>
+<details class="op" id="getNetCashPosition">
+<summary><span class="method m-get">GET</span><code class="path">/api/dashboard/net-position</code><span class="sum">Projected inflows merged with committed bill outflows per week — squeeze weeks flagged (deterministic; both sides from their own existing computations)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>NetCashPosition</code> <span class="dim">Weekly inflow/outflow/net per currency with overdue money on both sides reported separately</span></li></ul></div>
+</details>
 <details class="op" id="getChaseList">
 <summary><span class="method m-get">GET</span><code class="path">/api/dashboard/chase-list</code><span class="sum">Outstanding receivables ranked by days beyond the buyer's OWN expected payment date (deterministic)</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ChaseRow[]</code> <span class="dim">The invoices most worth chasing, most beyond expectation first</span></li></ul></div>
@@ -1257,7 +1273,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EngagementNarrative</code> <span class="dim">Letter body for the firm to edit and own</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The engagement's findings do not match the expected shape</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.44.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.45.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>
