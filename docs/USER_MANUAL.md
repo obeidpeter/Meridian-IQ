@@ -197,9 +197,9 @@ the firm connects. It carries only the capabilities the firm admin granted it
 ## 4. The Compliance App — for SMEs
 
 Sign in as the SME owner or firm staff and you land at `/app/`. The sidebar:
-**Dashboard, Invoices, Bills, Recurring, Import, Send to Clerk, Ask Clerk,
-Reconciliation, B2C reports, Calendar, Alert settings, Consent** (the two
-Clerk entries appear only for accounts with Clerk access). A **notification
+**Dashboard, Invoices, Bills, VAT, Recurring, Import, Send to Clerk, Ask
+Clerk, Reconciliation, B2C reports, Calendar, Alert settings, Consent** (the
+two Clerk entries appear only for accounts with Clerk access). A **notification
 bell** in the header collects every alert the platform has sent you — see
 "Notifications" below.
 
@@ -242,6 +242,15 @@ rate) before **Create invoice** is offered.
 - **Draft with Clerk** — type one sentence ("Invoice Adaeze Foods ₦150,000
   for June deliveries, 7.5% VAT") and Clerk prefills the form. You review
   every field before saving; nothing is created until you do.
+- **Currency and exchange rate** — invoices are naira by default. Pick
+  another currency (USD, EUR, GBP…) and an **Exchange rate (₦ per unit)**
+  field appears: enter the rate at which you issued the invoice (e.g. 1500
+  for $1 = ₦1,500). The rate is *captured*, not looked up — it's your
+  issue-time rate on the record, used to fold the invoice into naira
+  reporting honestly. Leave it blank and the invoice still works, but naira
+  views (the VAT position, CSV exports) will show it as *excluded* rather
+  than guess a rate — MeridianIQ never assumes ₦1 = 1 unit. An NGN invoice
+  never carries a rate.
 - **Add customer** — a dialog right on the form (legal name, optional TIN /
   street / city), so a new buyer never blocks an invoice.
 - **Frequent items** — chips mined from your own past invoices; one click
@@ -257,7 +266,12 @@ rate) before **Create invoice** is offered.
   Unsubmitted / Pending / Stamped / Failed) with live counts; advanced
   **Filters** (issue-date range, amount range). Lists load 50 at a time with
   **Load more**.
-- **Export CSV** downloads the (filtered) list.
+- **Export CSV** downloads the (filtered) list. The file now ends with two
+  currency columns — `fxRateToNgn` (the captured exchange rate) and
+  `ngnEquivalent` (the naira value of the grand total) — appended after the
+  original columns so existing spreadsheets keep working; a
+  foreign-currency invoice without a captured rate leaves them blank rather
+  than assuming a rate.
 - **Submit all drafts** validates every pending draft (oldest first) and
   submits the valid ones in batches of up to 200, with a per-invoice results
   report — every invalid or failed row links to the invoice with the reason.
@@ -288,6 +302,30 @@ rate) before **Create invoice** is offered.
   draft's tone escalates politely (warm → firm → "confirm a payment date").
 - **New from this invoice** — copies the customer and lines into a fresh
   draft.
+
+### When your firm requires a second approver (maker-checker)
+
+A firm can switch on a **submission approval** policy (the firm admin's
+Governance card in the console — see
+[section 6](#6-the-accountant-console--for-firms)). With the policy on, no
+one submits an invoice they alone signed off: submitting demands a recorded
+approval from **somebody else** first.
+
+- If you hit **Submit** without one, the submission is refused with *"This
+  firm requires a second person's approval before submission — ask a
+  colleague to review and approve this invoice first."* Nothing is lost —
+  the invoice simply stays where it was.
+- A colleague opens the invoice and clicks **Approve for submission** on
+  its **Approvals** card. Any firm account can approve (client accounts and
+  MeridianIQ operators cannot); what matters is that the person who then
+  submits is *someone else* — approving your own submission never counts.
+- The Approvals card is the evidence trail: who approved, when, and any
+  note. **Editing the invoice cancels its approvals** — an approval only
+  ever covers the exact content the approver saw, so after a change you
+  need a fresh one. Cancelled ("revoked") approvals stay visible on the
+  card; approvals are recorded facts, never deleted.
+- The policy ships **off**. Until a firm admin turns it on, nothing about
+  submitting changes.
 
 ### When a submission fails
 
@@ -351,6 +389,35 @@ stamping from your account.
 - **Calendar** — each bill's due date appears on your compliance calendar as
   a *bill due* entry, so committed outflows sit beside your statutory
   deadlines.
+
+### Your VAT position
+
+The **VAT** page puts your month in one number pair — a *preparation aid*
+for the monthly VAT return, not the return itself:
+
+- **Output VAT** — the VAT on invoices you issued this month that actually
+  cleared the e-invoicing rails (credit notes are netted off; cancelled
+  documents don't count). This is the same basis as your accountant's VAT
+  filing pack, so the two can never disagree.
+- **Input VAT** — the VAT on the supplier bills you captured this month,
+  paid or not, split into **stamp-verified** and **unverified**. "Verified"
+  means the bill's most recent stamp check (Bills → Verify the stamp) found
+  the supplier's stamp valid on the national record.
+- **Net VAT position** = output minus *all* input VAT. The **defensible
+  net** = output minus *verified* input only — the number you could stand
+  behind in an inspection, because an input-VAT claim ultimately rests on
+  valid supplier stamps. The gap between the two is exactly your unverified
+  bills: verifying them closes it.
+- The month picker covers the last 12 months, current month included — the
+  current month is a live, month-to-date number.
+- **Foreign-currency documents**: everything is shown in naira, converted
+  at each document's own captured exchange rate. A foreign-currency
+  document *without* a rate is excluded from the totals and the page says
+  how many were excluded — an honest gap, never a guessed rate.
+- **CSV** downloads the position as one row per document (invoices, credit
+  notes and bills, each with its currency, rate, VAT and verified status) —
+  the credit notes appear as negative amounts, so each column adds up to
+  the total on screen. The basis note travels inside the file.
 
 ### Recurring invoices
 
@@ -638,6 +705,24 @@ invoice list — a partner can reach any failing invoice in three clicks.
   party's legal identity are retained
   under statutory record-keeping rules, and consent remains the client's
   own (offboarding never revokes it).
+- **Collection accounts** — the same drill-down page provisions a virtual
+  **collection account** for the client: a payment reference (`CA-…`) the
+  client puts on its invoices. When your payment provider reports money
+  received on that reference (quoting an invoice number), the platform
+  records a settlement event against the matching invoice and marks it
+  **Settled** — automatic payment observation, the third honest settlement
+  source after bank-statement matching and buyer flags. Accounts can be
+  deactivated (the reference stops resolving; the record stays). On
+  deployments without a configured provider the reference is simulated —
+  ask your administrator ([section 14](#14-for-administrators)).
+- **Monthly compliance pack** — also on the drill-down: pick a month and
+  **download the pack (PDF)** — a branded, client-ready summary of that
+  client's month: a cover note, the document register, receivables,
+  payables, the VAT position and the next deadlines, all computed from the
+  same numbers the dashboards show. **Notify client** offers the client a
+  "your pack is ready" alert over their chosen channels — sent only with
+  the client's consent, and the message itself carries no numbers (it's a
+  pointer, like every alert).
 
 Below the client list, the portfolio gathers the firm-wide working cards
 (each appears when its data exists), grouped under anchor chips **Clients /
@@ -658,6 +743,19 @@ Money / Compliance / Connections & delivery**:
   and a **settlement cross-check** (which of the month's invoices the
   platform has *observed* being paid — an assurance view, never an
   accusation).
+- **VAT positions** — every engaged client's month in one table: output VAT
+  vs input VAT, verified input, net and **defensible net** (verified input
+  only), with firm totals — the firm-side mirror of each client's own VAT
+  page ([section 4](#4-the-compliance-app--for-smes) → Your VAT position),
+  computed by the same engine so the two can never disagree. Sorted largest
+  net liability first, current month included, month picker for the last
+  12.
+- **Governance** *(firm admins)* — the firm's control switches; today one:
+  **Submission approval**. On, every invoice submission demands a recorded
+  approval by someone other than the submitter (maker-checker — see
+  [section 4](#4-the-compliance-app--for-smes) → When your firm requires a
+  second approver). Off by default; the switch takes effect immediately and
+  every change is audited.
 - **Quarterly review** — a closed quarter in one document: the three monthly
   VAT packs, submission outcomes and top rejection codes, a receivables
   snapshot, Clerk throughput, and its own cover note.
@@ -1102,6 +1200,7 @@ stateDiagram-v2
     Stamped --> Confirmed: buyer confirms
     Stamped --> Cancelled: cancel (reason recorded)
     Stamped --> Credited: credit note stamps
+    Stamped --> Settled: payment observed
     Confirmed --> Settled: payment observed
     Confirmed --> Credited
     Settled --> Credited
@@ -1222,6 +1321,8 @@ unreachable (404), not broken:
 | `MESSAGING_WEBHOOK_URL` (+ `MESSAGING_WEBHOOK_TOKEN`) | Real outbound message delivery; unset = in-process simulator (messaging ships dark anyway behind `messaging_notifications`). |
 | `PAYMENT_PROVIDER_URL` (+ `PAYMENT_PROVIDER_TOKEN`) | The hosted-checkout payment provider; unset = simulator (payment intents record, no checkout page). |
 | `PAYMENT_WEBHOOK_TOKEN` | The payment-confirmation webhook; unset = 404. |
+| `COLLECTION_PROVIDER_URL` (+ `COLLECTION_PROVIDER_TOKEN`) | The collection-account provisioning relay (real virtual accounts at a bank/PSP); unset = simulator (references are minted but no real account exists). |
+| `COLLECTION_WEBHOOK_TOKEN` | The inbound collection-payment webhook that settles invoices; unset = the rail 404s (fail-closed — nothing can mark invoices settled without it). |
 | `MESSAGES_RETENTION_DAYS` | Message-ledger retention sweep (default 180 days; malformed values disable the sweep). |
 | `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_MODEL_PER_MIN` | Per-principal rate limits (defaults 600 / 60; `0` disables a class). |
 | `CLERK_MODEL`, `CLERK_MODEL_TIERS`, `CLERK_FIRM_MONTHLY_TOKENS` | Clerk's model, optional per-purpose model routing, and the default per-firm monthly token allowance. |
@@ -1250,13 +1351,18 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **62 headless user-journey checks** on the
+  path-router and drives **77 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month) covering: auth incl. throttling,
   password change and reset, the full 2FA enrol → challenge → disable
   journey, the operator Desk, admin advisory, the auditor's read-only
   boundary, consent round-trip, supplier bills (payment flags, the payables
   summary, and the guard that refuses to stamp a supplier document), the
+  VAT position (API shape, the SME page, CSV) with the compliance-pack PDF
+  and its consent-gated notify, the maker-checker submission-approval
+  round-trip (409 without a second approver, 202 with one, policy restored),
+  collection accounts (provisioning and the fail-closed inbound webhook
+  settling a stamped invoice), the
   credit-note lifecycle, the SME dashboard/search/bulk-submit/recurring
   flows, and the integration layer
   end-to-end (API-key mint / bearer auth / revocation, a webhook delivery
@@ -1416,16 +1522,19 @@ on the invoice itself.
 | **Extraction case** | One document Clerk has read, waiting for (or through) human review. Approval creates a draft invoice only. |
 | **Fast lane** | Extraction cases that passed pre-flight cleanly with high confidence — eligible for one-click bulk approval, re-verified server-side. |
 | **Claims register** | The store of approved rule statements Ask Clerk answers from, maintained under maker-checker (draft → review → active). |
-| **Maker-checker** | The rule that the person who drafts a register claim can never be the one who approves it. |
+| **Maker-checker** | Two-person control: whoever proposes can never be the one who approves. Applies to register claims (draft vs approve) and — when a firm switches the policy on — invoice submission (approver vs submitter). |
 | **Digest** | Clerk's weekly firm briefing (opt-in) — every fact computed from records, Clerk only phrases. |
 | **Error catalogue** | The living map from every rejection code to a plain-language cause and fix. |
 | **Escalation** | A client's "I'm stuck" — lands in the operator queue with context. |
 | **Case** | A unit of Compliance Desk work: an escalation, a dead-lettered failure, or an unmapped code. |
 | **Confirmation** | A buyer's formal acknowledgment of an invoice in Buyer Rails. |
 | **No-set-off** | The buyer's acknowledgment that it won't offset the invoice against counterclaims. |
-| **Settlement event** | Evidence an invoice was paid, from an allowed source: statement match, buyer flag, payer flag (on a supplier bill), or (later) a collection-account feed. |
+| **Settlement event** | Evidence an invoice was paid, from an allowed source: statement match, buyer flag, payer flag (on a supplier bill), or an inbound payment on a collection account. |
 | **Bill** | A captured supplier invoice where your business is the *buyer*. Tracked (payment status, stamp verification) but never submitted for stamping — its payment status is derived from settlement evidence only. |
 | **Credit note** | A stamped document that formally reverses an invoice; the only way an invoice becomes **Credited**. |
+| **VAT position** | A month's output VAT (rails-accepted issued documents, credits netted) against input VAT (captured supplier bills, split verified/unverified), in naira. The **defensible net** deducts stamp-verified input only. A preparation aid, never a return. |
+| **Collection account** | A virtual payment reference (`CA-…`) provisioned per client; inbound payments reported on it become settlement events that mark the matching invoice Settled automatically. |
+| **Compliance pack** | The monthly per-client PDF a firm downloads (and can offer the client, consent-gated): cover note, document register, receivables, payables, VAT position and next deadlines — all from the same numbers the dashboards show. |
 | **Consent layer** | One of three permission tiers over client data: compliance, benchmarking, credit. |
 | **Feature flag** | The switch that keeps a release-gated capability dark until its evidence gate passes. |
 | **API key** | A firm-created machine credential (`mk_…`) carrying an explicit, narrow capability list. Shown once; revocable instantly. |

@@ -273,6 +273,183 @@ directions:
   carries the vendor party "Lagos Packaging Supplies Ltd" and draft bill
   `BILL-2001`, which the e2e payables journey rides.
 
+## Governance (maker-checker)
+
+Firm-level dual control over stamping submissions (contract 0.45.0,
+`firm_policies` + `invoice_approvals` — `lib/db/src/schema/governance.ts`,
+firm-keyed RLS via migration 0024; `modules/invoice/approvals.ts`,
+`routes/firm-policies.ts`).
+
+- **The policy** (`GET`/`PUT /firm/policies`): today one switch,
+  `submitApprovalRequired`, **default OFF** — no `firm_policies` row means
+  every policy at its default, so existing firms keep single-actor submits
+  untouched. Reads are open to every firm principal (`invoice.read` — the
+  submit UI must be able to explain WHY a submit will demand a colleague);
+  the write is an EXPLICIT `firm_admin` role check (the integrations-route
+  precedent), not a capability — no broad capability grant can accidentally
+  hand out "govern the firm's controls", and a machine principal's synthetic
+  `api_key` role can never switch the policy off around the humans it binds.
+  Lazy-upsert on the firm_id unique; audited with pointer-safe booleans
+  (before/after policy state only). The console surfaces it as the
+  **Governance** card on the portfolio (firm admins only).
+- **Approval rows are EVIDENCE**: never deleted, only revoked (`revokedAt`).
+  `POST /invoices/{id}/approve` (`invoice.approve` — firm_admin/firm_staff
+  only: a client_user must not clear its own firm's guard, and cross-tenant
+  operators are not the firm's checker) guards orientation first (a bill
+  earns the same 409 `NOT_SUBMITTABLE` a submit would) and then state — only
+  pre-submission paper (draft / validated / failed) can collect an approval
+  (else 409 `APPROVAL_BAD_STATE`). **Any successful content edit revokes the
+  invoice's live approvals** (`updateInvoiceContent` →
+  `revokeLiveApprovals`), so an approval can never cover content the
+  approver did not see. `GET /invoices/{id}/approvals` lists the full trail,
+  revoked rows included (same tenant/SEC-03 gates as the invoice read); the
+  SME invoice detail renders it as the Approvals card with an "Approve for
+  submission" action.
+- **The submit-time guard** (`assertSubmitApproved`, called inside
+  `submitInvoice` after orientation and BEFORE consent — an unapproved
+  submit must not leak the supplier's consent standing): policy off is a
+  no-op; policy on demands a LIVE approval by a principal **OTHER than the
+  submitting actor** — dual control means two humans, not one human clicking
+  twice — or the submit 409s `APPROVAL_REQUIRED` with a plain-language
+  message. When the actor is unknown (system/worker paths carry no
+  principal) any live approval counts: the human separation was enforced
+  when the approval and the triggering action were recorded. The approver ≠
+  submitter check deliberately bites at submit time, not approve time — an
+  approval is evidence anyone entitled may record; what matters is that the
+  eventual submitter is somebody else.
+
+## Collection accounts
+
+Virtual account references per client whose inbound payments auto-observe
+settlements — the mandatory-source settlement hierarchy's auto-observed
+member (`modules/collections/{service,provider}.ts`,
+`routes/collections.ts`, `collection_accounts` + RLS via migration 0024).
+
+- **Provisioning** (`GET`/`POST /collection-accounts`,
+  `POST /collection-accounts/{id}/deactivate`): the statement-connections
+  gates exactly — `statement.write` + firm scope (firm_admin/firm_staff;
+  deliberately NOT client_user (SEC-03) nor the cross-tenant roles) plus
+  `assertPartyAccess` on the named client. The **provider seam**
+  (`provider.ts`, the payments/messaging transport idiom) is dark by
+  default: with no `COLLECTION_PROVIDER_URL` the in-process simulator mints
+  a `CA-…` reference and provisions nothing; setting the env lights a
+  generic JSON relay (`COLLECTION_PROVIDER_TOKEN` rides as `x-op-token`, 5s
+  timeout) that owns the real bank/PSP conversation and answers
+  `{accountReference}`. **Fail closed on a broken relay** (502, no row): an
+  account that does not exist provider-side must never be stored — no
+  payment could reach it, and the dead row would shadow the client's real
+  account on retry. Deactivation is an idempotent CAS on `active` — the
+  webhook stops resolving the reference, the row stays as provenance. The
+  console's client drill-down carries the Collection accounts card.
+- **The inbound webhook** (`POST /api/collections/inbound`) is a machine
+  rail deliberately OFF the OpenAPI contract — no generated SDK grows a way
+  to mark invoices settled. **FAIL-CLOSED** (the inbound-rail stance, the
+  opposite of `METRICS_TOKEN`'s open-when-unset default): this endpoint
+  settles money state on the word of an unauthenticated caller, so with
+  `COLLECTION_WEBHOOK_TOKEN` unset the rail does not exist — every request
+  404s exactly like an unknown route. Set, the shared secret IS the
+  credential (constant-time compare via `lib/op-token.ts`, `x-op-token` or
+  `?token=`). The route answers **202 either way**: an unknown or
+  deactivated reference — or an unmatchable invoice number — all look
+  identical, so a caller holding the secret still cannot probe which
+  references are live (an unmatched payment on a LIVE account additionally
+  lands a pointer-only `collections.unmatched` audit for the operator; an
+  unknown reference stays silent).
+- **Settlement semantics** (`recordInboundCollection`, a `NO_CONTEXT_ROUTES`
+  path running its own short bypass transaction — event + CAS + lifecycle +
+  audit commit before the 202 goes out): the payment binds by the account's
+  own firm + client as SUPPLIER + the quoted invoice number, `kind=invoice`
+  only, status ∈ submitted/stamped/confirmed — a stranger's coincidental
+  number can never settle cross-tenant, and credit notes are never targets.
+  Every delivery appends one `collection_account` settlement event (a
+  replayed webhook records again — evidence, never an update; `actorId`
+  null marks the machine observer). The status transition is the buyer
+  paid-flag branch exactly: **CAS to `settled`** only where the lifecycle
+  allows (stamped/confirmed; a `submitted` receivable records the event
+  only, and a concurrent cancel/credit wins — the event stands as lineage,
+  the transition is skipped). Pointer-only audit; the settlement event
+  itself carries the figures for whoever is entitled to read them.
+
+## VAT position & FX
+
+The client's month in one number pair — output VAT from issued documents vs
+input VAT from captured supplier bills, with the verified split that makes
+the "defensible" net honest (`modules/invoice/vat-position.ts`,
+`routes/vat-position.ts`; deterministic SQL, computed on demand, nothing
+stored).
+
+- **Surfaces & gates.** `GET /vat-position` + `GET /vat-position/export`
+  (CSV): `invoice.read` + `resolveClientAnalyticsScope` (SEC-03 — a
+  client_user is pinned to its own party, a firm principal names the
+  client); the SME app's **VAT** page renders the payload.
+  `GET /console/vat-positions` (firm rollup, one row per open/in-progress
+  engaged client + totals summed FROM the rows so the total line can never
+  disagree with its column): `console.portfolio.read` + firm scope — a
+  client_user must never see sibling clients' figures; console portfolio
+  card. **Live-month discipline**: the requestable months are the last 12
+  Lagos months INCLUDING the current one (a position is a running
+  month-to-date number — unlike the closed-month VAT pack), one option list
+  shared with the compliance pack.
+- **Output basis mirrors the VAT pack** (`acceptedMonthDocsSql` mirrors
+  `computeVatPack`'s predicate for predicate): Lagos issue-month bucketing,
+  only documents with an accepted submission attempt, credit notes netted
+  as offsets, cancelled documents excluded — the position and the pack can
+  never disagree about "accepted in the month".
+- **Input side is the captured bills** (`BILL_ORIENTATION`): bills stay
+  draft forever and never touch the rails, so no accepted-attempt basis
+  EXISTS for them — every non-cancelled bill issued in the month counts,
+  paid or not (input VAT hangs on the bill, not on payment evidence). The
+  **verified split** takes each bill's NEWEST `bill_verifications` result
+  (the same "newest check wins" ordering as the bills ledger), and
+  `defensibleNetVat` deducts verified input only — the number a partner can
+  stand behind in an inspection.
+- **FX capture** (`invoices.fx_rate_to_ngn`, contract 0.45.0):
+  `fxRateToNgn` — NGN per one unit of the document currency — is captured
+  at create (foreign-currency documents only; a rate on an NGN invoice is
+  refused, since converters treat null as "already naira" and a stored rate
+  would double-convert; positive, ≤6 decimals, validated before the insert)
+  and editable via PATCH while content is still mutable (null clears it —
+  e.g. the currency was corrected to NGN; like any content edit, this
+  revokes live approvals). The SME invoice form shows the currency picker
+  and — for foreign currencies — the exchange-rate field.
+- **excludedForFx honesty.** Every position amount is NGN: non-NGN
+  documents convert at their captured rate, and a non-NGN document WITHOUT
+  a rate is excluded from every total and every count except
+  `excludedForFx` — **a rate of 1 is never assumed**. The disclosure note
+  stating the whole basis travels with every surface (API, SME page, and as
+  a trailing row in the CSV so the caveats can't be separated from the
+  file); the CSV's per-document `vatNgn` is the SIGNED contribution (credit
+  notes negative, blank when FX-excluded), so each side's column sums to
+  its total. The invoices CSV export (`GET /invoices/export`) gained
+  APPENDED `fxRateToNgn` / `ngnEquivalent` columns on the same rule — an
+  honest blank for unconvertible rows, never an assumed 1.0.
+
+## Monthly compliance pack
+
+One client's Lagos month as a single branded PDF
+(`modules/invoice/compliance-pack.ts` computes the facts,
+`pack-pdf.ts` renders, `routes/compliance-pack.ts`): cover note, document
+register (every document the client put a number on, drafts and failures
+included — 200-row cap with a cap+1 truncation disclosure), receivables,
+payables, the VAT position, and deadlines (the next statutory VAT-return
+21st plus the client's unsubmitted-receivable backlog). Every section
+reuses the module that already owns its numbers (receivables.ts,
+payables.ts, vat-position.ts), so the pack can never disagree with the
+dashboards it summarizes; month discipline and scope gates are the VAT
+position's exactly (`invoice.read` + `resolveClientAnalyticsScope`,
+live-month option list). The only model touch is the cover-note phrasing
+(`modules/clerk/pack-note.ts`, purpose `draft_pack_note` — digest posture,
+template always answers; see `docs/clerk-ai.md` § Reports); whitelabel
+theming follows the invoice-PDF fallback rule. `POST
+/compliance-pack/notify` (`console.portfolio.read` + firm scope +
+`assertPartyAccess` — firm-side only, a client does not notify itself)
+answers **202 unconditionally**: consent (CORE-03) is enforced INSIDE
+`fanOutAlert` and the message is pointer-only (SEC-12 — a template key and
+opaque refs, never a month or an amount), so the endpoint can never be used
+as a consent oracle; the ask itself is audited pointer-only
+(`pack.notify`). The console's client drill-down carries the pack card
+(month picker, PDF download, "Notify client").
+
 ## Billing, PDF & exports
 
 - **Branded invoice PDF** (`modules/invoice/pdf.ts`,
