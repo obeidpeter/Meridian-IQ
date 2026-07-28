@@ -197,10 +197,16 @@ const GROWN_INTENT_CAP = 40;
 const DIRECTORY_OVERFLOW = "@@DIRECTORY_OVERFLOW@@";
 
 // NFKC folds homoglyphs and width/space variants (NBSP, Kelvin-sign K…);
+// invisible format characters (soft hyphen, ZWSP — Unicode Cf) are
+// stripped so they cannot hide a name from the matcher;
 // whitespace runs collapse so "Acme  Ltd" and "Acme Ltd" match "Acme
 // Ltd". Applied to the question AND every identity before matching.
 function normalizeForScrub(s: string): string {
-  return s.normalize("NFKC").replace(/\s+/g, " ").trim();
+  return s
+    .normalize("NFKC")
+    .replace(/\p{Cf}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // Informal-form variants: iteratively strip trailing legal/descriptor tokens

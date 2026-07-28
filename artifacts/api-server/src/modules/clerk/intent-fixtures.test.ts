@@ -189,6 +189,12 @@ test("scrub catches surface variants: NBSP, homoglyphs, informal short forms", (
     ),
     "What is unsubmitted for Alpha Ventures Ltd?",
   );
+  // An invisible format character INSIDE the name (soft hyphen) cannot
+  // hide it — Cf characters are stripped before matching.
+  assert.equal(
+    scrubIntentQuestion("Chase Ac­me Ltd for me", ids(["Acme Ltd"])),
+    "Chase Alpha Ventures Ltd for me",
+  );
 });
 
 test("scrub scrubs known TINs and refuses residual detections", () => {
