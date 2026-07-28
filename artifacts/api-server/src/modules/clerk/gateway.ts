@@ -133,7 +133,10 @@ export type ClerkPurpose =
   // Payment-chaser drafting (draft-chaser.ts): phrases one outstanding
   // receivable's stored facts (plus the buyer's mined payment rhythm) into a
   // reminder the client copies and sends; template fallback, never stored.
-  | "draft_chaser";
+  | "draft_chaser"
+  // Compliance-pack cover note (pack-note.ts): phrases the deterministic
+  // monthly client pack's computed facts; template fallback, nothing stored.
+  | "draft_pack_note";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;

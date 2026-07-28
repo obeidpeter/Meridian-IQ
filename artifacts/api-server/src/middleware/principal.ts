@@ -78,6 +78,10 @@ export const PUBLIC_PATHS = new Set([
   // machine-caller posture — PAYMENT_WEBHOOK_TOKEN is the credential; the
   // route fails closed (404) while the secret is unconfigured.
   "/api/billing/payments/confirm",
+  // Inbound collection webhook (routes/collections.ts): the same
+  // machine-caller posture — COLLECTION_WEBHOOK_TOKEN is the credential; the
+  // route fails closed (404) while the secret is unconfigured.
+  "/api/collections/inbound",
 ]);
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production";

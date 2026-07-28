@@ -44,6 +44,14 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email", "push"],
     description: "A monthly compliance statement is ready to view.",
   },
+  // Compliance-round delivery: a client's monthly compliance pack is ready.
+  // Pointer only (SEC-12): the message names no month, amounts or counts —
+  // the client opens the app to pull the pack itself.
+  compliance_pack_ready: {
+    key: "compliance_pack_ready",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "Monthly compliance pack is ready",
+  },
   // Weekly firm digest delivery to OPTED-IN firm staff (see
   // staff_notification_preferences; not the CORE-03 client-alert model).
   // Pointer only (SEC-12): the message names no counts or amounts — the staff

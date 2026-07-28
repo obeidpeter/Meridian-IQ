@@ -19,6 +19,7 @@ import {
   digestWeekStart,
   generateFirmDigest,
   latestDigestForFirm,
+  vatReturnInDays,
 } from "./digest.ts";
 import { draftClaimWithClerk } from "./draft-claim.ts";
 import { createDraft } from "../invoice/service.ts";
@@ -363,6 +364,7 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     unmatchedCreditClients: 0,
     chasedTwiceCount: 0,
     payablesDueCount: 0,
+    vatReturnInDays: null,
   });
   assert.match(quiet.headline, /on track/);
   assert.equal(quiet.bullets.length, 1);
@@ -382,9 +384,10 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     unmatchedCreditClients: 1,
     chasedTwiceCount: 1,
     payablesDueCount: 2,
+    vatReturnInDays: 3,
   });
   assert.equal(busy.headline, "3 invoices need attention this week.");
-  assert.equal(busy.bullets.length, 11);
+  assert.equal(busy.bullets.length, 12);
   assert.match(busy.bullets[0], /2 invoices are past the 7-day submission window/);
   assert.match(busy.bullets[5], /2 regular invoices look unraised across 1 client/);
   assert.match(
@@ -404,6 +407,47 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     busy.bullets[10],
     /2 supplier bills are due within the next 7 days or already overdue/,
   );
+  assert.match(
+    busy.bullets[11],
+    /Monthly VAT return due in 3 days — VAT returns fall due on the 21st/,
+  );
+
+  // Deadline day itself reads "today"; a null countdown adds no bullet (the
+  // quiet case above already pins that).
+  const dueToday = buildTemplateDigest({
+    unsubmittedCount: 0,
+    dueSoonCount: 0,
+    overdueCount: 0,
+    failedCount: 0,
+    receivablesOver60Count: 0,
+    unbilledCount: 0,
+    unbilledClients: 0,
+    expectedWeekCount: 0,
+    expectedWeekTotalNgn: "0.00",
+    chaseWorthyCount: 0,
+    unmatchedCreditCount: 0,
+    unmatchedCreditClients: 0,
+    chasedTwiceCount: 0,
+    payablesDueCount: 0,
+    vatReturnInDays: 0,
+  });
+  assert.equal(dueToday.bullets.length, 1);
+  assert.match(dueToday.bullets[0], /Monthly VAT return due today/);
+});
+
+test("vatReturnInDays counts to the Lagos 21st and goes quiet beyond a week", () => {
+  // 5 July: 16 days out — quiet.
+  assert.equal(vatReturnInDays(new Date("2026-07-05T12:00:00Z")), null);
+  // 14 July: exactly 7 days out — the first day it speaks.
+  assert.equal(vatReturnInDays(new Date("2026-07-14T12:00:00Z")), 7);
+  // 20 July 23:30 UTC is ALREADY 21 July in Lagos (WAT +01:00): due today.
+  assert.equal(vatReturnInDays(new Date("2026-07-20T23:30:00Z")), 0);
+  assert.equal(vatReturnInDays(new Date("2026-07-21T12:00:00Z")), 0);
+  // Past the 21st the clock re-arms on NEXT month's 21st — 30 days out, quiet.
+  assert.equal(vatReturnInDays(new Date("2026-07-22T12:00:00Z")), null);
+  // Year rollover: 15 December -> 21 December is 6 days out.
+  assert.equal(vatReturnInDays(new Date("2026-12-15T12:00:00Z")), 6);
+  assert.equal(vatReturnInDays(new Date("2026-12-31T12:00:00Z")), null);
 });
 
 test("digestWeekStart anchors to Monday 00:00 UTC", () => {
@@ -469,6 +513,9 @@ test("computeDigestFacts counts from the firm's invoices via SQL", async () => {
     1,
     "the unpaid bill due in 3 days is the payables fact",
   );
+  // The VAT-return countdown rides along as a pure Lagos-calendar fact —
+  // same clock as the exported helper, no SQL involved.
+  assert.equal(facts.vatReturnInDays, vatReturnInDays());
 });
 
 test("generateFirmDigest without a gateway stores the template narrative once", async () => {

@@ -12,6 +12,7 @@ import {
   settlementEventsTable,
   usersTable,
   submissionAttemptsTable,
+  type ProtectedFact,
 } from "@workspace/db";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window.ts";
 import { askClerk } from "./ask.ts";
@@ -700,6 +701,59 @@ test("payables intents: bills due and total owed are buyer-side, client-pinnable
   // here the sample is checked by name.
   const overdue = await lookup("data.overdue_submissions");
   assert.ok(!overdue?.facts.find((f) => f.key === "sample")?.value.includes(BILL_OLD_NUM));
+});
+
+test("data.vat_position phrases platform-computed totals — client-pinnable, month-aware and linkless", async () => {
+  const intent = getDataIntent("data.vat_position");
+  assert.ok(intent, "the catalogue carries the VAT position intent");
+  assert.deepEqual(intent.accepts, { month: true, client: true });
+  assert.ok(
+    CLIENT_SAFE_DATA_INTENTS.some((i) => i.key === "data.vat_position"),
+    "client-safe: the forced own-party pin reduces it to the caller's own documents",
+  );
+
+  // Firm-wide: the rollup totals, one row per engaged client (firm A engages
+  // exactly two parties here), defaulting to the current Lagos month.
+  const firmWide = await lookup("data.vat_position");
+  assert.ok(firmWide);
+  assert.match(firmWide.text, /VAT position across 2 engaged clients in /);
+  assert.match(firmWide.text, /defensible net \(verified input only\)/);
+  assert.equal(
+    firmWide.links,
+    undefined,
+    "VAT position answers carry NO links (the input side is bills — SEC-03)",
+  );
+  for (const key of [
+    "output_vat",
+    "input_vat",
+    "input_vat_verified",
+    "net_vat",
+    "defensible_net_vat",
+  ]) {
+    // Explicitly typed: the assert.ok(firmWide) narrowing above plus the
+    // loop back-edge otherwise trips TS7022 on the inferred type.
+    const fact: ProtectedFact | undefined = firmWide.facts.find(
+      (f) => f.key === key,
+    );
+    assert.equal(fact?.kind, "amount", `${key} fact present as an amount`);
+    assert.equal(fact?.unit, "NGN");
+  }
+
+  // The client pin + an explicit month key resolve exactly like the other
+  // parameterized lookups.
+  const pinned = await inClerkScope(firmA, () =>
+    runDataIntent("data.vat_position", firmA, {
+      clientPartyId: partyA2,
+      clientName: `DI Party Z ${SALT}`,
+      monthStart: MONTHS[0].monthStart,
+      monthLabel: MONTHS[0].label,
+    }),
+  );
+  assert.ok(pinned);
+  assert.ok(pinned.text.includes(`for DI Party Z ${SALT}`));
+  assert.ok(pinned.text.includes(`in ${MONTHS[0].label}`));
+  assert.equal(pinned.links, undefined);
+  assert.equal(pinned.facts.find((f) => f.key === "net_vat")?.unit, "NGN");
 });
 
 test("multi-turn: a previous data answer threads follow-up context by keys only", async () => {

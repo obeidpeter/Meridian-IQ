@@ -4,6 +4,7 @@ import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 import { isPurposePermitted } from "../consent/consent";
 import { validateInvoice, submitInvoice } from "./service";
+import { firmSubmitApprovalRequired } from "./approvals";
 import type { FieldError } from "./canonical";
 
 // Bulk validate & submit: the spreadsheet import lands hundreds of drafts in
@@ -53,6 +54,17 @@ export async function bulkSubmit(
       403,
     );
   }
+
+  // Maker-checker policy state, read ONCE up front like the consent check —
+  // but NOT enforced here: enforcement stays per-row inside submitInvoice
+  // (assertSubmitApproved), where a row lacking a colleague's live approval
+  // surfaces as outcome "failed" carrying the APPROVAL_REQUIRED message. The
+  // hoisted read only annotates the batch audit so an all-failed batch is
+  // explicable at a glance. Cross-tenant callers (firmId null) have no single
+  // policy to note; each invoice's own firm policy still applies per row.
+  const submitApprovalRequired = firmId
+    ? await firmSubmitApprovalRequired(firmId)
+    : null;
 
   const batchSize = Math.min(Math.max(limit ?? MAX_BATCH, 1), MAX_BATCH);
   const conditions = [
@@ -129,6 +141,7 @@ export async function bulkSubmit(
       invalidCount,
       failedCount,
       remaining: Math.max(0, pending - rows.length),
+      submitApprovalRequired,
     },
   });
 
