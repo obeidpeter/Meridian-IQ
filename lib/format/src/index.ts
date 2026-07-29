@@ -392,6 +392,7 @@ export const POLICY_PAUSE_REASON_LABELS: Record<string, string> = {
   grantor_inactive: "paused — the granter's access changed",
   consent_missing: "paused — compliance consent is missing",
   failed_targets: "paused — too many failures in the last run",
+  unknown_kind: "paused — this action kind can't run automatically",
 };
 
 export function policyPauseReasonLabel(reason: string | null): string {

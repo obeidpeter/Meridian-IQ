@@ -16,7 +16,6 @@ import {
   MAX_ACTION_TARGETS,
   executeAction,
   proposalForKind,
-  type ActionKind,
 } from "./actions";
 import { registerSweep } from "../pipeline/pipeline";
 import { atMostHourly } from "./watch-shared";
@@ -105,8 +104,9 @@ async function policiesEnabled(firmId: string): Promise<boolean> {
 
 export interface ActionPolicyList {
   policies: ClerkActionPolicy[];
-  // The grant affordance gate (mirrors ActionProposals' posture: an empty
-  // list while dark, never an error).
+  // The grant AFFORDANCE gate only. Grants deliberately stay listed while
+  // the flag is dark — they must remain visible, pausable and revocable
+  // even when the engine that would run them is off.
   enabled: boolean;
 }
 
@@ -333,7 +333,10 @@ export async function resumeActionPolicy(
     entityType: "clerk_action_policy",
     entityId: id,
     // A human resuming past a tripwire is a decision worth remembering —
-    // record what the pause had said.
+    // record what the pause had said. (clearedReason comes from the load
+    // above; a tripwire landing in the microsecond between load and update
+    // could relabel it, but the clear itself is what the resumer intended
+    // and the next run re-checks everything regardless.)
     after: { kind: policy.kind, clearedReason: policy.pausedReason },
   });
   return row;
@@ -384,7 +387,11 @@ function tooManyFailures(requested: number, failed: number): boolean {
 
 async function autoPause(
   policy: ClerkActionPolicy,
-  reason: "grantor_inactive" | "consent_missing" | "failed_targets",
+  reason:
+    | "grantor_inactive"
+    | "consent_missing"
+    | "failed_targets"
+    | "unknown_kind",
 ): Promise<boolean> {
   return runInBypassContext(async () => {
     const [row] = await getDb()
@@ -448,7 +455,7 @@ type PolicyRunOutcome =
   | "auto_paused"
   | "skipped_dark"
   | "skipped_empty"
-  | "skipped_claimed";
+  | "skipped_raced";
 
 async function runOnePolicy(
   policy: ClerkActionPolicy,
@@ -458,10 +465,28 @@ async function runOnePolicy(
   // flipping it back on mid-morning lets today's batch still run.
   if (!(await policiesEnabled(policy.firmId))) return "skipped_dark";
 
+  // The kind column is open text (catalogue growth), but this sweep only
+  // ever runs the automatable kinds. A row outside POLICY_KINDS — an ops
+  // fix-up, a future backfill bug — must fail CLOSED here (round-28 review
+  // M2): falling through proposalForKind would send draft_chasers to the
+  // chaser builder and burn unattended model calls on drafts nobody can
+  // ever read. (Guarded via a local: TS property narrowing does not
+  // survive the awaits below.)
+  const kind = policy.kind;
+  if (!isPolicyKind(kind)) {
+    return (await autoPause(policy, "unknown_kind"))
+      ? "auto_paused"
+      : "skipped_raced";
+  }
+
   const role = await grantorRole(policy);
   if (!role) {
-    await autoPause(policy, "grantor_inactive");
-    return "auto_paused";
+    // autoPause reports whether THIS instance's compare-and-set won; a
+    // loss means a concurrent instance (or a human pause) got there first
+    // — same end state, but only the winner counts it (review NIT).
+    return (await autoPause(policy, "grantor_inactive"))
+      ? "auto_paused"
+      : "skipped_raced";
   }
 
   // Consent, re-checked per run under the firm's own RLS context exactly
@@ -473,8 +498,9 @@ async function runOnePolicy(
     () => isPurposePermitted(policy.clientPartyId, "compliance_submission"),
   );
   if (!consented) {
-    await autoPause(policy, "consent_missing");
-    return "auto_paused";
+    return (await autoPause(policy, "consent_missing"))
+      ? "auto_paused"
+      : "skipped_raced";
   }
 
   // Assemble from the live proposal builders under the firm's context —
@@ -482,12 +508,7 @@ async function runOnePolicy(
   // would show a human.
   const proposal = await runRequestContext(
     { bypass: false, firmId: policy.firmId },
-    () =>
-      proposalForKind(
-        policy.kind as ActionKind,
-        policy.firmId,
-        policy.clientPartyId,
-      ),
+    () => proposalForKind(kind, policy.firmId, policy.clientPartyId),
   );
   const ids = (proposal?.targets ?? [])
     .slice(0, policy.maxTargetsPerRun)
@@ -517,7 +538,8 @@ async function runOnePolicy(
       )
       .returning({ id: clerkActionPoliciesTable.id }),
   );
-  if (claimed.length === 0) return "skipped_claimed";
+  // Another instance won the day's compare-and-set — same end state.
+  if (claimed.length === 0) return "skipped_raced";
 
   // The grantor, as they stand TODAY (current role from the membership
   // re-check). executeAction owns everything from here — flag, consent,
@@ -535,15 +557,16 @@ async function runOnePolicy(
     policy.firmId,
     policy.clientPartyId,
     policy.grantedBy,
-    policy.kind,
+    kind,
     ids,
     principal,
     { policyId: policy.id },
   );
 
   if (tooManyFailures(decision.requestedCount, decision.failedCount)) {
-    await autoPause(policy, "failed_targets");
-    return "ran_then_paused";
+    return (await autoPause(policy, "failed_targets"))
+      ? "ran_then_paused"
+      : "ran";
   }
   return "ran";
 }
@@ -558,6 +581,10 @@ export interface ActionPolicySweepResult {
 // (Lagos calendar). Per-policy failures are isolated — one broken firm
 // must never stall the rest of the fleet.
 export async function runActionPolicySweep(): Promise<ActionPolicySweepResult> {
+  // Computed once per pass: a pass straddling Lagos midnight can claim the
+  // OLD date at 00:01 and the policy then legitimately runs again under the
+  // new date an hour later — each Lagos day still claims at most once,
+  // which is the invariant that matters.
   const today = lagosDateString(new Date());
   const due = await runInBypassContext(() =>
     getDb()

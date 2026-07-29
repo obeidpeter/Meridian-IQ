@@ -116,6 +116,9 @@ describe("policyPauseReasonLabel", () => {
     expect(policyPauseReasonLabel("failed_targets")).toBe(
       "paused — too many failures in the last run",
     );
+    expect(policyPauseReasonLabel("unknown_kind")).toBe(
+      "paused — this action kind can't run automatically",
+    );
     expect(policyPauseReasonLabel(null)).toBe("paused manually");
     expect(policyPauseReasonLabel("new_reason")).toBe("paused — new_reason");
   });

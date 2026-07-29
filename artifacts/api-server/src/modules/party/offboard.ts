@@ -1,8 +1,9 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import {
   db as baseDb,
   getDb,
   alertPreferencesTable,
+  clerkActionPoliciesTable,
   engagementsTable,
   invitationsTable,
   membershipsTable,
@@ -34,6 +35,9 @@ import { getParty } from "./party";
 //      THIS firm's document vocabulary with the party — firm-keyed data);
 //  (d) its pending invitations for the party -> revoked (compare-and-set on
 //      status, mirroring the invitation revoke route);
+//  (d2) its live standing approvals for the party -> revoked (round 28): the
+//      autopilot must die with the relationship — see the step's comment for
+//      why no sweep tripwire would catch a staff-granted policy;
 //  (e) the LAST-ENGAGEMENT rule: alert_preferences (contact PII:
 //      whatsappTo/phone/email, the contactSetByRole routing gate, and the
 //      channel toggles) and push_devices are PARTY-keyed and shared across
@@ -168,6 +172,41 @@ export async function offboardClient(
     )
     .returning({ id: invitationsTable.id });
 
+  // (d2) Revoke this firm's live standing approvals for the party (round-28
+  // review M1): an offboarded client must never keep an unattended autopilot
+  // running. The sweep's own tripwires would NOT catch a staff-granted
+  // policy — the staff membership survives offboarding and consent is
+  // client-owned (deliberately untouched here), so without this step the
+  // policy keeps auto-submitting the offboarded client's paper daily, and
+  // (b) just deleted the client logins that could have seen or stopped it.
+  // Revoke, not pause: the relationship is over, re-engagement takes a
+  // fresh grant, and the rows survive as evidence.
+  const revokedPolicies = await getDb()
+    .update(clerkActionPoliciesTable)
+    .set({ revokedAt: new Date(), revokedBy: actor.userId })
+    .where(
+      and(
+        eq(clerkActionPoliciesTable.firmId, firmId),
+        eq(clerkActionPoliciesTable.clientPartyId, partyId),
+        isNull(clerkActionPoliciesTable.revokedAt),
+      ),
+    )
+    .returning({
+      id: clerkActionPoliciesTable.id,
+      kind: clerkActionPoliciesTable.kind,
+    });
+  for (const p of revokedPolicies) {
+    await appendAudit({
+      actorId: actor.userId,
+      actorRole: actor.role,
+      firmId,
+      action: "clerk.action.policy_revoked",
+      entityType: "clerk_action_policy",
+      entityId: p.id,
+      after: { kind: p.kind, via: "offboard" },
+    });
+  }
+
   // (e) Last-engagement probe — see the module header for why this single
   // existence read runs on the base client rather than the request tx.
   const [otherFirmEngagement] = await baseDb
@@ -241,6 +280,7 @@ export async function offboardClient(
       membershipsRemoved: removedMemberships.length,
       aliasesDeleted: deletedAliases.length,
       invitationsRevoked: revokedInvitations.length,
+      standingApprovalsRevoked: revokedPolicies.length,
       alertPreferencesCleared: clearedPreferences,
       pushDevicesRemoved: removedDevices,
       contactCleared,

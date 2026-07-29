@@ -285,6 +285,66 @@ test("action execution runs outside the request transaction, model call outside 
   );
 });
 
+// ---- Standing approvals (round 28) ------------------------------------------
+// The policy routes are ordinary in-transaction wiring, but their authz
+// stack spans the route file AND the module: no module test drives the HTTP
+// layer, so each gate gets a source pin (round-28 review M4).
+test("standing-approval routes: read gate, grant walls, firm-scoped lifecycle", () => {
+  const source = src("routes/clerk/actions.ts");
+
+  // GET lists grants under the same read capability as proposals/decisions.
+  const getBlock = routeBlock(source, "/clerk/action-policies");
+  assert.ok(
+    getBlock.includes('assertCan(req.principal, "invoice.read")'),
+    "listing grants is a read surface",
+  );
+
+  // Granting IS a standing submission authorization: invoice.submit plus
+  // the execute route's IDOR wall (assertPartyAccess), re-walked here.
+  const grantStart = source.indexOf('router.post("/clerk/action-policies"');
+  assert.ok(grantStart >= 0, "the grant route exists");
+  const grantEnd = source.indexOf("router.", source.indexOf("=>", grantStart));
+  const grantBlock = source.slice(
+    grantStart,
+    grantEnd === -1 ? undefined : grantEnd,
+  );
+  assert.ok(
+    grantBlock.includes('assertCan(req.principal, "invoice.submit")'),
+    "granting carries the submit capability — a standing approval authorizes submissions",
+  );
+  assert.ok(
+    grantBlock.includes(
+      "await assertPartyAccess(req.principal, clientPartyId)",
+    ),
+    "the grant re-walks the party IDOR wall exactly like execute",
+  );
+
+  // The lifecycle mutations resolve the firm from the PRINCIPAL (an
+  // operator/auditor has no tenant to mutate under) and the module applies
+  // the SEC-03 wall from the loaded row.
+  for (const path of [
+    "/clerk/action-policies/:id/pause",
+    "/clerk/action-policies/:id/resume",
+    "/clerk/action-policies/:id/revoke",
+  ]) {
+    const block = routeBlock(source, path);
+    assert.ok(
+      block.includes('assertCan(req.principal, "invoice.submit")'),
+      `${path} carries the submit capability`,
+    );
+    assert.ok(
+      block.includes("requireFirmScope(req.principal)"),
+      `${path} resolves the firm from the principal, never the body`,
+    );
+  }
+  assert.ok(
+    src("modules/clerk/action-policies.ts").includes(
+      "assertClientPartyScope(principal, policy.clientPartyId)",
+    ),
+    "the module walls a client_user to its own party's grants (SEC-03)",
+  );
+});
+
 test("bulk submit runs outside the request transaction with per-item caller-posture commits", () => {
   // The LAST batch surface converted (posture round): inside one request
   // transaction the first row's appendAudit held the GLOBAL audit advisory

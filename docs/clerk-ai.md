@@ -302,22 +302,36 @@ sweep then runs it — but a grant is authorization, never a bypass:
   (`atMostHourly`), per-policy failures isolated.
 - **The sweep polices itself.** A run where half or more of the targets
   fail auto-pauses the policy (`failed_targets`) — something is
-  structurally wrong and a human must look before it runs again. Pause is
-  reversible (a human resume clears a tripwire; the next run re-checks
-  everything anyway); revoke is permanent evidence — the row survives and
-  re-automating takes a fresh grant. Tripwire pauses audit as
-  `clerk.action.policy_auto_paused` with the system actor
-  (`action-policy-sweep`); grant/pause/resume/revoke audit under the
-  human's id.
+  structurally wrong and a human must look before it runs again. A row
+  whose `kind` falls outside `POLICY_KINDS` (an ops fix-up, a backfill
+  bug — the API never writes one) pauses as `unknown_kind` instead of
+  falling through the proposal dispatcher into the chaser builder's
+  model calls. Pause is reversible (a human resume clears a tripwire;
+  the next run re-checks everything anyway); revoke is permanent
+  evidence — the row survives and re-automating takes a fresh grant.
+  Tripwire pauses audit as `clerk.action.policy_auto_paused` with the
+  system actor (`action-policy-sweep`); grant/pause/resume/revoke audit
+  under the human's id — including the revocations `offboardClient`
+  performs: offboarding a client revokes the firm's live grants for that
+  party (step d2), because no sweep tripwire would ever catch a
+  STAFF-granted policy after offboarding deleted the client logins that
+  could have paused it (the staff membership survives, and consent is
+  client-owned and untouched).
 - **The paper trail stays one human deep.** A policy run's decision row
   carries `policyId` and `decidedBy` = the GRANTOR (maker-checker still
   bites per row inside `submitInvoice`); the batch audit carries the
-  policy pointer. The cards render policy-run decisions with an "· auto"
-  tag, an Automation strip (status, pause/resume/revoke), and an
-  "Automate daily" affordance next to each automatable proposal —
+  policy pointer. Eyes-open caveat: the PER-INVOICE lifecycle events and
+  audits inside `submitInvoice` name the grantor with no policy marker —
+  a row-level reader correlates through the decision row. Surfaces: both
+  cards grow an Automation strip (status line, pause/resume/revoke) and
+  an "Automate daily" affordance next to each automatable proposal —
   consent-grade grant copy lives in `@workspace/format`
-  (`policyGrantDescription`). Notifications about auto-pauses ride the
-  existing decision strip for now — a digest/inbox signal is deferred.
+  (`policyGrantDescription`); the CONSOLE card additionally tags
+  policy-run lines "· auto" in its recent-decisions strip (the SME card
+  has no decisions strip — its evidence is the status line's last-run
+  stamp). Deferred, deliberately visible: an SME-side run record and a
+  digest/inbox signal for auto-pauses — until then a paused autopilot
+  surfaces only when someone opens a dashboard.
 
 ## Ask Clerk (grounded firm-data Q&A)
 

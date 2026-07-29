@@ -1,7 +1,7 @@
-import { test, before } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import {
   getDb,
   auditEventsTable,
@@ -204,6 +204,23 @@ before(async () => {
   ]);
 });
 
+// The shared DB persists across runs (salted fixtures by design) but a LIVE
+// policy is a standing instruction to a GLOBAL sweep: tomorrow this run's
+// claimed policies would be due again — with leftover paper — for whichever
+// suite calls runActionPolicySweep() first (round-28 review M3). Revoke
+// everything this suite granted, even when a test failed mid-way.
+after(async () => {
+  await getDb()
+    .update(clerkActionPoliciesTable)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(clerkActionPoliciesTable.firmId, firmId),
+        isNull(clerkActionPoliciesTable.revokedAt),
+      ),
+    );
+});
+
 test("dark flags: granting refuses, the list says so, and clerk_actions alone is not enough", async () => {
   assert.deepEqual(await listActionPolicies(firmId, clientA), {
     policies: [],
@@ -382,10 +399,10 @@ test("sweep happy path: assembles from the live builders, claims the day, execut
   assert.equal(result.policiesRun, 1);
   assert.equal(result.policiesAutoPaused, 0);
 
-  const after = await policyRow(policy.id);
-  assert.equal(after?.lastRunDay, lagosDateString(new Date()), "the day is claimed");
-  assert.ok(after?.lastRunAt, "the run is timestamped");
-  assert.equal(after?.pausedAt, null);
+  const afterRow = await policyRow(policy.id);
+  assert.equal(afterRow?.lastRunDay, lagosDateString(new Date()), "the day is claimed");
+  assert.ok(afterRow?.lastRunAt, "the run is timestamped");
+  assert.equal(afterRow?.pausedAt, null);
 
   const [decision] = await getDb()
     .select()
@@ -415,9 +432,16 @@ test("sweep happy path: assembles from the live builders, claims the day, execut
     policy.id,
   );
 
-  // Same day, second pass: nothing is due — the claim holds.
-  const again = await runActionPolicySweep();
-  assert.equal(again.policiesDue, 0, "every policy is claimed, paused or revoked");
+  // Same day, second pass: the claim holds — THIS policy neither re-runs
+  // nor writes a second decision (pinned on the policy's own rows, not the
+  // sweep's global counters, which other due policies could legitimately
+  // move — round-28 review M3).
+  await runActionPolicySweep();
+  const decisionsForPolicy = await getDb()
+    .select({ id: clerkActionDecisionsTable.id })
+    .from(clerkActionDecisionsTable)
+    .where(eq(clerkActionDecisionsTable.policyId, policy.id));
+  assert.equal(decisionsForPolicy.length, 1, "one decision for the day");
   assert.equal(await statusOf(newer), "draft", "no double-run");
 });
 
@@ -429,9 +453,9 @@ test("a dark flag makes the sweep skip WITHOUT consuming the day", async () => {
 
   const result = await runActionPolicySweep();
   assert.equal(result.policiesRun, 0);
-  const after = await policyRow(policy.id);
-  assert.equal(after?.lastRunDay, null, "the day is NOT claimed — flipping the flag back on lets today still run");
-  assert.equal(after?.pausedAt, null, "a dark flag is an ops state, not a policy state");
+  const afterRow = await policyRow(policy.id);
+  assert.equal(afterRow?.lastRunDay, null, "the day is NOT claimed — flipping the flag back on lets today still run");
+  assert.equal(afterRow?.pausedAt, null, "a dark flag is an ops state, not a policy state");
 
   await setFirmOverride(POLICIES_FLAG_KEY, firmId, true);
   const rerun = await runActionPolicySweep();
@@ -459,11 +483,11 @@ test("a departed grantor pauses the policy — grantor_inactive", async () => {
 
   const result = await runActionPolicySweep();
   assert.equal(result.policiesAutoPaused, 1);
-  const after = await policyRow(policy.id);
-  assert.ok(after?.pausedAt);
-  assert.equal(after?.pausedReason, "grantor_inactive");
-  assert.equal(after?.pausedBy, null, "the system paused it, not a person");
-  assert.equal(after?.lastRunDay, null, "a pause is not a run");
+  const afterRow = await policyRow(policy.id);
+  assert.ok(afterRow?.pausedAt);
+  assert.equal(afterRow?.pausedReason, "grantor_inactive");
+  assert.equal(afterRow?.pausedBy, null, "the system paused it, not a person");
+  assert.equal(afterRow?.lastRunDay, null, "a pause is not a run");
   const audit = await lastAudit("clerk.action.policy_auto_paused");
   assert.equal(audit?.entityId, policy.id);
   assert.equal(audit?.actorId, "action-policy-sweep");
@@ -488,9 +512,36 @@ test("a client_user grantor is only valid for their OWN party (SEC-03)", async (
     .returning();
 
   await runActionPolicySweep();
-  const after = await policyRow(policy.id);
-  assert.equal(after?.pausedReason, "grantor_inactive");
-  assert.equal(after?.lastRunDay, null);
+  const afterRow = await policyRow(policy.id);
+  assert.equal(afterRow?.pausedReason, "grantor_inactive");
+  assert.equal(afterRow?.lastRunDay, null);
+});
+
+test("a kind outside POLICY_KINDS pauses instead of falling through to the chaser builder", async () => {
+  const client = await seedSupplier("BadKind");
+  // Direct insert: the grant path's kind guard already refuses this — the
+  // sweep must fail closed anyway (an ops fix-up or backfill bug is exactly
+  // a row the API never wrote). draft_chasers is the dangerous case: the
+  // dispatcher would burn unattended model calls on drafts nobody reads.
+  const [policy] = await getDb()
+    .insert(clerkActionPoliciesTable)
+    .values({
+      firmId,
+      clientPartyId: client,
+      kind: "draft_chasers",
+      maxTargetsPerRun: 10,
+      grantedBy: grantorId,
+      grantedByRole: "firm_admin",
+    })
+    .returning();
+
+  const result = await runActionPolicySweep();
+  assert.equal(result.policiesRun, 0);
+  assert.equal(result.policiesAutoPaused, 1);
+  const afterRow = await policyRow(policy.id);
+  assert.equal(afterRow?.pausedReason, "unknown_kind");
+  assert.equal(afterRow?.pausedBy, null);
+  assert.equal(afterRow?.lastRunDay, null, "no day consumed, nothing drafted");
 });
 
 test("lapsed consent pauses the policy — consent_missing", async () => {
@@ -511,10 +562,10 @@ test("lapsed consent pauses the policy — consent_missing", async () => {
 
   const result = await runActionPolicySweep();
   assert.equal(result.policiesAutoPaused, 1);
-  const after = await policyRow(policy.id);
-  assert.equal(after?.pausedReason, "consent_missing");
-  assert.equal(after?.pausedBy, null);
-  assert.equal(after?.lastRunDay, null, "no run was consumed");
+  const afterRow = await policyRow(policy.id);
+  assert.equal(afterRow?.pausedReason, "consent_missing");
+  assert.equal(afterRow?.pausedBy, null);
+  assert.equal(afterRow?.lastRunDay, null, "no run was consumed");
   // Re-consenting + resuming heals the grant without re-granting.
   await grantComplianceConsent(client, grantorId);
   await resumeActionPolicy(firmId, policy.id, grantor);
@@ -535,9 +586,9 @@ test("a majority-failed run pauses the policy — failed_targets — but the dec
   assert.equal(result.policiesRun, 1, "the run happened");
   assert.equal(result.policiesAutoPaused, 1, "…and tripped the wire");
 
-  const after = await policyRow(policy.id);
-  assert.equal(after?.pausedReason, "failed_targets");
-  assert.equal(after?.lastRunDay, lagosDateString(new Date()), "the run consumed the day");
+  const afterRow = await policyRow(policy.id);
+  assert.equal(afterRow?.pausedReason, "failed_targets");
+  assert.equal(afterRow?.lastRunDay, lagosDateString(new Date()), "the run consumed the day");
   const [decision] = await getDb()
     .select()
     .from(clerkActionDecisionsTable)
@@ -555,9 +606,9 @@ test("an empty assembly leaves the day unclaimed — the sweep keeps watching", 
   const result = await runActionPolicySweep();
   assert.equal(result.policiesRun, 0);
   assert.equal(result.policiesAutoPaused, 0);
-  const after = await policyRow(policy.id);
-  assert.equal(after?.lastRunDay, null);
-  assert.equal(after?.pausedAt, null);
+  const afterRow = await policyRow(policy.id);
+  assert.equal(afterRow?.lastRunDay, null);
+  assert.equal(afterRow?.pausedAt, null);
 
   // Paper appears mid-day: the NEXT hourly pass runs it — same day.
   const db = getDb();

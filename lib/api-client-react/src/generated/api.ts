@@ -21653,7 +21653,7 @@ export const pauseActionPolicy = async (id: string, options?: RequestInit): Prom
 
 
 
-export const getPauseActionPolicyMutationOptions = <TError = ErrorType<NotFoundResponse>,
+export const getPauseActionPolicyMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pauseActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof pauseActionPolicy>>, TError,{id: string}, TContext> => {
 
@@ -21682,12 +21682,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PauseActionPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof pauseActionPolicy>>>
 
-    export type PauseActionPolicyMutationError = ErrorType<NotFoundResponse>
+    export type PauseActionPolicyMutationError = ErrorType<NotFoundResponse | ConflictResponse>
 
     /**
  * @summary Pause a standing approval — the sweep skips it until someone resumes it; the grant survives
  */
-export const usePauseActionPolicy = <TError = ErrorType<NotFoundResponse>,
+export const usePauseActionPolicy = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pauseActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof pauseActionPolicy>>,
@@ -21723,7 +21723,7 @@ export const resumeActionPolicy = async (id: string, options?: RequestInit): Pro
 
 
 
-export const getResumeActionPolicyMutationOptions = <TError = ErrorType<NotFoundResponse>,
+export const getResumeActionPolicyMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumeActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof resumeActionPolicy>>, TError,{id: string}, TContext> => {
 
@@ -21752,12 +21752,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type ResumeActionPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof resumeActionPolicy>>>
 
-    export type ResumeActionPolicyMutationError = ErrorType<NotFoundResponse>
+    export type ResumeActionPolicyMutationError = ErrorType<NotFoundResponse | ConflictResponse>
 
     /**
  * @summary Resume a paused standing approval — clears the pause whether a human or a sweep tripwire set it
  */
-export const useResumeActionPolicy = <TError = ErrorType<NotFoundResponse>,
+export const useResumeActionPolicy = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumeActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof resumeActionPolicy>>,

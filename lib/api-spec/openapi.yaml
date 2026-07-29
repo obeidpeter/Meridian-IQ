@@ -5402,6 +5402,8 @@ paths:
                 $ref: "#/components/schemas/ClerkActionPolicy"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /clerk/action-policies/{id}/resume:
     post:
       operationId: resumeActionPolicy
@@ -5418,6 +5420,8 @@ paths:
                 $ref: "#/components/schemas/ClerkActionPolicy"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /clerk/action-policies/{id}/revoke:
     post:
       operationId: revokeActionPolicy
@@ -11787,8 +11791,9 @@ components:
           items:
             $ref: "#/components/schemas/ClerkActionPolicy"
         # Whether the clerk_action_policies flag is live for this firm — the
-        # grant affordance gate (mirrors ActionProposals' posture: the list is
-        # simply empty while dark, never an error).
+        # grant AFFORDANCE gate only. Grants deliberately stay listed while
+        # dark, so they remain visible, pausable and revocable even when the
+        # engine that would run them is off.
         enabled:
           type: boolean
     GrantActionPolicyInput:
