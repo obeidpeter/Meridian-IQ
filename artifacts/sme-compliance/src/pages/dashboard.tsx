@@ -789,7 +789,8 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   const execute = useExecuteAction();
   // `decision === null` is the confirmation step; a decision switches the
   // dialog to the results view (the bulk-submit dialog's shape). Chaser
-  // batches also carry their TRANSIENT drafts — shown once, never stored.
+  // batches also carry their drafts — shown once in this dialog only (no
+  // draft is stored; model output lands in the inference ledger).
   const [confirming, setConfirming] = useState<ActionProposal | null>(null);
   const [decision, setDecision] = useState<ClerkActionDecision | null>(null);
   const [drafts, setDrafts] = useState<PaymentChaserDraft[] | null>(null);

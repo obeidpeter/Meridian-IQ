@@ -11600,9 +11600,10 @@ components:
       properties:
         decision:
           $ref: "#/components/schemas/ClerkActionDecision"
-        # draft_chasers only: the drafted reminders, TRANSIENT — shown once
-        # for the human to copy and send; never stored. Null for the submit
-        # kinds.
+        # draft_chasers only: the drafted reminders, shown once for the
+        # human to copy and send — no draft is stored (model-phrased output
+        # is retained in the inference ledger like every Clerk call). Null
+        # for the submit kinds.
         drafts:
           type: ["array", "null"]
           items:
