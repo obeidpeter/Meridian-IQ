@@ -78,6 +78,12 @@ export const MODEL_RATE_LIMITED_ROUTES: ReadonlySet<string> = new Set([
   // above, so it must share the model class (the submit kinds spend
   // nothing but ride along, exactly the statements-CSV precedent).
   "POST /api/clerk/action-proposals/execute",
+  // Compliance pack (fix round): the pack GET makes one cover-note
+  // completion via gatewayOrNull — a token-spending GET that sat on the
+  // GENERAL class for three rounds (the drift class the lockstep test
+  // can't see because the route stays in-transaction; the gateway-scan pin
+  // in rate-limit-lockstep.test.ts now covers it).
+  "GET /api/compliance-pack",
 ]);
 
 export const MODEL_RATE_LIMITED_ROUTE_PATTERNS: ReadonlyArray<{

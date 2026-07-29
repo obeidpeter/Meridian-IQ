@@ -11,7 +11,11 @@ import { DomainError } from "../errors";
 import { ensureGrounded } from "../clerk/grounding";
 import { appendAudit } from "../audit/audit";
 import { isFeatureEnabled } from "../flags/flags";
-import { CLERK_FLAG_KEY, type ClerkGateway } from "../clerk/gateway";
+import {
+  CLERK_FLAG_KEY,
+  inferPhrasing,
+  type ClerkGateway,
+} from "../clerk/gateway";
 import { fenceUntrusted } from "../clerk/prompts";
 
 // Drafted escalation replies (exhaust idea #5). The failure explainer's
@@ -249,40 +253,51 @@ export async function draftEscalationReply(
     example,
     escalationReason: escalation.reason,
   });
-  const result = await gateway.infer<z.infer<typeof replyOutput>>({
-    purpose: "draft_reply",
-    caseId: null,
-    // Operator desk tooling: platform-funded, like claims/catalogue drafting.
-    firmId: null,
-    promptVersion: example
-      ? REPLY_PROMPT_VERSION_EXEMPLAR
-      : REPLY_PROMPT_VERSION,
-    system: example ? REPLY_SYSTEM_EXEMPLAR : REPLY_SYSTEM,
-    user,
-    schemaName: "escalation_reply",
-    jsonSchema: replyJsonSchema,
-    validator: replyOutput,
-    // Hash the real composed prompt (facts + fenced message) so the ledger's
-    // inputRef distinguishes re-drafts after the grounding facts changed.
-    inputForHash: user,
-  });
-  if (!result.ok) return fallback;
-  // Number grounding: a numeral neither the facts nor the fenced escalation
-  // message stated → template answers (grounding.ts).
-  if (!(await ensureGrounded("escalation_reply", null, result.data.reply, user))) {
+  // One phrasing call under the digest posture (fix round): the bare
+  // gateway.infer here was the ONE phrasing surface without the TOCTOU
+  // catch — a clerk_ai flip between the check above and the call threw out
+  // of the reply surface instead of answering with the template, the
+  // posture every sibling documents. inferPhrasing carries the catch; the
+  // outer try keeps the stronger guarantee that even a grounding-check
+  // failure answers with the template.
+  try {
+    const data = await inferPhrasing<z.infer<typeof replyOutput>>(gateway, {
+      purpose: "draft_reply",
+      caseId: null,
+      // Operator desk tooling: platform-funded, like claims/catalogue drafting.
+      firmId: null,
+      promptVersion: example
+        ? REPLY_PROMPT_VERSION_EXEMPLAR
+        : REPLY_PROMPT_VERSION,
+      system: example ? REPLY_SYSTEM_EXEMPLAR : REPLY_SYSTEM,
+      user,
+      schemaName: "escalation_reply",
+      jsonSchema: replyJsonSchema,
+      validator: replyOutput,
+      // Hash the real composed prompt (facts + fenced message) so the ledger's
+      // inputRef distinguishes re-drafts after the grounding facts changed.
+      inputForHash: user,
+    });
+    if (!data) return fallback;
+    // Number grounding: a numeral neither the facts nor the fenced escalation
+    // message stated → template answers (grounding.ts).
+    if (!(await ensureGrounded("escalation_reply", null, data.reply, user))) {
+      return fallback;
+    }
+    // The style-only rule has a deterministic backstop: a draft that copies
+    // the example's specifics is discarded in favour of the template.
+    if (example && copiesExampleSpecifics(data.reply, example, errorCode)) {
+      return fallback;
+    }
+    return {
+      draft: data.reply,
+      source: "clerk",
+      errorCode,
+      viaExample: example !== null,
+    };
+  } catch {
     return fallback;
   }
-  // The style-only rule has a deterministic backstop: a draft that copies
-  // the example's specifics is discarded in favour of the template.
-  if (example && copiesExampleSpecifics(result.data.reply, example, errorCode)) {
-    return fallback;
-  }
-  return {
-    draft: result.data.reply,
-    source: "clerk",
-    errorCode,
-    viaExample: example !== null,
-  };
 }
 
 // The ONLY writer of operator_reply. Send acknowledges an open escalation
