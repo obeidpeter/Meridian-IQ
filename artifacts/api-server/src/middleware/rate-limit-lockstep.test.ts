@@ -55,6 +55,10 @@ const NON_MODEL_NO_CONTEXT = new Set([
   "POST /api/clerk/cases/bulk-approve",
   "POST /api/billing/payments/confirm",
   "POST /api/collections/inbound",
+  // Posture round: no model call — left the request transaction because a
+  // 200-row batch would hold the global audit advisory lock batch-wide
+  // (modules/invoice/bulk-submit.ts commits per stage instead).
+  "POST /api/invoices/bulk-submit",
 ]);
 
 // Public machine rails: exempt from the authenticated rate classes because

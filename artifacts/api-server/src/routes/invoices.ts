@@ -10,6 +10,7 @@ import {
   settlementEventsTable,
   partiesTable,
   outboxTable,
+  runRequestContext,
 } from "@workspace/db";
 import {
   ListInvoicesQueryParams,
@@ -681,14 +682,22 @@ router.post(
 // Bulk validate & submit: same capability, party-access and consent gates as
 // a single submit — the batch only adds iteration. Selection is server-side
 // (the client's pending drafts, oldest first) so a paginated UI doesn't have
-// to know every draft id.
+// to know every draft id. Runs OUTSIDE the request transaction (app.ts
+// NO_CONTEXT_ROUTES — the posture round): the module commits every stage in
+// its own short caller-bound transaction, so the party-access lookup here
+// gets its own context too (the raw pool has no GUCs — RLS would blank the
+// engagement read and false-deny).
 router.post("/invoices/bulk-submit", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.submit");
   const body = parseOrThrow(BulkSubmitInvoicesBody, req.body);
-  await assertPartyAccess(req.principal, body.clientPartyId);
+  const tenant = tenantFirmId(req.principal);
+  await runRequestContext(
+    tenant ? { bypass: false, firmId: tenant } : { bypass: true, firmId: null },
+    () => assertPartyAccess(req.principal, body.clientPartyId),
+  );
   const result = await bulkSubmit(
     body.clientPartyId,
-    tenantFirmId(req.principal),
+    tenant,
     req.principal.userId,
     body.limit,
   );

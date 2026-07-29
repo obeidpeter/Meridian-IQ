@@ -257,12 +257,12 @@ dark means proposals answer empty (the cards hide) and execution refuses
   execute anything.
 
 Deferred to the next round of the arc: an action-effectiveness report
-(did approved batches actually clear the exposure?); the shared
-audit-lock posture follow-up for the OLDER batch surface (bulk-submit
-still runs in-transaction); and splitting `draftPaymentChaser`'s reads
-from its infer so the chaser batch's model calls run outside any
-transaction (round-22 review M3 — today each chaser target's short
-transaction spans its provider call).
+(did approved batches actually clear the exposure?). The two posture
+follow-ups this list carried have since shipped: the chaser's
+stage/phrase split (no transaction spans a model call — round 23) and
+the bulk-submit conversion (the last batch surface now commits per item
+in the caller's posture outside the request transaction, closing the
+audit-lock convoy class platform-wide).
 
 ## Ask Clerk (grounded firm-data Q&A)
 

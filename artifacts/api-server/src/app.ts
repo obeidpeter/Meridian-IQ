@@ -116,6 +116,16 @@ const NO_CONTEXT_ROUTES = new Set([
   // bypass: callers are firm principals and the per-stage transactions
   // carry their firm GUC, so RLS posture matches the ordinary request.
   "POST /api/clerk/action-proposals/execute",
+  // Bulk submit (posture round): the LAST batch surface still inside the
+  // request transaction. No model call — but each row's submit appends
+  // audit rows under the GLOBAL audit advisory lock (the bulk-approve
+  // rationale: one request transaction would hold it batch-wide, a
+  // platform-wide appendAudit convoy plus the documented row-lock →
+  // audit-lock deadlock window against concurrent single submits). The
+  // module commits every stage in its own short CALLER-POSTURE context
+  // (modules/invoice/bulk-submit.ts): firm principals get their firm GUC,
+  // cross-tenant staff get bypass — RLS exactly as their ordinary request.
+  "POST /api/invoices/bulk-submit",
 ]);
 
 // Parameterized-path variant of NO_CONTEXT_ROUTES: the Set above can only
