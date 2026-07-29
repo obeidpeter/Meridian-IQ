@@ -22,6 +22,7 @@ import {
   listActionDecisions,
   listActionProposals,
 } from "./actions.ts";
+import { executeActionBodyInvoiceIdsMax } from "@workspace/api-zod";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
@@ -259,6 +260,25 @@ test("execution re-checks every target and records an honest decision", async ()
   );
 });
 
+test("the module bound and the contract bound are the same number", () => {
+  assert.equal(MAX_ACTION_TARGETS, executeActionBodyInvoiceIdsMax);
+});
+
+test("a repeated id is processed once and counted once", async () => {
+  const dup = (await draftFor(buyer, daysAgo(12))).invoice.id;
+  const { decision } = await executeAction(
+    firmId,
+    supplier,
+    userId,
+    "submit_overdue",
+    [dup, dup],
+  );
+  assert.equal(decision.requestedCount, 1);
+  assert.equal(decision.targets.length, 1);
+  assert.equal(decision.targets[0].outcome, "submitted");
+  assert.equal(decision.executedCount, 1);
+});
+
 test("the catalogue is closed and the batch is bounded", async () => {
   await assert.rejects(
     executeAction(firmId, supplier, userId, "retry_failed", [randomUUID()]),
@@ -290,6 +310,10 @@ test("a client without layer-1 consent is refused up front", async () => {
   );
 });
 
+// Module-level walls only: the execute ROUTE additionally refuses a party
+// the principal cannot reach at all (assertPartyAccess, bulk-submit
+// parity), so a real cross-firm caller never gets this far — these probes
+// pin the data-layer behaviour underneath that wall.
 test("firm walls hold on both surfaces", async () => {
   await setFirmOverride(ACTIONS_FLAG_KEY, foreignFirmId, true);
   // The foreign firm sees no proposals for a client it does not hold…

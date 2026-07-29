@@ -10,6 +10,7 @@ import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
 import { isPurposePermitted } from "../consent/consent";
 import { validateInvoice, submitInvoice } from "../invoice/service";
+import { firmSubmitApprovalRequired } from "../invoice/approvals";
 import { RECEIVABLE_ORIENTATION } from "../invoice/receivables";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import { bandExposure } from "../invoice/penalty-exposure";
@@ -139,7 +140,12 @@ export async function listActionProposals(
         title: `Submit ${targetCount} overdue invoice${targetCount === 1 ? "" : "s"}`,
         why:
           `${targetCount} invoice${targetCount === 1 ? " is" : "s are"} past the ${SUBMISSION_WINDOW_DAYS}-day statutory submission window — ` +
-          `at least NGN ${floor} of estimated s.104 exposure (lowest band, an estimate not advice). Submitting them removes it.`,
+          `at least NGN ${floor} of estimated s.104 exposure (lowest band, an estimate not advice). Submitting them removes it` +
+          // The floor spans the FULL overdue count; a capped batch only
+          // clears its own share, so say so.
+          (targetCount > MAX_ACTION_TARGETS
+            ? ` — approve in batches of up to ${MAX_ACTION_TARGETS}.`
+            : "."),
         targets,
         targetCount,
         truncated: targetCount > targets.length,
@@ -189,6 +195,11 @@ export async function executeAction(
       400,
     );
   }
+  // Dedupe (a repeated id would record two contradictory outcomes for one
+  // invoice) and SORT: the caller controls the array order, and processing
+  // two concurrent batches over overlapping sets in different orders is a
+  // classic crossed-lock deadlock — a canonical order removes that variant.
+  const ids = [...new Set(invoiceIds)].sort();
   // Consent gates every submission identically — checked once up front,
   // exactly like a single submit would refuse (CORE-03).
   if (!(await isPurposePermitted(clientPartyId, "compliance_submission"))) {
@@ -198,6 +209,11 @@ export async function executeAction(
       403,
     );
   }
+
+  // The batch audit's one annotation (bulk-submit's shape): an approval
+  // policy surfaces per row as APPROVAL_REQUIRED failures, and the hoisted
+  // read makes an all-failed batch explicable at a glance.
+  const submitApprovalRequired = await firmSubmitApprovalRequired(firmId);
 
   // Load ONLY the requested ids that are in scope, and re-check the
   // action predicate per row RIGHT NOW: the approval was given on a
@@ -216,7 +232,7 @@ export async function executeAction(
       WHERE i.firm_id = ${firmId}
         AND i.supplier_party_id = ${clientPartyId}
         AND i.id IN (${sql.join(
-          invoiceIds.map((id) => sql`${id}`),
+          ids.map((id) => sql`${id}`),
           sql`, `,
         )})
     `)
@@ -224,7 +240,7 @@ export async function executeAction(
   const byId = new Map(candidates.map((c) => [c.id, c]));
 
   const targets: ActionTargetOutcome[] = [];
-  for (const invoiceId of invoiceIds) {
+  for (const invoiceId of ids) {
     const candidate = byId.get(invoiceId);
     if (!candidate || !candidate.eligible) {
       targets.push({
@@ -281,6 +297,17 @@ export async function executeAction(
     (t) => t.outcome === "failed" || t.outcome === "invalid",
   ).length;
 
+  // The evidence a reader of the decision needs, recomputed at THIS moment
+  // (the decision's own clock, not the proposal's): the client's live
+  // overdue count and the penalty floor it implies.
+  const [overdueNow] = (
+    await getDb().execute<{ n: number }>(sql`
+      SELECT COUNT(*)::int AS n FROM invoices i
+      WHERE ${overdueCond(firmId, clientPartyId)}
+    `)
+  ).rows;
+  const overdueCountAtDecision = Number(overdueNow?.n ?? 0);
+
   const [decision] = await getDb()
     .insert(clerkActionDecisionsTable)
     .values({
@@ -289,11 +316,13 @@ export async function executeAction(
       kind,
       decidedBy: actorId,
       evidence: {
-        requestedCount: invoiceIds.length,
+        requestedCount: ids.length,
+        overdueCountAtDecision,
+        exposureFloorNgn: bandExposure(overdueCountAtDecision).small,
         asOf: lagosDateString(new Date()),
       },
       targets,
-      requestedCount: invoiceIds.length,
+      requestedCount: ids.length,
       executedCount,
       skippedCount,
       failedCount,
@@ -309,7 +338,14 @@ export async function executeAction(
     action: "clerk.action.executed",
     entityType: "clerk_action_decision",
     entityId: decision.id,
-    after: { kind, requestedCount: invoiceIds.length, executedCount, skippedCount, failedCount },
+    after: {
+      kind,
+      requestedCount: ids.length,
+      executedCount,
+      skippedCount,
+      failedCount,
+      submitApprovalRequired,
+    },
   });
 
   return { decision };

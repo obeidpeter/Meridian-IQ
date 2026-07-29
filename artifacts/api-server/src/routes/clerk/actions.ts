@@ -9,7 +9,7 @@ import {
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import { resolveClientAnalyticsScope } from "../../lib/client-scope";
-import { assertCan } from "../../modules/auth/rbac";
+import { assertCan, assertPartyAccess } from "../../modules/auth/rbac";
 import {
   executeAction,
   listActionDecisions,
@@ -52,6 +52,9 @@ router.post(
       req.principal,
       body.clientPartyId,
     );
+    // Parity with the manual bulk-submit route: the party must be reachable
+    // by this principal (cross-tenant IDOR wall), not just consent-refused.
+    await assertPartyAccess(req.principal, clientPartyId);
     const result = await executeAction(
       firmId,
       clientPartyId,

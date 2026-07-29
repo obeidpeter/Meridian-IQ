@@ -800,7 +800,19 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
-  if (!isSuccess || !proposals || proposals.actions.length === 0) return null;
+  // The dialog must survive the proposals list emptying: after a full
+  // batch submits, the refetched list is [] and an early return would
+  // unmount the OPEN results view mid-read (review F1) — so the card stays
+  // mounted while the dialog is up, and the proposals refetch itself is
+  // deferred to closeDialog.
+  const dialogOpen = confirming !== null || decision !== null;
+  if (
+    !isSuccess ||
+    !proposals ||
+    (proposals.actions.length === 0 && !dialogOpen)
+  ) {
+    return null;
+  }
 
   const runAction = async (action: ActionProposal) => {
     try {
@@ -814,13 +826,8 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       setDecision(res.decision);
       // Not awaited: a background refetch rejection must not surface as a
       // false "action failed" error after the batch already ran. The
-      // no-args keys prefix-match every param variant.
-      queryClient.invalidateQueries({
-        queryKey: getGetActionProposalsQueryKey(),
-      });
-      queryClient.invalidateQueries({
-        queryKey: getGetActionDecisionsQueryKey(),
-      });
+      // no-args keys prefix-match every param variant. The proposals and
+      // decisions queries are deliberately NOT here — see closeDialog.
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       queryClient.invalidateQueries({
         queryKey: getGetDashboardSummaryQueryKey(),
@@ -844,6 +851,17 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   };
 
   const closeDialog = () => {
+    // A batch in flight cannot be cancelled from here — keep the dialog up
+    // so its result is always shown.
+    if (execute.isPending) return;
+    if (decision !== null) {
+      queryClient.invalidateQueries({
+        queryKey: getGetActionProposalsQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetActionDecisionsQueryKey(),
+      });
+    }
     setConfirming(null);
     setDecision(null);
   };
@@ -914,7 +932,11 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
-                <Button variant="outline" onClick={closeDialog}>
+                <Button
+                  variant="outline"
+                  onClick={closeDialog}
+                  disabled={execute.isPending}
+                >
                   Cancel
                 </Button>
                 <Button
