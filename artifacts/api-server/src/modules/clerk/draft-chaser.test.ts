@@ -18,7 +18,7 @@ import {
   restoreClerkFlag,
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Payment-chaser drafts (round-9 idea #2). Pinned invariants:
 //  - eligibility is the receivables definition exactly — a settled, failed
@@ -49,10 +49,6 @@ const siblingPrincipal: Principal = {
   userId: randomUUID(),
   clientPartyId: randomUUID(),
 };
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 before(async () => {
   await saveAndEnableClerkFlag();

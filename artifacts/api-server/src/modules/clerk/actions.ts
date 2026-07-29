@@ -13,11 +13,17 @@ import { isPurposePermitted } from "../consent/consent";
 import { validateInvoice, submitInvoice } from "../invoice/service";
 import { firmSubmitApprovalRequired } from "../invoice/approvals";
 import { OUTSTANDING, RECEIVABLE_ORIENTATION } from "../invoice/receivables";
-import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
+import {
+  SUBMISSION_WINDOW_DAYS,
+  UNSUBMITTED_STATE,
+  daysPastDeadline,
+  pastSubmissionDeadline,
+} from "../invoice/compliance-window";
 import { bandExposure } from "../invoice/penalty-exposure";
 import { listChaseRows } from "../invoice/cashflow";
 import {
-  draftPaymentChaser,
+  phrasePaymentChaser,
+  stagePaymentChaser,
   type PaymentChaserDraft,
 } from "./draft-chaser";
 import { gatewayOrNull } from "./provider";
@@ -117,16 +123,17 @@ export interface ActionProposals {
   note: string;
 }
 
-// The submit_overdue predicate — the digest/penalty-card overdue spelling,
-// verbatim: receivable paper, still draft/validated, past Lagos midnight
-// starting day issue+window.
+// The submit_overdue predicate — the SHARED overdue pieces (the digest,
+// penalty card and scorecard compose the same compliance-window fragments):
+// receivable paper, still draft/validated, past Lagos midnight starting day
+// issue+window.
 function overdueCond(firmId: string, clientPartyId: string) {
   return sql`i.firm_id = ${firmId}
     AND i.kind = 'invoice'
     AND i.supplier_party_id = ${clientPartyId}
-    AND i.status IN ('draft', 'validated')
+    AND ${UNSUBMITTED_STATE}
     AND ${RECEIVABLE_ORIENTATION}
-    AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${lagosTodaySql()}`;
+    AND ${pastSubmissionDeadline(lagosTodaySql())}`;
 }
 
 // The retry_failed predicate: receivable paper the rails rejected. The
@@ -165,7 +172,7 @@ async function submitOverdueProposal(
       full_count: number;
     }>(sql`
       SELECT i.id, i.invoice_number, i.issue_date::text AS issue_date,
-        (${lagosTodaySql()} - (i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int))::int AS days_overdue,
+        ${daysPastDeadline(lagosTodaySql())} AS days_overdue,
         i.grand_total::text AS grand_total, i.currency,
         COUNT(*) OVER ()::int AS full_count
       FROM invoices i
@@ -225,7 +232,7 @@ async function retryFailedProposal(
       full_count: number;
     }>(sql`
       SELECT i.id, i.invoice_number, i.issue_date::text AS issue_date,
-        GREATEST((${lagosTodaySql()} - (i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int))::int, 0) AS days_overdue,
+        GREATEST(${daysPastDeadline(lagosTodaySql())}, 0) AS days_overdue,
         i.grand_total::text AS grand_total, i.currency,
         (SELECT a.error_code FROM submission_attempts a
           WHERE a.invoice_id = i.id AND a.error_code IS NOT NULL
@@ -490,16 +497,17 @@ export async function executeAction(
     // Each target runs in its OWN short firm-bound transaction: the
     // existing per-invoice machinery commits per item, the global audit
     // lock is held per item only, and an executed target is durable
-    // immediately (bulk-approve semantics). Known trade (round-22 review
-    // M3, owned for the next round): the chaser target's transaction spans
-    // its provider call, pinning a pooled connection for that latency —
-    // the fix is splitting draftPaymentChaser's reads from its infer so
-    // the model call runs outside any transaction.
+    // immediately (bulk-approve semantics). The chaser target's DB half
+    // (stagePaymentChaser) commits and releases its connection BEFORE the
+    // provider is touched; phrasePaymentChaser then runs transaction-free,
+    // its ledger/audit writes landing on the raw pool (the round-22 review
+    // M3 split — no pooled connection is ever pinned across model latency).
     try {
       if (kind === "draft_chasers") {
-        const draft = await ctx(() =>
-          draftPaymentChaser(invoiceId, principal, gateway),
+        const staged = await ctx(() =>
+          stagePaymentChaser(invoiceId, principal),
         );
+        const draft = await phrasePaymentChaser(staged, gateway);
         drafts.push(draft);
         targets.push({
           invoiceId,

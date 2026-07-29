@@ -28,7 +28,7 @@ import {
 import { CLIENT_SAFE_DATA_INTENTS, DATA_INTENTS } from "./data-intents.ts";
 import { executeActionBodyInvoiceIdsMax } from "@workspace/api-zod";
 import { isDomainError } from "../../test-helpers/assertions.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Proposed actions (round 21). Pinned invariants:
 //  - fail-closed: while the clerk_actions flag is dark, proposals answer
@@ -70,10 +70,6 @@ const firmPrincipal: Principal = {
   buyerPartyId: null,
 };
 const foreignPrincipal: Principal = { ...firmPrincipal, firmId: foreignFirmId };
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 let n = 0;
 function draftFor(

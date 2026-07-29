@@ -1,7 +1,12 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosTodaySql } from "../../lib/lagos-time";
-import { SUBMISSION_WINDOW_DAYS } from "./compliance-window";
+import {
+  SUBMISSION_WINDOW_DAYS,
+  UNSUBMITTED_STATE,
+  daysPastDeadline,
+  pastSubmissionDeadline,
+} from "./compliance-window";
 import { RECEIVABLE_ORIENTATION } from "./receivables";
 
 // Penalty exposure (round-18 idea #2). The public penalty calculator
@@ -70,15 +75,16 @@ export async function computePenaltyExposure(
   const clientCond = clientPartyId
     ? sql`AND i.supplier_party_id = ${clientPartyId}`
     : sql``;
-  // The digest/dashboard overdue predicate, verbatim: draft/validated
-  // receivable paper whose statutory deadline has passed.
+  // The digest/dashboard overdue predicate — composed from the SHARED
+  // compliance-window fragments: draft/validated receivable paper whose
+  // statutory deadline has passed.
   const overdueCond = sql`
     i.firm_id = ${firmId}
     AND i.kind = 'invoice'
-    AND i.status IN ('draft', 'validated')
+    AND ${UNSUBMITTED_STATE}
     AND ${RECEIVABLE_ORIENTATION}
     ${clientCond}
-    AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${today}`;
+    AND ${pastSubmissionDeadline(today)}`;
   const [agg] = (
     await getDb().execute<{ count: number }>(sql`
       SELECT COUNT(*)::int AS count FROM invoices i WHERE ${overdueCond}
@@ -95,7 +101,7 @@ export async function computePenaltyExposure(
             days_overdue: number;
           }>(sql`
             SELECT i.id, i.invoice_number, i.issue_date::text AS issue_date,
-              (${today} - (i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int))::int AS days_overdue
+              ${daysPastDeadline(today)} AS days_overdue
             FROM invoices i
             WHERE ${overdueCond}
             ORDER BY i.issue_date ASC, i.id

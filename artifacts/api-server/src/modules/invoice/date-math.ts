@@ -25,3 +25,10 @@ export function median(values: number[]): number {
     ? sorted[mid]
     : (sorted[mid - 1] + sorted[mid]) / 2;
 }
+
+// The shared trailing-year evidence window every history miner uses
+// (recurring suggestions, unbilled income, missing bills, payment
+// behaviour, line-item memory, chase effectiveness) — ONE home
+// (refactoring round), so the window that feeds cash-flow projections and
+// the chase list cannot fork per miner.
+export const LOOKBACK_DAYS = 365;

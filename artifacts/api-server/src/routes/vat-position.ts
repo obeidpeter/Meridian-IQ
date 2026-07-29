@@ -9,7 +9,7 @@ import {
 import { parseOrThrow } from "../lib/parse";
 import { resolveClientAnalyticsScope } from "../lib/client-scope";
 import { sendCsvAttachment, toCsv } from "../lib/csv";
-import { assertCan, tenantFirmId, type Principal } from "../modules/auth/rbac";
+import { assertCan, firmScope } from "../modules/auth/rbac";
 import {
   computeFirmVatPositions,
   computeVatPosition,
@@ -44,17 +44,9 @@ function resolvePositionMonth(raw: string | undefined): string {
   return month;
 }
 
-// The firm a console request is scoped to — routes/console.ts's firmScope,
-// copied verbatim so /console/vat-positions carries EXACTLY the gate of the
-// existing firm rollup (/console/receivables): firm roles use their bound
-// firm; cross-tenant staff (operator/auditor) fall back to their bound firm
-// if any.
-function firmScope(principal: Principal): string {
-  const tenant = tenantFirmId(principal);
-  if (tenant) return tenant;
-  if (principal.firmId) return principal.firmId;
-  throw new DomainError("NO_TENANT", "A firm context is required", 403);
-}
+// The firm a console rollup is scoped to: firmScope, imported from rbac —
+// the ONE definition, so /console/vat-positions carries EXACTLY the gate of
+// the existing firm rollup (/console/receivables) by construction.
 
 router.get("/vat-position", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");

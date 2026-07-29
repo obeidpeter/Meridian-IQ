@@ -6,7 +6,13 @@ import {
   lagosTodaySql,
   lagosWindowSql,
 } from "../../lib/lagos-time";
-import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
+import {
+  SUBMISSION_WINDOW_DAYS,
+  UNSUBMITTED_STATE,
+  daysPastDeadline,
+  pastSubmissionDeadline,
+  withinDueSoonWindow,
+} from "../invoice/compliance-window";
 import {
   firmMoneySummary,
   isChaseEligible,
@@ -18,7 +24,7 @@ import {
   OUTSTANDING,
   RECEIVABLE_ORIENTATION,
 } from "../invoice/receivables";
-import { BILL_UNPAID } from "../invoice/payables";
+import { BILL_UNPAID, SETTLEMENT_EVIDENCE } from "../invoice/payables";
 import {
   computeFirmVatPositions,
   computeVatPosition,
@@ -372,14 +378,13 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     title: `invoices past the ${SUBMISSION_WINDOW_DAYS}-day statutory submission window (not yet submitted)`,
     accepts: { client: true },
     async run(firmId, params) {
-      // The statutory deadline is Lagos MIDNIGHT STARTING day issue+window
-      // (compliance-window.ts submissionDeadline), so an invoice is overdue
-      // ON that Lagos day — hence <=, matching the console/SME dashboards
-      // and the reminder sweep.
+      // The statutory deadline is Lagos MIDNIGHT STARTING day issue+window —
+      // the shared compliance-window fragments carry the boundary, matching
+      // the console/SME dashboards and the reminder sweep.
       const agg = await invoiceAggregate(
         firmId,
-        sql`i.status IN ('draft', 'validated')
-          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${lagosTodaySql()}`,
+        sql`${UNSUBMITTED_STATE}
+          AND ${pastSubmissionDeadline(lagosTodaySql())}`,
         params,
       );
       return {
@@ -399,9 +404,8 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     async run(firmId, params) {
       const agg = await invoiceAggregate(
         firmId,
-        sql`i.status IN ('draft', 'validated')
-          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int > ${lagosTodaySql()}
-          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${lagosTodaySql()} + 7`,
+        sql`${UNSUBMITTED_STATE}
+          AND ${withinDueSoonWindow(lagosTodaySql())}`,
         params,
       );
       return {
@@ -920,13 +924,13 @@ export const DATA_INTENTS: readonly DataIntent[] = [
             i.currency, i.grand_total::text AS grand_total,
             (${RECEIVABLE_ORIENTATION}) AS recv,
             (${BILL_ORIENTATION}) AS bill,
-            (i.status IN ('draft', 'validated')
-              AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${lagosTodaySql()}) AS overdue,
-            (${lagosTodaySql()} - (i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int))::int AS days_over,
+            (${UNSUBMITTED_STATE}
+              AND ${pastSubmissionDeadline(lagosTodaySql())}) AS overdue,
+            ${daysPastDeadline(lagosTodaySql())} AS days_over,
             EXISTS (
               SELECT 1 FROM settlement_events se
               WHERE se.invoice_id = i.id
-                AND (se.payment_status = 'paid' OR se.source = 'statement_match')
+                AND ${SETTLEMENT_EVIDENCE}
             ) AS settled,
             (SELECT sa.error_code FROM submission_attempts sa
               WHERE sa.invoice_id = i.id AND sa.status IN ('rejected', 'error')

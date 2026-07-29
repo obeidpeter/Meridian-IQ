@@ -38,10 +38,23 @@ export interface ReceivablesSummary {
   }[];
 }
 
+// The outstanding status triple, ONE home (refactoring round): the SQL
+// fragment below and every JS-side membership check (draft-chaser's
+// chaseability gate, chase-log's loggability gate) derive from this list —
+// a lifecycle status addition lands everywhere or nowhere.
+export const OUTSTANDING_STATUSES = [
+  "submitted",
+  "stamped",
+  "confirmed",
+] as const;
+
 // Exported for the cash-flow outlook / chase list, which must share this
 // exact outstanding definition (alias `i` for invoices at every use site).
+// COMPOSED from OUTSTANDING_STATUSES above (review NIT-2), so the SQL and
+// JS sides cannot fork — the raw interpolation is safe because the list is
+// this module's own const, never input.
 export const OUTSTANDING = sql`i.kind = 'invoice'
-  AND i.status IN ('submitted', 'stamped', 'confirmed')`;
+  AND i.status IN (${sql.raw(OUTSTANDING_STATUSES.map((s) => `'${s}'`).join(", "))})`;
 
 // ---------------------------------------------------------------------------
 // Invoice ORIENTATION (payables round, contract 0.44.0) — the ONE home for

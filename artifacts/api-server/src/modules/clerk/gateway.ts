@@ -372,6 +372,11 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
 // 429. The try/catch closes the kill-switch TOCTOU: if clerk_ai flips off
 // between the check here and the call, the gateway's own assert throws — and
 // for these surfaces even that must answer with the template.
+// NOTE (refactoring-round review LOW-1): callers wrap this whole call in
+// their own try — so a flag-READ failure (a DB blip, not a flag-off) also
+// falls to the template now, where the pre-fold surfaces let it propagate
+// as a 5xx. That is the direction these surfaces document ("→ template,
+// never an error") and is deliberate.
 export async function inferPhrasing<T>(
   gateway: ClerkGateway | null,
   params: InferParams<T>,

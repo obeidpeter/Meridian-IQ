@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString, lagosTodaySql } from "../../lib/lagos-time";
-import { SUBMISSION_WINDOW_DAYS } from "./compliance-window";
+import {
+  SUBMISSION_WINDOW_DAYS,
+  UNSUBMITTED_STATE,
+  pastSubmissionDeadline,
+} from "./compliance-window";
 import { RECEIVABLE_ORIENTATION, BILL_ORIENTATION } from "./receivables";
 
 // Client compliance scorecard (round-19 idea #3). Firms see per-client
@@ -117,9 +121,9 @@ export async function computeComplianceScorecard(
         FROM invoices i
         WHERE i.firm_id = ${firmId}
           AND i.kind = 'invoice'
-          AND i.status IN ('draft', 'validated')
+          AND ${UNSUBMITTED_STATE}
           AND ${RECEIVABLE_ORIENTATION}
-          AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${today}
+          AND ${pastSubmissionDeadline(today)}
         GROUP BY 1
       )
       SELECT

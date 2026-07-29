@@ -13,7 +13,7 @@ import {
   computePenaltyExposure,
   S104_PER_INVOICE,
 } from "./penalty-exposure.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Penalty exposure (round-18 idea #2). Pinned here:
 //  - the per-invoice charges are the PUBLISHED calculator model
@@ -35,10 +35,6 @@ const buyerParty = randomUUID();
 const vendorParty = randomUUID(); // not engaged — supplies the bill probe
 
 let oldestOverdueId: string;
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 const row = (over: {
   supplierPartyId?: string;

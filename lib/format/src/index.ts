@@ -9,6 +9,7 @@
 // status added to openapi.yaml fails typecheck here instead of silently
 // rendering as a grey humanized pill in three apps. Erased at compile time.
 import type {
+  ActionTargetOutcomeOutcome,
   ComplianceDeadlineSeverity,
   ConfirmationState,
   InvoiceStatus,
@@ -267,6 +268,34 @@ export function confirmationBadgeClasses(state: string): string {
   return pillClasses(
     (CONFIRMATION_TONES as Partial<Record<string, BadgeTone>>)[state] ?? "slate",
   );
+}
+
+// ---- Action batch outcomes -------------------------------------------------
+// Per-target outcomes of an approved Clerk action batch, rendered identically
+// by the SME dashboard's "Clerk suggests" card and its console twin.
+
+// Exhaustive over the contract's ActionTargetOutcomeOutcome (typecheck fails
+// on a new outcome until it is mapped here).
+export const ACTION_OUTCOME_LABELS: Record<ActionTargetOutcomeOutcome, string> =
+  {
+    submitted: "Submitted",
+    invalid: "Needs fixing",
+    skipped_not_eligible: "Skipped",
+    failed: "Failed",
+    drafted: "Drafted",
+  };
+
+/**
+ * Inline text tone for a batch-outcome row (plain text, not a pill): emerald
+ * for the two success outcomes, muted for not-eligible skips, amber for
+ * anything needing attention — including off-contract outcomes from a newer
+ * server, which read as "look at this" rather than silently default-grey.
+ */
+export function actionOutcomeToneClasses(outcome: string): string {
+  if (outcome === "submitted" || outcome === "drafted")
+    return "text-emerald-700 dark:text-emerald-400";
+  if (outcome === "skipped_not_eligible") return "text-muted-foreground";
+  return "text-amber-700 dark:text-amber-400";
 }
 
 // ---- Notification bell vocabulary -----------------------------------------

@@ -16,13 +16,21 @@ import { BILL_ORIENTATION, RECEIVABLE_ORIENTATION } from "./receivables";
 // Orientation comes from the shared fragments in receivables.ts (alias `i`),
 // so a bill can never be double-counted as a receivable.
 
+// One settlement event PROVES payment: an explicit 'paid' flag or a
+// statement match. Alias `se` — the ONE spelling of the evidence rule
+// (refactoring round; the chase-effectiveness report and Ask Clerk's
+// invoice-status settled flag compose this same fragment). NOTE:
+// double-payment.ts deliberately uses a NARROWER source='statement_match'
+// predicate — its comment documents why; do not fold it onto this.
+export const SETTLEMENT_EVIDENCE = sql`(se.payment_status = 'paid' OR se.source = 'statement_match')`;
+
 // The "no payment evidence yet" predicate, alias `i` — shared by the summary
 // buckets, the reconciliation debit-lane candidates, the digest fact and the
 // Ask Clerk payables intents so "unpaid" has exactly one spelling.
 export const BILL_UNPAID = sql`NOT EXISTS (
   SELECT 1 FROM settlement_events se
   WHERE se.invoice_id = i.id
-    AND (se.payment_status = 'paid' OR se.source = 'statement_match')
+    AND ${SETTLEMENT_EVIDENCE}
 )`;
 
 // The three orientation-defining conditions of a bill in one fragment: the
@@ -125,10 +133,10 @@ export async function listBills(
       LEFT JOIN (
         SELECT
           invoice_id,
-          BOOL_OR(payment_status = 'paid' OR source = 'statement_match') AS paid,
+          BOOL_OR(${SETTLEMENT_EVIDENCE}) AS paid,
           (ARRAY_AGG(payment_status ORDER BY occurred_at DESC, created_at DESC)
              FILTER (WHERE source = 'payer_flag'))[1] AS latest_flag
-        FROM settlement_events
+        FROM settlement_events se
         GROUP BY invoice_id
       ) se ON se.invoice_id = i.id
       LEFT JOIN LATERAL (

@@ -108,6 +108,16 @@ jobs:
       - name: Buyer portal unit tests
         run: pnpm --filter @workspace/buyer-portal run test
 
+      # Portal MFA/TOTP card logic for the landing app (the login portal).
+      - name: Landing unit tests
+        run: pnpm --filter @workspace/landing run test
+
+      # Parity anchor for the s.104 penalty model the api-server hand-mirrors
+      # (penalty-exposure.ts: "Mirrors penalty-calculator S104_PER_INVOICE —
+      # keep in sync").
+      - name: Penalty calculator unit tests
+        run: pnpm --filter @workspace/penalty-calculator run test
+
       # The shared display formatters, API-error policy and headless UI
       # plumbing live in workspace libs (the apps re-export them); their
       # suites are the single home for those behaviors.
@@ -139,9 +149,9 @@ jobs:
         run: pnpm --filter @workspace/penalty-calculator run build
         env: { BASE_PATH: /penalty-calculator/, PORT: "3000" }
 
-  # End-to-end user journeys against real builds and a real database: portal
-  # auth (incl. throttling + password change), operator Desk, admin advisory,
-  # auditor read-only boundary, consent round-trip, credit-note lifecycle.
+  # End-to-end user journeys against real builds and a real database — runs
+  # the full journey suite; see scripts/src/e2e/journeys.mjs for the current
+  # inventory.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 25

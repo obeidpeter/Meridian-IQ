@@ -2,10 +2,10 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { logger } from "../../lib/logger";
 import { lagosDateString } from "../../lib/lagos-time";
-import { addDays, daysBetween } from "./date-math";
 import {
-  detectMonthlyPattern,
   LOOKBACK_DAYS,
+  MAX_PATTERN_ALERTS,
+  patternAlertFor,
   type HistoryRow,
 } from "./recurring-suggest";
 import { BILL_OF_CLIENT } from "./payables";
@@ -23,10 +23,6 @@ import { BILL_ORIENTATION } from "./receivables";
 //  - GRACE_DAYS of slack before the card speaks (vendor cadences wobble);
 //  - silence past MAX_OVERDUE_DAYS means the arrangement probably ENDED —
 //    a cancelled subscription is not a missing bill.
-
-const GRACE_DAYS = 5;
-const MAX_OVERDUE_DAYS = 45;
-const MAX_ALERTS = 5;
 
 // Scan caps, fetched cap+1 so truncation is DETECTED, never silent (the
 // ask.ts rule): a truncated ASC scan would drop the NEWEST bills, making a
@@ -49,24 +45,13 @@ export interface MissingBillAlert {
 }
 
 // Pure projection over one vendor's mined bill pattern, exported for tests —
-// the unbilledAlertFor rule pointed at the capture side.
+// the shared alert-window core (recurring-suggest.ts patternAlertFor)
+// pointed at the capture side; signature and returned shape unchanged.
 export function missingBillAlertFor(
   bills: HistoryRow[],
   todayLagos: string,
 ): Omit<MissingBillAlert, "supplierPartyId" | "supplierName" | "currency"> | null {
-  const pattern = detectMonthlyPattern(bills);
-  if (!pattern) return null;
-  const expectedByDate = addDays(pattern.lastIssueDate, pattern.medianGapDays);
-  const overdueDays = daysBetween(expectedByDate, todayLagos);
-  if (overdueDays < GRACE_DAYS || overdueDays > MAX_OVERDUE_DAYS) return null;
-  return {
-    count: pattern.count,
-    medianAmount: String(pattern.medianAmount),
-    medianGapDays: pattern.medianGapDays,
-    lastIssueDate: pattern.lastIssueDate,
-    expectedByDate,
-    overdueDays,
-  };
+  return patternAlertFor(bills, todayLagos);
 }
 
 // One client's captured-bill history per vendor over the trailing year,
@@ -162,7 +147,7 @@ export async function listMissingRecurringBills(
     }
   }
   alerts.sort((a, b) => Number(b.medianAmount) - Number(a.medianAmount));
-  return alerts.slice(0, MAX_ALERTS);
+  return alerts.slice(0, MAX_PATTERN_ALERTS);
 }
 
 // Firm-wide count for the weekly digest — the countFirmUnbilled posture:

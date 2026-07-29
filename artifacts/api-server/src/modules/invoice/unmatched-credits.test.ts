@@ -14,7 +14,7 @@ import {
   countFirmUnmatchedCredits,
   listUnmatchedCredits,
 } from "./unmatched-credits.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Unmatched-credit detector (round-14 idea #1). Pinned invariants:
 //  - only PARSED credit lines with a value date in the window are
@@ -34,10 +34,6 @@ const siblingId = randomUUID();
 const buyerId = randomUUID();
 let matchedLineId: string;
 let unmatchedBigId: string;
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 before(async () => {
   const db = getDb();

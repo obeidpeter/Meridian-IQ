@@ -7,11 +7,11 @@ import {
   recurringInvoiceTemplatesTable,
 } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
-import { addDays, daysBetween } from "./date-math";
 import {
   buyerBillingHistories,
-  detectMonthlyPattern,
   LOOKBACK_DAYS,
+  MAX_PATTERN_ALERTS,
+  patternAlertFor,
   type HistoryRow,
 } from "./recurring-suggest";
 
@@ -31,10 +31,6 @@ import {
 //    lapsed retainer is not "unbilled income", and a card that nags forever
 //    about a customer the client lost is worse than no card. (If billing
 //    resumes, the pattern's lastIssueDate moves and the check re-arms.)
-const GRACE_DAYS = 5;
-const MAX_OVERDUE_DAYS = 45;
-const MAX_ALERTS = 5;
-
 export interface UnbilledIncomeAlert {
   buyerPartyId: string;
   buyerName: string;
@@ -47,26 +43,14 @@ export interface UnbilledIncomeAlert {
   overdueDays: number;
 }
 
-// Pure projection over one buyer's mined pattern, exported for tests: the
-// next invoice was expected medianGapDays after the last one; the alert is
-// live while "today" sits inside [expected + grace, expected + max].
+// Pure projection over one buyer's mined pattern, exported for tests — the
+// shared alert-window core (recurring-suggest.ts patternAlertFor) pointed
+// at the income side; signature and returned shape unchanged.
 export function unbilledAlertFor(
   invoices: HistoryRow[],
   todayLagos: string,
 ): Omit<UnbilledIncomeAlert, "buyerPartyId" | "buyerName" | "currency"> | null {
-  const pattern = detectMonthlyPattern(invoices);
-  if (!pattern) return null;
-  const expectedByDate = addDays(pattern.lastIssueDate, pattern.medianGapDays);
-  const overdueDays = daysBetween(expectedByDate, todayLagos);
-  if (overdueDays < GRACE_DAYS || overdueDays > MAX_OVERDUE_DAYS) return null;
-  return {
-    count: pattern.count,
-    medianAmount: String(pattern.medianAmount),
-    medianGapDays: pattern.medianGapDays,
-    lastIssueDate: pattern.lastIssueDate,
-    expectedByDate,
-    overdueDays,
-  };
+  return patternAlertFor(invoices, todayLagos);
 }
 
 // One client's expected-but-absent invoices, biggest money first. The caller
@@ -92,7 +76,7 @@ export async function listUnbilledIncome(
     }
   }
   alerts.sort((a, b) => Number(b.medianAmount) - Number(a.medianAmount));
-  return alerts.slice(0, MAX_ALERTS);
+  return alerts.slice(0, MAX_PATTERN_ALERTS);
 }
 
 // Firm-wide count for the weekly digest: the same detection, run over every

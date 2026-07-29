@@ -237,3 +237,50 @@ test("case retry runs outside the request transaction via the pattern list", () 
     "tenantContext must actually consult the pattern list",
   );
 });
+
+// ---- Proposed-action execution (rounds 21-23) -------------------------------
+// The execute route is BOTH batch shapes at once: up to ten provider calls
+// (draft_chasers) and per-invoice audit appends (submit kinds). Inside one
+// request transaction that is the 30s-cap violation plus the global
+// audit-lock convoy — and the round-22 M3 split additionally requires the
+// chaser MODEL call to run outside any transaction at all.
+test("action execution runs outside the request transaction, model call outside any transaction", () => {
+  const appSrc = src("app.ts");
+  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
+  assert.ok(setStart >= 0);
+  const setEnd = appSrc.indexOf("])", setStart);
+  assert.ok(
+    appSrc
+      .slice(setStart, setEnd)
+      .includes('"POST /api/clerk/action-proposals/execute"'),
+    "the execute route must be exempted from the request transaction",
+  );
+  const moduleSrc = src("modules/clerk/actions.ts");
+  assert.ok(
+    moduleSrc.includes("runRequestContext({ bypass: false, firmId }"),
+    "executeAction opens per-stage FIRM-BOUND contexts (never bypass — callers are firm principals)",
+  );
+  // The M3 split: the chaser's DB half commits inside ctx(); the phrasing
+  // half runs transaction-free so no pooled connection spans model latency.
+  assert.ok(
+    /await ctx\(\(\) =>\s*stagePaymentChaser\(/.test(moduleSrc),
+    "the chaser's staged (DB) half runs inside its own short context",
+  );
+  assert.ok(
+    /const draft = await phrasePaymentChaser\(staged, gateway\)/.test(moduleSrc),
+    "the chaser's phrasing half is called on the staged value",
+  );
+  assert.ok(
+    !/ctx\(\(\) =>\s*phrasePaymentChaser/.test(moduleSrc) &&
+      !/ctx\(\(\) =>\s*draftPaymentChaser/.test(moduleSrc),
+    "no context wrapper may span the chaser model call (round-22 review M3)",
+  );
+  // Evasion guard (review NIT-1): the negative regexes above only match the
+  // plain arrow form — pinning phrasePaymentChaser to exactly ONE call site
+  // (the asserted transaction-free one) closes the async/braced variants.
+  assert.equal(
+    moduleSrc.match(/phrasePaymentChaser\(/g)?.length,
+    1,
+    "phrasePaymentChaser must be called exactly once, at the pinned transaction-free site",
+  );
+});

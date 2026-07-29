@@ -26,6 +26,11 @@ const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 8091);
 const HOOK_PORT = Number(process.env.E2E_HOOK_PORT ?? 8093);
 const BASE = `http://127.0.0.1:${WEB_PORT}`;
 
+// Machine-rail tokens, defined once: set on the api-server env below AND
+// threaded into runJourneys, so the server and the journeys cannot drift.
+const PAYMENT_WEBHOOK_TOKEN = "e2e-pay-hook";
+const COLLECTION_WEBHOOK_TOKEN = "e2e-collect-hook";
+
 const REQUIRED = [
   "artifacts/api-server/dist/index.mjs",
   "artifacts/landing/dist/public/index.html",
@@ -85,11 +90,11 @@ const api = spawn("node", ["--enable-source-maps", "artifacts/api-server/dist/in
     // Lights the payment-confirmation machine rail (fail-closed: 404 while
     // unset). The env is read per call server-side; the integration journey
     // presents this token as x-op-token to settle its payment intent.
-    PAYMENT_WEBHOOK_TOKEN: "e2e-pay-hook",
+    PAYMENT_WEBHOOK_TOKEN,
     // Lights the inbound collection webhook (same fail-closed posture: the
     // rail 404s while unset). The collections journey presents this token as
     // x-op-token to settle a receivable through a collection account.
-    COLLECTION_WEBHOOK_TOKEN: "e2e-collect-hook",
+    COLLECTION_WEBHOOK_TOKEN,
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -112,7 +117,11 @@ try {
   });
   const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
 
-  await runJourneys(page, BASE, check, { hookReceiver });
+  await runJourneys(page, BASE, check, {
+    hookReceiver,
+    paymentWebhookToken: PAYMENT_WEBHOOK_TOKEN,
+    collectionWebhookToken: COLLECTION_WEBHOOK_TOKEN,
+  });
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

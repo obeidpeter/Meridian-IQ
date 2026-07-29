@@ -1,7 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
-import { median } from "./date-math";
+import { LOOKBACK_DAYS, median } from "./date-math";
 
 // Buyer payment-behaviour memory (round-9 idea #1). Reconciliation matches
 // record when money ACTUALLY arrived: an accepted match ties an invoice to a
@@ -19,8 +19,6 @@ import { median } from "./date-math";
 
 // Fewer than three observed settlements is an anecdote, not behaviour.
 const MIN_SETTLEMENTS = 3;
-// Same trailing year as the other history miners.
-const LOOKBACK_DAYS = 365;
 // A credit dated before its invoice is a mis-match or an advance payment —
 // either way not evidence of payment latency; small negatives are clock
 // noise between bank posting and issue timestamps.

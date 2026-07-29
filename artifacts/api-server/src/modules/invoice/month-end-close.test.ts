@@ -13,7 +13,7 @@ import {
 } from "@workspace/db";
 import { computeMonthEndClose } from "./month-end-close.ts";
 import { appendAudit } from "../audit/audit.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Month-end close assistant (round-19 idea #2). Pinned invariants:
 //  - the checklist contains ZERO predicates of its own — each line is the
@@ -29,10 +29,6 @@ const firmId = randomUUID();
 const clientParty = randomUUID();
 const cleanParty = randomUUID();
 const buyer = randomUUID();
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 before(async () => {
   const db = getDb();

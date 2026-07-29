@@ -918,6 +918,7 @@ shared computation as the corresponding chart.
   fixtures (newest 40, `retired_at` null) alongside the static set; tests
   pin the static corpus via `includeGrown: false`. Grown intent fixtures
   never serve memory.
+- **Learning loop** (`modules/clerk/eval-growth.ts`) turns corrected
   approvals into eval fixtures on the sweep loop; the nightly auto-eval is
   opt-in behind `clerk_auto_eval` (spends tokens). Grown fixtures are
   deliberately NOT scrubbed at mint — they double as the supplier-memory

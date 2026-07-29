@@ -16,7 +16,7 @@ import {
   recurringInvoiceTemplatesTable,
 } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
-import { daysBetween, median } from "./date-math";
+import { LOOKBACK_DAYS, addDays, daysBetween, median } from "./date-math";
 import type { LineInput } from "./lines";
 
 // Recurring-invoice suggestions (exhaust idea #3). recurring_invoice_templates
@@ -37,8 +37,10 @@ const MEDIAN_GAP_MIN_DAYS = 21;
 const MEDIAN_GAP_MAX_DAYS = 45;
 const AMOUNT_TOLERANCE = 0.25; // within ±25% of the median amount
 const AMOUNT_CLUSTER_SHARE = 0.6; // …for at least 60% of the invoices
-// Shared with unbilled-income.ts so both surfaces mine the same year.
-export const LOOKBACK_DAYS = 365;
+// Shared with unbilled-income.ts / missing-bills.ts so every surface mines
+// the same year — the constant itself lives in date-math.ts (re-exported
+// here for existing importers).
+export { LOOKBACK_DAYS };
 const MAX_SUGGESTIONS = 5;
 
 export interface RecurringSuggestion {
@@ -55,6 +57,55 @@ export interface HistoryRow {
   id: string;
   issueDate: string;
   grandTotal: number;
+}
+
+// ---------------------------------------------------------------------------
+// The shared alert-window core (refactoring round): unbilled-income and
+// missing-bills fire under the SAME discipline over a mined monthly pattern
+// — the two functions were token-identical twins held in lockstep by prose.
+// An alert is live only inside [expected + grace, expected + max] (both
+// ends inclusive):
+//  - GRACE_DAYS of slack first — cadences wobble, and nagging on day one of
+//    a slipped cycle teaches the client to ignore the card;
+//  - silence past MAX_OVERDUE_DAYS means the arrangement probably ENDED —
+//    a lapsed retainer is not "unbilled income" and a cancelled
+//    subscription is not a missing bill. (If activity resumes, the
+//    pattern's lastIssueDate moves and the check re-arms.)
+// ---------------------------------------------------------------------------
+
+export const GRACE_DAYS = 5;
+export const MAX_OVERDUE_DAYS = 45;
+export const MAX_PATTERN_ALERTS = 5;
+
+export interface PatternAlertCore {
+  count: number;
+  medianAmount: string;
+  medianGapDays: number;
+  lastIssueDate: string;
+  expectedByDate: string;
+  overdueDays: number;
+}
+
+// Pure projection over one counterparty's mined pattern: the next document
+// was expected medianGapDays after the last one; the alert is live while
+// "today" sits inside the window above.
+export function patternAlertFor(
+  rows: HistoryRow[],
+  todayLagos: string,
+): PatternAlertCore | null {
+  const pattern = detectMonthlyPattern(rows);
+  if (!pattern) return null;
+  const expectedByDate = addDays(pattern.lastIssueDate, pattern.medianGapDays);
+  const overdueDays = daysBetween(expectedByDate, todayLagos);
+  if (overdueDays < GRACE_DAYS || overdueDays > MAX_OVERDUE_DAYS) return null;
+  return {
+    count: pattern.count,
+    medianAmount: String(pattern.medianAmount),
+    medianGapDays: pattern.medianGapDays,
+    lastIssueDate: pattern.lastIssueDate,
+    expectedByDate,
+    overdueDays,
+  };
 }
 
 // Pure pattern detection over one buyer's invoices (oldest-first), exported
