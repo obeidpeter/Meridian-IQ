@@ -1234,11 +1234,11 @@ request's writes were rolled back.</li>
 </details>
 <details class="op" id="pauseActionPolicy">
 <summary><span class="method m-post">POST</span><code class="path">/api/clerk/action-policies/{id}/pause</code><span class="sum">Pause a standing approval — the sweep skips it until someone resumes it; the grant survives</span></summary>
-<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkActionPolicy</code> <span class="dim">The paused grant</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkActionPolicy</code> <span class="dim">The paused grant</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
 </details>
 <details class="op" id="resumeActionPolicy">
 <summary><span class="method m-post">POST</span><code class="path">/api/clerk/action-policies/{id}/resume</code><span class="sum">Resume a paused standing approval — clears the pause whether a human or a sweep tripwire set it</span></summary>
-<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkActionPolicy</code> <span class="dim">The resumed grant</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ClerkActionPolicy</code> <span class="dim">The resumed grant</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
 </details>
 <details class="op" id="revokeActionPolicy">
 <summary><span class="method m-post">POST</span><code class="path">/api/clerk/action-policies/{id}/revoke</code><span class="sum">Revoke a standing approval permanently — the row survives as evidence and a fresh grant is required to re-automate this kind</span></summary>
