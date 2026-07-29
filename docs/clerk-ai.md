@@ -185,53 +185,76 @@ review.
 
 ## Proposed actions (advice → assisted action)
 
-The round-21 arc: every advisory surface ends with "…you should submit
+The rounds-21/22 arc: every advisory surface ends with "…you should submit
 these", and the proposed-actions surface closes that gap WITHOUT crossing
 the platform's one hard line — Clerk still never files anything.
 `modules/clerk/actions.ts` + `routes/clerk/actions.ts`; opt-in
 `clerk_actions` flag (per-firm override capable), fail-closed on BOTH ends:
-dark means proposals answer empty (the SME card hides) and execution
-refuses `503 ACTIONS_DISABLED`.
+dark means proposals answer empty (the cards hide) and execution refuses
+`503 ACTIONS_DISABLED`.
 
-- **Closed catalogue, code-defined.** v1 carries exactly one action,
-  `submit_overdue` — the safest (submission is the statutory obligation
-  itself), highest-value (it clears s.104 exposure), fully re-checkable at
-  execution time. An unknown kind is `400 UNKNOWN_ACTION`; there is no
-  model call anywhere on this surface (deterministic assembly end to end).
+- **Closed catalogue, code-defined.** Three actions: `submit_overdue`
+  (round 21 — the statutory obligation itself, clears s.104 exposure),
+  `retry_failed` (round 22 — resubmission of rail-rejected paper via the
+  lifecycle's own failed→submitted edge; each target carries its last rail
+  `error_code` so the human can judge whether the cause is fixed), and
+  `draft_chasers` (round 22 — one approval drafts a staged payment reminder
+  for every chase-worthy receivable via `draftPaymentChaser`'s ladder; the
+  drafts ride the RESPONSE transiently and are never stored — the CLIENT
+  still sends them, the platform sends nothing, exactly the chaser
+  surface's standing posture). An unknown kind is `400 UNKNOWN_ACTION`.
 - **Proposals are computed live** (`GET /clerk/action-proposals`,
   `invoice.read` + the SEC-03 client scope wall) from the digest/penalty
-  card's overdue predicate verbatim — never stored, so never stale. Targets
-  are capped at `MAX_ACTION_TARGETS` (50), oldest first, with an honest
-  `targetCount`/`truncated` and the penalty-floor evidence
-  (`bandExposure().small`, "estimate not advice").
+  card's overdue predicate, the failed-status predicate, and
+  `listChaseRows` — never stored, so never stale, no model call in
+  assembly. Submit kinds cap at `MAX_ACTION_TARGETS` (50); the chaser
+  batch at `MAX_CHASER_TARGETS` (10 — each target is a model call), with
+  honest `targetCount`/`truncated` and per-kind evidence.
 - **A human approves an explicit target list**
-  (`POST /clerk/action-proposals/execute`, `invoice.submit` — approving a
-  Clerk batch IS submitting, so it carries exactly the capability a manual
-  submit does). Execution is the bulk-submit discipline: consent checked up
-  front (CORE-03), then each target walks the EXISTING per-invoice
-  machinery — `validateInvoice`'s compare-and-set, `submitInvoice`'s
-  exactly-once outbox enqueue, maker-checker enforced per row inside it.
-  The batch adds nothing but iteration.
-- **Every target is re-validated at decision time**: the approval was given
-  on a snapshot, so anything that changed since (submitted elsewhere,
-  cancelled, aged out, foreign id) is `skipped_not_eligible`, never
-  double-processed. Validation failures are `invalid` (draft untouched);
-  rail-path `DomainError`s are `failed`.
+  (`POST /clerk/action-proposals/execute`). The capability matches what
+  the batch DOES: submit kinds need `invoice.submit` (approving IS
+  submitting; maker-checker still bites per row inside `submitInvoice`),
+  `draft_chasers` needs `clerk.capture` (the single draft-chaser route's
+  own gate). Consent (CORE-03) gates the submit kinds up front; drafting
+  submits nothing and carries none.
+- **Transaction posture (round 22).** The execute route runs OUTSIDE the
+  request transaction (`NO_CONTEXT_ROUTES`) and every stage commits in its
+  own short `runRequestContext` transaction bound to the CALLER's firm —
+  the bulk-approve posture, for two hard reasons: a chaser batch is up to
+  ten sequential model calls (past the 30s cap), and a submit batch inside
+  one transaction held the GLOBAL audit advisory lock batch-wide (the
+  round-21 review's convoy/deadlock finding, closed here). The trade is
+  bulk-approve's: an executed target is durable immediately, and the
+  per-stage `SET LOCAL ROLE meridian_app` + firm GUC means the module
+  carries the REAL RLS posture even in module tests — a cross-firm caller
+  dies at the engagement-scoped consent wall with the same
+  `CONSENT_REQUIRED` an unconsented own client gets (no oracle), before
+  any decision row exists.
+- **Every target is re-validated at decision time** against its own kind's
+  predicate: anything that changed since the proposal (submitted
+  elsewhere, cancelled, settled, aged out, foreign id) is
+  `skipped_not_eligible`, never double-processed. Validation failures are
+  `invalid` (draft untouched); rail-path `DomainError`s are `failed`;
+  chaser successes are `drafted`.
 - **The decision is the durable artifact** (`clerk_action_decisions`,
-  firm-keyed RLS migration 0028): who approved, on what evidence, over
-  which targets, with per-target outcomes and honest tallies; surfaced via
-  `GET /clerk/action-decisions` (newest 10) and a pointer-only
-  `clerk.action.executed` audit event (SEC-12).
-- The SME dashboard's "Clerk suggests" card renders only when a proposal
-  exists; approval is a two-step dialog (confirm → per-target results) that
-  then invalidates the invoice/penalty/close queries so every advisory
-  card tells the same story.
+  firm-keyed RLS migration 0028): who approved, on what pre-execution
+  evidence, over which targets, with per-target outcomes and honest
+  tallies; surfaced via `GET /clerk/action-decisions` (newest 10) and a
+  pointer-only `clerk.action.executed` audit event (SEC-12). Chaser TEXT
+  lives nowhere.
+- **Surfaces.** The SME dashboard's "Clerk suggests" card and its console
+  twin on the client page (`components/clerk-actions-card.tsx`, which also
+  shows the recent-decisions strip): two-step confirm → per-target-results
+  dialog, drafts rendered once with copy buttons, advisory queries
+  invalidated on close. Ask Clerk knows the surface too:
+  `data.proposed_actions` (CLIENT_SAFE, own-party-pinned) answers what is
+  WAITING FOR APPROVAL and points at the dashboard — Ask can never
+  execute anything.
 
-Deferred to the next rounds of the arc: `retry_failed` (resubmit failed
-paper once the underlying issue is fixed), chaser-batch actions (send the
-drafted reminders), console/firm-side surfaces, Ask Clerk awareness, and
-an action-effectiveness report (did approved batches actually clear the
-exposure?).
+Deferred to the next round of the arc: an action-effectiveness report
+(did approved batches actually clear the exposure?), and the shared
+audit-lock posture follow-up for the OLDER batch surface (bulk-submit
+still runs in-transaction).
 
 ## Ask Clerk (grounded firm-data Q&A)
 

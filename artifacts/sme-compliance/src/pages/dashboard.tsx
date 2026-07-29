@@ -43,6 +43,7 @@ import type {
   CashflowBucket,
   ClerkActionDecision,
   PayablesSummaryGroupsItem,
+  PaymentChaserDraft,
   ReceivablesBucket,
   ReceivablesSummary,
 } from "@workspace/api-client-react";
@@ -773,6 +774,7 @@ const OUTCOME_LABELS: Record<string, string> = {
   invalid: "Needs fixing",
   skipped_not_eligible: "Skipped",
   failed: "Failed",
+  drafted: "Drafted",
 };
 
 // Proposed actions (round 21): Clerk assembles the batch from the same
@@ -786,9 +788,11 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   const queryClient = useQueryClient();
   const execute = useExecuteAction();
   // `decision === null` is the confirmation step; a decision switches the
-  // dialog to the results view (the bulk-submit dialog's shape).
+  // dialog to the results view (the bulk-submit dialog's shape). Chaser
+  // batches also carry their TRANSIENT drafts — shown once, never stored.
   const [confirming, setConfirming] = useState<ActionProposal | null>(null);
   const [decision, setDecision] = useState<ClerkActionDecision | null>(null);
+  const [drafts, setDrafts] = useState<PaymentChaserDraft[] | null>(null);
   const { data: proposals, isSuccess } = useGetActionProposals(
     { clientPartyId },
     {
@@ -824,6 +828,7 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
         },
       });
       setDecision(res.decision);
+      setDrafts(res.drafts ?? null);
       // Not awaited: a background refetch rejection must not surface as a
       // false "action failed" error after the batch already ran. The
       // no-args keys prefix-match every param variant. The proposals and
@@ -864,6 +869,7 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
     }
     setConfirming(null);
     setDecision(null);
+    setDrafts(null);
   };
 
   return (
@@ -881,12 +887,18 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             <div className="space-y-1 text-xs text-muted-foreground">
               {action.targets.slice(0, TARGET_DISPLAY_CAP).map((t) => (
                 <p key={t.invoiceId} data-testid={`action-target-${t.invoiceId}`}>
-                  {t.invoiceNumber} · issued {formatDate(t.issueDate)} ·{" "}
-                  {t.daysOverdue} day{t.daysOverdue === 1 ? "" : "s"} past the
-                  window
+                  {t.invoiceNumber} · issued {formatDate(t.issueDate)}
+                  {action.kind === "submit_overdue" && (
+                    <>
+                      {" "}
+                      · {t.daysOverdue} day{t.daysOverdue === 1 ? "" : "s"} past
+                      the window
+                    </>
+                  )}
                   {t.grandTotal
                     ? ` · ${formatAmount(t.grandTotal, t.currency)}`
                     : ""}
+                  {t.note ? ` · ${t.note}` : ""}
                 </p>
               ))}
               {action.targets.length > TARGET_DISPLAY_CAP && (
@@ -922,13 +934,13 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               <DialogHeader>
                 <DialogTitle>Approve: {confirming?.title}</DialogTitle>
                 <DialogDescription>
-                  This submits {confirming?.targets.length} invoice
-                  {confirming?.targets.length === 1 ? "" : "s"} to the
-                  e-invoicing rails through the ordinary path — validation,
-                  consent and any approval policy all apply. Each invoice is
-                  re-checked at this moment; anything already submitted or no
-                  longer overdue is skipped, and the decision is recorded under
-                  your name.
+                  {confirming?.kind === "draft_chasers"
+                    ? `This drafts ${confirming?.targets.length} payment reminder${
+                        confirming?.targets.length === 1 ? "" : "s"
+                      } for you to review, copy and send yourself — nothing is sent or submitted by the platform. Each invoice is re-checked at this moment, and the decision is recorded under your name.`
+                    : `This ${confirming?.kind === "retry_failed" ? "resubmits" : "submits"} ${confirming?.targets.length} invoice${
+                        confirming?.targets.length === 1 ? "" : "s"
+                      } to the e-invoicing rails through the ordinary path — validation, consent and any approval policy all apply. Each invoice is re-checked at this moment; anything already processed or no longer eligible is skipped, and the decision is recorded under your name.`}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -957,8 +969,10 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               <DialogHeader>
                 <DialogTitle>Batch result</DialogTitle>
                 <DialogDescription data-testid="text-action-outcome">
-                  {decision.executedCount} submitted · {decision.failedCount}{" "}
-                  need attention · {decision.skippedCount} skipped.
+                  {decision.executedCount}{" "}
+                  {decision.kind === "draft_chasers" ? "drafted" : "submitted"} ·{" "}
+                  {decision.failedCount} need attention ·{" "}
+                  {decision.skippedCount} skipped.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-1 text-sm">
@@ -984,6 +998,42 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                   </p>
                 ))}
               </div>
+              {drafts && drafts.length > 0 && (
+                <div className="space-y-3 border-t pt-3">
+                  <p className="text-sm font-medium">
+                    Your drafted reminders — copy each into your own email.
+                    They are not stored: copy them before closing.
+                  </p>
+                  {drafts.map((d) => (
+                    <div
+                      key={d.invoiceId}
+                      className="rounded-md border p-3 space-y-1.5 text-sm"
+                      data-testid={`draft-${d.invoiceId}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-medium truncate">{d.subject}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            navigator.clipboard.writeText(
+                              `${d.subject}\n\n${d.body}`,
+                            )
+                          }
+                          data-testid={`button-copy-draft-${d.invoiceId}`}
+                        >
+                          Copy
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {d.invoiceNumber} · to {d.buyerName} · reminder #
+                        {d.stage}
+                      </p>
+                      <p className="whitespace-pre-wrap text-xs">{d.body}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
               <DialogFooter>
                 <Button onClick={closeDialog} data-testid="button-close-action">
                   Done

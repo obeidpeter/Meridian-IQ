@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.52.0
+ * OpenAPI spec version: 0.53.0
  */
 export interface HealthStatus {
   status: string;
@@ -4235,6 +4235,8 @@ export interface ActionTarget {
   /** @nullable */
   grandTotal: string | null;
   currency: string;
+  /** @nullable */
+  note: string | null;
 }
 
 export type ActionProposalKind = typeof ActionProposalKind[keyof typeof ActionProposalKind];
@@ -4242,6 +4244,8 @@ export type ActionProposalKind = typeof ActionProposalKind[keyof typeof ActionPr
 
 export const ActionProposalKind = {
   submit_overdue: 'submit_overdue',
+  retry_failed: 'retry_failed',
+  draft_chasers: 'draft_chasers',
 } as const;
 
 export type ActionProposalEvidence = { [key: string]: unknown };
@@ -4266,6 +4270,8 @@ export type ExecuteActionInputKind = typeof ExecuteActionInputKind[keyof typeof 
 
 export const ExecuteActionInputKind = {
   submit_overdue: 'submit_overdue',
+  retry_failed: 'retry_failed',
+  draft_chasers: 'draft_chasers',
 } as const;
 
 export interface ExecuteActionInput {
@@ -4287,6 +4293,7 @@ export const ActionTargetOutcomeOutcome = {
   invalid: 'invalid',
   skipped_not_eligible: 'skipped_not_eligible',
   failed: 'failed',
+  drafted: 'drafted',
 } as const;
 
 export interface ActionTargetOutcome {
@@ -4314,8 +4321,34 @@ export interface ClerkActionDecision {
   createdAt: string;
 }
 
+export type PaymentChaserDraftSource = typeof PaymentChaserDraftSource[keyof typeof PaymentChaserDraftSource];
+
+
+export const PaymentChaserDraftSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export type PaymentChaserDraftPreviousReminders = {
+  count: number;
+  lastAt: string | null;
+};
+
+export interface PaymentChaserDraft {
+  invoiceId: string;
+  invoiceNumber: string;
+  buyerName: string;
+  subject: string;
+  body: string;
+  source: PaymentChaserDraftSource;
+  stage: number;
+  previousReminders: PaymentChaserDraftPreviousReminders;
+}
+
 export interface ExecuteActionResult {
   decision: ClerkActionDecision;
+  /** @nullable */
+  drafts: PaymentChaserDraft[] | null;
 }
 
 export interface ActionDecisionList {
@@ -5165,30 +5198,6 @@ export interface FailureExplanation {
 
 export interface DraftPaymentChaserInput {
   invoiceId: string;
-}
-
-export type PaymentChaserDraftSource = typeof PaymentChaserDraftSource[keyof typeof PaymentChaserDraftSource];
-
-
-export const PaymentChaserDraftSource = {
-  clerk: 'clerk',
-  template: 'template',
-} as const;
-
-export type PaymentChaserDraftPreviousReminders = {
-  count: number;
-  lastAt: string | null;
-};
-
-export interface PaymentChaserDraft {
-  invoiceId: string;
-  invoiceNumber: string;
-  buyerName: string;
-  subject: string;
-  body: string;
-  source: PaymentChaserDraftSource;
-  stage: number;
-  previousReminders: PaymentChaserDraftPreviousReminders;
 }
 
 export interface ChaseLogSummary {

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.52.0
+ * OpenAPI spec version: 0.53.0
  */
 
 export type ActionProposalKind = typeof ActionProposalKind[keyof typeof ActionProposalKind];
@@ -11,4 +11,6 @@ export type ActionProposalKind = typeof ActionProposalKind[keyof typeof ActionPr
 
 export const ActionProposalKind = {
   submit_overdue: 'submit_overdue',
+  retry_failed: 'retry_failed',
+  draft_chasers: 'draft_chasers',
 } as const;

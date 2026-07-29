@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.52.0
+ * OpenAPI spec version: 0.53.0
  */
 
 export type ActionTargetOutcomeOutcome = typeof ActionTargetOutcomeOutcome[keyof typeof ActionTargetOutcomeOutcome];
@@ -14,4 +14,5 @@ export const ActionTargetOutcomeOutcome = {
   invalid: 'invalid',
   skipped_not_eligible: 'skipped_not_eligible',
   failed: 'failed',
+  drafted: 'drafted',
 } as const;

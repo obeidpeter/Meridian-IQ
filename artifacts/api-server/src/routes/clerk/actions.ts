@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { runRequestContext } from "@workspace/db";
 import {
   GetActionProposalsQueryParams,
   GetActionProposalsResponse,
@@ -16,17 +17,23 @@ import {
   listActionProposals,
 } from "../../modules/clerk/actions";
 
-// Proposed actions (round 21): Clerk assembles a batch, a HUMAN approves it,
-// and approval executes through the platform's existing per-invoice
-// machinery. Three deliberate authz choices:
+// Proposed actions (rounds 21-22): Clerk assembles a batch, a HUMAN
+// approves it, and approval executes through the platform's existing
+// per-invoice machinery. The authz choices:
 //  - proposals and decisions are READ surfaces (invoice.read) — they reveal
 //    nothing the invoice list doesn't already show;
-//  - execution requires invoice.submit — approving a Clerk batch IS
-//    submitting, so it carries exactly the capability a manual submit does
-//    (and maker-checker still bites per invoice inside submitInvoice);
+//  - executing a SUBMIT kind requires invoice.submit — approving a Clerk
+//    batch IS submitting, so it carries exactly the capability a manual
+//    submit does (and maker-checker still bites per invoice inside
+//    submitInvoice); a draft_chasers batch submits nothing and carries the
+//    chaser surface's own capability, clerk.capture;
 //  - all three resolve the client through resolveClientAnalyticsScope
 //    (SEC-03): a client_user is pinned to its own party, a firm principal
 //    names the client.
+// The execute route runs OUTSIDE the request transaction (app.ts
+// NO_CONTEXT_ROUTES — a chaser batch makes sequential model calls, and the
+// per-target commits keep the global audit lock short); the module manages
+// its own short firm-bound transactions.
 // The opt-in clerk_actions flag is enforced inside the module (dark →
 // proposals answer empty, execution refuses 503).
 
@@ -46,21 +53,33 @@ router.get("/clerk/action-proposals", async (req, res): Promise<void> => {
 router.post(
   "/clerk/action-proposals/execute",
   async (req, res): Promise<void> => {
-    assertCan(req.principal, "invoice.submit");
     const body = parseOrThrow(ExecuteActionBody, req.body);
+    // The capability matches what the batch DOES: submitting paper needs
+    // invoice.submit; drafting reminder text needs clerk.capture (the
+    // single draft-chaser route's own gate).
+    assertCan(
+      req.principal,
+      body.kind === "draft_chasers" ? "clerk.capture" : "invoice.submit",
+    );
     const { firmId, clientPartyId } = resolveClientAnalyticsScope(
       req.principal,
       body.clientPartyId,
     );
     // Parity with the manual bulk-submit route: the party must be reachable
     // by this principal (cross-tenant IDOR wall), not just consent-refused.
-    await assertPartyAccess(req.principal, clientPartyId);
+    // This route runs OUTSIDE the request transaction, so the lookup gets
+    // its own short firm-bound context (the raw pool has no GUCs — RLS
+    // would blank the engagement read and false-deny).
+    await runRequestContext({ bypass: false, firmId }, () =>
+      assertPartyAccess(req.principal, clientPartyId),
+    );
     const result = await executeAction(
       firmId,
       clientPartyId,
       req.principal.userId,
       body.kind,
       body.invoiceIds,
+      req.principal,
     );
     res.json(ExecuteActionResponse.parse(result));
   },

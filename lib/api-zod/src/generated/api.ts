@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.52.0
+ * OpenAPI spec version: 0.53.0
  */
 import * as zod from 'zod';
 
@@ -7726,7 +7726,7 @@ export const GetActionProposalsQueryParams = zod.object({
 
 export const GetActionProposalsResponse = zod.object({
   "actions": zod.array(zod.object({
-  "kind": zod.enum(['submit_overdue']),
+  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
   "title": zod.string(),
   "why": zod.string(),
   "targets": zod.array(zod.object({
@@ -7735,7 +7735,8 @@ export const GetActionProposalsResponse = zod.object({
   "issueDate": zod.string(),
   "daysOverdue": zod.number(),
   "grandTotal": zod.string().nullable(),
-  "currency": zod.string()
+  "currency": zod.string(),
+  "note": zod.string().nullable()
 })),
   "targetCount": zod.number(),
   "truncated": zod.boolean(),
@@ -7753,7 +7754,7 @@ export const executeActionBodyInvoiceIdsMax = 50;
 
 
 export const ExecuteActionBody = zod.object({
-  "kind": zod.enum(['submit_overdue']),
+  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
   "invoiceIds": zod.array(zod.string().uuid()).min(1).max(executeActionBodyInvoiceIdsMax),
   "clientPartyId": zod.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
 })
@@ -7769,7 +7770,7 @@ export const ExecuteActionResponse = zod.object({
   "targets": zod.array(zod.object({
   "invoiceId": zod.string(),
   "invoiceNumber": zod.string(),
-  "outcome": zod.enum(['submitted', 'invalid', 'skipped_not_eligible', 'failed']),
+  "outcome": zod.enum(['submitted', 'invalid', 'skipped_not_eligible', 'failed', 'drafted']),
   "error": zod.string().nullable()
 })),
   "requestedCount": zod.number(),
@@ -7777,7 +7778,20 @@ export const ExecuteActionResponse = zod.object({
   "skippedCount": zod.number(),
   "failedCount": zod.number(),
   "createdAt": zod.coerce.date()
+}),
+  "drafts": zod.array(zod.object({
+  "invoiceId": zod.string(),
+  "invoiceNumber": zod.string(),
+  "buyerName": zod.string(),
+  "subject": zod.string(),
+  "body": zod.string(),
+  "source": zod.enum(['clerk', 'template']),
+  "stage": zod.number(),
+  "previousReminders": zod.object({
+  "count": zod.number(),
+  "lastAt": zod.string().nullable()
 })
+})).nullable()
 })
 
 
@@ -7799,7 +7813,7 @@ export const GetActionDecisionsResponse = zod.object({
   "targets": zod.array(zod.object({
   "invoiceId": zod.string(),
   "invoiceNumber": zod.string(),
-  "outcome": zod.enum(['submitted', 'invalid', 'skipped_not_eligible', 'failed']),
+  "outcome": zod.enum(['submitted', 'invalid', 'skipped_not_eligible', 'failed', 'drafted']),
   "error": zod.string().nullable()
 })),
   "requestedCount": zod.number(),
