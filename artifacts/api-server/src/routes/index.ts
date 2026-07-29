@@ -11,6 +11,13 @@ import invoicesRouter from "./invoices";
 // Supplier payables: buyer-side bill access lives on its own router — the
 // invoice routes' SEC-03 loaders stay supplier-pinned.
 import billsRouter from "./bills";
+// Compliance round: VAT position (client + firm rollup), firm governance
+// policies (maker-checker), collection accounts (incl. the fail-closed
+// inbound payment webhook).
+import vatPositionRouter from "./vat-position";
+import firmPoliciesRouter from "./firm-policies";
+import collectionsRouter from "./collections";
+import compliancePackRouter from "./compliance-pack";
 import recurringRouter from "./recurring";
 import verificationRouter from "./verification";
 import messagingRouter from "./messaging";
@@ -69,6 +76,10 @@ router.use(consentRouter);
 router.use(engagementsRouter);
 router.use(invoicesRouter);
 router.use(billsRouter);
+router.use(vatPositionRouter);
+router.use(firmPoliciesRouter);
+router.use(collectionsRouter);
+router.use(compliancePackRouter);
 router.use(recurringRouter);
 router.use(verificationRouter);
 router.use(messagingRouter);

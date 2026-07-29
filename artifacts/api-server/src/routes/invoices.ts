@@ -83,6 +83,11 @@ import {
   GetChaseEffectivenessResponse,
   RecordChaseReminderParams,
   RecordChaseReminderResponse,
+  ApproveInvoiceParams,
+  ApproveInvoiceBody,
+  ApproveInvoiceResponse,
+  ListInvoiceApprovalsParams,
+  ListInvoiceApprovalsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { computeStatusLight } from "../modules/clerk/status-light";
@@ -132,6 +137,11 @@ import {
   submitInvoice,
   updateInvoiceContent,
 } from "../modules/invoice/service";
+import {
+  approvalViews,
+  listApprovals,
+  recordApproval,
+} from "../modules/invoice/approvals";
 import {
   canTransition,
   applyTransition,
@@ -258,6 +268,16 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
       : [],
   );
 
+  // Naira view of the grand total (contract 0.45.0): NGN rows ARE naira; a
+  // foreign-currency row converts through its captured issue-time rate; no
+  // rate means unconvertible — an honest blank, never an assumed 1.0. The FX
+  // columns are APPENDED so existing consumers' column positions hold
+  // (`currency` already sits mid-row).
+  const ngnEquivalent = (r: (typeof rows)[number]): string => {
+    if (r.currency === "NGN") return r.grandTotal;
+    if (!r.fxRateToNgn) return "";
+    return (Number(r.grandTotal) * Number(r.fxRateToNgn)).toFixed(2);
+  };
   const csv = toCsv(
     [
       "invoiceNumber",
@@ -273,6 +293,8 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
       "supplier",
       "buyer",
       "createdAt",
+      "fxRateToNgn",
+      "ngnEquivalent",
     ],
     rows.map((r) => [
       r.invoiceNumber,
@@ -288,6 +310,8 @@ router.get("/invoices/export", async (req, res): Promise<void> => {
       names.get(r.supplierPartyId) ?? r.supplierPartyId,
       names.get(r.buyerPartyId) ?? r.buyerPartyId,
       r.createdAt.toISOString(),
+      r.fxRateToNgn ?? "",
+      ngnEquivalent(r),
     ]),
   );
   sendCsvAttachment(
@@ -672,6 +696,31 @@ router.post("/invoices/:id/submit", async (req, res): Promise<void> => {
   await loadForTenant(req, params.id);
   const invoice = await submitInvoice(params.id, req.principal.userId);
   res.status(202).json(SubmitInvoiceResponse.parse(invoice));
+});
+
+// Maker-checker (contract 0.45.0): record a submission approval. The module
+// guards orientation (a bill 409s NOT_SUBMITTABLE) and state (pre-submission
+// paper only); the approver/submitter separation bites at submit time, where
+// the firm's policy demands a live approval by someone OTHER than the
+// submitter. Body is optional (an approval needs no note).
+router.post("/invoices/:id/approve", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.approve");
+  const params = parseOrThrow(ApproveInvoiceParams, req.params);
+  const { invoice } = await loadForTenant(req, params.id);
+  const body = parseOrThrow(ApproveInvoiceBody, req.body ?? {});
+  const row = await recordApproval(invoice, req.principal.userId, body.note);
+  const [view] = await approvalViews([row]);
+  res.status(201).json(ApproveInvoiceResponse.parse(view));
+});
+
+// The invoice's approval evidence trail, newest first, revoked rows included.
+// Same gate and scoping as GET /invoices/:id (tenant + SEC-03 via
+// loadForTenant).
+router.get("/invoices/:id/approvals", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const params = parseOrThrow(ListInvoiceApprovalsParams, req.params);
+  await loadForTenant(req, params.id);
+  res.json(ListInvoiceApprovalsResponse.parse(await listApprovals(params.id)));
 });
 
 router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {

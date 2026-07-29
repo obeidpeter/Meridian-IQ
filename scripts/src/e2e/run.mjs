@@ -86,6 +86,10 @@ const api = spawn("node", ["--enable-source-maps", "artifacts/api-server/dist/in
     // unset). The env is read per call server-side; the integration journey
     // presents this token as x-op-token to settle its payment intent.
     PAYMENT_WEBHOOK_TOKEN: "e2e-pay-hook",
+    // Lights the inbound collection webhook (same fail-closed posture: the
+    // rail 404s while unset). The collections journey presents this token as
+    // x-op-token to settle a receivable through a collection account.
+    COLLECTION_WEBHOOK_TOKEN: "e2e-collect-hook",
   },
   stdio: ["ignore", "pipe", "pipe"],
 });

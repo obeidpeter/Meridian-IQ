@@ -60,21 +60,34 @@ export interface DraftState {
   buyerPartyId: string;
   issueDate: string;
   dueDate: string;
+  /** ISO currency code; NGN unless the client picked otherwise. */
+  currency: string;
+  /** ₦ per unit of the foreign currency; blank = not provided. */
+  fxRateToNgn: string;
   lines: LineDraft[];
 }
+
+// The lawful set the rails accept for e-invoicing; NGN leads and is the
+// default — a foreign currency additionally wants an exchange rate so the
+// naira-equivalent VAT can be computed server-side.
+export const CURRENCIES = ["NGN", "USD", "EUR", "GBP"] as const;
 
 const emptyDraft = (): DraftState => ({
   invoiceNumber: "",
   buyerPartyId: "",
   issueDate: todayIsoDate(),
   dueDate: "",
+  currency: "NGN",
+  fxRateToNgn: "",
   lines: [emptyLine()],
 });
 
 function loadDraft(): DraftState {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) return JSON.parse(raw) as DraftState;
+    // Merge over the empty draft so an offline draft saved before the
+    // currency fields existed still loads with NGN defaults.
+    if (raw) return { ...emptyDraft(), ...(JSON.parse(raw) as Partial<DraftState>) };
   } catch {
     /* ignore corrupt draft */
   }
@@ -153,6 +166,7 @@ export function InvoiceNew() {
       const matchedBuyerId =
         top && buyers.some((b) => b.id === top.partyId) ? top.partyId : "";
       setDraft((d) => ({
+        ...d,
         invoiceNumber: p.invoiceNumber ?? d.invoiceNumber,
         buyerPartyId: matchedBuyerId || d.buyerPartyId,
         issueDate: p.issueDate ?? d.issueDate,
@@ -250,12 +264,18 @@ export function InvoiceNew() {
     if (!me?.clientPartyId) return;
     try {
       const lines: InvoiceLineInput[] = toInvoiceLineInputs(draft.lines);
+      const fxRate = draft.fxRateToNgn.trim();
       const res = await create.mutateAsync({
         data: {
           supplierPartyId: me.clientPartyId,
           buyerPartyId: draft.buyerPartyId,
           invoiceNumber: draft.invoiceNumber.trim(),
-          currency: "NGN",
+          currency: draft.currency || "NGN",
+          // The rate only makes sense on a foreign-currency invoice, and an
+          // empty field is omitted, never sent as "".
+          ...(draft.currency !== "NGN" && fxRate
+            ? { fxRateToNgn: fxRate }
+            : {}),
           issueDate: draft.issueDate,
           dueDate: draft.dueDate || undefined,
           lines,
@@ -490,6 +510,44 @@ export function InvoiceNew() {
                     onChange={(e) => setDraft((d) => ({ ...d, dueDate: e.target.value }))}
                   />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="currency-select">Currency</Label>
+                  <select
+                    id="currency-select"
+                    value={draft.currency}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, currency: e.target.value }))
+                    }
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    data-testid="select-currency"
+                  >
+                    {CURRENCIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {draft.currency !== "NGN" && (
+                  <div>
+                    <Label htmlFor="fx-rate">Exchange rate (₦ per unit)</Label>
+                    <Input
+                      id="fx-rate"
+                      inputMode="decimal"
+                      value={draft.fxRateToNgn}
+                      placeholder="e.g. 1650.00"
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, fxRateToNgn: e.target.value }))
+                      }
+                      data-testid="input-fx-rate"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Used to fold this invoice into your naira VAT position.
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

@@ -19,7 +19,13 @@ import {
   RECEIVABLE_ORIENTATION,
 } from "../invoice/receivables";
 import { BILL_UNPAID } from "../invoice/payables";
+import {
+  computeFirmVatPositions,
+  computeVatPosition,
+  vatPositionMonths,
+} from "../invoice/vat-position";
 import { firmClerkUsage } from "./budget";
+import { monthLabel } from "./client-statement";
 import { isAre, MONTH_NAMES, plural } from "./text";
 
 // Grounded firm-data Q&A (Clerk idea #6). Ask Clerk gains a SECOND closed
@@ -657,6 +663,86 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     },
   },
   {
+    key: "data.vat_position",
+    title:
+      "the month's VAT position — output VAT from issued documents versus input VAT from supplier bills, with the verified (defensible) split (this month unless another listed month is named)",
+    accepts: { month: true, client: true },
+    async run(firmId, params) {
+      // Month resolution mirrors data.submitted_this_month: the app-resolved
+      // first-of-month key, defaulting to the current Lagos month — the same
+      // default the /vat-position route applies, so Ask and the dashboard
+      // can never disagree about "this month".
+      const monthStart = params?.monthStart ?? vatPositionMonths()[0];
+      const period = `in ${params?.monthLabel ?? monthLabel(monthStart)}`;
+      const amountFact = (
+        key: string,
+        label: string,
+        value: string,
+      ): ProtectedFact => ({ key, label, kind: "amount", value, unit: "NGN" });
+      // Deliberately NO answer links, per client or firm-wide (billAggregate's
+      // posture and reason): the position's input side is bills, which are
+      // not invoice-detail linkable for a client asker (the SEC-03 invoice
+      // detail routes are supplier-pinned).
+      if (params?.clientPartyId) {
+        const p = await computeVatPosition(
+          firmId,
+          params.clientPartyId,
+          monthStart,
+        );
+        const fx =
+          p.excludedForFx > 0
+            ? ` ${plural(p.excludedForFx, "non-NGN document")} without a captured FX rate ${isAre(p.excludedForFx)} excluded from these totals.`
+            : "";
+        return {
+          text: `VAT position${forClient(params)} ${period}: output VAT NGN ${p.outputVat} from ${plural(p.outputInvoiceCount, "rails-accepted invoice")} (credit notes netted), input VAT NGN ${p.inputVat} on ${plural(p.billCount, "captured supplier bill")}, of which NGN ${p.inputVatVerified} is verified against the national record. Net VAT NGN ${p.netVat}; defensible net (verified input only) NGN ${p.defensibleNetVat}.${fx}`,
+          facts: [
+            amountFact("output_vat", "Output VAT", p.outputVat),
+            amountFact("input_vat", "Input VAT", p.inputVat),
+            amountFact(
+              "input_vat_verified",
+              "Verified input VAT",
+              p.inputVatVerified,
+            ),
+            amountFact("net_vat", "Net VAT", p.netVat),
+            amountFact(
+              "defensible_net_vat",
+              "Defensible net VAT",
+              p.defensibleNetVat,
+            ),
+            ...(p.excludedForFx > 0
+              ? [
+                  countFact(
+                    "excluded_for_fx",
+                    "Documents excluded for missing FX rate",
+                    p.excludedForFx,
+                  ),
+                ]
+              : []),
+          ],
+        };
+      }
+      const f = await computeFirmVatPositions(firmId, monthStart);
+      return {
+        text: `VAT position across ${plural(f.rows.length, "engaged client")} ${period}: output VAT NGN ${f.totals.outputVat}, input VAT NGN ${f.totals.inputVat} (NGN ${f.totals.inputVatVerified} verified against the national record). Net VAT NGN ${f.totals.netVat}; defensible net (verified input only) NGN ${f.totals.defensibleNetVat}.`,
+        facts: [
+          amountFact("output_vat", "Output VAT", f.totals.outputVat),
+          amountFact("input_vat", "Input VAT", f.totals.inputVat),
+          amountFact(
+            "input_vat_verified",
+            "Verified input VAT",
+            f.totals.inputVatVerified,
+          ),
+          amountFact("net_vat", "Net VAT", f.totals.netVat),
+          amountFact(
+            "defensible_net_vat",
+            "Defensible net VAT",
+            f.totals.defensibleNetVat,
+          ),
+        ],
+      };
+    },
+  },
+  {
     key: "data.clerk_allowance",
     title: "the firm's Clerk AI token allowance and usage this month",
     accepts: {},
@@ -727,6 +813,12 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // for clients).
   "data.payables_due",
   "data.total_owed",
+  // VAT position with the forced own-party pin: ask.ts always sets
+  // params.clientPartyId for a client asker, so only the per-client branch
+  // (computeVatPosition over the caller's own documents) is reachable — the
+  // firm-wide totals branch never runs for a client. Linkless like the two
+  // payables keys above, for the same bills-are-not-linkable reason.
+  "data.vat_position",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

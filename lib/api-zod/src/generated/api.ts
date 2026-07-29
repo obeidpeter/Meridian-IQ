@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.46.0
+ * OpenAPI spec version: 0.47.0
  */
 import * as zod from 'zod';
 
@@ -790,6 +790,7 @@ export const ListInvoicesResponseItem = zod.object({
   "relatedInvoiceId": zod.string().nullish(),
   "invoiceNumber": zod.string(),
   "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
   "issueDate": zod.string(),
   "dueDate": zod.string().nullish(),
   "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
@@ -815,6 +816,7 @@ export const CreateInvoiceBody = zod.object({
   "buyerPartyId": zod.string(),
   "invoiceNumber": zod.string().min(1),
   "currency": zod.string().optional(),
+  "fxRateToNgn": zod.string().optional(),
   "issueDate": zod.string(),
   "dueDate": zod.string().optional(),
   "kind": zod.enum(['invoice', 'credit_note', 'correction']).optional(),
@@ -840,6 +842,7 @@ export const CreateInvoiceResponse = zod.object({
   "relatedInvoiceId": zod.string().nullish(),
   "invoiceNumber": zod.string(),
   "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
   "issueDate": zod.string(),
   "dueDate": zod.string().nullish(),
   "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
@@ -1549,6 +1552,7 @@ export const GetInvoiceResponse = zod.object({
   "relatedInvoiceId": zod.string().nullish(),
   "invoiceNumber": zod.string(),
   "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
   "issueDate": zod.string(),
   "dueDate": zod.string().nullish(),
   "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
@@ -1589,6 +1593,7 @@ export const UpdateInvoiceBody = zod.object({
   "invoiceNumber": zod.string().min(1).optional(),
   "issueDate": zod.string().optional(),
   "dueDate": zod.string().nullish(),
+  "fxRateToNgn": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "lines": zod.array(zod.object({
   "description": zod.string().min(1),
@@ -1609,6 +1614,7 @@ export const UpdateInvoiceResponse = zod.object({
   "relatedInvoiceId": zod.string().nullish(),
   "invoiceNumber": zod.string(),
   "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
   "issueDate": zod.string(),
   "dueDate": zod.string().nullish(),
   "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
@@ -1663,6 +1669,7 @@ export const SubmitInvoiceResponse = zod.object({
   "relatedInvoiceId": zod.string().nullish(),
   "invoiceNumber": zod.string(),
   "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
   "issueDate": zod.string(),
   "dueDate": zod.string().nullish(),
   "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
@@ -1785,6 +1792,7 @@ export const CancelInvoiceResponse = zod.object({
   "relatedInvoiceId": zod.string().nullish(),
   "invoiceNumber": zod.string(),
   "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
   "issueDate": zod.string(),
   "dueDate": zod.string().nullish(),
   "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
@@ -1825,6 +1833,7 @@ export const CreditNoteInvoiceResponse = zod.object({
   "relatedInvoiceId": zod.string().nullish(),
   "invoiceNumber": zod.string(),
   "currency": zod.string(),
+  "fxRateToNgn": zod.string().nullish(),
   "issueDate": zod.string(),
   "dueDate": zod.string().nullish(),
   "status": zod.enum(['draft', 'validated', 'submitted', 'stamped', 'confirmed', 'settled', 'failed', 'cancelled', 'credited']),
@@ -2762,6 +2771,236 @@ export const GetPayablesSummaryResponse = zod.object({
   "count": zod.number()
 }))
 })
+
+
+/**
+ * @summary Per-client monthly VAT position — output VAT from issued documents vs input VAT from supplier bills, with verified-input posture (deterministic)
+ */
+export const getClientVatPositionQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const GetClientVatPositionQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string(),
+  "month": zod.coerce.string().regex(getClientVatPositionQueryMonthRegExp).optional().describe('A Lagos month\'s first day (YYYY-MM-01); defaults to the current Lagos month.')
+})
+
+export const GetClientVatPositionResponse = zod.object({
+  "clientPartyId": zod.string(),
+  "monthStart": zod.string(),
+  "monthLabel": zod.string(),
+  "months": zod.array(zod.string()),
+  "outputVat": zod.string(),
+  "outputInvoiceCount": zod.number(),
+  "inputVat": zod.string(),
+  "inputVatVerified": zod.string(),
+  "inputVatUnverified": zod.string(),
+  "billCount": zod.number(),
+  "netVat": zod.string(),
+  "defensibleNetVat": zod.string(),
+  "excludedForFx": zod.number(),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Download the monthly VAT position as CSV — one row per document, verified posture included
+ */
+export const exportVatPositionCsvQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const ExportVatPositionCsvQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string(),
+  "month": zod.coerce.string().regex(exportVatPositionCsvQueryMonthRegExp).optional()
+})
+
+export const ExportVatPositionCsvResponse = zod.unknown()
+
+
+/**
+ * @summary VAT position across the firm's book — per-client output vs input VAT for a Lagos month
+ */
+export const getFirmVatPositionsQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const GetFirmVatPositionsQueryParams = zod.object({
+  "month": zod.coerce.string().regex(getFirmVatPositionsQueryMonthRegExp).optional()
+})
+
+export const GetFirmVatPositionsResponse = zod.object({
+  "monthStart": zod.string(),
+  "monthLabel": zod.string(),
+  "months": zod.array(zod.string()),
+  "rows": zod.array(zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "outputVat": zod.string(),
+  "inputVat": zod.string(),
+  "inputVatVerified": zod.string(),
+  "netVat": zod.string(),
+  "defensibleNetVat": zod.string()
+})),
+  "totals": zod.object({
+  "outputVat": zod.string(),
+  "inputVat": zod.string(),
+  "inputVatVerified": zod.string(),
+  "netVat": zod.string(),
+  "defensibleNetVat": zod.string()
+}),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary The firm's governance policies (submission approval requirement)
+ */
+export const GetFirmPoliciesResponse = zod.object({
+  "submitApprovalRequired": zod.boolean()
+})
+
+
+/**
+ * @summary Update the firm's governance policies — firm admins only
+ */
+export const UpdateFirmPoliciesBody = zod.object({
+  "submitApprovalRequired": zod.boolean()
+})
+
+export const UpdateFirmPoliciesResponse = zod.object({
+  "submitApprovalRequired": zod.boolean()
+})
+
+
+/**
+ * @summary Record a submission approval on a draft/validated invoice (maker-checker — the approver must differ from the eventual submitter)
+ */
+export const ApproveInvoiceParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const approveInvoiceBodyNoteMax = 1000;
+
+
+
+export const ApproveInvoiceBody = zod.object({
+  "note": zod.string().max(approveInvoiceBodyNoteMax).optional()
+})
+
+export const ApproveInvoiceResponse = zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "approvedByUserId": zod.string(),
+  "approvedByName": zod.string().nullable(),
+  "note": zod.string().nullable(),
+  "revokedAt": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Approvals recorded on an invoice, newest first (revoked ones included)
+ */
+export const ListInvoiceApprovalsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListInvoiceApprovalsResponseItem = zod.object({
+  "id": zod.string(),
+  "invoiceId": zod.string(),
+  "approvedByUserId": zod.string(),
+  "approvedByName": zod.string().nullable(),
+  "note": zod.string().nullable(),
+  "revokedAt": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const ListInvoiceApprovalsResponse = zod.array(ListInvoiceApprovalsResponseItem)
+
+
+/**
+ * @summary Collection accounts provisioned for a client — virtual account references that auto-observe settlements
+ */
+export const ListCollectionAccountsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string()
+})
+
+export const ListCollectionAccountsResponseItem = zod.object({
+  "id": zod.string(),
+  "clientPartyId": zod.string(),
+  "provider": zod.string(),
+  "accountReference": zod.string(),
+  "label": zod.string().nullable(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const ListCollectionAccountsResponse = zod.array(ListCollectionAccountsResponseItem)
+
+
+/**
+ * @summary Provision a collection account for a client via the configured provider
+ */
+export const createCollectionAccountBodyLabelMax = 200;
+
+
+
+export const CreateCollectionAccountBody = zod.object({
+  "clientPartyId": zod.string(),
+  "label": zod.string().max(createCollectionAccountBodyLabelMax).optional()
+})
+
+export const CreateCollectionAccountResponse = zod.object({
+  "id": zod.string(),
+  "clientPartyId": zod.string(),
+  "provider": zod.string(),
+  "accountReference": zod.string(),
+  "label": zod.string().nullable(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Deactivate a collection account — inbound payments on its reference stop being recorded
+ */
+export const DeactivateCollectionAccountParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeactivateCollectionAccountResponse = zod.object({
+  "id": zod.string(),
+  "clientPartyId": zod.string(),
+  "provider": zod.string(),
+  "accountReference": zod.string(),
+  "label": zod.string().nullable(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Monthly client compliance pack PDF — cover note, document register, receivables, payables, VAT position and deadlines
+ */
+export const getCompliancePackQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const GetCompliancePackQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string(),
+  "month": zod.coerce.string().regex(getCompliancePackQueryMonthRegExp).optional()
+})
+
+export const GetCompliancePackResponse = zod.unknown()
+
+
+/**
+ * @summary Tell the client their monthly pack is ready — consent-gated, pointer-only channel fan-out
+ */
+export const notifyCompliancePackBodyMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const NotifyCompliancePackBody = zod.object({
+  "clientPartyId": zod.string(),
+  "month": zod.string().regex(notifyCompliancePackBodyMonthRegExp).optional()
+})
+
+export const NotifyCompliancePackResponse = zod.void()
 
 
 /**

@@ -30,6 +30,7 @@ import {
 } from "./lines";
 import { computeLinesWithTotals, type ComputedLine } from "./line-totals";
 import { invoiceOrientation } from "./payables";
+import { assertSubmitApproved, revokeLiveApprovals } from "./approvals";
 
 export { computeLineFinancials, type LineInput };
 
@@ -59,6 +60,10 @@ export interface CreateInvoiceInput {
   buyerPartyId: string;
   invoiceNumber: string;
   currency?: string;
+  // NGN per one unit of `currency`, captured at issue time (contract 0.45.0).
+  // NGN documents must not carry a rate — converters treat null as "already
+  // naira" and a stored rate on NGN would double-convert.
+  fxRateToNgn?: string;
   issueDate: string;
   dueDate?: string | null;
   kind?: "invoice" | "credit_note" | "correction";
@@ -66,6 +71,20 @@ export interface CreateInvoiceInput {
   relatedInvoiceId?: string | null;
   notes?: string | null;
   lines: LineInput[];
+}
+
+// FX capture plumbing: the column is numeric(18,6), so anything beyond six
+// decimals (or non-numeric noise like "1,500") must be refused BEFORE the
+// insert turns it into an opaque DB error; zero/negative rates would silently
+// zero out or flip naira reporting.
+function assertValidFxRate(rate: string): void {
+  if (!/^\d+(\.\d{1,6})?$/.test(rate) || Number(rate) <= 0) {
+    throw new DomainError(
+      "FX_RATE_INVALID",
+      `fxRateToNgn must be a positive decimal with at most 6 decimal places, got "${rate}"`,
+      400,
+    );
+  }
 }
 
 // Statuses an original must have reached before a credit note or correction can
@@ -171,6 +190,17 @@ export async function createDraft(
   // Reject percent-style VAT rates before any row is written: a "7.5" that
   // should have been "0.075" would otherwise create a 100x-inflated draft.
   assertPlausibleVatRates(input.lines);
+  if (input.fxRateToNgn !== undefined) {
+    assertValidFxRate(input.fxRateToNgn);
+    // An NGN document carries no rate by definition (currency defaults NGN).
+    if ((input.currency ?? "NGN") === "NGN") {
+      throw new DomainError(
+        "FX_RATE_INVALID",
+        "fxRateToNgn must not be set on an NGN invoice — the rate converts a foreign currency to naira",
+        400,
+      );
+    }
+  }
   await assertAdjustmentRulesSatisfied(input);
   const { computed, subtotal, vatTotal, grandTotal } = computeLinesWithTotals(
     input.lines,
@@ -184,6 +214,7 @@ export async function createDraft(
       buyerPartyId: input.buyerPartyId,
       invoiceNumber: input.invoiceNumber,
       currency: input.currency ?? "NGN",
+      fxRateToNgn: input.fxRateToNgn ?? null,
       issueDate: input.issueDate,
       dueDate: input.dueDate ?? null,
       kind: input.kind ?? "invoice",
@@ -323,6 +354,8 @@ export interface UpdateInvoiceInput {
   invoiceNumber?: string;
   issueDate?: string;
   dueDate?: string | null;
+  // null clears a captured rate (e.g. the currency was corrected to NGN).
+  fxRateToNgn?: string | null;
   notes?: string | null;
   lines?: LineInput[];
 }
@@ -350,6 +383,10 @@ export async function updateInvoiceContent(
   }
   if (patch.issueDate !== undefined) invoicePatch.issueDate = patch.issueDate;
   if (patch.dueDate !== undefined) invoicePatch.dueDate = patch.dueDate;
+  if (patch.fxRateToNgn !== undefined) {
+    if (patch.fxRateToNgn !== null) assertValidFxRate(patch.fxRateToNgn);
+    invoicePatch.fxRateToNgn = patch.fxRateToNgn;
+  }
   if (patch.notes !== undefined) invoicePatch.notes = patch.notes;
 
   let newLines = bundle.lines;
@@ -378,6 +415,12 @@ export async function updateInvoiceContent(
       .returning();
     invoice = updated;
   }
+
+  // Maker-checker: an approval must never cover content the approver did not
+  // see, so ANY successful content update revokes the invoice's live
+  // approvals (revoked, never deleted — the rows stay as evidence). Under the
+  // submit policy the edited invoice needs a fresh second-person approval.
+  await revokeLiveApprovals(invoiceId);
 
   // A validated invoice's validation is stale once content changes: revert to
   // draft (compare-and-set) so it must be re-validated before submission.
@@ -534,6 +577,12 @@ export async function submitInvoice(
   // Orientation before consent: a bill must refuse as NOT_SUBMITTABLE, not
   // ride on the vendor's (correctly absent) consent record.
   await assertReceivableOriented(bundle.invoice);
+  // Maker-checker (firm_policies): when the firm requires it, a live approval
+  // by someone OTHER than this actor must exist, or the submit 409s
+  // APPROVAL_REQUIRED. After orientation (a bill stays NOT_SUBMITTABLE, never
+  // "needs approval") and before consent (an unapproved submit must not leak
+  // the supplier's consent standing).
+  await assertSubmitApproved(bundle.invoice, actorId);
   const permitted = await isPurposePermitted(
     bundle.invoice.supplierPartyId,
     "compliance_submission",

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.46.0
+ * OpenAPI spec version: 0.47.0
  */
 import type { InvoiceLineInput } from './invoiceLineInput';
 
@@ -13,6 +13,8 @@ export interface InvoiceUpdateInput {
   issueDate?: string;
   /** @nullable */
   dueDate?: string | null;
+  /** @nullable */
+  fxRateToNgn?: string | null;
   /** @nullable */
   notes?: string | null;
   /** @minItems 1 */

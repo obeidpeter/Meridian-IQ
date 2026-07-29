@@ -7,6 +7,12 @@ import {
   getExportClientDataQueryKey,
   useOffboardClient,
   getGetPortfolioQueryKey,
+  useListCollectionAccounts,
+  getListCollectionAccountsQueryKey,
+  useCreateCollectionAccount,
+  useDeactivateCollectionAccount,
+  getGetCompliancePackUrl,
+  useNotifyCompliancePack,
 } from "@workspace/api-client-react";
 import type { OffboardClientResult } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -25,7 +31,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryError } from "@/components/query-error";
 import { InvoiceStatusLight } from "@/components/status-light";
-import { ArrowLeft, AlertTriangle, Archive, Download } from "lucide-react";
+import {
+  ArrowLeft,
+  AlertTriangle,
+  Archive,
+  Download,
+  Landmark,
+  Send,
+} from "lucide-react";
 import {
   formatNaira,
   formatDate,
@@ -33,8 +46,9 @@ import {
   statusLabel,
   severityBadgeClasses,
   humanize,
+  pillClasses,
 } from "@/lib/format";
-import { downloadBlob } from "@/lib/download";
+import { downloadBlob, triggerDownload } from "@/lib/download";
 import { errorStatus, serverErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -93,6 +107,242 @@ export function offboardSummary(result: OffboardClientResult): string {
       : "contact details kept (still engaged elsewhere)",
   );
   return parts.join(" · ");
+}
+
+// ---- Compliance pack --------------------------------------------------------
+// The monthly client pack is one server-rendered PDF; the console only picks
+// the month, names the saved file, and (separately) asks the platform to
+// tell the client it is ready — that notification is consent-gated and
+// pointer-only server-side.
+
+/** Saved-file name for the monthly pack PDF: "compliance-pack-YYYY-MM.pdf". */
+export function packPdfFilename(monthStart: string): string {
+  const month = monthStart.slice(0, 7);
+  return month ? `compliance-pack-${month}.pdf` : "compliance-pack.pdf";
+}
+
+/** The current month's first day (YYYY-MM-01) — the pack picker's default. */
+export function currentMonthStart(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-01`;
+}
+
+function CompliancePackCard({ clientPartyId }: { clientPartyId: string }) {
+  const { toast } = useToast();
+  const [packMonth, setPackMonth] = useState(() => currentMonthStart());
+  const notify = useNotifyCompliancePack();
+
+  const handleNotify = () => {
+    notify.mutate(
+      { data: { clientPartyId, month: packMonth } },
+      {
+        onSuccess: () =>
+          toast({
+            title:
+              "Client notified — delivery respects their consent and channel preferences.",
+          }),
+        onError: (e) =>
+          toast({
+            title: "Could not notify the client",
+            description: serverErrorMessage(e) ?? "Try again.",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  return (
+    <Card data-testid="card-compliance-pack">
+      <CardHeader>
+        <CardTitle className="text-base">Monthly compliance pack</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          One PDF for the month: cover note, document register, receivables,
+          payables, VAT position and deadlines.
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="pack-month">Month</Label>
+          <Input
+            id="pack-month"
+            type="month"
+            className="w-44"
+            value={packMonth.slice(0, 7)}
+            onChange={(e) =>
+              setPackMonth(
+                e.target.value ? `${e.target.value}-01` : currentMonthStart(),
+              )
+            }
+            data-testid="input-pack-month"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() =>
+              triggerDownload(
+                getGetCompliancePackUrl({ clientPartyId, month: packMonth }),
+                packPdfFilename(packMonth),
+              )
+            }
+            data-testid="button-download-pack"
+          >
+            <Download className="w-4 h-4 mr-1" aria-hidden="true" /> Download
+            pack (PDF)
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleNotify}
+            disabled={notify.isPending}
+            data-testid="button-notify-pack"
+          >
+            <Send className="w-4 h-4 mr-1" aria-hidden="true" />
+            {notify.isPending ? "Notifying…" : "Notify client"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          The notification is pointer-only — the client signs in to fetch the
+          pack; none of their numbers ride the message.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---- Collection accounts ----------------------------------------------------
+// Virtual account references provisioned per client: payments sent to a
+// reference are observed as settlement evidence automatically. Render-on-
+// success — a 403 for roles without scope or a 404 from an older server
+// build hides the card entirely.
+
+function CollectionAccountsCard({ clientPartyId }: { clientPartyId: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const params = { clientPartyId };
+  const query = useListCollectionAccounts(params, {
+    query: {
+      queryKey: getListCollectionAccountsQueryKey(params),
+      retry: false,
+    },
+  });
+  const create = useCreateCollectionAccount();
+  const deactivate = useDeactivateCollectionAccount();
+  if (!query.isSuccess) return null;
+  const accounts = query.data ?? [];
+
+  // Prefix key: every param variant of the list goes stale together.
+  const refresh = () =>
+    void queryClient.invalidateQueries({
+      queryKey: getListCollectionAccountsQueryKey(),
+    });
+
+  const handleCreate = () => {
+    create.mutate(
+      { data: { clientPartyId } },
+      {
+        onSuccess: (account) => {
+          refresh();
+          toast({
+            title: "Collection account provisioned",
+            description: `Reference ${account.accountReference} now observes inbound payments as settlements.`,
+          });
+        },
+        onError: (e) =>
+          toast({
+            title: "Could not provision a collection account",
+            description: serverErrorMessage(e) ?? "Try again.",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  const handleDeactivate = (id: string) => {
+    deactivate.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          refresh();
+          toast({
+            title: "Collection account deactivated",
+            description:
+              "Inbound payments on its reference stop being recorded.",
+          });
+        },
+        onError: (e) =>
+          toast({
+            title: "Could not deactivate the account",
+            description: serverErrorMessage(e) ?? "Try again.",
+            variant: "destructive",
+          }),
+      },
+    );
+  };
+
+  return (
+    <Card data-testid="card-collection-accounts">
+      <CardHeader className="flex-row items-center justify-between space-y-0 gap-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Landmark className="w-4 h-4" aria-hidden="true" /> Collection
+          accounts
+        </CardTitle>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleCreate}
+          disabled={create.isPending}
+          data-testid="button-create-collection-account"
+        >
+          {create.isPending ? "Provisioning…" : "Provision collection account"}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {accounts.length === 0 ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-no-collection-accounts"
+          >
+            No collection accounts yet — provision one and payments sent to
+            its reference are observed as settlements automatically.
+          </p>
+        ) : (
+          <div className="divide-y">
+            {accounts.map((a) => (
+              <div
+                key={a.id}
+                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                data-testid={`row-collection-account-${a.id}`}
+              >
+                <div className="min-w-0">
+                  <p className="font-mono text-xs">{a.accountReference}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {a.label ?? humanize(a.provider)}
+                  </p>
+                </div>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className={pillClasses(a.active ? "emerald" : "slate")}>
+                    {a.active ? "Active" : "Inactive"}
+                  </span>
+                  {a.active && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDeactivate(a.id)}
+                      disabled={deactivate.isPending}
+                      data-testid={`button-deactivate-account-${a.id}`}
+                    >
+                      Deactivate
+                    </Button>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export function ClientDetail() {
@@ -389,6 +639,12 @@ export function ClientDetail() {
             )}
           </CardContent>
         </Card>
+
+        {/* Payments rail + monthly deliverable for this client. Both are
+            per-client operator surfaces; the collection-accounts card gates
+            itself render-on-success. */}
+        <CollectionAccountsCard clientPartyId={id} />
+        <CompliancePackCard clientPartyId={id} />
       </div>
 
       <Dialog

@@ -1,10 +1,13 @@
 // The user journeys that prove MeridianIQ's surfaces against a freshly seeded
 // database: portal auth, the operator's Compliance Desk, firm admin tooling,
-// the auditor's read-only boundary, consent, supplier bills (payables), and
-// the credit-note lifecycle. Journeys restore what they mutate (flags,
-// consent, passwords) so the suite reruns cleanly on the same seed — with one
-// deliberate exception: the payables journey's payment flags are append-only
-// settlement evidence and stay behind (see journeyPayables).
+// the auditor's read-only boundary, consent, supplier bills (payables), the
+// VAT position + compliance pack, maker-checker governance, collection
+// accounts, and the credit-note lifecycle. Journeys restore what they mutate
+// (flags, consent, passwords, the submit-approval policy) so the suite reruns
+// cleanly on the same seed — with two deliberate exceptions: the payables
+// journey's payment flags and the collections journey's settlement are
+// append-only settlement EVIDENCE and stay behind (see journeyPayables /
+// journeyCollections).
 
 import { createHash, createHmac } from "node:crypto";
 import { totpStep, totpCodeAtStep } from "./totp.mjs";
@@ -395,6 +398,341 @@ async function journeyPayables(page, BASE, check) {
   );
 
   await signOutFromApp(page, BASE);
+}
+
+// ---------- VAT position, SME VAT page & the monthly compliance pack --------
+// The contract-0.45.0 reporting surfaces: the per-client month-to-date VAT
+// position (API shape + the SME page + the CSV export), the compliance-pack
+// PDF, and — as the firm admin — the console rollup plus the consent-gated
+// notify. The seed's issue dates are RELATIVE to the run date, so every check
+// asserts shape and parseability, never totals. Sessions are API sign-ins
+// (page.request shares the browser context's cookie jar, so page.goto rides
+// the same session); the journey signs out at the end so the next journey's
+// portal shows the demo buttons again.
+async function journeyVatPositionAndPack(page, BASE, check) {
+  const CSRF = { "x-meridian-csrf": "1" };
+  const CLIENT = "22222222-2222-4222-8222-222222222222";
+  const login = async (email) => {
+    await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+    await page.request.post(BASE + "/api/auth/login", {
+      data: { email, password: DEMO_PASSWORD },
+      headers: CSRF,
+    });
+  };
+  await login("demo.staff@meridianiq.example");
+
+  // The month-to-date position for the demo client (current Lagos month by
+  // default — the option list includes it, unlike the closed-month VAT pack).
+  const posRes = await page.request.get(
+    BASE + `/api/vat-position?clientPartyId=${CLIENT}`,
+  );
+  const pos = posRes.status() === 200 ? await posRes.json() : null;
+  check(
+    "VAT position API answers the month-to-date shape",
+    posRes.status() === 200 &&
+      typeof pos?.outputVat === "string" &&
+      Number.isFinite(Number(pos.outputVat)) &&
+      Number(pos.outputVat) >= 0 &&
+      Array.isArray(pos?.months) &&
+      pos.months.length > 0,
+    `status ${posRes.status()}`,
+  );
+
+  // The SME VAT page. Early in a Lagos month the seeded documents (issued
+  // 4–10 days ago) can ALL fall in the previous month, so the current month
+  // legitimately renders the honest empty state — in that case pick the
+  // previous month from the card's own picker: INV-1003 (accepted attempt)
+  // is always inside one of the two newest months, so the summary rows
+  // render deterministically either way.
+  await page.goto(BASE + "/app/vat", { waitUntil: "networkidle" });
+  await page.waitForSelector('[data-testid="card-vat-position"]', {
+    timeout: 15000,
+  });
+  if (pos && (pos.outputInvoiceCount ?? 0) + (pos.billCount ?? 0) === 0) {
+    await page.getByTestId("select-vat-month").selectOption(pos.months[1]);
+  }
+  await page.waitForSelector('[data-testid="text-vat-output"]', {
+    timeout: 15000,
+  });
+  check("SME VAT page renders the position rows", true);
+
+  const csvRes = await page.request.get(
+    BASE + `/api/vat-position/export?clientPartyId=${CLIENT}`,
+  );
+  check(
+    "VAT position CSV export delivers the per-document file",
+    csvRes.status() === 200 &&
+      (csvRes.headers()["content-type"] ?? "").startsWith("text/csv"),
+    `status ${csvRes.status()}`,
+  );
+
+  // The monthly compliance pack is one server-rendered PDF (cover note falls
+  // back to the deterministic template when no model provider is configured
+  // — never an error).
+  const packRes = await page.request.get(
+    BASE + `/api/compliance-pack?clientPartyId=${CLIENT}`,
+  );
+  const packBody = packRes.status() === 200 ? await packRes.body() : null;
+  check(
+    "compliance pack renders a PDF",
+    packRes.status() === 200 &&
+      (packRes.headers()["content-type"] ?? "").startsWith("application/pdf") &&
+      packBody?.subarray(0, 4).toString() === "%PDF",
+    `status ${packRes.status()}`,
+  );
+
+  // Firm side as the admin: the rollup, then the consent-gated notify — 202
+  // whether anything was sent (the endpoint is never a consent oracle).
+  await login("demo.admin@meridianiq.example");
+  const firmRes = await page.request.get(BASE + "/api/console/vat-positions");
+  const firm = firmRes.status() === 200 ? await firmRes.json() : null;
+  check(
+    "console VAT positions roll up rows across the engaged book",
+    firmRes.status() === 200 &&
+      Array.isArray(firm?.rows) &&
+      firm.rows.length > 0,
+    `status ${firmRes.status()}`,
+  );
+  const notifyRes = await page.request.post(
+    BASE + "/api/compliance-pack/notify",
+    { data: { clientPartyId: CLIENT }, headers: CSRF },
+  );
+  check(
+    "compliance-pack notify answers 202 (consent-gated fan-out)",
+    notifyRes.status() === 202,
+    `status ${notifyRes.status()}`,
+  );
+
+  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+}
+
+// ---------- Governance: maker-checker submission approval --------------------
+// The firm policy round-trip: the admin turns submit-approval ON, a staff
+// submit without a second person's approval 409s APPROVAL_REQUIRED, the
+// admin's approval (a DIFFERENT human) unlocks it, the staff submit answers
+// 202 — and a finally restores the policy to OFF as its own check, because
+// every later submit-dependent journey (credit note, integration layer) runs
+// single-actor and would break against a policy left on.
+//
+// The probe draft GOV-9001 uses a number outside every pinned namespace
+// (INV-100*, BILL-2001, KAN/NDP/LBR-*, CN-*, E2E-*). It leaves the journey
+// `submitted` and stamps in the background, which disturbs nothing: the
+// credit-note journey targets the OLDEST stamped demo-client invoice
+// (createdAt asc — the boot-seeded INV-1003 always precedes GOV-9001), and
+// the integration journey only patterns party ids off the book's first
+// demo-client invoice regardless of status.
+async function journeyGovernance(page, BASE, check) {
+  const CSRF = { "x-meridian-csrf": "1" };
+  const CLIENT = "22222222-2222-4222-8222-222222222222";
+  const BUYER = "55555555-5555-4555-8555-555555555555"; // Zenith Retail
+  const login = async (email) => {
+    await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+    await page.request.post(BASE + "/api/auth/login", {
+      data: { email, password: DEMO_PASSWORD },
+      headers: CSRF,
+    });
+  };
+
+  try {
+    await login("demo.admin@meridianiq.example");
+    const onRes = await page.request.put(BASE + "/api/firm/policies", {
+      data: { submitApprovalRequired: true },
+      headers: CSRF,
+    });
+    const onBody = onRes.status() === 200 ? await onRes.json() : null;
+    check(
+      "firm admin turns the submit-approval policy on",
+      onRes.status() === 200 && onBody?.submitApprovalRequired === true,
+      `status ${onRes.status()}`,
+    );
+
+    // Staff: fresh draft → validate → submit refuses. DomainError serializes
+    // as {error: message} (no code field), so the check matches the guard's
+    // message text.
+    await login("demo.staff@meridianiq.example");
+    const createdRes = await page.request.post(BASE + "/api/invoices", {
+      data: {
+        supplierPartyId: CLIENT,
+        buyerPartyId: BUYER,
+        invoiceNumber: "GOV-9001",
+        issueDate: new Date().toISOString().slice(0, 10),
+        lines: [
+          {
+            description: "Governance probe goods",
+            quantity: "1",
+            unitPrice: "50000",
+            vatRate: "0.075",
+          },
+        ],
+      },
+      headers: CSRF,
+    });
+    const invoiceId =
+      createdRes.status() === 201 ? (await createdRes.json()).invoice?.id : null;
+    const validateRes = await page.request.post(
+      BASE + `/api/invoices/${invoiceId}/validate`,
+      { headers: CSRF },
+    );
+    const blockedRes = await page.request.post(
+      BASE + `/api/invoices/${invoiceId}/submit`,
+      { headers: CSRF },
+    );
+    const blockedBody = await blockedRes.json().catch(() => null);
+    check(
+      "submit without a second person's approval answers 409 APPROVAL_REQUIRED",
+      createdRes.status() === 201 &&
+        validateRes.status() === 200 &&
+        blockedRes.status() === 409 &&
+        String(blockedBody?.error ?? "").includes("approval"),
+      `create ${createdRes.status()}, validate ${validateRes.status()}, submit ${blockedRes.status()}`,
+    );
+
+    // A DIFFERENT human approves — evidence row, 201.
+    await login("demo.admin@meridianiq.example");
+    const approveRes = await page.request.post(
+      BASE + `/api/invoices/${invoiceId}/approve`,
+      { headers: CSRF },
+    );
+    check(
+      "a colleague records a submission approval (201)",
+      approveRes.status() === 201,
+      `status ${approveRes.status()}`,
+    );
+
+    // The original submitter retries: a live approval by ANOTHER user now
+    // satisfies the guard.
+    await login("demo.staff@meridianiq.example");
+    const submitRes = await page.request.post(
+      BASE + `/api/invoices/${invoiceId}/submit`,
+      { headers: CSRF },
+    );
+    check(
+      "approved invoice submits (202) under the policy",
+      submitRes.status() === 202,
+      `status ${submitRes.status()}`,
+    );
+  } finally {
+    // MUST run even when a check above failed or threw: a policy left on
+    // would break every later single-actor submit. The restore is itself a
+    // check so a silent failure here can never masquerade as a pass.
+    await login("demo.admin@meridianiq.example");
+    const offRes = await page.request.put(BASE + "/api/firm/policies", {
+      data: { submitApprovalRequired: false },
+      headers: CSRF,
+    });
+    const offBody = offRes.status() === 200 ? await offRes.json() : null;
+    check(
+      "submit-approval policy restored to off",
+      offRes.status() === 200 && offBody?.submitApprovalRequired === false,
+      `status ${offRes.status()}`,
+    );
+    await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+  }
+}
+
+// ---------- Collection accounts: provision + the inbound settlement rail -----
+// Provision a collection account (firm-staff plumbing, statement.write) and
+// prove the fail-closed inbound webhook (run.mjs sets COLLECTION_WEBHOOK_TOKEN
+// = the token below; unset would 404 the whole rail) settles the matched
+// receivable via an append-only collection_account settlement event.
+//
+// TARGET CHOICE — the settlement must move a SEEDED, STAMPED invoice to
+// `settled` without disturbing any later journey. INV-1003 is out: it is the
+// credit-note journey's target (the oldest stamped demo-client invoice must
+// still read `stamped` when that journey picks it). LBR-4002 (Lagos
+// BuildRight — a sibling client the same demo firm engages, stamped in the
+// seed) is referenced by NO other journey and no seed expectation, so the
+// account is provisioned for the BuildRight party and the payment binds to
+// LBR-4002 — no fresh invoice or stamping wait needed. Deliberately NOT
+// restored (the payables-journey exception): settlement events are append-only
+// evidence. A rerun on a kept database still passes: the settled invoice no
+// longer binds (the webhook silently records nothing), but the first run's
+// settlement event and status satisfy both polls.
+async function journeyCollections(page, BASE, check) {
+  const CSRF = { "x-meridian-csrf": "1" };
+  const BUILD_CLIENT = "cb000004-0000-4000-8000-0000000000b4"; // Lagos BuildRight
+  const HOOK_TOKEN = "e2e-collect-hook"; // must match run.mjs's api-server env
+
+  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+  await page.request.post(BASE + "/api/auth/login", {
+    data: { email: "demo.admin@meridianiq.example", password: DEMO_PASSWORD },
+    headers: CSRF,
+  });
+
+  const createdRes = await page.request.post(
+    BASE + "/api/collection-accounts",
+    {
+      data: { clientPartyId: BUILD_CLIENT, label: "E2E collections" },
+      headers: CSRF,
+    },
+  );
+  const account = createdRes.status() === 201 ? await createdRes.json() : null;
+  check(
+    "collection account provisions with a CA- reference",
+    createdRes.status() === 201 &&
+      (account?.accountReference ?? "").startsWith("CA-") &&
+      account?.active === true,
+    `status ${createdRes.status()}`,
+  );
+
+  const book = await (await page.request.get(BASE + "/api/invoices")).json();
+  const target = book.find((i) => i.invoiceNumber === "LBR-4002");
+
+  // Machine-rail probes ride plain fetch (cookie-free — the shared token is
+  // the whole credential, the payment-confirm rail's posture). Wrong token:
+  // 401, proving the rail is LIT but guarded (an unset env would 404).
+  const badToken = await fetch(BASE + "/api/collections/inbound", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-op-token": "wrong-token" },
+    body: JSON.stringify({
+      accountReference: account?.accountReference ?? "CA-MISSING",
+      amount: "1.00",
+      invoiceNumber: "LBR-4002",
+    }),
+  });
+  check(
+    "inbound collection rail refuses a wrong token (401)",
+    badToken.status === 401,
+    `status ${badToken.status}`,
+  );
+
+  const inbound = await fetch(BASE + "/api/collections/inbound", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-op-token": HOOK_TOKEN },
+    body: JSON.stringify({
+      accountReference: account?.accountReference ?? "CA-MISSING",
+      amount: target?.grandTotal ?? "0.00",
+      invoiceNumber: "LBR-4002",
+      reference: "E2E-COLLECT-1",
+    }),
+  });
+  // The event + CAS commit BEFORE the 202 answers; the short poll is only
+  // insurance, not a required drain.
+  const eventSeen =
+    inbound.status === 202 &&
+    (await pollUntil(
+      async () => {
+        const r = await page.request.get(
+          BASE + `/api/invoices/${target?.id}/settlements`,
+        );
+        if (r.status() !== 200) return false;
+        return (await r.json()).some((s) => s.source === "collection_account");
+      },
+      { tries: 5, delayMs: 500, page },
+    ));
+  check(
+    "inbound payment (202) records a collection_account settlement event",
+    eventSeen,
+    `inbound status ${inbound.status}`,
+  );
+
+  const invRes = await page.request.get(BASE + `/api/invoices/${target?.id}`);
+  const settled =
+    invRes.status() === 200 &&
+    (await invRes.json()).invoice.status === "settled";
+  check("matched receivable settles (stamped → settled CAS)", settled);
+
+  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
 }
 
 // ---------- SME staff: credit note + workflow smoke ----------
@@ -928,6 +1266,9 @@ export async function runJourneys(page, BASE, check, { hookReceiver } = {}) {
   await journeyOwnerConsent(page, BASE, check);
   await journeyTotp(page, BASE, check);
   await journeyPayables(page, BASE, check);
+  await journeyVatPositionAndPack(page, BASE, check);
+  await journeyGovernance(page, BASE, check);
+  await journeyCollections(page, BASE, check);
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
   await journeyPasswordReset(page, BASE, check);

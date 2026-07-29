@@ -33,6 +33,10 @@ const ALL = [
   "invoice.read",
   "invoice.write",
   "invoice.submit",
+  // Maker-checker second signature on a submission (firm_policies). Firm-side
+  // dual control only: a client_user must not clear its own firm's guard, and
+  // operators are cross-tenant platform staff, not the firm's checker.
+  "invoice.approve",
   "engagement.read",
   "engagement.write",
   "party.read",
@@ -106,6 +110,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "invoice.read",
     "invoice.write",
     "invoice.submit",
+    "invoice.approve",
     "engagement.read",
     "engagement.write",
     "party.read",
@@ -147,6 +152,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "invoice.read",
     "invoice.write",
     "invoice.submit",
+    "invoice.approve",
     "engagement.read",
     "engagement.write",
     "party.read",

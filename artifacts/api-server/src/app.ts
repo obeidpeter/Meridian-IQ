@@ -98,6 +98,13 @@ const NO_CONTEXT_ROUTES = new Set([
   // (modules/billing/payments.ts confirmPaymentIntent), so the 202 goes out
   // only after the settle is durably committed.
   "POST /api/billing/payments/confirm",
+  // Inbound collection webhook (routes/collections.ts): the payment
+  // confirmation's posture exactly — the settle path appends audit rows
+  // under the GLOBAL advisory xact lock, so the module commits event + CAS
+  // + audit in its own short bypass transaction
+  // (modules/collections/service.ts recordInboundCollection) and the 202
+  // goes out only after the settle is durably committed.
+  "POST /api/collections/inbound",
 ]);
 
 // Parameterized-path variant of NO_CONTEXT_ROUTES: the Set above can only

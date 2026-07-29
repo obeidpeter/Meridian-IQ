@@ -189,10 +189,16 @@ review.
   to the claims register — data intents ("what's overdue?", "what did we
   submit this month?", the money intents "who owes us?" / "what's
   expected this week?" / "who's worth chasing?" backed by the
-  receivables/cashflow modules, and the payables intents
+  receivables/cashflow modules, the payables intents
   `data.payables_due` ("what bills are due?") / `data.total_owed` ("how
   much do we owe?") backed by the same evidence-only payables predicate as
-  the Bills surfaces — see `docs/platform.md` § Payables), offered in the
+  the Bills surfaces — see `docs/platform.md` § Payables — and
+  `data.vat_position` ("where does our VAT stand?"), which phrases the
+  SAME `computeVatPosition` / `computeFirmVatPositions` totals as the VAT
+  surfaces (month-aware via the shared live-month default, per-client or
+  firm-wide, the FX-excluded count disclosed, and deliberately LINKLESS —
+  the input side is bills, which are not invoice-detail linkable for a
+  client asker)), offered in the
   intent enum only to firm-scoped askers. The model only CLASSIFIES; the app runs the matching
   FIXED, fully-parameterized query. Runtime inputs: the principal-resolved
   firmId plus optional month/client parameters the model can only pick from
@@ -218,9 +224,10 @@ review.
   offered data intents narrow to a vetted ALLOWLIST
   (`CLIENT_SAFE_DATA_INTENTS` — firm-wide money intents that name other
   clients' buyers, and the firm's own budget, are excluded and refuse; the
-  two payables intents `data.payables_due` / `data.total_owed` ARE
-  client-safe and on the allowlist — they answer over the caller's own
-  bills only); the client option list is exactly the caller's own party; the executed party
+  two payables intents `data.payables_due` / `data.total_owed` AND
+  `data.vat_position` ARE client-safe and on the allowlist — they answer
+  over the caller's own bills/position only, the forced party pin making a
+  client's "VAT position" always its own); the client option list is exactly the caller's own party; the executed party
   filter is FORCED from the principal regardless of the model's pick;
   multi-turn threads only from the client's own previous case (`createdBy`
   check); and `GET /clerk/digest` explicitly refuses client_user now that
@@ -340,9 +347,14 @@ without a human owner.
   in the coming week per each buyer's rhythm, and the chase-worthy count
   past BOTH due date and rhythm), firm-wide unmatched credits, unbilled
   income (`countFirmUnbilled`), outstanding invoices with 2+ logged
-  reminders, and a payables-due fact (bills falling due or overdue, from the
-  same evidence-only payables predicate as the Bills surfaces) — and lets
-  the model phrase them, falling back to deterministic template text. The
+  reminders, a payables-due fact (bills falling due or overdue, from the
+  same evidence-only payables predicate as the Bills surfaces), and the
+  monthly VAT-return countdown (`vatReturnInDays` — pure Lagos calendar
+  arithmetic to the next 21st, null beyond 7 days so the weekly digest only
+  speaks up when the clock is close) — and lets the model phrase them,
+  falling back to deterministic template text. Each fact added to the user
+  facts bumps the prompt version so the model path can never lag the
+  template path (currently `digest.v4`, the VAT-position round). The
   digest's unsubmitted/overdue compliance facts use the explicit
   receivable-orientation predicate, so captured supplier bills never count
   as "invoices to file" (`docs/platform.md` § Payables).
@@ -421,6 +433,18 @@ without a human owner.
   purpose `draft_quarterly_note`, firm-funded) is the vat-note contract
   exactly — digest posture, quiet quarter never calls the model, template
   always answers.
+- **Compliance-pack cover note** (`modules/clerk/pack-note.ts`, purpose
+  `draft_pack_note`, prompt `pack-note.v1`, firm-funded) — the vat-note
+  shape pointed at the monthly client pack (`docs/platform.md` § Monthly
+  compliance pack): every figure comes from the deterministically computed
+  pack facts, the model only PHRASES, and the digest posture holds end to
+  end — kill switch, missing provider, exhausted budget (no route
+  pre-check; the gateway backstop's typed failure is just one more reason),
+  invalid output and a quiet month (no documents, no bills — saying
+  "nothing happened" is the digest anti-pattern) all answer with the
+  deterministic template, never an error. Nothing is stored — the note
+  lives only inside the rendered PDF — and the pack's VAT basis disclosure
+  travels with it so the caveats survive the paper being handed around.
 - **Adoption & impact report** (`modules/clerk/adoption.ts`,
   `GET /console/clerk-adoption`, `console.portfolio.read`, console portfolio
   card, pure SQL) slices the firm's own cases per client — capture volume,

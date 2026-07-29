@@ -19,6 +19,8 @@ import {
   useGetVatPosition,
   getGetVatPositionQueryKey,
   getGetVatSettlementCheckQueryKey,
+  useGetFirmVatPositions,
+  getGetFirmVatPositionsQueryKey,
   useGetQuarterlyReview,
   getGetQuarterlyReviewQueryKey,
   useDraftQuarterlyCoverNote,
@@ -43,6 +45,8 @@ import {
 } from "@/components/ui/select";
 import { BillingStatementCard } from "@/components/billing-statement-card";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
+import { GovernanceCard, isFirmAdminRole } from "@/components/governance-card";
+import { VatPositionsCard } from "@/components/vat-positions-card";
 import {
   StaffNotificationPrefsCard,
   isFirmMemberRole,
@@ -1590,6 +1594,13 @@ export function Portfolio() {
       enabled: hasBook,
     },
   });
+  const gateVatPositions = useGetFirmVatPositions(undefined, {
+    query: {
+      queryKey: getGetFirmVatPositionsQueryKey(undefined),
+      retry: false,
+      enabled: hasBook,
+    },
+  });
   const gateQuarterly = useGetQuarterlyReview(undefined, {
     query: {
       queryKey: getGetQuarterlyReviewQueryKey(undefined),
@@ -1629,8 +1640,12 @@ export function Portfolio() {
     (gateCalendar.isSuccess && calendarHasContent(gateCalendar.data)) ||
     gateVatPack.isSuccess ||
     gateSettlement.isSuccess ||
+    gateVatPositions.isSuccess ||
     gateQuarterly.isSuccess ||
-    (gateRejections.isSuccess && rejectionsHaveContent(gateRejections.data));
+    (gateRejections.isSuccess && rejectionsHaveContent(gateRejections.data)) ||
+    // The governance card renders for firm admins (including its inline
+    // error state), and only for them — mirror its role self-gate.
+    isFirmAdminRole(me?.role);
   const connectionsOccupied =
     gateConnections.isSuccess ||
     gateDigest.isSuccess ||
@@ -1871,11 +1886,15 @@ export function Portfolio() {
         <PortfolioSection id="compliance" label="Compliance">
           <ComplianceCalendarCard />
           <VatPackCard />
+          <VatPositionsCard />
           <VatSettlementCard />
 
           <VatPositionCard />
           <QuarterlyReviewCard />
           <RejectionPatternsCard />
+          {/* Practice governance lives with the compliance surfaces it
+              shapes — the maker-checker rule gates stamping submissions. */}
+          <GovernanceCard />
         </PortfolioSection>
       )}
 

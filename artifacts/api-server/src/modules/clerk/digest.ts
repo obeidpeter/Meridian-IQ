@@ -15,7 +15,12 @@ import { pointerEntityRef } from "../messaging/recipient-ref";
 import { sendPushToUser } from "../push/push";
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
-import { lagosTodaySql } from "../../lib/lagos-time";
+import {
+  lagosDateString,
+  lagosMidnightFor,
+  lagosParts,
+  lagosTodaySql,
+} from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import { RECEIVABLE_ORIENTATION } from "../invoice/receivables";
 import { countFirmPayablesDue } from "../invoice/payables";
@@ -51,7 +56,9 @@ const DELIVERY_BATCH = 50;
 // v2 (round 14): the user facts gained the unmatched-credit and 2+-reminder
 // lines, so the model path can never lag the template path (review M1).
 // v3 (payables round): + the supplier-bills-due line, same reasoning.
-const DIGEST_PROMPT_VERSION = "digest.v3";
+// v4 (VAT-position round): + the monthly VAT-return countdown line, same
+// reasoning.
+const DIGEST_PROMPT_VERSION = "digest.v4";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -102,6 +109,30 @@ export interface DigestFacts {
   // Payables round: unpaid supplier bills due within the next 7 days or
   // already overdue (payables.ts countFirmPayablesDue).
   payablesDueCount: number;
+  // VAT-position round: days from Lagos-today until the monthly VAT return
+  // deadline — the 21st of the current Lagos month, or of the next month once
+  // the 21st has passed. Null when more than 7 days away (the digest is
+  // weekly; a farther deadline is noise). Pure calendar arithmetic, no SQL.
+  vatReturnInDays: number | null;
+}
+
+// The monthly VAT-return countdown, PURE and Lagos-anchored (lagosParts /
+// lagosMidnightFor — WAT is a fixed +01:00, so this is plain offset
+// arithmetic, never local Date math): days from the Lagos calendar today to
+// the NEXT 21st — this month's while today is on or before it, otherwise next
+// month's (month overflow carries into the year like Date.UTC). Returns null
+// when the deadline is more than 7 days out, so the weekly digest only speaks
+// up when the clock is actually close.
+export function vatReturnInDays(now: Date = new Date()): number | null {
+  const { year, monthIndex } = lagosParts(now);
+  const day = Number(lagosDateString(now).slice(8, 10));
+  const today = lagosMidnightFor(year, monthIndex, day);
+  const due =
+    day <= 21
+      ? lagosMidnightFor(year, monthIndex, 21)
+      : lagosMidnightFor(year, monthIndex + 1, 21);
+  const days = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+  return days > 7 ? null : days;
 }
 
 // Monday 00:00 UTC of the week containing `now` — the digest's identity key.
@@ -183,6 +214,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     unmatchedCreditClients: unmatched.clients,
     chasedTwiceCount: chasedTwice,
     payablesDueCount: payablesDue,
+    vatReturnInDays: vatReturnInDays(),
   };
 }
 
@@ -246,6 +278,11 @@ export function buildTemplateDigest(facts: DigestFacts): {
   if (facts.payablesDueCount > 0) {
     bullets.push(
       `${plural(facts.payablesDueCount, "supplier bill")} ${isAre(facts.payablesDueCount)} due within the next 7 days or already overdue — worth scheduling the payments.`,
+    );
+  }
+  if (facts.vatReturnInDays !== null) {
+    bullets.push(
+      `Monthly VAT return due ${facts.vatReturnInDays === 0 ? "today" : `in ${plural(facts.vatReturnInDays, "day")}`} — VAT returns fall due on the 21st.`,
     );
   }
   const urgent = facts.overdueCount + facts.failedCount;
@@ -312,6 +349,7 @@ export async function generateFirmDigest(
       `- Bank credits matching no invoice on the platform: ${facts.unmatchedCreditCount} (across ${facts.unmatchedCreditClients} client(s))`,
       `- Invoices with 2+ payment reminders sent and still unpaid: ${facts.chasedTwiceCount}`,
       `- Unpaid supplier bills due within the next 7 days or overdue: ${facts.payablesDueCount}`,
+      `- Days until the monthly VAT return deadline (the 21st): ${facts.vatReturnInDays ?? "more than 7 — do not mention"}`,
       `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
     ].join("\n");
     const result = await gateway.infer<z.infer<typeof digestOutput>>({
