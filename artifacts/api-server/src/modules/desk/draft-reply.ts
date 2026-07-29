@@ -259,7 +259,8 @@ export async function draftEscalationReply(
   // of the reply surface instead of answering with the template, the
   // posture every sibling documents. inferPhrasing carries the catch; the
   // outer try keeps the stronger guarantee that even a grounding-check
-  // failure answers with the template.
+  // failure — or a ledger-insert failure inside the gateway after the
+  // provider answered — answers with the template.
   try {
     const data = await inferPhrasing<z.infer<typeof replyOutput>>(gateway, {
       purpose: "draft_reply",

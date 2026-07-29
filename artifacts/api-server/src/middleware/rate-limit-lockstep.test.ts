@@ -142,7 +142,12 @@ test("the public machine rails really are public-path gated", () => {
 // assertFirmClerkBudget) must be in the MODEL rate class.
 // Known limitation: a handler that calls a model-invoking MODULE function
 // without touching the gateway in the route block itself is still invisible
-// — keep gateway acquisition in the route (the codebase's convention).
+// — keep gateway acquisition in the route (the codebase's convention). The
+// verified inventory of such cases today (review of commit 11b0939), each
+// covered by a SIBLING pin: POST /api/clerk/action-proposals/execute
+// (gateway acquired inside modules/clerk/actions.ts — the NO_CONTEXT
+// lockstep test above holds it in the MODEL class) and the two public
+// inbound rails (gateway inside modules/inbound — the PUBLIC_PATHS test).
 // ---------------------------------------------------------------------------
 
 import { readdirSync as readdir, statSync } from "node:fs";
@@ -198,7 +203,7 @@ test("every gateway-touching route handler is in the MODEL rate class", () => {
     }
   }
   assert.ok(
-    scanned >= 10,
-    `the gateway scan found only ${scanned} gateway-touching handlers — the registration parser has likely drifted from the route style`,
+    scanned >= 20,
+    `the gateway scan found only ${scanned} gateway-touching handlers (24 at the time of writing) — the registration parser has likely drifted from the route style`,
   );
 });
