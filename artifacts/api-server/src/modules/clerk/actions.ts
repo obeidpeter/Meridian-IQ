@@ -239,6 +239,18 @@ export async function executeAction(
   ).rows;
   const byId = new Map(candidates.map((c) => [c.id, c]));
 
+  // The evidence a reader of the decision needs — the client's live overdue
+  // count and the penalty floor it implies — captured NOW, before the batch
+  // runs (verification-pass F4: counting after the loop would record the
+  // residual, making a fully-successful approval look baseless).
+  const [overdueNow] = (
+    await getDb().execute<{ n: number }>(sql`
+      SELECT COUNT(*)::int AS n FROM invoices i
+      WHERE ${overdueCond(firmId, clientPartyId)}
+    `)
+  ).rows;
+  const overdueCountAtDecision = Number(overdueNow?.n ?? 0);
+
   const targets: ActionTargetOutcome[] = [];
   for (const invoiceId of ids) {
     const candidate = byId.get(invoiceId);
@@ -296,17 +308,6 @@ export async function executeAction(
   const failedCount = targets.filter(
     (t) => t.outcome === "failed" || t.outcome === "invalid",
   ).length;
-
-  // The evidence a reader of the decision needs, recomputed at THIS moment
-  // (the decision's own clock, not the proposal's): the client's live
-  // overdue count and the penalty floor it implies.
-  const [overdueNow] = (
-    await getDb().execute<{ n: number }>(sql`
-      SELECT COUNT(*)::int AS n FROM invoices i
-      WHERE ${overdueCond(firmId, clientPartyId)}
-    `)
-  ).rows;
-  const overdueCountAtDecision = Number(overdueNow?.n ?? 0);
 
   const [decision] = await getDb()
     .insert(clerkActionDecisionsTable)

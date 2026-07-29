@@ -219,6 +219,13 @@ test("execution re-checks every target and records an honest decision", async ()
   assert.equal(decision.failedCount, 1);
   assert.equal(decision.decidedBy, userId);
 
+  // Evidence is the PRE-execution picture (verification-pass F4): all three
+  // overdue invoices existed when the human approved, even though one was
+  // just submitted — a reader must never see the residual and conclude the
+  // approval was baseless.
+  assert.equal(decision.evidence.overdueCountAtDecision, 3);
+  assert.notEqual(decision.evidence.exposureFloorNgn, "0");
+
   // The submission is REAL — the ordinary path ran, the draft flipped.
   const db = getDb();
   const statusOf = async (id: string) =>
