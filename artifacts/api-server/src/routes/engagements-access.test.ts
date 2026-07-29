@@ -19,6 +19,7 @@ import {
   closeAllServers,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // SEC-03 sub-tenant isolation for advisory surfaces: a client_user must see
 // only its OWN client party's engagements, assessments and invoice
@@ -34,20 +35,8 @@ const clientA = randomUUID();
 const clientB = randomUUID();
 const buyer = randomUUID();
 
-const staff: Principal = {
-  userId: userStaff,
-  role: "firm_staff",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const clientUserA: Principal = {
-  userId: userClientA,
-  role: "client_user",
-  firmId,
-  clientPartyId: clientA,
-  buyerPartyId: null,
-};
+const staff: Principal = firmPrincipal(firmId, { userId: userStaff, role: "firm_staff" });
+const clientUserA: Principal = clientPrincipal(firmId, clientA, { userId: userClientA });
 
 const ASSESSMENT_FINDINGS = {
   score: 72,

@@ -22,6 +22,7 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Self-serve invite flow (IDN-01). The route harness runs getDb() on the raw
 // pool (no RLS), so these pin the module's app-layer behaviour: firmId is forced
@@ -39,13 +40,7 @@ const engagedClientId = randomUUID();
 const strayClientId = randomUUID();
 const takenEmail = `taken-${SALT}@test.local`;
 
-const admin: Principal = {
-  userId: adminUserId,
-  role: "firm_admin",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const admin: Principal = firmPrincipal(firmId, { userId: adminUserId });
 
 after(async () => {
   await closeAllServers();
@@ -296,13 +291,7 @@ test("redeeming an unknown token is a generic 400", async () => {
 // ordinary IDN-01 flow.
 
 const operatorUserId = randomUUID();
-const operator: Principal = {
-  userId: operatorUserId,
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const operator: Principal = crossTenantPrincipal("operator", { userId: operatorUserId });
 
 test("an operator bootstraps a new firm's first admin via a targeted invite", async () => {
   const db = getDb();

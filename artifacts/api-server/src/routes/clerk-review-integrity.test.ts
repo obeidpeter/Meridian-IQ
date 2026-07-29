@@ -22,6 +22,7 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Round 7 review integrity + Ask feedback. Pinned invariants:
 //  - source pages are an operator-only carve-out (clerk.use) from the blanket
@@ -39,28 +40,10 @@ const SALT = makeRunSalt();
 const firm1 = randomUUID();
 const firm2 = randomUUID();
 
-const operator: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const adminF1: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firm1,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const operator: Principal = crossTenantPrincipal("operator");
+const adminF1: Principal = firmPrincipal(firm1);
 const adminF2: Principal = { ...adminF1, userId: randomUUID(), firmId: firm2 };
-const clientA: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId: firm1,
-  clientPartyId: randomUUID(),
-  buyerPartyId: null,
-};
+const clientA: Principal = clientPrincipal(firm1, randomUUID());
 // Sibling client_user in the SAME firm, different party.
 const clientB: Principal = {
   ...clientA,

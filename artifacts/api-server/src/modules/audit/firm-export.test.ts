@@ -29,6 +29,7 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Full-firm portability export: every section scoped to THE firm (party
 // sphere, firm-keyed rows, the audit ledger's firm_id column), row caps with
@@ -47,21 +48,9 @@ const foreignParty = randomUUID(); // engaged by firmB only
 const invoiceId = randomUUID();
 const PASSWORD_HASH = `sekret-scrypt-${SALT}`;
 
-const operator: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const operator: Principal = crossTenantPrincipal("operator");
 const auditor: Principal = { ...operator, userId: randomUUID(), role: "auditor" };
-const firmAdmin: Principal = {
-  userId: adminUser,
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const firmAdmin: Principal = firmPrincipal(firmA, { userId: adminUser });
 
 const router = auditRouter as express.Router;
 

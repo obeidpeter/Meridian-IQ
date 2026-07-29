@@ -26,6 +26,7 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Monthly platform-billing statement. Pinned invariants:
 //  - accepted invoices use the vat-pack predicate exactly: Lagos issue-month
@@ -80,13 +81,7 @@ const TIER = {
   },
 };
 
-const firmAdminA: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const firmAdminA: Principal = firmPrincipal(firmA);
 const clientA: Principal = {
   ...firmAdminA,
   userId: randomUUID(),

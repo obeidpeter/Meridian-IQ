@@ -24,6 +24,7 @@ import {
   closeAllServers,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt, daysAgo } from "../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Scale package: list pagination + search (invoices, parties, clerk cases),
 // the receivables aging summary, and the build-version handshake. Uses the
@@ -44,20 +45,8 @@ const supplierB = randomUUID(); // sibling client of the same firm
 const buyerZebra = randomUUID();
 const buyerYak = randomUUID();
 
-const staff: Principal = {
-  userId,
-  role: "firm_staff",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const clientUserA: Principal = {
-  userId,
-  role: "client_user",
-  firmId,
-  clientPartyId: supplierA,
-  buyerPartyId: null,
-};
+const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
+const clientUserA: Principal = clientPrincipal(firmId, supplierA, { userId: userId });
 
 // Six invoices for supplier A with staggered created_at (deterministic paging
 // order) plus one for sibling supplier B (SEC-03 must hide it from A's user).

@@ -23,6 +23,7 @@ import {
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Natural-language invoice drafting (idea #7). Pinned invariants:
 //  - the model's output is re-validated and normalised by the app (dates,
@@ -43,13 +44,7 @@ const BUYER_NAME = `Adaeze Foods ${SALT}`;
 
 // Firm A has the buyer on one of its invoices (in sphere); firm B has no
 // relationship to it at all.
-const firmAPrincipal: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firmAId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const firmAPrincipal: Principal = firmPrincipal(firmAId);
 const firmBPrincipal: Principal = {
   ...firmAPrincipal,
   userId: randomUUID(),

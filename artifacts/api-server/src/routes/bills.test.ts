@@ -26,6 +26,7 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Supplier payables (contract 0.44.0). Pinned here:
 //  - the bills routes' own buyer-side scope wall: a sibling client's bill, a
@@ -51,21 +52,9 @@ const vendorParty = randomUUID(); // NOT engaged — the bills' supplier
 const buyerParty = randomUUID(); // ordinary receivable buyer
 const adminId = randomUUID();
 
-const admin: Principal = {
-  userId: adminId,
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const admin: Principal = firmPrincipal(firmA, { userId: adminId });
 const adminB: Principal = { ...admin, userId: randomUUID(), firmId: firmB };
-const clientUser: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId: firmA,
-  clientPartyId: clientParty,
-  buyerPartyId: null,
-};
+const clientUser: Principal = clientPrincipal(firmA, clientParty);
 const siblingUser: Principal = {
   ...clientUser,
   userId: randomUUID(),

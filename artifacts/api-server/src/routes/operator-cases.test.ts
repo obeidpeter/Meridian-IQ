@@ -15,6 +15,7 @@ import type { Principal } from "../modules/auth/rbac.ts";
 import { createDraft } from "../modules/invoice/service.ts";
 import { appFor, listen, closeAllServers } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { crossTenantPrincipal } from "../test-helpers/principals.ts";
 
 // GET /operator/cases now resolves firm/client/invoice/playbook/escalation
 // lookups for the whole page in batched queries instead of 5×N sequential
@@ -22,13 +23,7 @@ import { makeRunSalt } from "../test-helpers/fixtures.ts";
 // correctly (the operator queue is the hottest operator screen).
 
 const SALT = makeRunSalt();
-const operator: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const operator: Principal = crossTenantPrincipal("operator");
 
 const firmId = randomUUID();
 const clientId = randomUUID();

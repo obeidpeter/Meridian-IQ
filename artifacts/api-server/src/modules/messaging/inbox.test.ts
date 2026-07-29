@@ -14,6 +14,7 @@ import {
   closeAllServers,
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
+import { buyerPrincipal, clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Notification inbox scoping (SEC-03). The messages ledger has NO firm key
 // and NO RLS policy, so the recipient IDENTITY equality inside
@@ -56,55 +57,13 @@ const buyerPartyD = randomUUID();
 const refA = recipientRefFor(partyA);
 const refStaff = pointerEntityRef("usr", staffUserId);
 
-const clientA: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId,
-  clientPartyId: partyA,
-  buyerPartyId: null,
-};
-const siblingClientB: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId,
-  clientPartyId: partyB,
-  buyerPartyId: null,
-};
-const staff: Principal = {
-  userId: staffUserId,
-  role: "firm_staff",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const operator: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const operatorWithFeed: Principal = {
-  userId: opUserId,
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const buyerC: Principal = {
-  userId: randomUUID(),
-  role: "buyer_user",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: buyerPartyC,
-};
-const auditor: Principal = {
-  userId: randomUUID(),
-  role: "auditor",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const clientA: Principal = clientPrincipal(firmId, partyA);
+const siblingClientB: Principal = clientPrincipal(firmId, partyB);
+const staff: Principal = firmPrincipal(firmId, { userId: staffUserId, role: "firm_staff" });
+const operator: Principal = crossTenantPrincipal("operator");
+const operatorWithFeed: Principal = crossTenantPrincipal("operator", { userId: opUserId });
+const buyerC: Principal = buyerPrincipal(buyerPartyC);
+const auditor: Principal = crossTenantPrincipal("auditor");
 
 const at = (secondsAgo: number) => new Date(Date.now() - secondsAgo * 1_000);
 

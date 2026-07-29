@@ -12,7 +12,7 @@ import {
   auditEventsTable,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { recordConsent } from "../consent/consent.ts";
+import { grantComplianceConsent } from "../../test-helpers/seeders.ts";
 import { createDraft, validateInvoice } from "./service.ts";
 import { updateFirmPolicies } from "./approvals.ts";
 import { bulkSubmit } from "./bulk-submit.ts";
@@ -153,15 +153,7 @@ before(async () => {
   ]);
   // Layer-1 compliance consent for the submitting suppliers only.
   for (const partyId of [supplier, supplierBatch, supplierApproval, supplierOp]) {
-    await recordConsent({
-      partyId,
-      layer: 1,
-      action: "grant",
-      scope: "compliance",
-      basis: "contract",
-      channel: "test",
-      actorId: userId,
-    });
+    await grantComplianceConsent(partyId, userId);
   }
 });
 

@@ -23,6 +23,7 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Collection accounts. Pinned invariants:
 //  - provisioning: the simulator mints a CA- reference when no relay is
@@ -50,20 +51,8 @@ const clientParty = randomUUID(); // engaged with firm A — the accounts' owner
 const strangerParty = randomUUID(); // NOT engaged — the party-access probe
 const buyerParty = randomUUID();
 
-const admin: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const clientUser: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId: firmA,
-  clientPartyId: clientParty,
-  buyerPartyId: null,
-};
+const admin: Principal = firmPrincipal(firmA);
+const clientUser: Principal = clientPrincipal(firmA, clientParty);
 
 const WEBHOOK_TOKEN = `col-hook-${SALT}`;
 const STAMPED_NUM = `INV-CA-ST-${SALT}`;

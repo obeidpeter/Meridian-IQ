@@ -16,6 +16,7 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Access model for recurring templates: firm staff manage the firm's book;
 // a client_user (SEC-03) creates, sees and toggles only templates drafting
@@ -31,27 +32,9 @@ const clientA = randomUUID();
 const clientB = randomUUID();
 const buyer = randomUUID();
 
-const staff: Principal = {
-  userId: userStaff,
-  role: "firm_staff",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const clientUserA: Principal = {
-  userId: userClientA,
-  role: "client_user",
-  firmId,
-  clientPartyId: clientA,
-  buyerPartyId: null,
-};
-const clientUserB: Principal = {
-  userId: userClientB,
-  role: "client_user",
-  firmId,
-  clientPartyId: clientB,
-  buyerPartyId: null,
-};
+const staff: Principal = firmPrincipal(firmId, { userId: userStaff, role: "firm_staff" });
+const clientUserA: Principal = clientPrincipal(firmId, clientA, { userId: userClientA });
+const clientUserB: Principal = clientPrincipal(firmId, clientB, { userId: userClientB });
 
 function body(supplierPartyId: string, name: string) {
   return JSON.stringify({

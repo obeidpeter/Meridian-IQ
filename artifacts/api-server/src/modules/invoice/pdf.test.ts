@@ -19,6 +19,7 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Branded invoice PDF. Pinned invariants:
 //  - deterministic: identical spine rows render byte-identical buffers
@@ -46,20 +47,8 @@ const BRAND = `Adeyemi & Co ${SALT}`;
 const IRN = `IRN-PDF-${SALT.toUpperCase()}`;
 const CSID = `csid-${SALT}`;
 
-const firmAdmin: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const clientS1: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId: firmA,
-  clientPartyId: supplier1,
-  buyerPartyId: null,
-};
+const firmAdmin: Principal = firmPrincipal(firmA);
+const clientS1: Principal = clientPrincipal(firmA, supplier1);
 const clientS2: Principal = {
   ...clientS1,
   userId: randomUUID(),

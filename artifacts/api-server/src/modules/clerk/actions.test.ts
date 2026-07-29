@@ -13,7 +13,6 @@ import {
   submissionAttemptsTable,
   usersTable,
 } from "@workspace/db";
-import { recordConsent } from "../consent/consent.ts";
 import { createDraft } from "../invoice/service.ts";
 import { setFirmOverride } from "../flags/flags.ts";
 import type { Principal } from "../auth/rbac.ts";
@@ -29,6 +28,8 @@ import { CLIENT_SAFE_DATA_INTENTS, DATA_INTENTS } from "./data-intents/index.ts"
 import { executeActionBodyInvoiceIdsMax } from "@workspace/api-zod";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { firmPrincipal as makeFirmPrincipal } from "../../test-helpers/principals.ts";
+import { grantComplianceConsent } from "../../test-helpers/seeders.ts";
 
 // Proposed actions (round 21). Pinned invariants:
 //  - fail-closed: while the clerk_actions flag is dark, proposals answer
@@ -62,13 +63,7 @@ const LINE = {
 // executeAction's principal is the DRAFTING path's scope handle
 // (draftPaymentChaser asserts tenant + party scope with it); the submit
 // kinds derive nothing from it beyond what firmId/clientPartyId carry.
-const firmPrincipal: Principal = {
-  userId,
-  role: "firm_admin",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const firmPrincipal: Principal = makeFirmPrincipal(firmId, { userId: userId });
 const foreignPrincipal: Principal = { ...firmPrincipal, firmId: foreignFirmId };
 
 let n = 0;
@@ -156,15 +151,7 @@ before(async () => {
     { firmId, clientPartyId: supplier, type: "readiness_assessment", title: "act A" },
     { firmId, clientPartyId: supplierNoConsent, type: "readiness_assessment", title: "act B" },
   ]);
-  await recordConsent({
-    partyId: supplier,
-    layer: 1,
-    action: "grant",
-    scope: "compliance",
-    basis: "contract",
-    channel: "test",
-    actorId: userId,
-  });
+  await grantComplianceConsent(supplier, userId);
 
   overdueA = (await draftFor(buyer, daysAgo(30))).invoice.id;
   overdueBad = (await draftFor(buyerNoTin, daysAgo(25))).invoice.id;

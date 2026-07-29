@@ -27,6 +27,7 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt, daysAgo } from "../test-helpers/fixtures.ts";
+import { buyerPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Buyer Rails server behaviour (BR-02, BR-04, BR-05):
 //  - payment flags are append-only settlement lineage; a `paid` flag settles
@@ -75,34 +76,10 @@ const invNotifyDarkId = randomUUID(); // notification target while flag is dark
 const EVIL_SUPPLIER_NAME = `=Evil Supplier ${SALT}`;
 const EVIL_INVOICE_NUMBER = `=2+5+BRT${SALT}`;
 
-const admin: Principal = {
-  userId: staffUserId,
-  role: "firm_admin",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const buyerOne: Principal = {
-  userId: buyerUser1,
-  role: "buyer_user",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: buyer1,
-};
-const buyerTwo: Principal = {
-  userId: buyerUser2,
-  role: "buyer_user",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: buyer2,
-};
-const buyerNoTinUser: Principal = {
-  userId: buyerUser2,
-  role: "buyer_user",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: buyerNoTin,
-};
+const admin: Principal = firmPrincipal(firmId, { userId: staffUserId });
+const buyerOne: Principal = buyerPrincipal(buyer1, { userId: buyerUser1 });
+const buyerTwo: Principal = buyerPrincipal(buyer2, { userId: buyerUser2 });
+const buyerNoTinUser: Principal = buyerPrincipal(buyerNoTin, { userId: buyerUser2 });
 
 async function saveAndEnable(key: string): Promise<boolean | null> {
   const db = getDb();

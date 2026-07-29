@@ -19,6 +19,7 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Operator-assisted password recovery (IDN-02), on the invitation rail's
 // posture: the raw token is returned once and only its sha256 stored;
@@ -32,21 +33,9 @@ const operatorUserId = randomUUID();
 const subjectUserId = randomUUID();
 const subjectEmail = `lost-access-${SALT}@test.local`;
 
-const operator: Principal = {
-  userId: operatorUserId,
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const operator: Principal = crossTenantPrincipal("operator", { userId: operatorUserId });
 
-const firmAdmin: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: randomUUID(),
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const firmAdmin: Principal = firmPrincipal(randomUUID());
 
 after(async () => {
   await closeAllServers();

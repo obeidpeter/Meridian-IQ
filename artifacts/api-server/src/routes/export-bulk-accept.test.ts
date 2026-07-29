@@ -25,6 +25,7 @@ import {
   closeAllServers,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt, daysAgo } from "../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // CSV exports (invoice book, receivables aging) and reconciliation
 // bulk-accept. Same harness/salting conventions as scale.test.ts (shared
@@ -38,20 +39,8 @@ const supplier = randomUUID();
 const supplierB = randomUUID(); // sibling client (SEC-03)
 const buyer = randomUUID();
 
-const staff: Principal = {
-  userId,
-  role: "firm_staff",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const clientUserA: Principal = {
-  userId,
-  role: "client_user",
-  firmId,
-  clientPartyId: supplier,
-  buyerPartyId: null,
-};
+const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
+const clientUserA: Principal = clientPrincipal(firmId, supplier, { userId: userId });
 
 after(async () => {
   await closeAllServers();

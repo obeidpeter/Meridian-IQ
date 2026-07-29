@@ -41,6 +41,7 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Scanned bank-statement intake: a PDF statement's lines are PROPOSED by one
 // model call (text path for a text-layer PDF, vision path for a scan), the
@@ -59,13 +60,7 @@ const clientParty = randomUUID(); // engaged + layer-1 consent
 const noConsentParty = randomUUID(); // engaged, NO consent
 const brokeParty = randomUUID(); // firmBroke's engaged + consented party
 
-const staff: Principal = {
-  userId,
-  role: "firm_staff",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
 const staffBroke: Principal = { ...staff, firmId: firmBroke };
 
 // Minimal hand-built PDFs (the clerk-scan.test.ts builders): a textless one

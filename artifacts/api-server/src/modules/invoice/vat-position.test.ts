@@ -25,6 +25,7 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Monthly VAT position (contract 0.45.0). Pinned here:
 //  - the OUTPUT basis mirrors the VAT pack: only rails-accepted documents in
@@ -52,20 +53,8 @@ const buyerParty = randomUUID(); // plain buyer on the output documents
 const foreignClient = randomUUID(); // firm B's client — isolation probe
 const adminId = randomUUID();
 
-const admin: Principal = {
-  userId: adminId,
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const siblingUser: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId: firmA,
-  clientPartyId: clientTwo,
-  buyerPartyId: null,
-};
+const admin: Principal = firmPrincipal(firmA, { userId: adminId });
+const siblingUser: Principal = clientPrincipal(firmA, clientTwo);
 
 // The current Lagos month (the default position month) and its predecessor;
 // fixed mid-month issue dates so a month rollover mid-run cannot flip a

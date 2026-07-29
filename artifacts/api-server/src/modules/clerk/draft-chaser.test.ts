@@ -19,6 +19,7 @@ import {
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal as makeClientPrincipal } from "../../test-helpers/principals.ts";
 
 // Payment-chaser drafts (round-9 idea #2). Pinned invariants:
 //  - eligibility is the receivables definition exactly — a settled, failed
@@ -37,13 +38,7 @@ const outstandingId = randomUUID();
 const settledId = randomUUID();
 const draftId = randomUUID();
 
-const clientPrincipal: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId,
-  clientPartyId: clientId,
-  buyerPartyId: null,
-};
+const clientPrincipal: Principal = makeClientPrincipal(firmId, clientId);
 const siblingPrincipal: Principal = {
   ...clientPrincipal,
   userId: randomUUID(),

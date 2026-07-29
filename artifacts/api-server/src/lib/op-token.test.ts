@@ -1,6 +1,5 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
 import { opTokenAllows, requireOpToken } from "./op-token.ts";
 import healthRouter from "../routes/health.ts";
@@ -11,6 +10,7 @@ import {
   listen,
   closeAllServers,
 } from "../test-helpers/route-harness.ts";
+import { crossTenantPrincipal } from "../test-helpers/principals.ts";
 
 // The opt-in operational-token guard: unset env keeps an endpoint open
 // (existing deployments and the Replit scheduler are unaffected); once set,
@@ -18,13 +18,7 @@ import {
 // Env mutations here are safe: node:test runs this file in its own process
 // and its tests serially.
 
-const principal: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const principal: Principal = crossTenantPrincipal("operator");
 
 after(async () => {
   await closeAllServers();
