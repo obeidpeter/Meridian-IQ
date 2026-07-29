@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.47.0
+  version: 0.48.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2406,6 +2406,18 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+  /collection-accounts/unmatched:
+    get:
+      operationId: getUnmatchedCollections
+      tags: [statements]
+      summary: Inbound payments on live collection accounts that bound to no invoice — per-account counts from the webhook's pointer-only audit events (amounts are never recorded)
+      responses:
+        "200":
+          description: Unmatched inbound collections over the trailing window, newest activity first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnmatchedCollections"
   /collection-accounts/{id}/deactivate:
     post:
       operationId: deactivateCollectionAccount
@@ -6562,6 +6574,52 @@ components:
         label:
           type: string
           maxLength: 200
+    # Unmatched inbound collections (round 17): per-account counts of live
+    # payments that bound to no invoice, read back from the webhook's
+    # pointer-only audit events. Amounts are never recorded for unmatched
+    # payments — the note says to reconcile against the provider statement.
+    UnmatchedCollections:
+      type: object
+      required: [windowDays, total, accounts, note]
+      properties:
+        windowDays:
+          type: integer
+        total:
+          type: integer
+        accounts:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                accountId,
+                accountReference,
+                label,
+                clientPartyId,
+                clientName,
+                count,
+                firstSeen,
+                lastSeen,
+              ]
+            properties:
+              accountId:
+                type: string
+              accountReference:
+                type: string
+              label:
+                type: ["string", "null"]
+              clientPartyId:
+                type: string
+              clientName:
+                type: string
+              count:
+                type: integer
+              firstSeen:
+                type: string
+              lastSeen:
+                type: string
+        note:
+          type: string
     CompliancePackNotifyInput:
       type: object
       required: [clientPartyId]
@@ -7987,6 +8045,8 @@ components:
           resistanceAlert,
           decidedYesterday,
           spendAlerts,
+          approvalsPending,
+          unmatchedCollections7d,
         ]
       properties:
         # Firms whose latest-day Clerk spend is anomalously above their own
@@ -8039,6 +8099,14 @@ components:
           type: boolean
         # Extraction cases decided on the previous Lagos day.
         decidedYesterday:
+          type: integer
+        # Pre-submission invoices blocked on a colleague's approval across
+        # every policy-on firm (maker-checker, platform-wide).
+        approvalsPending:
+          type: integer
+        # Inbound collection-account payments of the past 7 days that bound
+        # to no invoice, platform-wide.
+        unmatchedCollections7d:
           type: integer
     PartyMergeSide:
       type: object
@@ -10360,10 +10428,30 @@ components:
           ask,
           injectionTrend,
           platformSpend,
+          grounding,
         ]
       properties:
         windowDays:
           type: integer
+        # Number-grounding violations in the window: phrasing surfaces whose
+        # model output carried a numeral the facts never stated — each such
+        # output was replaced by its deterministic template. Zero is healthy.
+        grounding:
+          type: object
+          required: [violations, bySurface]
+          properties:
+            violations:
+              type: integer
+            bySurface:
+              type: array
+              items:
+                type: object
+                required: [surface, count]
+                properties:
+                  surface:
+                    type: string
+                  count:
+                    type: integer
         # Confidence calibration from the corrections exhaust: for approved
         # extraction cases, how often a field at a given model confidence was
         # kept unchanged by the operator. Optional: absent when no corrected

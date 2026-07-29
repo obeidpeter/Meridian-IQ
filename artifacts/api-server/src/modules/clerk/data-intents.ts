@@ -24,6 +24,7 @@ import {
   computeVatPosition,
   vatPositionMonths,
 } from "../invoice/vat-position";
+import { pendingApprovals } from "../invoice/approvals";
 import { firmClerkUsage } from "./budget";
 import { monthLabel } from "./client-statement";
 import { isAre, MONTH_NAMES, plural } from "./text";
@@ -743,6 +744,48 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     },
   },
   {
+    key: "data.pending_approvals",
+    title:
+      "invoices waiting for a colleague's submission approval under the firm's maker-checker policy (count, oldest wait, the waiting invoices)",
+    accepts: { client: true },
+    async run(firmId, params) {
+      const pending = await pendingApprovals(firmId, params?.clientPartyId);
+      // Policy off is its own honest answer — "0 waiting" and "the firm
+      // doesn't use approvals" must never read the same.
+      if (pending === null) {
+        return {
+          text: "This firm has not turned on submission approvals, so no invoice waits on a second approver.",
+          facts: [countFact("pending_approvals", "Awaiting approval", 0)],
+        };
+      }
+      if (pending.count === 0) {
+        return {
+          text: `No invoices${forClient(params)} are waiting for a submission approval right now.`,
+          facts: [countFact("pending_approvals", "Awaiting approval", 0)],
+        };
+      }
+      const sample = pending.invoices.map((r) => r.invoiceNumber).join(", ");
+      const more = pending.count - pending.invoices.length;
+      return {
+        text:
+          `${plural(pending.count, "invoice")}${forClient(params)} ${isAre(pending.count)} waiting for a colleague's approval before submission` +
+          `${pending.oldestDays !== null && pending.oldestDays > 0 ? ` (oldest waiting ${plural(pending.oldestDays, "day")})` : ""}: ` +
+          `${sample}${more > 0 ? ` and ${more} more` : ""}.`,
+        facts: [
+          countFact("pending_approvals", "Awaiting approval", pending.count),
+          ...(pending.oldestDays !== null
+            ? [countFact("oldest_wait_days", "Oldest wait (days)", pending.oldestDays)]
+            : []),
+        ],
+        links: pending.invoices.map((r) => ({
+          label: r.invoiceNumber,
+          kind: "invoice" as const,
+          id: r.invoiceId,
+        })),
+      };
+    },
+  },
+  {
     key: "data.clerk_allowance",
     title: "the firm's Clerk AI token allowance and usage this month",
     accepts: {},
@@ -819,6 +862,11 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // firm-wide totals branch never runs for a client. Linkless like the two
   // payables keys above, for the same bills-are-not-linkable reason.
   "data.vat_position",
+  // Awaiting-approval with the forced own-party pin: the waiting invoices
+  // are the caller's OWN receivable drafts (supplier-pinned, so the links
+  // stay inside the asker's SEC-03 visibility); the policy state itself is
+  // firm configuration a client may fairly learn — it blocks their paper.
+  "data.pending_approvals",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

@@ -4,6 +4,7 @@ import {
   injectionResistanceMonths,
 } from "./resistance-watch";
 import { detectQualityDrop, keptRateMonths } from "./quality-watch";
+import { GROUNDING_VIOLATION_ACTION } from "./grounding";
 import {
   getDb,
   type ClerkCorrection,
@@ -145,6 +146,14 @@ export interface ClerkMetrics {
       injectionResisted: number;
       resistanceRate: number;
     }[];
+  };
+  // Number-grounding violations (round-17 idea #1): phrasing surfaces whose
+  // model output carried a numeral the facts never stated — each such output
+  // was replaced by its deterministic template and left one pointer-only
+  // audit event (grounding.ts). Zero is the healthy reading.
+  grounding: {
+    violations: number;
+    bySurface: { surface: string; count: number }[];
   };
   // Resistance-drop alert (round-8 idea #2): present when the newest measured
   // month's injection resistance fell materially below the previous one —
@@ -777,6 +786,26 @@ export async function getClerkMetrics(
   const trendMonths = await injectionResistanceMonths();
   // Same rule as the sweep's alert — the banner and the audit event agree.
   const resistanceAlert = detectResistanceDrop(trendMonths);
+  // Grounding violations in the window, by surface — counted straight from
+  // the pointer-only audit events grounding.ts writes (the action-prefixed
+  // audit index carries the probe).
+  const groundingRows = (
+    await db.execute(sql`
+      SELECT entity_id AS surface, COUNT(*)::int AS count
+      FROM audit_events
+      WHERE action = ${GROUNDING_VIOLATION_ACTION}
+        AND created_at >= ${since}
+      GROUP BY 1
+      ORDER BY 2 DESC, 1
+    `)
+  ).rows as { surface: string; count: number }[];
+  const grounding = {
+    violations: groundingRows.reduce((sum, r) => sum + Number(r.count), 0),
+    bySurface: groundingRows.map((r) => ({
+      surface: r.surface,
+      count: Number(r.count),
+    })),
+  };
   // Kept-rate drift buckets, shared with the quality-watch sweep exactly as
   // the injection trend is shared with the resistance watch — one source, so
   // the chart and the alert can never disagree.
@@ -922,6 +951,7 @@ export async function getClerkMetrics(
         ),
       })),
     },
+    grounding,
     ...(resistanceAlert ? { resistanceAlert } : {}),
     ...(keptRateTrend.length > 0 ? { keptRateTrend } : {}),
     ...(qualityAlert ? { qualityAlert } : {}),

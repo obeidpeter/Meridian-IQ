@@ -365,6 +365,9 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     chasedTwiceCount: 0,
     payablesDueCount: 0,
     vatReturnInDays: null,
+    approvalsPendingCount: null,
+    approvalsPendingOldestDays: null,
+    unmatchedCollectionsCount: 0,
   });
   assert.match(quiet.headline, /on track/);
   assert.equal(quiet.bullets.length, 1);
@@ -385,9 +388,12 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     chasedTwiceCount: 1,
     payablesDueCount: 2,
     vatReturnInDays: 3,
+    approvalsPendingCount: 2,
+    approvalsPendingOldestDays: 4,
+    unmatchedCollectionsCount: 1,
   });
   assert.equal(busy.headline, "3 invoices need attention this week.");
-  assert.equal(busy.bullets.length, 12);
+  assert.equal(busy.bullets.length, 14);
   assert.match(busy.bullets[0], /2 invoices are past the 7-day submission window/);
   assert.match(busy.bullets[5], /2 regular invoices look unraised across 1 client/);
   assert.match(
@@ -411,6 +417,14 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     busy.bullets[11],
     /Monthly VAT return due in 3 days — VAT returns fall due on the 21st/,
   );
+  assert.match(
+    busy.bullets[12],
+    /2 invoices are waiting for a colleague's approval before submission — the oldest has waited 4 days/,
+  );
+  assert.match(
+    busy.bullets[13],
+    /1 payment arrived on your collection accounts this week that matched no invoice/,
+  );
 
   // Deadline day itself reads "today"; a null countdown adds no bullet (the
   // quiet case above already pins that).
@@ -430,6 +444,9 @@ test("buildTemplateDigest phrases the facts deterministically", () => {
     chasedTwiceCount: 0,
     payablesDueCount: 0,
     vatReturnInDays: 0,
+    approvalsPendingCount: 0,
+    approvalsPendingOldestDays: null,
+    unmatchedCollectionsCount: 0,
   });
   assert.equal(dueToday.bullets.length, 1);
   assert.match(dueToday.bullets[0], /Monthly VAT return due today/);

@@ -482,6 +482,19 @@ export function OperatorQueue() {
                 : ""}{" "}
               {brief.decidedYesterday} case(s) were decided yesterday.
             </p>
+            {(brief.approvalsPending > 0 || brief.unmatchedCollections7d > 0) && (
+              <p
+                className="text-muted-foreground"
+                data-testid="brief-governance"
+              >
+                {brief.approvalsPending > 0
+                  ? `${brief.approvalsPending} invoice(s) across policy-on firms await a colleague's submission approval.`
+                  : ""}{" "}
+                {brief.unmatchedCollections7d > 0
+                  ? `${brief.unmatchedCollections7d} collection-account payment(s) this week matched no invoice.`
+                  : ""}
+              </p>
+            )}
             <p
               className={
                 brief.spendAlerts > 0

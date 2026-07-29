@@ -317,6 +317,17 @@ firm-keyed RLS via migration 0024; `modules/invoice/approvals.ts`,
   submitter check deliberately bites at submit time, not approve time — an
   approval is evidence anyone entitled may record; what matters is that the
   eventual submitter is somebody else.
+- **Awaiting-approval visibility** (round 17): `pendingApprovals` /
+  `awaitingApproval` (approvals.ts) is the ONE spelling of "waiting" —
+  policy ON, pre-submission receivable paper (the recorder's own
+  APPROVABLE_STATUSES), no live approval; policy off answers **null**, so
+  "0 waiting" and "the firm doesn't use approvals" never read the same.
+  Surfaced four ways, all deterministic: a weekly-digest fact (count +
+  oldest wait), the client-safe `data.pending_approvals` Ask intent (forced
+  own-party pin; links are the caller's own drafts), a platform-wide count
+  on the operator daily brief, and the invoice status light's amber
+  "waiting for a colleague's approval" reason with its matching
+  recommended action.
 
 ## Collection accounts
 
@@ -324,6 +335,16 @@ Virtual account references per client whose inbound payments auto-observe
 settlements — the mandatory-source settlement hierarchy's auto-observed
 member (`modules/collections/{service,provider}.ts`,
 `routes/collections.ts`, `collection_accounts` + RLS via migration 0024).
+
+- **Unmatched inbound payments** (`modules/collections/unmatched.ts`,
+  `GET /collection-accounts/unmatched`, round 17): the webhook's
+  pointer-only `collections.unmatched` audit events read back per account
+  over a trailing 90-day window (counts, first/last seen, resolved account
+  reference and client name — amounts were never recorded, and the note
+  says to reconcile against the provider statement). Same
+  `statement.write` + firm gate as the accounts list; surfaces as an amber
+  advisory under the console collection-accounts card, a weekly-digest
+  fact, and a platform-wide 7-day count on the operator daily brief.
 
 - **Provisioning** (`GET`/`POST /collection-accounts`,
   `POST /collection-accounts/{id}/deactivate`): the statement-connections

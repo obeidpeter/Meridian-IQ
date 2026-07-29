@@ -10,6 +10,9 @@ import {
   type ClerkDigestRow,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
+import { ensureGrounded } from "./grounding";
+import { pendingApprovals } from "../invoice/approvals";
+import { countFirmUnmatchedCollections } from "../collections/unmatched";
 import { sendMessage } from "../messaging/messaging";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import { sendPushToUser } from "../push/push";
@@ -58,7 +61,10 @@ const DELIVERY_BATCH = 50;
 // v3 (payables round): + the supplier-bills-due line, same reasoning.
 // v4 (VAT-position round): + the monthly VAT-return countdown line, same
 // reasoning.
-const DIGEST_PROMPT_VERSION = "digest.v4";
+// v5: the governance facts (awaiting-approval count, unmatched collection
+// payments) joined the fact list — the version bump keeps the model path in
+// lockstep with the template path.
+const DIGEST_PROMPT_VERSION = "digest.v5";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -114,6 +120,14 @@ export interface DigestFacts {
   // the 21st has passed. Null when more than 7 days away (the digest is
   // weekly; a farther deadline is noise). Pure calendar arithmetic, no SQL.
   vatReturnInDays: number | null;
+  // Round-17 governance facts: pre-submission invoices blocked on a
+  // colleague's approval under the maker-checker policy (BOTH null when the
+  // policy is off — "0 waiting" and "no policy" must never read the same),
+  // and inbound collection-account payments of the past 7 days the platform
+  // could not bind to any invoice.
+  approvalsPendingCount: number | null;
+  approvalsPendingOldestDays: number | null;
+  unmatchedCollectionsCount: number;
 }
 
 // The monthly VAT-return countdown, PURE and Lagos-anchored (lagosParts /
@@ -199,6 +213,8 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const unmatched = await countFirmUnmatchedCredits(firmId);
   const chasedTwice = await countFirmChasedTwice(firmId);
   const payablesDue = await countFirmPayablesDue(firmId);
+  const approvals = await pendingApprovals(firmId);
+  const unmatchedCollections = await countFirmUnmatchedCollections(firmId, 7);
   return {
     unsubmittedCount: Number(r?.unsubmitted ?? 0),
     dueSoonCount: Number(r?.due_soon ?? 0),
@@ -215,6 +231,9 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     chasedTwiceCount: chasedTwice,
     payablesDueCount: payablesDue,
     vatReturnInDays: vatReturnInDays(),
+    approvalsPendingCount: approvals?.count ?? null,
+    approvalsPendingOldestDays: approvals?.oldestDays ?? null,
+    unmatchedCollectionsCount: unmatchedCollections,
   };
 }
 
@@ -285,6 +304,21 @@ export function buildTemplateDigest(facts: DigestFacts): {
       `Monthly VAT return due ${facts.vatReturnInDays === 0 ? "today" : `in ${plural(facts.vatReturnInDays, "day")}`} — VAT returns fall due on the 21st.`,
     );
   }
+  if (facts.approvalsPendingCount !== null && facts.approvalsPendingCount > 0) {
+    bullets.push(
+      `${plural(facts.approvalsPendingCount, "invoice")} ${isAre(facts.approvalsPendingCount)} waiting for a colleague's approval before submission${
+        facts.approvalsPendingOldestDays !== null &&
+        facts.approvalsPendingOldestDays > 0
+          ? ` — the oldest has waited ${plural(facts.approvalsPendingOldestDays, "day")}`
+          : ""
+      }.`,
+    );
+  }
+  if (facts.unmatchedCollectionsCount > 0) {
+    bullets.push(
+      `${plural(facts.unmatchedCollectionsCount, "payment")} arrived on your collection accounts this week that matched no invoice — reconcile against the provider statement.`,
+    );
+  }
   const urgent = facts.overdueCount + facts.failedCount;
   const headline =
     urgent > 0
@@ -350,6 +384,12 @@ export async function generateFirmDigest(
       `- Invoices with 2+ payment reminders sent and still unpaid: ${facts.chasedTwiceCount}`,
       `- Unpaid supplier bills due within the next 7 days or overdue: ${facts.payablesDueCount}`,
       `- Days until the monthly VAT return deadline (the 21st): ${facts.vatReturnInDays ?? "more than 7 — do not mention"}`,
+      `- Invoices waiting for a colleague's approval before submission: ${facts.approvalsPendingCount ?? "approval policy off — do not mention"}${
+        facts.approvalsPendingCount !== null && facts.approvalsPendingOldestDays !== null
+          ? ` (oldest waiting ${facts.approvalsPendingOldestDays} day(s))`
+          : ""
+      }`,
+      `- Collection-account payments this week matching no invoice: ${facts.unmatchedCollectionsCount}`,
       `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
     ].join("\n");
     const result = await gateway.infer<z.infer<typeof digestOutput>>({
@@ -363,7 +403,18 @@ export async function generateFirmDigest(
       validator: digestOutput,
       inputForHash: `${firmId}:${weekStart.toISOString()}:${JSON.stringify(facts)}`,
     });
-    if (result.ok) {
+    // Number grounding: a numeral the facts never stated means the template
+    // answers instead (grounding.ts) — the phrased digest may only re-say
+    // the computed numbers.
+    if (
+      result.ok &&
+      (await ensureGrounded(
+        "digest",
+        firmId,
+        [result.data.headline, ...result.data.bullets].join("\n"),
+        user,
+      ))
+    ) {
       headline = result.data.headline;
       bullets = result.data.bullets.length ? result.data.bullets : bullets;
       source = "clerk";

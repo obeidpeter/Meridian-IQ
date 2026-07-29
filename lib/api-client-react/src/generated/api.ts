@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.47.0
+ * OpenAPI spec version: 0.48.0
  */
 import {
   useMutation,
@@ -326,6 +326,7 @@ import type {
   UnbilledIncomeAlert,
   UnearnedIncome,
   UnmappedErrorCode,
+  UnmatchedCollections,
   UnmatchedCredits,
   UpdateFirmPoliciesInput,
   UpdateStaffNotificationPreferencesInput,
@@ -9996,6 +9997,83 @@ export const useCreateCollectionAccount = <TError = ErrorType<BadRequestResponse
       > => {
       return useMutation(getCreateCollectionAccountMutationOptions(options));
     }
+
+export const getGetUnmatchedCollectionsUrl = () => {
+
+
+
+
+  return `/api/collection-accounts/unmatched`
+}
+
+/**
+ * @summary Inbound payments on live collection accounts that bound to no invoice — per-account counts from the webhook's pointer-only audit events (amounts are never recorded)
+ */
+export const getUnmatchedCollections = async ( options?: RequestInit): Promise<UnmatchedCollections> => {
+
+  return customFetch<UnmatchedCollections>(getGetUnmatchedCollectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUnmatchedCollectionsQueryKey = () => {
+    return [
+    `/api/collection-accounts/unmatched`
+    ] as const;
+    }
+
+
+export const getGetUnmatchedCollectionsQueryOptions = <TData = Awaited<ReturnType<typeof getUnmatchedCollections>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedCollections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUnmatchedCollectionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUnmatchedCollections>>> = ({ signal }) => getUnmatchedCollections({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedCollections>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetUnmatchedCollectionsQueryResult = NonNullable<Awaited<ReturnType<typeof getUnmatchedCollections>>>
+export type GetUnmatchedCollectionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Inbound payments on live collection accounts that bound to no invoice — per-account counts from the webhook's pointer-only audit events (amounts are never recorded)
+ */
+
+export function useGetUnmatchedCollections<TData = Awaited<ReturnType<typeof getUnmatchedCollections>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getUnmatchedCollections>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetUnmatchedCollectionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getDeactivateCollectionAccountUrl = (id: string,) => {
 

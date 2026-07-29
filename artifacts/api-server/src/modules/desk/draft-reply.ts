@@ -8,6 +8,7 @@ import {
   type Escalation,
 } from "@workspace/db";
 import { DomainError } from "../errors";
+import { ensureGrounded } from "../clerk/grounding";
 import { appendAudit } from "../audit/audit";
 import { isFeatureEnabled } from "../flags/flags";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "../clerk/gateway";
@@ -222,6 +223,11 @@ export async function draftEscalationReply(
     inputForHash: user,
   });
   if (!result.ok) return fallback;
+  // Number grounding: a numeral neither the facts nor the fenced escalation
+  // message stated → template answers (grounding.ts).
+  if (!(await ensureGrounded("escalation_reply", null, result.data.reply, user))) {
+    return fallback;
+  }
   // The style-only rule has a deterministic backstop: a draft that copies
   // the example's specifics is discarded in favour of the template.
   if (example && copiesExampleSpecifics(result.data.reply, example, errorCode)) {

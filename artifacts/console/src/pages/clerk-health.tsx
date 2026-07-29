@@ -2455,6 +2455,37 @@ export function HealthPanel() {
 
           <EvalCorpusCard />
 
+      {metrics && (
+        <Card data-testid="section-number-grounding">
+          <CardHeader>
+            <CardTitle className="text-base">Number grounding</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Every phrased surface (digest, statements, chasers, replies,
+              cover notes) is checked against its own facts: a numeral the
+              facts never stated forfeits the phrasing and the deterministic
+              template answers instead. Zero is the healthy reading.
+            </p>
+            <p className="text-sm" data-testid="text-grounding-violations">
+              {metrics.grounding.violations === 0
+                ? `No violations in the last ${metrics.windowDays} days — every phrased number was grounded.`
+                : `${metrics.grounding.violations} violation(s) in the last ${metrics.windowDays} days — each answered with the template instead.`}
+            </p>
+            {metrics.grounding.bySurface.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {metrics.grounding.bySurface.map((s) => (
+                  <span key={s.surface} className={pillClasses("amber")}>
+                    {s.surface.replace(/_/g, " ")}
+                    <span className="tabular-nums font-semibold">{s.count}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {metrics && metrics.injectionTrend.months.length > 0 && (
         <Card data-testid="section-injection-trend">
           <CardHeader>

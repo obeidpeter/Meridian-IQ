@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
   getDb,
   firmPoliciesTable,
@@ -14,6 +14,7 @@ import { isUuid } from "../../lib/uuid";
 // declarations and only reference each other inside call bodies, never at
 // module-evaluation time.
 import { assertReceivableOriented } from "./service";
+import { RECEIVABLE_ORIENTATION } from "./receivables";
 
 // Maker-checker submission approval (contract 0.45.0, firm_policies +
 // invoice_approvals — lib/db/src/schema/governance.ts, RLS via migration
@@ -205,6 +206,90 @@ export async function revokeLiveApprovals(invoiceId: string): Promise<void> {
         isNull(invoiceApprovalsTable.revokedAt),
       ),
     );
+}
+
+// Awaiting-approval visibility (round-17 idea #2). Under maker-checker a
+// draft blocked on its second pair of eyes is invisible until someone goes
+// looking — this is the one spelling of "waiting": policy ON, pre-submission
+// receivable paper (the same APPROVABLE_STATUSES the recorder accepts), no
+// live approval. Null when the policy is off — "0 waiting" and "the firm
+// doesn't use approvals" must never read the same.
+export interface PendingApprovals {
+  count: number;
+  oldestDays: number | null;
+  // Oldest first, capped — enough for a digest line or an Ask answer.
+  invoices: {
+    invoiceId: string;
+    invoiceNumber: string;
+    status: string;
+    ageDays: number;
+  }[];
+}
+
+export async function pendingApprovals(
+  firmId: string,
+  clientPartyId?: string,
+): Promise<PendingApprovals | null> {
+  if (!(await firmSubmitApprovalRequired(firmId))) return null;
+  const clientCond = clientPartyId
+    ? sql`AND i.supplier_party_id = ${clientPartyId}`
+    : sql``;
+  const rows = (
+    await getDb().execute<{
+      id: string;
+      invoice_number: string;
+      status: string;
+      age_days: number;
+    }>(sql`
+      SELECT i.id, i.invoice_number, i.status,
+        GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (now() - i.created_at)) / 86400))::int AS age_days
+      FROM invoices i
+      WHERE i.firm_id = ${firmId}
+        AND i.kind = 'invoice'
+        AND i.status IN ('draft', 'validated', 'failed')
+        AND ${RECEIVABLE_ORIENTATION}
+        ${clientCond}
+        AND NOT EXISTS (
+          SELECT 1 FROM invoice_approvals a
+          WHERE a.invoice_id = i.id AND a.revoked_at IS NULL
+        )
+      ORDER BY i.created_at ASC, i.id
+      LIMIT 5000
+    `)
+  ).rows;
+  return {
+    count: rows.length,
+    oldestDays: rows.length > 0 ? Number(rows[0].age_days) : null,
+    invoices: rows.slice(0, 5).map((r) => ({
+      invoiceId: r.id,
+      invoiceNumber: r.invoice_number,
+      status: r.status,
+      ageDays: Number(r.age_days),
+    })),
+  };
+}
+
+// Whether this invoice is blocked on the maker-checker policy right now —
+// the status light's "why can't I submit?" input. False when the policy is
+// off, the paper is past submission, or a live approval exists.
+export async function awaitingApproval(invoice: {
+  id: string;
+  firmId: string;
+  status: string;
+}): Promise<boolean> {
+  if (!APPROVABLE_STATUSES.includes(invoice.status)) return false;
+  if (!(await firmSubmitApprovalRequired(invoice.firmId))) return false;
+  const [live] = await getDb()
+    .select({ id: invoiceApprovalsTable.id })
+    .from(invoiceApprovalsTable)
+    .where(
+      and(
+        eq(invoiceApprovalsTable.invoiceId, invoice.id),
+        isNull(invoiceApprovalsTable.revokedAt),
+      ),
+    )
+    .limit(1);
+  return !live;
 }
 
 // The submit guard. Policy off (or no policy row) is a no-op — nothing about

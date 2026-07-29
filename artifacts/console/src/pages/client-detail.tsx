@@ -9,6 +9,8 @@ import {
   getGetPortfolioQueryKey,
   useListCollectionAccounts,
   getListCollectionAccountsQueryKey,
+  useGetUnmatchedCollections,
+  getGetUnmatchedCollectionsQueryKey,
   useCreateCollectionAccount,
   useDeactivateCollectionAccount,
   getGetCompliancePackUrl,
@@ -226,6 +228,15 @@ function CollectionAccountsCard({ clientPartyId }: { clientPartyId: string }) {
       retry: false,
     },
   });
+  // Unmatched inbound payments (round 17): firm-wide report filtered to
+  // THIS client's accounts — money arrived on a reference and bound to no
+  // invoice. Render-on-success like the list itself.
+  const { data: unmatched } = useGetUnmatchedCollections({
+    query: { queryKey: getGetUnmatchedCollectionsQueryKey(), retry: false },
+  });
+  const unmatchedRows = (unmatched?.accounts ?? []).filter(
+    (a) => a.clientPartyId === clientPartyId,
+  );
   const create = useCreateCollectionAccount();
   const deactivate = useDeactivateCollectionAccount();
   if (!query.isSuccess) return null;
@@ -337,6 +348,22 @@ function CollectionAccountsCard({ clientPartyId }: { clientPartyId: string }) {
                   )}
                 </span>
               </div>
+            ))}
+          </div>
+        )}
+        {unmatchedRows.length > 0 && (
+          <div
+            className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+            data-testid="unmatched-collections-advisory"
+          >
+            {unmatchedRows.map((r) => (
+              <p key={r.accountId} data-testid={`unmatched-${r.accountId}`}>
+                {r.count} inbound payment{r.count === 1 ? "" : "s"} on{" "}
+                <span className="font-mono text-xs">{r.accountReference}</span>{" "}
+                (last {formatDate(r.lastSeen)}) matched no invoice — amounts
+                are never recorded for unmatched payments; reconcile against
+                the provider statement.
+              </p>
             ))}
           </div>
         )}

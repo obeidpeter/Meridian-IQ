@@ -139,6 +139,7 @@ import {
 } from "../modules/invoice/service";
 import {
   approvalViews,
+  awaitingApproval,
   listApprovals,
   recordApproval,
 } from "../modules/invoice/approvals";
@@ -958,6 +959,8 @@ router.get("/invoices/:id/status-light", async (req, res): Promise<void> => {
     attempts,
     confirmations,
     stamp: stamps[0] ?? null,
+    // Maker-checker: the light's honest answer to "why can't I submit?".
+    awaitingApproval: await awaitingApproval(invoice),
   });
   res.json(GetInvoiceStatusLightResponse.parse(light));
 });

@@ -224,9 +224,11 @@ review.
   offered data intents narrow to a vetted ALLOWLIST
   (`CLIENT_SAFE_DATA_INTENTS` — firm-wide money intents that name other
   clients' buyers, and the firm's own budget, are excluded and refuse; the
-  two payables intents `data.payables_due` / `data.total_owed` AND
-  `data.vat_position` ARE client-safe and on the allowlist — they answer
-  over the caller's own bills/position only, the forced party pin making a
+  two payables intents `data.payables_due` / `data.total_owed`,
+  `data.vat_position` AND `data.pending_approvals` (round 17 — the caller's
+  own drafts blocked on the maker-checker policy, policy-off answered
+  plainly) ARE client-safe and on the allowlist — they answer over the
+  caller's own bills/position/paper only, the forced party pin making a
   client's "VAT position" always its own); the client option list is exactly the caller's own party; the executed party
   filter is FORCED from the principal regardless of the model's pick;
   multi-turn threads only from the client's own previous case (`createdBy`
@@ -351,10 +353,12 @@ without a human owner.
   same evidence-only payables predicate as the Bills surfaces), and the
   monthly VAT-return countdown (`vatReturnInDays` — pure Lagos calendar
   arithmetic to the next 21st, null beyond 7 days so the weekly digest only
-  speaks up when the clock is close) — and lets the model phrase them,
-  falling back to deterministic template text. Each fact added to the user
-  facts bumps the prompt version so the model path can never lag the
-  template path (currently `digest.v4`, the VAT-position round). The
+  speaks up when the clock is close), the awaiting-approval count under the
+  maker-checker policy (null when the policy is off — never a zero), and
+  the week's unmatched collection-account payments — and lets the model
+  phrase them, falling back to deterministic template text. Each fact added
+  to the user facts bumps the prompt version so the model path can never
+  lag the template path (currently `digest.v5`, the governance round). The
   digest's unsubmitted/overdue compliance facts use the explicit
   receivable-orientation predicate, so captured supplier bills never count
   as "invoices to file" (`docs/platform.md` § Payables).
@@ -640,6 +644,19 @@ call the model.
 All three share the posture: durable audit event as the dedup ledger (one
 event per degraded unit), an error log, and a banner/count fed from the SAME
 shared computation as the corresponding chart.
+
+- **Number grounding** (`modules/clerk/grounding.ts`, round 17) turns "the
+  model only PHRASES" into an enforced invariant: every phrasing surface —
+  digest, monthly statement, chaser, escalation reply, narrative,
+  VAT/quarterly/pack cover notes — runs its model output through
+  `numberGroundingViolations` against the SAME user prompt it sent.
+  Matching is format-tolerant but value-exact ("₦45,000.00" and "45000"
+  meet at "45000"; a typo'd grouping is a DIFFERENT number); a numeral the
+  facts never stated forfeits the phrasing and the deterministic template
+  answers instead — the safe direction, because the template always
+  answers. One pointer-only audit event per violating output (surface +
+  count, never the numbers themselves); `metrics.grounding` counts them
+  onto the health page's Number grounding card. Zero extra model calls.
 
 - **Resistance-drop alert** (`modules/clerk/resistance-watch.ts`) runs the
   SAME monthly buckets as the health chart (`injectionResistanceMonths`,

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.47.0
+ * OpenAPI spec version: 0.48.0
  */
 export interface HealthStatus {
   status: string;
@@ -1082,6 +1082,25 @@ export interface CreateCollectionAccountInput {
   label?: string;
 }
 
+export type UnmatchedCollectionsAccountsItem = {
+  accountId: string;
+  accountReference: string;
+  /** @nullable */
+  label: string | null;
+  clientPartyId: string;
+  clientName: string;
+  count: number;
+  firstSeen: string;
+  lastSeen: string;
+};
+
+export interface UnmatchedCollections {
+  windowDays: number;
+  total: number;
+  accounts: UnmatchedCollectionsAccountsItem[];
+  note: string;
+}
+
 export interface CompliancePackNotifyInput {
   clientPartyId: string;
   /** @pattern ^\d{4}-\d{2}-01$ */
@@ -1934,6 +1953,8 @@ export interface OperatorBrief {
   clerkEnabled: boolean;
   resistanceAlert: boolean;
   decidedYesterday: number;
+  approvalsPending: number;
+  unmatchedCollections7d: number;
 }
 
 export interface PartyMergeSide {
@@ -3707,6 +3728,16 @@ export interface StatusLight {
   recommendedAction: string;
 }
 
+export type ClerkMetricsGroundingBySurfaceItem = {
+  surface: string;
+  count: number;
+};
+
+export type ClerkMetricsGrounding = {
+  violations: number;
+  bySurface: ClerkMetricsGroundingBySurfaceItem[];
+};
+
 export type ClerkMetricsCalibrationBucketsItem = {
   range: string;
   fields: number;
@@ -3888,6 +3919,7 @@ export type ClerkMetricsQualityAlert = {
 
 export interface ClerkMetrics {
   windowDays: number;
+  grounding: ClerkMetricsGrounding;
   calibration?: ClerkMetricsCalibration;
   cases: ClerkMetricsCases;
   inference: ClerkMetricsInference;

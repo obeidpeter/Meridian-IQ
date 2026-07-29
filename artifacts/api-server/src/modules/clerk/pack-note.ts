@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import { isFeatureEnabled } from "../flags/flags";
+import { ensureGrounded } from "./grounding";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
 import {
   computeCompliancePack,
@@ -131,7 +132,14 @@ export async function draftPackCoverNote(
       validator: noteOutput,
       inputForHash: factsText,
     });
-    if (!result.ok) return fallback;
+    // Number grounding: a numeral the facts never stated → template answers
+    // (grounding.ts).
+    if (
+      !result.ok ||
+      !(await ensureGrounded("pack_note", firmId, result.data.note, factsText))
+    ) {
+      return fallback;
+    }
     return { ...fallback, note: result.data.note, source: "clerk" };
   } catch {
     return fallback;

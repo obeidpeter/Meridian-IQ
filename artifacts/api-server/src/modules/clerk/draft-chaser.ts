@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { getDb, invoicesTable, partiesTable } from "@workspace/db";
 import { DomainError } from "../errors";
+import { ensureGrounded } from "./grounding";
 import {
   assertClientPartyScope,
   assertSameTenant,
@@ -305,7 +306,19 @@ export async function draftPaymentChaser(
       validator: chaserOutput,
       inputForHash: facts,
     });
-    if (!result.ok) return fallback;
+    // Number grounding: a numeral the facts never stated → template answers
+    // (grounding.ts). Subject and body are checked together.
+    if (
+      !result.ok ||
+      !(await ensureGrounded(
+        "chaser",
+        tenantFirmId(principal),
+        `${result.data.subject}\n${result.data.body}`,
+        facts,
+      ))
+    ) {
+      return fallback;
+    }
     return {
       ...fallback,
       subject: result.data.subject,

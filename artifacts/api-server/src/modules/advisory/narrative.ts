@@ -2,6 +2,7 @@ import { z } from "zod/v4";
 import { eq } from "drizzle-orm";
 import { getDb, engagementsTable } from "@workspace/db";
 import { DomainError } from "../errors";
+import { ensureGrounded } from "../clerk/grounding";
 import {
   assertClientPartyScope,
   assertSameTenant,
@@ -267,6 +268,18 @@ export async function draftEngagementNarrative(
     validator: narrativeOutput,
     inputForHash: `${engagementId}:${facts}`,
   });
-  if (!result.ok) return fallback;
+  // Number grounding: a numeral the facts never stated → template answers
+  // (grounding.ts). The allowed source is the exact composed user prompt.
+  if (
+    !result.ok ||
+    !(await ensureGrounded(
+      "narrative",
+      tenant,
+      result.data.narrative,
+      `Advisory facts computed by the platform:\n${facts}`,
+    ))
+  ) {
+    return fallback;
+  }
   return { engagementId, narrative: result.data.narrative, source: "clerk" };
 }
