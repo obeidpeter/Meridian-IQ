@@ -3,14 +3,20 @@ import {
   getDb,
   runInBypassContext,
   runRequestContext,
+  alertPreferencesTable,
   clerkActionPoliciesTable,
   membershipsTable,
+  staffNotificationPreferencesTable,
   type ClerkActionPolicy,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
 import { isPurposePermitted } from "../consent/consent";
+import { fanOutAlert } from "../messaging/fan-out";
+import { sendMessage } from "../messaging/messaging";
+import { pointerEntityRef } from "../messaging/recipient-ref";
+import { sendPushToUser } from "../push/push";
 import {
   ACTIONS_FLAG_KEY,
   MAX_ACTION_TARGETS,
@@ -419,6 +425,111 @@ async function autoPause(
   });
 }
 
+// A tripwire pause on an UNATTENDED feature must not wait for someone to
+// open a dashboard (round-29: a paused submit_overdue policy is statutory
+// exposure quietly accruing daily). One pointer-only signal to the GRANTOR
+// — the human whose standing instruction just stopped — through the rail
+// where they live:
+//  - a client-granted policy notifies the client PARTY via the ordinary
+//    alert fan-out (CORE-03 consent-gated, alert-preference channels, the
+//    deadline-reminder rails; a consent_missing pause therefore sends
+//    nothing — consent wins over notification, and the SME card still
+//    shows the pause);
+//  - a staff-granted policy notifies the grantor's own channels: push to
+//    their registered devices (clean no-op without any), email only under
+//    the digest rail's proven-ownership gate (verified address + channel
+//    opted in) — but ONLY while they still hold a membership in this firm
+//    (a departed grantor gets nothing; grantor_inactive pauses then rely
+//    on the Automation strip).
+// Best-effort by design: sends run autocommit AFTER the pause committed,
+// and any failure lands in the messages ledger (or is absorbed) — never in
+// the sweep's control flow.
+async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
+  const entityId = pointerEntityRef("pol", policy.id);
+  if (policy.grantedByRole === "client_user") {
+    const [prefs] = await getDb()
+      .select()
+      .from(alertPreferencesTable)
+      .where(eq(alertPreferencesTable.clientPartyId, policy.clientPartyId));
+    await fanOutAlert({
+      prefs,
+      clientPartyId: policy.clientPartyId,
+      firmId: policy.firmId,
+      templateKey: "automation_paused",
+      entityType: "clerk_action_policy",
+      entityId,
+      smsDefaultWhenNoPrefs: false,
+    });
+    return;
+  }
+  const [membership] = await getDb()
+    .select({ userId: membershipsTable.userId })
+    .from(membershipsTable)
+    .where(
+      and(
+        eq(membershipsTable.userId, policy.grantedBy),
+        eq(membershipsTable.firmId, policy.firmId),
+      ),
+    )
+    .limit(1);
+  if (!membership) return;
+  const [prefs] = await getDb()
+    .select()
+    .from(staffNotificationPreferencesTable)
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, policy.grantedBy),
+        eq(staffNotificationPreferencesTable.firmId, policy.firmId),
+      ),
+    );
+  if (prefs?.emailEnabled && prefs.email && prefs.emailVerifiedAt) {
+    try {
+      await sendMessage({
+        channel: "email",
+        recipientRef: pointerEntityRef("usr", policy.grantedBy),
+        recipientUserId: policy.grantedBy,
+        templateKey: "automation_paused",
+        entityType: "clerk_action_policy",
+        entityId,
+      });
+    } catch {
+      // Channel failures are recorded in the messages ledger.
+    }
+  }
+  try {
+    await sendPushToUser({
+      userId: policy.grantedBy,
+      templateKey: "automation_paused",
+      entityType: "clerk_action_policy",
+      entityId,
+    });
+  } catch {
+    // Push failures are likewise recorded by the push module.
+  }
+}
+
+// autoPause + the grantor signal, in that order: the pause is the durable
+// state change (compare-and-set, audited), the notification is best-effort
+// on top — only the CAS winner sends, so a concurrent instance can never
+// double-notify, and a notification failure never fails the sweep.
+async function autoPauseAndNotify(
+  policy: ClerkActionPolicy,
+  reason: Parameters<typeof autoPause>[1],
+): Promise<boolean> {
+  const won = await autoPause(policy, reason);
+  if (won) {
+    try {
+      await notifyAutoPause(policy);
+    } catch (err) {
+      console.error(
+        `action-policy sweep: pause notification for ${policy.id} failed:`,
+        err,
+      );
+    }
+  }
+  return won;
+}
+
 // The grantor's CURRENT standing: a membership in this firm whose role
 // still carries invoice.submit — and for a client_user, pinned to this very
 // party (SEC-03: a client grantor automating a sibling client is exactly
@@ -474,7 +585,7 @@ async function runOnePolicy(
   // survive the awaits below.)
   const kind = policy.kind;
   if (!isPolicyKind(kind)) {
-    return (await autoPause(policy, "unknown_kind"))
+    return (await autoPauseAndNotify(policy, "unknown_kind"))
       ? "auto_paused"
       : "skipped_raced";
   }
@@ -484,7 +595,7 @@ async function runOnePolicy(
     // autoPause reports whether THIS instance's compare-and-set won; a
     // loss means a concurrent instance (or a human pause) got there first
     // — same end state, but only the winner counts it (review NIT).
-    return (await autoPause(policy, "grantor_inactive"))
+    return (await autoPauseAndNotify(policy, "grantor_inactive"))
       ? "auto_paused"
       : "skipped_raced";
   }
@@ -498,7 +609,7 @@ async function runOnePolicy(
     () => isPurposePermitted(policy.clientPartyId, "compliance_submission"),
   );
   if (!consented) {
-    return (await autoPause(policy, "consent_missing"))
+    return (await autoPauseAndNotify(policy, "consent_missing"))
       ? "auto_paused"
       : "skipped_raced";
   }
@@ -564,7 +675,7 @@ async function runOnePolicy(
   );
 
   if (tooManyFailures(decision.requestedCount, decision.failedCount)) {
-    return (await autoPause(policy, "failed_targets"))
+    return (await autoPauseAndNotify(policy, "failed_targets"))
       ? "ran_then_paused"
       : "ran";
   }

@@ -256,13 +256,12 @@ dark means proposals answer empty (the cards hide) and execution refuses
   WAITING FOR APPROVAL and points at the dashboard — Ask can never
   execute anything.
 
-Deferred to the next round of the arc: an action-effectiveness report
-(did approved batches actually clear the exposure?). The two posture
-follow-ups this list carried have since shipped: the chaser's
-stage/phrase split (no transaction spans a model call — round 23) and
-the bulk-submit conversion (the last batch surface now commits per item
-in the caller's posture outside the request transaction, closing the
-audit-lock convoy class platform-wide).
+The follow-ups this list has carried have all since shipped: the
+chaser's stage/phrase split (no transaction spans a model call — round
+23), the bulk-submit conversion (the last batch surface now commits per
+item in the caller's posture outside the request transaction, closing
+the audit-lock convoy class platform-wide), and the action-effectiveness
+report (round 29 — below).
 
 ### Standing approvals (round 28 — the policy autopilot)
 
@@ -326,12 +325,41 @@ sweep then runs it — but a grant is authorization, never a bypass:
   cards grow an Automation strip (status line, pause/resume/revoke) and
   an "Automate daily" affordance next to each automatable proposal —
   consent-grade grant copy lives in `@workspace/format`
-  (`policyGrantDescription`); the CONSOLE card additionally tags
-  policy-run lines "· auto" in its recent-decisions strip (the SME card
-  has no decisions strip — its evidence is the status line's last-run
-  stamp). Deferred, deliberately visible: an SME-side run record and a
-  digest/inbox signal for auto-pauses — until then a paused autopilot
-  surfaces only when someone opens a dashboard.
+  (`policyGrantDescription`); BOTH cards tag policy-run lines "· auto"
+  in their run-record strips (SME's landed in round 29).
+
+### Automation accountability (round 29)
+
+The unattended half of the arc: evidence and signals, all deterministic.
+
+- **Action-effectiveness report**
+  (`modules/clerk/action-effectiveness.ts`,
+  `GET /clerk/action-effectiveness`, `invoice.read` + the SEC-03 scope
+  resolver; console card on the client page). Pure ledger SQL over
+  `clerk_action_decisions`: per-kind decision-time tallies split auto vs
+  hand-approved, each EXECUTED submit target re-read against its CURRENT
+  invoice status (stamped-and-beyond = succeeded; a later rail rejection
+  surfaces as failed-again, never buried; a purged invoice lands in
+  "other"), and the lowest-band s.104 exposure estimate over the
+  window's executed `submit_overdue` count — `bandExposure`, the same
+  arithmetic and not-advice disclaimer as every other exposure surface.
+  Chaser drafts count as executed work with no rail lifecycle to verify
+  (reminder effectiveness audits chasing).
+- **Tripwire pause signals.** An auto-pause now notifies the GRANTOR
+  through the ordinary rails, pointer-only (SEC-12 — no kind, reason or
+  client in the message; the why lives on the Automation strip):
+  client-granted policies through the party alert fan-out (CORE-03
+  consent-gated — a consent_missing pause therefore sends nothing, by
+  design), staff-granted through the grantor's own channels (push to
+  registered devices; email only under the digest rail's
+  verified-address gate) and only while they still hold a membership.
+  Best-effort by construction: sends run autocommit after the pause
+  committed, only the CAS winner notifies (no double-sends across
+  instances), and a notification failure never touches the sweep.
+- **`data.automation_status`** (CLIENT_SAFE, own-party-pinned): Ask can
+  say which standing approvals are in force, paused (and why, in
+  app-computed words) and when each last ran — and only POINTS at the
+  Automation strip; Ask can never grant, pause or revoke.
 
 ## Ask Clerk (grounded firm-data Q&A)
 

@@ -299,6 +299,18 @@ test("standing-approval routes: read gate, grant walls, firm-scoped lifecycle", 
     "listing grants is a read surface",
   );
 
+  // Round 29: the effectiveness read shares the surface's read gate and the
+  // SEC-03 scope resolver — pure ledger SQL, nothing to execute.
+  const effBlock = routeBlock(source, "/clerk/action-effectiveness");
+  assert.ok(
+    effBlock.includes('assertCan(req.principal, "invoice.read")'),
+    "the effectiveness report is a read surface",
+  );
+  assert.ok(
+    effBlock.includes("resolveClientAnalyticsScope"),
+    "the report resolves its client through the SEC-03 scope resolver",
+  );
+
   // Granting IS a standing submission authorization: invoice.submit plus
   // the execute route's IDOR wall (assertPartyAccess), re-walked here.
   const grantStart = source.indexOf('router.post("/clerk/action-policies"');

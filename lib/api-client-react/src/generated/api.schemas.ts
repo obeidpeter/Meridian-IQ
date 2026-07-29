@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.54.0
+ * OpenAPI spec version: 0.55.0
  */
 export interface HealthStatus {
   status: string;
@@ -4406,6 +4406,38 @@ export interface GrantActionPolicyInput {
   maxTargetsPerRun?: number;
 }
 
+export interface ActionEffectivenessKindRow {
+  kind: string;
+  decisions: number;
+  autoDecisions: number;
+  requested: number;
+  executed: number;
+  skipped: number;
+  failed: number;
+  /** @nullable */
+  nowSucceeded: number | null;
+  /** @nullable */
+  nowInFlight: number | null;
+  /** @nullable */
+  nowFailedAgain: number | null;
+  /** @nullable */
+  nowOther: number | null;
+}
+
+export type ActionEffectivenessReportTotals = {
+  decisions: number;
+  autoDecisions: number;
+  executed: number;
+  failed: number;
+};
+
+export interface ActionEffectivenessReport {
+  windowDays: number;
+  totals: ActionEffectivenessReportTotals;
+  exposureFloorClearedNgn: string;
+  kinds: ActionEffectivenessKindRow[];
+}
+
 export type PhrasingEvalFixtureResultSurface = typeof PhrasingEvalFixtureResultSurface[keyof typeof PhrasingEvalFixtureResultSurface];
 
 
@@ -6055,5 +6087,18 @@ export type GetActionPoliciesParams = {
  * Required for firm principals; a client_user is pinned to its own party.
  */
 clientPartyId?: string;
+};
+
+export type GetActionEffectivenessParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+/**
+ * Look-back window in days (default 90, max 365).
+ * @minimum 1
+ * @maximum 365
+ */
+windowDays?: number;
 };
 

@@ -7,6 +7,8 @@ import {
   ExecuteActionResponse,
   GetActionDecisionsQueryParams,
   GetActionDecisionsResponse,
+  GetActionEffectivenessQueryParams,
+  GetActionEffectivenessResponse,
   GetActionPoliciesQueryParams,
   GetActionPoliciesResponse,
   GrantActionPolicyBody,
@@ -37,6 +39,7 @@ import {
   resumeActionPolicy,
   revokeActionPolicy,
 } from "../../modules/clerk/action-policies";
+import { computeActionEffectiveness } from "../../modules/clerk/action-effectiveness";
 
 // Proposed actions (rounds 21-22): Clerk assembles a batch, a HUMAN
 // approves it, and approval executes through the platform's existing
@@ -126,6 +129,27 @@ router.get("/clerk/action-decisions", async (req, res): Promise<void> => {
 // be automated, so clerk.capture never enters). The module re-validates the
 // grantor's rights on every sweep run, so authz here is necessary but not
 // durable by itself.
+
+// Round 29: the accountability read — whether the client's approved batches
+// WORKED. Pure ledger SQL (invoice.read, the decisions surface's own gate),
+// in-transaction, nothing stored.
+router.get(
+  "/clerk/action-effectiveness",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.read");
+    const query = parseOrThrow(GetActionEffectivenessQueryParams, req.query);
+    const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+      req.principal,
+      query.clientPartyId,
+    );
+    const report = await computeActionEffectiveness(
+      firmId,
+      clientPartyId,
+      query.windowDays,
+    );
+    res.json(GetActionEffectivenessResponse.parse(report));
+  },
+);
 
 router.get("/clerk/action-policies", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");

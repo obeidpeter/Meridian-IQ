@@ -14,12 +14,14 @@ import {
 import { SETTLEMENT_EVIDENCE } from "../../invoice/payables";
 import { pendingApprovals } from "../../invoice/approvals";
 import { listActionProposals } from "../actions";
+import { listActionPolicies } from "../action-policies";
 import { firmClerkUsage } from "../budget";
 import { isAre, plural } from "../text";
 import { type DataIntent, countFact, forClient } from "./shared";
 
 // The status lookups — one pinned invoice, maker-checker waits, the Clerk
-// allowance, and the proposed-action batches waiting for approval.
+// allowance, the proposed-action batches waiting for approval, and the
+// standing approvals (round 29).
 export const STATUS_INTENTS: readonly DataIntent[] = [
   {
     // Round-20 invoice-pinned lookup: one specific invoice's status and
@@ -285,5 +287,63 @@ export const STATUS_INTENTS: readonly DataIntent[] = [
         ],
       };
     },
-  }
+  },
+  {
+    // Round-29 accountability: the standing approvals in force for one
+    // client — active or paused (and why), plus when the sweep last ran
+    // each. Reads the same listActionPolicies the cards render (revoked
+    // grants are history and never appear); status words are computed here,
+    // never by the model, and the answer only POINTS at the Automation
+    // strip — Ask can never grant, pause or revoke anything.
+    key: "data.automation_status",
+    title:
+      "the STANDING APPROVALS (automations) in force for one client — which action kinds run automatically each day, whether any is paused and why, and when each last ran",
+    accepts: { client: true },
+    async run(firmId, params) {
+      if (!params?.clientPartyId) {
+        return {
+          text: "Standing approvals are per client — name the client you mean and I will check what runs automatically for them.",
+          facts: [countFact("automation_policies", "Standing approvals", 0)],
+        };
+      }
+      const { policies, enabled } = await listActionPolicies(
+        firmId,
+        params.clientPartyId,
+      );
+      if (policies.length === 0) {
+        return {
+          text: enabled
+            ? `No standing approvals are in place${forClient(params)} — Clerk still asks for a fresh human approval on every action batch. The dashboard's actions card offers "Automate daily" next to each automatable batch.`
+            : `Standing approvals are not enabled for this firm, so nothing runs automatically${forClient(params)} — every Clerk action batch needs a fresh human approval.`,
+          facts: [countFact("automation_policies", "Standing approvals", 0)],
+        };
+      }
+      const kindWords: Record<string, string> = {
+        submit_overdue: "auto-submit overdue invoices",
+        retry_failed: "auto-retry failed submissions",
+      };
+      const lines = policies.map((p) => {
+        const what = kindWords[p.kind] ?? p.kind;
+        if (p.pausedAt) {
+          const why = (p.pausedReason ?? "manual").replace(/_/g, " ");
+          return `${what} — PAUSED (${why}); it will not run until someone resumes it`;
+        }
+        const lastRan = p.lastRunDay
+          ? `last ran ${p.lastRunDay}`
+          : "has not run yet";
+        return `${what} — active, runs daily (up to ${p.maxTargetsPerRun} per run), ${lastRan}`;
+      });
+      const paused = policies.filter((p) => p.pausedAt).length;
+      return {
+        text:
+          `${plural(policies.length, "standing approval")} ${isAre(policies.length)} in force${forClient(params)}: ${lines.join("; ")}. ` +
+          `Every run re-checks consent, the granter's access and each invoice, and is recorded like a hand-approved batch — pause or revoke any of them from the dashboard's Automation strip.`,
+        facts: [
+          countFact("automation_policies", "Standing approvals", policies.length),
+          countFact("automation_active", "Active", policies.length - paused),
+          countFact("automation_paused", "Paused", paused),
+        ],
+      };
+    },
+  },
 ];

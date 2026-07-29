@@ -35,6 +35,7 @@ import {
   useGetActionProposals,
   getGetActionProposalsQueryKey,
   useExecuteAction,
+  useGetActionDecisions,
   getGetActionDecisionsQueryKey,
   getGetActionPoliciesQueryKey,
   useGetActionPolicies,
@@ -95,6 +96,7 @@ import {
   draftClipboardText,
   formatAmount,
   formatDate,
+  formatDateTime,
   formatNaira,
   policyGrantDescription,
   policyKindLabel,
@@ -809,6 +811,21 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
+  // The run record (round 29): who approved what — including the sweep's
+  // policy runs — with per-target outcomes. The console card has carried
+  // this strip since round 22; the SME owner who GRANTS an automation gets
+  // the same evidence where they granted it.
+  const { data: decisions } = useGetActionDecisions(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetActionDecisionsQueryKey({ clientPartyId }),
+        staleTime: 60_000,
+        retry: false,
+      },
+    },
+  );
   // Standing approvals (round 28): the owner's live grants plus the
   // clerk_action_policies flag — `enabled` gates the "automate" affordance,
   // while existing grants stay visible (and revocable) regardless.
@@ -907,13 +924,17 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   // submits, the refetched list is [] and an early return would unmount the
   // OPEN results view mid-read (review F1) — so the card stays mounted while
   // the dialog is up. A live standing approval also keeps the card up — it
-  // must stay manageable on a quiet day.
+  // must stay manageable on a quiet day — and so does run history (round
+  // 29): the owner's evidence of what automation did must not vanish just
+  // because today's batch already ran.
+  const hasDecisions = (decisions?.decisions.length ?? 0) > 0;
   if (
     !isSuccess ||
     !proposals ||
     (proposals.actions.length === 0 &&
       !dialog.dialogOpen &&
-      livePolicies.length === 0)
+      livePolicies.length === 0 &&
+      !hasDecisions)
   ) {
     return null;
   }
@@ -1042,6 +1063,21 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                   </Button>
                 </span>
               </div>
+            ))}
+          </div>
+        )}
+        {hasDecisions && (
+          <div className="space-y-1 border-t pt-3 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground text-sm">
+              Recent activity
+            </p>
+            {decisions?.decisions.slice(0, 5).map((d) => (
+              <p key={d.id} data-testid={`decision-${d.id}`}>
+                {formatDateTime(d.createdAt)} · {d.kind} · {d.executedCount}{" "}
+                executed · {d.skippedCount} skipped · {d.failedCount} failed
+                {/* A standing-approval run, not a fresh click. */}
+                {d.policyId ? " · auto" : ""}
+              </p>
             ))}
           </div>
         )}

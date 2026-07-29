@@ -12,7 +12,9 @@ import {
   firmsTable,
   invoicesTable,
   membershipsTable,
+  messagesTable,
   partiesTable,
+  staffNotificationPreferencesTable,
   usersTable,
 } from "@workspace/db";
 import { createDraft } from "../invoice/service.ts";
@@ -30,6 +32,7 @@ import {
   revokeActionPolicy,
   runActionPolicySweep,
 } from "./action-policies.ts";
+import { runDataIntent } from "./data-intents/index.ts";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import {
@@ -515,6 +518,33 @@ test("a client_user grantor is only valid for their OWN party (SEC-03)", async (
   const afterRow = await policyRow(policy.id);
   assert.equal(afterRow?.pausedReason, "grantor_inactive");
   assert.equal(afterRow?.lastRunDay, null);
+
+  // The pause SIGNAL (round 29): a client-granted policy notifies the
+  // client PARTY through the ordinary alert rails — default channels
+  // (whatsapp + email, no prefs row), addressed by the party identity the
+  // notification inbox reads. The GHOST pause in the previous test signaled
+  // nobody: a staff-granted policy only reaches a grantor who still holds
+  // a membership in the firm.
+  const partySignals = await getDb()
+    .select()
+    .from(messagesTable)
+    .where(
+      and(
+        eq(messagesTable.templateKey, "automation_paused"),
+        eq(messagesTable.recipientPartyId, client),
+      ),
+    );
+  assert.equal(partySignals.length, 2, "whatsapp + email default channels");
+  const ghostSignals = await getDb()
+    .select()
+    .from(messagesTable)
+    .where(
+      and(
+        eq(messagesTable.templateKey, "automation_paused"),
+        eq(messagesTable.recipientUserId, ghostId),
+      ),
+    );
+  assert.equal(ghostSignals.length, 0, "a departed grantor gets nothing");
 });
 
 test("a kind outside POLICY_KINDS pauses instead of falling through to the chaser builder", async () => {
@@ -544,10 +574,19 @@ test("a kind outside POLICY_KINDS pauses instead of falling through to the chase
   assert.equal(afterRow?.lastRunDay, null, "no day consumed, nothing drafted");
 });
 
-test("lapsed consent pauses the policy — consent_missing", async () => {
+test("lapsed consent pauses the policy — consent_missing — and signals the staff grantor's verified channel", async () => {
   const client = await seedSupplier("Lapsed");
   await draftFor(client, daysAgo(25));
   const policy = await grantActionPolicy(firmId, client, grantor, "submit_overdue");
+  // The grantor's staff notification channel: verified email, opted in —
+  // the digest rail's exact ownership gate.
+  await getDb().insert(staffNotificationPreferencesTable).values({
+    userId: grantorId,
+    firmId,
+    emailEnabled: true,
+    email: `policy-grantor-${SALT}@test.local`,
+    emailVerifiedAt: new Date(),
+  });
   // Consent lapses AFTER the grant (the grant path itself refuses without
   // it — pinned above): the latest event wins.
   await recordConsent({
@@ -566,6 +605,26 @@ test("lapsed consent pauses the policy — consent_missing", async () => {
   assert.equal(afterRow?.pausedReason, "consent_missing");
   assert.equal(afterRow?.pausedBy, null);
   assert.equal(afterRow?.lastRunDay, null, "no run was consumed");
+
+  // The staff grantor's signal landed on their inbox identity — email under
+  // the verified-address gate (no registered devices, so no push row) —
+  // and, per SEC-12, it is pointer-only: no reason, no client id.
+  const staffSignals = await getDb()
+    .select()
+    .from(messagesTable)
+    .where(
+      and(
+        eq(messagesTable.templateKey, "automation_paused"),
+        eq(messagesTable.recipientUserId, grantorId),
+      ),
+    );
+  assert.equal(staffSignals.length, 1);
+  assert.equal(staffSignals[0].channel, "email");
+  const serialized = JSON.stringify(staffSignals);
+  assert.ok(
+    !serialized.includes("consent_missing") && !serialized.includes(client),
+    "the signal carries pointers only — the WHY lives on the dashboard",
+  );
   // Re-consenting + resuming heals the grant without re-granting.
   await grantComplianceConsent(client, grantorId);
   await resumeActionPolicy(firmId, policy.id, grantor);
@@ -642,4 +701,50 @@ test("an empty assembly leaves the day unclaimed — the sweep keeps watching", 
       ),
     );
   assert.equal(decision?.executedCount, 1);
+});
+
+test("data.automation_status answers grants, pauses and cadence — and never executes anything", async () => {
+  // A firm asker must name the client.
+  const unpinned = await runDataIntent("data.automation_status", firmId);
+  assert.match(unpinned!.text, /name the client/);
+
+  // Flags dark (the foreign firm never opted in): the honest "not enabled".
+  const dark = await runDataIntent("data.automation_status", foreignFirmId, {
+    clientPartyId: randomUUID(),
+  });
+  assert.match(dark!.text, /not enabled for this firm/);
+
+  const client = await seedSupplier("AskStatus");
+  const none = await runDataIntent("data.automation_status", firmId, {
+    clientPartyId: client,
+  });
+  assert.match(none!.text, /No standing approvals are in place/);
+  assert.match(none!.text, /Automate daily/);
+
+  const policy = await grantActionPolicy(firmId, client, grantor, "retry_failed", 10);
+  const active = await runDataIntent("data.automation_status", firmId, {
+    clientPartyId: client,
+  });
+  assert.match(active!.text, /auto-retry failed submissions — active/);
+  assert.match(active!.text, /up to 10 per run/);
+  assert.match(active!.text, /has not run yet/);
+  assert.match(
+    active!.text,
+    /pause or revoke any of them from the dashboard/,
+    "the answer points at the strip — Ask can never mutate a grant",
+  );
+  assert.equal(
+    active!.facts.find((f) => f.key === "automation_active")?.value,
+    "1",
+  );
+
+  await pauseActionPolicy(firmId, policy.id, grantor);
+  const paused = await runDataIntent("data.automation_status", firmId, {
+    clientPartyId: client,
+  });
+  assert.match(paused!.text, /PAUSED \(manual\)/);
+  assert.equal(
+    paused!.facts.find((f) => f.key === "automation_paused")?.value,
+    "1",
+  );
 });

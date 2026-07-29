@@ -70,6 +70,17 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["email", "push"],
     description: "A platform health alert for the Compliance Desk.",
   },
+  // Standing-approval tripwire (round 29): the policy sweep paused an
+  // automation and a human must look before it runs again. Pointer only
+  // (SEC-12): no kind, reason, client or counts — the grantor opens their
+  // dashboard, where the Automation strip carries the why. Full channel set:
+  // a client-granted policy notifies through the party alert rails
+  // (WhatsApp-first market), a staff-granted one through the staff channels.
+  automation_paused: {
+    key: "automation_paused",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "A Clerk automation was paused and needs attention.",
+  },
 };
 
 // Channel failover order when a provider fails. Push is terminal: if the Expo
