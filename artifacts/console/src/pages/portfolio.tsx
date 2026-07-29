@@ -31,6 +31,8 @@ import {
   getListStatementConnectionsQueryKey,
   useListInvitations,
   getListInvitationsQueryKey,
+  useGetComplianceScorecard,
+  getGetComplianceScorecardQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1187,6 +1189,97 @@ function ComplianceCalendarCard() {
   );
 }
 
+// Client compliance scorecard (round-19 idea #3): the cross-client posture
+// league table, attention first — pure SQL server-side, sample floors on
+// every rate. A prioritization aid, not a verdict (the note says so).
+// Renders only on success with a non-empty book.
+function ComplianceScorecardCard() {
+  const { data: scorecard, isSuccess } = useGetComplianceScorecard({
+    query: { queryKey: getGetComplianceScorecardQueryKey(), retry: false },
+  });
+  if (!isSuccess || !scorecard || scorecard.rows.length === 0) return null;
+  const pct = (value: number | null) =>
+    value === null ? "—" : formatPct(value);
+  return (
+    <Card
+      className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
+      data-testid="card-compliance-scorecard"
+    >
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ListChecks className="w-4 h-4 text-primary" aria-hidden="true" />
+          Compliance scorecard — last {scorecard.windowDays} days
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-compliance-scorecard">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">Client</th>
+                <th className="py-2 pr-3 font-medium text-right">Issued</th>
+                <th className="py-2 pr-3 font-medium text-right">In window</th>
+                <th className="py-2 pr-3 font-medium text-right">Failures</th>
+                <th className="py-2 pr-3 font-medium text-right">
+                  Days to stamp
+                </th>
+                <th className="py-2 pr-3 font-medium text-right">Overdue now</th>
+                <th className="py-2 font-medium text-right">
+                  Unverified bills
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {scorecard.rows.slice(0, 10).map((r) => (
+                <tr
+                  key={r.clientPartyId}
+                  data-testid={`row-scorecard-${r.clientPartyId}`}
+                >
+                  <td className="py-2 pr-3 max-w-[16rem] truncate">
+                    <Link
+                      href={`/clients/${r.clientPartyId}`}
+                      className="hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      {r.clientName}
+                    </Link>
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {r.issuedCount}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {pct(r.withinWindowRate)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {pct(r.failureRate)}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {r.medianDaysToStamp === null
+                      ? "—"
+                      : `${r.medianDaysToStamp}d`}
+                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">
+                    {r.overdueNow > 0 ? (
+                      <span className="font-medium text-red-500 dark:text-red-400">
+                        {r.overdueNow}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="py-2 text-right tabular-nums">
+                    {r.unverifiedBills > 0 ? r.unverifiedBills : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-muted-foreground">{scorecard.note}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Clerk adoption & impact (round-10 idea #3): per-client capture volume,
 // kept-rate and review turnaround — the "is Clerk working for us" numbers.
 // Renders only when clients have approved captures in the window.
@@ -1871,6 +1964,7 @@ export function Portfolio() {
         </CardContent>
       </Card>
 
+      <ComplianceScorecardCard />
       <ClerkAdoptionCard />
       </PortfolioSection>
 

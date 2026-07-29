@@ -28,6 +28,8 @@ import {
   getGetPayablesSummaryQueryKey,
   useGetPenaltyExposure,
   getGetPenaltyExposureQueryKey,
+  useGetMonthEndClose,
+  getGetMonthEndCloseQueryKey,
 } from "@workspace/api-client-react";
 import type {
   CashflowBucket,
@@ -586,6 +588,95 @@ function UnbilledIncomeCard({ clientPartyId }: { clientPartyId: string }) {
         <p className="text-xs text-muted-foreground pt-3 border-t">
           Worked out from your own invoices — if an arrangement ended, you can
           ignore this.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Month-end close (round 19): the platform's deterministic advisories
+// composed into one checklist — each line computed by the same check that
+// powers its own card, so the two can never disagree. Advisory only; a
+// human closes the month.
+function MonthEndCloseCard({ clientPartyId }: { clientPartyId: string }) {
+  const { data: close, isSuccess } = useGetMonthEndClose(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetMonthEndCloseQueryKey({ clientPartyId }),
+        // The checklist composes seven detector queries server-side —
+        // don't re-run the sweep on every dashboard focus.
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  if (!isSuccess || !close) return null;
+  return (
+    <Card data-testid="month-end-close">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CalendarCheck className="w-5 h-5" aria-hidden="true" /> Month-end
+          close
+          {close.attentionCount > 0 ? (
+            <span
+              className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+              data-testid="text-close-attention-count"
+            >
+              {close.attentionCount} to review
+            </span>
+          ) : (
+            <span
+              className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+              data-testid="text-close-all-clear"
+            >
+              All clear
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <ul className="space-y-2">
+          {close.items.map((item) => (
+            <li
+              key={item.key}
+              className="flex items-start gap-2.5 text-sm"
+              data-testid={`close-item-${item.key}`}
+            >
+              {item.status === "attention" ? (
+                <AlertTriangle
+                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+                  aria-hidden="true"
+                />
+              ) : (
+                <CheckCircle
+                  className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                  aria-hidden="true"
+                />
+              )}
+              <div className="min-w-0">
+                <p
+                  className={
+                    item.status === "attention"
+                      ? "font-medium"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {item.label}
+                  {item.count > 0 && (
+                    <span className="ml-1.5 tabular-nums">({item.count})</span>
+                  )}
+                </p>
+                {item.status === "attention" && (
+                  <p className="text-xs text-muted-foreground">{item.detail}</p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-muted-foreground pt-3 border-t">
+          {close.note}
         </p>
       </CardContent>
     </Card>
@@ -1204,6 +1295,10 @@ export function Dashboard() {
 
               {canSeeStatement && me?.clientPartyId && (
                 <ClientStatementCard clientPartyId={me.clientPartyId} />
+              )}
+
+              {me?.clientPartyId && (
+                <MonthEndCloseCard clientPartyId={me.clientPartyId} />
               )}
 
               {me?.clientPartyId && (

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.49.0
+ * OpenAPI spec version: 0.50.0
  */
 import * as zod from 'zod';
 
@@ -1474,6 +1474,27 @@ export const GetPenaltyExposureResponse = zod.object({
   "issueDate": zod.string(),
   "daysOverdue": zod.number()
 })),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Month-end close checklist — the platform's deterministic advisories composed into one list, each line computed by the same check that powers its own card (nothing stored)
+ */
+export const GetMonthEndCloseQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetMonthEndCloseResponse = zod.object({
+  "asOf": zod.string(),
+  "items": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['clear', 'attention']),
+  "count": zod.number(),
+  "detail": zod.string()
+})),
+  "attentionCount": zod.number(),
   "note": zod.string()
 })
 
@@ -3528,6 +3549,27 @@ export const GetFirmReceivablesResponse = zod.object({
   "invoiceCount": zod.number(),
   "oldestDueDate": zod.string().nullable()
 }))
+})
+
+
+/**
+ * @summary Cross-client compliance posture league table over the trailing window — attention first, sample floors on every rate, a prioritization aid, not a verdict
+ */
+export const GetComplianceScorecardResponse = zod.object({
+  "asOf": zod.string(),
+  "windowDays": zod.number(),
+  "rows": zod.array(zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "issuedCount": zod.number(),
+  "acceptedCount": zod.number(),
+  "withinWindowRate": zod.number().nullable(),
+  "failureRate": zod.number().nullable(),
+  "medianDaysToStamp": zod.number().nullable(),
+  "overdueNow": zod.number(),
+  "unverifiedBills": zod.number()
+})),
+  "note": zod.string()
 })
 
 
@@ -6366,12 +6408,12 @@ export const runPhrasingEvalBodyCandidateSystemMax = 20000;
 
 export const RunPhrasingEvalBody = zod.object({
   "candidateSystem": zod.string().max(runPhrasingEvalBodyCandidateSystemMax).optional(),
-  "surface": zod.enum(['digest', 'chaser']).optional()
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']).optional()
 })
 
 export const RunPhrasingEvalResponse = zod.object({
   "canary": zod.object({
-  "surface": zod.enum(['digest', 'chaser']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
   "incumbent": zod.object({
   "fixtureCount": zod.number(),
   "correctCount": zod.number(),
@@ -6380,7 +6422,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -6400,7 +6442,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -6423,7 +6465,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -6452,7 +6494,7 @@ export const ListPhrasingEvalRunsResponseItem = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),

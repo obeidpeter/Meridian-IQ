@@ -102,6 +102,8 @@ export type ClerkPurpose =
   // string alone), while phrasing regression spend keeps its own cohorts.
   | "eval_phrasing_digest"
   | "eval_phrasing_chaser"
+  | "eval_phrasing_statement"
+  | "eval_phrasing_vat_note"
   // Scanned-bundle segmentation (batch-async): one vision call proposing
   // page ranges; the app validates coverage before anything else runs.
   | "segment_scan"

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.49.0
+ * OpenAPI spec version: 0.50.0
  */
 
 export type PhrasingEvalFixtureResultSurface = typeof PhrasingEvalFixtureResultSurface[keyof typeof PhrasingEvalFixtureResultSurface];
@@ -12,4 +12,6 @@ export type PhrasingEvalFixtureResultSurface = typeof PhrasingEvalFixtureResultS
 export const PhrasingEvalFixtureResultSurface = {
   digest: 'digest',
   chaser: 'chaser',
+  statement: 'statement',
+  vat_note: 'vat_note',
 } as const;

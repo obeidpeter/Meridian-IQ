@@ -345,8 +345,9 @@ function IntentEvalCard() {
   );
 }
 
-// Phrasing eval lane (round 18): the digest and chaser prompts' regression
-// card — replay fixed synthetic fact packs through the live prompt builders
+// Phrasing eval lane (rounds 18-19): the phrasing surfaces' regression
+// card (digest, chaser, client statement, VAT note) — replay fixed
+// synthetic fact packs through the live prompt builders
 // and score grounding, required identifiers and forbidden content
 // deterministically (including injection letters). Candidate-prompt canaries
 // run through the API's candidateSystem field; this card shows the stored
@@ -385,10 +386,11 @@ function PhrasingEvalCard() {
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          Replays fixed synthetic fact packs through the live digest and
-          chaser prompts (one call per fixture) and scores the output
-          deterministically: number grounding, required identifiers, forbidden
-          content — including two prompt-injection letters.
+          Replays fixed synthetic fact packs through the live digest, chaser,
+          client-statement and VAT-note prompts (one call per fixture) and
+          scores the output deterministically: number grounding, required
+          identifiers, forbidden content — including prompt-injection
+          fixtures on every surface with an outsider-influenced fact slot.
         </p>
         {!newest ? (
           <p
