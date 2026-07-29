@@ -61,6 +61,11 @@ const FLAGS: {
   // submission path. Shipped dark (PL-02); enable per firm via override once
   // a pilot firm opts in.
   { key: "clerk_actions", enabled: false, releaseTag: "R3", description: "Clerk proposed actions: human-approved batch execution over the closed action catalogue (submit_overdue)" },
+  // Standing approvals (round 28): a durable, revocable per-client grant lets
+  // the daily sweep run a submit kind without a fresh per-batch approval,
+  // re-validated on every run. Layered ON clerk_actions — both must be lit.
+  // Shipped dark (PL-02); enable per firm via override alongside a pilot.
+  { key: "clerk_action_policies", enabled: false, releaseTag: "R3", description: "Clerk standing approvals: policy-driven daily execution of approved action kinds (layered on clerk_actions)" },
 ];
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [

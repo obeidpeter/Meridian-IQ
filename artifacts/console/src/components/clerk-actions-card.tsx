@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetActionProposals,
@@ -5,6 +6,12 @@ import {
   useExecuteAction,
   getGetActionDecisionsQueryKey,
   useGetActionDecisions,
+  getGetActionPoliciesQueryKey,
+  useGetActionPolicies,
+  useGrantActionPolicy,
+  usePauseActionPolicy,
+  useResumeActionPolicy,
+  useRevokeActionPolicy,
   getGetClientPortfolioQueryKey,
 } from "@workspace/api-client-react";
 import type {
@@ -32,10 +39,14 @@ import {
   actionConfirmDescription,
   actionOutcomeSummary,
   actionOutcomeToneClasses,
+  automatableActionKind,
   draftClipboardText,
   formatAmount,
   formatDate,
   formatDateTime,
+  policyGrantDescription,
+  policyKindLabel,
+  policyStatusLine,
 } from "@/lib/format";
 import { Send, Sparkles } from "lucide-react";
 
@@ -76,6 +87,48 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
+  // Standing approvals (round 28): the client's live grants plus the
+  // clerk_action_policies flag — `enabled` gates the "automate" affordance,
+  // while existing grants stay visible (and revocable) regardless.
+  const { data: policies } = useGetActionPolicies(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetActionPoliciesQueryKey({ clientPartyId }),
+        staleTime: 60_000,
+        retry: false,
+      },
+    },
+  );
+  // Which submit-kind proposal is awaiting the standing-approval confirm.
+  const [automating, setAutomating] = useState<ActionProposal | null>(null);
+  const onPolicyChanged = () =>
+    queryClient.invalidateQueries({
+      queryKey: getGetActionPoliciesQueryKey(),
+    });
+  const policyError = (e: unknown) =>
+    toast({
+      title: "Automation change failed",
+      description: serverErrorMessage(e),
+      variant: "destructive",
+    });
+  const grant = useGrantActionPolicy({
+    mutation: { onSuccess: onPolicyChanged, onError: policyError },
+  });
+  const pause = usePauseActionPolicy({
+    mutation: { onSuccess: onPolicyChanged, onError: policyError },
+  });
+  const resume = useResumeActionPolicy({
+    mutation: { onSuccess: onPolicyChanged, onError: policyError },
+  });
+  const revoke = useRevokeActionPolicy({
+    mutation: { onSuccess: onPolicyChanged, onError: policyError },
+  });
+  const policyBusy =
+    grant.isPending || pause.isPending || resume.isPending || revoke.isPending;
+  const livePolicies = policies?.policies ?? [];
+  const policyByKind = new Map(livePolicies.map((p) => [p.kind, p]));
   const dialog = useClerkActionsDialog<
     ActionProposal,
     ClerkActionDecision,
@@ -116,12 +169,16 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
 
   // The dialog must survive the proposals list emptying after a full batch
   // (the SME card's F1 lesson): stay mounted while the dialog is up, defer
-  // the proposals refetch to closeDialog.
+  // the proposals refetch to closeDialog. A live standing approval also
+  // keeps the card up — it must stay manageable on a quiet day.
   const hasDecisions = (decisions?.decisions.length ?? 0) > 0;
   if (
     !isSuccess ||
     !proposals ||
-    (proposals.actions.length === 0 && !dialog.dialogOpen && !hasDecisions)
+    (proposals.actions.length === 0 &&
+      !dialog.dialogOpen &&
+      !hasDecisions &&
+      livePolicies.length === 0)
   ) {
     return null;
   }
@@ -169,17 +226,93 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                 </p>
               )}
             </div>
-            <Button
-              size="sm"
-              onClick={() => dialog.beginConfirm(action)}
-              disabled={execute.isPending}
-              data-testid={`button-approve-${action.kind}`}
-            >
-              <Send className="w-4 h-4 mr-2" aria-hidden="true" />
-              Review &amp; approve
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => dialog.beginConfirm(action)}
+                disabled={execute.isPending}
+                data-testid={`button-approve-${action.kind}`}
+              >
+                <Send className="w-4 h-4 mr-2" aria-hidden="true" />
+                Review &amp; approve
+              </Button>
+              {/* The automate affordance: submit kinds only, flag lit, no
+                  live grant yet — a standing approval is granted NEXT TO the
+                  evidence it will act on. */}
+              {policies?.enabled &&
+                automatableActionKind(action.kind) &&
+                !policyByKind.has(action.kind) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAutomating(action)}
+                    disabled={policyBusy}
+                    data-testid={`button-automate-${action.kind}`}
+                  >
+                    Automate daily
+                  </Button>
+                )}
+            </div>
           </div>
         ))}
+        {livePolicies.length > 0 && (
+          <div className="space-y-2 border-t pt-3">
+            <p className="font-medium text-foreground text-sm">Automation</p>
+            {livePolicies.map((p) => (
+              <div
+                key={p.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                data-testid={`policy-${p.kind}`}
+              >
+                <span className="font-medium text-foreground">
+                  {policyKindLabel(p.kind)}
+                </span>
+                <span
+                  className={
+                    p.pausedAt
+                      ? "text-amber-700 dark:text-amber-400"
+                      : "text-muted-foreground"
+                  }
+                  data-testid={`text-policy-status-${p.kind}`}
+                >
+                  {policyStatusLine(p)}
+                </span>
+                <span className="ml-auto flex gap-1">
+                  {p.pausedAt ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => resume.mutate({ id: p.id })}
+                      disabled={policyBusy}
+                      data-testid={`button-policy-resume-${p.kind}`}
+                    >
+                      Resume
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => pause.mutate({ id: p.id })}
+                      disabled={policyBusy}
+                      data-testid={`button-policy-pause-${p.kind}`}
+                    >
+                      Pause
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => revoke.mutate({ id: p.id })}
+                    disabled={policyBusy}
+                    data-testid={`button-policy-revoke-${p.kind}`}
+                  >
+                    Revoke
+                  </Button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         {hasDecisions && (
           <div className="space-y-1 border-t pt-3 text-xs text-muted-foreground">
             <p className="font-medium text-foreground text-sm">
@@ -189,6 +322,8 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               <p key={d.id} data-testid={`decision-${d.id}`}>
                 {formatDateTime(d.createdAt)} · {d.kind} · {d.executedCount}{" "}
                 executed · {d.skippedCount} skipped · {d.failedCount} failed
+                {/* A standing-approval run, not a fresh click. */}
+                {d.policyId ? " · auto" : ""}
               </p>
             ))}
           </div>
@@ -301,6 +436,48 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+      {/* Standing-approval confirm: consent-grade copy, separate from the
+          per-batch dialog machine (granting runs no batch). */}
+      <Dialog
+        open={!!automating}
+        onOpenChange={(open) => !open && setAutomating(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {automating ? policyKindLabel(automating.kind) : ""}
+            </DialogTitle>
+            <DialogDescription>
+              {automating
+                ? policyGrantDescription(automating.kind, "console")
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAutomating(null)}
+              disabled={grant.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const kind = automating && automatableActionKind(automating.kind);
+                if (!kind) return;
+                grant.mutate(
+                  { data: { kind, clientPartyId } },
+                  { onSuccess: () => setAutomating(null) },
+                );
+              }}
+              disabled={grant.isPending}
+              data-testid="button-confirm-automate"
+            >
+              {grant.isPending ? "Working…" : "Turn on daily automation"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>

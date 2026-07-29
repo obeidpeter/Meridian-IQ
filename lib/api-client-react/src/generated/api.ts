@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.53.0
+ * OpenAPI spec version: 0.54.0
  */
 import {
   useMutation,
@@ -22,6 +22,7 @@ import type {
 import type {
   AcceptInvitationInput,
   ActionDecisionList,
+  ActionPolicyList,
   ActionProposals,
   AlertDeliveryResult,
   AlertPreferences,
@@ -71,6 +72,7 @@ import type {
   ClaimGapReport,
   ClaimRecord,
   ClaimUpdateInput,
+  ClerkActionPolicy,
   ClerkAdoptionReport,
   ClerkBatchView,
   ClerkBulkApproveInput,
@@ -180,6 +182,7 @@ import type {
   GateMetrics,
   GenerateStatementsInput,
   GetActionDecisionsParams,
+  GetActionPoliciesParams,
   GetActionProposalsParams,
   GetBillingStatementParams,
   GetCashflowOutlookParams,
@@ -206,6 +209,7 @@ import type {
   GetVatPackParams,
   GetVatPositionParams,
   GetVatSettlementCheckParams,
+  GrantActionPolicyInput,
   HealthAlert,
   HealthStatus,
   IdentifierCheck,
@@ -21469,4 +21473,368 @@ export function useGetActionDecisions<TData = Awaited<ReturnType<typeof getActio
 
 
 
+
+export const getGetActionPoliciesUrl = (params?: GetActionPoliciesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/action-policies?${stringifiedParams}` : `/api/clerk/action-policies`
+}
+
+/**
+ * @summary Standing approvals for one client — every non-revoked grant (paused ones included) plus whether the clerk_action_policies flag is live for this firm, which gates granting and every sweep run
+ */
+export const getActionPolicies = async (params?: GetActionPoliciesParams, options?: RequestInit): Promise<ActionPolicyList> => {
+
+  return customFetch<ActionPolicyList>(getGetActionPoliciesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetActionPoliciesQueryKey = (params?: GetActionPoliciesParams,) => {
+    return [
+    `/api/clerk/action-policies`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetActionPoliciesQueryOptions = <TData = Awaited<ReturnType<typeof getActionPolicies>>, TError = ErrorType<BadRequestResponse>>(params?: GetActionPoliciesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionPolicies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetActionPoliciesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getActionPolicies>>> = ({ signal }) => getActionPolicies(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getActionPolicies>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetActionPoliciesQueryResult = NonNullable<Awaited<ReturnType<typeof getActionPolicies>>>
+export type GetActionPoliciesQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Standing approvals for one client — every non-revoked grant (paused ones included) plus whether the clerk_action_policies flag is live for this firm, which gates granting and every sweep run
+ */
+
+export function useGetActionPolicies<TData = Awaited<ReturnType<typeof getActionPolicies>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetActionPoliciesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionPolicies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetActionPoliciesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGrantActionPolicyUrl = () => {
+
+
+
+
+  return `/api/clerk/action-policies`
+}
+
+/**
+ * @summary Grant a standing approval — the daily sweep may then run this action kind for this client without a fresh per-batch click, re-validated on every run (flags, the grantor's current rights, consent, per-target eligibility) and capped at maxTargetsPerRun
+ */
+export const grantActionPolicy = async (grantActionPolicyInput: GrantActionPolicyInput, options?: RequestInit): Promise<ClerkActionPolicy> => {
+
+  return customFetch<ClerkActionPolicy>(getGrantActionPolicyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(grantActionPolicyInput)
+  }
+);}
+
+
+
+
+export const getGrantActionPolicyMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof grantActionPolicy>>, TError,{data: BodyType<GrantActionPolicyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof grantActionPolicy>>, TError,{data: BodyType<GrantActionPolicyInput>}, TContext> => {
+
+const mutationKey = ['grantActionPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof grantActionPolicy>>, {data: BodyType<GrantActionPolicyInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  grantActionPolicy(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GrantActionPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof grantActionPolicy>>>
+    export type GrantActionPolicyMutationBody = BodyType<GrantActionPolicyInput>
+    export type GrantActionPolicyMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Grant a standing approval — the daily sweep may then run this action kind for this client without a fresh per-batch click, re-validated on every run (flags, the grantor's current rights, consent, per-target eligibility) and capped at maxTargetsPerRun
+ */
+export const useGrantActionPolicy = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof grantActionPolicy>>, TError,{data: BodyType<GrantActionPolicyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof grantActionPolicy>>,
+        TError,
+        {data: BodyType<GrantActionPolicyInput>},
+        TContext
+      > => {
+      return useMutation(getGrantActionPolicyMutationOptions(options));
+    }
+
+export const getPauseActionPolicyUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/action-policies/${id}/pause`
+}
+
+/**
+ * @summary Pause a standing approval — the sweep skips it until someone resumes it; the grant survives
+ */
+export const pauseActionPolicy = async (id: string, options?: RequestInit): Promise<ClerkActionPolicy> => {
+
+  return customFetch<ClerkActionPolicy>(getPauseActionPolicyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getPauseActionPolicyMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pauseActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof pauseActionPolicy>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['pauseActionPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pauseActionPolicy>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  pauseActionPolicy(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PauseActionPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof pauseActionPolicy>>>
+
+    export type PauseActionPolicyMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Pause a standing approval — the sweep skips it until someone resumes it; the grant survives
+ */
+export const usePauseActionPolicy = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pauseActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof pauseActionPolicy>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getPauseActionPolicyMutationOptions(options));
+    }
+
+export const getResumeActionPolicyUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/action-policies/${id}/resume`
+}
+
+/**
+ * @summary Resume a paused standing approval — clears the pause whether a human or a sweep tripwire set it
+ */
+export const resumeActionPolicy = async (id: string, options?: RequestInit): Promise<ClerkActionPolicy> => {
+
+  return customFetch<ClerkActionPolicy>(getResumeActionPolicyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getResumeActionPolicyMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumeActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resumeActionPolicy>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['resumeActionPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resumeActionPolicy>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  resumeActionPolicy(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResumeActionPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof resumeActionPolicy>>>
+
+    export type ResumeActionPolicyMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Resume a paused standing approval — clears the pause whether a human or a sweep tripwire set it
+ */
+export const useResumeActionPolicy = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumeActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resumeActionPolicy>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getResumeActionPolicyMutationOptions(options));
+    }
+
+export const getRevokeActionPolicyUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/action-policies/${id}/revoke`
+}
+
+/**
+ * @summary Revoke a standing approval permanently — the row survives as evidence and a fresh grant is required to re-automate this kind
+ */
+export const revokeActionPolicy = async (id: string, options?: RequestInit): Promise<ClerkActionPolicy> => {
+
+  return customFetch<ClerkActionPolicy>(getRevokeActionPolicyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRevokeActionPolicyMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeActionPolicy>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['revokeActionPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeActionPolicy>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  revokeActionPolicy(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeActionPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof revokeActionPolicy>>>
+
+    export type RevokeActionPolicyMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Revoke a standing approval permanently — the row survives as evidence and a fresh grant is required to re-automate this kind
+ */
+export const useRevokeActionPolicy = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeActionPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeActionPolicy>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRevokeActionPolicyMutationOptions(options));
+    }
 

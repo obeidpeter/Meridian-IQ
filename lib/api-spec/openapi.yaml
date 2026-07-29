@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.53.0
+  version: 0.54.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5343,6 +5343,97 @@ paths:
                 $ref: "#/components/schemas/ActionDecisionList"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /clerk/action-policies:
+    get:
+      operationId: getActionPolicies
+      tags: [clerk]
+      summary: Standing approvals for one client — every non-revoked grant (paused ones included) plus whether the clerk_action_policies flag is live for this firm, which gates granting and every sweep run
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Live grants, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionPolicyList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      operationId: grantActionPolicy
+      tags: [clerk]
+      summary: Grant a standing approval — the daily sweep may then run this action kind for this client without a fresh per-batch click, re-validated on every run (flags, the grantor's current rights, consent, per-target eligibility) and capped at maxTargetsPerRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrantActionPolicyInput"
+      responses:
+        "200":
+          description: The new grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkActionPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/action-policies/{id}/pause:
+    post:
+      operationId: pauseActionPolicy
+      tags: [clerk]
+      summary: Pause a standing approval — the sweep skips it until someone resumes it; the grant survives
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The paused grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkActionPolicy"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clerk/action-policies/{id}/resume:
+    post:
+      operationId: resumeActionPolicy
+      tags: [clerk]
+      summary: Resume a paused standing approval — clears the pause whether a human or a sweep tripwire set it
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The resumed grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkActionPolicy"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clerk/action-policies/{id}/revoke:
+    post:
+      operationId: revokeActionPolicy
+      tags: [clerk]
+      summary: Revoke a standing approval permanently — the row survives as evidence and a fresh grant is required to re-automate this kind
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The revoked grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkActionPolicy"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   parameters:
     IdParam:
@@ -11553,6 +11644,7 @@ components:
           clientPartyId,
           kind,
           decidedBy,
+          policyId,
           evidence,
           targets,
           requestedCount,
@@ -11575,6 +11667,11 @@ components:
           type: string
         decidedBy:
           type: string
+          format: uuid
+        # Set when a standing approval (not a fresh human click) authorized
+        # this run — decidedBy then names the policy's grantor.
+        policyId:
+          type: ["string", "null"]
           format: uuid
         evidence:
           type: object
@@ -11616,6 +11713,103 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ClerkActionDecision"
+    ClerkActionPolicy:
+      type: object
+      required:
+        [
+          id,
+          firmId,
+          clientPartyId,
+          kind,
+          maxTargetsPerRun,
+          grantedBy,
+          grantedByRole,
+          pausedAt,
+          pausedReason,
+          pausedBy,
+          revokedAt,
+          revokedBy,
+          lastRunAt,
+          lastRunDay,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firmId:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        maxTargetsPerRun:
+          type: integer
+        grantedBy:
+          type: string
+          format: uuid
+        grantedByRole:
+          type: string
+        pausedAt:
+          type: ["string", "null"]
+          format: date-time
+        # "manual" for a human pause; the sweep's tripwires write
+        # grantor_inactive | consent_missing | failed_targets.
+        pausedReason:
+          type: ["string", "null"]
+        # Null when a sweep tripwire paused it (pausedReason says why).
+        pausedBy:
+          type: ["string", "null"]
+          format: uuid
+        revokedAt:
+          type: ["string", "null"]
+          format: date-time
+        revokedBy:
+          type: ["string", "null"]
+          format: uuid
+        lastRunAt:
+          type: ["string", "null"]
+          format: date-time
+        # Lagos YYYY-MM-DD of the last claimed run.
+        lastRunDay:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    ActionPolicyList:
+      type: object
+      required: [policies, enabled]
+      properties:
+        policies:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkActionPolicy"
+        # Whether the clerk_action_policies flag is live for this firm — the
+        # grant affordance gate (mirrors ActionProposals' posture: the list is
+        # simply empty while dark, never an error).
+        enabled:
+          type: boolean
+    GrantActionPolicyInput:
+      type: object
+      required: [kind]
+      properties:
+        # The automatable subset of the action catalogue: draft_chasers is
+        # excluded by design — its output exists only on the response for a
+        # human to read, which an unattended sweep cannot do.
+        kind:
+          type: string
+          enum: [submit_overdue, retry_failed]
+        clientPartyId:
+          type: string
+          format: uuid
+          description: Required for firm principals; a client_user is pinned to its own party.
+        # Per-run target cap; defaults to the batch maximum (50).
+        maxTargetsPerRun:
+          type: integer
+          minimum: 1
+          maximum: 50
     PhrasingEvalFixtureResult:
       type: object
       required:

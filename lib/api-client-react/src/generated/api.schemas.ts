@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.53.0
+ * OpenAPI spec version: 0.54.0
  */
 export interface HealthStatus {
   status: string;
@@ -4312,6 +4312,8 @@ export interface ClerkActionDecision {
   clientPartyId: string;
   kind: string;
   decidedBy: string;
+  /** @nullable */
+  policyId: string | null;
   evidence: ClerkActionDecisionEvidence;
   targets: ActionTargetOutcome[];
   requestedCount: number;
@@ -4353,6 +4355,55 @@ export interface ExecuteActionResult {
 
 export interface ActionDecisionList {
   decisions: ClerkActionDecision[];
+}
+
+export interface ClerkActionPolicy {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  kind: string;
+  maxTargetsPerRun: number;
+  grantedBy: string;
+  grantedByRole: string;
+  /** @nullable */
+  pausedAt: string | null;
+  /** @nullable */
+  pausedReason: string | null;
+  /** @nullable */
+  pausedBy: string | null;
+  /** @nullable */
+  revokedAt: string | null;
+  /** @nullable */
+  revokedBy: string | null;
+  /** @nullable */
+  lastRunAt: string | null;
+  /** @nullable */
+  lastRunDay: string | null;
+  createdAt: string;
+}
+
+export interface ActionPolicyList {
+  policies: ClerkActionPolicy[];
+  enabled: boolean;
+}
+
+export type GrantActionPolicyInputKind = typeof GrantActionPolicyInputKind[keyof typeof GrantActionPolicyInputKind];
+
+
+export const GrantActionPolicyInputKind = {
+  submit_overdue: 'submit_overdue',
+  retry_failed: 'retry_failed',
+} as const;
+
+export interface GrantActionPolicyInput {
+  kind: GrantActionPolicyInputKind;
+  /** Required for firm principals; a client_user is pinned to its own party. */
+  clientPartyId?: string;
+  /**
+     * @minimum 1
+     * @maximum 50
+     */
+  maxTargetsPerRun?: number;
 }
 
 export type PhrasingEvalFixtureResultSurface = typeof PhrasingEvalFixtureResultSurface[keyof typeof PhrasingEvalFixtureResultSurface];
@@ -5993,6 +6044,13 @@ clientPartyId?: string;
 };
 
 export type GetActionDecisionsParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
+export type GetActionPoliciesParams = {
 /**
  * Required for firm principals; a client_user is pinned to its own party.
  */

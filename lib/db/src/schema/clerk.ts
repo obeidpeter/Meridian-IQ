@@ -710,6 +710,62 @@ export const clerkPhrasingEvalRunsTable = pgTable("clerk_phrasing_eval_runs", {
 
 export type ClerkPhrasingEvalRun = typeof clerkPhrasingEvalRunsTable.$inferSelect;
 
+// Standing approvals (round 28): a durable, revocable GRANT that lets the
+// daily sweep run one action kind for one client without a fresh per-batch
+// approval. The grant names who approved it (and their role at grant time,
+// so the sweep can re-check they'd STILL be allowed to approve today), caps
+// how many targets a single run may touch, and carries its own lifecycle:
+// paused (reversible — by a human or by the sweep's own tripwires) versus
+// revoked (permanent evidence; a partial unique index keeps at most one
+// LIVE grant per firm/client/kind while revoked rows pile up as history).
+// lastRunDay is the Lagos-calendar claim cell: the sweep CASes today's date
+// into it before executing, so concurrent instances can never double-run a
+// policy. Firm-keyed RLS via migration 0029.
+export const clerkActionPoliciesTable = pgTable(
+  "clerk_action_policies",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    // A key from POLICY_KINDS (modules/clerk/action-policies.ts) — the
+    // automatable subset of the action catalogue. Text so old rows survive
+    // catalogue growth.
+    kind: text("kind").notNull(),
+    // Per-run target cap, chosen at grant time (1..MAX_ACTION_TARGETS).
+    maxTargetsPerRun: integer("max_targets_per_run").notNull(),
+    grantedBy: uuid("granted_by")
+      .notNull()
+      .references(() => usersTable.id),
+    // The grantor's role at grant time; the sweep re-derives their CURRENT
+    // membership and pauses the policy if approval rights lapsed.
+    grantedByRole: text("granted_by_role").notNull(),
+    pausedAt: timestamp("paused_at", { withTimezone: true }),
+    // "manual" for a human pause; the sweep's tripwires write
+    // "grantor_inactive" | "consent_missing" | "failed_targets".
+    pausedReason: text("paused_reason"),
+    // Null when the sweep paused it (pausedReason says why).
+    pausedBy: uuid("paused_by").references(() => usersTable.id),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => usersTable.id),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    // Lagos YYYY-MM-DD of the last claimed run — the once-per-day CAS cell.
+    lastRunDay: text("last_run_day"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("clerk_action_policies_live_uq")
+      .on(t.firmId, t.clientPartyId, t.kind)
+      .where(sql`revoked_at IS NULL`),
+    index("clerk_action_policies_scope_idx").on(t.firmId, t.clientPartyId),
+  ],
+);
+
+export type ClerkActionPolicy = typeof clerkActionPoliciesTable.$inferSelect;
+
 // Proposed actions (round 21): the durable APPROVAL artifact. Proposals
 // themselves are never stored — they are computed live from the detectors,
 // so they can never be stale — but the moment a human APPROVES a batch,
@@ -741,6 +797,10 @@ export const clerkActionDecisionsTable = pgTable(
     decidedBy: uuid("decided_by")
       .notNull()
       .references(() => usersTable.id),
+    // Round 28: set when a standing approval (not a fresh human click)
+    // authorized this run — decidedBy then names the policy's GRANTOR.
+    // Null for every hand-approved batch.
+    policyId: uuid("policy_id").references(() => clerkActionPoliciesTable.id),
     // The facts the approval surface showed at decision time.
     evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
     targets: jsonb("targets").$type<ActionTargetOutcome[]>().notNull(),

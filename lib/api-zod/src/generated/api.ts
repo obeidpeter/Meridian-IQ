@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.53.0
+ * OpenAPI spec version: 0.54.0
  */
 import * as zod from 'zod';
 
@@ -7766,6 +7766,7 @@ export const ExecuteActionResponse = zod.object({
   "clientPartyId": zod.string().uuid(),
   "kind": zod.string(),
   "decidedBy": zod.string().uuid(),
+  "policyId": zod.string().uuid().nullable(),
   "evidence": zod.record(zod.string(), zod.unknown()),
   "targets": zod.array(zod.object({
   "invoiceId": zod.string(),
@@ -7809,6 +7810,7 @@ export const GetActionDecisionsResponse = zod.object({
   "clientPartyId": zod.string().uuid(),
   "kind": zod.string(),
   "decidedBy": zod.string().uuid(),
+  "policyId": zod.string().uuid().nullable(),
   "evidence": zod.record(zod.string(), zod.unknown()),
   "targets": zod.array(zod.object({
   "invoiceId": zod.string(),
@@ -7822,6 +7824,145 @@ export const GetActionDecisionsResponse = zod.object({
   "failedCount": zod.number(),
   "createdAt": zod.coerce.date()
 }))
+})
+
+
+/**
+ * @summary Standing approvals for one client — every non-revoked grant (paused ones included) plus whether the clerk_action_policies flag is live for this firm, which gates granting and every sweep run
+ */
+export const GetActionPoliciesQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetActionPoliciesResponse = zod.object({
+  "policies": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "kind": zod.string(),
+  "maxTargetsPerRun": zod.number(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullable(),
+  "pausedReason": zod.string().nullable(),
+  "pausedBy": zod.string().uuid().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "revokedBy": zod.string().uuid().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "lastRunDay": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})),
+  "enabled": zod.boolean()
+})
+
+
+/**
+ * @summary Grant a standing approval — the daily sweep may then run this action kind for this client without a fresh per-batch click, re-validated on every run (flags, the grantor's current rights, consent, per-target eligibility) and capped at maxTargetsPerRun
+ */
+export const grantActionPolicyBodyMaxTargetsPerRunMax = 50;
+
+
+
+export const GrantActionPolicyBody = zod.object({
+  "kind": zod.enum(['submit_overdue', 'retry_failed']),
+  "clientPartyId": zod.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.'),
+  "maxTargetsPerRun": zod.number().min(1).max(grantActionPolicyBodyMaxTargetsPerRunMax).optional()
+})
+
+export const GrantActionPolicyResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "kind": zod.string(),
+  "maxTargetsPerRun": zod.number(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullable(),
+  "pausedReason": zod.string().nullable(),
+  "pausedBy": zod.string().uuid().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "revokedBy": zod.string().uuid().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "lastRunDay": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Pause a standing approval — the sweep skips it until someone resumes it; the grant survives
+ */
+export const PauseActionPolicyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const PauseActionPolicyResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "kind": zod.string(),
+  "maxTargetsPerRun": zod.number(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullable(),
+  "pausedReason": zod.string().nullable(),
+  "pausedBy": zod.string().uuid().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "revokedBy": zod.string().uuid().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "lastRunDay": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Resume a paused standing approval — clears the pause whether a human or a sweep tripwire set it
+ */
+export const ResumeActionPolicyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ResumeActionPolicyResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "kind": zod.string(),
+  "maxTargetsPerRun": zod.number(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullable(),
+  "pausedReason": zod.string().nullable(),
+  "pausedBy": zod.string().uuid().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "revokedBy": zod.string().uuid().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "lastRunDay": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Revoke a standing approval permanently — the row survives as evidence and a fresh grant is required to re-automate this kind
+ */
+export const RevokeActionPolicyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RevokeActionPolicyResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "kind": zod.string(),
+  "maxTargetsPerRun": zod.number(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullable(),
+  "pausedReason": zod.string().nullable(),
+  "pausedBy": zod.string().uuid().nullable(),
+  "revokedAt": zod.coerce.date().nullable(),
+  "revokedBy": zod.string().uuid().nullable(),
+  "lastRunAt": zod.coerce.date().nullable(),
+  "lastRunDay": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
 })
 
 
