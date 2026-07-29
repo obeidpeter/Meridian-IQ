@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
   getDb,
+  collectionAccountsTable,
   engagementsTable,
   firmPoliciesTable,
   firmsTable,
@@ -11,6 +12,7 @@ import {
   partiesTable,
 } from "@workspace/db";
 import { computeMonthEndClose } from "./month-end-close.ts";
+import { appendAudit } from "../audit/audit.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Month-end close assistant (round-19 idea #2). Pinned invariants:
@@ -94,6 +96,44 @@ test("a clean client reads all clear, and scope holds", async () => {
   const close = await computeMonthEndClose(firmId, cleanParty);
   assert.equal(close.attentionCount, 0, "the sibling's overdue paper stays out");
   for (const item of close.items) assert.equal(item.status, "clear");
+});
+
+test("an unmatched collection payment turns the collections line (honest count, not the capped array)", async () => {
+  // Seed the pointer-only trace the inbound webhook leaves: a live
+  // collection account plus one collections.unmatched audit event — the
+  // review-confirmed M3 path (the close must count events directly, never
+  // sum the report's capped per-account array).
+  const [account] = await getDb()
+    .insert(collectionAccountsTable)
+    .values({
+      firmId,
+      clientPartyId: clientParty,
+      provider: "test-provider",
+      accountReference: `MC-ACC-${SALT}`,
+      label: `MC test ${SALT}`,
+    })
+    .returning();
+  await appendAudit({
+    actorId: null,
+    firmId,
+    action: "collections.unmatched",
+    entityType: "collection_account",
+    entityId: account.id,
+    after: { reason: "test seed" },
+  });
+
+  const close = await computeMonthEndClose(firmId, clientParty);
+  const line = close.items.find((i) => i.key === "unmatched_collections");
+  assert.ok(line);
+  assert.equal(line.status, "attention");
+  assert.equal(line.count, 1);
+  // The sibling client's checklist stays clear — account scoping holds.
+  const sibling = await computeMonthEndClose(firmId, cleanParty);
+  const siblingLine = sibling.items.find(
+    (i) => i.key === "unmatched_collections",
+  );
+  assert.ok(siblingLine);
+  assert.equal(siblingLine.count, 0);
 });
 
 test("turning the maker-checker policy on adds the approvals line", async () => {

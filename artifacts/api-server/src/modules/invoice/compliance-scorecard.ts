@@ -138,14 +138,17 @@ export async function computeComplianceScorecard(
       -- Attention-first INSIDE the query, so a book past MAX_ROWS drops its
       -- calmest tail — never an arbitrary plan-dependent subset that could
       -- silently omit the very clients the table exists to surface. The JS
-      -- sort below then refines the retained set with the same keys.
+      -- sort below re-applies the same keys to the retained set, including
+      -- the sample floor mirrored in the CASE (a sub-floor rate is "no
+      -- rate", sorted last, exactly like the null the row will carry).
       ORDER BY COALESCE(MAX(od.n), 0) DESC,
-        COALESCE(
-          (COUNT(fa.invoice_id) FILTER (
-            WHERE fa.accepted_date < wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
-          ))::float / NULLIF(COUNT(fa.invoice_id), 0),
-          2
-        ) ASC,
+        CASE
+          WHEN COUNT(fa.invoice_id) >= ${MIN_RATE_SAMPLE} THEN
+            (COUNT(fa.invoice_id) FILTER (
+              WHERE fa.accepted_date < wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
+            ))::float / COUNT(fa.invoice_id)
+          ELSE 2
+        END ASC,
         p.legal_name
       LIMIT ${MAX_ROWS}
     `)

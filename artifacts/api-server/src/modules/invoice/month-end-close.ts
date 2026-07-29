@@ -130,11 +130,15 @@ export async function computeMonthEndClose(
       "Possible double payments",
       doublePayCount,
       doublePayCount > 0
-        ? capped(
-            doublePayCount,
-            20,
-            "Bills the payment evidence says were settled twice, or unpaid near-duplicates — review before paying anything else.",
-          )
+        ? // The detector caps each LANE at 20 — saturation is per lane, so
+          // the combined count triggers the hedge only when a lane is full
+          // ("(30)" from 15+15 lists everything and must not hedge).
+          `Bills the payment evidence says were settled twice, or unpaid near-duplicates — review before paying anything else.${
+            doublePay.multiPaid.length >= 20 ||
+            doublePay.duplicateCandidates.length >= 20
+              ? " Showing the detector's top 20 per check — more may exist."
+              : ""
+          }`
         : "No double-payment signals in the payment evidence.",
     ),
     item(

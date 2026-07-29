@@ -39,7 +39,7 @@ async function seedInvoice(input: {
   buyerPartyId?: string;
   invoiceNumber: string;
   issueDate: string;
-  status?: "draft" | "validated" | "stamped";
+  status?: "draft" | "validated" | "stamped" | "cancelled";
 }): Promise<string> {
   const id = randomUUID();
   await getDb().insert(invoicesTable).values({
@@ -114,6 +114,15 @@ before(async () => {
     invoiceNumber: `SC-AB1-${SALT}`,
     issueDate: daysAgo(15),
     status: "draft",
+  });
+  // A CANCELLED bill: a voided mis-capture is not a posture gap and must
+  // not count as unverified (the vat-position rule).
+  await seedInvoice({
+    supplierPartyId: vendor,
+    buyerPartyId: clientA,
+    invoiceNumber: `SC-AB2-${SALT}`,
+    issueDate: daysAgo(12),
+    status: "cancelled",
   });
 
   // Client B: one stamped invoice, one accepted attempt — under every floor.
