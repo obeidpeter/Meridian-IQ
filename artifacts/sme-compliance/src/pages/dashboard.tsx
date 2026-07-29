@@ -570,7 +570,7 @@ function UnbilledIncomeCard({ clientPartyId }: { clientPartyId: string }) {
             <div
               key={`${a.buyerPartyId}-${a.currency}`}
               className="flex items-center justify-between gap-3 rounded-lg border p-3"
-              data-testid={`unbilled-${a.buyerPartyId}`}
+              data-testid={`unbilled-${a.buyerPartyId}-${a.currency}`}
             >
               <div className="min-w-0">
                 <p className="text-sm font-semibold truncate">{a.buyerName}</p>

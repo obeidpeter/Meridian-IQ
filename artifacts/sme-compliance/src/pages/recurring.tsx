@@ -473,7 +473,7 @@ export function Recurring() {
             {(suggestions ?? []).map((s) => (
               <Card
                 key={`${s.buyerPartyId}-${s.currency}`}
-                data-testid={`row-suggestion-${s.buyerPartyId}`}
+                data-testid={`row-suggestion-${s.buyerPartyId}-${s.currency}`}
               >
                 <CardContent className="flex flex-wrap items-center justify-between p-4 gap-3">
                   <div className="min-w-0">

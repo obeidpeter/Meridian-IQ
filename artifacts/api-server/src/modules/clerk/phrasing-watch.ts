@@ -8,6 +8,7 @@ import {
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../flags/flags";
+import { CLERK_FLAG_KEY } from "./gateway";
 import { getClerkGateway } from "./provider";
 import { runPhrasingEval } from "./phrasing-eval";
 import {
@@ -34,11 +35,14 @@ const PHRASING_SWEEP_LOCK_ID = 731_846;
 
 // Baseline needs a real history: fewer prior runs than this and the sweep
 // stays quiet (a second-ever run has nothing meaningful to drop from).
-const MIN_BASELINE_RUNS = envThreshold(
-  process.env.PHRASING_ALERT_MIN_RUNS,
-  3,
-);
 const MAX_BASELINE_RUNS = 5;
+// Clamped to the baseline window: a MIN above MAX_BASELINE_RUNS could
+// never be satisfied by the fetched rows and would silence the watch
+// forever (review-confirmed L2).
+const MIN_BASELINE_RUNS = Math.min(
+  envThreshold(process.env.PHRASING_ALERT_MIN_RUNS, 3),
+  MAX_BASELINE_RUNS,
+);
 const DROP_POINTS = envThreshold(process.env.PHRASING_ALERT_DROP, 0.1);
 
 export const PHRASING_DROP_ACTION = "clerk.phrasing_quality.dropped";
@@ -129,23 +133,38 @@ registerSweep(async function sweepPhrasingAutoEval(): Promise<void> {
     if (!locked) return false;
     // Each run spends platform tokens: opt-in flag, at most once per UTC
     // day. Race losers record a second startedBy-null row, which the
-    // due-today check then ignores for the rest of the day.
+    // due-today check then ignores for the rest of the day. The kill
+    // switch is checked HERE too (review-confirmed M2): with clerk_ai off
+    // no run row lands, so an unguarded runPhrasingEval would throw
+    // CLERK_DISABLED on every 60-second pass all day and redden the
+    // shared sweep health for the duration of an incident.
+    if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return false;
     if (!(await isFeatureEnabled(AUTO_PHRASING_FLAG_KEY))) return false;
     return autoPhrasingDueToday();
   });
   if (!runEval) return;
 
-  const gateway = await getClerkGateway();
-  const run = await runPhrasingEval(null, gateway);
-  logger.info(
-    {
-      fixtureCount: run.fixtureCount,
-      correctCount: run.correctCount,
-      groundedCount: run.groundedCount,
-      injectionResisted: run.injectionResisted,
-    },
-    "phrasing lane: nightly eval run complete",
-  );
+  // Belt and braces for the TOCTOU (the flag can flip between the check
+  // and the call) and for a missing provider: either answers with a quiet
+  // log, never a failed sweep pass.
+  try {
+    const gateway = await getClerkGateway();
+    const run = await runPhrasingEval(null, gateway);
+    logger.info(
+      {
+        fixtureCount: run.fixtureCount,
+        correctCount: run.correctCount,
+        groundedCount: run.groundedCount,
+        injectionResisted: run.injectionResisted,
+      },
+      "phrasing lane: nightly eval run complete",
+    );
+  } catch (err) {
+    logger.warn(
+      { err },
+      "phrasing lane: nightly eval skipped (clerk disabled or provider unavailable)",
+    );
+  }
 });
 
 export interface PhrasingWatchResult {

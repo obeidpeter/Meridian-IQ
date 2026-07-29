@@ -67,7 +67,11 @@ export async function computeDigestImpact(
         AVG(next_urgent - urgent)::text AS mean_delta,
         COUNT(*) FILTER (WHERE next_urgent < urgent)::int AS improved
       FROM snapshots
-      WHERE next_week = week_start + interval '7 days'
+      -- '168 hours', not '7 days': week_start is timestamptz, and a
+      -- day-based interval follows the SESSION timezone — on a
+      -- DST-observing session a pair spanning a transition is 167/169
+      -- hours and would silently drop.
+      WHERE next_week = week_start + interval '168 hours'
         AND next_urgent IS NOT NULL
       GROUP BY 1
     `)

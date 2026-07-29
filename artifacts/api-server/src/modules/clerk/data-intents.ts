@@ -99,22 +99,50 @@ export interface DataIntentParams {
 // Pure and exported for tests. Date-shaped tokens are excluded — "2026-07-08"
 // is a date in a question, not an invoice number.
 const SEPARATED_TOKEN_RE = /\b[A-Za-z0-9]+(?:[/-][A-Za-z0-9]+)+\b/g;
-const INTRODUCED_NUMBER_RE = /(?:invoice|inv|bill|number|no\.?|#)\s*[#:]?\s*(\d{3,})/gi;
+// Letter-prefixed compounds with no separator (INV2041) — without this
+// class, "invoice INV2041" would extract the bare "2041" via the intro
+// pattern and then honestly find nothing.
+const COMPOUND_TOKEN_RE = /\b[A-Za-z]{2,}\d{3,}\b/g;
+// The word alternation needs \b (or "casino 12345" mints via its "no"
+// tail) and "no" needs its dot (or the ordinary word "no" introduces any
+// number); "#" is non-word, so it gets its own boundary-free arm.
+const INTRODUCED_NUMBER_RE =
+  /(?:\b(?:invoice|inv|bill|number|no\.)|#)\s*[#:]?\s*(\d{3,})/gi;
 const DATE_SHAPES = [
-  /^\d{4}-\d{2}(-\d{2})?$/,
+  /^\d{4}-\d{1,2}(-\d{1,2})?$/,
   /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/,
+  /^\d{4}[/-]\d{1,2}([/-]\d{1,2})?$/, // 2026/07/08, 2026/07, 2025/26 (fiscal)
+  /^\d{1,2}[/-]\d{4}$/, // 05/2026
 ];
+// A token introduced by one of these words is that thing, not an invoice
+// number — the rail error code and TIN false positives the review probed.
+const EXCLUDING_CONTEXT_RE = /(?:code|error|tin|phone|tel|call)[\s:#-]*$/i;
 
 export function extractInvoiceNumbers(question: string): string[] {
   const seen = new Map<string, string>(); // lower -> first-seen casing
-  for (const match of question.match(SEPARATED_TOKEN_RE) ?? []) {
-    if (!/\d/.test(match)) continue;
-    if (DATE_SHAPES.some((re) => re.test(match))) continue;
-    const key = match.toLowerCase();
-    if (!seen.has(key)) seen.set(key, match);
+  const consider = (token: string, index: number) => {
+    if (!/\d/.test(token)) return;
+    if (DATE_SHAPES.some((re) => re.test(token))) return;
+    if (EXCLUDING_CONTEXT_RE.test(question.slice(Math.max(0, index - 12), index)))
+      return;
+    const key = token.toLowerCase();
+    if (!seen.has(key)) seen.set(key, token);
+  };
+  for (const m of question.matchAll(SEPARATED_TOKEN_RE)) {
+    consider(m[0], m.index ?? 0);
+  }
+  for (const m of question.matchAll(COMPOUND_TOKEN_RE)) {
+    // A compound inside a separated token (the "TIN" of "IS-TIN-01") was
+    // already considered as its whole token.
+    if ([...seen.keys()].some((k) => k.includes(m[0].toLowerCase()))) continue;
+    consider(m[0], m.index ?? 0);
   }
   for (const m of question.matchAll(INTRODUCED_NUMBER_RE)) {
+    // A bare number that is the digit tail of a candidate already found
+    // ("invoice INV2041" → the intro pattern's "2041") is not a second
+    // candidate.
     const key = m[1].toLowerCase();
+    if ([...seen.keys()].some((k) => k.includes(key))) continue;
     if (!seen.has(key)) seen.set(key, m[1]);
   }
   return [...seen.values()];
@@ -847,8 +875,16 @@ export const DATA_INTENTS: readonly DataIntent[] = [
           facts: [],
         };
       }
+      // SEC-03 (review-confirmed H1): the pin's buyer arm is qualified with
+      // BILL_ORIENTATION — the bills scope wall verbatim. Without it, a
+      // client who happens to be the BUYER on a sibling client's receivable
+      // (dual-engaged trades are supported; the supplier side wins
+      // orientation) could read the sibling's rail posture. With it, a
+      // pinned asker only ever matches their own receivables or rows that
+      // actually ARE their captured bills; a sibling's paper answers "no
+      // invoice" — non-disclosure.
       const clientFilter = params?.clientPartyId
-        ? sql` AND (i.supplier_party_id = ${params.clientPartyId} OR i.buyer_party_id = ${params.clientPartyId})`
+        ? sql` AND (i.supplier_party_id = ${params.clientPartyId} OR (i.buyer_party_id = ${params.clientPartyId} AND ${BILL_ORIENTATION}))`
         : sql``;
       const rows = (
         await getDb().execute<{
@@ -894,8 +930,14 @@ export const DATA_INTENTS: readonly DataIntent[] = [
         };
       }
       if (rows.length > 1) {
+        // LIMIT 4 means "4" may understate; a pinned asker's duplicates
+        // can only be their OWN paper (the pin above), so the firm-wide
+        // "name the client" advice would be useless there.
+        const shown = rows.length >= 4 ? "4 or more" : String(rows.length);
         return {
-          text: `${rows.length} invoices share the number ${number} across the firm's clients. Add the client's name to the question to pick one.`,
+          text: params?.clientPartyId
+            ? `${shown} of your own documents share the number ${number} — one may be your invoice and another a captured supplier bill. Open the invoices or bills page to pick the right one.`
+            : `${shown} invoices share the number ${number} across the firm's clients. Add the client's name to the question to pick one.`,
           facts: [countFact("matches", "Matching invoices", rows.length)],
         };
       }
@@ -915,7 +957,9 @@ export const DATA_INTENTS: readonly DataIntent[] = [
           : r.status === "failed"
             ? "Its last submission failed — open the invoice for the specific fix, then resubmit."
             : r.overdue
-              ? `It is ${plural(Math.max(Number(r.days_over ?? 0), 0), "day")} past the ${SUBMISSION_WINDOW_DAYS}-day submission window — submit it now to limit penalty exposure.`
+              ? Number(r.days_over ?? 0) <= 0
+                ? `It reached its ${SUBMISSION_WINDOW_DAYS}-day submission deadline today — submit it now to limit penalty exposure.`
+                : `It is ${plural(Number(r.days_over), "day")} past the ${SUBMISSION_WINDOW_DAYS}-day submission window — submit it now to limit penalty exposure.`
               : r.status === "draft" || r.status === "validated"
                 ? "It has not been submitted — validate and submit it inside the statutory window."
                 : r.status === "submitted"
@@ -942,7 +986,17 @@ export const DATA_INTENTS: readonly DataIntent[] = [
               ]
             : []),
         ],
-        links: [{ label: r.invoice_number, kind: "invoice" as const, id: r.id }],
+        // No link for a pinned asker's BILL: the SME app routes invoice
+        // links through the supplier-side detail loader, which correctly
+        // 403s the buyer — a link that always dead-ends is worse than none
+        // (the bills page shows the document).
+        ...(r.bill && params?.clientPartyId
+          ? {}
+          : {
+              links: [
+                { label: r.invoice_number, kind: "invoice" as const, id: r.id },
+              ],
+            }),
       };
     },
   },

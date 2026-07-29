@@ -26,6 +26,7 @@ const firmId = randomUUID();
 const clientParty = randomUUID();
 const siblingParty = randomUUID();
 const buyer = randomUUID();
+const vendor = randomUUID(); // unengaged — supplies the client's bill
 // Unique invoice number per run — the shared DB may hold INV-lookalikes.
 const NUM = `IS-${SALT}-77`;
 let invoiceId: string;
@@ -43,6 +44,7 @@ before(async () => {
     { id: clientParty, type: "client_business", legalName: `IS Client ${SALT}` },
     { id: siblingParty, type: "client_business", legalName: `IS Sibling ${SALT}` },
     { id: buyer, type: "buyer", legalName: `IS Buyer ${SALT}` },
+    { id: vendor, type: "buyer", legalName: `IS Vendor ${SALT}` },
   ]);
   await db.insert(engagementsTable).values([
     { firmId, clientPartyId: clientParty, type: "retainer", title: `is A ${SALT}` },
@@ -74,6 +76,34 @@ before(async () => {
       subtotal: "37209.30",
       vatTotal: "2790.70",
     },
+    // The H1 shape: the SIBLING's receivable where OUR client is the
+    // buyer (dual-engaged trade — the supplier side wins orientation).
+    // The pinned lookup must answer "no invoice", never the sibling's
+    // rail posture.
+    {
+      firmId,
+      supplierPartyId: siblingParty,
+      buyerPartyId: clientParty,
+      invoiceNumber: `IS-${SALT}-99`,
+      issueDate: daysAgo(15),
+      status: "failed",
+      grandTotal: "60000.00",
+      subtotal: "55813.95",
+      vatTotal: "4186.05",
+    },
+    // A genuine BILL of the client (unengaged vendor supplies): the
+    // pinned buyer-side lookup that SHOULD answer.
+    {
+      firmId,
+      supplierPartyId: vendor,
+      buyerPartyId: clientParty,
+      invoiceNumber: `IS-${SALT}-55`,
+      issueDate: daysAgo(8),
+      status: "draft",
+      grandTotal: "25000.00",
+      subtotal: "23255.81",
+      vatTotal: "1744.19",
+    },
   ]);
 });
 
@@ -102,6 +132,35 @@ test("extractInvoiceNumbers is conservative and date-safe", () => {
     extractInvoiceNumbers("is inv-2041 the same as INV-2041?"),
     ["inv-2041"],
   );
+  // The review-probed false positives (round-20 M3):
+  // slash dates and month/fiscal shapes are dates, not numbers…
+  assert.deepEqual(extractInvoiceNumbers("submitted on 2026/07/08?"), []);
+  assert.deepEqual(extractInvoiceNumbers("the 05/2026 return"), []);
+  assert.deepEqual(extractInvoiceNumbers("the 2025/26 fiscal year"), []);
+  // …an introduced rail error code or TIN is that thing…
+  assert.deepEqual(
+    extractInvoiceNumbers("it failed with code E-TIN-01, why?"),
+    [],
+  );
+  assert.deepEqual(
+    extractInvoiceNumbers("their TIN 12345678-0001 was rejected"),
+    [],
+  );
+  // …but the real number still comes through beside an excluded token.
+  assert.deepEqual(
+    extractInvoiceNumbers("it failed with code E-TIN-01 — what about INV-2041?"),
+    ["INV-2041"],
+  );
+  // Ordinary words containing "no" and the bare word "no" introduce nothing.
+  assert.deepEqual(extractInvoiceNumbers("casino 12345 is not ours"), []);
+  assert.deepEqual(
+    extractInvoiceNumbers("there are no 20000 naira invoices"),
+    [],
+  );
+  // A separator-free compound is ONE candidate — never its bare digit tail.
+  assert.deepEqual(extractInvoiceNumbers("where is invoice INV2041?"), [
+    "INV2041",
+  ]);
 });
 
 test("the lookup answers status, next step and a link", async () => {
@@ -132,6 +191,27 @@ test("scope: a client pin only sees its own paper", async () => {
     clientPartyId: clientParty,
   });
   assert.match(foreign.text, /No invoice numbered/);
+  // The H1 shape: the sibling's RECEIVABLE with our client on the buyer
+  // side (dual-engaged) — the pin's buyer arm is BILL_ORIENTATION-
+  // qualified, so this answers non-disclosure, never the sibling's
+  // failed-submission posture.
+  const dualEngaged = await intent.run(firmId, {
+    invoiceNumber: `IS-${SALT}-99`,
+    clientPartyId: clientParty,
+  });
+  assert.match(dualEngaged.text, /No invoice numbered/);
+  assert.ok(
+    !dualEngaged.text.includes("failed"),
+    "the sibling's rail posture never leaks",
+  );
+  // The client's genuine BILL answers on the buyer side — bill copy, and
+  // deliberately NO link (the invoice detail loader is supplier-side).
+  const bill = await intent.run(firmId, {
+    invoiceNumber: `IS-${SALT}-55`,
+    clientPartyId: clientParty,
+  });
+  assert.match(bill.text, /captured supplier bill/);
+  assert.equal(bill.links, undefined);
   // A foreign firm sees nothing at all.
   const otherFirm = await intent.run(randomUUID(), { invoiceNumber: NUM });
   assert.match(otherFirm.text, /No invoice numbered/);

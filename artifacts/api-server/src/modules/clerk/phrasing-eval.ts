@@ -612,7 +612,9 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
       cause: "The buyer's Tax Identification Number failed validation against the national register.",
       fix: "Correct the buyer's TIN on the invoice and resubmit.",
     },
-    mustInclude: ["E-TIN-01"],
+    // No mustInclude for the code: EXPLAIN_SYSTEM says "use ONLY the cause
+    // and fix text" — a compliant rewrite may legitimately omit the code
+    // slot, and grounding already polices anything it does state.
   },
   {
     key: "explain-unmapped",

@@ -177,7 +177,7 @@ function MissingBillsAdvisory({ clientPartyId }: { clientPartyId: string }) {
         {alerts.map((a) => (
           <p
             key={`${a.supplierPartyId}-${a.currency}`}
-            data-testid={`missing-bill-${a.supplierPartyId}`}
+            data-testid={`missing-bill-${a.supplierPartyId}-${a.currency}`}
           >
             {a.supplierName} has billed about{" "}
             {formatAmount(a.medianAmount, a.currency)} roughly every{" "}
