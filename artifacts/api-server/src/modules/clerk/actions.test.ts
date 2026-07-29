@@ -25,7 +25,7 @@ import {
   listActionDecisions,
   listActionProposals,
 } from "./actions.ts";
-import { CLIENT_SAFE_DATA_INTENTS, DATA_INTENTS } from "./data-intents.ts";
+import { CLIENT_SAFE_DATA_INTENTS, DATA_INTENTS } from "./data-intents/index.ts";
 import { executeActionBodyInvoiceIdsMax } from "@workspace/api-zod";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";

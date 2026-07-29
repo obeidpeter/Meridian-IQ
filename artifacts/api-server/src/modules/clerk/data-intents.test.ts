@@ -24,7 +24,7 @@ import {
   getDataIntent,
   lagosMonthOptions,
   runDataIntent,
-} from "./data-intents.ts";
+} from "./data-intents/index.ts";
 import type { CompletionRequest } from "./gateway.ts";
 import { inClerkScope } from "./scope.ts";
 import {

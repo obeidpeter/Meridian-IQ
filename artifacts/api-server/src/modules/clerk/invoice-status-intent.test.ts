@@ -8,7 +8,7 @@ import {
   invoicesTable,
   partiesTable,
 } from "@workspace/db";
-import { DATA_INTENTS, extractInvoiceNumbers } from "./data-intents.ts";
+import { DATA_INTENTS, extractInvoiceNumbers } from "./data-intents/index.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Invoice-pinned Ask intent (round-20 idea #5). Pinned invariants:
