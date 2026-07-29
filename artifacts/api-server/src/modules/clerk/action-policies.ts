@@ -435,16 +435,22 @@ async function autoPause(
 //    deadline-reminder rails; a consent_missing pause therefore sends
 //    nothing — consent wins over notification, and the SME card still
 //    shows the pause);
-//  - a staff-granted policy notifies the grantor's own channels: push to
-//    their registered devices (clean no-op without any), email only under
-//    the digest rail's proven-ownership gate (verified address + channel
-//    opted in) — but ONLY while they still hold a membership in this firm
-//    (a departed grantor gets nothing; grantor_inactive pauses then rely
+//  - a staff-granted policy notifies the grantor's own channels under the
+//    staff-preference OPT-INS (the digest rail's exact posture: email only
+//    with a verified, enabled address; push only when turned on) — and
+//    ONLY while they still hold a firm_admin/firm_staff membership in this
+//    firm (a departed or demoted grantor gets nothing; those pauses rely
 //    on the Automation strip).
 // Best-effort by design: sends run autocommit AFTER the pause committed,
 // and any failure lands in the messages ledger (or is absorbed) — never in
 // the sweep's control flow.
 async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
+  // PL-02 (round-29 review MAJOR): the platform-wide messaging kill switch
+  // gates every sweep-side send — the digest/reminder/statement rails'
+  // shared posture — and a dark rail means NO ledger rows and no provider
+  // traffic. The pause itself (and its audit) has already committed; only
+  // the signal goes quiet.
+  if (!(await isFeatureEnabled("messaging_notifications", null))) return;
   const entityId = pointerEntityRef("pol", policy.id);
   if (policy.grantedByRole === "client_user") {
     const [prefs] = await getDb()
@@ -462,17 +468,25 @@ async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
     });
     return;
   }
-  const [membership] = await getDb()
-    .select({ userId: membershipsTable.userId })
+  // Digest-rail parity end to end (round-29 review): the grantor must still
+  // be firm STAFF here (an operator/auditor membership is not a staff
+  // channel; a client_user grantor took the party branch above), and both
+  // channels honour the staff-preference opt-ins — email only under the
+  // proven-ownership gate, push only when the member turned it on. The
+  // Automation strip remains the guaranteed surface either way.
+  const memberships = await getDb()
+    .select({ role: membershipsTable.role })
     .from(membershipsTable)
     .where(
       and(
         eq(membershipsTable.userId, policy.grantedBy),
         eq(membershipsTable.firmId, policy.firmId),
       ),
-    )
-    .limit(1);
-  if (!membership) return;
+    );
+  const isStaff = memberships.some(
+    (m) => m.role === "firm_admin" || m.role === "firm_staff",
+  );
+  if (!isStaff) return;
   const [prefs] = await getDb()
     .select()
     .from(staffNotificationPreferencesTable)
@@ -496,15 +510,17 @@ async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
       // Channel failures are recorded in the messages ledger.
     }
   }
-  try {
-    await sendPushToUser({
-      userId: policy.grantedBy,
-      templateKey: "automation_paused",
-      entityType: "clerk_action_policy",
-      entityId,
-    });
-  } catch {
-    // Push failures are likewise recorded by the push module.
+  if (prefs?.pushEnabled) {
+    try {
+      await sendPushToUser({
+        userId: policy.grantedBy,
+        templateKey: "automation_paused",
+        entityType: "clerk_action_policy",
+        entityId,
+      });
+    } catch {
+      // Push failures are likewise recorded by the push module.
+    }
   }
 }
 

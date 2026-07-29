@@ -341,18 +341,22 @@ The unattended half of the arc: evidence and signals, all deterministic.
   invoice status (stamped-and-beyond = succeeded; a later rail rejection
   surfaces as failed-again, never buried; a purged invoice lands in
   "other"), and the lowest-band s.104 exposure estimate over the
-  window's executed `submit_overdue` count — `bandExposure`, the same
-  arithmetic and not-advice disclaimer as every other exposure surface.
-  Chaser drafts count as executed work with no rail lifecycle to verify
-  (reminder effectiveness audits chasing).
+  window's executed `submit_overdue` count minus the failed-again ones
+  (exposure the rails later rejected is back, so it was never removed) —
+  `bandExposure`, the same arithmetic and not-advice disclaimer as every
+  other exposure surface. Chaser drafts count as executed work with no
+  rail lifecycle to verify (reminder effectiveness audits chasing).
 - **Tripwire pause signals.** An auto-pause now notifies the GRANTOR
   through the ordinary rails, pointer-only (SEC-12 — no kind, reason or
-  client in the message; the why lives on the Automation strip):
+  client in the message; the why lives on the Automation strip), behind
+  the platform-wide `messaging_notifications` kill switch like every
+  other sweep-side sender (PL-02: a dark rail means no ledger rows and
+  no provider traffic; the pause and its audit land regardless):
   client-granted policies through the party alert fan-out (CORE-03
   consent-gated — a consent_missing pause therefore sends nothing, by
-  design), staff-granted through the grantor's own channels (push to
-  registered devices; email only under the digest rail's
-  verified-address gate) and only while they still hold a membership.
+  design), staff-granted through the grantor's staff-preference OPT-INS
+  (email under the verified-address gate; push only when turned on) and
+  only while they still hold a firm_admin/firm_staff membership.
   Best-effort by construction: sends run autocommit after the pause
   committed, only the CAS winner notifies (no double-sends across
   instances), and a notification failure never touches the sweep.

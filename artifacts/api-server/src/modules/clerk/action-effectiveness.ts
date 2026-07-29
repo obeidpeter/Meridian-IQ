@@ -18,8 +18,10 @@ import { bandExposure } from "../invoice/penalty-exposure";
 //    the NOW columns re-read each executed submit target's current invoice
 //    status, so a retry that failed again is visible, not buried;
 //  - the exposure figure is the LOWEST turnover band over the window's
-//    executed submit_overdue count — an estimate under the published
-//    penalty model, never advice;
+//    executed submit_overdue count MINUS the failed-again ones (an invoice
+//    the rails later rejected is back in penalty territory — its exposure
+//    was not removed) — an estimate under the published penalty model,
+//    never advice;
 //  - chaser drafts count as executed work but have no rail outcome to
 //    verify here — reminder effectiveness (chase-effectiveness.ts) already
 //    audits whether chasing correlates with settlement.
@@ -64,6 +66,10 @@ export async function computeActionEffectiveness(
   clientPartyId: string,
   windowDays: number = EFFECTIVENESS_DEFAULT_WINDOW_DAYS,
 ): Promise<ActionEffectivenessReport> {
+  // The module is the wall, not the parse: the contract bounds 1..365 but
+  // zod coerces without .int(), and a fractional day would 22P02 inside
+  // make_interval — clamp and floor here so no input shape can 500 this.
+  const days = Math.min(365, Math.max(1, Math.floor(windowDays)));
   const db = getDb();
   // Per-kind decision aggregates — the ledger's own decision-time truth.
   const kindRows = (
@@ -86,7 +92,7 @@ export async function computeActionEffectiveness(
       FROM clerk_action_decisions
       WHERE firm_id = ${firmId}
         AND client_party_id = ${clientPartyId}
-        AND created_at >= now() - make_interval(days => ${windowDays})
+        AND created_at >= now() - make_interval(days => ${days})
       GROUP BY kind
       ORDER BY kind
     `)
@@ -100,6 +106,15 @@ export async function computeActionEffectiveness(
   // commercial lifecycle (stamped/confirmed/settled/credited); in flight =
   // still 'submitted'; failed again = the rails rejected it after the
   // batch reported success — the number a reader must never lose.
+  // Semantics, deliberately: counting is per EXECUTED OCCURRENCE, not per
+  // distinct invoice — a target submitted in two window decisions (failed,
+  // retried) contributes its current status twice, so the NOW buckets
+  // always sum to `executed` per kind. Do not "fix" this to DISTINCT
+  // without deciding what `executed` should then mean.
+  // The invoiceId cast is guarded by a CASE (evaluation order inside a
+  // plain ON clause is not contractual): a malformed id — only reachable
+  // via a hand-written ledger row, every real writer is uuid-validated —
+  // degrades to the `other` bucket instead of 22P02-failing the report.
   const nowRows = (
     await db.execute<{
       kind: string;
@@ -121,10 +136,14 @@ export async function computeActionEffectiveness(
         )::int AS now_other
       FROM clerk_action_decisions d
       CROSS JOIN LATERAL jsonb_array_elements(d.targets) AS t(el)
-      LEFT JOIN invoices i ON i.id = (t.el ->> 'invoiceId')::uuid
+      LEFT JOIN invoices i ON i.id = CASE
+        WHEN t.el ->> 'invoiceId'
+          ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        THEN (t.el ->> 'invoiceId')::uuid
+      END
       WHERE d.firm_id = ${firmId}
         AND d.client_party_id = ${clientPartyId}
-        AND d.created_at >= now() - make_interval(days => ${windowDays})
+        AND d.created_at >= now() - make_interval(days => ${days})
         AND d.kind IN ('submit_overdue', 'retry_failed')
         AND t.el ->> 'outcome' = 'submitted'
       GROUP BY d.kind
@@ -150,18 +169,25 @@ export async function computeActionEffectiveness(
     };
   });
 
-  const executedOverdue =
-    kinds.find((k) => k.kind === "submit_overdue")?.executed ?? 0;
+  // Exposure honesty (round-29 review): a submitted-then-failed-again
+  // target did NOT have its exposure removed — the invoice is back in
+  // penalty territory, and the card shows that one line above. Count only
+  // the executed submit_overdue occurrences still standing on the rails.
+  const overdueKind = kinds.find((k) => k.kind === "submit_overdue");
+  const standingOverdue = Math.max(
+    0,
+    (overdueKind?.executed ?? 0) - (overdueKind?.nowFailedAgain ?? 0),
+  );
 
   return {
-    windowDays,
+    windowDays: days,
     totals: {
       decisions: kinds.reduce((n, k) => n + k.decisions, 0),
       autoDecisions: kinds.reduce((n, k) => n + k.autoDecisions, 0),
       executed: kinds.reduce((n, k) => n + k.executed, 0),
       failed: kinds.reduce((n, k) => n + k.failed, 0),
     },
-    exposureFloorClearedNgn: bandExposure(executedOverdue).small,
+    exposureFloorClearedNgn: bandExposure(standingOverdue).small,
     kinds,
   };
 }

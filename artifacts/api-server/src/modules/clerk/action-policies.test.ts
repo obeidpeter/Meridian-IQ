@@ -149,10 +149,32 @@ async function lastAudit(action: string) {
 
 let clientA: string; // the lifecycle + walls party (no invoices ever)
 
+// The pause signals ride the platform-wide messaging rail, which every
+// sweep-side sender gates on (PL-02). This suite lights it to observe the
+// sends and puts it back exactly as found (delete when it did not
+// pre-exist) — the health-watch/digest suites' save/restore idiom.
+const MESSAGING_FLAG = "messaging_notifications";
+let messagingFlagWasEnabled: boolean | null = null;
+
 before(async () => {
   const db = getDb();
-  // Both flag rows exactly as boot seeding ships them: DARK. Tests opt the
-  // firm in via per-firm overrides only.
+  const [existingMessaging] = await db
+    .select()
+    .from(featureFlagsTable)
+    .where(eq(featureFlagsTable.key, MESSAGING_FLAG))
+    .limit(1);
+  messagingFlagWasEnabled = existingMessaging
+    ? existingMessaging.enabled
+    : null;
+  await db
+    .insert(featureFlagsTable)
+    .values({ key: MESSAGING_FLAG, enabled: true, description: "test" })
+    .onConflictDoUpdate({
+      target: featureFlagsTable.key,
+      set: { enabled: true },
+    });
+  // Both action flag rows exactly as boot seeding ships them: DARK. Tests
+  // opt the firm in via per-firm overrides only.
   await db
     .insert(featureFlagsTable)
     .values([
@@ -222,6 +244,18 @@ after(async () => {
         isNull(clerkActionPoliciesTable.revokedAt),
       ),
     );
+  // Put the messaging flag back exactly as found.
+  const db = getDb();
+  if (messagingFlagWasEnabled === null) {
+    await db
+      .delete(featureFlagsTable)
+      .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
+  } else {
+    await db
+      .update(featureFlagsTable)
+      .set({ enabled: messagingFlagWasEnabled })
+      .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
+  }
 });
 
 test("dark flags: granting refuses, the list says so, and clerk_actions alone is not enough", async () => {
@@ -633,13 +667,32 @@ test("lapsed consent pauses the policy — consent_missing — and signals the s
   assert.equal((await policyRow(policy.id))?.lastRunDay, lagosDateString(new Date()));
 });
 
-test("a majority-failed run pauses the policy — failed_targets — but the decision stands", async () => {
+test("a majority-failed run pauses the policy — failed_targets — and a dark messaging rail silences ONLY the signal", async () => {
   const client = await seedSupplier("Failing");
   // Both targets name the incomplete buyer: validation fails per invoice,
   // so the run records 2 failed of 2 requested — past the half tripwire.
   await draftFor(client, daysAgo(30), buyerNoTin);
   await draftFor(client, daysAgo(25), buyerNoTin);
   const policy = await grantActionPolicy(firmId, client, grantor, "submit_overdue");
+
+  // The PL-02 pin (round-29 review MAJOR): with the platform messaging
+  // rail dark, the tripwire must still pause and record — but send
+  // NOTHING, not even a simulator ledger row.
+  await getDb()
+    .update(featureFlagsTable)
+    .set({ enabled: false })
+    .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
+  const grantorSignals = () =>
+    getDb()
+      .select()
+      .from(messagesTable)
+      .where(
+        and(
+          eq(messagesTable.templateKey, "automation_paused"),
+          eq(messagesTable.recipientUserId, grantorId),
+        ),
+      );
+  const signalsBefore = (await grantorSignals()).length;
 
   const result = await runActionPolicySweep();
   assert.equal(result.policiesRun, 1, "the run happened");
@@ -656,6 +709,15 @@ test("a majority-failed run pauses the policy — failed_targets — but the dec
   assert.equal(decision?.executedCount, 0);
   const audit = await lastAudit("clerk.action.policy_auto_paused");
   assert.equal((audit?.after as { reason?: string })?.reason, "failed_targets");
+  assert.equal(
+    (await grantorSignals()).length,
+    signalsBefore,
+    "a dark rail means no ledger row at all — the pause and audit still landed",
+  );
+  await getDb()
+    .update(featureFlagsTable)
+    .set({ enabled: true })
+    .where(eq(featureFlagsTable.key, MESSAGING_FLAG));
 });
 
 test("an empty assembly leaves the day unclaimed — the sweep keeps watching", async () => {

@@ -11909,8 +11909,10 @@ components:
             failed:
               type: integer
         # Lowest-band s.104 exposure estimate removed by the window's
-        # executed submit_overdue targets, whole naira ("0" when none) — an
-        # estimate under the published penalty model, not advice.
+        # executed submit_overdue targets STILL STANDING on the rails
+        # (failed-again targets are subtracted — their exposure is back),
+        # whole naira ("0" when none) — an estimate under the published
+        # penalty model, not advice.
         exposureFloorClearedNgn:
           type: string
         kinds:

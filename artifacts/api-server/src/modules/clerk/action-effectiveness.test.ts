@@ -240,10 +240,12 @@ test("decision-time tallies, the auto split, and the NOW buckets are honest", as
     executed: 6,
     failed: 1,
   });
+  // 4 executed submit_overdue MINUS the 1 that failed again: exposure the
+  // rails later rejected is back, so it was never "removed".
   assert.equal(
     report.exposureFloorClearedNgn,
-    bandExposure(4).small,
-    "the same lowest-band arithmetic as every other s.104 surface",
+    bandExposure(3).small,
+    "failed-again targets are subtracted from the cleared estimate",
   );
 });
 
@@ -254,8 +256,8 @@ test("the window bounds the ledger, and a sibling firm never leaks in", async ()
   assert.equal(wide.totals.decisions, 5);
   assert.equal(
     wide.exposureFloorClearedNgn,
-    bandExposure(5).small,
-    "the wider window's executed count drives the estimate",
+    bandExposure(4).small,
+    "the wider window's executed-still-standing count drives the estimate",
   );
 
   const foreign = await computeActionEffectiveness(foreignFirmId, client);
@@ -268,4 +270,42 @@ test("the window bounds the ledger, and a sibling firm never leaks in", async ()
   const empty = await computeActionEffectiveness(firmId, randomUUID());
   assert.deepEqual(empty.kinds, []);
   assert.equal(empty.exposureFloorClearedNgn, "0");
+
+  // Fractional/oversized windows are clamped in the module (the contract's
+  // zod coerces without .int() — a raw 1.5 must degrade, never 22P02).
+  const fractional = await computeActionEffectiveness(firmId, client, 90.9);
+  assert.equal(fractional.windowDays, 90);
+  const oversized = await computeActionEffectiveness(firmId, client, 4000);
+  assert.equal(oversized.windowDays, 365);
+});
+
+test("a malformed target row degrades to the other bucket — the report never 500s", async () => {
+  // Only reachable via a hand-written ledger row (every real writer is
+  // uuid-validated), but one such row must not permanently 500 the report
+  // for the whole client. Seeded on its OWN client so the main
+  // expectations above stay exact.
+  const oddClient = randomUUID();
+  await getDb().insert(partiesTable).values({
+    id: oddClient,
+    type: "client_business",
+    legalName: `Effect Odd ${SALT}`,
+    tin: "40000000-0003",
+  });
+  await seedDecision({
+    kind: "submit_overdue",
+    clientParty: oddClient,
+    targets: [
+      {
+        invoiceId: "not-a-uuid",
+        invoiceNumber: `EFF-${SALT}-odd`,
+        outcome: "submitted",
+        error: null,
+      },
+    ],
+  });
+  const report = await computeActionEffectiveness(firmId, oddClient);
+  const overdue = report.kinds.find((k) => k.kind === "submit_overdue");
+  assert.equal(overdue?.executed, 1);
+  assert.equal(overdue?.nowOther, 1, "the junk id lands in other, countable");
+  assert.equal(overdue?.nowSucceeded, 0);
 });
