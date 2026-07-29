@@ -48,13 +48,20 @@ import { lagosDateString, lagosTodaySql } from "../../lib/lagos-time";
 //    execution; anything that changed since the proposal is SKIPPED.
 //  - The DECISION is the durable artifact (clerk_action_decisions,
 //    firm-keyed RLS 0028) plus a pointer-only audit event. Chaser draft
-//    TEXT is transient response data — never stored (SEC-12; the client
-//    owns what is sent).
+//    TEXT rides only the response — the decision row and the audit carry
+//    ids/counts, never subject or body (SEC-12; the client owns what is
+//    sent). Honesty note (round-22 review M1): a MODEL-phrased draft's
+//    output is retained in the firm-scoped inference ledger like every
+//    Clerk call — the platform never claims otherwise; template drafts
+//    involve no model call and genuinely live nowhere.
 //
 // Transaction shape (round 22): the execute route runs OUTSIDE the request
 // transaction (app.ts NO_CONTEXT_ROUTES) and every stage below commits in
 // its own short runRequestContext transaction bound to the CALLER's firm —
-// the bulk-approve posture. Two reasons, both hard: a chaser batch makes up
+// the bulk-approve posture. The honest crash window that buys: a crash
+// after per-target commits but before stage Z leaves REAL submits/drafts
+// with no decision row and no batch audit — each invoice's own lifecycle
+// events and audits still exist, but the batch-level record does not. Two reasons, both hard: a chaser batch makes up
 // to MAX_CHASER_TARGETS sequential model calls (far past the 30s
 // request-transaction cap), and a submit batch inside one transaction held
 // the GLOBAL audit advisory lock from its first appendAudit to the final
@@ -332,8 +339,9 @@ export async function listActionProposals(
 
 export interface ActionExecution {
   decision: ClerkActionDecision;
-  // Chaser batches only: the drafted reminders, TRANSIENT — shown once for
-  // the human to copy and send; never stored (the chaser posture).
+  // Chaser batches only: the drafted reminders, shown once for the human
+  // to copy and send — no DRAFT is stored anywhere (the chaser posture;
+  // model output lands in the inference ledger like every Clerk call).
   drafts: PaymentChaserDraft[] | null;
 }
 
@@ -482,7 +490,11 @@ export async function executeAction(
     // Each target runs in its OWN short firm-bound transaction: the
     // existing per-invoice machinery commits per item, the global audit
     // lock is held per item only, and an executed target is durable
-    // immediately (bulk-approve semantics).
+    // immediately (bulk-approve semantics). Known trade (round-22 review
+    // M3, owned for the next round): the chaser target's transaction spans
+    // its provider call, pinning a pooled connection for that latency —
+    // the fix is splitting draftPaymentChaser's reads from its infer so
+    // the model call runs outside any transaction.
     try {
       if (kind === "draft_chasers") {
         const draft = await ctx(() =>
@@ -579,7 +591,8 @@ export async function executeAction(
 
     // Pointer-only audit (SEC-12): counts and the decision id — the
     // per-invoice detail lives on the decision row and each invoice's own
-    // lifecycle events; chaser text lives nowhere.
+    // lifecycle events; no chaser subject/body appears here or on the
+    // decision row.
     await appendAudit({
       actorId,
       firmId,

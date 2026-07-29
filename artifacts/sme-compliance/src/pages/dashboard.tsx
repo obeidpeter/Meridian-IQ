@@ -957,10 +957,14 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                   data-testid="button-confirm-action"
                 >
                   {execute.isPending
-                    ? "Submitting…"
-                    : `Approve ${confirming?.targets.length ?? 0} invoice${
-                        confirming?.targets.length === 1 ? "" : "s"
-                      }`}
+                    ? "Working…"
+                    : confirming?.kind === "draft_chasers"
+                      ? `Draft ${confirming?.targets.length ?? 0} reminder${
+                          confirming?.targets.length === 1 ? "" : "s"
+                        }`
+                      : `Approve ${confirming?.targets.length ?? 0} invoice${
+                          confirming?.targets.length === 1 ? "" : "s"
+                        }`}
                 </Button>
               </DialogFooter>
             </>
@@ -985,7 +989,7 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                     <span className="truncate">{t.invoiceNumber}</span>
                     <span
                       className={
-                        t.outcome === "submitted"
+                        t.outcome === "submitted" || t.outcome === "drafted"
                           ? "text-emerald-700 dark:text-emerald-400"
                           : t.outcome === "skipped_not_eligible"
                             ? "text-muted-foreground"
@@ -1002,7 +1006,8 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                 <div className="space-y-3 border-t pt-3">
                   <p className="text-sm font-medium">
                     Your drafted reminders — copy each into your own email.
-                    They are not stored: copy them before closing.
+                    This dialog will not show them again: copy them before
+                    closing.
                   </p>
                   {drafts.map((d) => (
                     <div

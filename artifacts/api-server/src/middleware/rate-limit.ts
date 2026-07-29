@@ -73,6 +73,11 @@ export const MODEL_RATE_LIMITED_ROUTES: ReadonlySet<string> = new Set([
   // class, exactly like the queue-only batches route; a 4MB CSV parse is not
   // free either).
   "POST /api/statements",
+  // Proposed-action execution (round 22): a draft_chasers batch is up to
+  // ten sequential draft-chaser completions — ten times the single route
+  // above, so it must share the model class (the submit kinds spend
+  // nothing but ride along, exactly the statements-CSV precedent).
+  "POST /api/clerk/action-proposals/execute",
 ]);
 
 export const MODEL_RATE_LIMITED_ROUTE_PATTERNS: ReadonlyArray<{

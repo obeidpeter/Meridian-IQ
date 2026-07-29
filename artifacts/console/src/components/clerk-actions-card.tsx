@@ -42,10 +42,11 @@ const OUTCOME_LABELS: Record<string, string> = {
 // the console client page. Clerk assembles each batch from the same checks
 // that power the analytics cards; NOTHING runs until the firm user approves,
 // approval executes through the ordinary per-invoice path, and every target
-// is re-checked at that moment. Renders only when the clerk_actions flag is
-// on for the firm AND a proposal exists (a dark flag answers an empty list,
-// so the card hides). The recent-decisions strip shows who approved what —
-// the durable artifact the SME card only records.
+// is re-checked at that moment. Renders when a proposal exists OR the client
+// has decision history — a dark clerk_actions flag empties the proposals
+// (fail-closed; execution refuses 503 regardless), but past decisions remain
+// legitimately visible: the strip is the firm's durable record of who
+// approved what.
 export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -229,9 +230,13 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                 >
                   {execute.isPending
                     ? "Working…"
-                    : `Approve ${confirming?.targets.length ?? 0} invoice${
-                        confirming?.targets.length === 1 ? "" : "s"
-                      }`}
+                    : confirming?.kind === "draft_chasers"
+                      ? `Draft ${confirming?.targets.length ?? 0} reminder${
+                          confirming?.targets.length === 1 ? "" : "s"
+                        }`
+                      : `Approve ${confirming?.targets.length ?? 0} invoice${
+                          confirming?.targets.length === 1 ? "" : "s"
+                        }`}
                 </Button>
               </DialogFooter>
             </>
@@ -272,8 +277,8 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               {drafts && drafts.length > 0 && (
                 <div className="space-y-3 border-t pt-3">
                   <p className="text-sm font-medium">
-                    Drafted reminders — copy each for the client to send. They
-                    are not stored: copy them before closing.
+                    Drafted reminders — copy each for the client to send. This
+                    dialog will not show them again: copy them before closing.
                   </p>
                   {drafts.map((d) => (
                     <div

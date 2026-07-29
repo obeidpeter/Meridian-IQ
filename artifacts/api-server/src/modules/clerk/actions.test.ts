@@ -481,6 +481,20 @@ test("draft_chasers drafts staged reminders — the platform sends nothing", asy
     .from(invoicesTable)
     .where(eq(invoicesTable.id, chaseInv));
   assert.equal(row.status, "submitted");
+  // The round's headline claim, PINNED: neither the decision row nor the
+  // batch audit carries the drafted subject/body — the text rides the
+  // response only.
+  const decisionJson = JSON.stringify(decision);
+  assert.ok(!decisionJson.includes(drafts[0].subject));
+  assert.ok(!decisionJson.includes(drafts[0].body.slice(0, 40)));
+  const [audit] = await db
+    .select()
+    .from(auditEventsTable)
+    .where(eq(auditEventsTable.action, "clerk.action.executed"))
+    .orderBy(desc(auditEventsTable.seq))
+    .limit(1);
+  assert.ok(audit);
+  assert.ok(!JSON.stringify(audit.after).includes(drafts[0].subject));
 });
 
 test("the data.proposed_actions intent points at the approval surface", async () => {
@@ -532,6 +546,26 @@ test("firm walls hold on both surfaces", async () => {
     .from(invoicesTable)
     .where(eq(invoicesTable.id, overdueB));
   assert.equal(row.status, "draft", "the foreign approval changed nothing");
+  // The CHASER kind carries no consent gate, so its wall is the candidates
+  // query alone (review L1): a foreign chaser batch drafts nothing and
+  // leaks nothing — every target skips as not-found, and no draft is
+  // produced for another firm's paper.
+  const foreignChase = await executeAction(
+    foreignFirmId,
+    supplier,
+    userId,
+    "draft_chasers",
+    [overdueB],
+    foreignPrincipal,
+  );
+  assert.equal(foreignChase.decision.executedCount, 0);
+  assert.equal(foreignChase.decision.skippedCount, 1);
+  assert.deepEqual(foreignChase.drafts, []);
+  assert.match(
+    foreignChase.decision.targets[0].error ?? "",
+    /Not found/,
+    "the wall answers non-disclosure, not the sibling's invoice number",
+  );
   // Nothing foreign ever lands on our firm's decision list.
   const ours = await listActionDecisions(firmId, supplier);
   assert.ok(ours.every((d) => d.firmId === firmId));

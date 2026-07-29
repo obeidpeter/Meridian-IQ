@@ -200,9 +200,11 @@ dark means proposals answer empty (the cards hide) and execution refuses
   `error_code` so the human can judge whether the cause is fixed), and
   `draft_chasers` (round 22 — one approval drafts a staged payment reminder
   for every chase-worthy receivable via `draftPaymentChaser`'s ladder; the
-  drafts ride the RESPONSE transiently and are never stored — the CLIENT
-  still sends them, the platform sends nothing, exactly the chaser
-  surface's standing posture). An unknown kind is `400 UNKNOWN_ACTION`.
+  drafts ride the RESPONSE and no DRAFT is stored — the CLIENT still sends
+  them, the platform sends nothing, exactly the chaser surface's standing
+  posture; a model-phrased draft's output is retained in the firm-scoped
+  inference ledger like every Clerk call, while template drafts involve no
+  model call at all). An unknown kind is `400 UNKNOWN_ACTION`.
 - **Proposals are computed live** (`GET /clerk/action-proposals`,
   `invoice.read` + the SEC-03 client scope wall) from the digest/penalty
   card's overdue predicate, the failed-status predicate, and
@@ -240,8 +242,11 @@ dark means proposals answer empty (the cards hide) and execution refuses
   firm-keyed RLS migration 0028): who approved, on what pre-execution
   evidence, over which targets, with per-target outcomes and honest
   tallies; surfaced via `GET /clerk/action-decisions` (newest 10) and a
-  pointer-only `clerk.action.executed` audit event (SEC-12). Chaser TEXT
-  lives nowhere.
+  pointer-only `clerk.action.executed` audit event (SEC-12) — neither
+  carries a chaser subject or body. The honest crash window of the
+  per-target posture: a crash before the final stage leaves real
+  submits/drafts with per-invoice lifecycle events but no batch-level
+  decision row.
 - **Surfaces.** The SME dashboard's "Clerk suggests" card and its console
   twin on the client page (`components/clerk-actions-card.tsx`, which also
   shows the recent-decisions strip): two-step confirm → per-target-results
@@ -252,9 +257,12 @@ dark means proposals answer empty (the cards hide) and execution refuses
   execute anything.
 
 Deferred to the next round of the arc: an action-effectiveness report
-(did approved batches actually clear the exposure?), and the shared
+(did approved batches actually clear the exposure?); the shared
 audit-lock posture follow-up for the OLDER batch surface (bulk-submit
-still runs in-transaction).
+still runs in-transaction); and splitting `draftPaymentChaser`'s reads
+from its infer so the chaser batch's model calls run outside any
+transaction (round-22 review M3 — today each chaser target's short
+transaction spans its provider call).
 
 ## Ask Clerk (grounded firm-data Q&A)
 
