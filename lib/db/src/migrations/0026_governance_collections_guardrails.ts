@@ -1,4 +1,4 @@
-// Migration 0025 — governance + collections guardrails (compliance round).
+// Migration 0026 — governance + collections guardrails (compliance round).
 //
 // Three new firm-keyed tenant tables (0018/0023 posture — firm principals
 // reach only their own rows, sweeps and operators run with app.bypass):
@@ -98,8 +98,8 @@ ALTER TABLE ${t} DISABLE ROW LEVEL SECURITY;`,
 ${PURGE_0023}
 `;
 
-export const migration0025 = {
-  version: 25,
+export const migration0026 = {
+  version: 26,
   name: "governance_collections_guardrails",
   up,
   down,

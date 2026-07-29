@@ -61,9 +61,9 @@ const NO_CONTEXT_ROUTES = new Set([
   // A canary is 2× a corpus pass of model calls — far past the 30s cap.
   "POST /api/clerk/eval/canary",
   "POST /api/clerk/eval/model-canary",
-  // The intent corpus is 14 classify calls (28 in canary mode) — same story
-  // (round-15 review H1); the stored run then lands on the raw pool like
-  // clerk_eval_runs already does.
+  // The intent corpus is one classify call per fixture — 14 static plus up
+  // to 40 grown (double in canary mode) — same story (round-15 review H1);
+  // the stored run then lands on the raw pool like clerk_eval_runs does.
   "POST /api/clerk/eval/intent",
   // Inbound webhooks (routes/inbound.ts): each handler responds 202 and
   // then runs sender resolution + extraction in a detached promise whose DB

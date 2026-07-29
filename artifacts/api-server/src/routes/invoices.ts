@@ -79,6 +79,8 @@ import {
   GetUnmatchedCreditsResponse,
   GetProjectionAccuracyQueryParams,
   GetProjectionAccuracyResponse,
+  GetChaseEffectivenessQueryParams,
+  GetChaseEffectivenessResponse,
   RecordChaseReminderParams,
   RecordChaseReminderResponse,
   ApproveInvoiceParams,
@@ -118,6 +120,7 @@ import { listLineItemSuggestions } from "../modules/invoice/line-items";
 import { listPaymentBehaviour } from "../modules/invoice/payment-behaviour";
 import { listUnmatchedCredits } from "../modules/invoice/unmatched-credits";
 import { computeProjectionAccuracy } from "../modules/invoice/projection-accuracy";
+import { computeChaseEffectiveness } from "../modules/invoice/chase-effectiveness";
 import { computeRejectionRisk } from "../modules/invoice/rejection-risk";
 import { recordChase } from "../modules/invoice/chase-log";
 import { renderInvoicePdf, sendPdfAttachment } from "../modules/invoice/pdf";
@@ -608,6 +611,21 @@ router.get("/projection-accuracy", async (req, res): Promise<void> => {
   );
   const accuracy = await computeProjectionAccuracy(firmId, clientPartyId);
   res.json(GetProjectionAccuracyResponse.parse(accuracy));
+});
+
+// Reminder effectiveness (round-16 idea #2): the chase ladder joined to the
+// settlement exhaust — did reminded invoices actually settle, and how fast?
+// Correlation only (the note says so); nothing stored, no model. Same SEC-03
+// resolution as projection-accuracy.
+router.get("/chase-effectiveness", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetChaseEffectivenessQueryParams, req.query);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const report = await computeChaseEffectiveness(firmId, clientPartyId);
+  res.json(GetChaseEffectivenessResponse.parse(report));
 });
 
 // Chase ladder (round-14 idea #3): record that a payment reminder was SENT —

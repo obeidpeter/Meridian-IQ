@@ -6,6 +6,11 @@ import {
   useRunIntentEval,
   useListIntentEvalRuns,
   getListIntentEvalRunsQueryKey,
+  useListIntentFixtures,
+  useMintIntentFixture,
+  useRetireIntentFixture,
+  useRestoreIntentFixture,
+  getListIntentFixturesQueryKey,
   useListEvalFixtures,
   useMintFixtureFromCase,
   useRetireEvalFixture,
@@ -216,6 +221,19 @@ function IntentEvalCard() {
   const { data: runs, isSuccess } = useListIntentEvalRuns({
     query: { queryKey: getListIntentEvalRunsQueryKey(), retry: false },
   });
+  const { data: grownFixtures } = useListIntentFixtures({
+    query: { queryKey: getListIntentFixturesQueryKey(), retry: false },
+  });
+  const invalidateFixtures = () =>
+    queryClient.invalidateQueries({
+      queryKey: getListIntentFixturesQueryKey(),
+    });
+  const retireFx = useRetireIntentFixture({
+    mutation: { onSuccess: invalidateFixtures },
+  });
+  const restoreFx = useRestoreIntentFixture({
+    mutation: { onSuccess: invalidateFixtures },
+  });
   const runEval = useRunIntentEval({
     mutation: {
       onSuccess: () => {
@@ -248,6 +266,51 @@ function IntentEvalCard() {
           (one classify call per fixture) and scores the classification
           deterministically — including two prompt-injection questions.
         </p>
+        {grownFixtures && grownFixtures.length > 0 && (
+          <div className="space-y-1" data-testid="grown-intent-list">
+            <p
+              className="text-xs font-medium text-muted-foreground uppercase"
+              data-testid="text-grown-intent-count"
+            >
+              Grown corpus —{" "}
+              {grownFixtures.filter((f) => f.retiredAt === null).length} active
+              {grownFixtures.some((f) => f.retiredAt !== null)
+                ? `, ${grownFixtures.filter((f) => f.retiredAt !== null).length} retired`
+                : ""}{" "}
+              (runs with the static fixtures)
+            </p>
+            {grownFixtures.slice(0, 8).map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-2 text-xs"
+                data-testid={`grown-fixture-${f.id}`}
+              >
+                <span
+                  className={`min-w-0 flex-1 truncate ${f.retiredAt ? "text-muted-foreground line-through" : ""}`}
+                >
+                  {f.question}
+                </span>
+                <span className="font-mono text-muted-foreground">
+                  {f.expected.claimKey}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs"
+                  disabled={retireFx.isPending || restoreFx.isPending}
+                  onClick={() =>
+                    f.retiredAt
+                      ? restoreFx.mutate({ id: f.id })
+                      : retireFx.mutate({ id: f.id })
+                  }
+                  data-testid={`button-grown-toggle-${f.id}`}
+                >
+                  {f.retiredAt ? "Restore" : "Retire"}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
         {!newest ? (
           <p
             className="text-sm text-muted-foreground"
@@ -276,6 +339,113 @@ function IntentEvalCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Promote a not-helpful question into the grown intent corpus (round 16).
+// The operator supplies the key the classifier SHOULD have chosen; the
+// server validates it against the eval's frozen offered context, scrubs the
+// question onto the synthetic directory, and refuses anything it cannot
+// represent — every failure carries the reason.
+function PromoteToIntentCorpus({ caseId }: { caseId: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [claimKey, setClaimKey] = useState("");
+  const [month, setMonth] = useState("");
+  const [client, setClient] = useState("");
+  const mint = useMintIntentFixture({
+    mutation: {
+      onSuccess: (fixture) => {
+        setOpen(false);
+        setClaimKey("");
+        setMonth("");
+        setClient("");
+        queryClient.invalidateQueries({
+          queryKey: getListIntentFixturesQueryKey(),
+        });
+        // Surface the SCRUBBED text so the operator can immediately judge
+        // (and retire) a mangled mint from the eval card's grown list.
+        toast({
+          title: "Added to the intent eval corpus",
+          description: fixture.question,
+        });
+      },
+      onError: (e) =>
+        toast({
+          title: "Could not promote the question",
+          description:
+            serverErrorMessage(e) ??
+            "The expected key must come from the eval's offered context.",
+          variant: "destructive",
+        }),
+    },
+  });
+  if (!open) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-6 px-2 text-xs"
+        onClick={() => setOpen(true)}
+        data-testid={`button-promote-${caseId}`}
+      >
+        Promote to corpus
+      </Button>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1">
+      <Input
+        value={claimKey}
+        onChange={(e) => setClaimKey(e.target.value)}
+        placeholder="expected key, e.g. data.chase_list"
+        className="h-6 w-48 text-xs"
+        data-testid={`input-promote-key-${caseId}`}
+      />
+      <Input
+        value={month}
+        onChange={(e) => setMonth(e.target.value)}
+        placeholder="month pin"
+        className="h-6 w-24 text-xs"
+        data-testid={`input-promote-month-${caseId}`}
+      />
+      <Input
+        value={client}
+        onChange={(e) => setClient(e.target.value)}
+        placeholder="client pin"
+        className="h-6 w-20 text-xs"
+        data-testid={`input-promote-client-${caseId}`}
+      />
+      <Button
+        size="sm"
+        className="h-6 px-2 text-xs"
+        disabled={mint.isPending || claimKey.trim().length === 0}
+        onClick={() =>
+          mint.mutate({
+            data: {
+              caseId,
+              expected: {
+                claimKey: claimKey.trim(),
+                ...(month.trim() ? { month: month.trim() } : {}),
+                ...(client.trim() ? { client: client.trim() } : {}),
+              },
+            },
+          })
+        }
+        data-testid={`button-promote-confirm-${caseId}`}
+      >
+        {mint.isPending ? "Minting…" : "Mint"}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-6 px-2 text-xs"
+        onClick={() => setOpen(false)}
+      >
+        Cancel
+      </Button>
+    </span>
   );
 }
 
@@ -1850,6 +2020,7 @@ export function HealthPanel() {
                           <span className="whitespace-nowrap text-xs text-muted-foreground">
                             {formatDateTime(q.createdAt)}
                           </span>
+                          <PromoteToIntentCorpus caseId={q.caseId} />
                         </li>
                       ))}
                     </ul>

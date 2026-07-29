@@ -283,7 +283,12 @@ const LADDER: LadderStep[] = [
     afterRollback: [not(bypass("clerk_intent_eval_runs"))],
   },
   {
-    version: 25, // governance + collections guardrails (+ purge covers invoice_approvals)
+    version: 25, // grown intent fixture guardrails
+    atTop: [bypass("clerk_intent_fixtures")],
+    afterRollback: [not(bypass("clerk_intent_fixtures"))],
+  },
+  {
+    version: 26, // governance + collections guardrails (+ purge covers invoice_approvals)
     atTop: [
       clerkTenant("firm_policies"),
       clerkTenant("invoice_approvals"),

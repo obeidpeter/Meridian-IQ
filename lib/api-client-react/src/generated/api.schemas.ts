@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.46.0
+ * OpenAPI spec version: 0.47.0
  */
 export interface HealthStatus {
   status: string;
@@ -4179,6 +4179,36 @@ export interface IntentEvalOutcome {
   run: IntentEvalRun | null;
 }
 
+export interface IntentFixtureExpected {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  claimKey: string;
+  /** @maxLength 40 */
+  month?: string;
+  /** @maxLength 40 */
+  client?: string;
+}
+
+export interface MintIntentFixtureInput {
+  caseId: string;
+  /** @maxLength 160 */
+  label?: string;
+  expected: IntentFixtureExpected;
+}
+
+export interface IntentFixtureSummary {
+  id: string;
+  caseId: string;
+  label: string;
+  question: string;
+  expected: IntentFixtureExpected;
+  /** @nullable */
+  retiredAt: string | null;
+  createdAt: string;
+}
+
 export interface ModelCanarySide {
   model: string;
   fieldsCompared: number;
@@ -4948,6 +4978,59 @@ export interface ProjectionAccuracy {
   note: string;
 }
 
+export interface ChaseEffectiveness {
+  asOf: string;
+  withinDays: number;
+  remindedCount: number;
+  remindedSettledCount: number;
+  settledWithinShare: number | null;
+  medianDaysReminderToSettle: number | null;
+  medianDaysToSettleReminded: number | null;
+  medianDaysToSettleUnreminded: number | null;
+  note: string;
+}
+
+export type DoublePaymentCheckMultiPaidItem = {
+  invoiceId: string;
+  invoiceNumber: string;
+  supplierName: string;
+  currency: string;
+  grandTotal: string;
+  evidenceCount: number;
+  firstPaidAt: string;
+  lastPaidAt: string;
+};
+
+export type DoublePaymentCheckDuplicateCandidatesItemPairKind = typeof DoublePaymentCheckDuplicateCandidatesItemPairKind[keyof typeof DoublePaymentCheckDuplicateCandidatesItemPairKind];
+
+
+export const DoublePaymentCheckDuplicateCandidatesItemPairKind = {
+  both_unpaid: 'both_unpaid',
+  paid_original: 'paid_original',
+} as const;
+
+export interface DuplicateBillRef {
+  invoiceId: string;
+  invoiceNumber: string;
+  issueDate: string;
+}
+
+export type DoublePaymentCheckDuplicateCandidatesItem = {
+  supplierName: string;
+  currency: string;
+  grandTotal: string;
+  pairKind: DoublePaymentCheckDuplicateCandidatesItemPairKind;
+  first: DuplicateBillRef;
+  second: DuplicateBillRef;
+  daysApart: number;
+};
+
+export interface DoublePaymentCheck {
+  multiPaid: DoublePaymentCheckMultiPaidItem[];
+  duplicateCandidates: DoublePaymentCheckDuplicateCandidatesItem[];
+  note: string;
+}
+
 export type ClerkTierReportRowsItemRecommendation = typeof ClerkTierReportRowsItemRecommendation[keyof typeof ClerkTierReportRowsItemRecommendation];
 
 
@@ -5302,6 +5385,13 @@ export type GetProjectionAccuracyParams = {
 clientPartyId?: string;
 };
 
+export type GetChaseEffectivenessParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
 export type ListRecurringSuggestionsParams = {
 clientPartyId?: string;
 };
@@ -5316,6 +5406,13 @@ clientPartyId: string;
 
 export type ListBillsParams = {
 clientPartyId: string;
+};
+
+export type GetDoublePaymentCheckParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
 };
 
 export type GetPayablesSummaryParams = {

@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.46.0
+  version: 0.47.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1255,6 +1255,28 @@ paths:
                 $ref: "#/components/schemas/ProjectionAccuracy"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /chase-effectiveness:
+    get:
+      operationId: getChaseEffectiveness
+      tags: [invoices]
+      summary: Chase-ladder reminders joined to observed settlements — did reminded invoices settle, and how fast (correlation only; deterministic, nothing stored)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Reminder-effectiveness summary over the trailing year (mature reminder windows only)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChaseEffectiveness"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /invoices/{invoiceId}/chase-log:
     post:
       operationId: recordChaseReminder
@@ -2158,6 +2180,28 @@ paths:
                 $ref: "#/components/schemas/BillVerification"
         "404":
           $ref: "#/components/responses/NotFound"
+  /bills/double-payment-check:
+    get:
+      operationId: getDoublePaymentCheck
+      tags: [sme]
+      summary: Advisory double-payment guard — bills paid twice by the evidence, and unpaid near-duplicate bills that would become one (deterministic, nothing stored)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Multi-paid bills and unpaid duplicate candidates, capped, with the advisory note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DoublePaymentCheck"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /dashboard/payables:
     get:
       operationId: getPayablesSummary
@@ -4303,6 +4347,82 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/IntentEvalRun"
+  /clerk/eval/intent-fixtures:
+    get:
+      operationId: listIntentFixtures
+      tags: [clerk]
+      summary: The grown intent corpus — question cases promoted into the eval, scrubbed onto the synthetic directory, newest first
+      responses:
+        "200":
+          description: Grown intent fixtures (including retired rows)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IntentFixtureSummary"
+  /clerk/eval/intent-fixtures/from-case:
+    post:
+      operationId: mintIntentFixture
+      tags: [clerk]
+      summary: Promote a real question case into the intent eval corpus (deterministic scrub onto the frozen synthetic directory; refused when unrepresentable)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MintIntentFixtureInput"
+      responses:
+        "201":
+          description: The minted fixture (question already scrubbed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentFixtureSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          description: The question names more parties than the frozen directory can represent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /clerk/eval/intent-fixtures/{id}/retire:
+    post:
+      operationId: retireIntentFixture
+      tags: [clerk]
+      summary: Retire a grown intent fixture — the row survives, the eval loaders exclude it
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The updated fixture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentFixtureSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clerk/eval/intent-fixtures/{id}/restore:
+    post:
+      operationId: restoreIntentFixture
+      tags: [clerk]
+      summary: Restore a retired grown intent fixture into the eval loaders
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The updated fixture
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentFixtureSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /clerk/eval/fixtures:
     get:
       operationId: listEvalFixtures
@@ -11014,6 +11134,58 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/IntentEvalRun"
+    # Grown intent corpus (round 16): a real question case promoted into the
+    # intent eval. The stored question is ALWAYS the scrubbed text — every
+    # engaged-client (and firm) name mapped onto the frozen synthetic
+    # directory — and the expected keys must come from the eval's frozen
+    # offered context.
+    IntentFixtureExpected:
+      type: object
+      required: [claimKey]
+      properties:
+        claimKey:
+          type: string
+          minLength: 1
+          maxLength: 120
+        month:
+          type: string
+          maxLength: 40
+        client:
+          type: string
+          maxLength: 40
+    MintIntentFixtureInput:
+      type: object
+      required: [caseId, expected]
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        label:
+          type: string
+          maxLength: 160
+        expected:
+          $ref: "#/components/schemas/IntentFixtureExpected"
+    IntentFixtureSummary:
+      type: object
+      required: [id, caseId, label, question, expected, retiredAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        label:
+          type: string
+        question:
+          type: string
+        expected:
+          $ref: "#/components/schemas/IntentFixtureExpected"
+        retiredAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
     ModelCanarySide:
       type: object
       required:
@@ -12137,6 +12309,137 @@ components:
               withinShare:
                 type: number
         note:
+          type: string
+    # Reminder effectiveness (round 16): the chase ladder joined to observed
+    # settlements. Correlation only — the note says so — and the within-window
+    # share counts only MATURE reminders (window fully elapsed or settled).
+    ChaseEffectiveness:
+      type: object
+      required:
+        [
+          asOf,
+          withinDays,
+          remindedCount,
+          remindedSettledCount,
+          settledWithinShare,
+          medianDaysReminderToSettle,
+          medianDaysToSettleReminded,
+          medianDaysToSettleUnreminded,
+          note,
+        ]
+      properties:
+        asOf:
+          type: string
+        withinDays:
+          type: integer
+        remindedCount:
+          type: integer
+        # Settled AFTER the first reminder — an earlier settlement never
+        # credits the reminder.
+        remindedSettledCount:
+          type: integer
+        settledWithinShare:
+          type: number
+          nullable: true
+        medianDaysReminderToSettle:
+          type: number
+          nullable: true
+        medianDaysToSettleReminded:
+          type: number
+          nullable: true
+        medianDaysToSettleUnreminded:
+          type: number
+          nullable: true
+        note:
+          type: string
+    # Double-payment guard (round 16): advisory only — evidence the platform
+    # already holds, a human decides.
+    DoublePaymentCheck:
+      type: object
+      required: [multiPaid, duplicateCandidates, note]
+      properties:
+        # Bills matched to two or more distinct bank-statement debits whose
+        # amounts sum to more than the bill (installments never flag).
+        multiPaid:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                invoiceId,
+                invoiceNumber,
+                supplierName,
+                currency,
+                grandTotal,
+                evidenceCount,
+                firstPaidAt,
+                lastPaidAt,
+              ]
+            properties:
+              invoiceId:
+                type: string
+                format: uuid
+              invoiceNumber:
+                type: string
+              supplierName:
+                type: string
+              currency:
+                type: string
+              grandTotal:
+                type: string
+              evidenceCount:
+                type: integer
+              firstPaidAt:
+                type: string
+              lastPaidAt:
+                type: string
+        # Same-supplier same-amount bill pairs issued within the
+        # near-duplicate window where the second side is still unpaid —
+        # including a paid original next to its unpaid copy.
+        duplicateCandidates:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                supplierName,
+                currency,
+                grandTotal,
+                pairKind,
+                first,
+                second,
+                daysApart,
+              ]
+            properties:
+              supplierName:
+                type: string
+              currency:
+                type: string
+              grandTotal:
+                type: string
+              # paid_original: `first` is already paid, `second` is the
+              # unpaid copy. both_unpaid: neither has payment evidence.
+              pairKind:
+                type: string
+                enum: [both_unpaid, paid_original]
+              first:
+                $ref: "#/components/schemas/DuplicateBillRef"
+              second:
+                $ref: "#/components/schemas/DuplicateBillRef"
+              daysApart:
+                type: integer
+        note:
+          type: string
+    DuplicateBillRef:
+      type: object
+      required: [invoiceId, invoiceNumber, issueDate]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        issueDate:
           type: string
     ClerkTierReport:
       type: object

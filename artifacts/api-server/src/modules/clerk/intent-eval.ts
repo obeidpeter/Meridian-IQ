@@ -1,8 +1,11 @@
-import { desc } from "drizzle-orm";
+import { desc, eq, isNull, sql } from "drizzle-orm";
 import {
   getDb,
   clerkIntentEvalRunsTable,
+  clerkIntentFixturesTable,
+  clerkCasesTable,
   type ClerkIntentEvalRun,
+  type ClerkIntentFixture,
   type IntentEvalFixtureResult,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
@@ -16,6 +19,7 @@ import {
 } from "./prompts";
 import { buildIntentUser, type IntentPromptContext } from "./ask";
 import { DATA_INTENTS } from "./data-intents";
+import { createScrubber } from "./scrub";
 
 // Intent-classification eval lane (round-15 idea #3). Extraction and
 // injection resistance are measured; the Ask classifier — now serving
@@ -174,6 +178,300 @@ export const INTENT_FIXTURES: IntentFixture[] = [
   },
 ];
 
+// ---- Grown corpus (round 16) ----------------------------------------------
+// Question cases promoted into the corpus. The question text is SCRUBBED
+// deterministically before storage through the SAME span-claim machinery the
+// extraction corpus uses (scrub.ts: word boundaries, longest-first claims,
+// spacing-tolerant TIN matching): every identity the platform can name for
+// the firm — engaged clients, invoice counterparties, the firm itself, their
+// TINs — is mapped onto the frozen synthetic directory in order of first
+// appearance in the question. A question naming more parties than the
+// directory can represent is REFUSED, never stored partially scrubbed, and a
+// final verification pass re-runs detection over the output so any residual
+// match refuses instead of leaking.
+
+const GROWN_INTENT_CAP = 40;
+
+// Impossible-in-text sentinel: allocated when a THIRD distinct name identity
+// appears, turning directory overflow into a refusal.
+const DIRECTORY_OVERFLOW = "@@DIRECTORY_OVERFLOW@@";
+
+// NFKC folds homoglyphs and width/space variants (NBSP, Kelvin-sign K…);
+// invisible format characters (soft hyphen, ZWSP — Unicode Cf) are
+// stripped so they cannot hide a name from the matcher;
+// whitespace runs collapse so "Acme  Ltd" and "Acme Ltd" match "Acme
+// Ltd". Applied to the question AND every identity before matching.
+function normalizeForScrub(s: string): string {
+  return s
+    .normalize("NFKC")
+    .replace(/\p{Cf}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Informal-form variants: iteratively strip trailing legal/descriptor tokens
+// so "Acme Ventures Nigeria Ltd" also scrubs as "Acme Ventures Nigeria",
+// "Acme Ventures" and "Acme". Every variant shares the full name's identity
+// (one directory slot). Over-scrubbing an ordinary word is the safe failure
+// direction; leaking a name is not.
+const LEGAL_TAIL =
+  /\s+(limited|ltd|plc|gte|llc|llp|inc|nigeria|nig|enterprises?|ventures?|company|co|global|international|intl|group|holdings?|industries|services|solutions|resources|investments?|trading|stores?|farms?|motors|foods?|logistics)\.?$/i;
+
+function nameVariants(name: string): string[] {
+  const variants = [name];
+  let current = name;
+  for (let i = 0; i < 8; i += 1) {
+    const next = current.replace(LEGAL_TAIL, "").trim();
+    if (next === current) break;
+    current = next;
+    if (current.length >= 4 && /[A-Za-z]{3,}/.test(current)) {
+      variants.push(current);
+    }
+  }
+  return variants;
+}
+
+// Pure, exported for tests. Returns null when the question cannot be
+// represented in the frozen two-client directory (a third distinct party, or
+// any identity still detectable after scrubbing).
+export function scrubIntentQuestion(
+  question: string,
+  identities: { names: string[]; tins: string[] },
+): string | null {
+  const directory = INTENT_EVAL_CONTEXT.clients.map((c) => c.name);
+  const normalized = normalizeForScrub(question);
+
+  // Canonical grouping: each known name and its informal variants share one
+  // identity key. Sorted intake keeps collisions (two clients sharing a
+  // variant) deterministic — first owner wins; a mis-grouped variant can
+  // mislabel WHICH synthetic name is used, never leak.
+  const canonical = new Map<string, string>();
+  const surfaceForms: string[] = [];
+  const baseNames = [...new Set(identities.names.map(normalizeForScrub))]
+    .filter((n) => n.length >= 2)
+    .sort();
+  for (const base of baseNames) {
+    for (const variant of nameVariants(base)) {
+      const key = variant.toLowerCase();
+      if (!canonical.has(key)) {
+        canonical.set(key, base.toLowerCase());
+        surfaceForms.push(variant);
+      }
+    }
+  }
+
+  const scrubber = createScrubber(
+    { names: surfaceForms, tins: identities.tins },
+    {
+      nameKey: (name) => canonical.get(name.toLowerCase()) ?? name.toLowerCase(),
+      nameLabel: (index) => directory[index] ?? DIRECTORY_OVERFLOW,
+    },
+  );
+  const { text } = scrubber.scrub(normalized);
+  if (text.includes(DIRECTORY_OVERFLOW)) return null;
+
+  // Fail-closed verification: a FRESH scrubber over the output must find
+  // nothing. Any residual detection (replacement collisions, an identity
+  // that survived) refuses the mint instead of storing a partial scrub.
+  const verify = createScrubber({
+    names: surfaceForms,
+    tins: identities.tins,
+  }).scrub(text);
+  if (verify.replacements > 0) return null;
+  return text;
+}
+
+export async function mintIntentFixture(
+  input: {
+    caseId: string;
+    label?: string;
+    expected: { claimKey: string; month?: string; client?: string };
+  },
+  actorId: string,
+): Promise<ClerkIntentFixture> {
+  // Expected values must live inside the frozen offered context — the
+  // corpus can only pin keys the eval prompt actually offers (fail-closed).
+  const offeredKeys = new Set([
+    "none",
+    ...INTENT_EVAL_CONTEXT.claims.map((c) => c.claimKey),
+    ...INTENT_EVAL_CONTEXT.dataIntents.map((i) => i.key),
+  ]);
+  const offeredMonths = new Set([
+    "none",
+    ...INTENT_EVAL_CONTEXT.months.map((m) => m.key),
+  ]);
+  const offeredClients = new Set([
+    "none",
+    ...INTENT_EVAL_CONTEXT.clients.map((c) => c.key),
+  ]);
+  if (
+    !offeredKeys.has(input.expected.claimKey) ||
+    (input.expected.month !== undefined &&
+      !offeredMonths.has(input.expected.month)) ||
+    (input.expected.client !== undefined &&
+      !offeredClients.has(input.expected.client))
+  ) {
+    throw new DomainError(
+      "BAD_EXPECTED",
+      "Expected keys must come from the eval's frozen offered context",
+      400,
+    );
+  }
+
+  const [row] = await getDb()
+    .select({
+      id: clerkCasesTable.id,
+      kind: clerkCasesTable.kind,
+      question: clerkCasesTable.question,
+      firmId: clerkCasesTable.firmId,
+    })
+    .from(clerkCasesTable)
+    .where(eq(clerkCasesTable.id, input.caseId))
+    .limit(1);
+  if (!row || row.kind !== "question" || !row.question) {
+    throw new DomainError("NOT_FOUND", "Question case not found", 404);
+  }
+
+  // Identities that must not survive into the corpus: every party the
+  // platform can name for this firm — engaged clients, the counterparties on
+  // the firm's invoices (Ask questions canonically name the client's own
+  // customers), the firm itself, and their TINs — the same breadth the
+  // extraction-mint scrubber uses. A firm-less (operator) question has no
+  // tenant vocabulary to scrub.
+  const identities: { names: string[]; tins: string[] } = {
+    names: [],
+    tins: [],
+  };
+  if (row.firmId) {
+    const rows = (
+      await getDb().execute<{ name: string; tin: string | null }>(sql`
+        SELECT p.legal_name AS name, p.tin
+        FROM parties p
+        WHERE p.id IN (
+          SELECT e.client_party_id FROM engagements e WHERE e.firm_id = ${row.firmId}
+          UNION
+          SELECT i.supplier_party_id FROM invoices i WHERE i.firm_id = ${row.firmId}
+          UNION
+          SELECT i.buyer_party_id FROM invoices i WHERE i.firm_id = ${row.firmId}
+        )
+        UNION
+        SELECT f.name, NULL FROM firms f WHERE f.id = ${row.firmId}
+      `)
+    ).rows;
+    for (const r of rows) {
+      identities.names.push(r.name);
+      if (r.tin) identities.tins.push(r.tin);
+    }
+  }
+  const scrubbed = scrubIntentQuestion(row.question, identities);
+  if (scrubbed === null) {
+    throw new DomainError(
+      "UNREPRESENTABLE",
+      "The question names more parties than the frozen directory can represent — rewrite it as a static fixture instead",
+      422,
+    );
+  }
+
+  const [fixture] = await getDb()
+    .insert(clerkIntentFixturesTable)
+    .values({
+      caseId: input.caseId,
+      label: input.label?.trim() || `grown: ${scrubbed.slice(0, 60)}`,
+      question: scrubbed,
+      expected: input.expected,
+    })
+    .onConflictDoNothing()
+    .returning();
+  if (!fixture) {
+    throw new DomainError(
+      "ALREADY_MINTED",
+      "This case is already in the intent corpus",
+      409,
+    );
+  }
+  await appendAudit({
+    actorId,
+    action: "clerk.intent-fixture.mint",
+    entityType: "clerk_intent_fixture",
+    entityId: fixture.id,
+    after: { caseId: input.caseId, expected: input.expected },
+  });
+  return fixture;
+}
+
+export async function loadGrownIntentFixtures(): Promise<IntentFixture[]> {
+  const rows = await getDb()
+    .select()
+    .from(clerkIntentFixturesTable)
+    .where(isNull(clerkIntentFixturesTable.retiredAt))
+    .orderBy(
+      desc(clerkIntentFixturesTable.createdAt),
+      desc(clerkIntentFixturesTable.id),
+    )
+    .limit(GROWN_INTENT_CAP);
+  return rows.map((r) => ({
+    key: `grown-${r.id.slice(0, 8)}`,
+    label: r.label,
+    question: r.question,
+    riskLabel: "clean" as const,
+    expected: r.expected,
+  }));
+}
+
+export async function listIntentFixtures(): Promise<ClerkIntentFixture[]> {
+  return getDb()
+    .select()
+    .from(clerkIntentFixturesTable)
+    .orderBy(
+      desc(clerkIntentFixturesTable.createdAt),
+      desc(clerkIntentFixturesTable.id),
+    )
+    .limit(200);
+}
+
+// Retire/restore: the extraction-corpus lifecycle, mirrored. The row
+// survives (past runs keep their meaning); the loader excludes retired rows
+// before its cap, so retirement frees a corpus slot — and gives a mis-mint
+// (wrong expected key, mangled scrub) an exit that is not manual SQL.
+async function setIntentFixtureRetired(
+  id: string,
+  retired: boolean,
+  actorId: string,
+): Promise<ClerkIntentFixture> {
+  const [row] = await getDb()
+    .update(clerkIntentFixturesTable)
+    .set({ retiredAt: retired ? new Date() : null })
+    .where(eq(clerkIntentFixturesTable.id, id))
+    .returning();
+  if (!row) {
+    throw new DomainError("NOT_FOUND", "Intent fixture not found", 404);
+  }
+  await appendAudit({
+    actorId,
+    action: retired
+      ? "clerk.intent-fixture.retire"
+      : "clerk.intent-fixture.restore",
+    entityType: "clerk_intent_fixture",
+    entityId: row.id,
+    after: { retiredAt: row.retiredAt?.toISOString() ?? null },
+  });
+  return row;
+}
+
+export async function retireIntentFixture(
+  id: string,
+  actorId: string,
+): Promise<ClerkIntentFixture> {
+  return setIntentFixtureRetired(id, true, actorId);
+}
+
+export async function restoreIntentFixture(
+  id: string,
+  actorId: string,
+): Promise<ClerkIntentFixture> {
+  return setIntentFixtureRetired(id, false, actorId);
+}
+
 export interface IntentEvalReport {
   fixtureCount: number;
   correctCount: number;
@@ -185,6 +483,7 @@ export interface IntentEvalReport {
 async function classifyCorpus(
   gateway: ClerkGateway,
   system: string,
+  fixtures: IntentFixture[],
 ): Promise<IntentEvalReport> {
   // NO explicit "none" here: intentJsonSchema/intentValidator append it
   // themselves, exactly as ask.ts builds the production request — a
@@ -197,7 +496,7 @@ async function classifyCorpus(
   const monthKeys = INTENT_EVAL_CONTEXT.months.map((m) => m.key);
   const clientKeys = INTENT_EVAL_CONTEXT.clients.map((c) => c.key);
   const results: IntentEvalFixtureResult[] = [];
-  for (const fixture of INTENT_FIXTURES) {
+  for (const fixture of fixtures) {
     const inferred = await gateway.infer<{
       claimKey: string;
       month?: string;
@@ -264,10 +563,17 @@ async function classifyCorpus(
 export async function runIntentEval(
   actorId: string | null,
   gateway: ClerkGateway,
+  // includeGrown=false pins a run to the hand-written static corpus (the
+  // runEvalCorpus precedent — tests assert exact corpus-shape expectations).
+  opts: { includeGrown?: boolean } = {},
 ): Promise<ClerkIntentEvalRun> {
   await assertClerkEnabled();
   const startedAt = Date.now();
-  const report = await classifyCorpus(gateway, INTENT_SYSTEM);
+  const fixtures =
+    opts.includeGrown === false
+      ? [...INTENT_FIXTURES]
+      : [...INTENT_FIXTURES, ...(await loadGrownIntentFixtures())];
+  const report = await classifyCorpus(gateway, INTENT_SYSTEM, fixtures);
   const [run] = await getDb()
     .insert(clerkIntentEvalRunsTable)
     .values({
@@ -307,13 +613,14 @@ export interface IntentCanaryReport {
   verdict: "promote" | "reject" | "inconclusive";
 }
 
-// The prompt-canary floor: a stub candidate must not burn a 28-call corpus
-// (round-15 review L3).
+// The prompt-canary floor: a stub candidate must not burn a double corpus
+// pass — up to ~108 calls with a full grown corpus (round-15 review L3).
 const MIN_CANDIDATE_CHARS = 100;
 
 export async function runIntentCanary(
   gateway: ClerkGateway,
   candidateSystem: string,
+  opts: { includeGrown?: boolean } = {},
 ): Promise<IntentCanaryReport> {
   if (candidateSystem.trim().length < MIN_CANDIDATE_CHARS) {
     throw new DomainError(
@@ -323,8 +630,12 @@ export async function runIntentCanary(
     );
   }
   await assertClerkEnabled();
-  const incumbent = await classifyCorpus(gateway, INTENT_SYSTEM);
-  const candidate = await classifyCorpus(gateway, candidateSystem);
+  const fixtures =
+    opts.includeGrown === false
+      ? [...INTENT_FIXTURES]
+      : [...INTENT_FIXTURES, ...(await loadGrownIntentFixtures())];
+  const incumbent = await classifyCorpus(gateway, INTENT_SYSTEM, fixtures);
+  const candidate = await classifyCorpus(gateway, candidateSystem, fixtures);
   // Symmetric one-fixture noise band (round-15 review M3): a single flipped
   // fixture on a 14-question corpus is noise in EITHER direction — promote
   // and reject both require clearing the band.

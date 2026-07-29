@@ -6,6 +6,8 @@ import {
   useFlagBillPayment,
   useVerifyBillStamp,
   getGetPayablesSummaryQueryKey,
+  useGetDoublePaymentCheck,
+  getGetDoublePaymentCheckQueryKey,
 } from "@workspace/api-client-react";
 import type {
   BillSummary,
@@ -34,7 +36,7 @@ import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
-import { ChevronDown, Receipt, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ChevronDown, Receipt, ShieldCheck } from "lucide-react";
 import {
   billPayStatusBadgeClasses,
   billPayStatusLabel,
@@ -60,6 +62,86 @@ type FlagStatus = "scheduled" | "paid";
 // supplier document.
 const FLAG_CONFIRM_MESSAGE =
   "This records payment evidence on the bill — it never edits the document.";
+
+// Double-payment guard (round 16): advisory only — bills the payment
+// evidence says were settled twice, and unpaid near-duplicates that would
+// become a double payment if both are paid. Renders nothing when there is
+// nothing to warn about; a repeated standing charge can legitimately match.
+function DoublePaymentAdvisory({ clientPartyId }: { clientPartyId: string }) {
+  const { data: check } = useGetDoublePaymentCheck(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetDoublePaymentCheckQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  if (
+    !check ||
+    (check.multiPaid.length === 0 && check.duplicateCandidates.length === 0)
+  ) {
+    return null;
+  }
+  return (
+    <Card
+      className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40"
+      data-testid="double-payment-advisory"
+    >
+      <CardContent className="pt-4 space-y-2 text-sm text-amber-800 dark:text-amber-300">
+        <p className="flex items-center gap-2 font-semibold">
+          <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+          Possible double payments
+        </p>
+        {check.multiPaid.map((b) => (
+          <p key={b.invoiceId} data-testid={`multi-paid-${b.invoiceId}`}>
+            {b.invoiceNumber} ({b.supplierName},{" "}
+            {b.currency === "NGN"
+              ? formatNaira(b.grandTotal)
+              : `${b.currency} ${b.grandTotal}`}
+            ) is matched to {b.evidenceCount} separate bank debits totalling
+            more than the bill — {formatDate(b.firstPaidAt)} and again{" "}
+            {formatDate(b.lastPaidAt)}.
+          </p>
+        ))}
+        {check.duplicateCandidates.map((p) => (
+          <p
+            key={`${p.first.invoiceId}-${p.second.invoiceId}`}
+            data-testid={`dup-pair-${p.first.invoiceId}`}
+          >
+            {p.pairKind === "paid_original" ? (
+              <>
+                {p.first.invoiceNumber} from {p.supplierName} is already paid,
+                and {p.second.invoiceNumber} looks like the same bill (
+                {p.currency === "NGN"
+                  ? formatNaira(p.grandTotal)
+                  : `${p.currency} ${p.grandTotal}`}
+                , issued {p.daysApart} day{p.daysApart === 1 ? "" : "s"} apart)
+                — check it is not a duplicate before paying it.
+              </>
+            ) : (
+              <>
+                {p.first.invoiceNumber} and {p.second.invoiceNumber} from{" "}
+                {p.supplierName} are both unpaid for the same amount (
+                {p.currency === "NGN"
+                  ? formatNaira(p.grandTotal)
+                  : `${p.currency} ${p.grandTotal}`}
+                ), issued {p.daysApart} day{p.daysApart === 1 ? "" : "s"} apart
+                — check one is not a duplicate before paying both.
+              </>
+            )}
+          </p>
+        ))}
+        <p className="text-xs">
+          Advisory only, from payment evidence already on file. A recurring
+          standing charge can match legitimately — review before acting.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function billAmount(bill: BillSummary): string {
   return bill.currency === "NGN"
@@ -365,6 +447,7 @@ export function Bills() {
 
       <RequireClientScope thing="supplier bills list">
         <div className="space-y-6">
+          <DoublePaymentAdvisory clientPartyId={clientPartyId} />
           <div className="flex flex-wrap items-center gap-2">
             {FILTERS.map((f) => {
               const isActive = filter === f.key;

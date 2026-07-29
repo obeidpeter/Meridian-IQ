@@ -38,6 +38,20 @@ export interface Scrubber {
   scrub(text: string): ScrubResult;
 }
 
+// Optional lane-specific behaviour. The intent-eval corpus (round 16) maps
+// names onto its frozen synthetic client directory instead of "Company A",
+// and groups surface variants ("Acme", "Acme Ventures Nigeria Ltd") under
+// one canonical identity so they share a single label.
+export interface ScrubberOptions {
+  // Label for the Nth DISTINCT name identity (first-seen order). Default:
+  // spreadsheet-style "Company A"/"Company B"/…
+  nameLabel?: (index: number) => string;
+  // Canonical identity key for a name (labels are allocated per key).
+  // Default: the name lowercased — every distinct surface form is its own
+  // identity.
+  nameKey?: (name: string) => string;
+}
+
 // 0 -> "Company A" … 25 -> "Company Z", 26 -> "Company AA" (spreadsheet-style,
 // so the label sequence never collides however many identities show up).
 function companyLabel(index: number): string {
@@ -69,7 +83,12 @@ interface Claim {
   key: string;
 }
 
-export function createScrubber(identities: ScrubIdentities): Scrubber {
+export function createScrubber(
+  identities: ScrubIdentities,
+  options: ScrubberOptions = {},
+): Scrubber {
+  const nameLabel = options.nameLabel ?? companyLabel;
+  const nameKey = options.nameKey ?? ((name: string) => name.toLowerCase());
   // Distinct names, case-insensitive, blank-dropped; matched longest-first so
   // an identity that contains another claims its whole span.
   const seenNames = new Set<string>();
@@ -106,7 +125,7 @@ export function createScrubber(identities: ScrubIdentities): Scrubber {
     let label = labels.get(key);
     if (!label) {
       label = key.startsWith("name:")
-        ? companyLabel(nameCount++)
+        ? nameLabel(nameCount++)
         : syntheticTin(tinCount++);
       labels.set(key, label);
     }
@@ -129,7 +148,7 @@ export function createScrubber(identities: ScrubIdentities): Scrubber {
         const start = m.index;
         const end = start + m[0].length;
         if (!overlaps(start, end)) {
-          claims.push({ start, end, key: `name:${name.toLowerCase()}` });
+          claims.push({ start, end, key: `name:${nameKey(name)}` });
         }
       }
     }
