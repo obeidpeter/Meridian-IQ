@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.45.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.46.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.45.0</title>
+<title>MeridianIQ API reference — v0.46.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.45.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.46.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -156,7 +156,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">29</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">14</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">10</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">46</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">20</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">30</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">14</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">10</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">50</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">21</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -369,6 +369,10 @@ request's writes were rolled back.</li>
 <details class="op" id="getProjectionAccuracy">
 <summary><span class="method m-get">GET</span><code class="path">/api/projection-accuracy</code><span class="sum">Cash-flow projection rule replayed against every observed settlement — the forecast auditing itself (deterministic; nothing stored, no model)</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ProjectionAccuracy</code> <span class="dim">Signed projection error overall and per buyer (leave-one-out rhythm evaluation)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
+<details class="op" id="getChaseEffectiveness">
+<summary><span class="method m-get">GET</span><code class="path">/api/chase-effectiveness</code><span class="sum">Chase-ladder reminders joined to observed settlements — did reminded invoices settle, and how fast (correlation only; deterministic, nothing stored)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>ChaseEffectiveness</code> <span class="dim">Reminder-effectiveness summary over the trailing year (mature reminder windows only)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
 </details>
 <details class="op" id="recordChaseReminder">
 <summary><span class="method m-post">POST</span><code class="path">/api/invoices/{invoiceId}/chase-log</code><span class="sum">Record that a payment reminder was SENT for this invoice (logged on copy — the platform itself sends nothing)</span></summary>
@@ -1012,6 +1016,22 @@ request's writes were rolled back.</li>
 <summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/intent-runs</code><span class="sum">Stored intent-classification eval runs, newest first</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>IntentEvalRun[]</code> <span class="dim">Intent eval runs</span></li></ul></div>
 </details>
+<details class="op" id="listIntentFixtures">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/intent-fixtures</code><span class="sum">The grown intent corpus — question cases promoted into the eval, scrubbed onto the synthetic directory, newest first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>IntentFixtureSummary[]</code> <span class="dim">Grown intent fixtures (including retired rows)</span></li></ul></div>
+</details>
+<details class="op" id="mintIntentFixture">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/intent-fixtures/from-case</code><span class="sum">Promote a real question case into the intent eval corpus (deterministic scrub onto the frozen synthetic directory; refused when unrepresentable)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>MintIntentFixtureInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>IntentFixtureSummary</code> <span class="dim">The minted fixture (question already scrubbed)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The question names more parties than the frozen directory can represent</span></li></ul></div>
+</details>
+<details class="op" id="retireIntentFixture">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/intent-fixtures/{id}/retire</code><span class="sum">Retire a grown intent fixture — the row survives, the eval loaders exclude it</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>IntentFixtureSummary</code> <span class="dim">The updated fixture</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="restoreIntentFixture">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/intent-fixtures/{id}/restore</code><span class="sum">Restore a retired grown intent fixture into the eval loaders</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>IntentFixtureSummary</code> <span class="dim">The updated fixture</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
 <details class="op" id="listEvalFixtures">
 <summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/fixtures</code><span class="sum">The full eval corpus with per-fixture pass history reconstructed from stored runs</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EvalFixtureReport</code> <span class="dim">Corpus inventory — static, grown and red-team fixtures</span></li></ul></div>
@@ -1189,6 +1209,10 @@ request's writes were rolled back.</li>
 <summary><span class="method m-post">POST</span><code class="path">/api/bills/{id}/verify-stamp</code><span class="sum">Verify a supplier bill's stamp against the national record and keep the result on the bill (input-VAT protection)</span></summary>
 <div class="opbody"><div class="req">Request body: <code>StampVerifyInput</code></div><ul class="responses"><li><span class="status s2xx">201</span> <code>BillVerification</code> <span class="dim">Verification recorded</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
+<details class="op" id="getDoublePaymentCheck">
+<summary><span class="method m-get">GET</span><code class="path">/api/bills/double-payment-check</code><span class="sum">Advisory double-payment guard — bills paid twice by the evidence, and unpaid near-duplicate bills that would become one (deterministic, nothing stored)</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>DoublePaymentCheck</code> <span class="dim">Multi-paid bills and unpaid duplicate candidates, capped, with the advisory note</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+</details>
 <details class="op" id="getPayablesSummary">
 <summary><span class="method m-get">GET</span><code class="path">/api/dashboard/payables</code><span class="sum">Committed outflows — bills aged and bucketed by due date, with top suppliers (deterministic)</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>PayablesSummary</code> <span class="dim">Payables summary</span></li></ul></div>
@@ -1273,7 +1297,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EngagementNarrative</code> <span class="dim">Letter body for the firm to edit and own</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The engagement's findings do not match the expected shape</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.45.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.46.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>

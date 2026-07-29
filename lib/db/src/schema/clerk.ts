@@ -390,6 +390,28 @@ export const clerkIntentEvalRunsTable = pgTable("clerk_intent_eval_runs", {
 
 export type ClerkIntentEvalRun = typeof clerkIntentEvalRunsTable.$inferSelect;
 
+// Grown intent fixtures (round 16): question cases promoted into the intent
+// eval corpus with the question text SCRUBBED (engaged-client names mapped
+// onto the frozen synthetic directory). Operator tooling — bypass-only RLS
+// (migration 0025) like the runs table; a retired fixture stays as evidence
+// but leaves the corpus loaders.
+export const clerkIntentFixturesTable = pgTable("clerk_intent_fixtures", {
+  id: id(),
+  caseId: uuid("case_id")
+    .notNull()
+    .unique()
+    .references(() => clerkCasesTable.id),
+  label: text("label").notNull(),
+  question: text("question").notNull(),
+  expected: jsonb("expected")
+    .$type<{ claimKey: string; month?: string; client?: string }>()
+    .notNull(),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+export type ClerkIntentFixture = typeof clerkIntentFixturesTable.$inferSelect;
+
 // Learning loop (Clerk expansion B): every human-corrected approval becomes a
 // ground-truth eval fixture — the sweep grows this corpus from the correction
 // exhaust, and every eval run (manual or nightly) scores against the static

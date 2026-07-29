@@ -568,6 +568,32 @@ call the model.
   itself, 3+ other settlements required), else due-date terms, else 30 days
   — reporting signed median error, a ±7-day share and a per-buyer table;
   surfaced as a confidence line under the SME outlook card (5+ settlements).
+- **Reminder effectiveness** (`modules/invoice/chase-effectiveness.ts`,
+  `GET /chase-effectiveness`, nothing stored) — the chase ladder auditing
+  itself: `chase_log` reminders joined to observed payment evidence over the
+  trailing year. Counts a reminded invoice as settled only when the
+  settlement lands AFTER its first reminder (an earlier settlement never
+  credits the reminder); the within-14-day share divides by MATURE reminders
+  only (settled, or first reminder old enough for the window to have run —
+  a reminder sent yesterday cannot deflate it); reminded vs unreminded
+  issue-to-settle medians carry the comparison; every aggregate honours a
+  3-sample floor and the note pins correlation-not-causation. Surfaced as a
+  footnote under the SME chase list.
+- **Double-payment guard** (`modules/invoice/double-payment.ts`,
+  `GET /bills/double-payment-check`, nothing stored) — advisory payables
+  safety over the SAME canonical bill fragments (`BILL_OF_CLIENT` +
+  `BILL_UNPAID`). "Paid twice" means the BANK evidence shows money leaving
+  twice: 2+ DISTINCT statement-line matches whose amounts sum to MORE than
+  the bill — a payer flag plus its confirming statement match (the
+  ordinary lifecycle) never flags, and partial matches summing to the
+  total are installments, not a double payment. "Possible duplicates" are
+  same-supplier same-currency same-amount bills issued within 14 days of
+  each other where the second side is still UNPAID — including the
+  riskiest shape, a PAID original next to its unpaid re-captured copy
+  (`pairKind: paid_original`); both-unpaid pairs appear once and
+  already-paid pairs are history, not a warning. Capped at 20 per lane;
+  amber advisory card on the SME bills page; nothing is blocked, and the
+  note warns that a recurring standing charge can match legitimately.
 - **Net cash position** (`modules/invoice/net-position.ts`,
   `GET /dashboard/net-position`, nothing stored) merges the outlook's
   projected inflows with the payables summary's committed outflows per
@@ -631,7 +657,30 @@ shared computation as the corresponding chart.
   corpus runs side by side and returns the prompt-canary verdict
   (injection resistance may never drop; accuracy judged outside a
   one-fixture noise band) with nothing stored.
-- **Learning loop** (`modules/clerk/eval-growth.ts`) turns corrected
+- **Grown intent corpus** (`clerk_intent_fixtures`, bypass-only RLS
+  migration 0025; `POST /clerk/eval/intent-fixtures/from-case` +
+  `GET /clerk/eval/intent-fixtures` + per-fixture retire/restore,
+  `clerk.use`; console promote row on the ask-feedback card, retire list on
+  the eval card): promotes a real QUESTION case — typically one an asker
+  marked not-helpful — into the intent corpus. The operator names the key
+  the classifier SHOULD have chosen (plus optional month/client pins),
+  validated fail-closed against the eval's frozen offered context. The
+  stored question is ALWAYS scrubbed through the SAME span-claim machinery
+  as the extraction corpus (scrub.ts: word boundaries, longest-first
+  claims, spacing-tolerant TINs) after NFKC + whitespace normalization
+  (NBSP and homoglyph variants still match); the identity set is every
+  party the platform can name for the firm — engaged clients, invoice
+  counterparties, the firm, their TINs — plus informal short forms of each
+  name (legal-suffix tails stripped, sharing one directory slot). Names
+  map onto the frozen synthetic directory in order of first appearance; a
+  question naming more parties than the directory can represent is REFUSED
+  (422), and a verification pass re-runs detection over the output so any
+  residual match refuses rather than storing a partial scrub. Minting is
+  idempotent per case (409); a mis-mint is retired via the API, never
+  manual SQL. Default eval runs and intent canaries load active grown
+  fixtures (newest 40, `retired_at` null) alongside the static set; tests
+  pin the static corpus via `includeGrown: false`. Grown intent fixtures
+  never serve memory.
   approvals into eval fixtures on the sweep loop; the nightly auto-eval is
   opt-in behind `clerk_auto_eval` (spends tokens). Grown fixtures are
   deliberately NOT scrubbed at mint — they double as the supplier-memory

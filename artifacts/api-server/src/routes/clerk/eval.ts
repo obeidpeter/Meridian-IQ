@@ -18,6 +18,13 @@ import {
   RunIntentEvalBody,
   RunIntentEvalResponse,
   ListIntentEvalRunsResponse,
+  MintIntentFixtureBody,
+  MintIntentFixtureResponse,
+  ListIntentFixturesResponse,
+  RetireIntentFixtureParams,
+  RetireIntentFixtureResponse,
+  RestoreIntentFixtureParams,
+  RestoreIntentFixtureResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import { assertCan } from "../../modules/auth/rbac";
@@ -29,9 +36,14 @@ import {
 } from "../../modules/clerk/eval";
 import {
   listIntentEvalRuns,
+  listIntentFixtures,
+  mintIntentFixture,
+  restoreIntentFixture,
+  retireIntentFixture,
   runIntentCanary,
   runIntentEval,
 } from "../../modules/clerk/intent-eval";
+import type { ClerkIntentFixture } from "@workspace/db";
 import {
   listEvalFixtures,
   mintFixtureFromCase,
@@ -86,6 +98,64 @@ router.get("/clerk/eval/intent-runs", async (req, res): Promise<void> => {
   const runs = await listIntentEvalRuns();
   res.json(ListIntentEvalRunsResponse.parse(runs));
 });
+
+// Grown intent corpus (round 16): promote a real question case into the
+// intent eval corpus. The module owns every refusal (400 BAD_EXPECTED off
+// the frozen offered context, 404 not-a-question-case, 422 UNREPRESENTABLE
+// when scrubbing can't map every name onto the synthetic directory, 409
+// ALREADY_MINTED); the stored question is ALWAYS the scrubbed text.
+const intentFixtureSummary = (f: ClerkIntentFixture) => ({
+  id: f.id,
+  caseId: f.caseId,
+  label: f.label,
+  question: f.question,
+  expected: f.expected,
+  retiredAt: f.retiredAt ? f.retiredAt.toISOString() : null,
+  createdAt: f.createdAt.toISOString(),
+});
+
+router.post(
+  "/clerk/eval/intent-fixtures/from-case",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const body = parseOrThrow(MintIntentFixtureBody, req.body);
+    const fixture = await mintIntentFixture(body, req.principal.userId);
+    res
+      .status(201)
+      .json(MintIntentFixtureResponse.parse(intentFixtureSummary(fixture)));
+  },
+);
+
+router.get("/clerk/eval/intent-fixtures", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const fixtures = await listIntentFixtures();
+  res.json(
+    ListIntentFixturesResponse.parse(fixtures.map(intentFixtureSummary)),
+  );
+});
+
+// Retire/restore a grown intent fixture — the extraction-corpus lifecycle
+// mirrored: the row survives, the loaders exclude retired rows before their
+// cap, and a mis-mint has an exit that is not manual SQL.
+router.post(
+  "/clerk/eval/intent-fixtures/:id/retire",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const params = parseOrThrow(RetireIntentFixtureParams, req.params);
+    const row = await retireIntentFixture(params.id, req.principal.userId);
+    res.json(RetireIntentFixtureResponse.parse(intentFixtureSummary(row)));
+  },
+);
+
+router.post(
+  "/clerk/eval/intent-fixtures/:id/restore",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const params = parseOrThrow(RestoreIntentFixtureParams, req.params);
+    const row = await restoreIntentFixture(params.id, req.principal.userId);
+    res.json(RestoreIntentFixtureResponse.parse(intentFixtureSummary(row)));
+  },
+);
 
 // Corpus curation (round 15): the inventory of every fixture the eval run
 // measures — static, corrections-grown and red-team — with per-fixture pass

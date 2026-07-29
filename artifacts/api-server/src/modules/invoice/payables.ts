@@ -28,7 +28,8 @@ export const BILL_UNPAID = sql`NOT EXISTS (
 // The three orientation-defining conditions of a bill in one fragment: the
 // row is an invoice-kind document whose buyer is the named client, oriented
 // as a bill. Callers add firm scoping and any payment-state predicate.
-const BILL_OF_CLIENT = (firmId: string, clientPartyId: string) => sql`
+// Shared with the double-payment guard (double-payment.ts).
+export const BILL_OF_CLIENT = (firmId: string, clientPartyId: string) => sql`
   i.firm_id = ${firmId}
   AND i.buyer_party_id = ${clientPartyId}
   AND i.kind = 'invoice'

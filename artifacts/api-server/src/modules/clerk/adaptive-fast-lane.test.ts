@@ -4,6 +4,7 @@ import { inArray } from "drizzle-orm";
 import {
   getDb,
   clerkCasesTable,
+  clerkEvalFixturesTable,
   type ClerkCorrection,
   type ClerkExtraction,
 } from "@workspace/db";
@@ -202,6 +203,12 @@ before(async () => {
   // (220 fields in band, keptRate 1.0); the plain firm's operators changed 3
   // of 11 per case (keptRate ~0.73 — plenty of sample, nowhere near 0.97).
   const allIds = [...QUAL_CASE_IDS, ...PLAIN_CASE_IDS];
+  // A prior ABORTED run can leave these fixed-id cases behind, and the
+  // eval-growth sweep (platform-wide) may then have minted eval fixtures
+  // from them — those FK rows must go first or this reseed delete fails.
+  await getDb()
+    .delete(clerkEvalFixturesTable)
+    .where(inArray(clerkEvalFixturesTable.caseId, allIds));
   await getDb()
     .delete(clerkCasesTable)
     .where(inArray(clerkCasesTable.id, allIds));
