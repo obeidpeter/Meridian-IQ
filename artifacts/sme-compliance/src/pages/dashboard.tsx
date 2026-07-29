@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetMe,
   useGetClerkDigest,
@@ -30,9 +32,16 @@ import {
   getGetPenaltyExposureQueryKey,
   useGetMonthEndClose,
   getGetMonthEndCloseQueryKey,
+  useGetActionProposals,
+  getGetActionProposalsQueryKey,
+  useExecuteAction,
+  getGetActionDecisionsQueryKey,
+  getListInvoicesQueryKey,
 } from "@workspace/api-client-react";
 import type {
+  ActionProposal,
   CashflowBucket,
+  ClerkActionDecision,
   PayablesSummaryGroupsItem,
   ReceivablesBucket,
   ReceivablesSummary,
@@ -40,10 +49,20 @@ import type {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { useToast } from "@/hooks/use-toast";
+import { serverErrorMessage } from "@/lib/errors";
 import {
   AlertTriangle,
   CheckCircle,
@@ -51,6 +70,7 @@ import {
   Download,
   FileText,
   Activity,
+  Send,
   Sparkles,
   CalendarCheck,
   Receipt,
@@ -746,6 +766,215 @@ function PenaltyExposureCard({ clientPartyId }: { clientPartyId: string }) {
   );
 }
 
+const TARGET_DISPLAY_CAP = 8;
+
+const OUTCOME_LABELS: Record<string, string> = {
+  submitted: "Submitted",
+  invalid: "Needs fixing",
+  skipped_not_eligible: "Skipped",
+  failed: "Failed",
+};
+
+// Proposed actions (round 21): Clerk assembles the batch from the same
+// checks that power the cards above; NOTHING runs until the owner approves.
+// Approval executes through the ordinary submission path — validation,
+// consent, any approval policy — and every target is re-checked at that
+// moment. Renders only when the clerk_actions flag is on for the firm AND a
+// proposal exists (a dark flag answers an empty list, so the card hides).
+function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const execute = useExecuteAction();
+  // `decision === null` is the confirmation step; a decision switches the
+  // dialog to the results view (the bulk-submit dialog's shape).
+  const [confirming, setConfirming] = useState<ActionProposal | null>(null);
+  const [decision, setDecision] = useState<ClerkActionDecision | null>(null);
+  const { data: proposals, isSuccess } = useGetActionProposals(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetActionProposalsQueryKey({ clientPartyId }),
+        staleTime: 60_000,
+        retry: false,
+      },
+    },
+  );
+  if (!isSuccess || !proposals || proposals.actions.length === 0) return null;
+
+  const runAction = async (action: ActionProposal) => {
+    try {
+      const res = await execute.mutateAsync({
+        data: {
+          kind: action.kind,
+          invoiceIds: action.targets.map((t) => t.invoiceId),
+          clientPartyId,
+        },
+      });
+      setDecision(res.decision);
+      // Not awaited: a background refetch rejection must not surface as a
+      // false "action failed" error after the batch already ran. The
+      // no-args keys prefix-match every param variant.
+      queryClient.invalidateQueries({
+        queryKey: getGetActionProposalsQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetActionDecisionsQueryKey(),
+      });
+      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+      queryClient.invalidateQueries({
+        queryKey: getGetDashboardSummaryQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetReceivablesSummaryQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetPenaltyExposureQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetMonthEndCloseQueryKey(),
+      });
+    } catch (e) {
+      toast({
+        title: "Action failed",
+        description: serverErrorMessage(e),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const closeDialog = () => {
+    setConfirming(null);
+    setDecision(null);
+  };
+
+  return (
+    <Card data-testid="clerk-actions">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5" aria-hidden="true" /> Clerk suggests
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {proposals.actions.map((action) => (
+          <div key={action.kind} className="space-y-2" data-testid={`action-${action.kind}`}>
+            <p className="font-medium">{action.title}</p>
+            <p className="text-sm text-muted-foreground">{action.why}</p>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              {action.targets.slice(0, TARGET_DISPLAY_CAP).map((t) => (
+                <p key={t.invoiceId} data-testid={`action-target-${t.invoiceId}`}>
+                  {t.invoiceNumber} · issued {formatDate(t.issueDate)} ·{" "}
+                  {t.daysOverdue} day{t.daysOverdue === 1 ? "" : "s"} past the
+                  window
+                  {t.grandTotal
+                    ? ` · ${formatAmount(t.grandTotal, t.currency)}`
+                    : ""}
+                </p>
+              ))}
+              {action.targets.length > TARGET_DISPLAY_CAP && (
+                <p>…and {action.targets.length - TARGET_DISPLAY_CAP} more.</p>
+              )}
+              {action.truncated && (
+                <p>
+                  Showing the oldest {action.targets.length} of{" "}
+                  {action.targetCount} — approve this batch, then come back for
+                  the rest.
+                </p>
+              )}
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setConfirming(action)}
+              disabled={execute.isPending}
+              data-testid="button-approve-action"
+            >
+              <Send className="w-4 h-4 mr-2" aria-hidden="true" />
+              Review &amp; approve
+            </Button>
+          </div>
+        ))}
+        <p className="text-xs text-muted-foreground pt-3 border-t">
+          {proposals.note}
+        </p>
+      </CardContent>
+      <Dialog open={!!confirming} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          {decision === null ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Approve: {confirming?.title}</DialogTitle>
+                <DialogDescription>
+                  This submits {confirming?.targets.length} invoice
+                  {confirming?.targets.length === 1 ? "" : "s"} to the
+                  e-invoicing rails through the ordinary path — validation,
+                  consent and any approval policy all apply. Each invoice is
+                  re-checked at this moment; anything already submitted or no
+                  longer overdue is skipped, and the decision is recorded under
+                  your name.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={closeDialog}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => confirming && runAction(confirming)}
+                  disabled={execute.isPending}
+                  data-testid="button-confirm-action"
+                >
+                  {execute.isPending
+                    ? "Submitting…"
+                    : `Approve ${confirming?.targets.length ?? 0} invoice${
+                        confirming?.targets.length === 1 ? "" : "s"
+                      }`}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Batch result</DialogTitle>
+                <DialogDescription data-testid="text-action-outcome">
+                  {decision.executedCount} submitted · {decision.failedCount}{" "}
+                  need attention · {decision.skippedCount} skipped.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-1 text-sm">
+                {decision.targets.map((t) => (
+                  <p
+                    key={t.invoiceId}
+                    className="flex justify-between gap-3"
+                    data-testid={`outcome-${t.invoiceId}`}
+                  >
+                    <span className="truncate">{t.invoiceNumber}</span>
+                    <span
+                      className={
+                        t.outcome === "submitted"
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : t.outcome === "skipped_not_eligible"
+                            ? "text-muted-foreground"
+                            : "text-amber-700 dark:text-amber-400"
+                      }
+                    >
+                      {OUTCOME_LABELS[t.outcome] ?? t.outcome}
+                      {t.error ? ` — ${t.error}` : ""}
+                    </span>
+                  </p>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button onClick={closeDialog} data-testid="button-close-action">
+                  Done
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 // Unmatched credits (round-14 idea #1): bank credits with no invoice behind
 // them — the compliance mirror of the unbilled card above. If any of these
 // is a sale, an e-invoice should exist for it. Deterministic advisory,
@@ -1304,6 +1533,10 @@ export function Dashboard() {
 
               {me?.clientPartyId && (
                 <PenaltyExposureCard clientPartyId={me.clientPartyId} />
+              )}
+
+              {me?.clientPartyId && (
+                <ClerkActionsCard clientPartyId={me.clientPartyId} />
               )}
 
               {me?.clientPartyId && (

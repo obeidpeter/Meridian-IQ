@@ -5,6 +5,7 @@ import askRouter from "./ask";
 import batchesRouter from "./batches";
 import reportsRouter from "./reports";
 import draftsRouter from "./drafts";
+import actionsRouter from "./actions";
 
 // Clerk copilot surface (Task #40 + expansion A). Shadow-mode throughout:
 // extraction proposes, a human disposes, and approval can only create a DRAFT
@@ -25,6 +26,7 @@ import draftsRouter from "./drafts";
 //   batches.ts  async batch intake
 //   reports.ts  metrics, claim gaps, tier report, usage, digest, statements
 //   drafts.ts   format/import/invoice/claims/catalogue drafting + assist
+//   actions.ts  proposed actions — live proposals, human-approved execution
 
 const router: IRouter = Router();
 
@@ -34,5 +36,6 @@ router.use(askRouter);
 router.use(batchesRouter);
 router.use(reportsRouter);
 router.use(draftsRouter);
+router.use(actionsRouter);
 
 export default router;

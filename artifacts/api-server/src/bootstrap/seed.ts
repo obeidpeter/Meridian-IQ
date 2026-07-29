@@ -56,6 +56,11 @@ const FLAGS: {
   // Clerk v0 kill switch (Task #40): flipping this off instantly disables every
   // Clerk AI surface (capture extraction, Ask Clerk); manual flows keep working.
   { key: "clerk_ai", enabled: true, releaseTag: "R3", description: "Clerk AI copilot: capture extraction and register-backed Q&A (operator-only)" },
+  // Proposed actions (round 21): Clerk assembles a batch from the detector
+  // predicates, a human approves it, execution rides the ordinary per-invoice
+  // submission path. Shipped dark (PL-02); enable per firm via override once
+  // a pilot firm opts in.
+  { key: "clerk_actions", enabled: false, releaseTag: "R3", description: "Clerk proposed actions: human-approved batch execution over the closed action catalogue (submit_overdue)" },
 ];
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [

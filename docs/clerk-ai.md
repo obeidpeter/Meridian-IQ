@@ -183,6 +183,56 @@ review.
   (`console/src/components/clerk-shell.tsx`, dark teal rail in both color
   schemes) with four tabs: Intake queue, Claims, Ask Clerk, Health.
 
+## Proposed actions (advice → assisted action)
+
+The round-21 arc: every advisory surface ends with "…you should submit
+these", and the proposed-actions surface closes that gap WITHOUT crossing
+the platform's one hard line — Clerk still never files anything.
+`modules/clerk/actions.ts` + `routes/clerk/actions.ts`; opt-in
+`clerk_actions` flag (per-firm override capable), fail-closed on BOTH ends:
+dark means proposals answer empty (the SME card hides) and execution
+refuses `503 ACTIONS_DISABLED`.
+
+- **Closed catalogue, code-defined.** v1 carries exactly one action,
+  `submit_overdue` — the safest (submission is the statutory obligation
+  itself), highest-value (it clears s.104 exposure), fully re-checkable at
+  execution time. An unknown kind is `400 UNKNOWN_ACTION`; there is no
+  model call anywhere on this surface (deterministic assembly end to end).
+- **Proposals are computed live** (`GET /clerk/action-proposals`,
+  `invoice.read` + the SEC-03 client scope wall) from the digest/penalty
+  card's overdue predicate verbatim — never stored, so never stale. Targets
+  are capped at `MAX_ACTION_TARGETS` (50), oldest first, with an honest
+  `targetCount`/`truncated` and the penalty-floor evidence
+  (`bandExposure().small`, "estimate not advice").
+- **A human approves an explicit target list**
+  (`POST /clerk/action-proposals/execute`, `invoice.submit` — approving a
+  Clerk batch IS submitting, so it carries exactly the capability a manual
+  submit does). Execution is the bulk-submit discipline: consent checked up
+  front (CORE-03), then each target walks the EXISTING per-invoice
+  machinery — `validateInvoice`'s compare-and-set, `submitInvoice`'s
+  exactly-once outbox enqueue, maker-checker enforced per row inside it.
+  The batch adds nothing but iteration.
+- **Every target is re-validated at decision time**: the approval was given
+  on a snapshot, so anything that changed since (submitted elsewhere,
+  cancelled, aged out, foreign id) is `skipped_not_eligible`, never
+  double-processed. Validation failures are `invalid` (draft untouched);
+  rail-path `DomainError`s are `failed`.
+- **The decision is the durable artifact** (`clerk_action_decisions`,
+  firm-keyed RLS migration 0028): who approved, on what evidence, over
+  which targets, with per-target outcomes and honest tallies; surfaced via
+  `GET /clerk/action-decisions` (newest 10) and a pointer-only
+  `clerk.action.executed` audit event (SEC-12).
+- The SME dashboard's "Clerk suggests" card renders only when a proposal
+  exists; approval is a two-step dialog (confirm → per-target results) that
+  then invalidates the invoice/penalty/close queries so every advisory
+  card tells the same story.
+
+Deferred to the next rounds of the arc: `retry_failed` (resubmit failed
+paper once the underlying issue is fixed), chaser-batch actions (send the
+drafted reminders), console/firm-side surfaces, Ask Clerk awareness, and
+an action-effectiveness report (did approved batches actually clear the
+exposure?).
+
 ## Ask Clerk (grounded firm-data Q&A)
 
 - `modules/clerk/data-intents.ts`: Ask carries a second closed catalogue next

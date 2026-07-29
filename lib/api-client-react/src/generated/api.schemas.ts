@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.51.0
+ * OpenAPI spec version: 0.52.0
  */
 export interface HealthStatus {
   status: string;
@@ -4227,6 +4227,101 @@ export interface DigestImpactReport {
   note: string;
 }
 
+export interface ActionTarget {
+  invoiceId: string;
+  invoiceNumber: string;
+  issueDate: string;
+  daysOverdue: number;
+  /** @nullable */
+  grandTotal: string | null;
+  currency: string;
+}
+
+export type ActionProposalKind = typeof ActionProposalKind[keyof typeof ActionProposalKind];
+
+
+export const ActionProposalKind = {
+  submit_overdue: 'submit_overdue',
+} as const;
+
+export type ActionProposalEvidence = { [key: string]: unknown };
+
+export interface ActionProposal {
+  kind: ActionProposalKind;
+  title: string;
+  why: string;
+  targets: ActionTarget[];
+  targetCount: number;
+  truncated: boolean;
+  evidence: ActionProposalEvidence;
+}
+
+export interface ActionProposals {
+  actions: ActionProposal[];
+  note: string;
+}
+
+export type ExecuteActionInputKind = typeof ExecuteActionInputKind[keyof typeof ExecuteActionInputKind];
+
+
+export const ExecuteActionInputKind = {
+  submit_overdue: 'submit_overdue',
+} as const;
+
+export interface ExecuteActionInput {
+  kind: ExecuteActionInputKind;
+  /**
+     * @minItems 1
+     * @maxItems 50
+     */
+  invoiceIds: string[];
+  /** Required for firm principals; a client_user is pinned to its own party. */
+  clientPartyId?: string;
+}
+
+export type ActionTargetOutcomeOutcome = typeof ActionTargetOutcomeOutcome[keyof typeof ActionTargetOutcomeOutcome];
+
+
+export const ActionTargetOutcomeOutcome = {
+  submitted: 'submitted',
+  invalid: 'invalid',
+  skipped_not_eligible: 'skipped_not_eligible',
+  failed: 'failed',
+} as const;
+
+export interface ActionTargetOutcome {
+  invoiceId: string;
+  invoiceNumber: string;
+  outcome: ActionTargetOutcomeOutcome;
+  /** @nullable */
+  error: string | null;
+}
+
+export type ClerkActionDecisionEvidence = { [key: string]: unknown };
+
+export interface ClerkActionDecision {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  kind: string;
+  decidedBy: string;
+  evidence: ClerkActionDecisionEvidence;
+  targets: ActionTargetOutcome[];
+  requestedCount: number;
+  executedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  createdAt: string;
+}
+
+export interface ExecuteActionResult {
+  decision: ClerkActionDecision;
+}
+
+export interface ActionDecisionList {
+  decisions: ClerkActionDecision[];
+}
+
 export type PhrasingEvalFixtureResultSurface = typeof PhrasingEvalFixtureResultSurface[keyof typeof PhrasingEvalFixtureResultSurface];
 
 
@@ -5879,5 +5974,19 @@ export type GetClerkClaimGapsParams = {
  * @maximum 365
  */
 windowDays?: number;
+};
+
+export type GetActionProposalsParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
+export type GetActionDecisionsParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
 };
 

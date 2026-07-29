@@ -3,10 +3,18 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.51.0
+ * OpenAPI spec version: 0.52.0
  */
 
 export * from './acceptInvitationInput';
+export * from './actionDecisionList';
+export * from './actionProposal';
+export * from './actionProposalEvidence';
+export * from './actionProposalKind';
+export * from './actionProposals';
+export * from './actionTarget';
+export * from './actionTargetOutcome';
+export * from './actionTargetOutcomeOutcome';
 export * from './activityItem';
 export * from './activityItemKind';
 export * from './alertDeliveryResult';
@@ -103,6 +111,8 @@ export * from './claimGapReportUncoveredItem';
 export * from './claimRecord';
 export * from './claimRecordState';
 export * from './claimUpdateInput';
+export * from './clerkActionDecision';
+export * from './clerkActionDecisionEvidence';
 export * from './clerkAdoptionReport';
 export * from './clerkAdoptionReportClientsItem';
 export * from './clerkAdoptionReportTotals';
@@ -295,6 +305,9 @@ export * from './escalationStatus';
 export * from './evalFixtureReport';
 export * from './evalFixtureSummary';
 export * from './evalFixtureSummarySource';
+export * from './executeActionInput';
+export * from './executeActionInputKind';
+export * from './executeActionResult';
 export * from './explainFailureInput';
 export * from './exportBillingStatementCsvParams';
 export * from './exportInvoicesCsvParams';
@@ -338,6 +351,8 @@ export * from './gapItem';
 export * from './gapItemSeverity';
 export * from './gateMetrics';
 export * from './generateStatementsInput';
+export * from './getActionDecisionsParams';
+export * from './getActionProposalsParams';
 export * from './getBillingStatementParams';
 export * from './getCashflowOutlookParams';
 export * from './getChaseEffectivenessParams';

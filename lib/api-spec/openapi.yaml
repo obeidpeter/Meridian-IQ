@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.51.0
+  version: 0.52.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5279,6 +5279,70 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ModelCanaryReport"
+  /clerk/action-proposals:
+    get:
+      operationId: getActionProposals
+      tags: [clerk]
+      summary: Clerk-assembled action batches from the closed catalogue, computed live from the detector predicates — nothing is stored and nothing runs until a human approves (empty while the clerk_actions flag is dark)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Zero or more proposals, each with its capped target list and evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionProposals"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /clerk/action-proposals/execute:
+    post:
+      operationId: executeAction
+      tags: [clerk]
+      summary: Approve one proposed batch — executes through the ordinary per-invoice submission path (validation, consent, approval policy), re-checks every target's eligibility at this moment, and records the decision with per-target outcomes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteActionInput"
+      responses:
+        "200":
+          description: The durable decision record with per-target outcomes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecuteActionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /clerk/action-decisions:
+    get:
+      operationId: getActionDecisions
+      tags: [clerk]
+      summary: The client's most recent action decisions — who approved what, on which evidence, with per-target outcomes
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Newest decisions first (capped at 10)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionDecisionList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
 components:
   parameters:
     IdParam:
@@ -11380,6 +11444,153 @@ components:
           type: ["number", "null"]
         improvedShare:
           type: ["number", "null"]
+    # Proposed actions (round 21): Clerk assembles, a human disposes. The
+    # catalogue is closed and code-defined — v1 carries submit_overdue only.
+    ActionTarget:
+      type: object
+      required:
+        [invoiceId, invoiceNumber, issueDate, daysOverdue, grandTotal, currency]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        issueDate:
+          type: string
+        daysOverdue:
+          type: integer
+        grandTotal:
+          type: ["string", "null"]
+        currency:
+          type: string
+    ActionProposal:
+      type: object
+      required: [kind, title, why, targets, targetCount, truncated, evidence]
+      properties:
+        kind:
+          type: string
+          enum: [submit_overdue]
+        title:
+          type: string
+        why:
+          type: string
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionTarget"
+        targetCount:
+          type: integer
+        truncated:
+          type: boolean
+        evidence:
+          type: object
+          additionalProperties: true
+    ActionProposals:
+      type: object
+      required: [actions, note]
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionProposal"
+        note:
+          type: string
+    ExecuteActionInput:
+      type: object
+      required: [kind, invoiceIds]
+      properties:
+        kind:
+          type: string
+          enum: [submit_overdue]
+        invoiceIds:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+          description: Required for firm principals; a client_user is pinned to its own party.
+    ActionTargetOutcome:
+      type: object
+      required: [invoiceId, invoiceNumber, outcome, error]
+      properties:
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        outcome:
+          type: string
+          enum: [submitted, invalid, skipped_not_eligible, failed]
+        error:
+          type: ["string", "null"]
+    ClerkActionDecision:
+      type: object
+      required:
+        [
+          id,
+          firmId,
+          clientPartyId,
+          kind,
+          decidedBy,
+          evidence,
+          targets,
+          requestedCount,
+          executedCount,
+          skippedCount,
+          failedCount,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firmId:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        decidedBy:
+          type: string
+          format: uuid
+        evidence:
+          type: object
+          additionalProperties: true
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionTargetOutcome"
+        requestedCount:
+          type: integer
+        executedCount:
+          type: integer
+        skippedCount:
+          type: integer
+        failedCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    ExecuteActionResult:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          $ref: "#/components/schemas/ClerkActionDecision"
+    ActionDecisionList:
+      type: object
+      required: [decisions]
+      properties:
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkActionDecision"
     PhrasingEvalFixtureResult:
       type: object
       required:
