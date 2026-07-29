@@ -171,6 +171,41 @@ test("every RLS policy's rendered qual matches its pinned hash", async () => {
           `could touch this table`,
       );
     }
+
+    // Enabled-state net (round-27 review MAJOR): pg_policies keeps listing a
+    // table's policies after ALTER TABLE ... DISABLE ROW LEVEL SECURITY, and
+    // the coverage gate only enumerates tenant-KEYED tables — so a
+    // policy-bearing table WITHOUT a tenant-key column (password_resets, the
+    // eval stores) could have RLS switched off with every DB gate green,
+    // its policies reduced to decoration. Every pinned table must have row
+    // security enabled AND forced — the guardrail migrations set both.
+    const pinnedTables = [
+      ...new Set(Object.keys(PINNED).map((k) => k.split("/")[0])),
+    ];
+    const { rows: states } = await pool.query<{
+      relname: string;
+      rls_enabled: boolean;
+      rls_forced: boolean;
+    }>(
+      `SELECT c.relname,
+              c.relrowsecurity AS rls_enabled,
+              c.relforcerowsecurity AS rls_forced
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+       WHERE c.relname = ANY($1)`,
+      [pinnedTables],
+    );
+    const stateByTable = new Map(states.map((s) => [s.relname, s]));
+    for (const table of pinnedTables) {
+      const state = stateByTable.get(table);
+      assert.ok(state, `pinned table '${table}' no longer exists`);
+      assert.ok(
+        state.rls_enabled && state.rls_forced,
+        `${table}: row security is not enabled+forced — its pinned policies ` +
+          `are decoration (DISABLE ROW LEVEL SECURITY leaves pg_policies ` +
+          `intact, and the coverage gate cannot see non-tenant-keyed tables)`,
+      );
+    }
   } finally {
     await pool.end();
   }
