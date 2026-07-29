@@ -50,6 +50,26 @@ export function formatNaira(value: string | number | null | undefined): string {
   return NAIRA_FORMAT.format(n);
 }
 
+// Non-NGN amounts: a plain grouped number plus the currency code, so a
+// foreign-currency figure never masquerades as naira (the portfolio
+// rollup's idiom, shared since round 20's currency-aware miners).
+const FOREIGN_AMOUNT_FORMAT = new Intl.NumberFormat("en-NG", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Currency-aware amount: NGN renders as naira, anything else as "1,200.00 USD". */
+export function formatAmount(
+  value: string | number | null | undefined,
+  currency: string,
+): string {
+  if (currency === "NGN") return formatNaira(value);
+  if (value === null || value === undefined) return "—";
+  const n = Number(value);
+  if (Number.isNaN(n)) return "—";
+  return `${FOREIGN_AMOUNT_FORMAT.format(n)} ${currency}`;
+}
+
 /**
  * Compact stat-card variant: "₦1.2M". Pair it with the full value in the
  * element's `title` attribute so the exact figure is always reachable.

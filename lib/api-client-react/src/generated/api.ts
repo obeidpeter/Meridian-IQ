@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.50.0
+ * OpenAPI spec version: 0.51.0
  */
 import {
   useMutation,
@@ -121,6 +121,7 @@ import type {
   CreatedClient,
   CreditNoteInput,
   DashboardSummary,
+  DigestImpactReport,
   DoublePaymentCheck,
   DraftCatalogueEntryInput,
   DraftClaimWithClerkInput,
@@ -20982,6 +20983,83 @@ export function useGetClerkMetrics<TData = Awaited<ReturnType<typeof getClerkMet
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetClerkMetricsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetDigestImpactUrl = () => {
+
+
+
+
+  return `/api/clerk/digest-impact`
+}
+
+/**
+ * @summary Week-over-week movement of firms' urgent counts between consecutive digest fact snapshots, split by delivered vs not (deterministic, correlation not causation)
+ */
+export const getDigestImpact = async ( options?: RequestInit): Promise<DigestImpactReport> => {
+
+  return customFetch<DigestImpactReport>(getGetDigestImpactUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDigestImpactQueryKey = () => {
+    return [
+    `/api/clerk/digest-impact`
+    ] as const;
+    }
+
+
+export const getGetDigestImpactQueryOptions = <TData = Awaited<ReturnType<typeof getDigestImpact>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDigestImpact>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDigestImpactQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDigestImpact>>> = ({ signal }) => getDigestImpact({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDigestImpact>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDigestImpactQueryResult = NonNullable<Awaited<ReturnType<typeof getDigestImpact>>>
+export type GetDigestImpactQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Week-over-week movement of firms' urgent counts between consecutive digest fact snapshots, split by delivered vs not (deterministic, correlation not causation)
+ */
+
+export function useGetDigestImpact<TData = Awaited<ReturnType<typeof getDigestImpact>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDigestImpact>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDigestImpactQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

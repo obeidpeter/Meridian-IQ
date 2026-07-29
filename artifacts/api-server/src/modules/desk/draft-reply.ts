@@ -62,6 +62,56 @@ export interface EscalationReplyDraft {
   viaExample: boolean;
 }
 
+// The user prompt the model phrases — extracted so the phrasing eval
+// replays the BYTE-IDENTICAL assembly production sends. Pure. The
+// escalationReason slot is the CLIENT'S OWN message (fenced as untrusted)
+// — the one fact slot an outsider fully controls on this surface, so the
+// eval's injection fixture rides it.
+export interface ReplyPhrasingInput {
+  cause: string;
+  fix: string;
+  attemptSummary: string;
+  example: string | null;
+  escalationReason: string;
+}
+
+export function buildReplyUser(input: ReplyPhrasingInput): string {
+  return [
+    `Catalogue cause: ${input.cause}`,
+    `Catalogue fix: ${input.fix}`,
+    `Submission history: ${input.attemptSummary}`,
+    ...(input.example
+      ? [
+          fenceUntrusted(
+            "previously sent reply (style example)",
+            "PAST_REPLY",
+            input.example,
+          ),
+        ]
+      : []),
+    fenceUntrusted(
+      "client's escalation message",
+      "ESCALATION",
+      input.escalationReason,
+    ),
+  ].join("\n");
+}
+
+// The escalation-reply surface's phrasing seam (the DIGEST_PHRASING
+// shape). The eval runs the NO-EXAMPLE variant (fixtures set example:
+// null) — the exemplar path's copy-specifics backstop has its own
+// deterministic tests in this module.
+export const REPLY_PHRASING = {
+  surface: "escalation_reply" as const,
+  promptVersion: REPLY_PROMPT_VERSION,
+  system: REPLY_SYSTEM,
+  schemaName: "escalation_reply",
+  jsonSchema: replyJsonSchema,
+  validator: replyOutput,
+  buildUser: buildReplyUser,
+  joinOutput: (data: z.infer<typeof replyOutput>): string => data.reply,
+};
+
 const MAX_REPLY_CHARS = 2000;
 
 // Deterministic post-check on exemplar-styled drafts (the one place a model
@@ -192,19 +242,13 @@ export async function draftEscalationReply(
     }
   }
 
-  const user = [
-    `Catalogue cause: ${cause}`,
-    `Catalogue fix: ${fix}`,
-    `Submission history: ${attemptSummary}`,
-    ...(example
-      ? [fenceUntrusted("previously sent reply (style example)", "PAST_REPLY", example)]
-      : []),
-    fenceUntrusted(
-      "client's escalation message",
-      "ESCALATION",
-      escalation.reason,
-    ),
-  ].join("\n");
+  const user = buildReplyUser({
+    cause,
+    fix,
+    attemptSummary,
+    example,
+    escalationReason: escalation.reason,
+  });
   const result = await gateway.infer<z.infer<typeof replyOutput>>({
     purpose: "draft_reply",
     caseId: null,

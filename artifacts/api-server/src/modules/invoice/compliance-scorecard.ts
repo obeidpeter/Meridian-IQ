@@ -29,6 +29,11 @@ export interface ScorecardRow {
   // Share of invoices with any submission attempt that saw a rejection or
   // error (0..1). Null under the sample floor.
   failureRate: number | null;
+  // The same two rates over the window BEFORE (issue dates in
+  // [today-2w, today-w)), same floors — the trend's baseline. Null means
+  // "no meaningful prior sample", not "was perfect".
+  prevWithinWindowRate: number | null;
+  prevFailureRate: number | null;
   // Median days from issue to first rail acceptance. Null when nothing was
   // accepted in the window.
   medianDaysToStamp: number | null;
@@ -56,7 +61,11 @@ export async function computeComplianceScorecard(
 
   // Receivable posture per client over the window: issued volume, first
   // rail acceptance (and whether it landed inside the statutory window),
-  // failure share, and the current overdue count. One pass, grouped in SQL.
+  // failure share, and the current overdue count — plus the SAME rate
+  // metrics over the window BEFORE (round-20 trend: direction turns the
+  // league table from "who's bad" into "who's slipping"). One pass: the
+  // invoice scan covers 2× the window with a `recent` flag and every
+  // current aggregate FILTERs on it.
   const receivableRows = (
     await db.execute<{
       client_party_id: string;
@@ -66,6 +75,10 @@ export async function computeComplianceScorecard(
       within_window: number;
       attempted: number;
       failed: number;
+      prev_accepted: number;
+      prev_within: number;
+      prev_attempted: number;
+      prev_failed: number;
       median_days: string | null;
       overdue_now: number;
     }>(sql`
@@ -75,13 +88,14 @@ export async function computeComplianceScorecard(
         WHERE e.firm_id = ${firmId} AND e.status IN ('open', 'in_progress')
       ),
       window_invoices AS (
-        SELECT i.id, i.supplier_party_id, i.issue_date
+        SELECT i.id, i.supplier_party_id, i.issue_date,
+          (i.issue_date >= ${today} - ${WINDOW_DAYS}::int) AS recent
         FROM invoices i
         WHERE i.firm_id = ${firmId}
           AND i.kind = 'invoice'
           AND ${RECEIVABLE_ORIENTATION}
           AND i.supplier_party_id IN (SELECT client_party_id FROM engaged)
-          AND i.issue_date >= ${today} - ${WINDOW_DAYS}::int
+          AND i.issue_date >= ${today} - ${2 * WINDOW_DAYS}::int
       ),
       first_accepted AS (
         SELECT sa.invoice_id,
@@ -111,21 +125,29 @@ export async function computeComplianceScorecard(
       SELECT
         eng.client_party_id,
         p.legal_name AS client_name,
-        COUNT(wi.id)::int AS issued,
-        COUNT(fa.invoice_id)::int AS accepted,
+        COUNT(wi.id) FILTER (WHERE wi.recent)::int AS issued,
+        COUNT(fa.invoice_id) FILTER (WHERE wi.recent)::int AS accepted,
         -- Strict <: the canonical deadline (compliance-window.ts) is Lagos
         -- MIDNIGHT AT THE START of day issue+window, and the overdue
         -- predicate below flips overdue when issue + window <= today — an
         -- acceptance ON day 7 is late, and the two columns of one row must
         -- never disagree about the same invoice.
         COUNT(fa.invoice_id) FILTER (
-          WHERE fa.accepted_date < wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
+          WHERE wi.recent
+            AND fa.accepted_date < wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
         )::int AS within_window,
-        COUNT(ap.invoice_id)::int AS attempted,
-        COUNT(ap.invoice_id) FILTER (WHERE ap.saw_failure)::int AS failed,
+        COUNT(ap.invoice_id) FILTER (WHERE wi.recent)::int AS attempted,
+        COUNT(ap.invoice_id) FILTER (WHERE wi.recent AND ap.saw_failure)::int AS failed,
+        COUNT(fa.invoice_id) FILTER (WHERE NOT wi.recent)::int AS prev_accepted,
+        COUNT(fa.invoice_id) FILTER (
+          WHERE NOT wi.recent
+            AND fa.accepted_date < wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
+        )::int AS prev_within,
+        COUNT(ap.invoice_id) FILTER (WHERE NOT wi.recent)::int AS prev_attempted,
+        COUNT(ap.invoice_id) FILTER (WHERE NOT wi.recent AND ap.saw_failure)::int AS prev_failed,
         (percentile_cont(0.5) WITHIN GROUP (
           ORDER BY (fa.accepted_date - wi.issue_date)
-        ))::text AS median_days,
+        ) FILTER (WHERE wi.recent))::text AS median_days,
         COALESCE(MAX(od.n), 0)::int AS overdue_now
       FROM engaged eng
       JOIN parties p ON p.id = eng.client_party_id
@@ -143,10 +165,11 @@ export async function computeComplianceScorecard(
       -- rate", sorted last, exactly like the null the row will carry).
       ORDER BY COALESCE(MAX(od.n), 0) DESC,
         CASE
-          WHEN COUNT(fa.invoice_id) >= ${MIN_RATE_SAMPLE} THEN
+          WHEN COUNT(fa.invoice_id) FILTER (WHERE wi.recent) >= ${MIN_RATE_SAMPLE} THEN
             (COUNT(fa.invoice_id) FILTER (
-              WHERE fa.accepted_date < wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
-            ))::float / COUNT(fa.invoice_id)
+              WHERE wi.recent
+                AND fa.accepted_date < wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
+            ))::float / (COUNT(fa.invoice_id) FILTER (WHERE wi.recent))
           ELSE 2
         END ASC,
         p.legal_name
@@ -180,6 +203,8 @@ export async function computeComplianceScorecard(
   const rows: ScorecardRow[] = receivableRows.map((r) => {
     const accepted = Number(r.accepted);
     const attempted = Number(r.attempted);
+    const prevAccepted = Number(r.prev_accepted);
+    const prevAttempted = Number(r.prev_attempted);
     return {
       clientPartyId: r.client_party_id,
       clientName: r.client_name,
@@ -191,6 +216,14 @@ export async function computeComplianceScorecard(
           : null,
       failureRate:
         attempted >= MIN_RATE_SAMPLE ? Number(r.failed) / attempted : null,
+      prevWithinWindowRate:
+        prevAccepted >= MIN_RATE_SAMPLE
+          ? Number(r.prev_within) / prevAccepted
+          : null,
+      prevFailureRate:
+        prevAttempted >= MIN_RATE_SAMPLE
+          ? Number(r.prev_failed) / prevAttempted
+          : null,
       medianDaysToStamp:
         r.median_days !== null ? Number(r.median_days) : null,
       overdueNow: Number(r.overdue_now),
@@ -214,7 +247,8 @@ export async function computeComplianceScorecard(
     rows,
     note:
       `Posture over the trailing ${WINDOW_DAYS} days for clients with a live engagement — a prioritization aid, not a verdict. ` +
-      `Rates need ${MIN_RATE_SAMPLE}+ observations (fewer shows as no rate); "overdue now" counts all overdue paper regardless of age. ` +
+      `Rates need ${MIN_RATE_SAMPLE}+ observations (fewer shows as no rate); "overdue now" counts all overdue paper regardless of age; ` +
+      `trend arrows compare against the ${WINDOW_DAYS} days before, under the same floors. ` +
       `A low score is a to-do list: submit the overdue paper, retry the failures, verify the captured bills.`,
   };
 }

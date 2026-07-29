@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import {
+  formatAmount,
   formatDate,
   formatNaira,
   statusLabel,
@@ -567,15 +568,15 @@ function UnbilledIncomeCard({ clientPartyId }: { clientPartyId: string }) {
         <div className="space-y-2">
           {alerts.map((a) => (
             <div
-              key={a.buyerPartyId}
+              key={`${a.buyerPartyId}-${a.currency}`}
               className="flex items-center justify-between gap-3 rounded-lg border p-3"
               data-testid={`unbilled-${a.buyerPartyId}`}
             >
               <div className="min-w-0">
                 <p className="text-sm font-semibold truncate">{a.buyerName}</p>
                 <p className="text-xs text-muted-foreground">
-                  Usually about {formatNaira(a.medianAmount)} every ~
-                  {a.medianGapDays} days · last invoiced{" "}
+                  Usually about {formatAmount(a.medianAmount, a.currency)}{" "}
+                  every ~{a.medianGapDays} days · last invoiced{" "}
                   {formatDate(a.lastIssueDate)}
                 </p>
               </div>

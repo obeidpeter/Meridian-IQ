@@ -227,8 +227,12 @@ review.
   two payables intents `data.payables_due` / `data.total_owed`,
   `data.vat_position`, `data.pending_approvals` (round 17 — the caller's
   own drafts blocked on the maker-checker policy, policy-off answered
-  plainly) AND `data.penalty_exposure` (round 18 — the caller's own
-  overdue paper priced at the small-band floor) ARE client-safe and on the
+  plainly), `data.penalty_exposure` (round 18 — the caller's own
+  overdue paper priced at the small-band floor) AND `data.invoice_status`
+  (round 20 — ONE invoice named by its number, the number APP-EXTRACTED
+  from the raw question by regex, never the model; the pinned lookup
+  matches either side of the caller's own paper and answers a sibling's
+  number with "no invoice" — non-disclosure) ARE client-safe and on the
   allowlist — they answer over the
   caller's own bills/position/paper only, the forced party pin making a
   client's "VAT position" always its own); the client option list is exactly the caller's own party; the executed party
@@ -559,7 +563,11 @@ call the model.
   stored) mine a client's own invoices for monthly billing patterns (3+
   invoices, monthly median gap, clustered amounts, buyers already covered by
   ANY template excluded) and prefill the existing template dialog — the
-  client disposes.
+  client disposes. Since round 20 all three habit miners (suggestions,
+  unbilled income, missing bills) group per (counterparty, CURRENCY) and
+  carry the currency through the contract — a USD retainer and NGN
+  one-offs to the same party are different habits, and the UI renders
+  each in its own currency.
 - **Unbilled-income detection** (`modules/invoice/unbilled-income.ts`,
   `GET /unbilled-income`, nothing stored) — the same miner pointed at the
   month the invoice DIDN'T go out, sharing `buyerBillingHistories` with the
@@ -643,6 +651,14 @@ call the model.
   count the digest's own facts query already computed
   (`bandExposure(count).small`, null when clean), never a second query
   that could straddle a Lagos midnight and contradict the count.
+- **Digest impact** (`modules/clerk/digest-impact.ts`,
+  `GET /clerk/digest-impact`, `clerk.use`, console health card) — the
+  digest auditing itself: each digest row stores its fact snapshot (round
+  20), and consecutive 7-day pairs within a firm form the time series.
+  Week-over-week movement of the urgent count (overdue + failed) is
+  split by whether the earlier digest was DELIVERED to opted-in staff;
+  buckets under a 3-pair floor show no rates, and the note pins
+  correlation-not-causation (opt-in itself is a signal).
 - **Month-end close assistant** (`modules/invoice/month-end-close.ts`,
   `GET /month-end-close`, nothing stored) — the deterministic advisories
   COMPOSED: overdue submissions (with the s.104 floor), unbilled income,
@@ -663,8 +679,11 @@ call the model.
   issue-to-stamp days, current overdue count (not windowed) and captured
   bills without a stamp verification. Attention first (overdue paper,
   then the weakest window rate); every rate honours the 3-sample floor
-  (null, never a scary 0%); the note pins posture-not-blame. Console
-  portfolio card, pure SQL end to end.
+  (null, never a scary 0%); the note pins posture-not-blame. Round 20
+  added the TREND: the same rates over the window before (same floors,
+  one SQL pass via a recent-flag on a doubled scan) with
+  improving/worsening arrows on the console card — "who's slipping"
+  instead of "who's bad". Console portfolio card, pure SQL end to end.
 - **Missing recurring bills** (`modules/invoice/missing-bills.ts`,
   `GET /bills/missing-recurring`, nothing stored) — the payables mirror of
   unbilled-income: the SAME `detectMonthlyPattern` miner pointed at the
@@ -763,16 +782,25 @@ shared computation as the corresponding chart.
   surfaces, which shipped every prompt change blind until round 18. Fixed
   synthetic fact packs replay through the BYTE-IDENTICAL production prompt
   builders — `DIGEST_PHRASING` / `CHASER_PHRASING` / `STATEMENT_PHRASING`
-  / `VAT_NOTE_PHRASING` (round 19 grew the corpus to the client statement
-  and VAT cover note), each surface's system prompt, version, schema,
-  validator and user-prompt assembly exported as one descriptor — via the
-  gateway, one purpose PER SURFACE (`eval_phrasing_digest` / `_chaser` /
-  `_statement` / `_vat_note`) so each slice of the corpus rides the model
-  tier its production surface actually uses. Every surface with an
-  outsider-influenced fact slot carries an injection fixture riding it
-  (the chaser's buyer name, the VAT note's client legal names); the
-  statement's facts are all platform-computed, so its fixtures are
-  clean-only. Scoring is
+  / `VAT_NOTE_PHRASING` / `REPLY_PHRASING` / `EXPLAIN_PHRASING` (rounds
+  19-20 grew the corpus to the client statement, VAT cover note,
+  escalation reply and failure explanation — every phrased surface where
+  a regression touches money, filings or a client conversation), each
+  surface's system prompt, version, schema, validator and user-prompt
+  assembly exported as one descriptor — via the gateway, one purpose PER
+  SURFACE so each slice of the corpus rides the model tier its production
+  surface actually uses. Every surface with an outsider-influenced fact
+  slot carries an injection fixture riding it (the chaser's buyer name,
+  the VAT note's client legal names, the escalation reply's fenced client
+  message, the explainer's rail-returned error code); the statement's
+  facts are all platform-computed, so its fixtures are clean-only. The
+  lane is SELF-ENFORCING since round 20: an opt-in nightly sweep run
+  (`clerk_auto_phrasing_eval` flag, once per UTC day, the eval-growth
+  discipline) plus a quality-drop watch (`phrasing-watch.ts`) that
+  compares each newest run's grounded/resistance RATES against the
+  aggregate of up to five prior runs (rate-based, so corpus growth never
+  reads as regression) and raises the resistance-watch style once-only
+  audit alert on a material drop. Scoring is
   DETERMINISTIC: number grounding via the production check itself
   (`numberGroundingViolations`, so the eval measures how often production
   would have fallen back to the template), required canonical numerals and

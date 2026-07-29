@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.50.0
+ * OpenAPI spec version: 0.51.0
  */
 export interface HealthStatus {
   status: string;
@@ -978,6 +978,7 @@ export interface RecurringInvoiceTemplate {
 export interface RecurringSuggestion {
   buyerPartyId: string;
   buyerName: string;
+  currency: string;
   count: number;
   medianAmount: string;
   lastIssueDate: string;
@@ -987,6 +988,7 @@ export interface RecurringSuggestion {
 export interface UnbilledIncomeAlert {
   buyerPartyId: string;
   buyerName: string;
+  currency: string;
   count: number;
   medianAmount: string;
   medianGapDays: number;
@@ -4211,6 +4213,20 @@ export interface IntentEvalOutcome {
   run: IntentEvalRun | null;
 }
 
+export interface DigestImpactBucket {
+  pairs: number;
+  /** @nullable */
+  meanUrgentDelta: number | null;
+  /** @nullable */
+  improvedShare: number | null;
+}
+
+export interface DigestImpactReport {
+  delivered: DigestImpactBucket;
+  undelivered: DigestImpactBucket;
+  note: string;
+}
+
 export type PhrasingEvalFixtureResultSurface = typeof PhrasingEvalFixtureResultSurface[keyof typeof PhrasingEvalFixtureResultSurface];
 
 
@@ -4219,6 +4235,8 @@ export const PhrasingEvalFixtureResultSurface = {
   chaser: 'chaser',
   statement: 'statement',
   vat_note: 'vat_note',
+  escalation_reply: 'escalation_reply',
+  failure_explanation: 'failure_explanation',
 } as const;
 
 export type PhrasingEvalFixtureResultRiskLabel = typeof PhrasingEvalFixtureResultRiskLabel[keyof typeof PhrasingEvalFixtureResultRiskLabel];
@@ -4285,6 +4303,8 @@ export const RunPhrasingEvalInputSurface = {
   chaser: 'chaser',
   statement: 'statement',
   vat_note: 'vat_note',
+  escalation_reply: 'escalation_reply',
+  failure_explanation: 'failure_explanation',
 } as const;
 
 export interface RunPhrasingEvalInput {
@@ -4301,6 +4321,8 @@ export const PhrasingEvalOutcomeCanarySurface = {
   chaser: 'chaser',
   statement: 'statement',
   vat_note: 'vat_note',
+  escalation_reply: 'escalation_reply',
+  failure_explanation: 'failure_explanation',
 } as const;
 
 export type PhrasingEvalOutcomeCanaryIncumbent = PhrasingEvalReport & {
@@ -5170,6 +5192,7 @@ export interface PenaltyExposure {
 export interface MissingRecurringBill {
   supplierPartyId: string;
   supplierName: string;
+  currency: string;
   count: number;
   medianAmount: string;
   medianGapDays: number;
@@ -5210,6 +5233,10 @@ export type ComplianceScorecardRowsItem = {
   withinWindowRate: number | null;
   /** @nullable */
   failureRate: number | null;
+  /** @nullable */
+  prevWithinWindowRate: number | null;
+  /** @nullable */
+  prevFailureRate: number | null;
   /** @nullable */
   medianDaysToStamp: number | null;
   overdueNow: number;

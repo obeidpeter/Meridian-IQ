@@ -1200,6 +1200,33 @@ function ComplianceScorecardCard() {
   if (!isSuccess || !scorecard || scorecard.rows.length === 0) return null;
   const pct = (value: number | null) =>
     value === null ? "—" : formatPct(value);
+  // Trend vs the prior window (round 20): direction only when both windows
+  // carry a rate; `goodWhenUp` maps improvement to green for both metrics.
+  const trend = (
+    current: number | null,
+    prev: number | null,
+    goodWhenUp: boolean,
+  ) => {
+    if (current === null || prev === null) return null;
+    const delta = current - prev;
+    if (Math.abs(delta) < 0.01) {
+      return (
+        <Minus
+          className="ml-1 inline w-3.5 h-3.5 text-muted-foreground"
+          aria-label="unchanged vs the prior window"
+        />
+      );
+    }
+    const up = delta > 0;
+    const good = up === goodWhenUp;
+    const Icon = up ? TrendingUp : TrendingDown;
+    return (
+      <Icon
+        className={`ml-1 inline w-3.5 h-3.5 ${good ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
+        aria-label={`${up ? "up" : "down"} vs the prior window`}
+      />
+    );
+  };
   return (
     <Card
       className="rounded-lg border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-card"
@@ -1248,9 +1275,11 @@ function ComplianceScorecardCard() {
                   </td>
                   <td className="py-2 pr-3 text-right tabular-nums">
                     {pct(r.withinWindowRate)}
+                    {trend(r.withinWindowRate, r.prevWithinWindowRate, true)}
                   </td>
                   <td className="py-2 pr-3 text-right tabular-nums">
                     {pct(r.failureRate)}
+                    {trend(r.failureRate, r.prevFailureRate, false)}
                   </td>
                   <td className="py-2 pr-3 text-right tabular-nums">
                     {r.medianDaysToStamp === null

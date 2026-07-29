@@ -520,6 +520,11 @@ export const clerkDigestsTable = pgTable(
     headline: text("headline").notNull(),
     bullets: jsonb("bullets").$type<string[]>().notNull().default([]),
     source: clerkDigestSourceEnum("source").notNull(),
+    // The fact snapshot the digest phrased (round 20): consecutive weekly
+    // snapshots are the digest-impact report's time series — the only way
+    // to know what the book looked like when each digest went out. Null on
+    // rows generated before the column existed; the report skips those.
+    facts: jsonb("facts").$type<Record<string, unknown> | null>(),
     // Set when the digest was offered to the firm's opted-in staff channels
     // (or deliberately skipped: no opted-in recipients claims silently —
     // opt-in means quiet is correct). The claim-first UPDATE on this column

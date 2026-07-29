@@ -42,6 +42,7 @@ const bill = (over: {
   invoiceNumber: string;
   issueDate: string;
   grandTotal?: string;
+  currency?: string;
 }) => ({
   firmId,
   supplierPartyId: over.supplierPartyId,
@@ -49,6 +50,7 @@ const bill = (over: {
   invoiceNumber: over.invoiceNumber,
   issueDate: over.issueDate,
   status: "draft" as const,
+  currency: over.currency ?? "NGN",
   grandTotal: over.grandTotal ?? "80000.00",
   subtotal: "74418.60",
   vatTotal: "5581.40",
@@ -82,6 +84,12 @@ before(async () => {
       ...bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-DX-${SALT}`, issueDate: daysAgo(10) }),
       status: "cancelled" as const,
     },
+    // Two USD one-offs from the SAME vendor, interleaved with the NGN habit
+    // — merged (the pre-round-20 bug) they would drag the median gap under
+    // the monthly floor and kill the alert; per-currency grouping keeps the
+    // NGN cadence clean and the USD leg under the pattern minimum.
+    bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-DU1-${SALT}`, issueDate: daysAgo(55), currency: "USD", grandTotal: "300.00" }),
+    bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-DU2-${SALT}`, issueDate: daysAgo(50), currency: "USD", grandTotal: "300.00" }),
     // Same habit, captured 15 days ago: nothing is late yet.
     bill({ supplierPartyId: vendorFresh, invoiceNumber: `MB-F1-${SALT}`, issueDate: daysAgo(75) }),
     bill({ supplierPartyId: vendorFresh, invoiceNumber: `MB-F2-${SALT}`, issueDate: daysAgo(45) }),
@@ -133,6 +141,8 @@ test("listMissingRecurringBills flags exactly the late vendor habit", async () =
   const a = alerts[0];
   assert.equal(a.supplierPartyId, vendorDue);
   assert.equal(a.supplierName, `MB Due Vendor ${SALT}`);
+  assert.equal(a.currency, "NGN", "the USD one-offs never pollute the cadence");
+  assert.equal(a.medianGapDays, 30, "the NGN habit's own gap, unmixed");
   assert.equal(Number(a.medianAmount), 80000);
   assert.equal(a.count, 3);
   assert.ok(

@@ -45,6 +45,7 @@ const row = (over: {
   invoiceNumber: string;
   issueDate: string;
   grandTotal?: string;
+  currency?: string;
 }) => ({
   firmId,
   supplierPartyId: clientId,
@@ -52,6 +53,7 @@ const row = (over: {
   invoiceNumber: over.invoiceNumber,
   issueDate: over.issueDate,
   status: "stamped" as const,
+  currency: over.currency ?? "NGN",
   grandTotal: over.grandTotal ?? "200000.00",
   subtotal: "186046.51",
   vatTotal: "13953.49",
@@ -76,6 +78,13 @@ before(async () => {
     row({ buyerPartyId: buyerDue, invoiceNumber: `UB-D1-${SALT}`, issueDate: daysAgo(100) }),
     row({ buyerPartyId: buyerDue, invoiceNumber: `UB-D2-${SALT}`, issueDate: daysAgo(70) }),
     row({ buyerPartyId: buyerDue, invoiceNumber: `UB-D3-${SALT}`, issueDate: daysAgo(40) }),
+    // Two USD one-offs to the SAME buyer, interleaved with the NGN habit.
+    // Merged into one history (the pre-round-20 bug) they would drag the
+    // median gap under the monthly floor and KILL the alert — per-currency
+    // grouping keeps the NGN cadence clean and the USD leg (2 invoices)
+    // under the pattern minimum.
+    row({ buyerPartyId: buyerDue, invoiceNumber: `UB-DU1-${SALT}`, issueDate: daysAgo(55), currency: "USD", grandTotal: "500.00" }),
+    row({ buyerPartyId: buyerDue, invoiceNumber: `UB-DU2-${SALT}`, issueDate: daysAgo(50), currency: "USD", grandTotal: "500.00" }),
     // Same habit, freshly billed 15 days ago: nothing is late yet.
     row({ buyerPartyId: buyerFresh, invoiceNumber: `UB-F1-${SALT}`, issueDate: daysAgo(75) }),
     row({ buyerPartyId: buyerFresh, invoiceNumber: `UB-F2-${SALT}`, issueDate: daysAgo(45) }),
@@ -147,10 +156,16 @@ test("unbilledAlertFor projects the next date and respects the window", () => {
 
 test("listUnbilledIncome flags exactly the late habit", async () => {
   const alerts = await listUnbilledIncome(firmId, clientId);
-  assert.equal(alerts.length, 1, "due only — not fresh, lapsed or covered");
+  assert.equal(
+    alerts.length,
+    1,
+    "due only — not fresh, lapsed, covered, or the sub-minimum USD leg",
+  );
   const a = alerts[0];
   assert.equal(a.buyerPartyId, buyerDue);
   assert.equal(a.buyerName, `UB Due Buyer ${SALT}`);
+  assert.equal(a.currency, "NGN", "the USD one-offs never pollute the cadence");
+  assert.equal(a.medianGapDays, 30, "the NGN habit's own gap, unmixed");
   assert.equal(Number(a.medianAmount), 200000);
   assert.ok(
     a.overdueDays >= 5 && a.overdueDays <= 45,

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.50.0
+ * OpenAPI spec version: 0.51.0
  */
 
 export type ComplianceScorecardRowsItem = {
@@ -15,6 +15,10 @@ export type ComplianceScorecardRowsItem = {
   withinWindowRate: number | null;
   /** @nullable */
   failureRate: number | null;
+  /** @nullable */
+  prevWithinWindowRate: number | null;
+  /** @nullable */
+  prevFailureRate: number | null;
   /** @nullable */
   medianDaysToStamp: number | null;
   overdueNow: number;

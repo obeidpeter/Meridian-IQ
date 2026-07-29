@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.50.0
+ * OpenAPI spec version: 0.51.0
  */
 
 export type PhrasingEvalOutcomeCanarySurface = typeof PhrasingEvalOutcomeCanarySurface[keyof typeof PhrasingEvalOutcomeCanarySurface];
@@ -14,4 +14,6 @@ export const PhrasingEvalOutcomeCanarySurface = {
   chaser: 'chaser',
   statement: 'statement',
   vat_note: 'vat_note',
+  escalation_reply: 'escalation_reply',
+  failure_explanation: 'failure_explanation',
 } as const;

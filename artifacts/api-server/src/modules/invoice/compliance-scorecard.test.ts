@@ -124,6 +124,16 @@ before(async () => {
     issueDate: daysAgo(12),
     status: "cancelled",
   });
+  // PRIOR window (round-20 trend): three invoices issued 120-100 days ago,
+  // all accepted LATE — prevWithinWindowRate 0 against the current 1/2,
+  // an improving client.
+  for (const [i, age] of [120, 110, 100].entries()) {
+    const p = await seedInvoice({
+      invoiceNumber: `SC-AP${i}-${SALT}`,
+      issueDate: daysAgo(age),
+    });
+    await seedAttempt(p, "accepted", daysAgo(age - 10)); // +10d: late
+  }
 
   // Client B: one stamped invoice, one accepted attempt — under every floor.
   const b1 = await seedInvoice({
@@ -166,6 +176,11 @@ test("the scorecard ranks attention first with floored rates", async () => {
   );
   assert.equal(first.overdueNow, 1);
   assert.equal(first.unverifiedBills, 1);
+  // The trend baseline: the prior window's three late acceptances give a
+  // 0% within-window rate (current is 1/2 — improving), no prior failures.
+  assert.equal(first.prevWithinWindowRate, 0);
+  assert.equal(first.prevFailureRate, 0);
+  assert.equal(second.prevWithinWindowRate, null, "no prior sample");
   assert.ok(
     first.medianDaysToStamp !== null && first.medianDaysToStamp >= 2,
     "median issue-to-stamp is computed",

@@ -54,6 +54,41 @@ export interface FailureExplanation {
   source: "clerk" | "catalogue";
 }
 
+// The user prompt the model phrases — extracted so the phrasing eval
+// replays the BYTE-IDENTICAL assembly production sends. Pure. The
+// invoiceNumber and errorCode slots carry text the platform did not
+// author (client-entered number, rail-returned code) — the eval's
+// injection fixture rides the code.
+export interface ExplainPhrasingInput {
+  invoiceNumber: string;
+  errorCode: string;
+  cause: string;
+  fix: string;
+}
+
+export function buildExplainUser(input: ExplainPhrasingInput): string {
+  return [
+    `Invoice number: ${input.invoiceNumber}`,
+    `Error code: ${input.errorCode}`,
+    `Catalogue cause: ${input.cause}`,
+    `Catalogue fix: ${input.fix}`,
+  ].join("\n");
+}
+
+// The failure-explanation surface's phrasing seam (the DIGEST_PHRASING
+// shape) — joinOutput matches production's exact ensureGrounded input.
+export const EXPLAIN_PHRASING = {
+  surface: "failure_explanation" as const,
+  promptVersion: EXPLAIN_PROMPT_VERSION,
+  system: EXPLAIN_SYSTEM,
+  schemaName: "failure_explanation",
+  jsonSchema: explainJsonSchema,
+  validator: explainOutput,
+  buildUser: buildExplainUser,
+  joinOutput: (data: z.infer<typeof explainOutput>): string =>
+    `${data.explanation}\n${data.nextSteps.join("\n")}`,
+};
+
 export async function explainInvoiceFailure(
   invoiceId: string,
   principal: Principal,
@@ -118,12 +153,12 @@ export async function explainInvoiceFailure(
   // Clerk phrasing is best-effort: no provider, kill switch off or budget
   // spent → the grounded catalogue text is the answer, not an error
   // (inferPhrasing — the gateway backstop covers the budget).
-  const user = [
-    `Invoice number: ${invoice.invoiceNumber}`,
-    `Error code: ${attempt.errorCode}`,
-    `Catalogue cause: ${cause}`,
-    `Catalogue fix: ${fix}`,
-  ].join("\n");
+  const user = buildExplainUser({
+    invoiceNumber: invoice.invoiceNumber,
+    errorCode: attempt.errorCode,
+    cause,
+    fix,
+  });
   const data = await inferPhrasing<z.infer<typeof explainOutput>>(gateway, {
     purpose: "explain_failure",
     caseId: null,

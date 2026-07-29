@@ -3,13 +3,14 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.50.0
+ * OpenAPI spec version: 0.51.0
  */
 import type { InvoiceLineInput } from './invoiceLineInput';
 
 export interface RecurringSuggestion {
   buyerPartyId: string;
   buyerName: string;
+  currency: string;
   count: number;
   medianAmount: string;
   lastIssueDate: string;
