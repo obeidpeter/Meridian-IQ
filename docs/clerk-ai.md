@@ -266,7 +266,7 @@ audit-lock convoy class platform-wide).
 
 ## Ask Clerk (grounded firm-data Q&A)
 
-- `modules/clerk/data-intents.ts`: Ask carries a second closed catalogue next
+- `modules/clerk/data-intents/`: Ask carries a second closed catalogue next
   to the claims register — data intents ("what's overdue?", "what did we
   submit this month?", the money intents "who owes us?" / "what's
   expected this week?" / "who's worth chasing?" backed by the
