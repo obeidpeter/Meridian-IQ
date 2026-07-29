@@ -150,7 +150,7 @@ jobs:
         env: { BASE_PATH: /penalty-calculator/, PORT: "3000" }
 
   # End-to-end user journeys against real builds and a real database — runs
-  # the full journey suite; see scripts/src/e2e/journeys.mjs for the current
+  # the full journey suite; see scripts/src/e2e/journeys/ for the current
   # inventory.
   e2e:
     runs-on: ubuntu-latest

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetActionProposals,
@@ -13,6 +12,7 @@ import type {
   ClerkActionDecision,
   PaymentChaserDraft,
 } from "@workspace/api-client-react";
+import { useClerkActionsDialog } from "@workspace/web-ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,14 +27,17 @@ import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
 import {
   ACTION_OUTCOME_LABELS,
+  ACTION_TARGET_DISPLAY_CAP,
+  actionConfirmButtonLabel,
+  actionConfirmDescription,
+  actionOutcomeSummary,
   actionOutcomeToneClasses,
+  draftClipboardText,
   formatAmount,
   formatDate,
   formatDateTime,
 } from "@/lib/format";
 import { Send, Sparkles } from "lucide-react";
-
-const TARGET_DISPLAY_CAP = 8;
 
 // Proposed actions, firm side (round 22): the SME dashboard card's twin on
 // the console client page. Clerk assembles each batch from the same checks
@@ -44,14 +47,13 @@ const TARGET_DISPLAY_CAP = 8;
 // has decision history — a dark clerk_actions flag empties the proposals
 // (fail-closed; execution refuses 503 regardless), but past decisions remain
 // legitimately visible: the strip is the firm's durable record of who
-// approved what.
+// approved what. The dialog machine (F1 unmount guard, mid-flight close
+// gate, deferred invalidations) is the shared headless core
+// (@workspace/web-ui useClerkActionsDialog); the copy is lib/format's.
 export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const execute = useExecuteAction();
-  const [confirming, setConfirming] = useState<ActionProposal | null>(null);
-  const [decision, setDecision] = useState<ClerkActionDecision | null>(null);
-  const [drafts, setDrafts] = useState<PaymentChaserDraft[] | null>(null);
   const { data: proposals, isSuccess } = useGetActionProposals(
     { clientPartyId },
     {
@@ -74,22 +76,13 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
-
-  // The dialog must survive the proposals list emptying after a full batch
-  // (the SME card's F1 lesson): stay mounted while the dialog is up, defer
-  // the proposals refetch to closeDialog.
-  const dialogOpen = confirming !== null || decision !== null;
-  const hasDecisions = (decisions?.decisions.length ?? 0) > 0;
-  if (
-    !isSuccess ||
-    !proposals ||
-    (proposals.actions.length === 0 && !dialogOpen && !hasDecisions)
-  ) {
-    return null;
-  }
-
-  const runAction = async (action: ActionProposal) => {
-    try {
+  const dialog = useClerkActionsDialog<
+    ActionProposal,
+    ClerkActionDecision,
+    PaymentChaserDraft
+  >({
+    mutation: execute,
+    run: async (action) => {
       const res = await execute.mutateAsync({
         data: {
           kind: action.kind,
@@ -97,34 +90,41 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
           clientPartyId,
         },
       });
-      setDecision(res.decision);
-      setDrafts(res.drafts ?? null);
+      return { decision: res.decision, drafts: res.drafts };
+    },
+    onExecuted: () => {
       queryClient.invalidateQueries({
         queryKey: getGetClientPortfolioQueryKey(clientPartyId),
       });
-    } catch (e) {
-      toast({
-        title: "Action failed",
-        description: serverErrorMessage(e),
-        variant: "destructive",
-      });
-    }
-  };
-
-  const closeDialog = () => {
-    if (execute.isPending) return;
-    if (decision !== null) {
+    },
+    onCloseAfterDecision: () => {
       queryClient.invalidateQueries({
         queryKey: getGetActionProposalsQueryKey(),
       });
       queryClient.invalidateQueries({
         queryKey: getGetActionDecisionsQueryKey(),
       });
-    }
-    setConfirming(null);
-    setDecision(null);
-    setDrafts(null);
-  };
+    },
+    onError: (e) =>
+      toast({
+        title: "Action failed",
+        description: serverErrorMessage(e),
+        variant: "destructive",
+      }),
+  });
+  const { confirming, decision, drafts, closeDialog } = dialog;
+
+  // The dialog must survive the proposals list emptying after a full batch
+  // (the SME card's F1 lesson): stay mounted while the dialog is up, defer
+  // the proposals refetch to closeDialog.
+  const hasDecisions = (decisions?.decisions.length ?? 0) > 0;
+  if (
+    !isSuccess ||
+    !proposals ||
+    (proposals.actions.length === 0 && !dialog.dialogOpen && !hasDecisions)
+  ) {
+    return null;
+  }
 
   return (
     <Card data-testid="card-clerk-actions">
@@ -149,7 +149,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             <p className="font-medium text-sm">{action.title}</p>
             <p className="text-sm text-muted-foreground">{action.why}</p>
             <div className="space-y-1 text-xs text-muted-foreground">
-              {action.targets.slice(0, TARGET_DISPLAY_CAP).map((t) => (
+              {action.targets.slice(0, ACTION_TARGET_DISPLAY_CAP).map((t) => (
                 <p key={t.invoiceId} data-testid={`action-target-${t.invoiceId}`}>
                   {t.invoiceNumber} · issued {formatDate(t.issueDate)}
                   {t.grandTotal
@@ -158,8 +158,8 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                   {t.note ? ` · ${t.note}` : ""}
                 </p>
               ))}
-              {action.targets.length > TARGET_DISPLAY_CAP && (
-                <p>…and {action.targets.length - TARGET_DISPLAY_CAP} more.</p>
+              {action.targets.length > ACTION_TARGET_DISPLAY_CAP && (
+                <p>…and {action.targets.length - ACTION_TARGET_DISPLAY_CAP} more.</p>
               )}
               {action.truncated && (
                 <p>
@@ -171,7 +171,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             </div>
             <Button
               size="sm"
-              onClick={() => setConfirming(action)}
+              onClick={() => dialog.beginConfirm(action)}
               disabled={execute.isPending}
               data-testid={`button-approve-${action.kind}`}
             >
@@ -204,13 +204,13 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               <DialogHeader>
                 <DialogTitle>Approve: {confirming?.title}</DialogTitle>
                 <DialogDescription>
-                  {confirming?.kind === "draft_chasers"
-                    ? `This drafts ${confirming?.targets.length} payment reminder${
-                        confirming?.targets.length === 1 ? "" : "s"
-                      } for the client to review and send — nothing is sent or submitted by the platform. Each invoice is re-checked at this moment, and the decision is recorded under your name.`
-                    : `This ${confirming?.kind === "retry_failed" ? "resubmits" : "submits"} ${confirming?.targets.length} invoice${
-                        confirming?.targets.length === 1 ? "" : "s"
-                      } to the e-invoicing rails through the ordinary path — validation, consent and any approval policy all apply. Each invoice is re-checked at this moment; anything already processed or no longer eligible is skipped, and the decision is recorded under your name.`}
+                  {confirming
+                    ? actionConfirmDescription(
+                        confirming.kind,
+                        confirming.targets.length,
+                        "console",
+                      )
+                    : ""}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -222,19 +222,18 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => confirming && runAction(confirming)}
+                  onClick={() => confirming && dialog.runAction(confirming)}
                   disabled={execute.isPending}
                   data-testid="button-confirm-action"
                 >
                   {execute.isPending
                     ? "Working…"
-                    : confirming?.kind === "draft_chasers"
-                      ? `Draft ${confirming?.targets.length ?? 0} reminder${
-                          confirming?.targets.length === 1 ? "" : "s"
-                        }`
-                      : `Approve ${confirming?.targets.length ?? 0} invoice${
-                          confirming?.targets.length === 1 ? "" : "s"
-                        }`}
+                    : confirming
+                      ? actionConfirmButtonLabel(
+                          confirming.kind,
+                          confirming.targets.length,
+                        )
+                      : ""}
                 </Button>
               </DialogFooter>
             </>
@@ -243,10 +242,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               <DialogHeader>
                 <DialogTitle>Batch result</DialogTitle>
                 <DialogDescription data-testid="text-action-outcome">
-                  {decision.executedCount}{" "}
-                  {decision.kind === "draft_chasers" ? "drafted" : "submitted"} ·{" "}
-                  {decision.failedCount} need attention ·{" "}
-                  {decision.skippedCount} skipped.
+                  {actionOutcomeSummary(decision)}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-1 text-sm">
@@ -282,9 +278,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                           size="sm"
                           variant="outline"
                           onClick={() =>
-                            navigator.clipboard.writeText(
-                              `${d.subject}\n\n${d.body}`,
-                            )
+                            navigator.clipboard.writeText(draftClipboardText(d))
                           }
                           data-testid={`button-copy-draft-${d.invoiceId}`}
                         >

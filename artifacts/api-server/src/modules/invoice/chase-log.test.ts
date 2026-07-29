@@ -14,6 +14,7 @@ import {
   recordChase,
 } from "./chase-log.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal as makeClientPrincipal } from "../../test-helpers/principals.ts";
 
 // Chase ladder memory (round-14 idea #3). Pinned invariants:
 //  - stages number 1, 2, 3… in logging order;
@@ -29,13 +30,7 @@ const outstandingId = randomUUID();
 const onceChasedId = randomUUID();
 const settledId = randomUUID();
 
-const clientPrincipal: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId,
-  clientPartyId: clientId,
-  buyerPartyId: null,
-};
+const clientPrincipal: Principal = makeClientPrincipal(firmId, clientId);
 const siblingPrincipal: Principal = {
   ...clientPrincipal,
   userId: randomUUID(),

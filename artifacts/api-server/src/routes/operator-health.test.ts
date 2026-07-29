@@ -10,6 +10,7 @@ import {
 } from "../modules/desk/health-watch.ts";
 import { appFor, listen, closeAllServers } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // GET /operator/health-alerts and GET /operator/rail-config. Pinned:
 //  - health-alerts reads the watches' durable alerts back off the audit
@@ -21,20 +22,8 @@ import { makeRunSalt } from "../test-helpers/fixtures.ts";
 
 const SALT = makeRunSalt();
 
-const operator: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const firmAdmin: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: randomUUID(),
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const operator: Principal = crossTenantPrincipal("operator");
+const firmAdmin: Principal = firmPrincipal(randomUUID());
 
 const railEntityId = `test_rail_${SALT}:2026-07-20T06:00:00.000Z`;
 const deliveryId = randomUUID();

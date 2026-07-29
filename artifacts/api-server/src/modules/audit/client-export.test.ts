@@ -27,6 +27,7 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // GET /clients/{id}/export — data-subject export. Access: assertPartyAccess
 // whole (client_user pinned to its OWN party per SEC-03; firm principals
@@ -50,48 +51,12 @@ const userPA = randomUUID(); // P's client_user under firm A
 const userPB = randomUUID(); // P's client_user under firm B
 const PASSWORD_HASH = `sekret-scrypt-${SALT}`;
 
-const clientP: Principal = {
-  userId: userPA,
-  role: "client_user",
-  firmId: firmA,
-  clientPartyId: partyP,
-  buyerPartyId: null,
-};
-const clientQ: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId: firmA,
-  clientPartyId: partyQ,
-  buyerPartyId: null,
-};
-const adminA: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const staffC: Principal = {
-  userId: randomUUID(),
-  role: "firm_staff",
-  firmId: firmC,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const operator: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const bankUser: Principal = {
-  userId: randomUUID(),
-  role: "bank_user",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const clientP: Principal = clientPrincipal(firmA, partyP, { userId: userPA });
+const clientQ: Principal = clientPrincipal(firmA, partyQ);
+const adminA: Principal = firmPrincipal(firmA);
+const staffC: Principal = firmPrincipal(firmC, { role: "firm_staff" });
+const operator: Principal = crossTenantPrincipal("operator");
+const bankUser: Principal = crossTenantPrincipal("bank_user");
 
 const ALL_SECTIONS = [
   "party",

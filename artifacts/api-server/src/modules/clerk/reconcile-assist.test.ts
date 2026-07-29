@@ -23,6 +23,7 @@ import {
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal as makeClientPrincipal, firmPrincipal as makeFirmPrincipal } from "../../test-helpers/principals.ts";
 
 // Reconciliation match assist (idea #2). Pinned invariants:
 //  - the ranking and every highlight are computed from the matcher's RECORDED
@@ -49,13 +50,7 @@ const proposalBId = randomUUID();
 const INV_A = `RA-A-${SALT}`;
 const INV_B = `RA-B-${SALT}`;
 
-const firmPrincipal: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const firmPrincipal: Principal = makeFirmPrincipal(firmId);
 
 before(async () => {
   await saveAndEnableClerkFlag();
@@ -278,13 +273,7 @@ test("a principal from another firm is refused before any explanation", async ()
     (err: Error & { code?: string }) => err.code === "CROSS_TENANT",
   );
   // SEC-03: a sibling client of the SAME firm is refused too.
-  const siblingClient: Principal = {
-    userId: randomUUID(),
-    role: "client_user",
-    firmId,
-    clientPartyId: randomUUID(),
-    buyerPartyId: null,
-  };
+  const siblingClient: Principal = makeClientPrincipal(firmId, randomUUID());
   await assert.rejects(
     assistMatch(lineId, siblingClient, null),
     (err: Error & { code?: string }) => err.code === "CROSS_CLIENT",

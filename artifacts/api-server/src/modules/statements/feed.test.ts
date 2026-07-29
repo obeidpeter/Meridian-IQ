@@ -42,6 +42,7 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Bank-feed connector seam (Wave C): the contract round-trip (pull -> render ->
 // ingestStatement -> reconcile outbox -> proposals), cursor idempotency, the
@@ -59,21 +60,9 @@ const noConsentParty = randomUUID(); // engaged, NO consent (CORE-03 probe)
 const foreignParty = randomUUID(); // engaged by firmDark, not by firmId
 const buyerParty = randomUUID();
 
-const staff: Principal = {
-  userId,
-  role: "firm_staff",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
 const staffDark: Principal = { ...staff, firmId: firmDark };
-const clientUser: Principal = {
-  userId,
-  role: "client_user",
-  firmId,
-  clientPartyId: clientParty,
-  buyerPartyId: null,
-};
+const clientUser: Principal = clientPrincipal(firmId, clientParty, { userId: userId });
 
 const goodConfig = { apiKey: `demo_${SALT}`, account: `acct-${SALT}` };
 

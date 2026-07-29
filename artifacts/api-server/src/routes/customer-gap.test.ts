@@ -18,6 +18,7 @@ import {
   closeAllServers,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt, daysAgo } from "../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // The "new customer" gap: party visibility is the firm's SPHERE (engaged ∪
 // invoice-referenced ∪ captured-by-firm), with the strictly narrower SEC-03
@@ -36,20 +37,8 @@ const buyerX = randomUUID(); // on clientA's invoice — NOT engaged
 const buyerY = randomUUID(); // on clientB's invoice only
 const buyerOther = randomUUID(); // firm B's buyer — never visible to firm A
 
-const staff: Principal = {
-  userId: userStaff,
-  role: "firm_staff",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const clientUserA: Principal = {
-  userId: userClientA,
-  role: "client_user",
-  firmId,
-  clientPartyId: clientA,
-  buyerPartyId: null,
-};
+const staff: Principal = firmPrincipal(firmId, { userId: userStaff, role: "firm_staff" });
+const clientUserA: Principal = clientPrincipal(firmId, clientA, { userId: userClientA });
 
 after(async () => {
   await closeAllServers();

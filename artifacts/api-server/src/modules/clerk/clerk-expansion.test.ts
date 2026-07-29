@@ -29,6 +29,7 @@ import {
   restoreClerkFlag,
 } from "./test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal as makeClientPrincipal, firmPrincipal as makeFirmPrincipal } from "../../test-helpers/principals.ts";
 
 // Clerk expansions B & C: the correction→eval learning loop and the grounded
 // failure explainer, plus voice-note duration persistence.
@@ -41,13 +42,7 @@ const clientId = randomUUID();
 const buyerId = randomUUID();
 const CODE = `EXP_TEST_${SALT}`.slice(0, 40);
 
-const admin: Principal = {
-  userId,
-  role: "firm_admin",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const admin: Principal = makeFirmPrincipal(firmId, { userId: userId });
 const brokeAdmin: Principal = { ...admin, firmId: brokeFirmId };
 
 let invoiceId = "";
@@ -259,13 +254,7 @@ test("explainInvoiceFailure: a client_user reaches only its own party's invoices
       nextSteps: ["Fix the field", "Resubmit"],
     }),
   );
-  const clientPrincipal: Principal = {
-    userId,
-    role: "client_user",
-    firmId,
-    clientPartyId: clientId,
-    buyerPartyId: null,
-  };
+  const clientPrincipal: Principal = makeClientPrincipal(firmId, clientId, { userId: userId });
   const result = await explainInvoiceFailure(invoiceId, clientPrincipal, gateway);
   assert.equal(result.errorCode, CODE);
   assert.equal(result.source, "clerk");

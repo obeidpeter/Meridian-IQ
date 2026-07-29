@@ -18,6 +18,7 @@ import {
 import { DomainError } from "../errors.ts";
 import type { Principal } from "../auth/rbac.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { buyerPrincipal as makeBuyerPrincipal } from "../../test-helpers/principals.ts";
 
 // Supplier compliance scoreboard (BR-05). Pinned invariants:
 //  - complianceScore = 0.6 × stamped rate + 0.4 × confirmed rate, where the
@@ -204,13 +205,7 @@ test("supplierDetail: the drill-down runs the exposure breakdown's aggregation a
 });
 
 test("respondBulk refuses an over-cap batch outright", async () => {
-  const buyerPrincipal: Principal = {
-    userId: randomUUID(),
-    role: "buyer_user",
-    firmId: null,
-    clientPartyId: null,
-    buyerPartyId: buyerId,
-  };
+  const buyerPrincipal: Principal = makeBuyerPrincipal(buyerId);
   await assert.rejects(
     respondBulk(
       buyerPrincipal,

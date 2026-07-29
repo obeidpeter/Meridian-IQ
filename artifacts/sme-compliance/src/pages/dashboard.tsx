@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetMe,
@@ -80,7 +79,12 @@ import {
 import { Link } from "wouter";
 import {
   ACTION_OUTCOME_LABELS,
+  ACTION_TARGET_DISPLAY_CAP,
+  actionConfirmButtonLabel,
+  actionConfirmDescription,
+  actionOutcomeSummary,
   actionOutcomeToneClasses,
+  draftClipboardText,
   formatAmount,
   formatDate,
   formatNaira,
@@ -89,6 +93,7 @@ import {
   severityLabel,
   severityBadgeClasses,
 } from "@/lib/format";
+import { useClerkActionsDialog } from "@workspace/web-ui";
 
 function StatCard({
   label,
@@ -769,25 +774,19 @@ function PenaltyExposureCard({ clientPartyId }: { clientPartyId: string }) {
   );
 }
 
-const TARGET_DISPLAY_CAP = 8;
-
 // Proposed actions (round 21): Clerk assembles the batch from the same
 // checks that power the cards above; NOTHING runs until the owner approves.
 // Approval executes through the ordinary submission path — validation,
 // consent, any approval policy — and every target is re-checked at that
 // moment. Renders only when the clerk_actions flag is on for the firm AND a
 // proposal exists (a dark flag answers an empty list, so the card hides).
+// The dialog machine (F1 unmount guard, mid-flight close gate, deferred
+// invalidations, transient drafts) is the shared headless core
+// (@workspace/web-ui useClerkActionsDialog); the copy is lib/format's.
 export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const execute = useExecuteAction();
-  // `decision === null` is the confirmation step; a decision switches the
-  // dialog to the results view (the bulk-submit dialog's shape). Chaser
-  // batches also carry their drafts — shown once in this dialog only (no
-  // draft is stored; model output lands in the inference ledger).
-  const [confirming, setConfirming] = useState<ActionProposal | null>(null);
-  const [decision, setDecision] = useState<ClerkActionDecision | null>(null);
-  const [drafts, setDrafts] = useState<PaymentChaserDraft[] | null>(null);
   const { data: proposals, isSuccess } = useGetActionProposals(
     { clientPartyId },
     {
@@ -799,22 +798,13 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
-  // The dialog must survive the proposals list emptying: after a full
-  // batch submits, the refetched list is [] and an early return would
-  // unmount the OPEN results view mid-read (review F1) — so the card stays
-  // mounted while the dialog is up, and the proposals refetch itself is
-  // deferred to closeDialog.
-  const dialogOpen = confirming !== null || decision !== null;
-  if (
-    !isSuccess ||
-    !proposals ||
-    (proposals.actions.length === 0 && !dialogOpen)
-  ) {
-    return null;
-  }
-
-  const runAction = async (action: ActionProposal) => {
-    try {
+  const dialog = useClerkActionsDialog<
+    ActionProposal,
+    ClerkActionDecision,
+    PaymentChaserDraft
+  >({
+    mutation: execute,
+    run: async (action) => {
       const res = await execute.mutateAsync({
         data: {
           kind: action.kind,
@@ -822,12 +812,14 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
           clientPartyId,
         },
       });
-      setDecision(res.decision);
-      setDrafts(res.drafts ?? null);
+      return { decision: res.decision, drafts: res.drafts };
+    },
+    onExecuted: () => {
       // Not awaited: a background refetch rejection must not surface as a
       // false "action failed" error after the batch already ran. The
       // no-args keys prefix-match every param variant. The proposals and
-      // decisions queries are deliberately NOT here — see closeDialog.
+      // decisions queries are deliberately NOT here — see the hook's
+      // onCloseAfterDecision (the F1 rule).
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       queryClient.invalidateQueries({
         queryKey: getGetDashboardSummaryQueryKey(),
@@ -841,31 +833,34 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       queryClient.invalidateQueries({
         queryKey: getGetMonthEndCloseQueryKey(),
       });
-    } catch (e) {
-      toast({
-        title: "Action failed",
-        description: serverErrorMessage(e),
-        variant: "destructive",
-      });
-    }
-  };
-
-  const closeDialog = () => {
-    // A batch in flight cannot be cancelled from here — keep the dialog up
-    // so its result is always shown.
-    if (execute.isPending) return;
-    if (decision !== null) {
+    },
+    onCloseAfterDecision: () => {
       queryClient.invalidateQueries({
         queryKey: getGetActionProposalsQueryKey(),
       });
       queryClient.invalidateQueries({
         queryKey: getGetActionDecisionsQueryKey(),
       });
-    }
-    setConfirming(null);
-    setDecision(null);
-    setDrafts(null);
-  };
+    },
+    onError: (e) =>
+      toast({
+        title: "Action failed",
+        description: serverErrorMessage(e),
+        variant: "destructive",
+      }),
+  });
+  const { confirming, decision, drafts, closeDialog } = dialog;
+  // The card must survive the proposals list emptying: after a full batch
+  // submits, the refetched list is [] and an early return would unmount the
+  // OPEN results view mid-read (review F1) — so the card stays mounted while
+  // the dialog is up.
+  if (
+    !isSuccess ||
+    !proposals ||
+    (proposals.actions.length === 0 && !dialog.dialogOpen)
+  ) {
+    return null;
+  }
 
   return (
     <Card data-testid="clerk-actions">
@@ -880,7 +875,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             <p className="font-medium">{action.title}</p>
             <p className="text-sm text-muted-foreground">{action.why}</p>
             <div className="space-y-1 text-xs text-muted-foreground">
-              {action.targets.slice(0, TARGET_DISPLAY_CAP).map((t) => (
+              {action.targets.slice(0, ACTION_TARGET_DISPLAY_CAP).map((t) => (
                 <p key={t.invoiceId} data-testid={`action-target-${t.invoiceId}`}>
                   {t.invoiceNumber} · issued {formatDate(t.issueDate)}
                   {action.kind === "submit_overdue" && (
@@ -896,8 +891,8 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                   {t.note ? ` · ${t.note}` : ""}
                 </p>
               ))}
-              {action.targets.length > TARGET_DISPLAY_CAP && (
-                <p>…and {action.targets.length - TARGET_DISPLAY_CAP} more.</p>
+              {action.targets.length > ACTION_TARGET_DISPLAY_CAP && (
+                <p>…and {action.targets.length - ACTION_TARGET_DISPLAY_CAP} more.</p>
               )}
               {action.truncated && (
                 <p>
@@ -909,7 +904,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             </div>
             <Button
               size="sm"
-              onClick={() => setConfirming(action)}
+              onClick={() => dialog.beginConfirm(action)}
               disabled={execute.isPending}
               data-testid="button-approve-action"
             >
@@ -929,13 +924,13 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               <DialogHeader>
                 <DialogTitle>Approve: {confirming?.title}</DialogTitle>
                 <DialogDescription>
-                  {confirming?.kind === "draft_chasers"
-                    ? `This drafts ${confirming?.targets.length} payment reminder${
-                        confirming?.targets.length === 1 ? "" : "s"
-                      } for you to review, copy and send yourself — nothing is sent or submitted by the platform. Each invoice is re-checked at this moment, and the decision is recorded under your name.`
-                    : `This ${confirming?.kind === "retry_failed" ? "resubmits" : "submits"} ${confirming?.targets.length} invoice${
-                        confirming?.targets.length === 1 ? "" : "s"
-                      } to the e-invoicing rails through the ordinary path — validation, consent and any approval policy all apply. Each invoice is re-checked at this moment; anything already processed or no longer eligible is skipped, and the decision is recorded under your name.`}
+                  {confirming
+                    ? actionConfirmDescription(
+                        confirming.kind,
+                        confirming.targets.length,
+                        "sme",
+                      )
+                    : ""}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -947,19 +942,18 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => confirming && runAction(confirming)}
+                  onClick={() => confirming && dialog.runAction(confirming)}
                   disabled={execute.isPending}
                   data-testid="button-confirm-action"
                 >
                   {execute.isPending
                     ? "Working…"
-                    : confirming?.kind === "draft_chasers"
-                      ? `Draft ${confirming?.targets.length ?? 0} reminder${
-                          confirming?.targets.length === 1 ? "" : "s"
-                        }`
-                      : `Approve ${confirming?.targets.length ?? 0} invoice${
-                          confirming?.targets.length === 1 ? "" : "s"
-                        }`}
+                    : confirming
+                      ? actionConfirmButtonLabel(
+                          confirming.kind,
+                          confirming.targets.length,
+                        )
+                      : ""}
                 </Button>
               </DialogFooter>
             </>
@@ -968,10 +962,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               <DialogHeader>
                 <DialogTitle>Batch result</DialogTitle>
                 <DialogDescription data-testid="text-action-outcome">
-                  {decision.executedCount}{" "}
-                  {decision.kind === "draft_chasers" ? "drafted" : "submitted"} ·{" "}
-                  {decision.failedCount} need attention ·{" "}
-                  {decision.skippedCount} skipped.
+                  {actionOutcomeSummary(decision)}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-1 text-sm">
@@ -1009,7 +1000,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                           variant="outline"
                           onClick={() =>
                             navigator.clipboard.writeText(
-                              `${d.subject}\n\n${d.body}`,
+                              draftClipboardText(d),
                             )
                           }
                           data-testid={`button-copy-draft-${d.invoiceId}`}

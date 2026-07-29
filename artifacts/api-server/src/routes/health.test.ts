@@ -1,21 +1,15 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import healthRouter from "./health.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { appFor, listen, closeAllServers } from "../test-helpers/route-harness.ts";
+import { crossTenantPrincipal } from "../test-helpers/principals.ts";
 
 // Liveness (/healthz), readiness (/readyz — real DB round-trip) and the
 // Prometheus scrape endpoint (/metrics). These are public; the harness injects
 // a principal the handlers ignore.
 
-const principal: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const principal: Principal = crossTenantPrincipal("operator");
 
 after(async () => {
   await closeAllServers();

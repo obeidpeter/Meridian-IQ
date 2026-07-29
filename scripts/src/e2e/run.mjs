@@ -17,7 +17,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { startStaticServer, startWebhookReceiver } from "./serve.mjs";
-import { runJourneys } from "./journeys.mjs";
+import { runJourneys } from "./journeys/index.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const API_PORT = Number(process.env.E2E_API_PORT ?? 5100);

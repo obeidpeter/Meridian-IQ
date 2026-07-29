@@ -29,6 +29,7 @@ import {
   closeAllServers,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Reconciliation debit lane (payables round). Pinned here:
 //  - the reconcile pipeline proposes DEBIT lines against unpaid BILLS
@@ -46,13 +47,7 @@ const vendorParty = randomUUID(); // not engaged: the bills' supplier
 const buyerParty = randomUUID(); // the receivable's buyer
 const userId = randomUUID();
 
-const staff: Principal = {
-  userId,
-  role: "firm_staff",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const staff: Principal = firmPrincipal(firmId, { userId: userId, role: "firm_staff" });
 
 const BILL_TOTAL = "129000.00";
 const RECV_TOTAL = "500000.00";

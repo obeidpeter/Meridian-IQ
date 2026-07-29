@@ -18,6 +18,7 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // POST /clients — single engaged-client creation: party (shared spine, with
 // provenance + party.create audit via createParty) plus the retainer
@@ -32,32 +33,14 @@ const firmA = randomUUID();
 const firmB = randomUUID();
 const adminAId = randomUUID();
 
-const adminA: Principal = {
-  userId: adminAId,
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const adminA: Principal = firmPrincipal(firmA, { userId: adminAId });
 const adminB: Principal = {
   ...adminA,
   userId: randomUUID(),
   firmId: firmB,
 };
-const clientUser: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId: firmA,
-  clientPartyId: randomUUID(),
-  buyerPartyId: null,
-};
-const operator: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const clientUser: Principal = clientPrincipal(firmA, randomUUID());
+const operator: Principal = crossTenantPrincipal("operator");
 
 const TIN = "12345678-0001";
 const LEGAL_NAME = `Create Client Alpha ${SALT}`;

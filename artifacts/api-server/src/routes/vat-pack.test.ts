@@ -11,6 +11,7 @@ import {
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
 import { closedLagosMonths } from "../modules/clerk/vat-pack.ts";
+import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Route-level authz for the VAT filing pack (idea #2). The SEC-critical
 // guarantee — a client_user must never see sibling clients' VAT figures, and
@@ -21,27 +22,9 @@ import { closedLagosMonths } from "../modules/clerk/vat-pack.ts";
 const SALT = makeRunSalt();
 const firmId = randomUUID();
 
-const firmAdmin: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const clientUser: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId,
-  clientPartyId: randomUUID(),
-  buyerPartyId: null,
-};
-const operator: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const firmAdmin: Principal = firmPrincipal(firmId);
+const clientUser: Principal = clientPrincipal(firmId, randomUUID());
+const operator: Principal = crossTenantPrincipal("operator");
 
 before(async () => {
   await getDb()

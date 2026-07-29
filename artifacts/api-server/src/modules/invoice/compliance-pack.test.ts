@@ -33,6 +33,7 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Monthly client compliance pack (contract 0.45.0). Pinned here:
 //  - the facts object: month-filtered register (sibling and other-month
@@ -56,20 +57,8 @@ const adminId = randomUUID();
 
 const MONTH = lagosMonthStart(0); // the current Lagos month — the default
 
-const admin: Principal = {
-  userId: adminId,
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
-const clientUser: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId: firmA,
-  clientPartyId: clientParty,
-  buyerPartyId: null,
-};
+const admin: Principal = firmPrincipal(firmA, { userId: adminId });
+const clientUser: Principal = clientPrincipal(firmA, clientParty);
 
 const CLIENT_NAME = `Pack Client ${SALT}`;
 const SIBLING_NAME = `Pack Sibling ${SALT}`;

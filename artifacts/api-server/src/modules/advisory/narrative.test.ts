@@ -19,6 +19,7 @@ import {
   saveAndEnableClerkFlag,
 } from "../clerk/test-support.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal as makeClientPrincipal, firmPrincipal as makeFirmPrincipal } from "../../test-helpers/principals.ts";
 
 // Advisory narrative drafting (idea #10). Pinned invariants:
 //  - every number in the letter comes from the engagement's stored findings;
@@ -35,13 +36,7 @@ const assessmentId = randomUUID();
 const vatId = randomUUID();
 const retainerId = randomUUID();
 
-const firmPrincipal: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const firmPrincipal: Principal = makeFirmPrincipal(firmId);
 
 const READINESS_FINDINGS = {
   version: 1,
@@ -226,13 +221,7 @@ test("tenancy: foreign firm and sibling client are refused", async () => {
     draftEngagementNarrative(assessmentId, foreign, null),
     (err: Error & { code?: string }) => err.code === "CROSS_TENANT",
   );
-  const sibling: Principal = {
-    userId: randomUUID(),
-    role: "client_user",
-    firmId,
-    clientPartyId: randomUUID(),
-    buyerPartyId: null,
-  };
+  const sibling: Principal = makeClientPrincipal(firmId, randomUUID());
   await assert.rejects(
     draftEngagementNarrative(assessmentId, sibling, null),
     (err: Error & { code?: string }) => err.code === "CROSS_CLIENT",

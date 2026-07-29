@@ -22,6 +22,7 @@ import {
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../test-helpers/fixtures.ts";
+import { clientPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Clerk expansion A: capture goes client-facing. These pin the route-layer
 // tenancy (firm principals see only their firm's cases; a client_user only its
@@ -35,21 +36,9 @@ const firm1 = randomUUID();
 const firm2 = randomUUID();
 const firmBroke = randomUUID(); // budget-exhaustion firm (ledger is append-only)
 
-const clientA: Principal = {
-  userId: randomUUID(),
-  role: "client_user",
-  firmId: firm1,
-  clientPartyId: randomUUID(),
-  buyerPartyId: null,
-};
+const clientA: Principal = clientPrincipal(firm1, randomUUID());
 const clientB: Principal = { ...clientA, userId: randomUUID(), clientPartyId: randomUUID() };
-const adminF1: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firm1,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const adminF1: Principal = firmPrincipal(firm1);
 const adminF2: Principal = { ...adminF1, userId: randomUUID(), firmId: firm2 };
 const adminBroke: Principal = { ...adminF1, userId: randomUUID(), firmId: firmBroke };
 

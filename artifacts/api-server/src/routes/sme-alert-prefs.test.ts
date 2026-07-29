@@ -17,6 +17,7 @@ import {
   closeAllServers,
   JSON_HEADERS,
 } from "../test-helpers/route-harness.ts";
+import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../test-helpers/principals.ts";
 
 // Alert-preference authorization (review finding): the SME owner role
 // (client_user) holds no messaging.send capability but MUST be able to manage
@@ -78,13 +79,7 @@ after(async () => {
 
 test("client_user can update the alert preferences of its OWN party", async () => {
   await ensureFixtures();
-  const principal: Principal = {
-    userId: "dev-user",
-    role: "client_user",
-    firmId,
-    clientPartyId: partyId,
-    buyerPartyId: null,
-  };
+  const principal: Principal = clientPrincipal(firmId, partyId, { userId: "dev-user" });
   const base = await listen(appFor(principal, smeRouter));
 
   const res = await fetch(`${base}/clients/${partyId}/alert-preferences`, {
@@ -123,20 +118,8 @@ test("client_user CANNOT update another client party's alert preferences", async
 
 test("the prefs PUT records contact provenance; toggles alone never clobber it", async () => {
   await ensureFixtures();
-  const client: Principal = {
-    userId: "dev-user",
-    role: "client_user",
-    firmId,
-    clientPartyId: partyId,
-    buyerPartyId: null,
-  };
-  const staff: Principal = {
-    userId: "dev-user",
-    role: "firm_staff",
-    firmId,
-    clientPartyId: null,
-    buyerPartyId: null,
-  };
+  const client: Principal = clientPrincipal(firmId, partyId, { userId: "dev-user" });
+  const staff: Principal = firmPrincipal(firmId, { userId: "dev-user", role: "firm_staff" });
   const readRow = async () => {
     const [row] = await getDb()
       .select()
@@ -181,13 +164,7 @@ test("the prefs PUT records contact provenance; toggles alone never clobber it",
 });
 
 test("roles with neither client scope nor messaging.send are rejected", async () => {
-  const principal: Principal = {
-    userId: "dev-user",
-    role: "bank_user",
-    firmId: null,
-    clientPartyId: null,
-    buyerPartyId: null,
-  };
+  const principal: Principal = crossTenantPrincipal("bank_user", { userId: "dev-user" });
   const base = await listen(appFor(principal, smeRouter));
 
   const res = await fetch(`${base}/clients/${partyId}/alert-preferences`, {

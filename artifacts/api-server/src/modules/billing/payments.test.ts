@@ -27,6 +27,7 @@ import {
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { lagosMonthStart } from "../clerk/client-statement.ts";
 import { resetPaymentProvider } from "./provider.ts";
+import { crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Payment collection seam. Pinned invariants:
 //  - the amount is NEVER a caller input: it comes from the billing-statement
@@ -85,13 +86,7 @@ const MONTH_FEE = "20600.00";
 // Months with no accepted invoices still owe the base subscription.
 const BASE_FEE = "20000.00";
 
-const admin: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firmPay,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const admin: Principal = firmPrincipal(firmPay);
 const adminFree: Principal = {
   ...admin,
   userId: randomUUID(),
@@ -103,13 +98,7 @@ const client: Principal = {
   role: "client_user",
   clientPartyId: supplier,
 };
-const operator: Principal = {
-  userId: randomUUID(),
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const operator: Principal = crossTenantPrincipal("operator");
 
 const WEBHOOK_TOKEN = `pay-hook-${SALT}`;
 

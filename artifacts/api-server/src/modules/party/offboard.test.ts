@@ -27,6 +27,7 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { firmPrincipal } from "../../test-helpers/principals.ts";
 
 // POST /clients/{id}/offboard — firm-scoped teardown of a SHARED-SPINE party.
 // The critical property under test is the two-firm shape: while another firm
@@ -66,22 +67,10 @@ const caseOff = randomUUID();
 const caseOther = randomUUID();
 const FIXTURE_TEXT = `INVOICE OFFBOARD-${randomUUID().slice(0, 8)} from Offboard Subject`;
 
-const adminA: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const adminA: Principal = firmPrincipal(firmA);
 const adminB: Principal = { ...adminA, userId: randomUUID(), firmId: firmB };
 const adminC: Principal = { ...adminA, userId: randomUUID(), firmId: firmC };
-const staffA: Principal = {
-  userId: randomUUID(),
-  role: "firm_staff",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const staffA: Principal = firmPrincipal(firmA, { role: "firm_staff" });
 
 function offboard(base: string, id: string, confirmLegalName: string) {
   return fetch(`${base}/clients/${id}/offboard`, {

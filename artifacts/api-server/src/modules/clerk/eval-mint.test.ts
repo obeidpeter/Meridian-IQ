@@ -25,6 +25,7 @@ import {
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { DomainError } from "../errors.ts";
 import { mintFixtureFromCase } from "./eval-curation.ts";
+import { crossTenantPrincipal } from "../../test-helpers/principals.ts";
 
 // Mint a fixture from a decided case (round 7). Invariants pinned here:
 //  - a case traceable to a live client (client_user creator OR approved
@@ -76,13 +77,7 @@ function extractionWith(
   };
 }
 
-const principal: Principal = {
-  userId: operatorId,
-  role: "operator",
-  firmId: null,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const principal: Principal = crossTenantPrincipal("operator", { userId: operatorId });
 
 before(async () => {
   const db = getDb();

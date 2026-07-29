@@ -71,7 +71,7 @@ const VAT_POSITION_MONTHS = 12;
 
 // The requestable Lagos months, newest first ("YYYY-MM-01"): the CURRENT
 // month plus the eleven before it — the LIVE mirror of closedLagosMonths
-// (vat-pack.ts) and lagosMonthOptions (clerk/data-intents.ts). Unlike the
+// (vat-pack.ts) and lagosMonthOptions (clerk/data-intents/). Unlike the
 // closed-month pack, a position is a running month-to-date number, so the
 // current month is a valid — and the default — request.
 export function vatPositionMonths(

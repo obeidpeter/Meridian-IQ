@@ -34,6 +34,7 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Outbound firm webhooks: fan-out inserts pointer-only delivery rows for
 // subscribed ACTIVE endpoints from the append-only domain ledgers
@@ -51,13 +52,7 @@ const partyA = randomUUID();
 const invoiceA = randomUUID();
 const statementId = randomUUID();
 
-const admin: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const admin: Principal = firmPrincipal(firmA);
 const staff: Principal = { ...admin, userId: randomUUID(), role: "firm_staff" };
 const adminB: Principal = { ...admin, userId: randomUUID(), firmId: firmB };
 

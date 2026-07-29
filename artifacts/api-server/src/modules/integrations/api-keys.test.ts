@@ -23,6 +23,7 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Firm API keys: minted/listed/revoked by the firm's ADMIN only (explicit
 // role gate), secret shown once / sha256 stored, and the resolved machine
@@ -33,13 +34,7 @@ const SALT = makeRunSalt();
 const firmA = randomUUID();
 const firmB = randomUUID();
 
-const admin: Principal = {
-  userId: randomUUID(),
-  role: "firm_admin",
-  firmId: firmA,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const admin: Principal = firmPrincipal(firmA);
 const staff: Principal = { ...admin, userId: randomUUID(), role: "firm_staff" };
 const adminB: Principal = { ...admin, userId: randomUUID(), firmId: firmB };
 

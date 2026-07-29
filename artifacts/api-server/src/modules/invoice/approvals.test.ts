@@ -39,6 +39,7 @@ import {
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Maker-checker submission approval + FX capture (contract 0.45.0). Pinned:
 //  - the policy DEFAULTS OFF: with no firm_policies row a single actor still
@@ -66,13 +67,7 @@ const clientBulk = randomUUID(); // engaged with firmOn — bulk-submit probe
 const vendorParty = randomUUID(); // NOT engaged — the bill's supplier
 const buyerParty = randomUUID();
 
-const makerOn: Principal = {
-  userId: makerId,
-  role: "firm_admin",
-  firmId: firmOn,
-  clientPartyId: null,
-  buyerPartyId: null,
-};
+const makerOn: Principal = firmPrincipal(firmOn, { userId: makerId });
 const checkerOn: Principal = {
   ...makerOn,
   userId: checkerId,
@@ -244,20 +239,8 @@ test("policy defaults off: a single actor still submits alone", async () => {
 test("invoice.approve is firm-side dual control only", () => {
   assert.equal(can(makerOn, "invoice.approve"), true, "firm_admin approves");
   assert.equal(can(checkerOn, "invoice.approve"), true, "firm_staff approves");
-  const clientUser: Principal = {
-    userId: randomUUID(),
-    role: "client_user",
-    firmId: firmOn,
-    clientPartyId: clientOn,
-    buyerPartyId: null,
-  };
-  const operator: Principal = {
-    userId: randomUUID(),
-    role: "operator",
-    firmId: null,
-    clientPartyId: null,
-    buyerPartyId: null,
-  };
+  const clientUser: Principal = clientPrincipal(firmOn, clientOn);
+  const operator: Principal = crossTenantPrincipal("operator");
   assert.equal(can(clientUser, "invoice.approve"), false, "not client_user");
   assert.equal(can(operator, "invoice.approve"), false, "not operator");
 });
