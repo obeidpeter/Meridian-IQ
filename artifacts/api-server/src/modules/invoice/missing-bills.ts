@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
+import { logger } from "../../lib/logger";
 import { lagosDateString } from "../../lib/lagos-time";
 import { addDays, daysBetween } from "./date-math";
 import {
@@ -98,7 +99,15 @@ async function vendorBillHistories(
       LIMIT ${CLIENT_SCAN_CAP + 1}
     `)
   ).rows;
-  if (rows.length > CLIENT_SCAN_CAP) return new Map();
+  if (rows.length > CLIENT_SCAN_CAP) {
+    // Fail quiet for the user, loud for the operator: a firm permanently
+    // past the cap loses this advisory, and only this line says why.
+    logger.warn(
+      { firmId, clientPartyId, cap: CLIENT_SCAN_CAP },
+      "missing-bills scan over cap — advisory suppressed",
+    );
+    return new Map();
+  }
   const byVendor = new Map<string, { name: string; bills: HistoryRow[] }>();
   for (const r of rows) {
     const entry = byVendor.get(r.supplier_party_id) ?? {
@@ -174,7 +183,13 @@ export async function countFirmMissingBills(
       LIMIT ${FIRM_SCAN_CAP + 1}
     `)
   ).rows;
-  if (rows.length > FIRM_SCAN_CAP) return { alerts: 0, clients: 0 };
+  if (rows.length > FIRM_SCAN_CAP) {
+    logger.warn(
+      { firmId, cap: FIRM_SCAN_CAP },
+      "missing-bills firm scan over cap — digest fact suppressed",
+    );
+    return { alerts: 0, clients: 0 };
+  }
   const today = lagosDateString(now);
   const byPair = new Map<string, { client: string; bills: HistoryRow[] }>();
   for (const r of rows) {
