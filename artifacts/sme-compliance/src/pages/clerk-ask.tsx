@@ -38,7 +38,7 @@ const QUESTION_MAX = 2000;
 // Pre-phrased to land in the grounded data intents, so a first click answers
 // from the asker's own records instead of a register refusal. This page
 // serves client_users too (SEC-03), who are only offered the
-// CLIENT_SAFE_DATA_INTENTS subset (api-server modules/clerk/data-intents.ts)
+// CLIENT_SAFE_DATA_INTENTS subset (api-server modules/clerk/data-intents/)
 // — so every chip here must classify to an intent on THAT allowlist, or the
 // chip is a one-click refusal for a client. Check the allowlist before
 // adding or rewording a chip.
