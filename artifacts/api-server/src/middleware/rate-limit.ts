@@ -54,6 +54,10 @@ export const MODEL_RATE_LIMITED_ROUTES: ReadonlySet<string> = new Set([
   "POST /api/clerk/eval/run",
   "POST /api/clerk/eval/canary",
   "POST /api/clerk/eval/model-canary",
+  // Round-18 hygiene: the intent eval joined NO_CONTEXT_ROUTES in round 15
+  // but was never mirrored here; the phrasing eval joins both lists at once.
+  "POST /api/clerk/eval/intent",
+  "POST /api/clerk/eval/phrasing",
   "POST /api/clerk/format-draft",
   "POST /api/clerk/draft-invoice",
   "POST /api/clerk/client-import-draft",

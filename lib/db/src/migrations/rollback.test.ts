@@ -300,6 +300,11 @@ const LADDER: LadderStep[] = [
       not(clerkTenant("collection_accounts")),
     ],
   },
+  {
+    version: 27, // phrasing eval run guardrails
+    atTop: [bypass("clerk_phrasing_eval_runs")],
+    afterRollback: [not(bypass("clerk_phrasing_eval_runs"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

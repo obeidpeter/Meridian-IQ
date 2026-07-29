@@ -65,6 +65,9 @@ const NO_CONTEXT_ROUTES = new Set([
   // to 40 grown (double in canary mode) — same story (round-15 review H1);
   // the stored run then lands on the raw pool like clerk_eval_runs does.
   "POST /api/clerk/eval/intent",
+  // The phrasing corpus is one completion per fixture (double in canary
+  // mode) — the intent eval's posture exactly.
+  "POST /api/clerk/eval/phrasing",
   // Inbound webhooks (routes/inbound.ts): each handler responds 202 and
   // then runs sender resolution + extraction in a detached promise whose DB
   // stages commit in their own short transactions (clerk scope.ts) — nothing

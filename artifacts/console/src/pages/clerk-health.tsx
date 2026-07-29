@@ -6,6 +6,9 @@ import {
   useRunIntentEval,
   useListIntentEvalRuns,
   getListIntentEvalRunsQueryKey,
+  useRunPhrasingEval,
+  useListPhrasingEvalRuns,
+  getListPhrasingEvalRunsQueryKey,
   useListIntentFixtures,
   useMintIntentFixture,
   useRetireIntentFixture,
@@ -332,6 +335,87 @@ function IntentEvalCard() {
                 {newest.results
                   .filter((r) => !r.correct)
                   .map((r) => r.key)
+                  .join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Phrasing eval lane (round 18): the digest and chaser prompts' regression
+// card — replay fixed synthetic fact packs through the live prompt builders
+// and score grounding, required identifiers and forbidden content
+// deterministically (including injection letters). Candidate-prompt canaries
+// run through the API's candidateSystem field; this card shows the stored
+// trend.
+function PhrasingEvalCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: runs, isSuccess } = useListPhrasingEvalRuns({
+    query: { queryKey: getListPhrasingEvalRunsQueryKey(), retry: false },
+  });
+  const runEval = useRunPhrasingEval({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: getListPhrasingEvalRunsQueryKey(),
+        });
+      },
+      onError: () =>
+        toast({ title: "Phrasing eval failed", variant: "destructive" }),
+    },
+  });
+  if (!isSuccess) return null;
+  const newest = runs?.[0];
+  return (
+    <Card data-testid="section-phrasing-eval">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base">Phrasing evaluation</CardTitle>
+        <Button
+          size="sm"
+          onClick={() => runEval.mutate({ data: {} })}
+          disabled={runEval.isPending}
+          data-testid="button-run-phrasing-eval"
+        >
+          {runEval.isPending ? "Running…" : "Run phrasing eval"}
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Replays fixed synthetic fact packs through the live digest and
+          chaser prompts (one call per fixture) and scores the output
+          deterministically: number grounding, required identifiers, forbidden
+          content — including two prompt-injection letters.
+        </p>
+        {!newest ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-phrasing-eval-empty"
+          >
+            No phrasing eval runs yet — run one to baseline the prompts.
+          </p>
+        ) : (
+          <div className="space-y-1" data-testid="phrasing-eval-latest">
+            <p className="text-sm">
+              Latest: {newest.correctCount}/{newest.fixtureCount} correct ·{" "}
+              {newest.groundedCount}/{newest.fixtureCount} grounded · injection{" "}
+              {newest.injectionResisted}/{newest.injectionFixtures} resisted ·{" "}
+              {Object.entries(newest.promptVersions ?? {}).map(([k, v]) => (
+                <code key={k} className="mr-1">
+                  {v}
+                </code>
+              ))}
+              · {formatDateTime(newest.createdAt)}
+            </p>
+            {newest.results.filter((r) => !r.correct).length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Failed:{" "}
+                {newest.results
+                  .filter((r) => !r.correct)
+                  .map((r) => `${r.key} (${r.failures.join("; ")})`)
                   .join(", ")}
               </p>
             )}
@@ -2283,6 +2367,8 @@ export function HealthPanel() {
           className="mt-4 space-y-4 data-[state=inactive]:hidden"
         >
       <IntentEvalCard />
+
+      <PhrasingEvalCard />
 
       <Card data-testid="section-evaluation">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">

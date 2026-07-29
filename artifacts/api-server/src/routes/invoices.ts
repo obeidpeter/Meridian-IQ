@@ -81,6 +81,8 @@ import {
   GetProjectionAccuracyResponse,
   GetChaseEffectivenessQueryParams,
   GetChaseEffectivenessResponse,
+  GetPenaltyExposureQueryParams,
+  GetPenaltyExposureResponse,
   RecordChaseReminderParams,
   RecordChaseReminderResponse,
   ApproveInvoiceParams,
@@ -121,6 +123,7 @@ import { listPaymentBehaviour } from "../modules/invoice/payment-behaviour";
 import { listUnmatchedCredits } from "../modules/invoice/unmatched-credits";
 import { computeProjectionAccuracy } from "../modules/invoice/projection-accuracy";
 import { computeChaseEffectiveness } from "../modules/invoice/chase-effectiveness";
+import { computePenaltyExposure } from "../modules/invoice/penalty-exposure";
 import { computeRejectionRisk } from "../modules/invoice/rejection-risk";
 import { recordChase } from "../modules/invoice/chase-log";
 import { renderInvoicePdf, sendPdfAttachment } from "../modules/invoice/pdf";
@@ -627,6 +630,21 @@ router.get("/chase-effectiveness", async (req, res): Promise<void> => {
   );
   const report = await computeChaseEffectiveness(firmId, clientPartyId);
   res.json(GetChaseEffectivenessResponse.parse(report));
+});
+
+// Penalty exposure (round-18 idea #2): the public penalty model pointed at
+// the caller's own overdue paper — per-band estimate, small-band floor,
+// estimate-not-advice note. Deterministic, nothing stored. Same SEC-03
+// resolution as the miners above.
+router.get("/penalty-exposure", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetPenaltyExposureQueryParams, req.query);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const report = await computePenaltyExposure(firmId, clientPartyId);
+  res.json(GetPenaltyExposureResponse.parse(report));
 });
 
 // Chase ladder (round-14 idea #3): record that a payment reminder was SENT —

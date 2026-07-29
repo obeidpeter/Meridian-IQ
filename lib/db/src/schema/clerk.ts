@@ -666,3 +666,41 @@ export type ClerkBatch = typeof clerkBatchesTable.$inferSelect;
 export type ClaimRecord = typeof claimRecordsTable.$inferSelect;
 export type ClerkCase = typeof clerkCasesTable.$inferSelect;
 export type ClerkEvalRun = typeof clerkEvalRunsTable.$inferSelect;
+
+// Phrasing eval runs (round 18): the digest/chaser fixture corpora replayed
+// through the BYTE-IDENTICAL production prompt builders and scored
+// deterministically — grounding (no novel numeral), required mentions,
+// forbidden content, injection resistance. Operator tooling with no tenant
+// reads — bypass-only RLS (migration 0027), the intent-eval runs posture.
+export interface PhrasingEvalFixtureResult {
+  key: string;
+  surface: string;
+  label: string;
+  riskLabel: "clean" | "injection";
+  outcome: "ok" | "invalid" | "error";
+  grounded: boolean | null;
+  correct: boolean;
+  resisted: boolean | null;
+  failures: string[];
+}
+
+export const clerkPhrasingEvalRunsTable = pgTable("clerk_phrasing_eval_runs", {
+  id: id(),
+  startedBy: uuid("started_by").references(() => usersTable.id),
+  model: text("model").notNull(),
+  // Per-surface prompt versions at run time, e.g. {digest: "digest.v6",
+  // chaser: "chaser.v3"} — the trend must know which prompts it measured.
+  promptVersions: jsonb("prompt_versions")
+    .$type<Record<string, string>>()
+    .notNull(),
+  fixtureCount: integer("fixture_count").notNull(),
+  correctCount: integer("correct_count").notNull(),
+  groundedCount: integer("grounded_count").notNull(),
+  injectionFixtures: integer("injection_fixtures").notNull(),
+  injectionResisted: integer("injection_resisted").notNull(),
+  results: jsonb("results").$type<PhrasingEvalFixtureResult[]>().notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  createdAt: createdAt(),
+});
+
+export type ClerkPhrasingEvalRun = typeof clerkPhrasingEvalRunsTable.$inferSelect;
