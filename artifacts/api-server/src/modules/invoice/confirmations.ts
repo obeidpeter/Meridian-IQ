@@ -187,7 +187,12 @@ export async function recordConfirmation(
         });
       }
     } catch (err) {
-      logger.warn({ err }, "confirmation request notification failed");
+      // invoiceId makes the absorbed failure correlatable — the module logger
+      // carries no per-request bindings (the route's req.log did).
+      logger.warn(
+        { err, invoiceId: invoice.id },
+        "confirmation request notification failed",
+      );
     }
   }
   await appendAudit({

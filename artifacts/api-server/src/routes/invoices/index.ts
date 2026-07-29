@@ -17,8 +17,8 @@ import railsRouter from "./rails";
 //   collection.ts  list, create, CSV export (+ the shared list conditions)
 //   packs.ts       VAT pack family, quarterly review, billing statement
 //   advisories.ts  the deterministic client-scoped miners and reports
-//   lifecycle.ts   single get/fix, validate/submit/bulk-submit, approvals,
-//                  cancel, credit-note, chase-log
+//   lifecycle.ts   chase-log, bulk-submit, single get/fix,
+//                  validate/submit, approvals, cancel, credit-note
 //   documents.ts   PDF/UBL/canonical, stamp, attempts, status light, risk
 //   rails.ts       buyer confirmations (BR-02) and settlement evidence
 //   shared.ts      loadForTenant — the SEC-03 single-invoice scope gate
