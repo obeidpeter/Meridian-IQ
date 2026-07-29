@@ -13,7 +13,7 @@ import { isFeatureEnabled } from "../flags/flags";
 import { ensureGrounded } from "./grounding";
 import { pendingApprovals } from "../invoice/approvals";
 import { countFirmUnmatchedCollections } from "../collections/unmatched";
-import { firmPenaltyExposureFloor } from "../invoice/penalty-exposure";
+import { bandExposure } from "../invoice/penalty-exposure";
 import { countFirmMissingBills } from "../invoice/missing-bills";
 import { sendMessage } from "../messaging/messaging";
 import { pointerEntityRef } from "../messaging/recipient-ref";
@@ -224,12 +224,16 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const payablesDue = await countFirmPayablesDue(firmId);
   const approvals = await pendingApprovals(firmId);
   const unmatchedCollections = await countFirmUnmatchedCollections(firmId, 7);
-  const penaltyFloor = await firmPenaltyExposureFloor(firmId);
   const missingBills = await countFirmMissingBills(firmId);
+  // The penalty floor is DERIVED from the overdue count this query already
+  // computed — a second COUNT under the same predicate could straddle a
+  // Lagos midnight and let one digest say "0 overdue" next to a non-zero
+  // exposure. One count, one spelling, no second query.
+  const overdueCount = Number(r?.overdue ?? 0);
   return {
     unsubmittedCount: Number(r?.unsubmitted ?? 0),
     dueSoonCount: Number(r?.due_soon ?? 0),
-    overdueCount: Number(r?.overdue ?? 0),
+    overdueCount,
     failedCount: Number(r?.failed ?? 0),
     receivablesOver60Count: Number(r?.recv_over_60 ?? 0),
     unbilledCount: unbilled.alerts,
@@ -245,7 +249,8 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     approvalsPendingCount: approvals?.count ?? null,
     approvalsPendingOldestDays: approvals?.oldestDays ?? null,
     unmatchedCollectionsCount: unmatchedCollections,
-    penaltyExposureFloorNgn: penaltyFloor,
+    penaltyExposureFloorNgn:
+      overdueCount > 0 ? bandExposure(overdueCount).small : null,
     missingBillsCount: missingBills.alerts,
     missingBillsClients: missingBills.clients,
   };

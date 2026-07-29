@@ -11,7 +11,6 @@ import {
 import {
   bandExposure,
   computePenaltyExposure,
-  firmPenaltyExposureFloor,
   S104_PER_INVOICE,
 } from "./penalty-exposure.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
@@ -181,7 +180,3 @@ test("another firm sees nothing", async () => {
   assert.deepEqual(report.sampleInvoices, []);
 });
 
-test("the digest floor is the small band, null when clean", async () => {
-  assert.equal(await firmPenaltyExposureFloor(firmId), bandExposure(4).small);
-  assert.equal(await firmPenaltyExposureFloor(randomUUID()), null);
-});

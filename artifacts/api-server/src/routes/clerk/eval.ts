@@ -31,6 +31,7 @@ import {
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import { assertCan } from "../../modules/auth/rbac";
+import { DomainError } from "../../modules/errors";
 import { getClerkGateway } from "../../modules/clerk/provider";
 import {
   listEvalRuns,
@@ -125,6 +126,16 @@ router.post("/clerk/eval/phrasing", async (req, res): Promise<void> => {
     );
     res.json(RunPhrasingEvalResponse.parse({ canary: report, run: null }));
     return;
+  }
+  // `surface` only means something to a canary. Refuse it on a stored run
+  // rather than silently burning a full two-surface pass the operator did
+  // not ask for (and polluting the stored trend with it).
+  if (body.surface) {
+    throw new DomainError(
+      "SURFACE_WITHOUT_CANDIDATE",
+      "surface selects the canary corpus — provide candidateSystem, or omit surface to run and store the full eval",
+      400,
+    );
   }
   const run = await runPhrasingEval(req.principal.userId, gateway);
   res.json(RunPhrasingEvalResponse.parse({ canary: null, run }));

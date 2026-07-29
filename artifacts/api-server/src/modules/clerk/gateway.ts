@@ -96,9 +96,12 @@ export type ClerkPurpose =
   // regression spend never blends into the extraction eval cohort.
   | "eval_intent"
   // Phrasing eval lane (round 18): the digest/chaser fixture corpora
-  // replayed through the byte-identical production prompt builders; its own
-  // purpose so phrasing regression spend has its own cohort.
-  | "eval_phrasing"
+  // replayed through the byte-identical production prompt builders. One
+  // purpose PER SURFACE so each half of the corpus rides the tier its
+  // production surface actually uses (modelForPurpose routes on the purpose
+  // string alone), while phrasing regression spend keeps its own cohorts.
+  | "eval_phrasing_digest"
+  | "eval_phrasing_chaser"
   // Scanned-bundle segmentation (batch-async): one vision call proposing
   // page ranges; the app validates coverage before anything else runs.
   | "segment_scan"

@@ -27,6 +27,14 @@ const GRACE_DAYS = 5;
 const MAX_OVERDUE_DAYS = 45;
 const MAX_ALERTS = 5;
 
+// Scan caps, fetched cap+1 so truncation is DETECTED, never silent (the
+// ask.ts rule): a truncated ASC scan would drop the NEWEST bills, making a
+// captured vendor look uncaptured — a manufactured alert. Past the cap the
+// advisory fails QUIET (no alerts): a card that cannot see the whole year
+// must not speak.
+const CLIENT_SCAN_CAP = 50_000;
+const FIRM_SCAN_CAP = 100_000;
+
 export interface MissingBillAlert {
   supplierPartyId: string;
   supplierName: string;
@@ -61,7 +69,10 @@ export function missingBillAlertFor(
 
 // One client's captured-bill history per vendor over the trailing year,
 // through the canonical bill fragment (BILL_OF_CLIENT — a receivable can
-// never pollute a vendor's cadence).
+// never pollute a vendor's cadence). Cancelled/credited paper and null
+// totals are excluded and merged-away vendors dropped — the exact evidence
+// discipline of the miner this mirrors (recurring-suggest.ts: cancelled
+// paper is not evidence of a standing arrangement).
 async function vendorBillHistories(
   firmId: string,
   clientPartyId: string,
@@ -79,11 +90,15 @@ async function vendorBillHistories(
       FROM invoices i
       JOIN parties p ON p.id = i.supplier_party_id
       WHERE ${BILL_OF_CLIENT(firmId, clientPartyId)}
+        AND i.status NOT IN ('cancelled', 'credited')
+        AND i.grand_total IS NOT NULL
+        AND p.merged_into_id IS NULL
         AND i.issue_date >= (now() AT TIME ZONE 'Africa/Lagos')::date - ${LOOKBACK_DAYS}::int
       ORDER BY i.issue_date ASC, i.id
-      LIMIT 50000
+      LIMIT ${CLIENT_SCAN_CAP + 1}
     `)
   ).rows;
+  if (rows.length > CLIENT_SCAN_CAP) return new Map();
   const byVendor = new Map<string, { name: string; bills: HistoryRow[] }>();
   for (const r of rows) {
     const entry = byVendor.get(r.supplier_party_id) ?? {
@@ -141,9 +156,13 @@ export async function countFirmMissingBills(
       SELECT i.buyer_party_id, i.supplier_party_id,
         i.id, i.issue_date::text AS issue_date, i.grand_total::text AS grand_total
       FROM invoices i
+      JOIN parties p ON p.id = i.supplier_party_id
       WHERE i.firm_id = ${firmId}
         AND i.kind = 'invoice'
         AND ${BILL_ORIENTATION}
+        AND i.status NOT IN ('cancelled', 'credited')
+        AND i.grand_total IS NOT NULL
+        AND p.merged_into_id IS NULL
         AND EXISTS (
           SELECT 1 FROM engagements e
           WHERE e.firm_id = i.firm_id
@@ -152,9 +171,10 @@ export async function countFirmMissingBills(
         )
         AND i.issue_date >= (now() AT TIME ZONE 'Africa/Lagos')::date - ${LOOKBACK_DAYS}::int
       ORDER BY i.issue_date ASC, i.id
-      LIMIT 100000
+      LIMIT ${FIRM_SCAN_CAP + 1}
     `)
   ).rows;
+  if (rows.length > FIRM_SCAN_CAP) return { alerts: 0, clients: 0 };
   const today = lagosDateString(now);
   const byPair = new Map<string, { client: string; bills: HistoryRow[] }>();
   for (const r of rows) {

@@ -57,11 +57,15 @@ export function modelForPurpose(
   if (purpose === "eval_intent") {
     return tiers.get("classify_intent") ?? base;
   }
-  // The phrasing eval must measure the model that actually phrases the
-  // digest; its chaser fixtures ride the same tier (both surfaces default
-  // to the base model unless a digest tier is configured).
-  if (purpose === "eval_phrasing") {
+  // The phrasing eval must measure the model that actually phrases each
+  // surface: digest fixtures ride the digest tier, chaser fixtures the
+  // draft_chaser tier — an operator who tiers the two surfaces apart must
+  // not have the eval silently measure the wrong model on either half.
+  if (purpose === "eval_phrasing_digest") {
     return tiers.get("digest") ?? base;
+  }
+  if (purpose === "eval_phrasing_chaser") {
+    return tiers.get("draft_chaser") ?? base;
   }
   return base;
 }

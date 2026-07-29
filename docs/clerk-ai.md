@@ -639,8 +639,10 @@ call the model.
   estimate-not-advice and the framing is always "submitting removes the
   exposure". Amber SME dashboard card with the oldest-5 sample; also an
   Ask data intent (`data.penalty_exposure`, client-safe with the forced
-  own-party pin) and the digest floor fact (`firmPenaltyExposureFloor`,
-  null when clean).
+  own-party pin) and the digest floor fact — DERIVED from the overdue
+  count the digest's own facts query already computed
+  (`bandExposure(count).small`, null when clean), never a second query
+  that could straddle a Lagos midnight and contradict the count.
 - **Missing recurring bills** (`modules/invoice/missing-bills.ts`,
   `GET /bills/missing-recurring`, nothing stored) — the payables mirror of
   unbilled-income: the SAME `detectMonthlyPattern` miner pointed at the
@@ -743,7 +745,9 @@ shared computation as the corresponding chart.
   BYTE-IDENTICAL production prompt builders — `DIGEST_PHRASING` /
   `CHASER_PHRASING`, each surface's system prompt, version, schema,
   validator and user-prompt assembly exported as one descriptor — via the
-  gateway (purpose `eval_phrasing`, tiered like the digest). Scoring is
+  gateway, one purpose PER SURFACE (`eval_phrasing_digest` /
+  `eval_phrasing_chaser`) so each half of the corpus rides the model tier
+  its production surface actually uses. Scoring is
   DETERMINISTIC: number grounding via the production check itself
   (`numberGroundingViolations`, so the eval measures how often production
   would have fallen back to the template), required canonical numerals and

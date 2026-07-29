@@ -75,6 +75,13 @@ before(async () => {
     bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-D1-${SALT}`, issueDate: daysAgo(100) }),
     bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-D2-${SALT}`, issueDate: daysAgo(70) }),
     bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-D3-${SALT}`, issueDate: daysAgo(40) }),
+    // A voided mis-capture 10 days ago must NOT advance the cadence —
+    // cancelled paper is not evidence, and counting it would suppress the
+    // genuine alert (lastIssueDate would look current).
+    {
+      ...bill({ supplierPartyId: vendorDue, invoiceNumber: `MB-DX-${SALT}`, issueDate: daysAgo(10) }),
+      status: "cancelled" as const,
+    },
     // Same habit, captured 15 days ago: nothing is late yet.
     bill({ supplierPartyId: vendorFresh, invoiceNumber: `MB-F1-${SALT}`, issueDate: daysAgo(75) }),
     bill({ supplierPartyId: vendorFresh, invoiceNumber: `MB-F2-${SALT}`, issueDate: daysAgo(45) }),

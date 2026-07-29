@@ -130,25 +130,8 @@ export async function computePenaltyExposure(
   };
 }
 
-// The digest's single number: the SMALL-band floor over the firm's overdue
-// paper — null when nothing is overdue (the digest already carries the
-// overdue count; this adds what it could cost).
-export async function firmPenaltyExposureFloor(
-  firmId: string,
-): Promise<string | null> {
-  const today = lagosTodaySql();
-  const [agg] = (
-    await getDb().execute<{ count: number }>(sql`
-      SELECT COUNT(*)::int AS count
-      FROM invoices i
-      WHERE i.firm_id = ${firmId}
-        AND i.kind = 'invoice'
-        AND i.status IN ('draft', 'validated')
-        AND ${RECEIVABLE_ORIENTATION}
-        AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${today}
-    `)
-  ).rows;
-  const count = Number(agg?.count ?? 0);
-  if (count === 0) return null;
-  return bandExposure(count).small;
-}
+// The digest's single number is NOT a second query: computeDigestFacts
+// derives the small-band floor from the overdue count its own facts query
+// already produced (bandExposure(count).small, null when clean) — two
+// counts under the same predicate could straddle a Lagos midnight and
+// let one digest contradict itself.
