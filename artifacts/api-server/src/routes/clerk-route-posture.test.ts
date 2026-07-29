@@ -284,3 +284,58 @@ test("action execution runs outside the request transaction, model call outside 
     "phrasePaymentChaser must be called exactly once, at the pinned transaction-free site",
   );
 });
+
+test("bulk submit runs outside the request transaction with per-item caller-posture commits", () => {
+  // The LAST batch surface converted (posture round): inside one request
+  // transaction the first row's appendAudit held the GLOBAL audit advisory
+  // lock for the whole 200-row batch — the convoy/deadlock class the
+  // bulk-approve and execute-route blocks above document.
+  const appSrc = src("app.ts");
+  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
+  const setEnd = appSrc.indexOf("])", setStart);
+  assert.ok(
+    appSrc.slice(setStart, setEnd).includes('"POST /api/invoices/bulk-submit"'),
+    "bulk-submit must be exempted from the request transaction",
+  );
+  // The route's own party-access gate needs a context too — the raw pool
+  // carries no GUCs, so an unwrapped engagement read would false-deny under
+  // RLS for firm principals.
+  const block = routeBlock(src("routes/invoices.ts"), "/invoices/bulk-submit");
+  // One spanning regex, not two includes: an unwrapped assertPartyAccess
+  // beside a vestigial runRequestContext(noop) must not pass.
+  assert.ok(
+    /runRequestContext\([\s\S]*?assertPartyAccess\(req\.principal, body\.clientPartyId\)/.test(
+      block,
+    ),
+    "the route's assertPartyAccess must run inside a caller-posture context",
+  );
+  // The module re-binds the CALLER's posture per stage: firm principals get
+  // their firm GUC, cross-tenant staff (firmId null) get bypass — both arms
+  // must exist, unlike bulk-approve's operator-only bypass.
+  const moduleSrc = src("modules/invoice/bulk-submit.ts");
+  assert.ok(
+    moduleSrc.includes("runRequestContext({ bypass: false, firmId }") &&
+      moduleSrc.includes("runRequestContext({ bypass: true, firmId: null }"),
+    "bulkSubmit's ctx helper must carry the caller's posture (firm-bound OR bypass)",
+  );
+  // Validate and submit each commit in their OWN context — one shared
+  // transaction would roll the validated state back when submit fails,
+  // changing today's observable validated-stays-validated behavior.
+  assert.ok(
+    /await ctx\(\(\) => validateInvoice\(inv\.id, actorId\)\)/.test(moduleSrc),
+    "per-item validate runs in its own short context",
+  );
+  assert.ok(
+    /await ctx\(\(\) => submitInvoice\(inv\.id, actorId\)\)/.test(moduleSrc),
+    "per-item submit runs in its own short context, separate from validate",
+  );
+  assert.equal(
+    moduleSrc.match(/submitInvoice\(/g)?.length,
+    1,
+    "submitInvoice must be CALLED exactly once, at the pinned per-item ctx site",
+  );
+  assert.ok(
+    /await ctx\(\(\) =>\s*appendAudit\(/.test(moduleSrc),
+    "the batch summary audit commits in its own final context",
+  );
+});
