@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb, chaseLogTable, invoicesTable } from "@workspace/db";
 import { DomainError } from "../errors";
-import { OUTSTANDING } from "./receivables";
+import { OUTSTANDING, OUTSTANDING_STATUSES } from "./receivables";
 import {
   assertClientPartyScope,
   assertSameTenant,
@@ -16,10 +16,10 @@ import {
 // can be a follow-up instead of a first nudge, and the digest can say
 // "4 invoices have had 2+ reminders and remain unpaid".
 
-// JS-side mirror of the OUTSTANDING statuses (receivables.ts) for the check
-// on the loaded invoice row in recordChase — a reminder can only be logged
-// against an invoice that is still chaseable.
-const OUTSTANDING_STATUSES = new Set(["submitted", "stamped", "confirmed"]);
+// JS-side check on the loaded invoice row in recordChase — a reminder can
+// only be logged against an invoice that is still chaseable. Derived from
+// receivables.ts's shared status list (no private mirror to drift).
+const LOGGABLE = new Set<string>(OUTSTANDING_STATUSES);
 
 export interface ChaseHistory {
   invoiceId: string;
@@ -76,7 +76,7 @@ export async function recordChase(
   assertClientPartyScope(principal, invoice.supplierPartyId);
   if (
     invoice.kind !== "invoice" ||
-    !OUTSTANDING_STATUSES.has(invoice.status) ||
+    !LOGGABLE.has(invoice.status) ||
     invoice.firmId === null
   ) {
     throw new DomainError(

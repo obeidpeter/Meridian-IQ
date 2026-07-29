@@ -1,5 +1,10 @@
 import { test, expect, describe } from "vitest";
+// Runtime enum values, straight from the generated contract package, so the
+// exhaustiveness assertion below cannot drift from openapi.yaml.
+import { ActionTargetOutcomeOutcome } from "@workspace/api-zod";
 import {
+  ACTION_OUTCOME_LABELS,
+  actionOutcomeToneClasses,
   badgeClasses,
   confirmationBadgeClasses,
   confirmationLabel,
@@ -194,6 +199,46 @@ describe("deadline severity", () => {
     expect(severityBadgeClasses("warning")).toContain("amber");
     expect(severityBadgeClasses("info")).toContain("blue");
     expect(severityBadgeClasses("something-new")).toContain("slate");
+  });
+});
+
+describe("action batch outcomes", () => {
+  test("the label map covers exactly the contract's outcome enum", () => {
+    // Both directions: every enum value is labelled, and no stray key labels
+    // an outcome the contract no longer knows.
+    expect(Object.keys(ACTION_OUTCOME_LABELS).sort()).toEqual(
+      Object.values(ActionTargetOutcomeOutcome).sort(),
+    );
+  });
+
+  test("labels never leak the raw enum string", () => {
+    expect(ACTION_OUTCOME_LABELS.submitted).toBe("Submitted");
+    expect(ACTION_OUTCOME_LABELS.invalid).toBe("Needs fixing");
+    expect(ACTION_OUTCOME_LABELS.skipped_not_eligible).toBe("Skipped");
+    expect(ACTION_OUTCOME_LABELS.failed).toBe("Failed");
+    expect(ACTION_OUTCOME_LABELS.drafted).toBe("Drafted");
+  });
+
+  test("tones: emerald for the success pair, muted for skips, amber otherwise", () => {
+    expect(actionOutcomeToneClasses("submitted")).toBe(
+      "text-emerald-700 dark:text-emerald-400",
+    );
+    expect(actionOutcomeToneClasses("drafted")).toBe(
+      "text-emerald-700 dark:text-emerald-400",
+    );
+    expect(actionOutcomeToneClasses("skipped_not_eligible")).toBe(
+      "text-muted-foreground",
+    );
+    expect(actionOutcomeToneClasses("invalid")).toBe(
+      "text-amber-700 dark:text-amber-400",
+    );
+    expect(actionOutcomeToneClasses("failed")).toBe(
+      "text-amber-700 dark:text-amber-400",
+    );
+    // An off-contract outcome from a newer server reads as needs-attention.
+    expect(actionOutcomeToneClasses("something-new")).toBe(
+      "text-amber-700 dark:text-amber-400",
+    );
   });
 });
 

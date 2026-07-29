@@ -79,6 +79,8 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import {
+  ACTION_OUTCOME_LABELS,
+  actionOutcomeToneClasses,
   formatAmount,
   formatDate,
   formatNaira,
@@ -769,21 +771,13 @@ function PenaltyExposureCard({ clientPartyId }: { clientPartyId: string }) {
 
 const TARGET_DISPLAY_CAP = 8;
 
-const OUTCOME_LABELS: Record<string, string> = {
-  submitted: "Submitted",
-  invalid: "Needs fixing",
-  skipped_not_eligible: "Skipped",
-  failed: "Failed",
-  drafted: "Drafted",
-};
-
 // Proposed actions (round 21): Clerk assembles the batch from the same
 // checks that power the cards above; NOTHING runs until the owner approves.
 // Approval executes through the ordinary submission path — validation,
 // consent, any approval policy — and every target is re-checked at that
 // moment. Renders only when the clerk_actions flag is on for the firm AND a
 // proposal exists (a dark flag answers an empty list, so the card hides).
-function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
+export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const execute = useExecuteAction();
@@ -988,16 +982,8 @@ function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                     data-testid={`outcome-${t.invoiceId}`}
                   >
                     <span className="truncate">{t.invoiceNumber}</span>
-                    <span
-                      className={
-                        t.outcome === "submitted" || t.outcome === "drafted"
-                          ? "text-emerald-700 dark:text-emerald-400"
-                          : t.outcome === "skipped_not_eligible"
-                            ? "text-muted-foreground"
-                            : "text-amber-700 dark:text-amber-400"
-                      }
-                    >
-                      {OUTCOME_LABELS[t.outcome] ?? t.outcome}
+                    <span className={actionOutcomeToneClasses(t.outcome)}>
+                      {ACTION_OUTCOME_LABELS[t.outcome] ?? t.outcome}
                       {t.error ? ` — ${t.error}` : ""}
                     </span>
                   </p>

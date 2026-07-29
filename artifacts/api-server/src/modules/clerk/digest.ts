@@ -26,7 +26,12 @@ import {
   lagosParts,
   lagosTodaySql,
 } from "../../lib/lagos-time";
-import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
+import {
+  SUBMISSION_WINDOW_DAYS,
+  UNSUBMITTED_STATE,
+  pastSubmissionDeadline,
+  withinDueSoonWindow,
+} from "../invoice/compliance-window";
 import { RECEIVABLE_ORIENTATION } from "../invoice/receivables";
 import { countFirmPayablesDue } from "../invoice/payables";
 import { countFirmUnbilled } from "../invoice/unbilled-income";
@@ -190,22 +195,21 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
         -- unsubmitted/due-soon/overdue numbers with deadlines that do not
         -- exist for them.
         COUNT(*) FILTER (
-          WHERE i.status IN ('draft', 'validated')
+          WHERE ${UNSUBMITTED_STATE}
             AND ${RECEIVABLE_ORIENTATION}
         )::int AS unsubmitted,
         COUNT(*) FILTER (
-          WHERE i.status IN ('draft', 'validated')
+          WHERE ${UNSUBMITTED_STATE}
             AND ${RECEIVABLE_ORIENTATION}
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int > ${today}
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${today} + 7
+            AND ${withinDueSoonWindow(today)}
         )::int AS due_soon,
-        -- The deadline is Lagos midnight STARTING day issue+window, so an
-        -- invoice is overdue ON that day (<=) — same boundary as the
-        -- dashboards, reminders and the Ask Clerk data intents.
+        -- The deadline boundary (overdue ON day issue+window, <=) lives in
+        -- compliance-window.ts — the same fragment as the dashboards,
+        -- reminders, penalty card and the Ask Clerk data intents.
         COUNT(*) FILTER (
-          WHERE i.status IN ('draft', 'validated')
+          WHERE ${UNSUBMITTED_STATE}
             AND ${RECEIVABLE_ORIENTATION}
-            AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${today}
+            AND ${pastSubmissionDeadline(today)}
         )::int AS overdue,
         COUNT(*) FILTER (WHERE i.status = 'failed')::int AS failed,
         COUNT(*) FILTER (

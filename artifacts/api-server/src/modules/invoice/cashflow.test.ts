@@ -26,7 +26,7 @@ import {
 import { OUTSTANDING } from "./receivables.ts";
 import type { BuyerPaymentBehaviour } from "./payment-behaviour.ts";
 import { lagosDateString } from "../../lib/lagos-time.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Cash-flow outlook + chase list (round-10 ideas #1/#2). Pinned invariants:
 //  - projection basis is rhythm > due date > default terms, per buyer;
@@ -55,10 +55,6 @@ const stmtMulti = randomUUID();
 const lateC1Id = randomUUID();
 const ovdC2Id = randomUUID();
 const termsC3Id = randomUUID();
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 const behaviour = (
   buyerPartyId: string,

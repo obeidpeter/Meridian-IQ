@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
 import { median } from "./payment-behaviour";
+import { SETTLEMENT_EVIDENCE } from "./payables";
+import { LOOKBACK_DAYS } from "./date-math";
 
 // Reminder-effectiveness report (round-16 idea #2). The chase ladder records
 // which reminders were SENT; the settlement exhaust records when money
@@ -18,7 +20,6 @@ import { median } from "./payment-behaviour";
 //  - "settled" is observed payment evidence (paid flag or statement match),
 //    and a settlement BEFORE the first reminder never credits the reminder.
 
-const LOOKBACK_DAYS = 365;
 const WITHIN_DAYS = 14;
 const MIN_SAMPLE = 3;
 
@@ -139,7 +140,7 @@ export async function computeChaseEffectiveness(
           WHERE c.invoice_id = i.id)::int AS reminders,
         (SELECT MIN(se.occurred_at) FROM settlement_events se
           WHERE se.invoice_id = i.id
-            AND (se.payment_status = 'paid' OR se.source = 'statement_match')
+            AND ${SETTLEMENT_EVIDENCE}
         )::text AS settled_at
       FROM invoices i
       WHERE i.firm_id = ${firmId}

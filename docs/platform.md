@@ -94,16 +94,9 @@ The AI-assistant side lives in `docs/clerk-ai.md`.
 
 `modules/pipeline/pipeline.ts` runs three in-process loops: outbox drain,
 reconciliation sweep, and the registered compliance sweeps. Register new
-periodic work with `registerSweep(fn)`. The current sweep inventory (grep
-`registerSweep(` for the authoritative list): deadline reminders, recurring
-invoices, B2C pre-breach alerts, buyer exposure refresh, push receipts,
-login-attempt / password-reset cleanup, outbox + stamp-verification
-retention, unmapped-code desk cases, escalation triage, and the Clerk
-sweeps — watchdog (stuck pending cases, expired claims, expired case
-content), eval growth, red-team growth, async batches, weekly digest
-(generation + delivery), per-client statements (generation + delivery),
-resistance watch, spend watch and quality watch (the last three wrapped
-`atMostHourly`).
+periodic work with `registerSweep(fn)` — wrapped `atMostHourly` when every
+worker tick would be too often. The sweep inventory lives in the code, not
+here: grep `registerSweep(` for the authoritative list.
 
 Alert fan-out (`modules/messaging/fan-out.ts`) is consent-gated: no layer-1
 grant, no alert (CORE-03). Statutory day boundaries — submission windows,

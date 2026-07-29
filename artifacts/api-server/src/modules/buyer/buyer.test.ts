@@ -17,7 +17,7 @@ import {
 } from "./service.ts";
 import { DomainError } from "../errors.ts";
 import type { Principal } from "../auth/rbac.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Supplier compliance scoreboard (BR-05). Pinned invariants:
 //  - complianceScore = 0.6 × stamped rate + 0.4 × confirmed rate, where the
@@ -35,10 +35,6 @@ const firmId = randomUUID();
 const buyerId = randomUUID();
 const supplierOne = randomUUID(); // 4 visible invoices, 3 stamped, 2 confirmed
 const supplierTwo = randomUUID(); // 2 visible invoices, none protected
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 async function seedInvoice(input: {
   id: string;

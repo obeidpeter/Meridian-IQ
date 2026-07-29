@@ -10,7 +10,7 @@ import {
   submissionAttemptsTable,
 } from "@workspace/db";
 import { computeComplianceScorecard } from "./compliance-scorecard.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Client compliance scorecard (round-19 idea #3). Pinned invariants:
 //  - rates honour the sample floor: fewer than 3 observations shows as
@@ -29,10 +29,6 @@ const clientB = randomUUID(); // tiny sample — rates must be null
 const clientArchived = randomUUID(); // archived engagement — excluded
 const buyer = randomUUID();
 const vendor = randomUUID();
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 async function seedInvoice(input: {
   supplierPartyId?: string;

@@ -25,18 +25,16 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
-import { formatAmount, formatDate, formatDateTime } from "@/lib/format";
+import {
+  ACTION_OUTCOME_LABELS,
+  actionOutcomeToneClasses,
+  formatAmount,
+  formatDate,
+  formatDateTime,
+} from "@/lib/format";
 import { Send, Sparkles } from "lucide-react";
 
 const TARGET_DISPLAY_CAP = 8;
-
-const OUTCOME_LABELS: Record<string, string> = {
-  submitted: "Submitted",
-  invalid: "Needs fixing",
-  skipped_not_eligible: "Skipped",
-  failed: "Failed",
-  drafted: "Drafted",
-};
 
 // Proposed actions, firm side (round 22): the SME dashboard card's twin on
 // the console client page. Clerk assembles each batch from the same checks
@@ -259,16 +257,8 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                     data-testid={`outcome-${t.invoiceId}`}
                   >
                     <span className="truncate">{t.invoiceNumber}</span>
-                    <span
-                      className={
-                        t.outcome === "submitted" || t.outcome === "drafted"
-                          ? "text-emerald-700 dark:text-emerald-400"
-                          : t.outcome === "skipped_not_eligible"
-                            ? "text-muted-foreground"
-                            : "text-amber-700 dark:text-amber-400"
-                      }
-                    >
-                      {OUTCOME_LABELS[t.outcome] ?? t.outcome}
+                    <span className={actionOutcomeToneClasses(t.outcome)}>
+                      {ACTION_OUTCOME_LABELS[t.outcome] ?? t.outcome}
                       {t.error ? ` — ${t.error}` : ""}
                     </span>
                   </p>

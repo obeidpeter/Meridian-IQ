@@ -317,6 +317,18 @@ export function tenantFirmId(principal: Principal): string | null {
   return principal.firmId;
 }
 
+// The firm a CONSOLE rollup request is scoped to (refactoring round — one
+// definition; routes/console.ts and routes/vat-position.ts previously each
+// carried a verbatim copy so their gates could not drift, which one home
+// makes structural): firm roles use their bound firm; cross-tenant staff
+// (operator/auditor) fall back to their bound firm if any.
+export function firmScope(principal: Principal): string {
+  const tenant = tenantFirmId(principal);
+  if (tenant) return tenant;
+  if (principal.firmId) return principal.firmId;
+  throw new DomainError("NO_TENANT", "A firm context is required", 403);
+}
+
 // Like tenantFirmId, but for writes that must land in a firm's tenant: a
 // cross-tenant principal (operator/auditor, which tenantFirmId maps to null)
 // has no firm to write into, so it is rejected instead of passed through.

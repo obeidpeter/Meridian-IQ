@@ -15,8 +15,8 @@ import {
   type BuyerPaymentBehaviour,
 } from "../invoice/payment-behaviour";
 import { chaseHistory } from "../invoice/chase-log";
-import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
-import { isFeatureEnabled } from "../flags/flags";
+import { inferPhrasing, type ClerkGateway } from "./gateway";
+import { OUTSTANDING_STATUSES } from "../invoice/receivables";
 
 // Payment-chaser drafts (round-9 idea #2). The receivables card says "chase
 // payment" and leaves the awkward letter to the client; this writes it.
@@ -76,9 +76,10 @@ export interface PaymentChaserDraft {
   previousReminders: { count: number; lastAt: string | null };
 }
 
-// The receivables definition, mirrored from receivables.ts: issued to the
-// buyer and payment not yet observed.
-const OUTSTANDING_STATUSES = new Set(["submitted", "stamped", "confirmed"]);
+// The receivables definition — DERIVED from receivables.ts's shared status
+// list, so the chaser's eligibility can never drift from what the
+// receivables card counts.
+const CHASEABLE = new Set<string>(OUTSTANDING_STATUSES);
 
 export interface ChaserFactsInput {
   invoiceNumber: string;
@@ -197,11 +198,27 @@ export function templateChaser(input: ChaserFactsInput): {
   };
 }
 
-export async function draftPaymentChaser(
+// The staged half of a chaser draft: everything that touches the DATABASE
+// (invoice + party join, tenancy asserts, chaseability gates, behaviour and
+// ladder reads) plus the always-complete template fallback — and nothing
+// that touches the model. Split from the phrasing half (round-22 review
+// M3) so a batch caller can close its per-target transaction BEFORE the
+// provider is touched; the single route composes the two immediately via
+// draftPaymentChaser below.
+export interface StagedChaser {
+  input: ChaserFactsInput;
+  fallback: PaymentChaserDraft;
+  // Funded by the CALLER's firm (explainer parity): firm/client principals
+  // bill their own allowance; an operator's chaser is platform-funded, not
+  // drawn from the firm. Computed once here and used for both the infer
+  // and the grounding audit.
+  fundingFirmId: string | null;
+}
+
+export async function stagePaymentChaser(
   invoiceId: string,
   principal: Principal,
-  gateway: ClerkGateway | null,
-): Promise<PaymentChaserDraft> {
+): Promise<StagedChaser> {
   const [invoice] = await getDb()
     .select({
       id: invoicesTable.id,
@@ -229,7 +246,7 @@ export async function draftPaymentChaser(
 
   if (
     invoice.kind !== "invoice" ||
-    !OUTSTANDING_STATUSES.has(invoice.status)
+    !CHASEABLE.has(invoice.status)
   ) {
     throw new DomainError(
       "NOT_CHASEABLE",
@@ -286,22 +303,27 @@ export async function draftPaymentChaser(
     stage,
     previousReminders: { count: history.count, lastAt: history.lastAt },
   };
-  if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
+  return { input, fallback, fundingFirmId: tenantFirmId(principal) };
+}
 
-  const facts = chaserFacts(input);
-  // The try/catch closes the kill-switch TOCTOU: if clerk_ai flips off
-  // between the check above and the call, the gateway's own assert throws —
-  // and for this surface even that must answer with the template.
+// The phrasing half: one model completion under the digest posture, safe to
+// run OUTSIDE any transaction (the inference ledger and the grounding audit
+// land on the raw pool when no context is active). Deliberately NO route
+// budget pre-check: the gateway backstop turns an exhausted allowance into
+// a typed failure, which answers with the template — never a 429. The
+// kill-switch check and its TOCTOU catch live in inferPhrasing; the outer
+// try keeps the surface's stronger guarantee that even a grounding-check
+// failure answers with the template.
+export async function phrasePaymentChaser(
+  staged: StagedChaser,
+  gateway: ClerkGateway | null,
+): Promise<PaymentChaserDraft> {
+  const facts = chaserFacts(staged.input);
   try {
-    const result = await gateway.infer<z.infer<typeof chaserOutput>>({
+    const data = await inferPhrasing<z.infer<typeof chaserOutput>>(gateway, {
       purpose: "draft_chaser",
       caseId: null,
-      // Funded by the CALLER's firm (explainer parity): firm/client
-      // principals bill their own allowance; an operator's chaser is
-      // platform-funded, not drawn from the firm. Deliberately NO route
-      // budget pre-check: the gateway backstop turns an exhausted allowance
-      // into a typed failure, which answers with the template — never a 429.
-      firmId: tenantFirmId(principal),
+      firmId: staged.fundingFirmId,
       promptVersion: CHASER_PROMPT_VERSION,
       system: CHASER_SYSTEM,
       user: facts,
@@ -313,25 +335,38 @@ export async function draftPaymentChaser(
     // Number grounding: a numeral the facts never stated → template answers
     // (grounding.ts). Subject and body are checked together.
     if (
-      !result.ok ||
+      !data ||
       !(await ensureGrounded(
         "chaser",
-        tenantFirmId(principal),
-        `${result.data.subject}\n${result.data.body}`,
+        staged.fundingFirmId,
+        `${data.subject}\n${data.body}`,
         facts,
       ))
     ) {
-      return fallback;
+      return staged.fallback;
     }
     return {
-      ...fallback,
-      subject: result.data.subject,
-      body: result.data.body,
+      ...staged.fallback,
+      subject: data.subject,
+      body: data.body,
       source: "clerk",
     };
   } catch {
-    return fallback;
+    return staged.fallback;
   }
+}
+
+// The single-draft composition the route and tests call — behaviorally
+// identical to the pre-split function.
+export async function draftPaymentChaser(
+  invoiceId: string,
+  principal: Principal,
+  gateway: ClerkGateway | null,
+): Promise<PaymentChaserDraft> {
+  return phrasePaymentChaser(
+    await stagePaymentChaser(invoiceId, principal),
+    gateway,
+  );
 }
 
 // The chaser surface's phrasing seam, one object — the phrasing eval

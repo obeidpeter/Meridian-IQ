@@ -14,7 +14,7 @@ import {
   listMissingRecurringBills,
   missingBillAlertFor,
 } from "./missing-bills.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Missing recurring bills (round-18 idea #3) — the payables mirror of
 // unbilled-income. Pinned invariants:
@@ -32,10 +32,6 @@ const clientParty = randomUUID(); // engaged — bills' buyer
 const vendorDue = randomUUID(); // monthly habit, capture ~10 days late
 const vendorFresh = randomUUID(); // monthly habit, freshly captured
 const vendorLapsed = randomUUID(); // habit went silent months ago
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 const bill = (over: {
   supplierPartyId: string;

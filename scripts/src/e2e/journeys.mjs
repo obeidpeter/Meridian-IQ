@@ -14,6 +14,14 @@ import { totpStep, totpCodeAtStep } from "./totp.mjs";
 
 const DEMO_PASSWORD = "meridian2027";
 
+// Every state-changing page.request call presents the CSRF marker header.
+const CSRF = { "x-meridian-csrf": "1" };
+
+// The seeded demo client party. Journeys key list filters and API calls off
+// the full id, and pattern-match "a demo-client invoice" off its first block.
+const DEMO_CLIENT_PARTY_ID = "22222222-2222-4222-8222-222222222222";
+const DEMO_CLIENT_PARTY_PREFIX = DEMO_CLIENT_PARTY_ID.slice(0, 8);
+
 async function signIn(page, BASE, demoTestId, waitUrl) {
   await page.goto(BASE + "/login", { waitUntil: "networkidle" });
   await page.getByTestId(demoTestId).click();
@@ -24,6 +32,21 @@ async function signOutFromApp(page, BASE) {
   await page.getByTestId("button-sign-out").first().click();
   await page.waitForURL(BASE + "/login");
   await page.waitForSelector('[data-testid="input-email"]', { timeout: 10000 });
+}
+
+// API-session sign-in with the demo password: page.request shares the browser
+// context's cookie jar, so a later page.goto rides the same session. Drops any
+// current session first (logout is a public, idempotent endpoint).
+async function apiLogin(page, BASE, email) {
+  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+  await page.request.post(BASE + "/api/auth/login", {
+    data: { email, password: DEMO_PASSWORD },
+    headers: CSRF,
+  });
+}
+
+async function apiLogout(page, BASE) {
+  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
 }
 
 // Poll a probe until it reports true. The delay runs BEFORE each attempt —
@@ -321,11 +344,9 @@ async function journeyTotp(page, BASE, check) {
 // run — fine for the standard fresh-seed run (run.mjs requires a scratch
 // database), but a rerun on a kept database sees payStatus "paid" up front.
 async function journeyPayables(page, BASE, check) {
-  const CSRF = { "x-meridian-csrf": "1" };
-  const CLIENT = "22222222-2222-4222-8222-222222222222";
   const billFromList = async () => {
     const r = await page.request.get(
-      BASE + `/api/bills?clientPartyId=${CLIENT}`,
+      BASE + `/api/bills?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
     if (r.status() !== 200) return null;
     return (await r.json()).find((b) => b.invoiceNumber === "BILL-2001") ?? null;
@@ -350,7 +371,7 @@ async function journeyPayables(page, BASE, check) {
   // The payables summary — read while the bill is still unpaid, because
   // committed outflows only count bills without payment evidence.
   const payablesRes = await page.request.get(
-    BASE + `/api/dashboard/payables?clientPartyId=${CLIENT}`,
+    BASE + `/api/dashboard/payables?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
   );
   const payables =
     payablesRes.status() === 200 ? await payablesRes.json() : null;
@@ -410,21 +431,12 @@ async function journeyPayables(page, BASE, check) {
 // the same session); the journey signs out at the end so the next journey's
 // portal shows the demo buttons again.
 async function journeyVatPositionAndPack(page, BASE, check) {
-  const CSRF = { "x-meridian-csrf": "1" };
-  const CLIENT = "22222222-2222-4222-8222-222222222222";
-  const login = async (email) => {
-    await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
-    await page.request.post(BASE + "/api/auth/login", {
-      data: { email, password: DEMO_PASSWORD },
-      headers: CSRF,
-    });
-  };
-  await login("demo.staff@meridianiq.example");
+  await apiLogin(page, BASE, "demo.staff@meridianiq.example");
 
   // The month-to-date position for the demo client (current Lagos month by
   // default — the option list includes it, unlike the closed-month VAT pack).
   const posRes = await page.request.get(
-    BASE + `/api/vat-position?clientPartyId=${CLIENT}`,
+    BASE + `/api/vat-position?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
   );
   const pos = posRes.status() === 200 ? await posRes.json() : null;
   check(
@@ -457,7 +469,7 @@ async function journeyVatPositionAndPack(page, BASE, check) {
   check("SME VAT page renders the position rows", true);
 
   const csvRes = await page.request.get(
-    BASE + `/api/vat-position/export?clientPartyId=${CLIENT}`,
+    BASE + `/api/vat-position/export?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
   );
   check(
     "VAT position CSV export delivers the per-document file",
@@ -470,7 +482,7 @@ async function journeyVatPositionAndPack(page, BASE, check) {
   // back to the deterministic template when no model provider is configured
   // — never an error).
   const packRes = await page.request.get(
-    BASE + `/api/compliance-pack?clientPartyId=${CLIENT}`,
+    BASE + `/api/compliance-pack?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
   );
   const packBody = packRes.status() === 200 ? await packRes.body() : null;
   check(
@@ -483,7 +495,7 @@ async function journeyVatPositionAndPack(page, BASE, check) {
 
   // Firm side as the admin: the rollup, then the consent-gated notify — 202
   // whether anything was sent (the endpoint is never a consent oracle).
-  await login("demo.admin@meridianiq.example");
+  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
   const firmRes = await page.request.get(BASE + "/api/console/vat-positions");
   const firm = firmRes.status() === 200 ? await firmRes.json() : null;
   check(
@@ -495,7 +507,7 @@ async function journeyVatPositionAndPack(page, BASE, check) {
   );
   const notifyRes = await page.request.post(
     BASE + "/api/compliance-pack/notify",
-    { data: { clientPartyId: CLIENT }, headers: CSRF },
+    { data: { clientPartyId: DEMO_CLIENT_PARTY_ID }, headers: CSRF },
   );
   check(
     "compliance-pack notify answers 202 (consent-gated fan-out)",
@@ -503,7 +515,7 @@ async function journeyVatPositionAndPack(page, BASE, check) {
     `status ${notifyRes.status()}`,
   );
 
-  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+  await apiLogout(page, BASE);
 }
 
 // ---------- Governance: maker-checker submission approval --------------------
@@ -522,19 +534,10 @@ async function journeyVatPositionAndPack(page, BASE, check) {
 // the integration journey only patterns party ids off the book's first
 // demo-client invoice regardless of status.
 async function journeyGovernance(page, BASE, check) {
-  const CSRF = { "x-meridian-csrf": "1" };
-  const CLIENT = "22222222-2222-4222-8222-222222222222";
   const BUYER = "55555555-5555-4555-8555-555555555555"; // Zenith Retail
-  const login = async (email) => {
-    await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
-    await page.request.post(BASE + "/api/auth/login", {
-      data: { email, password: DEMO_PASSWORD },
-      headers: CSRF,
-    });
-  };
 
   try {
-    await login("demo.admin@meridianiq.example");
+    await apiLogin(page, BASE, "demo.admin@meridianiq.example");
     const onRes = await page.request.put(BASE + "/api/firm/policies", {
       data: { submitApprovalRequired: true },
       headers: CSRF,
@@ -549,10 +552,10 @@ async function journeyGovernance(page, BASE, check) {
     // Staff: fresh draft → validate → submit refuses. DomainError serializes
     // as {error: message} (no code field), so the check matches the guard's
     // message text.
-    await login("demo.staff@meridianiq.example");
+    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
     const createdRes = await page.request.post(BASE + "/api/invoices", {
       data: {
-        supplierPartyId: CLIENT,
+        supplierPartyId: DEMO_CLIENT_PARTY_ID,
         buyerPartyId: BUYER,
         invoiceNumber: "GOV-9001",
         issueDate: new Date().toISOString().slice(0, 10),
@@ -588,7 +591,7 @@ async function journeyGovernance(page, BASE, check) {
     );
 
     // A DIFFERENT human approves — evidence row, 201.
-    await login("demo.admin@meridianiq.example");
+    await apiLogin(page, BASE, "demo.admin@meridianiq.example");
     const approveRes = await page.request.post(
       BASE + `/api/invoices/${invoiceId}/approve`,
       { headers: CSRF },
@@ -601,7 +604,7 @@ async function journeyGovernance(page, BASE, check) {
 
     // The original submitter retries: a live approval by ANOTHER user now
     // satisfies the guard.
-    await login("demo.staff@meridianiq.example");
+    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
     const submitRes = await page.request.post(
       BASE + `/api/invoices/${invoiceId}/submit`,
       { headers: CSRF },
@@ -615,7 +618,7 @@ async function journeyGovernance(page, BASE, check) {
     // MUST run even when a check above failed or threw: a policy left on
     // would break every later single-actor submit. The restore is itself a
     // check so a silent failure here can never masquerade as a pass.
-    await login("demo.admin@meridianiq.example");
+    await apiLogin(page, BASE, "demo.admin@meridianiq.example");
     const offRes = await page.request.put(BASE + "/api/firm/policies", {
       data: { submitApprovalRequired: false },
       headers: CSRF,
@@ -626,15 +629,16 @@ async function journeyGovernance(page, BASE, check) {
       offRes.status() === 200 && offBody?.submitApprovalRequired === false,
       `status ${offRes.status()}`,
     );
-    await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+    await apiLogout(page, BASE);
   }
 }
 
 // ---------- Collection accounts: provision + the inbound settlement rail -----
 // Provision a collection account (firm-staff plumbing, statement.write) and
 // prove the fail-closed inbound webhook (run.mjs sets COLLECTION_WEBHOOK_TOKEN
-// = the token below; unset would 404 the whole rail) settles the matched
-// receivable via an append-only collection_account settlement event.
+// on the api-server env and threads the same value in here as hookToken;
+// unset would 404 the whole rail) settles the matched receivable via an
+// append-only collection_account settlement event.
 //
 // TARGET CHOICE — the settlement must move a SEEDED, STAMPED invoice to
 // `settled` without disturbing any later journey. INV-1003 is out: it is the
@@ -648,16 +652,10 @@ async function journeyGovernance(page, BASE, check) {
 // evidence. A rerun on a kept database still passes: the settled invoice no
 // longer binds (the webhook silently records nothing), but the first run's
 // settlement event and status satisfy both polls.
-async function journeyCollections(page, BASE, check) {
-  const CSRF = { "x-meridian-csrf": "1" };
+async function journeyCollections(page, BASE, check, hookToken) {
   const BUILD_CLIENT = "cb000004-0000-4000-8000-0000000000b4"; // Lagos BuildRight
-  const HOOK_TOKEN = "e2e-collect-hook"; // must match run.mjs's api-server env
 
-  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
-  await page.request.post(BASE + "/api/auth/login", {
-    data: { email: "demo.admin@meridianiq.example", password: DEMO_PASSWORD },
-    headers: CSRF,
-  });
+  await apiLogin(page, BASE, "demo.admin@meridianiq.example");
 
   const createdRes = await page.request.post(
     BASE + "/api/collection-accounts",
@@ -698,7 +696,7 @@ async function journeyCollections(page, BASE, check) {
 
   const inbound = await fetch(BASE + "/api/collections/inbound", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-op-token": HOOK_TOKEN },
+    headers: { "content-type": "application/json", "x-op-token": hookToken },
     body: JSON.stringify({
       accountReference: account?.accountReference ?? "CA-MISSING",
       amount: target?.grandTotal ?? "0.00",
@@ -732,7 +730,7 @@ async function journeyCollections(page, BASE, check) {
     (await invRes.json()).invoice.status === "settled";
   check("matched receivable settles (stamped → settled CAS)", settled);
 
-  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+  await apiLogout(page, BASE);
 }
 
 // ---------- SME staff: credit note + workflow smoke ----------
@@ -743,7 +741,9 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
   await signIn(page, BASE, "button-demo-demo.staff", "**/app/**");
   const invoicesResp = await page.request.get(BASE + "/api/invoices?status=stamped");
   const stamped = (await invoicesResp.json()).filter(
-    (i) => i.supplierPartyId.startsWith("22222222") && i.kind === "invoice",
+    (i) =>
+      i.supplierPartyId.startsWith(DEMO_CLIENT_PARTY_PREFIX) &&
+      i.kind === "invoice",
   );
   check("a stamped, consented invoice exists to credit", stamped.length > 0);
   if (stamped.length > 0) {
@@ -840,7 +840,7 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
           },
         ],
       },
-      headers: { "x-meridian-csrf": "1" },
+      headers: CSRF,
     });
     check("draft created via the session API", created.status() === 201);
     await page.goto(BASE + "/app/invoices", { waitUntil: "networkidle" });
@@ -927,13 +927,16 @@ async function journeyPasswordReset(page, BASE, check) {
   const STAFF = "demo.staff@meridianiq.example";
 
   // Sign in as the operator and issue a reset link for the staff account.
+  // (Raw login posts, not apiLogin: this tail journey deliberately skips the
+  // logout-first and signs the operator in over whatever session the
+  // change-password journey left behind.)
   await page.request.post(BASE + "/api/auth/login", {
     data: { email: "ops@meridianiq.example", password: DEMO_PASSWORD },
-    headers: { "x-meridian-csrf": "1" },
+    headers: CSRF,
   });
   const issued = await page.request.post(BASE + "/api/password-resets", {
     data: { email: STAFF },
-    headers: { "x-meridian-csrf": "1" },
+    headers: CSRF,
   });
   const issuedBody = issued.status() === 201 ? await issued.json() : null;
   check(
@@ -968,23 +971,23 @@ async function journeyPasswordReset(page, BASE, check) {
   // The redeemed link is single-use.
   const replay = await page.request.post(BASE + "/api/auth/reset-password", {
     data: { token: issuedBody.token, password: "reset-temp-pw-2" },
-    headers: { "x-meridian-csrf": "1" },
+    headers: CSRF,
   });
   check("reset link is single-use", replay.status() === 400);
 
   // Restore the demo password via a second reset so reruns start clean.
   await page.request.post(BASE + "/api/auth/login", {
     data: { email: "ops@meridianiq.example", password: DEMO_PASSWORD },
-    headers: { "x-meridian-csrf": "1" },
+    headers: CSRF,
   });
   const restore = await page.request.post(BASE + "/api/password-resets", {
     data: { email: STAFF },
-    headers: { "x-meridian-csrf": "1" },
+    headers: CSRF,
   });
   const restoreBody = await restore.json();
   const restored = await page.request.post(BASE + "/api/auth/reset-password", {
     data: { token: restoreBody.token, password: DEMO_PASSWORD },
-    headers: { "x-meridian-csrf": "1" },
+    headers: CSRF,
   });
   check("second reset restores the demo password", restored.status() === 204);
 }
@@ -996,7 +999,8 @@ async function journeyPasswordReset(page, BASE, check) {
 // invoice through validate → submit → stamp and verify the signed
 // pointer-only delivery, then collect the demo firm's platform bill through
 // the payment-intent + confirmation-webhook rail (run.mjs sets
-// PAYMENT_WEBHOOK_TOKEN, read per call server-side).
+// PAYMENT_WEBHOOK_TOKEN on the api-server env — read per call server-side —
+// and threads the same value in here as paymentWebhookToken).
 //
 // Runs AFTER the staff/password journeys: it must not add invoices before the
 // credit-note journey picks its target, and the password journeys need
@@ -1011,13 +1015,16 @@ async function journeyPasswordReset(page, BASE, check) {
 // server short-circuits mk_ tokens before any cookie path — principal.ts —
 // so it would still pass, but the cookie-free probe proves the revoked-key
 // 401 with no ambient-credential caveat.)
-async function journeyIntegrationLayer(page, BASE, check, hookReceiver) {
-  const CSRF = { "x-meridian-csrf": "1" };
-
+async function journeyIntegrationLayer(
+  page,
+  BASE,
+  check,
+  hookReceiver,
+  paymentWebhookToken,
+) {
   // The reset journey leaves an ops session in the browser context (API
-  // login); drop it so the portal shows the demo buttons again (logout is a
-  // public, idempotent endpoint).
-  await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
+  // login); drop it so the portal shows the demo buttons again.
+  await apiLogout(page, BASE);
   await signIn(page, BASE, "button-demo-demo.admin", "**/console/");
 
   // -- API key: minted once, bearer-authenticates, dies on revoke ------------
@@ -1089,7 +1096,9 @@ async function journeyIntegrationLayer(page, BASE, check, hookReceiver) {
   // into misleading downstream failures.
   const book = await (await page.request.get(BASE + "/api/invoices")).json();
   const pattern = book.find(
-    (i) => i.kind === "invoice" && i.supplierPartyId?.startsWith("22222222"),
+    (i) =>
+      i.kind === "invoice" &&
+      i.supplierPartyId?.startsWith(DEMO_CLIENT_PARTY_PREFIX),
   );
   if (!pattern) {
     throw new Error(
@@ -1230,7 +1239,10 @@ async function journeyIntegrationLayer(page, BASE, check, hookReceiver) {
     // firm-visible list proves the CAS actually settled the intent.
     const confirmRes = await fetch(BASE + "/api/billing/payments/confirm", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-op-token": "e2e-pay-hook" },
+      headers: {
+        "content-type": "application/json",
+        "x-op-token": paymentWebhookToken,
+      },
       body: JSON.stringify({
         providerRef: intentBody.providerRef,
         outcome: "confirmed",
@@ -1258,7 +1270,12 @@ async function journeyIntegrationLayer(page, BASE, check, hookReceiver) {
   await signOutFromApp(page, BASE);
 }
 
-export async function runJourneys(page, BASE, check, { hookReceiver } = {}) {
+export async function runJourneys(
+  page,
+  BASE,
+  check,
+  { hookReceiver, paymentWebhookToken, collectionWebhookToken } = {},
+) {
   await journeyPortalAuth(page, BASE, check);
   await journeyOperatorDesk(page, BASE, check);
   await journeyFirmAdminAdvisory(page, BASE, check);
@@ -1268,9 +1285,9 @@ export async function runJourneys(page, BASE, check, { hookReceiver } = {}) {
   await journeyPayables(page, BASE, check);
   await journeyVatPositionAndPack(page, BASE, check);
   await journeyGovernance(page, BASE, check);
-  await journeyCollections(page, BASE, check);
+  await journeyCollections(page, BASE, check, collectionWebhookToken);
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
   await journeyPasswordReset(page, BASE, check);
-  await journeyIntegrationLayer(page, BASE, check, hookReceiver);
+  await journeyIntegrationLayer(page, BASE, check, hookReceiver, paymentWebhookToken);
 }

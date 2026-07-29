@@ -14,7 +14,7 @@ import {
   detectMonthlyPattern,
   listRecurringSuggestions,
 } from "./recurring-suggest.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Recurring-invoice suggestions (exhaust idea #3). Pinned invariants:
 //  - detection is pure and conservative: three-ish monthly invoices with
@@ -33,9 +33,6 @@ const buyerCovered = randomUUID();
 const userId = randomUUID();
 
 // Recent Lagos-ish dates, oldest to newest, roughly monthly.
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 const row = (over: {
   id?: string;

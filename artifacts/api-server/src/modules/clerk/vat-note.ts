@@ -1,7 +1,6 @@
 import { z } from "zod/v4";
-import { isFeatureEnabled } from "../flags/flags";
 import { ensureGrounded } from "./grounding";
-import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
+import { inferPhrasing, type ClerkGateway } from "./gateway";
 import { computeVatPack, type VatPack } from "./vat-pack";
 
 // VAT filing cover note (round-4 idea #6). The VAT pack is deterministic end
@@ -107,14 +106,13 @@ export async function draftVatCoverNote(
   if (pack.totals.acceptedCount === 0 && pack.totals.creditCount === 0) {
     return fallback;
   }
-  if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
-
   const facts = vatNoteFacts(pack);
-  // The try/catch closes the kill-switch TOCTOU: if clerk_ai flips off
-  // between the check above and the call, the gateway's own assert throws —
-  // and for this surface even that must answer with the template.
+  // One phrasing call under the digest posture — the kill-switch check and
+  // its TOCTOU catch live in inferPhrasing (gateway.ts); the outer try
+  // keeps the surface's stronger guarantee that even a grounding-check
+  // failure answers with the template.
   try {
-    const result = await gateway.infer<z.infer<typeof noteOutput>>({
+    const data = await inferPhrasing<z.infer<typeof noteOutput>>(gateway, {
       purpose: "draft_vat_note",
       caseId: null,
       // Firm work product, so the firm's own allowance funds it. There is
@@ -133,12 +131,12 @@ export async function draftVatCoverNote(
     // Number grounding: a numeral the facts never stated → template answers
     // (grounding.ts).
     if (
-      !result.ok ||
-      !(await ensureGrounded("vat_note", firmId, result.data.note, facts))
+      !data ||
+      !(await ensureGrounded("vat_note", firmId, data.note, facts))
     ) {
       return fallback;
     }
-    return { ...fallback, note: result.data.note, source: "clerk" };
+    return { ...fallback, note: data.note, source: "clerk" };
   } catch {
     return fallback;
   }

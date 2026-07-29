@@ -9,7 +9,7 @@ import {
   partiesTable,
 } from "@workspace/db";
 import { DATA_INTENTS, extractInvoiceNumbers } from "./data-intents.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Invoice-pinned Ask intent (round-20 idea #5). Pinned invariants:
 //  - the extractor is DETERMINISTIC and conservative: separator+digit
@@ -32,10 +32,6 @@ const NUM = `IS-${SALT}-77`;
 let invoiceId: string;
 
 const intent = DATA_INTENTS.find((i) => i.key === "data.invoice_status");
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 before(async () => {
   const db = getDb();

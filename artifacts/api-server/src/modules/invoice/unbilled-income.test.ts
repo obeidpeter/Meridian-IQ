@@ -16,7 +16,7 @@ import {
   listUnbilledIncome,
   unbilledAlertFor,
 } from "./unbilled-income.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Unbilled-income detection (round-8 idea #1). Pinned invariants:
 //  - the projection is pure: expected = last issue + median gap, alert only
@@ -35,10 +35,6 @@ const buyerFresh = randomUUID();
 const buyerLapsed = randomUUID();
 const buyerCovered = randomUUID();
 const userId = randomUUID();
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 const row = (over: {
   buyerPartyId: string;

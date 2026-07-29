@@ -14,7 +14,7 @@ import {
   listPaymentBehaviour,
   summarizeBehaviour,
 } from "./payment-behaviour.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Buyer payment-behaviour memory (round-9 idea #1). Pinned invariants:
 //  - evidence is ONLY accepted proposals over credit lines with a value
@@ -29,10 +29,6 @@ const clientId = randomUUID();
 const buyerSteady = randomUUID();
 const buyerThin = randomUUID();
 const statementId = randomUUID();
-
-function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-}
 
 before(async () => {
   const db = getDb();

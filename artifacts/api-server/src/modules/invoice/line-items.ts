@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, notInArray, sql } from "drizzle-orm";
 import { getDb, invoicesTable, invoiceLinesTable } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
-import { median } from "./date-math";
+import { LOOKBACK_DAYS, median } from "./date-math";
 
 // Line-item memory (exhaust idea #1, round 4). A client's approved invoices
 // already show WHAT they sell: the same line descriptions, at consistent
@@ -17,7 +17,6 @@ import { median } from "./date-math";
 // only (firm + supplier filters at every query; SEC-03 gating is the
 // caller's job exactly like the other history checks).
 
-const LOOKBACK_DAYS = 365;
 // An item seen fewer times than this is not a habit worth suggesting.
 const MIN_OCCURRENCES = 2;
 // ...and price-deviation warnings need more history than suggestions do.

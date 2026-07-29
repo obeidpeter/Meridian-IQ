@@ -907,6 +907,17 @@ export function InvoiceDetail() {
     setAdjustReason("");
   };
 
+  // The invoice and its attempt history refresh together after anything that
+  // may have moved the lifecycle. Deliberately NOT awaited at any call site:
+  // a background refetch rejection must not mask the toast the handler is
+  // about to show, nor turn an already-landed mutation into a false failure.
+  const refreshInvoiceState = () => {
+    queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
+    queryClient.invalidateQueries({
+      queryKey: getListSubmissionAttemptsQueryKey(id),
+    });
+  };
+
   const handleSubmit = async () => {
     if (!invoice) return;
     // A new attempt makes any fetched explanation stale: if this submission
@@ -917,12 +928,7 @@ export function InvoiceDetail() {
       if (invoice.status === "draft") {
         const res = await validate.mutateAsync({ id });
         if (!res.ok) {
-          // Not awaited: a background refetch rejection must not mask the real
-          // validation-failed message below with a generic submission error.
-          queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
-          queryClient.invalidateQueries({
-            queryKey: getListSubmissionAttemptsQueryKey(id),
-          });
+          refreshInvoiceState();
           toast({
             title: "Validation failed",
             description: res.errors[0]?.message || "Fix the issues and try again.",
@@ -932,10 +938,7 @@ export function InvoiceDetail() {
         }
       }
       await submit.mutateAsync({ id });
-      queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
-      queryClient.invalidateQueries({
-        queryKey: getListSubmissionAttemptsQueryKey(id),
-      });
+      refreshInvoiceState();
       toast({
         title: "Submitted for stamping",
         description: "We'll notify you once it clears the rail.",
@@ -1001,10 +1004,7 @@ export function InvoiceDetail() {
       });
       await submit.mutateAsync({ id });
       setFix(null);
-      queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
-      queryClient.invalidateQueries({
-        queryKey: getListSubmissionAttemptsQueryKey(id),
-      });
+      refreshInvoiceState();
       toast({
         title: "Corrected and resubmitted",
         description: "We'll notify you once it clears the rail.",
@@ -1012,10 +1012,7 @@ export function InvoiceDetail() {
     } catch (e) {
       // The PATCH may have landed even when the resubmit failed — refresh so
       // the page shows whatever state the server actually reached.
-      queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
-      queryClient.invalidateQueries({
-        queryKey: getListSubmissionAttemptsQueryKey(id),
-      });
+      refreshInvoiceState();
       toast({
         title: "Could not resubmit",
         description: serverErrorMessage(e),
@@ -1072,10 +1069,7 @@ export function InvoiceDetail() {
       }
       setAdjustKind(null);
       setAdjustReason("");
-      queryClient.invalidateQueries({ queryKey: getGetInvoiceQueryKey(id) });
-      queryClient.invalidateQueries({
-        queryKey: getListSubmissionAttemptsQueryKey(id),
-      });
+      refreshInvoiceState();
     } catch (e) {
       toast({
         title:

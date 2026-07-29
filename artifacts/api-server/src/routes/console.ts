@@ -67,9 +67,9 @@ import {
 import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
+  firmScope,
   tenantFirmId,
   ROLE_CAPABILITIES,
-  type Principal,
 } from "../modules/auth/rbac";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
@@ -106,14 +106,8 @@ const BILLED_STATUSES = ["submitted", "stamped", "confirmed", "settled"] as cons
 // queue.
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 } as const;
 
-// The firm a console request is scoped to. Firm roles use their bound firm;
-// cross-tenant staff (operator/auditor) fall back to their bound firm if any.
-function firmScope(principal: Principal): string {
-  const tenant = tenantFirmId(principal);
-  if (tenant) return tenant;
-  if (principal.firmId) return principal.firmId;
-  throw new DomainError("NO_TENANT", "A firm context is required", 403);
-}
+// The firm a console request is scoped to: firmScope, imported from rbac
+// (the ONE definition — vat-position.ts shares it).
 
 type ClientRisk = {
   clientPartyId: string;
