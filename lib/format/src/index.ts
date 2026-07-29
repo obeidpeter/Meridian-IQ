@@ -298,6 +298,56 @@ export function actionOutcomeToneClasses(outcome: string): string {
   return "text-amber-700 dark:text-amber-400";
 }
 
+// The approve/results dialog copy the two "Clerk suggests" cards render
+// verbatim (survey items 25+26 — extracted with the headless machine in
+// @workspace/web-ui). Pure builders so the exact wording has one home and
+// unit tests; the SME/console texts differ ONLY where the audience does.
+
+// How many batch targets a card lists before "…and N more."
+export const ACTION_TARGET_DISPLAY_CAP = 8;
+
+export function actionConfirmDescription(
+  kind: string,
+  count: number,
+  audience: "sme" | "console",
+): string {
+  const s = count === 1 ? "" : "s";
+  if (kind === "draft_chasers") {
+    const reviewer =
+      audience === "sme"
+        ? "for you to review, copy and send yourself"
+        : "for the client to review and send";
+    return `This drafts ${count} payment reminder${s} ${reviewer} — nothing is sent or submitted by the platform. Each invoice is re-checked at this moment, and the decision is recorded under your name.`;
+  }
+  return `This ${kind === "retry_failed" ? "resubmits" : "submits"} ${count} invoice${s} to the e-invoicing rails through the ordinary path — validation, consent and any approval policy all apply. Each invoice is re-checked at this moment; anything already processed or no longer eligible is skipped, and the decision is recorded under your name.`;
+}
+
+export function actionConfirmButtonLabel(kind: string, count: number): string {
+  const s = count === 1 ? "" : "s";
+  return kind === "draft_chasers"
+    ? `Draft ${count} reminder${s}`
+    : `Approve ${count} invoice${s}`;
+}
+
+export function actionOutcomeSummary(decision: {
+  kind: string;
+  executedCount: number;
+  failedCount: number;
+  skippedCount: number;
+}): string {
+  return `${decision.executedCount} ${
+    decision.kind === "draft_chasers" ? "drafted" : "submitted"
+  } · ${decision.failedCount} need attention · ${decision.skippedCount} skipped.`;
+}
+
+// The pinned clipboard contract for a transient chaser draft.
+export function draftClipboardText(d: {
+  subject: string;
+  body: string;
+}): string {
+  return `${d.subject}\n\n${d.body}`;
+}
+
 // ---- Notification bell vocabulary -----------------------------------------
 // Channel labels/tones, relative-time buckets and the badge/mark-read
 // helpers shared by the console and SME notification bells.
