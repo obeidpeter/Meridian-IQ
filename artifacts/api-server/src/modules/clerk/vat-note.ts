@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import { isFeatureEnabled } from "../flags/flags";
+import { ensureGrounded } from "./grounding";
 import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
 import { computeVatPack, type VatPack } from "./vat-pack";
 
@@ -113,7 +114,14 @@ export async function draftVatCoverNote(
       validator: noteOutput,
       inputForHash: facts,
     });
-    if (!result.ok) return fallback;
+    // Number grounding: a numeral the facts never stated → template answers
+    // (grounding.ts).
+    if (
+      !result.ok ||
+      !(await ensureGrounded("vat_note", firmId, result.data.note, facts))
+    ) {
+      return fallback;
+    }
     return { ...fallback, note: result.data.note, source: "clerk" };
   } catch {
     return fallback;

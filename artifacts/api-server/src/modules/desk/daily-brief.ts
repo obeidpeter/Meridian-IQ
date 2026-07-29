@@ -7,6 +7,8 @@ import {
   injectionResistanceMonths,
 } from "../clerk/resistance-watch";
 import { detectSpendAnomalies, firmSpendDays } from "../clerk/spend-watch";
+import { RECEIVABLE_ORIENTATION } from "../invoice/receivables";
+import { UNMATCHED_COLLECTION_ACTION } from "../collections/unmatched";
 import { UNMAPPED_TITLE_PREFIX } from "./sweeps";
 
 // Operator daily brief (round-12 idea #1). The firm side has the weekly
@@ -38,6 +40,12 @@ export interface OperatorBrief {
   spendAlerts: number;
   // Yesterday's throughput (Lagos day) — the "did the desk keep up" number.
   decidedYesterday: number;
+  // Round-17 governance lanes: pre-submission invoices blocked on a
+  // colleague's approval across every policy-on firm, and inbound
+  // collection-account payments of the past 7 days that bound to no invoice
+  // (the webhook's own "worth an operator's attention" events, platform-wide).
+  approvalsPending: number;
+  unmatchedCollections7d: number;
 }
 
 export async function computeOperatorBrief(
@@ -114,6 +122,34 @@ export async function computeOperatorBrief(
   const resistance = detectResistanceDrop(await injectionResistanceMonths());
   const spendAnomalies = detectSpendAnomalies(await firmSpendDays());
 
+  // Governance lanes (round 17). Pending approvals join through
+  // firm_policies so only policy-on firms count — the same predicate as
+  // pendingApprovals (approvals.ts), platform-wide. Unmatched collections
+  // read the webhook's own pointer-only audit events.
+  const approvalsRows = (
+    await db.execute<{ count: number }>(sql`
+      SELECT COUNT(*)::int AS count
+      FROM invoices i
+      JOIN firm_policies fp
+        ON fp.firm_id = i.firm_id AND fp.submit_approval_required = true
+      WHERE i.kind = 'invoice'
+        AND i.status IN ('draft', 'validated', 'failed')
+        AND ${RECEIVABLE_ORIENTATION}
+        AND NOT EXISTS (
+          SELECT 1 FROM invoice_approvals a
+          WHERE a.invoice_id = i.id AND a.revoked_at IS NULL
+        )
+    `)
+  ).rows;
+  const unmatchedRows2 = (
+    await db.execute<{ count: number }>(sql`
+      SELECT COUNT(*)::int AS count
+      FROM audit_events e
+      WHERE e.action = ${UNMATCHED_COLLECTION_ACTION}
+        AND e.created_at >= now() - make_interval(days => 7)
+    `)
+  ).rows;
+
   return {
     asOf: now.toISOString(),
     openCases: {
@@ -138,5 +174,7 @@ export async function computeOperatorBrief(
     resistanceAlert: resistance !== null,
     spendAlerts: spendAnomalies.length,
     decidedYesterday: Number(decidedRows[0]?.count ?? 0),
+    approvalsPending: Number(approvalsRows[0]?.count ?? 0),
+    unmatchedCollections7d: Number(unmatchedRows2[0]?.count ?? 0),
   };
 }

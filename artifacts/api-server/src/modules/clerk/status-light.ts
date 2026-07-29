@@ -24,6 +24,10 @@ export interface StatusLightInput {
   confirmations: Pick<Confirmation, "state" | "note" | "createdAt">[];
   stamp: Pick<StampRecord, "irn"> | null;
   today?: Date;
+  // Maker-checker (round 17): the firm's policy demands a live colleague
+  // approval this pre-submission invoice does not yet have — the light's
+  // honest answer to "why can't I submit?".
+  awaitingApproval?: boolean;
 }
 
 function latest<T extends { createdAt: Date }>(rows: T[]): T | null {
@@ -49,6 +53,13 @@ export function computeStatusLight(input: StatusLightInput): StatusLightResult {
         code
           ? `Submission was rejected with code ${code}`
           : "Submission failed on all rails",
+        // Failed paper is still approvable — resubmission will ALSO demand
+        // the colleague's approval, so say so now rather than after the fix.
+        ...(input.awaitingApproval
+          ? [
+              "After fixing, a colleague's approval is also required before resubmission",
+            ]
+          : []),
       ],
       recommendedAction:
         "Open the rejection, fix the flagged field and resubmit the invoice.",
@@ -69,6 +80,17 @@ export function computeStatusLight(input: StatusLightInput): StatusLightResult {
 
   // AMBER: in-flight or needs attention, nothing broken yet.
   if (invoice.status === "draft" || invoice.status === "validated") {
+    if (input.awaitingApproval) {
+      return {
+        light: "amber",
+        reasons: [
+          "Invoice has not been submitted yet",
+          "Waiting for a colleague's approval — this firm requires a second person before submission",
+        ],
+        recommendedAction:
+          "Ask a colleague to review and approve this invoice, then submit it.",
+      };
+    }
     return {
       light: "amber",
       reasons: ["Invoice has not been submitted yet"],

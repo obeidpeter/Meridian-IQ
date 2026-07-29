@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.47.0
+ * OpenAPI spec version: 0.48.0
  */
 import * as zod from 'zod';
 
@@ -2958,6 +2958,26 @@ export const CreateCollectionAccountResponse = zod.object({
 
 
 /**
+ * @summary Inbound payments on live collection accounts that bound to no invoice — per-account counts from the webhook's pointer-only audit events (amounts are never recorded)
+ */
+export const GetUnmatchedCollectionsResponse = zod.object({
+  "windowDays": zod.number(),
+  "total": zod.number(),
+  "accounts": zod.array(zod.object({
+  "accountId": zod.string(),
+  "accountReference": zod.string(),
+  "label": zod.string().nullable(),
+  "clientPartyId": zod.string(),
+  "clientName": zod.string(),
+  "count": zod.number(),
+  "firstSeen": zod.string(),
+  "lastSeen": zod.string()
+})),
+  "note": zod.string()
+})
+
+
+/**
  * @summary Deactivate a collection account — inbound payments on its reference stop being recorded
  */
 export const DeactivateCollectionAccountParams = zod.object({
@@ -3487,7 +3507,9 @@ export const GetOperatorBriefResponse = zod.object({
   "unmappedCodeCases": zod.number(),
   "clerkEnabled": zod.boolean(),
   "resistanceAlert": zod.boolean(),
-  "decidedYesterday": zod.number()
+  "decidedYesterday": zod.number(),
+  "approvalsPending": zod.number(),
+  "unmatchedCollections7d": zod.number()
 })
 
 
@@ -7253,6 +7275,13 @@ export const GetClerkMetricsQueryParams = zod.object({
 
 export const GetClerkMetricsResponse = zod.object({
   "windowDays": zod.number(),
+  "grounding": zod.object({
+  "violations": zod.number(),
+  "bySurface": zod.array(zod.object({
+  "surface": zod.string(),
+  "count": zod.number()
+}))
+}),
   "calibration": zod.object({
   "sampleFields": zod.number(),
   "buckets": zod.array(zod.object({

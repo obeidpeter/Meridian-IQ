@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.47.0
+ * OpenAPI spec version: 0.48.0
  */
 import type { OperatorBriefOpenCases } from './operatorBriefOpenCases';
 import type { OperatorBriefStuckBatches } from './operatorBriefStuckBatches';
@@ -19,4 +19,6 @@ export interface OperatorBrief {
   clerkEnabled: boolean;
   resistanceAlert: boolean;
   decidedYesterday: number;
+  approvalsPending: number;
+  unmatchedCollections7d: number;
 }

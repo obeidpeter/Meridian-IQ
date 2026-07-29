@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.47.0
+ * OpenAPI spec version: 0.48.0
  */
 import type { ClerkMetricsAsk } from './clerkMetricsAsk';
 import type { ClerkMetricsCalibration } from './clerkMetricsCalibration';
@@ -12,6 +12,7 @@ import type { ClerkMetricsCorrectionShapesItem } from './clerkMetricsCorrectionS
 import type { ClerkMetricsCorrectionsItem } from './clerkMetricsCorrectionsItem';
 import type { ClerkMetricsCost } from './clerkMetricsCost';
 import type { ClerkMetricsEconomics } from './clerkMetricsEconomics';
+import type { ClerkMetricsGrounding } from './clerkMetricsGrounding';
 import type { ClerkMetricsInference } from './clerkMetricsInference';
 import type { ClerkMetricsInjectionTrend } from './clerkMetricsInjectionTrend';
 import type { ClerkMetricsKeptRateTrendItem } from './clerkMetricsKeptRateTrendItem';
@@ -22,6 +23,7 @@ import type { ClerkMetricsSupplierAccuracyItem } from './clerkMetricsSupplierAcc
 
 export interface ClerkMetrics {
   windowDays: number;
+  grounding: ClerkMetricsGrounding;
   calibration?: ClerkMetricsCalibration;
   cases: ClerkMetricsCases;
   inference: ClerkMetricsInference;

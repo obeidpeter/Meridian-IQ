@@ -10,6 +10,7 @@ import {
   type ClientStatementFacts,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
+import { ensureGrounded } from "./grounding";
 import { fanOutAlert } from "../messaging/fan-out";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import { registerSweep } from "../pipeline/pipeline";
@@ -279,7 +280,17 @@ export async function generateClientStatement(
       validator: statementOutput,
       inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(facts)}`,
     });
-    if (result.ok) {
+    // Number grounding: a numeral the facts never stated → template answers
+    // (grounding.ts).
+    if (
+      result.ok &&
+      (await ensureGrounded(
+        "client_statement",
+        firmId,
+        [result.data.headline, ...result.data.bullets].join("\n"),
+        user,
+      ))
+    ) {
       headline = result.data.headline;
       bullets = result.data.bullets.length ? result.data.bullets : bullets;
       source = "clerk";

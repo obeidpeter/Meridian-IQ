@@ -343,18 +343,22 @@ test("a quiet client-month never calls the model (dormant clients cost nothing)"
 
 test("the model phrases an active month; the call is ledgered to the firm", async () => {
   const calls: CompletionRequest[] = [];
+  // The phrased output must be GROUNDED (round 17): every numeral it uses
+  // exists in the fact prompt (1 invoice, NGN 77.00) — an invented count
+  // would forfeit the phrasing to the template, which grounding.test.ts
+  // pins on the digest surface.
   const gateway = fakeGateway((req) => {
     calls.push(req);
     return JSON.stringify({
-      headline: "Great month, three invoices cleared.",
-      bullets: ["You issued 3 invoices.", "1 needs a fix."],
+      headline: "A steady month — 1 invoice issued.",
+      bullets: ["You issued 1 invoice totalling NGN 77.00."],
     });
   });
   // clientA's MONTH already has a stored template row from an earlier test;
   // use clientA2 with real activity in MONTH (the OTHER_CLIENT draft).
   const row = await generateClientStatement(firmA, clientA2, MONTH, gateway);
   assert.equal(row.source, "clerk");
-  assert.equal(row.headline, "Great month, three invoices cleared.");
+  assert.equal(row.headline, "A steady month — 1 invoice issued.");
   assert.equal(calls.length, 1);
   // Facts are still SQL — the model only phrased them.
   assert.equal(row.facts.issuedCount, 1);

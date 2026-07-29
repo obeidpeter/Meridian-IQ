@@ -13,6 +13,7 @@ import {
   CreateCollectionAccountResponse,
   DeactivateCollectionAccountParams,
   DeactivateCollectionAccountResponse,
+  GetUnmatchedCollectionsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { opTokenAllows } from "../lib/op-token";
@@ -23,6 +24,7 @@ import {
   requireFirmScope,
 } from "../modules/auth/rbac";
 import { DomainError } from "../modules/errors";
+import { listUnmatchedCollections } from "../modules/collections/unmatched";
 import {
   createCollectionAccount,
   listCollectionAccounts,
@@ -55,6 +57,20 @@ function accountView(row: CollectionAccountRow): Record<string, unknown> {
     createdAt: row.createdAt.toISOString(),
   };
 }
+
+// Unmatched inbound payments (round-17 idea #3): the webhook's own
+// pointer-only `collections.unmatched` audit events read back per account —
+// money arrived on a live account and bound to no invoice. Same firm gate as
+// the accounts list; nothing here carries amounts (they were never recorded).
+router.get(
+  "/collection-accounts/unmatched",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "statement.write");
+    const firmId = requireFirmScope(req.principal);
+    const report = await listUnmatchedCollections(firmId);
+    res.json(GetUnmatchedCollectionsResponse.parse(report));
+  },
+);
 
 router.get("/collection-accounts", async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.write");
