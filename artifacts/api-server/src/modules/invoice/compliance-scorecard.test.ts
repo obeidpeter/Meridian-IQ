@@ -97,6 +97,11 @@ before(async () => {
   await seedAttempt(a2, "accepted", daysAgo(46)); // +4d: inside window
   const a3 = await seedInvoice({ invoiceNumber: `SC-A3-${SALT}`, issueDate: daysAgo(40) });
   await seedAttempt(a3, "accepted", daysAgo(28)); // +12d: outside window
+  // The deadline boundary: accepted exactly on day issue+7. The overdue
+  // predicate says day 7 IS late (issue + window <= today), so this must
+  // NOT count as within-window — the review-confirmed off-by-one.
+  const a5 = await seedInvoice({ invoiceNumber: `SC-A5-${SALT}`, issueDate: daysAgo(35) });
+  await seedAttempt(a5, "accepted", daysAgo(28)); // +7d: the boundary — late
   await seedInvoice({
     invoiceNumber: `SC-A4-${SALT}`,
     issueDate: daysAgo(20),
@@ -136,17 +141,19 @@ test("the scorecard ranks attention first with floored rates", async () => {
   const [first, second] = scorecard.rows;
   assert.equal(first.clientPartyId, clientA, "overdue paper leads");
   assert.equal(first.clientName, `SC Alpha ${SALT}`);
-  assert.equal(first.issuedCount, 4);
-  assert.equal(first.acceptedCount, 3);
-  // 2 of 3 accepted landed inside the 7-day window.
+  assert.equal(first.issuedCount, 5);
+  assert.equal(first.acceptedCount, 4);
+  // 2 of 4 accepted landed INSIDE the window: +2 and +4 count, +12 does
+  // not, and the +7 boundary is LATE (the overdue predicate's day-7 rule).
   assert.ok(
     first.withinWindowRate !== null &&
-      Math.abs(first.withinWindowRate - 2 / 3) < 1e-9,
+      Math.abs(first.withinWindowRate - 2 / 4) < 1e-9,
+    `withinWindowRate ${first.withinWindowRate} — the day-7 boundary is late`,
   );
-  // 3 invoices were attempted (a4 never was); only a2 saw a rejection.
+  // 4 invoices were attempted (a4 never was); only a2 saw a rejection.
   assert.ok(
-    first.failureRate !== null && Math.abs(first.failureRate - 1 / 3) < 1e-9,
-    `failureRate ${first.failureRate} — rejected a2 over 3 attempted invoices`,
+    first.failureRate !== null && Math.abs(first.failureRate - 1 / 4) < 1e-9,
+    `failureRate ${first.failureRate} — rejected a2 over 4 attempted invoices`,
   );
   assert.equal(first.overdueNow, 1);
   assert.equal(first.unverifiedBills, 1);

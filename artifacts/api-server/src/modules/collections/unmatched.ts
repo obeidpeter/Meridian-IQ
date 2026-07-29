@@ -11,7 +11,9 @@ import { getDb, collectionAccountsTable, partiesTable } from "@workspace/db";
 // nobody knows. Zero model calls, nothing stored, pointer-only throughout
 // (counts and timestamps; the amounts were never recorded).
 
-const WINDOW_DAYS = 90;
+// Exported for the month-end close, whose detail line names the window.
+export const UNMATCHED_COLLECTIONS_WINDOW_DAYS = 90;
+const WINDOW_DAYS = UNMATCHED_COLLECTIONS_WINDOW_DAYS;
 
 export const UNMATCHED_COLLECTION_ACTION = "collections.unmatched";
 
@@ -115,6 +117,30 @@ export async function listUnmatchedCollections(
       `the payer quoted no usable invoice number, or the quoted invoice was not in a payable state. ` +
       `Amounts are never recorded for unmatched payments; reconcile against the provider's own statement.`,
   };
+}
+
+// One CLIENT's honest count over the window — the month-end close's line.
+// A direct COUNT, deliberately NOT derived from listUnmatchedCollections's
+// per-account array: that array is capped at 100 accounts and drops rows
+// whose client no longer resolves, so summing it could assert a false
+// "all clear" for a client whose account fell off the cap.
+export async function countClientUnmatchedCollections(
+  firmId: string,
+  clientPartyId: string,
+  windowDays = WINDOW_DAYS,
+): Promise<number> {
+  const rows = (
+    await getDb().execute<{ n: number }>(sql`
+      SELECT COUNT(*)::int AS n
+      FROM audit_events e
+      JOIN collection_accounts ca ON ca.id::text = e.entity_id
+      WHERE e.action = ${UNMATCHED_COLLECTION_ACTION}
+        AND e.firm_id = ${firmId}
+        AND ca.client_party_id = ${clientPartyId}
+        AND e.created_at >= now() - make_interval(days => ${windowDays})
+    `)
+  ).rows;
+  return Number(rows[0]?.n ?? 0);
 }
 
 // Firm-wide count over a short window — the digest/brief fact.

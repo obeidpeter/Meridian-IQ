@@ -128,7 +128,7 @@ router.post("/clerk/eval/phrasing", async (req, res): Promise<void> => {
     return;
   }
   // `surface` only means something to a canary. Refuse it on a stored run
-  // rather than silently burning a full two-surface pass the operator did
+  // rather than silently burning a full all-surfaces pass the operator did
   // not ask for (and polluting the stored trend with it).
   if (body.surface) {
     throw new DomainError(

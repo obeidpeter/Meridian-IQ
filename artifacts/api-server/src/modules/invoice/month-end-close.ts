@@ -5,7 +5,10 @@ import { listMissingRecurringBills } from "./missing-bills";
 import { computeDoublePaymentCheck } from "./double-payment";
 import { computePenaltyExposure } from "./penalty-exposure";
 import { pendingApprovals } from "./approvals";
-import { listUnmatchedCollections } from "../collections/unmatched";
+import {
+  countClientUnmatchedCollections,
+  UNMATCHED_COLLECTIONS_WINDOW_DAYS,
+} from "../collections/unmatched";
 
 // Month-end close assistant (round-19 idea #2). The platform now runs seven
 // independent deterministic advisories that a client discovers one card at a
@@ -54,12 +57,19 @@ export async function computeMonthEndClose(
   const doublePay = await computeDoublePaymentCheck(firmId, clientPartyId);
   const exposure = await computePenaltyExposure(firmId, clientPartyId);
   const approvals = await pendingApprovals(firmId, clientPartyId);
-  const collections = await listUnmatchedCollections(firmId);
-  const clientCollections = collections.accounts
-    .filter((a) => a.clientPartyId === clientPartyId)
-    .reduce((sum, a) => sum + a.count, 0);
+  const clientCollections = await countClientUnmatchedCollections(
+    firmId,
+    clientPartyId,
+  );
   const doublePayCount =
     doublePay.multiPaid.length + doublePay.duplicateCandidates.length;
+
+  // Three source lists are capped at their own detector's display limit
+  // (unbilled/missing at 5, double-payment at 20 per lane); when a count
+  // sits AT the cap the detail says so — a saturated "(5)" must never read
+  // as exactly five.
+  const capped = (n: number, cap: number, detail: string): string =>
+    n >= cap ? `${detail} Showing the detector's top ${cap} — more may exist.` : detail;
 
   const item = (
     key: string,
@@ -80,7 +90,7 @@ export async function computeMonthEndClose(
       "Overdue e-invoice submissions",
       exposure.overdueCount,
       exposure.overdueCount > 0
-        ? `${exposure.overdueCount} invoice(s) are past the statutory window — at least NGN ${exposure.exposure.small} of estimated s.104 exposure (lowest band). Submitting them removes it.`
+        ? `${exposure.overdueCount} invoice(s) are past the statutory window — at least NGN ${exposure.exposure.small} of estimated s.104 exposure (lowest band). ${approvals !== null ? "Approving and submitting" : "Submitting"} them removes it.`
         : "Every invoice is inside the statutory submission window.",
     ),
     item(
@@ -88,7 +98,11 @@ export async function computeMonthEndClose(
       "Regular invoices not yet raised",
       unbilled.length,
       unbilled.length > 0
-        ? "Buyers you bill on a monthly rhythm with nothing raised this cycle — income going unbilled."
+        ? capped(
+            unbilled.length,
+            5,
+            "Buyers you bill on a monthly rhythm with nothing raised this cycle — income going unbilled.",
+          )
         : "Every monthly billing habit is up to date.",
     ),
     item(
@@ -104,7 +118,11 @@ export async function computeMonthEndClose(
       "Expected vendor bills not captured",
       missingBills.length,
       missingBills.length > 0
-        ? "Vendors that bill you monthly with nothing captured this cycle — input VAT going unclaimed."
+        ? capped(
+            missingBills.length,
+            5,
+            "Vendors that bill you monthly with nothing captured this cycle — input VAT going unclaimed.",
+          )
         : "Every monthly vendor habit has this cycle's bill captured.",
     ),
     item(
@@ -112,26 +130,21 @@ export async function computeMonthEndClose(
       "Possible double payments",
       doublePayCount,
       doublePayCount > 0
-        ? "Bills the payment evidence says were settled twice, or unpaid near-duplicates — review before paying anything else."
+        ? capped(
+            doublePayCount,
+            20,
+            "Bills the payment evidence says were settled twice, or unpaid near-duplicates — review before paying anything else.",
+          )
         : "No double-payment signals in the payment evidence.",
     ),
-    ...(clientCollections > 0
-      ? [
-          item(
-            "unmatched_collections",
-            "Collection-account payments matching no invoice",
-            clientCollections,
-            `Payments arrived on your collection accounts (trailing ${collections.windowDays} days) that could not be bound to any invoice — reconcile against the provider statement.`,
-          ),
-        ]
-      : [
-          item(
-            "unmatched_collections",
-            "Collection-account payments matching no invoice",
-            0,
-            "Every collection-account payment bound to an invoice.",
-          ),
-        ]),
+    item(
+      "unmatched_collections",
+      "Collection-account payments matching no invoice",
+      clientCollections,
+      clientCollections > 0
+        ? `Payments arrived on your collection accounts (trailing ${UNMATCHED_COLLECTIONS_WINDOW_DAYS} days) that could not be bound to any invoice — reconcile against the provider statement.`
+        : "Every collection-account payment bound to an invoice.",
+    ),
     // Approval item only when the maker-checker policy is ON for the firm
     // (null means off — a checklist line for a policy the firm never
     // adopted is noise).

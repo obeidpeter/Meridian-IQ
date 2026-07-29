@@ -605,6 +605,9 @@ function MonthEndCloseCard({ clientPartyId }: { clientPartyId: string }) {
       query: {
         enabled: !!clientPartyId,
         queryKey: getGetMonthEndCloseQueryKey({ clientPartyId }),
+        // The checklist composes seven detector queries server-side —
+        // don't re-run the sweep on every dashboard focus.
+        staleTime: 5 * 60_000,
         retry: false,
       },
     },

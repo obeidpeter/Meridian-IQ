@@ -113,8 +113,13 @@ export async function computeComplianceScorecard(
         p.legal_name AS client_name,
         COUNT(wi.id)::int AS issued,
         COUNT(fa.invoice_id)::int AS accepted,
+        -- Strict <: the canonical deadline (compliance-window.ts) is Lagos
+        -- MIDNIGHT AT THE START of day issue+window, and the overdue
+        -- predicate below flips overdue when issue + window <= today — an
+        -- acceptance ON day 7 is late, and the two columns of one row must
+        -- never disagree about the same invoice.
         COUNT(fa.invoice_id) FILTER (
-          WHERE fa.accepted_date <= wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
+          WHERE fa.accepted_date < wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
         )::int AS within_window,
         COUNT(ap.invoice_id)::int AS attempted,
         COUNT(ap.invoice_id) FILTER (WHERE ap.saw_failure)::int AS failed,
@@ -130,6 +135,18 @@ export async function computeComplianceScorecard(
       LEFT JOIN overdue_now od ON od.supplier_party_id = eng.client_party_id
       WHERE p.merged_into_id IS NULL
       GROUP BY 1, 2
+      -- Attention-first INSIDE the query, so a book past MAX_ROWS drops its
+      -- calmest tail — never an arbitrary plan-dependent subset that could
+      -- silently omit the very clients the table exists to surface. The JS
+      -- sort below then refines the retained set with the same keys.
+      ORDER BY COALESCE(MAX(od.n), 0) DESC,
+        COALESCE(
+          (COUNT(fa.invoice_id) FILTER (
+            WHERE fa.accepted_date < wi.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
+          ))::float / NULLIF(COUNT(fa.invoice_id), 0),
+          2
+        ) ASC,
+        p.legal_name
       LIMIT ${MAX_ROWS}
     `)
   ).rows;
@@ -143,6 +160,9 @@ export async function computeComplianceScorecard(
       WHERE i.firm_id = ${firmId}
         AND i.kind = 'invoice'
         AND ${BILL_ORIENTATION}
+        -- The one bill status with meaning (vat-position.ts): a cancelled
+        -- mis-capture is not a posture gap.
+        AND i.status <> 'cancelled'
         AND i.issue_date >= ${today} - ${WINDOW_DAYS}::int
         AND NOT EXISTS (
           SELECT 1 FROM bill_verifications bv WHERE bv.invoice_id = i.id
