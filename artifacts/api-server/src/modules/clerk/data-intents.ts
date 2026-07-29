@@ -25,6 +25,7 @@ import {
   vatPositionMonths,
 } from "../invoice/vat-position";
 import { pendingApprovals } from "../invoice/approvals";
+import { computePenaltyExposure } from "../invoice/penalty-exposure";
 import { firmClerkUsage } from "./budget";
 import { monthLabel } from "./client-statement";
 import { isAre, MONTH_NAMES, plural } from "./text";
@@ -744,6 +745,56 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     },
   },
   {
+    key: "data.penalty_exposure",
+    title:
+      "estimated s.104 penalty exposure for invoices past the submission window and still unsubmitted (per-band estimate; the platform does not hold turnover)",
+    accepts: { client: true },
+    async run(firmId, params) {
+      const exposure = await computePenaltyExposure(
+        firmId,
+        params?.clientPartyId,
+      );
+      if (exposure.overdueCount === 0) {
+        return {
+          text: `No invoices${forClient(params)} are past the submission window, so there is no estimated s.104 exposure right now.`,
+          facts: [countFact("overdue_submissions", "Past the window", 0)],
+        };
+      }
+      return {
+        text:
+          `${plural(exposure.overdueCount, "invoice")}${forClient(params)} ${isAre(exposure.overdueCount)} past the submission window and still unsubmitted. ` +
+          `Estimated s.104 exposure under MeridianIQ's published model: NGN ${exposure.exposure.small} (small turnover band) to NGN ${exposure.exposure.large} (large band). ` +
+          `An estimate, not legal or tax advice — submitting the overdue paper removes the exposure.`,
+        facts: [
+          countFact(
+            "overdue_submissions",
+            "Past the window",
+            exposure.overdueCount,
+          ),
+          {
+            key: "exposure_floor",
+            label: "Exposure floor (small band)",
+            kind: "amount",
+            value: exposure.exposure.small,
+            unit: "NGN",
+          },
+          {
+            key: "exposure_ceiling",
+            label: "Exposure ceiling (large band)",
+            kind: "amount",
+            value: exposure.exposure.large,
+            unit: "NGN",
+          },
+        ],
+        links: exposure.sampleInvoices.map((r) => ({
+          label: r.invoiceNumber,
+          kind: "invoice" as const,
+          id: r.invoiceId,
+        })),
+      };
+    },
+  },
+  {
     key: "data.pending_approvals",
     title:
       "invoices waiting for a colleague's submission approval under the firm's maker-checker policy (count, oldest wait, the waiting invoices)",
@@ -868,6 +919,10 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // stay inside the asker's SEC-03 visibility); the policy state itself is
   // firm configuration a client may fairly learn — it blocks their paper.
   "data.pending_approvals",
+  // Penalty exposure with the forced own-party pin: the overdue paper and
+  // its links are the caller's own supplier-pinned invoices, and the rates
+  // are MeridianIQ's published public model — nothing firm-internal.
+  "data.penalty_exposure",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

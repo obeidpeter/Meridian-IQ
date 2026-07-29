@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.48.0
+ * OpenAPI spec version: 0.49.0
  */
 export interface HealthStatus {
   status: string;
@@ -4211,6 +4211,117 @@ export interface IntentEvalOutcome {
   run: IntentEvalRun | null;
 }
 
+export type PhrasingEvalFixtureResultSurface = typeof PhrasingEvalFixtureResultSurface[keyof typeof PhrasingEvalFixtureResultSurface];
+
+
+export const PhrasingEvalFixtureResultSurface = {
+  digest: 'digest',
+  chaser: 'chaser',
+} as const;
+
+export type PhrasingEvalFixtureResultRiskLabel = typeof PhrasingEvalFixtureResultRiskLabel[keyof typeof PhrasingEvalFixtureResultRiskLabel];
+
+
+export const PhrasingEvalFixtureResultRiskLabel = {
+  clean: 'clean',
+  injection: 'injection',
+} as const;
+
+export type PhrasingEvalFixtureResultOutcome = typeof PhrasingEvalFixtureResultOutcome[keyof typeof PhrasingEvalFixtureResultOutcome];
+
+
+export const PhrasingEvalFixtureResultOutcome = {
+  ok: 'ok',
+  invalid: 'invalid',
+  error: 'error',
+} as const;
+
+export interface PhrasingEvalFixtureResult {
+  key: string;
+  surface: PhrasingEvalFixtureResultSurface;
+  label: string;
+  riskLabel: PhrasingEvalFixtureResultRiskLabel;
+  outcome: PhrasingEvalFixtureResultOutcome;
+  /** @nullable */
+  grounded: boolean | null;
+  correct: boolean;
+  /** @nullable */
+  resisted: boolean | null;
+  failures: string[];
+}
+
+export interface PhrasingEvalReport {
+  fixtureCount: number;
+  correctCount: number;
+  groundedCount: number;
+  injectionFixtures: number;
+  injectionResisted: number;
+  results: PhrasingEvalFixtureResult[];
+}
+
+export type PhrasingEvalRunPromptVersions = {[key: string]: string};
+
+export interface PhrasingEvalRun {
+  id: string;
+  model: string;
+  promptVersions: PhrasingEvalRunPromptVersions;
+  fixtureCount: number;
+  correctCount: number;
+  groundedCount: number;
+  injectionFixtures: number;
+  injectionResisted: number;
+  results: PhrasingEvalFixtureResult[];
+  durationMs: number;
+  createdAt: string;
+}
+
+export type RunPhrasingEvalInputSurface = typeof RunPhrasingEvalInputSurface[keyof typeof RunPhrasingEvalInputSurface];
+
+
+export const RunPhrasingEvalInputSurface = {
+  digest: 'digest',
+  chaser: 'chaser',
+} as const;
+
+export interface RunPhrasingEvalInput {
+  /** @maxLength 20000 */
+  candidateSystem?: string;
+  surface?: RunPhrasingEvalInputSurface;
+}
+
+export type PhrasingEvalOutcomeCanarySurface = typeof PhrasingEvalOutcomeCanarySurface[keyof typeof PhrasingEvalOutcomeCanarySurface];
+
+
+export const PhrasingEvalOutcomeCanarySurface = {
+  digest: 'digest',
+  chaser: 'chaser',
+} as const;
+
+export type PhrasingEvalOutcomeCanaryIncumbent = PhrasingEvalReport & {
+  promptVersion: string;
+};
+
+export type PhrasingEvalOutcomeCanaryVerdict = typeof PhrasingEvalOutcomeCanaryVerdict[keyof typeof PhrasingEvalOutcomeCanaryVerdict];
+
+
+export const PhrasingEvalOutcomeCanaryVerdict = {
+  promote: 'promote',
+  reject: 'reject',
+  inconclusive: 'inconclusive',
+} as const;
+
+export type PhrasingEvalOutcomeCanary = {
+  surface: PhrasingEvalOutcomeCanarySurface;
+  incumbent: PhrasingEvalOutcomeCanaryIncumbent;
+  candidate: PhrasingEvalReport;
+  verdict: PhrasingEvalOutcomeCanaryVerdict;
+} | null;
+
+export interface PhrasingEvalOutcome {
+  canary: PhrasingEvalOutcomeCanary;
+  run: PhrasingEvalRun | null;
+}
+
 export interface IntentFixtureExpected {
   /**
      * @minLength 1
@@ -5022,6 +5133,45 @@ export interface ChaseEffectiveness {
   note: string;
 }
 
+export type PenaltyExposureExposure = {
+  small: string;
+  medium: string;
+  large: string;
+};
+
+export type PenaltyExposurePerInvoice = {
+  small: string;
+  medium: string;
+  large: string;
+};
+
+export type PenaltyExposureSampleInvoicesItem = {
+  invoiceId: string;
+  invoiceNumber: string;
+  issueDate: string;
+  daysOverdue: number;
+};
+
+export interface PenaltyExposure {
+  asOf: string;
+  overdueCount: number;
+  exposure: PenaltyExposureExposure;
+  perInvoice: PenaltyExposurePerInvoice;
+  sampleInvoices: PenaltyExposureSampleInvoicesItem[];
+  note: string;
+}
+
+export interface MissingRecurringBill {
+  supplierPartyId: string;
+  supplierName: string;
+  count: number;
+  medianAmount: string;
+  medianGapDays: number;
+  lastIssueDate: string;
+  expectedByDate: string;
+  overdueDays: number;
+}
+
 export type DoublePaymentCheckMultiPaidItem = {
   invoiceId: string;
   invoiceNumber: string;
@@ -5424,6 +5574,13 @@ export type GetChaseEffectivenessParams = {
 clientPartyId?: string;
 };
 
+export type GetPenaltyExposureParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
 export type ListRecurringSuggestionsParams = {
 clientPartyId?: string;
 };
@@ -5441,6 +5598,13 @@ clientPartyId: string;
 };
 
 export type GetDoublePaymentCheckParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
+export type ListMissingRecurringBillsParams = {
 /**
  * Required for firm principals; a client_user is pinned to its own party.
  */

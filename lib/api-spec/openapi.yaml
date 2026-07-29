@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.48.0
+  version: 0.49.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1277,6 +1277,28 @@ paths:
                 $ref: "#/components/schemas/ChaseEffectiveness"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /penalty-exposure:
+    get:
+      operationId: getPenaltyExposure
+      tags: [invoices]
+      summary: Estimated s.104 penalty exposure for invoices past the submission window and still unsubmitted — per turnover band, estimate not advice (deterministic, nothing stored)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Per-band exposure with the oldest overdue paper sampled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PenaltyExposure"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /invoices/{invoiceId}/chase-log:
     post:
       operationId: recordChaseReminder
@@ -2200,6 +2222,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DoublePaymentCheck"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /bills/missing-recurring:
+    get:
+      operationId: listMissingRecurringBills
+      tags: [sme]
+      summary: Vendors with a monthly capture habit whose bill has not been captured this cycle — the payables mirror of unbilled income (deterministic, nothing stored)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Expected-but-uncaptured vendor bills, biggest money first (capped)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MissingRecurringBill"
         "400":
           $ref: "#/components/responses/BadRequest"
   /dashboard/payables:
@@ -4359,6 +4405,40 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/IntentEvalRun"
+  /clerk/eval/phrasing:
+    post:
+      operationId: runPhrasingEval
+      tags: [clerk]
+      summary: Run the digest/chaser phrasing corpora through the byte-identical production prompt builders (deterministic scoring); with a candidate prompt, side-by-side canary for one surface — nothing stored
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunPhrasingEvalInput"
+      responses:
+        "200":
+          description: The stored run (incumbent mode) or the canary report (candidate mode)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PhrasingEvalOutcome"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /clerk/eval/phrasing-runs:
+    get:
+      operationId: listPhrasingEvalRuns
+      tags: [clerk]
+      summary: Stored phrasing eval runs, newest first
+      responses:
+        "200":
+          description: Phrasing eval runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PhrasingEvalRun"
   /clerk/eval/intent-fixtures:
     get:
       operationId: listIntentFixtures
@@ -11222,6 +11302,153 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/IntentEvalRun"
+    # Phrasing eval lane (round 18): digest/chaser synthetic fact packs
+    # replayed through the byte-identical production prompt builders, scored
+    # deterministically (grounding, required/forbidden content, injection
+    # resistance).
+    PhrasingEvalFixtureResult:
+      type: object
+      required:
+        [key, surface, label, riskLabel, outcome, grounded, correct, resisted, failures]
+      properties:
+        key:
+          type: string
+        surface:
+          type: string
+          enum: [digest, chaser]
+        label:
+          type: string
+        riskLabel:
+          type: string
+          enum: [clean, injection]
+        outcome:
+          type: string
+          enum: [ok, invalid, error]
+        grounded:
+          type: ["boolean", "null"]
+        correct:
+          type: boolean
+        resisted:
+          type: ["boolean", "null"]
+        failures:
+          type: array
+          items:
+            type: string
+    PhrasingEvalReport:
+      type: object
+      required:
+        [
+          fixtureCount,
+          correctCount,
+          groundedCount,
+          injectionFixtures,
+          injectionResisted,
+          results,
+        ]
+      properties:
+        fixtureCount:
+          type: integer
+        correctCount:
+          type: integer
+        groundedCount:
+          type: integer
+        injectionFixtures:
+          type: integer
+        injectionResisted:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/PhrasingEvalFixtureResult"
+    PhrasingEvalRun:
+      type: object
+      required:
+        [
+          id,
+          model,
+          promptVersions,
+          fixtureCount,
+          correctCount,
+          groundedCount,
+          injectionFixtures,
+          injectionResisted,
+          results,
+          durationMs,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        model:
+          type: string
+        # Per-surface prompt versions at run time, e.g. {"digest":
+        # "digest.v6", "chaser": "chaser.v3"}.
+        promptVersions:
+          type: object
+          additionalProperties:
+            type: string
+        fixtureCount:
+          type: integer
+        correctCount:
+          type: integer
+        groundedCount:
+          type: integer
+        injectionFixtures:
+          type: integer
+        injectionResisted:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/PhrasingEvalFixtureResult"
+        durationMs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    RunPhrasingEvalInput:
+      type: object
+      properties:
+        # When present, that surface's fixtures run under this candidate
+        # system prompt and the incumbent side by side; nothing is stored.
+        candidateSystem:
+          type: string
+          maxLength: 20000
+        surface:
+          type: string
+          enum: [digest, chaser]
+    PhrasingEvalOutcome:
+      type: object
+      required: [canary, run]
+      properties:
+        canary:
+          nullable: true
+          type: object
+          required: [surface, incumbent, candidate, verdict]
+          properties:
+            surface:
+              type: string
+              enum: [digest, chaser]
+            incumbent:
+              allOf:
+                - $ref: "#/components/schemas/PhrasingEvalReport"
+                - type: object
+                  required: [promptVersion]
+                  properties:
+                    promptVersion:
+                      type: string
+            candidate:
+              $ref: "#/components/schemas/PhrasingEvalReport"
+            # Deterministic: grounding and injection resistance may never
+            # drop; correctness is judged outside a one-fixture noise band.
+            verdict:
+              type: string
+              enum: [promote, reject, inconclusive]
+        run:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/PhrasingEvalRun"
     # Grown intent corpus (round 16): a real question case promoted into the
     # intent eval. The stored question is ALWAYS the scrubbed text — every
     # engaged-client (and firm) name mapped onto the frozen synthetic
@@ -12440,6 +12667,89 @@ components:
           nullable: true
         note:
           type: string
+    # Penalty exposure (round 18): the public s.104 model pointed at the
+    # caller's overdue paper — all three turnover bands (the platform does
+    # not hold turnover), single-figure surfaces use the small-band floor.
+    PenaltyExposure:
+      type: object
+      required:
+        [asOf, overdueCount, exposure, perInvoice, sampleInvoices, note]
+      properties:
+        asOf:
+          type: string
+        overdueCount:
+          type: integer
+        exposure:
+          type: object
+          required: [small, medium, large]
+          properties:
+            small:
+              type: string
+            medium:
+              type: string
+            large:
+              type: string
+        perInvoice:
+          type: object
+          required: [small, medium, large]
+          properties:
+            small:
+              type: string
+            medium:
+              type: string
+            large:
+              type: string
+        sampleInvoices:
+          type: array
+          items:
+            type: object
+            required: [invoiceId, invoiceNumber, issueDate, daysOverdue]
+            properties:
+              invoiceId:
+                type: string
+                format: uuid
+              invoiceNumber:
+                type: string
+              issueDate:
+                type: string
+              daysOverdue:
+                type: integer
+        note:
+          type: string
+    # Missing recurring bills (round 18): the payables mirror of unbilled
+    # income — a vendor with a monthly capture habit and nothing captured
+    # this cycle.
+    MissingRecurringBill:
+      type: object
+      required:
+        [
+          supplierPartyId,
+          supplierName,
+          count,
+          medianAmount,
+          medianGapDays,
+          lastIssueDate,
+          expectedByDate,
+          overdueDays,
+        ]
+      properties:
+        supplierPartyId:
+          type: string
+          format: uuid
+        supplierName:
+          type: string
+        count:
+          type: integer
+        medianAmount:
+          type: string
+        medianGapDays:
+          type: integer
+        lastIssueDate:
+          type: string
+        expectedByDate:
+          type: string
+        overdueDays:
+          type: integer
     # Double-payment guard (round 16): advisory only — evidence the platform
     # already holds, a human decides.
     DoublePaymentCheck:

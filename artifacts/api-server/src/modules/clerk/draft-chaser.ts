@@ -80,7 +80,7 @@ export interface PaymentChaserDraft {
 // buyer and payment not yet observed.
 const OUTSTANDING_STATUSES = new Set(["submitted", "stamped", "confirmed"]);
 
-interface ChaserFactsInput {
+export interface ChaserFactsInput {
   invoiceNumber: string;
   buyerName: string;
   currency: string;
@@ -333,3 +333,18 @@ export async function draftPaymentChaser(
     return fallback;
   }
 }
+
+// The chaser surface's phrasing seam, one object — the phrasing eval
+// (modules/clerk/phrasing-eval.ts) runs candidate prompts and fixtures
+// through EXACTLY what production uses (the DIGEST_PHRASING shape).
+export const CHASER_PHRASING = {
+  surface: "chaser" as const,
+  promptVersion: CHASER_PROMPT_VERSION,
+  system: CHASER_SYSTEM,
+  schemaName: "payment_chaser",
+  jsonSchema: chaserJsonSchema,
+  validator: chaserOutput,
+  buildUser: (facts: ChaserFactsInput): string => chaserFacts(facts),
+  joinOutput: (data: { subject: string; body: string }): string =>
+    `${data.subject}\n${data.body}`,
+};

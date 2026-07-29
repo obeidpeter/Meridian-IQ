@@ -20,6 +20,8 @@ import {
   VerifyBillStampResponse,
   GetDoublePaymentCheckQueryParams,
   GetDoublePaymentCheckResponse,
+  ListMissingRecurringBillsQueryParams,
+  ListMissingRecurringBillsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
 import { resolveClientAnalyticsScope } from "../lib/client-scope";
@@ -35,6 +37,7 @@ import {
   payablesSummary,
 } from "../modules/invoice/payables";
 import { computeDoublePaymentCheck } from "../modules/invoice/double-payment";
+import { listMissingRecurringBills } from "../modules/invoice/missing-bills";
 import { verifyStamp } from "../modules/rails/adapter";
 import { appendAudit } from "../modules/audit/audit";
 import { DomainError } from "../modules/errors";
@@ -118,6 +121,20 @@ router.get("/bills/double-payment-check", async (req, res): Promise<void> => {
   );
   const check = await computeDoublePaymentCheck(firmId, clientPartyId);
   res.json(GetDoublePaymentCheckResponse.parse(check));
+});
+
+// Missing recurring bills (round-18 idea #3): vendors with a monthly
+// capture habit and nothing captured this cycle — the payables mirror of
+// unbilled-income. Advisory only; same scope resolution as the ledger.
+router.get("/bills/missing-recurring", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(ListMissingRecurringBillsQueryParams, req.query);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const alerts = await listMissingRecurringBills(firmId, clientPartyId);
+  res.json(ListMissingRecurringBillsResponse.parse(alerts));
 });
 
 // The payer's own payment flag (the buyer route's mirror, routes/buyer.ts

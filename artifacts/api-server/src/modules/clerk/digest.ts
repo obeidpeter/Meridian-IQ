@@ -13,6 +13,8 @@ import { isFeatureEnabled } from "../flags/flags";
 import { ensureGrounded } from "./grounding";
 import { pendingApprovals } from "../invoice/approvals";
 import { countFirmUnmatchedCollections } from "../collections/unmatched";
+import { bandExposure } from "../invoice/penalty-exposure";
+import { countFirmMissingBills } from "../invoice/missing-bills";
 import { sendMessage } from "../messaging/messaging";
 import { pointerEntityRef } from "../messaging/recipient-ref";
 import { sendPushToUser } from "../push/push";
@@ -61,10 +63,10 @@ const DELIVERY_BATCH = 50;
 // v3 (payables round): + the supplier-bills-due line, same reasoning.
 // v4 (VAT-position round): + the monthly VAT-return countdown line, same
 // reasoning.
-// v5: the governance facts (awaiting-approval count, unmatched collection
-// payments) joined the fact list — the version bump keeps the model path in
-// lockstep with the template path.
-const DIGEST_PROMPT_VERSION = "digest.v5";
+// v6: the money-risk facts (s.104 penalty-exposure floor, missing recurring
+// vendor bills) joined the fact list — the version bump keeps the model
+// path in lockstep with the template path.
+const DIGEST_PROMPT_VERSION = "digest.v6";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -128,6 +130,13 @@ export interface DigestFacts {
   approvalsPendingCount: number | null;
   approvalsPendingOldestDays: number | null;
   unmatchedCollectionsCount: number;
+  // Round-18 money-risk facts: the s.104 penalty-exposure FLOOR over the
+  // firm's overdue paper (small turnover band — null when nothing is
+  // overdue), and vendors with a monthly capture habit whose bill has not
+  // been captured this cycle (the payables mirror of unbilledCount).
+  penaltyExposureFloorNgn: string | null;
+  missingBillsCount: number;
+  missingBillsClients: number;
 }
 
 // The monthly VAT-return countdown, PURE and Lagos-anchored (lagosParts /
@@ -215,10 +224,16 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const payablesDue = await countFirmPayablesDue(firmId);
   const approvals = await pendingApprovals(firmId);
   const unmatchedCollections = await countFirmUnmatchedCollections(firmId, 7);
+  const missingBills = await countFirmMissingBills(firmId);
+  // The penalty floor is DERIVED from the overdue count this query already
+  // computed — a second COUNT under the same predicate could straddle a
+  // Lagos midnight and let one digest say "0 overdue" next to a non-zero
+  // exposure. One count, one spelling, no second query.
+  const overdueCount = Number(r?.overdue ?? 0);
   return {
     unsubmittedCount: Number(r?.unsubmitted ?? 0),
     dueSoonCount: Number(r?.due_soon ?? 0),
-    overdueCount: Number(r?.overdue ?? 0),
+    overdueCount,
     failedCount: Number(r?.failed ?? 0),
     receivablesOver60Count: Number(r?.recv_over_60 ?? 0),
     unbilledCount: unbilled.alerts,
@@ -234,8 +249,56 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     approvalsPendingCount: approvals?.count ?? null,
     approvalsPendingOldestDays: approvals?.oldestDays ?? null,
     unmatchedCollectionsCount: unmatchedCollections,
+    penaltyExposureFloorNgn:
+      overdueCount > 0 ? bandExposure(overdueCount).small : null,
+    missingBillsCount: missingBills.alerts,
+    missingBillsClients: missingBills.clients,
   };
 }
+
+// The user prompt the model phrases — extracted so the phrasing eval
+// (modules/clerk/phrasing-eval.ts) replays the BYTE-IDENTICAL assembly
+// production sends (the buildIntentUser precedent). Pure.
+export function buildDigestUser(facts: DigestFacts): string {
+  return [
+    "Weekly compliance facts for the firm:",
+    `- Invoices past the submission window (overdue): ${facts.overdueCount}`,
+    `- Invoices whose submission deadline falls in the next 7 days: ${facts.dueSoonCount}`,
+    `- Invoices that failed submission: ${facts.failedCount}`,
+    `- Unsubmitted invoices in total (draft or validated): ${facts.unsubmittedCount}`,
+    `- Receivables older than 60 days: ${facts.receivablesOver60Count}`,
+    `- Regular monthly invoices that look unraised this cycle: ${facts.unbilledCount} (across ${facts.unbilledClients} client(s))`,
+    `- Payments expected in the coming week (customers' own rhythms): ${facts.expectedWeekCount} invoice(s), NGN ${facts.expectedWeekTotalNgn}`,
+    `- Receivables worth chasing (past due date AND the customer's usual rhythm): ${facts.chaseWorthyCount}`,
+    `- Bank credits matching no invoice on the platform: ${facts.unmatchedCreditCount} (across ${facts.unmatchedCreditClients} client(s))`,
+    `- Invoices with 2+ payment reminders sent and still unpaid: ${facts.chasedTwiceCount}`,
+    `- Unpaid supplier bills due within the next 7 days or overdue: ${facts.payablesDueCount}`,
+    `- Days until the monthly VAT return deadline (the 21st): ${facts.vatReturnInDays ?? "more than 7 — do not mention"}`,
+    `- Invoices waiting for a colleague's approval before submission: ${facts.approvalsPendingCount ?? "approval policy off — do not mention"}${
+      facts.approvalsPendingCount !== null && facts.approvalsPendingOldestDays !== null
+        ? ` (oldest waiting ${facts.approvalsPendingOldestDays} day(s))`
+        : ""
+    }`,
+    `- Collection-account payments this week matching no invoice: ${facts.unmatchedCollectionsCount}`,
+    `- Estimated s.104 penalty exposure for the overdue paper (small-band floor): ${facts.penaltyExposureFloorNgn !== null ? `NGN ${facts.penaltyExposureFloorNgn}` : "none — do not mention"}`,
+    `- Regular vendor bills that look uncaptured this cycle: ${facts.missingBillsCount} (across ${facts.missingBillsClients} client(s))`,
+    `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
+  ].join("\n");
+}
+
+// The digest surface's phrasing seam, one object — the phrasing eval runs
+// candidate prompts and fixtures through EXACTLY what production uses.
+export const DIGEST_PHRASING = {
+  surface: "digest" as const,
+  promptVersion: DIGEST_PROMPT_VERSION,
+  system: DIGEST_SYSTEM,
+  schemaName: "weekly_digest",
+  jsonSchema: digestJsonSchema,
+  validator: digestOutput,
+  buildUser: buildDigestUser,
+  joinOutput: (data: z.infer<typeof digestOutput>): string =>
+    [data.headline, ...data.bullets].join("\n"),
+};
 
 // The deterministic fallback narrative — also the grounding shown to the
 // model. Pure so it is unit-testable.
@@ -319,6 +382,16 @@ export function buildTemplateDigest(facts: DigestFacts): {
       `${plural(facts.unmatchedCollectionsCount, "payment")} arrived on your collection accounts this week that matched no invoice — reconcile against the provider statement.`,
     );
   }
+  if (facts.penaltyExposureFloorNgn !== null) {
+    bullets.push(
+      `Overdue submissions carry at least NGN ${facts.penaltyExposureFloorNgn} of s.104 penalty exposure (lowest turnover band) — an estimate, not advice.`,
+    );
+  }
+  if (facts.missingBillsCount > 0) {
+    bullets.push(
+      `${plural(facts.missingBillsCount, "regular vendor bill")} ${facts.missingBillsCount === 1 ? "looks" : "look"} uncaptured this cycle across ${plural(facts.missingBillsClients, "client")} — input VAT may be going unclaimed.`,
+    );
+  }
   const urgent = facts.overdueCount + facts.failedCount;
   const headline =
     urgent > 0
@@ -370,28 +443,7 @@ export async function generateFirmDigest(
     }
   }
   if (clerkAvailable && gateway) {
-    const user = [
-      "Weekly compliance facts for the firm:",
-      `- Invoices past the submission window (overdue): ${facts.overdueCount}`,
-      `- Invoices whose submission deadline falls in the next 7 days: ${facts.dueSoonCount}`,
-      `- Invoices that failed submission: ${facts.failedCount}`,
-      `- Unsubmitted invoices in total (draft or validated): ${facts.unsubmittedCount}`,
-      `- Receivables older than 60 days: ${facts.receivablesOver60Count}`,
-      `- Regular monthly invoices that look unraised this cycle: ${facts.unbilledCount} (across ${facts.unbilledClients} client(s))`,
-      `- Payments expected in the coming week (customers' own rhythms): ${facts.expectedWeekCount} invoice(s), NGN ${facts.expectedWeekTotalNgn}`,
-      `- Receivables worth chasing (past due date AND the customer's usual rhythm): ${facts.chaseWorthyCount}`,
-      `- Bank credits matching no invoice on the platform: ${facts.unmatchedCreditCount} (across ${facts.unmatchedCreditClients} client(s))`,
-      `- Invoices with 2+ payment reminders sent and still unpaid: ${facts.chasedTwiceCount}`,
-      `- Unpaid supplier bills due within the next 7 days or overdue: ${facts.payablesDueCount}`,
-      `- Days until the monthly VAT return deadline (the 21st): ${facts.vatReturnInDays ?? "more than 7 — do not mention"}`,
-      `- Invoices waiting for a colleague's approval before submission: ${facts.approvalsPendingCount ?? "approval policy off — do not mention"}${
-        facts.approvalsPendingCount !== null && facts.approvalsPendingOldestDays !== null
-          ? ` (oldest waiting ${facts.approvalsPendingOldestDays} day(s))`
-          : ""
-      }`,
-      `- Collection-account payments this week matching no invoice: ${facts.unmatchedCollectionsCount}`,
-      `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
-    ].join("\n");
+    const user = buildDigestUser(facts);
     const result = await gateway.infer<z.infer<typeof digestOutput>>({
       purpose: "digest",
       firmId,

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.48.0
+ * OpenAPI spec version: 0.49.0
  */
 
 export * from './acceptInvitationInput';
@@ -349,6 +349,7 @@ export * from './getFirmVatPositionsParams';
 export * from './getMergeImpactParams';
 export * from './getNetCashPositionParams';
 export * from './getPayablesSummaryParams';
+export * from './getPenaltyExposureParams';
 export * from './getProjectionAccuracyParams';
 export * from './getPublicThemeParams';
 export * from './getQuarterlyReviewParams';
@@ -417,6 +418,7 @@ export * from './listCollectionAccountsParams';
 export * from './listErpConnectionsParams';
 export * from './listInvoicesParams';
 export * from './listLineItemSuggestionsParams';
+export * from './listMissingRecurringBillsParams';
 export * from './listNotificationsParams';
 export * from './listOperatorCasesParams';
 export * from './listOperatorCasesStatus';
@@ -451,6 +453,7 @@ export * from './messageInputChannel';
 export * from './messageStatus';
 export * from './mintFixtureInput';
 export * from './mintIntentFixtureInput';
+export * from './missingRecurringBill';
 export * from './modelCanaryReport';
 export * from './modelCanaryReportFixturesItem';
 export * from './modelCanaryReportVerdict';
@@ -501,6 +504,22 @@ export * from './paymentFlagInput';
 export * from './paymentFlagInputPaymentStatus';
 export * from './paymentIntent';
 export * from './paymentIntentStatus';
+export * from './penaltyExposure';
+export * from './penaltyExposureExposure';
+export * from './penaltyExposurePerInvoice';
+export * from './penaltyExposureSampleInvoicesItem';
+export * from './phrasingEvalFixtureResult';
+export * from './phrasingEvalFixtureResultOutcome';
+export * from './phrasingEvalFixtureResultRiskLabel';
+export * from './phrasingEvalFixtureResultSurface';
+export * from './phrasingEvalOutcome';
+export * from './phrasingEvalOutcomeCanary';
+export * from './phrasingEvalOutcomeCanaryIncumbent';
+export * from './phrasingEvalOutcomeCanarySurface';
+export * from './phrasingEvalOutcomeCanaryVerdict';
+export * from './phrasingEvalReport';
+export * from './phrasingEvalRun';
+export * from './phrasingEvalRunPromptVersions';
 export * from './portfolioSummary';
 export * from './priceReview';
 export * from './projectionAccuracy';
@@ -562,6 +581,8 @@ export * from './revenueShareStatement';
 export * from './runAssessmentInput';
 export * from './runIntentEvalInput';
 export * from './runModelCanaryInput';
+export * from './runPhrasingEvalInput';
+export * from './runPhrasingEvalInputSurface';
 export * from './runPromptCanaryInput';
 export * from './scoreboardRow';
 export * from './settlementEvent';

@@ -25,9 +25,13 @@ import {
   RetireIntentFixtureResponse,
   RestoreIntentFixtureParams,
   RestoreIntentFixtureResponse,
+  RunPhrasingEvalBody,
+  RunPhrasingEvalResponse,
+  ListPhrasingEvalRunsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import { assertCan } from "../../modules/auth/rbac";
+import { DomainError } from "../../modules/errors";
 import { getClerkGateway } from "../../modules/clerk/provider";
 import {
   listEvalRuns,
@@ -50,6 +54,11 @@ import {
   restoreFixture,
   retireFixture,
 } from "../../modules/clerk/eval-curation";
+import {
+  listPhrasingEvalRuns,
+  runPhrasingCanary,
+  runPhrasingEval,
+} from "../../modules/clerk/phrasing-eval";
 import { runPromptCanary } from "../../modules/clerk/prompt-canary";
 import { runModelCanary } from "../../modules/clerk/model-canary";
 import {
@@ -97,6 +106,45 @@ router.get("/clerk/eval/intent-runs", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
   const runs = await listIntentEvalRuns();
   res.json(ListIntentEvalRunsResponse.parse(runs));
+});
+
+// Phrasing eval lane (round 18): the digest/chaser synthetic fact packs
+// replayed through the byte-identical production prompt builders and scored
+// deterministically (grounding, required content, forbidden content,
+// injection resistance). Without a candidate the run is STORED; with one,
+// that surface's fixtures run side by side and the deterministic verdict
+// comes back — nothing stored, the prompt-canary contract.
+router.post("/clerk/eval/phrasing", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const body = parseOrThrow(RunPhrasingEvalBody, req.body ?? {});
+  const gateway = await getClerkGateway();
+  if (body.candidateSystem) {
+    const report = await runPhrasingCanary(
+      gateway,
+      body.surface ?? "digest",
+      body.candidateSystem,
+    );
+    res.json(RunPhrasingEvalResponse.parse({ canary: report, run: null }));
+    return;
+  }
+  // `surface` only means something to a canary. Refuse it on a stored run
+  // rather than silently burning a full two-surface pass the operator did
+  // not ask for (and polluting the stored trend with it).
+  if (body.surface) {
+    throw new DomainError(
+      "SURFACE_WITHOUT_CANDIDATE",
+      "surface selects the canary corpus — provide candidateSystem, or omit surface to run and store the full eval",
+      400,
+    );
+  }
+  const run = await runPhrasingEval(req.principal.userId, gateway);
+  res.json(RunPhrasingEvalResponse.parse({ canary: null, run }));
+});
+
+router.get("/clerk/eval/phrasing-runs", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const runs = await listPhrasingEvalRuns();
+  res.json(ListPhrasingEvalRunsResponse.parse(runs));
 });
 
 // Grown intent corpus (round 16): promote a real question case into the

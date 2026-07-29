@@ -225,9 +225,11 @@ review.
   (`CLIENT_SAFE_DATA_INTENTS` — firm-wide money intents that name other
   clients' buyers, and the firm's own budget, are excluded and refuse; the
   two payables intents `data.payables_due` / `data.total_owed`,
-  `data.vat_position` AND `data.pending_approvals` (round 17 — the caller's
+  `data.vat_position`, `data.pending_approvals` (round 17 — the caller's
   own drafts blocked on the maker-checker policy, policy-off answered
-  plainly) ARE client-safe and on the allowlist — they answer over the
+  plainly) AND `data.penalty_exposure` (round 18 — the caller's own
+  overdue paper priced at the small-band floor) ARE client-safe and on the
+  allowlist — they answer over the
   caller's own bills/position/paper only, the forced party pin making a
   client's "VAT position" always its own); the client option list is exactly the caller's own party; the executed party
   filter is FORCED from the principal regardless of the model's pick;
@@ -358,7 +360,9 @@ without a human owner.
   the week's unmatched collection-account payments — and lets the model
   phrase them, falling back to deterministic template text. Each fact added
   to the user facts bumps the prompt version so the model path can never
-  lag the template path (currently `digest.v5`, the governance round). The
+  lag the template path (currently `digest.v6`, the money-risk round: the
+  s.104 penalty-exposure floor — small band, null when clean — and the
+  missing-recurring-bills count joined the facts). The
   digest's unsubmitted/overdue compliance facts use the explicit
   receivable-orientation predicate, so captured supplier bills never count
   as "invoices to file" (`docs/platform.md` § Payables).
@@ -622,6 +626,33 @@ call the model.
   already-paid pairs are history, not a warning. Capped at 20 per lane;
   amber advisory card on the SME bills page; nothing is blocked, and the
   note warns that a recurring standing charge can match legitimately.
+- **Penalty exposure** (`modules/invoice/penalty-exposure.ts`,
+  `GET /penalty-exposure`, nothing stored) — what the overdue paper could
+  COST: the published penalty-calculator s.104 model (the per-invoice
+  charges are mirrored constants, pinned in the test) pointed at the
+  client's own overdue receivable paper under the digest's EXACT overdue
+  predicate (draft/validated past issue + submission window). The platform
+  does not hold turnover, so all THREE bands are reported and every
+  single-figure surface (the digest fact, the dashboard card headline)
+  uses the SMALL band — the floor, never a scare figure; s.103 access-denial
+  charges are not platform-observable and are excluded; the note pins
+  estimate-not-advice and the framing is always "submitting removes the
+  exposure". Amber SME dashboard card with the oldest-5 sample; also an
+  Ask data intent (`data.penalty_exposure`, client-safe with the forced
+  own-party pin) and the digest floor fact — DERIVED from the overdue
+  count the digest's own facts query already computed
+  (`bandExposure(count).small`, null when clean), never a second query
+  that could straddle a Lagos midnight and contradict the count.
+- **Missing recurring bills** (`modules/invoice/missing-bills.ts`,
+  `GET /bills/missing-recurring`, nothing stored) — the payables mirror of
+  unbilled-income: the SAME `detectMonthlyPattern` miner pointed at the
+  vendors a client captures a bill from every month, through the canonical
+  bill fragments so a receivable can never pollute a vendor's cadence.
+  Same bounded alert window (grace 5 days, lapsed after 45 — a cancelled
+  subscription is not a missing bill); an uncaptured bill is unclaimed
+  input VAT plus a payment the cash outlook cannot see. Amber advisory on
+  the SME bills page; firm-wide digest fact (`countFirmMissingBills`,
+  live-engagement-scoped like `countFirmUnbilled`).
 - **Net cash position** (`modules/invoice/net-position.ts`,
   `GET /dashboard/net-position`, nothing stored) merges the outlook's
   projected inflows with the payables summary's committed outflows per
@@ -703,6 +734,32 @@ shared computation as the corresponding chart.
   corpus runs side by side and returns the prompt-canary verdict
   (injection resistance may never drop; accuracy judged outside a
   one-fixture noise band) with nothing stored.
+- **Phrasing eval lane** (`modules/clerk/phrasing-eval.ts`,
+  `POST /clerk/eval/phrasing` + `GET /clerk/eval/phrasing-runs`,
+  `clerk.use`, `clerk_phrasing_eval_runs` bypass-only RLS migration 0027,
+  console health card): the intent lane's pattern pointed at the PHRASING
+  surfaces, which shipped every prompt change blind until round 18. Fixed
+  synthetic fact packs (busy/quiet/governance/money digests; first/third
+  chasers; two injection letters whose hostile text rides the one fact
+  slot an outsider controls, the buyer name) replay through the
+  BYTE-IDENTICAL production prompt builders — `DIGEST_PHRASING` /
+  `CHASER_PHRASING`, each surface's system prompt, version, schema,
+  validator and user-prompt assembly exported as one descriptor — via the
+  gateway, one purpose PER SURFACE (`eval_phrasing_digest` /
+  `eval_phrasing_chaser`) so each half of the corpus rides the model tier
+  its production surface actually uses. Scoring is
+  DETERMINISTIC: number grounding via the production check itself
+  (`numberGroundingViolations`, so the eval measures how often production
+  would have fallen back to the template), required canonical numerals and
+  verbatim identifiers, forbidden patterns (zero facts, policy-off topics,
+  threat language, the injected payloads) with every broken rule named in
+  the stored result. The all-zero fixture baseline is built from
+  `DigestFacts` itself, so a new fact field breaks the corpus at compile
+  time. With a `candidateSystem` (+ `surface`) the canary compares
+  candidate vs incumbent over that surface's fixtures — grounding and
+  injection resistance may never drop, correctness judged outside a
+  one-fixture noise band — and stores nothing; a failed model call on an
+  injection fixture counts AGAINST resistance.
 - **Grown intent corpus** (`clerk_intent_fixtures`, bypass-only RLS
   migration 0025; `POST /clerk/eval/intent-fixtures/from-case` +
   `GET /clerk/eval/intent-fixtures` + per-fixture retire/restore,

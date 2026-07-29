@@ -8,6 +8,8 @@ import {
   getGetPayablesSummaryQueryKey,
   useGetDoublePaymentCheck,
   getGetDoublePaymentCheckQueryKey,
+  useListMissingRecurringBills,
+  getListMissingRecurringBillsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   BillSummary,
@@ -137,6 +139,56 @@ function DoublePaymentAdvisory({ clientPartyId }: { clientPartyId: string }) {
         <p className="text-xs">
           Advisory only, from payment evidence already on file. A recurring
           standing charge can match legitimately — review before acting.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Missing recurring bills (round 18): vendors whose bill arrives every
+// month with nothing captured this cycle — an uncaptured bill is input VAT
+// silently lost and a payment about to surprise the cash outlook. Advisory
+// only, mined deterministically from the capture history; renders nothing
+// when every habit is up to date.
+function MissingBillsAdvisory({ clientPartyId }: { clientPartyId: string }) {
+  const { data: alerts } = useListMissingRecurringBills(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getListMissingRecurringBillsQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  if (!alerts || alerts.length === 0) return null;
+  return (
+    <Card
+      className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40"
+      data-testid="missing-bills-advisory"
+    >
+      <CardContent className="pt-4 space-y-2 text-sm text-amber-800 dark:text-amber-300">
+        <p className="flex items-center gap-2 font-semibold">
+          <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+          Expected vendor bills not captured yet
+        </p>
+        {alerts.map((a) => (
+          <p
+            key={a.supplierPartyId}
+            data-testid={`missing-bill-${a.supplierPartyId}`}
+          >
+            {a.supplierName} has billed about {formatNaira(a.medianAmount)}{" "}
+            roughly every {a.medianGapDays} days ({a.count} bills on record,
+            last {formatDate(a.lastIssueDate)}) — this cycle's bill was
+            expected by {formatDate(a.expectedByDate)} and has not been
+            captured.
+          </p>
+        ))}
+        <p className="text-xs">
+          Advisory only, from your own capture history. An uncaptured bill
+          means unclaimed input VAT — if the vendor arrangement has ended,
+          you can ignore this.
         </p>
       </CardContent>
     </Card>
@@ -448,6 +500,7 @@ export function Bills() {
       <RequireClientScope thing="supplier bills list">
         <div className="space-y-6">
           <DoublePaymentAdvisory clientPartyId={clientPartyId} />
+          <MissingBillsAdvisory clientPartyId={clientPartyId} />
           <div className="flex flex-wrap items-center gap-2">
             {FILTERS.map((f) => {
               const isActive = filter === f.key;

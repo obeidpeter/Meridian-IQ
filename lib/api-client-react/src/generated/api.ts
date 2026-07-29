@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.48.0
+ * OpenAPI spec version: 0.49.0
  */
 import {
   useMutation,
@@ -188,6 +188,7 @@ import type {
   GetMergeImpactParams,
   GetNetCashPositionParams,
   GetPayablesSummaryParams,
+  GetPenaltyExposureParams,
   GetProjectionAccuracyParams,
   GetPublicThemeParams,
   GetQuarterlyReviewParams,
@@ -225,6 +226,7 @@ import type {
   ListErpConnectionsParams,
   ListInvoicesParams,
   ListLineItemSuggestionsParams,
+  ListMissingRecurringBillsParams,
   ListNotificationsParams,
   ListOperatorCasesParams,
   ListPartiesParams,
@@ -246,6 +248,7 @@ import type {
   MessageInput,
   MintFixtureInput,
   MintIntentFixtureInput,
+  MissingRecurringBill,
   ModelCanaryReport,
   NetCashPosition,
   NotFoundResponse,
@@ -266,6 +269,9 @@ import type {
   PaymentChaserDraft,
   PaymentFlagInput,
   PaymentIntent,
+  PenaltyExposure,
+  PhrasingEvalOutcome,
+  PhrasingEvalRun,
   PortfolioSummary,
   PriceReview,
   ProjectionAccuracy,
@@ -295,6 +301,7 @@ import type {
   RunAssessmentInput,
   RunIntentEvalInput,
   RunModelCanaryInput,
+  RunPhrasingEvalInput,
   RunPromptCanaryInput,
   ScoreboardRow,
   SettlementEvent,
@@ -5227,6 +5234,90 @@ export function useGetChaseEffectiveness<TData = Awaited<ReturnType<typeof getCh
 
 
 
+export const getGetPenaltyExposureUrl = (params?: GetPenaltyExposureParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/penalty-exposure?${stringifiedParams}` : `/api/penalty-exposure`
+}
+
+/**
+ * @summary Estimated s.104 penalty exposure for invoices past the submission window and still unsubmitted — per turnover band, estimate not advice (deterministic, nothing stored)
+ */
+export const getPenaltyExposure = async (params?: GetPenaltyExposureParams, options?: RequestInit): Promise<PenaltyExposure> => {
+
+  return customFetch<PenaltyExposure>(getGetPenaltyExposureUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPenaltyExposureQueryKey = (params?: GetPenaltyExposureParams,) => {
+    return [
+    `/api/penalty-exposure`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPenaltyExposureQueryOptions = <TData = Awaited<ReturnType<typeof getPenaltyExposure>>, TError = ErrorType<BadRequestResponse>>(params?: GetPenaltyExposureParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPenaltyExposure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPenaltyExposureQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPenaltyExposure>>> = ({ signal }) => getPenaltyExposure(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPenaltyExposure>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPenaltyExposureQueryResult = NonNullable<Awaited<ReturnType<typeof getPenaltyExposure>>>
+export type GetPenaltyExposureQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Estimated s.104 penalty exposure for invoices past the submission window and still unsubmitted — per turnover band, estimate not advice (deterministic, nothing stored)
+ */
+
+export function useGetPenaltyExposure<TData = Awaited<ReturnType<typeof getPenaltyExposure>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetPenaltyExposureParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPenaltyExposure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPenaltyExposureQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getRecordChaseReminderUrl = (invoiceId: string,) => {
 
 
@@ -9201,6 +9292,90 @@ export function useGetDoublePaymentCheck<TData = Awaited<ReturnType<typeof getDo
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDoublePaymentCheckQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListMissingRecurringBillsUrl = (params?: ListMissingRecurringBillsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bills/missing-recurring?${stringifiedParams}` : `/api/bills/missing-recurring`
+}
+
+/**
+ * @summary Vendors with a monthly capture habit whose bill has not been captured this cycle — the payables mirror of unbilled income (deterministic, nothing stored)
+ */
+export const listMissingRecurringBills = async (params?: ListMissingRecurringBillsParams, options?: RequestInit): Promise<MissingRecurringBill[]> => {
+
+  return customFetch<MissingRecurringBill[]>(getListMissingRecurringBillsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMissingRecurringBillsQueryKey = (params?: ListMissingRecurringBillsParams,) => {
+    return [
+    `/api/bills/missing-recurring`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListMissingRecurringBillsQueryOptions = <TData = Awaited<ReturnType<typeof listMissingRecurringBills>>, TError = ErrorType<BadRequestResponse>>(params?: ListMissingRecurringBillsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMissingRecurringBills>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMissingRecurringBillsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMissingRecurringBills>>> = ({ signal }) => listMissingRecurringBills(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMissingRecurringBills>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMissingRecurringBillsQueryResult = NonNullable<Awaited<ReturnType<typeof listMissingRecurringBills>>>
+export type ListMissingRecurringBillsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Vendors with a monthly capture habit whose bill has not been captured this cycle — the payables mirror of unbilled income (deterministic, nothing stored)
+ */
+
+export function useListMissingRecurringBills<TData = Awaited<ReturnType<typeof listMissingRecurringBills>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ListMissingRecurringBillsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMissingRecurringBills>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMissingRecurringBillsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -17786,6 +17961,153 @@ export function useListIntentEvalRuns<TData = Awaited<ReturnType<typeof listInte
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListIntentEvalRunsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRunPhrasingEvalUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/phrasing`
+}
+
+/**
+ * @summary Run the digest/chaser phrasing corpora through the byte-identical production prompt builders (deterministic scoring); with a candidate prompt, side-by-side canary for one surface — nothing stored
+ */
+export const runPhrasingEval = async (runPhrasingEvalInput?: RunPhrasingEvalInput, options?: RequestInit): Promise<PhrasingEvalOutcome> => {
+
+  return customFetch<PhrasingEvalOutcome>(getRunPhrasingEvalUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(runPhrasingEvalInput)
+  }
+);}
+
+
+
+
+export const getRunPhrasingEvalMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runPhrasingEval>>, TError,{data?: BodyType<RunPhrasingEvalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runPhrasingEval>>, TError,{data?: BodyType<RunPhrasingEvalInput>}, TContext> => {
+
+const mutationKey = ['runPhrasingEval'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runPhrasingEval>>, {data?: BodyType<RunPhrasingEvalInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  runPhrasingEval(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunPhrasingEvalMutationResult = NonNullable<Awaited<ReturnType<typeof runPhrasingEval>>>
+    export type RunPhrasingEvalMutationBody = BodyType<RunPhrasingEvalInput> | undefined
+    export type RunPhrasingEvalMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Run the digest/chaser phrasing corpora through the byte-identical production prompt builders (deterministic scoring); with a candidate prompt, side-by-side canary for one surface — nothing stored
+ */
+export const useRunPhrasingEval = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runPhrasingEval>>, TError,{data?: BodyType<RunPhrasingEvalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runPhrasingEval>>,
+        TError,
+        {data?: BodyType<RunPhrasingEvalInput>},
+        TContext
+      > => {
+      return useMutation(getRunPhrasingEvalMutationOptions(options));
+    }
+
+export const getListPhrasingEvalRunsUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/phrasing-runs`
+}
+
+/**
+ * @summary Stored phrasing eval runs, newest first
+ */
+export const listPhrasingEvalRuns = async ( options?: RequestInit): Promise<PhrasingEvalRun[]> => {
+
+  return customFetch<PhrasingEvalRun[]>(getListPhrasingEvalRunsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPhrasingEvalRunsQueryKey = () => {
+    return [
+    `/api/clerk/eval/phrasing-runs`
+    ] as const;
+    }
+
+
+export const getListPhrasingEvalRunsQueryOptions = <TData = Awaited<ReturnType<typeof listPhrasingEvalRuns>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPhrasingEvalRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPhrasingEvalRunsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPhrasingEvalRuns>>> = ({ signal }) => listPhrasingEvalRuns({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPhrasingEvalRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPhrasingEvalRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listPhrasingEvalRuns>>>
+export type ListPhrasingEvalRunsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Stored phrasing eval runs, newest first
+ */
+
+export function useListPhrasingEvalRuns<TData = Awaited<ReturnType<typeof listPhrasingEvalRuns>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPhrasingEvalRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPhrasingEvalRunsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.48.0
+ * OpenAPI spec version: 0.49.0
  */
 import * as zod from 'zod';
 
@@ -1449,6 +1449,36 @@ export const GetChaseEffectivenessResponse = zod.object({
 
 
 /**
+ * @summary Estimated s.104 penalty exposure for invoices past the submission window and still unsubmitted — per turnover band, estimate not advice (deterministic, nothing stored)
+ */
+export const GetPenaltyExposureQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetPenaltyExposureResponse = zod.object({
+  "asOf": zod.string(),
+  "overdueCount": zod.number(),
+  "exposure": zod.object({
+  "small": zod.string(),
+  "medium": zod.string(),
+  "large": zod.string()
+}),
+  "perInvoice": zod.object({
+  "small": zod.string(),
+  "medium": zod.string(),
+  "large": zod.string()
+}),
+  "sampleInvoices": zod.array(zod.object({
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "issueDate": zod.string(),
+  "daysOverdue": zod.number()
+})),
+  "note": zod.string()
+})
+
+
+/**
  * @summary Record that a payment reminder was SENT for this invoice (logged on copy — the platform itself sends nothing)
  */
 export const RecordChaseReminderParams = zod.object({
@@ -2733,6 +2763,26 @@ export const GetDoublePaymentCheckResponse = zod.object({
 })),
   "note": zod.string()
 })
+
+
+/**
+ * @summary Vendors with a monthly capture habit whose bill has not been captured this cycle — the payables mirror of unbilled income (deterministic, nothing stored)
+ */
+export const ListMissingRecurringBillsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const ListMissingRecurringBillsResponseItem = zod.object({
+  "supplierPartyId": zod.string().uuid(),
+  "supplierName": zod.string(),
+  "count": zod.number(),
+  "medianAmount": zod.string(),
+  "medianGapDays": zod.number(),
+  "lastIssueDate": zod.string(),
+  "expectedByDate": zod.string(),
+  "overdueDays": zod.number()
+})
+export const ListMissingRecurringBillsResponse = zod.array(ListMissingRecurringBillsResponseItem)
 
 
 /**
@@ -6305,6 +6355,116 @@ export const ListIntentEvalRunsResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const ListIntentEvalRunsResponse = zod.array(ListIntentEvalRunsResponseItem)
+
+
+/**
+ * @summary Run the digest/chaser phrasing corpora through the byte-identical production prompt builders (deterministic scoring); with a candidate prompt, side-by-side canary for one surface — nothing stored
+ */
+export const runPhrasingEvalBodyCandidateSystemMax = 20000;
+
+
+
+export const RunPhrasingEvalBody = zod.object({
+  "candidateSystem": zod.string().max(runPhrasingEvalBodyCandidateSystemMax).optional(),
+  "surface": zod.enum(['digest', 'chaser']).optional()
+})
+
+export const RunPhrasingEvalResponse = zod.object({
+  "canary": zod.object({
+  "surface": zod.enum(['digest', 'chaser']),
+  "incumbent": zod.object({
+  "fixtureCount": zod.number(),
+  "correctCount": zod.number(),
+  "groundedCount": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "surface": zod.enum(['digest', 'chaser']),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "grounded": zod.boolean().nullable(),
+  "correct": zod.boolean(),
+  "resisted": zod.boolean().nullable(),
+  "failures": zod.array(zod.string())
+}))
+}).and(zod.object({
+  "promptVersion": zod.string()
+})),
+  "candidate": zod.object({
+  "fixtureCount": zod.number(),
+  "correctCount": zod.number(),
+  "groundedCount": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "surface": zod.enum(['digest', 'chaser']),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "grounded": zod.boolean().nullable(),
+  "correct": zod.boolean(),
+  "resisted": zod.boolean().nullable(),
+  "failures": zod.array(zod.string())
+}))
+}),
+  "verdict": zod.enum(['promote', 'reject', 'inconclusive'])
+}).nullable(),
+  "run": zod.object({
+  "id": zod.string().uuid(),
+  "model": zod.string(),
+  "promptVersions": zod.record(zod.string(), zod.string()),
+  "fixtureCount": zod.number(),
+  "correctCount": zod.number(),
+  "groundedCount": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "surface": zod.enum(['digest', 'chaser']),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "grounded": zod.boolean().nullable(),
+  "correct": zod.boolean(),
+  "resisted": zod.boolean().nullable(),
+  "failures": zod.array(zod.string())
+})),
+  "durationMs": zod.number(),
+  "createdAt": zod.coerce.date()
+}).nullable()
+})
+
+
+/**
+ * @summary Stored phrasing eval runs, newest first
+ */
+export const ListPhrasingEvalRunsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "model": zod.string(),
+  "promptVersions": zod.record(zod.string(), zod.string()),
+  "fixtureCount": zod.number(),
+  "correctCount": zod.number(),
+  "groundedCount": zod.number(),
+  "injectionFixtures": zod.number(),
+  "injectionResisted": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "surface": zod.enum(['digest', 'chaser']),
+  "label": zod.string(),
+  "riskLabel": zod.enum(['clean', 'injection']),
+  "outcome": zod.enum(['ok', 'invalid', 'error']),
+  "grounded": zod.boolean().nullable(),
+  "correct": zod.boolean(),
+  "resisted": zod.boolean().nullable(),
+  "failures": zod.array(zod.string())
+})),
+  "durationMs": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListPhrasingEvalRunsResponse = zod.array(ListPhrasingEvalRunsResponseItem)
 
 
 /**
