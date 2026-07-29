@@ -132,6 +132,13 @@ export const INTENT_FIXTURES: IntentFixture[] = [
     expected: { claimKey: "data.chase_list" },
   },
   {
+    key: "data-invoice-status",
+    label: "data: one specific invoice by number (round 20)",
+    question: "What is happening with invoice INV-2041?",
+    riskLabel: "clean",
+    expected: { claimKey: "data.invoice_status" },
+  },
+  {
     key: "refuse-advice",
     label: "refusal: open-ended advice",
     question: "How should I restructure my company to pay less tax overall?",

@@ -44,6 +44,7 @@ const MAX_SUGGESTIONS = 5;
 export interface RecurringSuggestion {
   buyerPartyId: string;
   buyerName: string;
+  currency: string;
   count: number;
   medianAmount: string;
   lastIssueDate: string;
@@ -114,16 +115,24 @@ export function detectMonthlyPattern(invoices: HistoryRow[]): {
   };
 }
 
-// One client's billing history grouped per buyer, with buyers already covered
-// by ANY template (active or paused) excluded — the recurring engine handles
-// those, and re-suggesting a pattern the client deliberately paused is
-// nagging, not help. Shared by the recurring suggestions and the
-// unbilled-income check so the two surfaces mine the SAME history under the
-// SAME exclusions.
+// One client's billing history grouped per (buyer, CURRENCY), with buyers
+// already covered by ANY template (active or paused) excluded — the
+// recurring engine handles those, and re-suggesting a pattern the client
+// deliberately paused is nagging, not help. Shared by the recurring
+// suggestions and the unbilled-income check so the two surfaces mine the
+// SAME history under the SAME exclusions. Currency is part of the group
+// key (round-20 hygiene): a retainer billed in USD and an NGN one-off to
+// the same buyer are different habits, and merging them minted a median
+// that was neither — rendered as naira.
 export async function buyerBillingHistories(
   firmId: string,
   clientPartyId: string,
-): Promise<Map<string, { name: string; invoices: HistoryRow[] }>> {
+): Promise<
+  Map<
+    string,
+    { buyerPartyId: string; name: string; currency: string; invoices: HistoryRow[] }
+  >
+> {
   const db = getDb();
   const covered = (
     await db
@@ -143,6 +152,7 @@ export async function buyerBillingHistories(
     .select({
       id: invoicesTable.id,
       buyerPartyId: invoicesTable.buyerPartyId,
+      currency: invoicesTable.currency,
       issueDate: invoicesTable.issueDate,
       grandTotal: invoicesTable.grandTotal,
       buyerName: partiesTable.legalName,
@@ -167,18 +177,24 @@ export async function buyerBillingHistories(
     )
     .orderBy(asc(invoicesTable.issueDate));
 
-  const byBuyer = new Map<string, { name: string; invoices: HistoryRow[] }>();
+  const byBuyer = new Map<
+    string,
+    { buyerPartyId: string; name: string; currency: string; invoices: HistoryRow[] }
+  >();
   for (const row of rows) {
     if (covered.includes(row.buyerPartyId)) continue;
-    const entry = byBuyer.get(row.buyerPartyId) ?? {
+    const key = `${row.buyerPartyId}:${row.currency}`;
+    const entry = byBuyer.get(key) ?? {
+      buyerPartyId: row.buyerPartyId,
       name: row.buyerName,
+      currency: row.currency,
       invoices: [],
     };
     const total = Number(row.grandTotal);
     if (Number.isFinite(total)) {
       entry.invoices.push({ id: row.id, issueDate: row.issueDate, grandTotal: total });
     }
-    byBuyer.set(row.buyerPartyId, entry);
+    byBuyer.set(key, entry);
   }
   return byBuyer;
 }
@@ -193,14 +209,22 @@ export async function listRecurringSuggestions(
   const patterns: Array<{
     buyerPartyId: string;
     buyerName: string;
+    currency: string;
     count: number;
     medianAmount: number;
     lastInvoiceId: string;
     lastIssueDate: string;
   }> = [];
-  for (const [buyerPartyId, entry] of byBuyer) {
+  for (const entry of byBuyer.values()) {
     const pattern = detectMonthlyPattern(entry.invoices);
-    if (pattern) patterns.push({ buyerPartyId, buyerName: entry.name, ...pattern });
+    if (pattern) {
+      patterns.push({
+        buyerPartyId: entry.buyerPartyId,
+        buyerName: entry.name,
+        currency: entry.currency,
+        ...pattern,
+      });
+    }
   }
   // Strongest habits first; cap so the card row stays a nudge, not a wall.
   patterns.sort((a, b) => b.count - a.count);
@@ -241,6 +265,7 @@ export async function listRecurringSuggestions(
   return top.map((p) => ({
     buyerPartyId: p.buyerPartyId,
     buyerName: p.buyerName,
+    currency: p.currency,
     count: p.count,
     medianAmount: String(p.medianAmount),
     lastIssueDate: p.lastIssueDate,

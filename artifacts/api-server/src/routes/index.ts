@@ -58,6 +58,7 @@ import "../modules/clerk/digest";
 import "../modules/clerk/client-statement";
 import "../modules/clerk/red-team";
 import "../modules/clerk/resistance-watch";
+import "../modules/clerk/phrasing-watch";
 import "../modules/clerk/spend-watch";
 import "../modules/clerk/quality-watch";
 import "../modules/push/register";

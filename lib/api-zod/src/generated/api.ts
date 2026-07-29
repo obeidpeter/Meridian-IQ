@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.50.0
+ * OpenAPI spec version: 0.51.0
  */
 import * as zod from 'zod';
 
@@ -2412,6 +2412,7 @@ export const ListRecurringSuggestionsQueryParams = zod.object({
 export const ListRecurringSuggestionsResponseItem = zod.object({
   "buyerPartyId": zod.string().uuid(),
   "buyerName": zod.string(),
+  "currency": zod.string(),
   "count": zod.number(),
   "medianAmount": zod.string(),
   "lastIssueDate": zod.string(),
@@ -2435,6 +2436,7 @@ export const ListUnbilledIncomeQueryParams = zod.object({
 export const ListUnbilledIncomeResponseItem = zod.object({
   "buyerPartyId": zod.string().uuid(),
   "buyerName": zod.string(),
+  "currency": zod.string(),
   "count": zod.number(),
   "medianAmount": zod.string(),
   "medianGapDays": zod.number(),
@@ -2796,6 +2798,7 @@ export const ListMissingRecurringBillsQueryParams = zod.object({
 export const ListMissingRecurringBillsResponseItem = zod.object({
   "supplierPartyId": zod.string().uuid(),
   "supplierName": zod.string(),
+  "currency": zod.string(),
   "count": zod.number(),
   "medianAmount": zod.string(),
   "medianGapDays": zod.number(),
@@ -3565,6 +3568,8 @@ export const GetComplianceScorecardResponse = zod.object({
   "acceptedCount": zod.number(),
   "withinWindowRate": zod.number().nullable(),
   "failureRate": zod.number().nullable(),
+  "prevWithinWindowRate": zod.number().nullable(),
+  "prevFailureRate": zod.number().nullable(),
   "medianDaysToStamp": zod.number().nullable(),
   "overdueNow": zod.number(),
   "unverifiedBills": zod.number()
@@ -6408,12 +6413,12 @@ export const runPhrasingEvalBodyCandidateSystemMax = 20000;
 
 export const RunPhrasingEvalBody = zod.object({
   "candidateSystem": zod.string().max(runPhrasingEvalBodyCandidateSystemMax).optional(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']).optional()
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']).optional()
 })
 
 export const RunPhrasingEvalResponse = zod.object({
   "canary": zod.object({
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
   "incumbent": zod.object({
   "fixtureCount": zod.number(),
   "correctCount": zod.number(),
@@ -6422,7 +6427,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -6442,7 +6447,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -6465,7 +6470,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -6494,7 +6499,7 @@ export const ListPhrasingEvalRunsResponseItem = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -7617,6 +7622,24 @@ export const GetClerkMetricsResponse = zod.object({
   "toRate": zod.number(),
   "fields": zod.number()
 }).optional()
+})
+
+
+/**
+ * @summary Week-over-week movement of firms' urgent counts between consecutive digest fact snapshots, split by delivered vs not (deterministic, correlation not causation)
+ */
+export const GetDigestImpactResponse = zod.object({
+  "delivered": zod.object({
+  "pairs": zod.number(),
+  "meanUrgentDelta": zod.number().nullable(),
+  "improvedShare": zod.number().nullable()
+}),
+  "undelivered": zod.object({
+  "pairs": zod.number(),
+  "meanUrgentDelta": zod.number().nullable(),
+  "improvedShare": zod.number().nullable()
+}),
+  "note": zod.string()
 })
 
 

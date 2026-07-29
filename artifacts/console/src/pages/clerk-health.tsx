@@ -9,6 +9,8 @@ import {
   useRunPhrasingEval,
   useListPhrasingEvalRuns,
   getListPhrasingEvalRunsQueryKey,
+  useGetDigestImpact,
+  getGetDigestImpactQueryKey,
   useListIntentFixtures,
   useMintIntentFixture,
   useRetireIntentFixture,
@@ -340,6 +342,61 @@ function IntentEvalCard() {
             )}
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Digest impact (round 20): the digest auditing itself — week-over-week
+// movement of firms' urgent counts between consecutive fact snapshots,
+// split by delivered vs not. Renders only once real pairs exist; the
+// server's note pins correlation-not-causation.
+function DigestImpactCard() {
+  const { data: report, isSuccess } = useGetDigestImpact({
+    query: { queryKey: getGetDigestImpactQueryKey(), retry: false },
+  });
+  if (
+    !isSuccess ||
+    !report ||
+    (report.delivered.pairs === 0 && report.undelivered.pairs === 0)
+  ) {
+    return null;
+  }
+  const bucket = (
+    label: string,
+    b: { pairs: number; meanUrgentDelta: number | null; improvedShare: number | null },
+    testId: string,
+  ) => (
+    <div className="rounded-md border p-3" data-testid={testId}>
+      <p className="text-xs font-medium uppercase text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-sm tabular-nums">
+        {b.pairs} week-pair{b.pairs === 1 ? "" : "s"}
+        {b.improvedShare !== null && (
+          <> · improved {formatPct(b.improvedShare)}</>
+        )}
+        {b.meanUrgentDelta !== null && (
+          <>
+            {" "}
+            · urgent {b.meanUrgentDelta > 0 ? "+" : ""}
+            {b.meanUrgentDelta.toFixed(1)}/wk
+          </>
+        )}
+      </p>
+    </div>
+  );
+  return (
+    <Card data-testid="card-digest-impact">
+      <CardHeader>
+        <CardTitle className="text-base">Digest impact</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {bucket("Digest delivered", report.delivered, "impact-delivered")}
+          {bucket("Not delivered", report.undelivered, "impact-undelivered")}
+        </div>
+        <p className="text-xs text-muted-foreground">{report.note}</p>
       </CardContent>
     </Card>
   );
@@ -2371,6 +2428,8 @@ export function HealthPanel() {
       <IntentEvalCard />
 
       <PhrasingEvalCard />
+
+      <DigestImpactCard />
 
       <Card data-testid="section-evaluation">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">

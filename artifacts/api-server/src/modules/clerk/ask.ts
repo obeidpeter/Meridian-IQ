@@ -17,6 +17,7 @@ import { inClerkScope } from "./scope";
 import { getActiveClaims } from "./claims";
 import {
   lagosMonthOptions,
+  extractInvoiceNumbers,
   CLIENT_SAFE_DATA_INTENTS,
   DATA_INTENTS,
   type DataIntentParams,
@@ -409,6 +410,24 @@ export async function askClerk(
       params.clientPartyId = ctx.clientPartyId;
       const own = clientOptions.find((c) => c.id === ctx.clientPartyId);
       if (own) params.clientName = own.name;
+    }
+    // Invoice-pinned lookup (round 20): the number is APP-EXTRACTED from
+    // the RAW question by a regex — the model only picked the key, and
+    // nothing model-authored reaches the lookup. No number, or several,
+    // refuses rather than guessing.
+    if (dataIntent.key === "data.invoice_status") {
+      const numbers = extractInvoiceNumbers(question);
+      if (numbers.length === 0) {
+        return refuse(
+          "No invoice number could be read from the question. Name it exactly as it appears on the invoice (e.g. INV-2041) and ask again.",
+        );
+      }
+      if (numbers.length > 1) {
+        return refuse(
+          "More than one invoice number appears in the question — ask about one invoice at a time.",
+        );
+      }
+      params.invoiceNumber = numbers[0];
     }
 
     let outcome;

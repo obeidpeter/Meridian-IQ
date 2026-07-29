@@ -10,6 +10,7 @@ import {
   GetClerkClaimGapsQueryParams,
   GetClerkClaimGapsResponse,
   GetAskFeedbackReportResponse,
+  GetDigestImpactResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import {
@@ -30,6 +31,7 @@ import { computeTierReport } from "../../modules/clerk/tier-report";
 import { getClerkMetrics } from "../../modules/clerk/metrics";
 import { computeClaimGaps } from "../../modules/clerk/claim-gaps";
 import { computeAskFeedback } from "../../modules/clerk/ask-feedback";
+import { computeDigestImpact } from "../../modules/clerk/digest-impact";
 
 const router: IRouter = Router();
 
@@ -51,6 +53,16 @@ router.get("/clerk/claim-gaps", async (req, res): Promise<void> => {
   const windowDays = query.success ? (query.data.windowDays ?? 90) : 90;
   const report = await computeClaimGaps(windowDays);
   res.json(GetClerkClaimGapsResponse.parse(report));
+});
+
+// Digest impact (round 20): week-over-week movement of each firm's urgent
+// count between consecutive digest fact snapshots, split by delivered vs
+// not. Deterministic SQL over the digests' own stored facts, zero model
+// calls; the note pins correlation-not-causation. Same operator gate.
+router.get("/clerk/digest-impact", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const report = await computeDigestImpact();
+  res.json(GetDigestImpactResponse.parse(report));
 });
 
 // Ask-feedback mining (round 7): the claim-gaps sibling over the asker's own

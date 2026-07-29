@@ -84,6 +84,82 @@ export interface DataIntentParams {
   // One of the firm's own client parties (principal-scoped list).
   clientPartyId?: string;
   clientName?: string;
+  // APP-EXTRACTED from the raw question by extractInvoiceNumbers (a regex,
+  // never the model) — the round-20 invoice-pinned lookup's key. Compared
+  // case-insensitively against the firm's own invoice numbers; it reaches
+  // SQL only as a bound parameter.
+  invoiceNumber?: string;
+}
+
+// Deterministic invoice-number extraction (round-20 idea: "what's happening
+// with INV-2041?"). The model never touches this — ask.ts runs it over the
+// RAW question when the classifier picks data.invoice_status. Two shapes:
+// a token with an internal separator and a digit (INV-2041, 2026/044), and
+// a bare number introduced by an invoice-ish word or # ("invoice 7801").
+// Pure and exported for tests. Date-shaped tokens are excluded — "2026-07-08"
+// is a date in a question, not an invoice number.
+const SEPARATED_TOKEN_RE = /\b[A-Za-z0-9]+(?:[/-][A-Za-z0-9]+)+\b/g;
+// Letter-prefixed compounds with no separator (INV2041) — without this
+// class, "invoice INV2041" would extract the bare "2041" via the intro
+// pattern and then honestly find nothing.
+const COMPOUND_TOKEN_RE = /\b[A-Za-z]{2,}\d{3,}\b/g;
+// The word alternation needs \b (or "casino 12345" mints via its "no"
+// tail) and "no" needs its dot (or the ordinary word "no" introduces any
+// number); "#" is non-word, so it gets its own boundary-free arm.
+const INTRODUCED_NUMBER_RE =
+  /(?:\b(?:invoice|inv|bill|number|no\.)|#)\s*[#:]?\s*(\d{3,})/gi;
+const DATE_SHAPES = [
+  /^\d{4}-\d{1,2}(-\d{1,2})?$/,
+  /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/,
+  /^\d{4}[/-]\d{1,2}([/-]\d{1,2})?$/, // 2026/07/08, 2026/07, 2025/26 (fiscal)
+  /^\d{1,2}[/-]\d{4}$/, // 05/2026
+];
+// A token introduced by one of these words is that thing, not an invoice
+// number — the rail error code and TIN false positives the review probed.
+// The leading \b keeps word TAILS out ("Eko Hotel INV-2041" must not lose
+// its number to the "tel" of "Hotel").
+const EXCLUDING_CONTEXT_RE = /\b(?:code|error|tin|phone|tel|call)[\s:#-]*$/i;
+// A compound whose letters are a period word is a period, not a number
+// (FY2025, Q32026, July2026).
+const PERIOD_COMPOUND_RE =
+  /^(?:fy|q\d?|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun[e]?|jul[y]?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\d+$/i;
+
+export function extractInvoiceNumbers(question: string): string[] {
+  const seen = new Map<string, string>(); // lower -> first-seen casing
+  const consider = (token: string, index: number) => {
+    if (!/\d/.test(token)) return;
+    if (DATE_SHAPES.some((re) => re.test(token))) return;
+    if (EXCLUDING_CONTEXT_RE.test(question.slice(Math.max(0, index - 12), index)))
+      return;
+    const key = token.toLowerCase();
+    if (!seen.has(key)) seen.set(key, token);
+  };
+  for (const m of question.matchAll(SEPARATED_TOKEN_RE)) {
+    consider(m[0], m.index ?? 0);
+  }
+  for (const m of question.matchAll(COMPOUND_TOKEN_RE)) {
+    if (PERIOD_COMPOUND_RE.test(m[0])) continue;
+    // A compound inside a separated token (the "TIN" of "IS-TIN-01") was
+    // already considered as its whole token.
+    if ([...seen.keys()].some((k) => k.includes(m[0].toLowerCase()))) continue;
+    consider(m[0], m.index ?? 0);
+  }
+  // The digit TAILS of already-found candidates: an introduced bare number
+  // equal to one ("invoice INV2041" → "2041") is not a second candidate —
+  // but exact-tail only, never substring (the review-confirmed N1: "invoice
+  // 123" beside "INV-1234" is a DIFFERENT invoice and must surface both,
+  // which then refuses honestly rather than silently answering about one).
+  const seenTails = new Set(
+    [...seen.keys()]
+      .map((k) => /(\d+)$/.exec(k)?.[1])
+      .filter((t): t is string => t !== undefined),
+  );
+  for (const m of question.matchAll(INTRODUCED_NUMBER_RE)) {
+    const key = m[1].toLowerCase();
+    if (seenTails.has(key)) continue;
+    if (!seen.has(key)) seen.set(key, m[1]);
+  }
+  return [...seen.values()];
 }
 
 export interface DataIntent {
@@ -795,6 +871,150 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     },
   },
   {
+    // Round-20 invoice-pinned lookup: one specific invoice's status and
+    // next step. The invoice number is APP-EXTRACTED from the question
+    // (extractInvoiceNumbers — ask.ts refuses when none or several appear);
+    // the model only picks this key. A client asker's pin matches EITHER
+    // side of the paper (their receivable or their captured bill).
+    key: "data.invoice_status",
+    title:
+      "the current status and next step for ONE SPECIFIC invoice the question names by its invoice number",
+    accepts: { client: true },
+    async run(firmId, params) {
+      const number = params?.invoiceNumber;
+      if (!number) {
+        // ask.ts guarantees the number; fail closed if it ever doesn't.
+        return {
+          text: "No invoice number reached the lookup, so it cannot answer. Name the invoice number exactly as it appears and ask again.",
+          facts: [],
+        };
+      }
+      // SEC-03 (review-confirmed H1): the pin's buyer arm is qualified with
+      // BILL_ORIENTATION — the bills scope wall verbatim. Without it, a
+      // client who happens to be the BUYER on a sibling client's receivable
+      // (dual-engaged trades are supported; the supplier side wins
+      // orientation) could read the sibling's rail posture. With it, a
+      // pinned asker only ever matches their own receivables or rows that
+      // actually ARE their captured bills; a sibling's paper answers "no
+      // invoice" — non-disclosure.
+      const clientFilter = params?.clientPartyId
+        ? sql` AND (i.supplier_party_id = ${params.clientPartyId} OR (i.buyer_party_id = ${params.clientPartyId} AND ${BILL_ORIENTATION}))`
+        : sql``;
+      const rows = (
+        await getDb().execute<{
+          id: string;
+          invoice_number: string;
+          status: string;
+          issue_date: string;
+          currency: string;
+          grand_total: string | null;
+          recv: boolean;
+          bill: boolean;
+          overdue: boolean;
+          days_over: number | null;
+          settled: boolean;
+          last_error: string | null;
+        }>(sql`
+          SELECT i.id, i.invoice_number, i.status, i.issue_date::text AS issue_date,
+            i.currency, i.grand_total::text AS grand_total,
+            (${RECEIVABLE_ORIENTATION}) AS recv,
+            (${BILL_ORIENTATION}) AS bill,
+            (i.status IN ('draft', 'validated')
+              AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${lagosTodaySql()}) AS overdue,
+            (${lagosTodaySql()} - (i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int))::int AS days_over,
+            EXISTS (
+              SELECT 1 FROM settlement_events se
+              WHERE se.invoice_id = i.id
+                AND (se.payment_status = 'paid' OR se.source = 'statement_match')
+            ) AS settled,
+            (SELECT sa.error_code FROM submission_attempts sa
+              WHERE sa.invoice_id = i.id AND sa.status IN ('rejected', 'error')
+              ORDER BY sa.created_at DESC LIMIT 1) AS last_error
+          FROM invoices i
+          WHERE i.firm_id = ${firmId}
+            AND i.kind = 'invoice'
+            AND LOWER(i.invoice_number) = LOWER(${number})${clientFilter}
+          LIMIT 4
+        `)
+      ).rows;
+      if (rows.length === 0) {
+        return {
+          text: `No invoice numbered ${number}${forClient(params)} exists in the records the platform holds. Check the number and ask again.`,
+          facts: [countFact("matches", "Matching invoices", 0)],
+        };
+      }
+      if (rows.length > 1) {
+        // LIMIT 4 means "4" may understate; a pinned asker's duplicates
+        // can only be their OWN paper (the pin above), so the firm-wide
+        // "name the client" advice would be useless there.
+        const shown = rows.length >= 4 ? "4 or more" : String(rows.length);
+        return {
+          text: params?.clientPartyId
+            ? `${shown} of your own documents share the number ${number} — one may be your invoice and another a captured supplier bill. Open the invoices or bills page to pick the right one.`
+            : `${shown} invoices share the number ${number} across the firm's clients. Add the client's name to the question to pick one.`,
+          facts: [countFact("matches", "Matching invoices", rows.length)],
+        };
+      }
+      const r = rows[0];
+      const side = r.bill
+        ? "a captured supplier bill (money going out)"
+        : r.recv
+          ? "a receivable e-invoice (money coming in)"
+          : "an invoice with no engaged side";
+      // The next step per posture — the status-light vocabulary, one line.
+      const next = r.bill
+        ? r.settled
+          ? "Payment evidence is on file — nothing to do."
+          : "No payment evidence yet — flag or reconcile the payment when it is made, and verify the supplier's stamp for input VAT."
+        : r.status === "failed" && r.last_error
+          ? `Its last submission failed with code ${r.last_error} — open the invoice for the catalogue fix, then resubmit.`
+          : r.status === "failed"
+            ? "Its last submission failed — open the invoice for the specific fix, then resubmit."
+            : r.overdue
+              ? Number(r.days_over ?? 0) <= 0
+                ? `It reached its ${SUBMISSION_WINDOW_DAYS}-day submission deadline today — submit it now to limit penalty exposure.`
+                : `It is ${plural(Number(r.days_over), "day")} past the ${SUBMISSION_WINDOW_DAYS}-day submission window — submit it now to limit penalty exposure.`
+              : r.status === "draft" || r.status === "validated"
+                ? "It has not been submitted — validate and submit it inside the statutory window."
+                : r.status === "submitted"
+                  ? "It is with the rails awaiting a verdict — no action needed yet."
+                  : r.status === "stamped" && r.settled
+                    ? "It is stamped and payment evidence is on file — fully done."
+                    : r.status === "stamped"
+                      ? "It is stamped; no payment evidence yet — chase or reconcile the payment when it arrives."
+                      : `Its status is ${r.status} — no further action from here.`;
+      return {
+        text: `Invoice ${r.invoice_number}${forClient(params)} is ${side}, issued ${r.issue_date}, status ${r.status}. ${next}`,
+        facts: [
+          { key: "number", label: "Invoice number", kind: "text", value: r.invoice_number },
+          { key: "status", label: "Status", kind: "text", value: r.status },
+          ...(r.grand_total !== null
+            ? [
+                {
+                  key: "amount",
+                  label: "Amount",
+                  kind: "amount" as const,
+                  value: r.grand_total,
+                  unit: r.currency,
+                },
+              ]
+            : []),
+        ],
+        // No link for a pinned asker's BILL: the SME app routes invoice
+        // links through the supplier-side detail loader, which correctly
+        // 403s the buyer — a link that always dead-ends is worse than none
+        // (the bills page shows the document).
+        ...(r.bill && params?.clientPartyId
+          ? {}
+          : {
+              links: [
+                { label: r.invoice_number, kind: "invoice" as const, id: r.id },
+              ],
+            }),
+      };
+    },
+  },
+  {
     key: "data.pending_approvals",
     title:
       "invoices waiting for a colleague's submission approval under the firm's maker-checker policy (count, oldest wait, the waiting invoices)",
@@ -923,6 +1143,12 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // its links are the caller's own supplier-pinned invoices, and the rates
   // are MeridianIQ's published public model — nothing firm-internal.
   "data.penalty_exposure",
+  // Invoice-pinned status with the forced own-party pin: the lookup only
+  // matches invoices where the caller's party sits on EITHER side, so a
+  // sibling's invoice number answers "no invoice numbered X" — the bills
+  // scope wall's non-disclosure posture. The single link is the caller's
+  // own paper.
+  "data.invoice_status",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

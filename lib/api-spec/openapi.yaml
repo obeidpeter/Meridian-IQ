@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.50.0
+  version: 0.51.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5229,6 +5229,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/ClerkMetrics"
 
+  /clerk/digest-impact:
+    get:
+      operationId: getDigestImpact
+      tags: [clerk]
+      summary: Week-over-week movement of firms' urgent counts between consecutive digest fact snapshots, split by delivered vs not (deterministic, correlation not causation)
+      responses:
+        "200":
+          description: Delivered vs undelivered buckets over consecutive weekly snapshot pairs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DigestImpactReport"
   /clerk/claim-gaps:
     get:
       operationId: getClerkClaimGaps
@@ -6454,12 +6466,15 @@ components:
           format: date-time
     RecurringSuggestion:
       type: object
-      required: [buyerPartyId, buyerName, count, medianAmount, lastIssueDate, lines]
+      required:
+        [buyerPartyId, buyerName, currency, count, medianAmount, lastIssueDate, lines]
       properties:
         buyerPartyId:
           type: string
           format: uuid
         buyerName:
+          type: string
+        currency:
           type: string
         # How many invoices matched the monthly pattern.
         count:
@@ -6480,6 +6495,7 @@ components:
         [
           buyerPartyId,
           buyerName,
+          currency,
           count,
           medianAmount,
           medianGapDays,
@@ -6492,6 +6508,8 @@ components:
           type: string
           format: uuid
         buyerName:
+          type: string
+        currency:
           type: string
         # How many invoices matched the monthly pattern.
         count:
@@ -11340,6 +11358,28 @@ components:
     # replayed through the byte-identical production prompt builders, scored
     # deterministically (grounding, required/forbidden content, injection
     # resistance).
+    # Digest impact (round 20): consecutive weekly fact snapshots as the
+    # time series; buckets under the pair floor show null rates.
+    DigestImpactReport:
+      type: object
+      required: [delivered, undelivered, note]
+      properties:
+        delivered:
+          $ref: "#/components/schemas/DigestImpactBucket"
+        undelivered:
+          $ref: "#/components/schemas/DigestImpactBucket"
+        note:
+          type: string
+    DigestImpactBucket:
+      type: object
+      required: [pairs, meanUrgentDelta, improvedShare]
+      properties:
+        pairs:
+          type: integer
+        meanUrgentDelta:
+          type: ["number", "null"]
+        improvedShare:
+          type: ["number", "null"]
     PhrasingEvalFixtureResult:
       type: object
       required:
@@ -11349,7 +11389,7 @@ components:
           type: string
         surface:
           type: string
-          enum: [digest, chaser, statement, vat_note]
+          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation]
         label:
           type: string
         riskLabel:
@@ -11451,7 +11491,7 @@ components:
           maxLength: 20000
         surface:
           type: string
-          enum: [digest, chaser, statement, vat_note]
+          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation]
     PhrasingEvalOutcome:
       type: object
       required: [canary, run]
@@ -11463,7 +11503,7 @@ components:
           properties:
             surface:
               type: string
-              enum: [digest, chaser, statement, vat_note]
+              enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation]
             incumbent:
               allOf:
                 - $ref: "#/components/schemas/PhrasingEvalReport"
@@ -12759,6 +12799,7 @@ components:
         [
           supplierPartyId,
           supplierName,
+          currency,
           count,
           medianAmount,
           medianGapDays,
@@ -12771,6 +12812,8 @@ components:
           type: string
           format: uuid
         supplierName:
+          type: string
+        currency:
           type: string
         count:
           type: integer
@@ -12836,6 +12879,8 @@ components:
                 acceptedCount,
                 withinWindowRate,
                 failureRate,
+                prevWithinWindowRate,
+                prevFailureRate,
                 medianDaysToStamp,
                 overdueNow,
                 unverifiedBills,
@@ -12853,6 +12898,11 @@ components:
               withinWindowRate:
                 type: ["number", "null"]
               failureRate:
+                type: ["number", "null"]
+              # The same rates over the window before — the trend baseline.
+              prevWithinWindowRate:
+                type: ["number", "null"]
+              prevFailureRate:
                 type: ["number", "null"]
               medianDaysToStamp:
                 type: ["number", "null"]

@@ -477,7 +477,11 @@ export async function generateFirmDigest(
   // loser reads the winner's row.
   const [inserted] = await getDb()
     .insert(clerkDigestsTable)
-    .values({ firmId, weekStart, headline, bullets, source })
+    // The fact snapshot is stored WITH the digest (round 20): consecutive
+    // weekly snapshots are the impact report's time series. The spread
+    // satisfies the column's generic Record type — DigestFacts is an
+    // interface, and the schema package cannot import it.
+    .values({ firmId, weekStart, headline, bullets, source, facts: { ...facts } })
     .onConflictDoNothing()
     .returning();
   if (inserted) return inserted;

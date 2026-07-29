@@ -38,6 +38,7 @@ const MAX_ALERTS = 5;
 export interface UnbilledIncomeAlert {
   buyerPartyId: string;
   buyerName: string;
+  currency: string;
   count: number;
   medianAmount: string;
   medianGapDays: number;
@@ -52,7 +53,7 @@ export interface UnbilledIncomeAlert {
 export function unbilledAlertFor(
   invoices: HistoryRow[],
   todayLagos: string,
-): Omit<UnbilledIncomeAlert, "buyerPartyId" | "buyerName"> | null {
+): Omit<UnbilledIncomeAlert, "buyerPartyId" | "buyerName" | "currency"> | null {
   const pattern = detectMonthlyPattern(invoices);
   if (!pattern) return null;
   const expectedByDate = addDays(pattern.lastIssueDate, pattern.medianGapDays);
@@ -79,9 +80,16 @@ export async function listUnbilledIncome(
   const byBuyer = await buyerBillingHistories(firmId, clientPartyId);
   const today = lagosDateString(now);
   const alerts: UnbilledIncomeAlert[] = [];
-  for (const [buyerPartyId, entry] of byBuyer) {
+  for (const entry of byBuyer.values()) {
     const alert = unbilledAlertFor(entry.invoices, today);
-    if (alert) alerts.push({ buyerPartyId, buyerName: entry.name, ...alert });
+    if (alert) {
+      alerts.push({
+        buyerPartyId: entry.buyerPartyId,
+        buyerName: entry.name,
+        currency: entry.currency,
+        ...alert,
+      });
+    }
   }
   alerts.sort((a, b) => Number(b.medianAmount) - Number(a.medianAmount));
   return alerts.slice(0, MAX_ALERTS);
@@ -119,6 +127,7 @@ export async function countFirmUnbilled(
       id: invoicesTable.id,
       supplierPartyId: invoicesTable.supplierPartyId,
       buyerPartyId: invoicesTable.buyerPartyId,
+      currency: invoicesTable.currency,
       issueDate: invoicesTable.issueDate,
       grandTotal: invoicesTable.grandTotal,
     })
@@ -142,12 +151,16 @@ export async function countFirmUnbilled(
       ),
     );
 
+  // Grouped per (supplier, buyer, CURRENCY) — the client-card grouping —
+  // while template coverage stays per (supplier, buyer): a template covers
+  // the relationship, whatever it bills in.
   const byPair = new Map<string, HistoryRow[]>();
   for (const row of rows) {
-    const key = `${row.supplierPartyId}:${row.buyerPartyId}`;
-    if (covered.has(key)) continue;
+    const coverageKey = `${row.supplierPartyId}:${row.buyerPartyId}`;
+    if (covered.has(coverageKey)) continue;
     const total = Number(row.grandTotal);
     if (!Number.isFinite(total)) continue;
+    const key = `${coverageKey}:${row.currency}`;
     const list = byPair.get(key) ?? [];
     list.push({ id: row.id, issueDate: row.issueDate, grandTotal: total });
     byPair.set(key, list);

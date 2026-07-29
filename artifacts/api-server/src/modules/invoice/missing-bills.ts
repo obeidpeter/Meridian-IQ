@@ -39,6 +39,7 @@ const FIRM_SCAN_CAP = 100_000;
 export interface MissingBillAlert {
   supplierPartyId: string;
   supplierName: string;
+  currency: string;
   count: number;
   medianAmount: string;
   medianGapDays: number;
@@ -52,7 +53,7 @@ export interface MissingBillAlert {
 export function missingBillAlertFor(
   bills: HistoryRow[],
   todayLagos: string,
-): Omit<MissingBillAlert, "supplierPartyId" | "supplierName"> | null {
+): Omit<MissingBillAlert, "supplierPartyId" | "supplierName" | "currency"> | null {
   const pattern = detectMonthlyPattern(bills);
   if (!pattern) return null;
   const expectedByDate = addDays(pattern.lastIssueDate, pattern.medianGapDays);
@@ -77,16 +78,22 @@ export function missingBillAlertFor(
 async function vendorBillHistories(
   firmId: string,
   clientPartyId: string,
-): Promise<Map<string, { name: string; bills: HistoryRow[] }>> {
+): Promise<
+  Map<
+    string,
+    { supplierPartyId: string; name: string; currency: string; bills: HistoryRow[] }
+  >
+> {
   const rows = (
     await getDb().execute<{
       supplier_party_id: string;
       supplier_name: string;
+      currency: string;
       id: string;
       issue_date: string;
       grand_total: string;
     }>(sql`
-      SELECT i.supplier_party_id, p.legal_name AS supplier_name,
+      SELECT i.supplier_party_id, p.legal_name AS supplier_name, i.currency,
         i.id, i.issue_date::text AS issue_date, i.grand_total::text AS grand_total
       FROM invoices i
       JOIN parties p ON p.id = i.supplier_party_id
@@ -108,10 +115,18 @@ async function vendorBillHistories(
     );
     return new Map();
   }
-  const byVendor = new Map<string, { name: string; bills: HistoryRow[] }>();
+  // Per (vendor, CURRENCY): a vendor's USD subscription and NGN one-offs
+  // are different cadences (round-20 hygiene, buyerBillingHistories parity).
+  const byVendor = new Map<
+    string,
+    { supplierPartyId: string; name: string; currency: string; bills: HistoryRow[] }
+  >();
   for (const r of rows) {
-    const entry = byVendor.get(r.supplier_party_id) ?? {
+    const key = `${r.supplier_party_id}:${r.currency}`;
+    const entry = byVendor.get(key) ?? {
+      supplierPartyId: r.supplier_party_id,
       name: r.supplier_name,
+      currency: r.currency,
       bills: [],
     };
     entry.bills.push({
@@ -119,7 +134,7 @@ async function vendorBillHistories(
       issueDate: r.issue_date,
       grandTotal: Number(r.grand_total),
     });
-    byVendor.set(r.supplier_party_id, entry);
+    byVendor.set(key, entry);
   }
   return byVendor;
 }
@@ -135,10 +150,15 @@ export async function listMissingRecurringBills(
   const byVendor = await vendorBillHistories(firmId, clientPartyId);
   const today = lagosDateString(now);
   const alerts: MissingBillAlert[] = [];
-  for (const [supplierPartyId, entry] of byVendor) {
+  for (const entry of byVendor.values()) {
     const alert = missingBillAlertFor(entry.bills, today);
     if (alert) {
-      alerts.push({ supplierPartyId, supplierName: entry.name, ...alert });
+      alerts.push({
+        supplierPartyId: entry.supplierPartyId,
+        supplierName: entry.name,
+        currency: entry.currency,
+        ...alert,
+      });
     }
   }
   alerts.sort((a, b) => Number(b.medianAmount) - Number(a.medianAmount));
@@ -158,11 +178,12 @@ export async function countFirmMissingBills(
     await getDb().execute<{
       buyer_party_id: string;
       supplier_party_id: string;
+      currency: string;
       id: string;
       issue_date: string;
       grand_total: string;
     }>(sql`
-      SELECT i.buyer_party_id, i.supplier_party_id,
+      SELECT i.buyer_party_id, i.supplier_party_id, i.currency,
         i.id, i.issue_date::text AS issue_date, i.grand_total::text AS grand_total
       FROM invoices i
       JOIN parties p ON p.id = i.supplier_party_id
@@ -193,7 +214,7 @@ export async function countFirmMissingBills(
   const today = lagosDateString(now);
   const byPair = new Map<string, { client: string; bills: HistoryRow[] }>();
   for (const r of rows) {
-    const key = `${r.buyer_party_id}:${r.supplier_party_id}`;
+    const key = `${r.buyer_party_id}:${r.supplier_party_id}:${r.currency}`;
     const entry = byPair.get(key) ?? { client: r.buyer_party_id, bills: [] };
     entry.bills.push({
       id: r.id,

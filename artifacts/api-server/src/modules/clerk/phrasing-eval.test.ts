@@ -12,6 +12,8 @@ import { DIGEST_PHRASING } from "./digest.ts";
 import { CHASER_PHRASING } from "./draft-chaser.ts";
 import { STATEMENT_PHRASING } from "./client-statement.ts";
 import { VAT_NOTE_PHRASING } from "./vat-note.ts";
+import { EXPLAIN_PHRASING } from "./explain.ts";
+import { REPLY_PHRASING } from "../desk/draft-reply.ts";
 import { DomainError } from "../errors.ts";
 import {
   fakeGateway,
@@ -52,6 +54,7 @@ function scriptedResponder(misbehave?: {
   ungroundedDigestKeys?: Set<string>;
   echoWaiverKeys?: Set<string>;
   echoNilFilingKeys?: Set<string>;
+  echoRefundKeys?: Set<string>;
 }) {
   return (req: CompletionRequest): string => {
     const user = String(req.user);
@@ -83,6 +86,37 @@ function scriptedResponder(misbehave?: {
       }
       return JSON.stringify({
         note: `Please find attached the VAT filing pack. It shows net output VAT of NGN ${net} for the month — reconcile before filing.`,
+      });
+    }
+    if (req.schemaName === "escalation_reply") {
+      const fixture = PHRASING_FIXTURES.find(
+        (f) =>
+          f.surface === "escalation_reply" &&
+          REPLY_PHRASING.buildUser(f.facts as never) === user,
+      );
+      if (!fixture) throw new Error("unknown reply eval prompt");
+      const cause = user.match(/Catalogue cause: (.+)/)?.[1];
+      if (misbehave?.echoRefundKeys?.has(fixture.key)) {
+        return JSON.stringify({
+          reply: `Good news: the firm will pay your customer a refund of NGN 250000 and no resubmission is required.`,
+        });
+      }
+      return JSON.stringify({
+        reply: `Thank you for flagging this. ${cause} Correcting it as described will resolve the failure, and we will update you here.`,
+      });
+    }
+    if (req.schemaName === "failure_explanation") {
+      const fixture = PHRASING_FIXTURES.find(
+        (f) =>
+          f.surface === "failure_explanation" &&
+          EXPLAIN_PHRASING.buildUser(f.facts as never) === user,
+      );
+      if (!fixture) throw new Error("unknown explain eval prompt");
+      const code = user.match(/Error code: (\S+)/)?.[1];
+      const fix = user.match(/Catalogue fix: (.+)/)?.[1];
+      return JSON.stringify({
+        explanation: `The rails rejected this submission with code ${code}. It is fixable — see the step below.`,
+        nextSteps: [String(fix)],
       });
     }
     if (req.schemaName === "weekly_digest") {
@@ -226,7 +260,7 @@ test("a clean run scores full marks and stores the run", async () => {
   const injections = PHRASING_FIXTURES.filter(
     (f) => f.riskLabel === "injection",
   ).length;
-  assert.ok(injections >= 3, "every attacker-slotted surface has an injection fixture");
+  assert.ok(injections >= 5, "every attacker-slotted surface has an injection fixture");
   assert.equal(run.injectionFixtures, injections);
   assert.equal(run.injectionResisted, injections);
   assert.deepEqual(run.promptVersions, {
@@ -234,6 +268,8 @@ test("a clean run scores full marks and stores the run", async () => {
     chaser: CHASER_PHRASING.promptVersion,
     statement: STATEMENT_PHRASING.promptVersion,
     vat_note: VAT_NOTE_PHRASING.promptVersion,
+    escalation_reply: REPLY_PHRASING.promptVersion,
+    failure_explanation: EXPLAIN_PHRASING.promptVersion,
   });
 
   // Every prompt is the production assembly for its surface.
@@ -245,6 +281,11 @@ test("a clean run scores full marks and stores the run", async () => {
       assert.match(user, /Monthly compliance facts for one client business/);
     } else if (p.schemaName === "vat_cover_note") {
       assert.match(user, /Net output VAT: NGN/);
+    } else if (p.schemaName === "escalation_reply") {
+      assert.match(user, /Catalogue cause: /);
+      assert.match(user, /-----BEGIN ESCALATION-----/);
+    } else if (p.schemaName === "failure_explanation") {
+      assert.match(user, /Error code: /);
     } else {
       assert.equal(p.schemaName, "payment_chaser");
       assert.match(user, /Invoice number: INV-78\d\d/);

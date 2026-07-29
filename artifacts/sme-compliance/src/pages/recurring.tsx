@@ -45,7 +45,7 @@ import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
 import { idMap, scopedToSupplier } from "@/lib/rows";
-import { formatNaira, formatDate, pillClasses } from "@/lib/format";
+import { formatAmount, formatNaira, formatDate, pillClasses } from "@/lib/format";
 import {
   type LineDraft,
   emptyLine,
@@ -471,13 +471,16 @@ export function Recurring() {
               Looks like you bill these customers about monthly
             </p>
             {(suggestions ?? []).map((s) => (
-              <Card key={s.buyerPartyId} data-testid={`row-suggestion-${s.buyerPartyId}`}>
+              <Card
+                key={`${s.buyerPartyId}-${s.currency}`}
+                data-testid={`row-suggestion-${s.buyerPartyId}-${s.currency}`}
+              >
                 <CardContent className="flex flex-wrap items-center justify-between p-4 gap-3">
                   <div className="min-w-0">
                     <span className="font-semibold truncate">{s.buyerName}</span>
                     <p className="text-sm text-muted-foreground mt-1">
                       {s.count} invoices in the last year · about{" "}
-                      {formatNaira(Number(s.medianAmount))} each · last{" "}
+                      {formatAmount(s.medianAmount, s.currency)} each · last{" "}
                       {formatDate(s.lastIssueDate)}
                     </p>
                   </div>

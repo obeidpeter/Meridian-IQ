@@ -44,6 +44,7 @@ import {
   billPayStatusLabel,
   canFlagBill,
   formatDate,
+  formatAmount,
   formatNaira,
   pillClasses,
 } from "@/lib/format";
@@ -175,14 +176,14 @@ function MissingBillsAdvisory({ clientPartyId }: { clientPartyId: string }) {
         </p>
         {alerts.map((a) => (
           <p
-            key={a.supplierPartyId}
-            data-testid={`missing-bill-${a.supplierPartyId}`}
+            key={`${a.supplierPartyId}-${a.currency}`}
+            data-testid={`missing-bill-${a.supplierPartyId}-${a.currency}`}
           >
-            {a.supplierName} has billed about {formatNaira(a.medianAmount)}{" "}
-            roughly every {a.medianGapDays} days ({a.count} bills on record,
-            last {formatDate(a.lastIssueDate)}) — this cycle's bill was
-            expected by {formatDate(a.expectedByDate)} and has not been
-            captured.
+            {a.supplierName} has billed about{" "}
+            {formatAmount(a.medianAmount, a.currency)} roughly every{" "}
+            {a.medianGapDays} days ({a.count} bills on record, last{" "}
+            {formatDate(a.lastIssueDate)}) — this cycle's bill was expected by{" "}
+            {formatDate(a.expectedByDate)} and has not been captured.
           </p>
         ))}
         <p className="text-xs">
