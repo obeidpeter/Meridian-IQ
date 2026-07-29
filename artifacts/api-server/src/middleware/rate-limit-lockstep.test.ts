@@ -131,3 +131,79 @@ test("the public machine rails really are public-path gated", () => {
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// The gateway-scan pin (fix round, survey item 20): the lockstep tests above
+// only see routes that LEFT the request transaction — a model-calling route
+// that stays in-transaction (the digest-posture single completions) was
+// invisible, and exactly that class drifted three times (rounds 18, 22, and
+// compliance-pack). This scan closes it: every route registration whose
+// HANDLER BLOCK touches the gateway (gatewayOrNull / getClerkGateway /
+// assertFirmClerkBudget) must be in the MODEL rate class.
+// Known limitation: a handler that calls a model-invoking MODULE function
+// without touching the gateway in the route block itself is still invisible
+// — keep gateway acquisition in the route (the codebase's convention). The
+// verified inventory of such cases today (review of commit 11b0939), each
+// covered by a SIBLING pin: POST /api/clerk/action-proposals/execute
+// (gateway acquired inside modules/clerk/actions.ts — the NO_CONTEXT
+// lockstep test above holds it in the MODEL class) and the two public
+// inbound rails (gateway inside modules/inbound — the PUBLIC_PATHS test).
+// ---------------------------------------------------------------------------
+
+import { readdirSync as readdir, statSync } from "node:fs";
+
+function routeFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const name of readdir(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) out.push(...routeFiles(full));
+    else if (name.endsWith(".ts") && !name.endsWith(".test.ts")) out.push(full);
+  }
+  return out;
+}
+
+const GATEWAY_MARKS = ["gatewayOrNull(", "getClerkGateway(", "assertFirmClerkBudget("];
+
+test("every gateway-touching route handler is in the MODEL rate class", () => {
+  const model = new Set(
+    literalEntries(src("middleware/rate-limit.ts"), "MODEL_RATE_LIMITED_ROUTES"),
+  );
+  const modelPatterns = patternEntries(
+    src("middleware/rate-limit.ts"),
+    "MODEL_RATE_LIMITED_ROUTE_PATTERNS",
+  ).map((p) => ({
+    method: p.method,
+    // The captured text is the literal /^...$/ source — evaluate it.
+    regex: new RegExp(p.pattern.slice(1, -1)),
+  }));
+
+  const registration = /router\.(get|post|patch|put|delete)\(\s*\n?\s*"([^"]+)"/g;
+  let scanned = 0;
+  for (const file of routeFiles(join(import.meta.dirname, "..", "routes"))) {
+    const source = readFileSync(file, "utf8");
+    if (!GATEWAY_MARKS.some((m) => source.includes(m))) continue;
+    const matches = [...source.matchAll(registration)];
+    for (let i = 0; i < matches.length; i++) {
+      const block = source.slice(
+        matches[i].index,
+        i + 1 < matches.length ? matches[i + 1].index : undefined,
+      );
+      if (!GATEWAY_MARKS.some((m) => block.includes(m))) continue;
+      scanned++;
+      const method = matches[i][1].toUpperCase();
+      const path = `/api${matches[i][2]}`;
+      const literal = `${method} ${path}`;
+      // Parameterized paths probe the pattern list with :segments filled in.
+      const probe = path.replace(/:[^/]+/g, "probe");
+      assert.ok(
+        model.has(literal) ||
+          modelPatterns.some((p) => p.method === method && p.regex.test(probe)),
+        `${literal} (${file.split("/src/")[1]}) touches the Clerk gateway in its handler but is not in the MODEL rate class — the round-18/22/compliance-pack drift, recurring`,
+      );
+    }
+  }
+  assert.ok(
+    scanned >= 20,
+    `the gateway scan found only ${scanned} gateway-touching handlers (24 at the time of writing) — the registration parser has likely drifted from the route style`,
+  );
+});
