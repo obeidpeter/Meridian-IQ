@@ -16,6 +16,7 @@ import {
   type Principal,
 } from "../auth/rbac";
 import { inferPhrasing, type ClerkGateway } from "./gateway";
+import { ensureGrounded } from "./grounding";
 import { fenceUntrusted } from "./prompts";
 
 // Reconciliation match assist (Clerk idea #2). The matcher's middle band —
@@ -270,6 +271,19 @@ export async function assistMatch(
     validator: assistOutput,
     inputForHash: `${statementLineId}:${ranked.map((r) => `${r.proposalId}=${r.confidence}`).join(",")}`,
   });
-  if (!data) return template;
+  // Number grounding: a numeral neither the line, the candidates nor the
+  // fenced narration stated → the deterministic template answers
+  // (grounding.ts).
+  if (
+    !data ||
+    !(await ensureGrounded(
+      "match_assist",
+      tenantFirmId(principal),
+      data.explanation,
+      user,
+    ))
+  ) {
+    return template;
+  }
   return { ...template, explanation: data.explanation, source: "clerk" };
 }

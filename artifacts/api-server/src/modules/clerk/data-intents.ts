@@ -751,11 +751,12 @@ export const DATA_INTENTS: readonly DataIntent[] = [
     async run(firmId, params) {
       const pending = await pendingApprovals(firmId, params?.clientPartyId);
       // Policy off is its own honest answer — "0 waiting" and "the firm
-      // doesn't use approvals" must never read the same.
+      // doesn't use approvals" must never read the same, in the TEXT and in
+      // the machine-readable facts alike (no zero-count fact here).
       if (pending === null) {
         return {
           text: "This firm has not turned on submission approvals, so no invoice waits on a second approver.",
-          facts: [countFact("pending_approvals", "Awaiting approval", 0)],
+          facts: [],
         };
       }
       if (pending.count === 0) {

@@ -327,7 +327,11 @@ firm-keyed RLS via migration 0024; `modules/invoice/approvals.ts`,
   own-party pin; links are the caller's own drafts), a platform-wide count
   on the operator daily brief, and the invoice status light's amber
   "waiting for a colleague's approval" reason with its matching
-  recommended action.
+  recommended action (failed paper gets the same warning alongside its
+  red fix-first reason). Known actor-agnostic edge: an invoice whose ONLY
+  live approval was recorded by the person about to submit reads as "not
+  waiting" everywhere, yet THAT person's submit still 409s — the guard's
+  approver ≠ submitter rule bites per-actor at submit time.
 
 ## Collection accounts
 

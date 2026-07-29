@@ -320,7 +320,7 @@ without a human owner.
   migration 0018) records one row per reminder the client actually SENT —
   the UI logs on COPY (`POST /invoices/{id}/chase-log`, `invoice.write` +
   the same tenant/SEC-03/still-outstanding gates), never on draft — and the
-  draft reads the count to escalate register with the stage (`chaser.v2`:
+  draft reads the count to escalate register with the stage (`chaser.v3`:
   warm → politely firm → confirm-a-payment-date; NEVER threats, in the
   system prompt and every template). The weekly digest counts outstanding
   invoices at 2+ reminders (`countFirmChasedTwice`).
@@ -645,18 +645,23 @@ All three share the posture: durable audit event as the dedup ledger (one
 event per degraded unit), an error log, and a banner/count fed from the SAME
 shared computation as the corresponding chart.
 
-- **Number grounding** (`modules/clerk/grounding.ts`, round 17) turns "the
-  model only PHRASES" into an enforced invariant: every phrasing surface —
-  digest, monthly statement, chaser, escalation reply, narrative,
-  VAT/quarterly/pack cover notes — runs its model output through
+- **Number grounding** (`modules/clerk/grounding.ts`, round 17) enforces
+  "no NOVEL numeral": every phrasing surface — digest, monthly statement,
+  chaser, escalation reply, failure explainer, reconciliation match assist,
+  narrative, VAT/quarterly/pack cover notes — runs its model output through
   `numberGroundingViolations` against the SAME user prompt it sent.
   Matching is format-tolerant but value-exact ("₦45,000.00" and "45000"
-  meet at "45000"; a typo'd grouping is a DIFFERENT number); a numeral the
-  facts never stated forfeits the phrasing and the deterministic template
-  answers instead — the safe direction, because the template always
-  answers. One pointer-only audit event per violating output (surface +
-  count, never the numbers themselves); `metrics.grounding` counts them
-  onto the health page's Number grounding card. Zero extra model calls.
+  meet at "45000"; a typo'd grouping or a flipped sign is a DIFFERENT
+  number; NFKC folds fullwidth digits, and any other digit script is a
+  violation outright); a numeral the facts never stated forfeits the
+  phrasing and the deterministic template answers instead — the safe
+  direction, because the template always answers. HONEST LIMITS: it cannot
+  catch a hallucination that REUSES a numeral the prompt already contains
+  against the wrong fact, nor spelled-out numbers or magnitude words
+  ("45,000 million") — it narrows the failure class, it does not close it.
+  One pointer-only audit event per violating output (surface + count,
+  never the numbers themselves); `metrics.grounding` counts them onto the
+  health page's Number grounding card. Zero extra model calls.
 
 - **Resistance-drop alert** (`modules/clerk/resistance-watch.ts`) runs the
   SAME monthly buckets as the health chart (`injectionResistanceMonths`,

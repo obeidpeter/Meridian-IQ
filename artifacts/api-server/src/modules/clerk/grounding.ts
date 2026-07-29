@@ -24,35 +24,53 @@ import { logger } from "../../lib/logger";
 export const GROUNDING_VIOLATION_ACTION = "clerk.grounding.violation";
 
 // A numeral token: digits with optional comma thousand-groups and an
-// optional decimal tail. Hyphens/colons split dates and times into their
-// parts, which canonicalize symmetrically on both sides.
-const TOKEN_RE = /\d[\d,]*(?:\.\d+)?/g;
+// optional decimal tail, plus an optional leading minus (ASCII or U+2212)
+// when it is not the interior hyphen of a date/range (the lookbehind — a
+// sign only counts when no digit precedes it, so "2026-06" still splits
+// into its parts while "-45,000" keeps its sign: a flipped sign is a
+// DIFFERENT number, not a formatting choice). Hyphens/colons otherwise
+// split dates and times into parts that canonicalize symmetrically.
+const TOKEN_RE = /(?<!\d)[-−]?\d[\d,]*(?:\.\d+)?/g;
+
+// Any decimal digit that is not ASCII after NFKC (which folds fullwidth and
+// superscript forms): our fact builders never emit these, so one appearing
+// in model output is treated as an ungrounded numeral outright.
+const NON_ASCII_DIGIT_RE = /(?![0-9])\p{Nd}/u;
 
 // Canonical value form: commas stripped; trailing decimal zeros (then a bare
-// trailing point) stripped; leading zeros stripped. "45,000.00" → "45000",
-// "07" → "7", "7.50" → "7.5", "0" → "0".
+// trailing point) stripped; leading zeros stripped; U+2212 folded to "-";
+// "-0" is "0". "45,000.00" → "45000", "07" → "7", "7.50" → "7.5".
 export function canonNumeral(raw: string): string {
-  let s = raw.replace(/,/g, "");
+  let s = raw.replace(/−/g, "-").replace(/,/g, "");
+  const negative = s.startsWith("-");
+  if (negative) s = s.slice(1);
   if (s.includes(".")) {
     s = s.replace(/0+$/, "").replace(/\.$/, "");
   }
   s = s.replace(/^0+(?=\d)/, "");
-  return s;
+  return negative && s !== "0" ? `-${s}` : s;
 }
 
 export function extractNumerals(text: string): string[] {
-  return (text.match(TOKEN_RE) ?? []).map(canonNumeral);
+  return (text.normalize("NFKC").match(TOKEN_RE) ?? []).map(canonNumeral);
 }
 
 // The canonical numerals present in `output` but absent from
 // `allowedSource` (the exact user prompt the surface sent). Pure, exported
-// for tests.
+// for tests. A non-ASCII digit script in the output is itself a violation —
+// the platform's fact builders never produce one.
 export function numberGroundingViolations(
   output: string,
   allowedSource: string,
 ): string[] {
   const allowed = new Set(extractNumerals(allowedSource));
-  return [...new Set(extractNumerals(output))].filter((n) => !allowed.has(n));
+  const violations = [...new Set(extractNumerals(output))].filter(
+    (n) => !allowed.has(n),
+  );
+  if (NON_ASCII_DIGIT_RE.test(output.normalize("NFKC"))) {
+    violations.push("non-ascii-digit");
+  }
+  return violations;
 }
 
 // The enforcement seam every phrasing surface calls after a successful

@@ -14,6 +14,7 @@ import {
   type Principal,
 } from "../auth/rbac";
 import { inferPhrasing, type ClerkGateway } from "./gateway";
+import { ensureGrounded } from "./grounding";
 
 // Contextual Clerk (expansion C): "what's wrong with this invoice?". The
 // answer is ALWAYS grounded in the error catalogue — the deterministic
@@ -135,7 +136,21 @@ export async function explainInvoiceFailure(
     validator: explainOutput,
     inputForHash: `${invoiceId}:${attempt.errorCode}`,
   });
-  if (!data) return catalogueFallback;
+  // Number grounding: a numeral the catalogue facts never stated → the
+  // catalogue text answers (grounding.ts). This surface is CLIENT-facing at
+  // the moment of a compliance failure — an invented deadline or penalty
+  // number here is the exact class the postcheck exists to stop.
+  if (
+    !data ||
+    !(await ensureGrounded(
+      "failure_explanation",
+      tenantFirmId(principal),
+      `${data.explanation}\n${data.nextSteps.join("\n")}`,
+      user,
+    ))
+  ) {
+    return catalogueFallback;
+  }
   return {
     errorCode: attempt.errorCode,
     explanation: data.explanation,

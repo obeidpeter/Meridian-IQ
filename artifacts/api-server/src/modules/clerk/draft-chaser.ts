@@ -35,7 +35,8 @@ import { isFeatureEnabled } from "../flags/flags";
 // v2 (round-14 idea #3): the chase ladder. The facts now carry which
 // reminder number this is; tone escalates with the stage but NEVER into
 // threats — the ceiling is a direct request for a payment date.
-const CHASER_PROMPT_VERSION = "chaser.v2";
+// v3: the stage-1 fact carries its digit for number grounding.
+const CHASER_PROMPT_VERSION = "chaser.v3";
 const CHASER_SYSTEM = [
   "You write a short, polite payment reminder from a Nigerian small business to one of its customers.",
   "Use ONLY the facts provided. Never add, change or estimate an amount, date, invoice number, bank detail or payment method that is not in them.",
@@ -128,7 +129,10 @@ export function chaserFacts(input: ChaserFactsInput): string {
   }
   lines.push(
     input.stage <= 1
-      ? `This is the first reminder for this invoice`
+      ? // "(reminder number 1)" keeps the digit in the fact text so a model
+        // writing "1st reminder" stays number-grounded (grounding.ts) —
+        // stage 1 was the most likely over-trigger otherwise.
+        `This is the first reminder for this invoice (reminder number 1)`
       : `This is reminder number ${input.stage} for this invoice${
           input.lastReminderAt
             ? `; the previous reminder was sent on ${input.lastReminderAt.slice(0, 10)}`

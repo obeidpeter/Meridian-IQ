@@ -34,6 +34,18 @@ export interface UnmatchedCollectionsReport {
 export async function listUnmatchedCollections(
   firmId: string,
 ): Promise<UnmatchedCollectionsReport> {
+  // The total is its own ungrouped count so it stays honest past the
+  // per-account LIMIT below and past any account row the join cannot
+  // resolve.
+  const [totalRow] = (
+    await getDb().execute<{ n: number }>(sql`
+      SELECT COUNT(*)::int AS n
+      FROM audit_events e
+      WHERE e.action = ${UNMATCHED_COLLECTION_ACTION}
+        AND e.firm_id = ${firmId}
+        AND e.created_at >= now() - make_interval(days => ${WINDOW_DAYS})
+    `)
+  ).rows;
   const rows = (
     await getDb().execute<{
       account_id: string;
@@ -96,7 +108,7 @@ export async function listUnmatchedCollections(
 
   return {
     windowDays: WINDOW_DAYS,
-    total: rows.reduce((sum, r) => sum + Number(r.count), 0),
+    total: Number(totalRow?.n ?? 0),
     accounts: reportRows,
     note:
       `Inbound payments on live collection accounts over the trailing ${WINDOW_DAYS} days that could not be bound to any invoice — ` +

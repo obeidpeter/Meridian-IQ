@@ -39,6 +39,7 @@ const actorA = randomUUID();
 const actorB = randomUUID();
 
 let draftOldId: string;
+let billId: string;
 
 async function seedInvoice(input: {
   supplierPartyId: string;
@@ -111,7 +112,7 @@ before(async () => {
     status: "submitted",
   });
   // The bill: the engaged client is the BUYER — draft forever, never waiting.
-  await seedInvoice({
+  billId = await seedInvoice({
     supplierPartyId: vendorParty,
     buyerPartyId: clientParty,
     invoiceNumber: `AP-BILL-${SALT}`,
@@ -119,12 +120,18 @@ before(async () => {
   });
 });
 
+const invoiceRef = (id: string, status = "draft", kind = "invoice") => ({
+  id,
+  firmId,
+  supplierPartyId: clientParty,
+  buyerPartyId: buyerParty,
+  status,
+  kind,
+});
+
 test("policy off answers null / false — never a zero", async () => {
   assert.equal(await pendingApprovals(firmId), null);
-  assert.equal(
-    await awaitingApproval({ id: draftOldId, firmId, status: "draft" }),
-    false,
-  );
+  assert.equal(await awaitingApproval(invoiceRef(draftOldId)), false);
 });
 
 test("policy on counts pre-submission receivables without a live approval", async () => {
@@ -138,8 +145,31 @@ test("policy on counts pre-submission receivables without a live approval", asyn
   assert.ok(mine);
   assert.equal(mine.count, 3, "the sibling's draft is outside the client pin");
   assert.equal(
-    await awaitingApproval({ id: draftOldId, firmId, status: "draft" }),
+    await awaitingApproval(invoiceRef(draftOldId)),
     true,
+  );
+});
+
+test("a bill and a credit note are never 'awaiting approval'", async () => {
+  // Round-17 review H1: the status light must not tell non-submittable
+  // paper it is blocked on an approval — that block does not exist and the
+  // recommended action would 409.
+  assert.equal(
+    await awaitingApproval({
+      id: billId,
+      firmId,
+      supplierPartyId: vendorParty,
+      buyerPartyId: clientParty,
+      status: "draft",
+      kind: "invoice",
+    }),
+    false,
+    "a captured bill never waits — it never submits",
+  );
+  assert.equal(
+    await awaitingApproval(invoiceRef(draftOldId, "draft", "credit_note")),
+    false,
+    "a credit note never waits",
   );
 });
 
@@ -155,14 +185,14 @@ test("a live approval clears the wait; revoking it restores the wait", async () 
     actorB,
   );
   assert.equal(
-    await awaitingApproval({ id: draftOldId, firmId, status: "draft" }),
+    await awaitingApproval(invoiceRef(draftOldId)),
     false,
   );
   const after = await pendingApprovals(firmId);
   assert.equal(after?.count, 3);
   await revokeLiveApprovals(draftOldId);
   assert.equal(
-    await awaitingApproval({ id: draftOldId, firmId, status: "draft" }),
+    await awaitingApproval(invoiceRef(draftOldId)),
     true,
     "only LIVE evidence unblocks",
   );
@@ -183,4 +213,15 @@ test("the status light explains the approval wait", () => {
     "the reason names the block",
   );
   assert.match(light.recommendedAction, /approve/i);
+  // Failed paper stays red but warns that resubmission ALSO needs the
+  // approval — the fix-first action must not walk into a surprise 409.
+  const failed = computeStatusLight({
+    invoice: { status: "failed", dueDate: null },
+    attempts: [],
+    confirmations: [],
+    stamp: null,
+    awaitingApproval: true,
+  });
+  assert.equal(failed.light, "red");
+  assert.ok(failed.reasons.some((r) => /approval is also required/.test(r)));
 });

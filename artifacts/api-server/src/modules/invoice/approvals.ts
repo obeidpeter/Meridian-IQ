@@ -15,6 +15,7 @@ import { isUuid } from "../../lib/uuid";
 // module-evaluation time.
 import { assertReceivableOriented } from "./service";
 import { RECEIVABLE_ORIENTATION } from "./receivables";
+import { invoiceOrientation } from "./payables";
 
 // Maker-checker submission approval (contract 0.45.0, firm_policies +
 // invoice_approvals — lib/db/src/schema/governance.ts, RLS via migration
@@ -234,33 +235,50 @@ export async function pendingApprovals(
   const clientCond = clientPartyId
     ? sql`AND i.supplier_party_id = ${clientPartyId}`
     : sql``;
-  const rows = (
-    await getDb().execute<{
-      id: string;
-      invoice_number: string;
-      status: string;
-      age_days: number;
-    }>(sql`
-      SELECT i.id, i.invoice_number, i.status,
-        GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (now() - i.created_at)) / 86400))::int AS age_days
+  // One spelling of the pending predicate, shared by the honest COUNT (no
+  // row cap — "5000 waiting" must never mean "5000 or more") and the small
+  // oldest-first sample.
+  const pendingCond = sql`
+    i.firm_id = ${firmId}
+    AND i.kind = 'invoice'
+    AND i.status IN ('draft', 'validated', 'failed')
+    AND ${RECEIVABLE_ORIENTATION}
+    ${clientCond}
+    AND NOT EXISTS (
+      SELECT 1 FROM invoice_approvals a
+      WHERE a.invoice_id = i.id AND a.revoked_at IS NULL
+    )`;
+  const [agg] = (
+    await getDb().execute<{ count: number; oldest_days: number | null }>(sql`
+      SELECT COUNT(*)::int AS count,
+        GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (now() - MIN(i.created_at))) / 86400))::int AS oldest_days
       FROM invoices i
-      WHERE i.firm_id = ${firmId}
-        AND i.kind = 'invoice'
-        AND i.status IN ('draft', 'validated', 'failed')
-        AND ${RECEIVABLE_ORIENTATION}
-        ${clientCond}
-        AND NOT EXISTS (
-          SELECT 1 FROM invoice_approvals a
-          WHERE a.invoice_id = i.id AND a.revoked_at IS NULL
-        )
-      ORDER BY i.created_at ASC, i.id
-      LIMIT 5000
+      WHERE ${pendingCond}
     `)
   ).rows;
+  const count = Number(agg?.count ?? 0);
+  const sample =
+    count > 0
+      ? (
+          await getDb().execute<{
+            id: string;
+            invoice_number: string;
+            status: string;
+            age_days: number;
+          }>(sql`
+            SELECT i.id, i.invoice_number, i.status,
+              GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (now() - i.created_at)) / 86400))::int AS age_days
+            FROM invoices i
+            WHERE ${pendingCond}
+            ORDER BY i.created_at ASC, i.id
+            LIMIT 5
+          `)
+        ).rows
+      : [];
   return {
-    count: rows.length,
-    oldestDays: rows.length > 0 ? Number(rows[0].age_days) : null,
-    invoices: rows.slice(0, 5).map((r) => ({
+    count,
+    oldestDays: count > 0 ? Number(agg?.oldest_days ?? 0) : null,
+    invoices: sample.map((r) => ({
       invoiceId: r.id,
       invoiceNumber: r.invoice_number,
       status: r.status,
@@ -271,14 +289,23 @@ export async function pendingApprovals(
 
 // Whether this invoice is blocked on the maker-checker policy right now —
 // the status light's "why can't I submit?" input. False when the policy is
-// off, the paper is past submission, or a live approval exists.
+// off, the paper is past submission, a live approval exists, or the row is
+// not submittable paper at all: a captured BILL and a credit note never
+// enter the stamping lifecycle, so telling them they "await approval" would
+// name a block that does not exist and direct the user into a guaranteed
+// 409 — the same kind + orientation gate pendingApprovals applies.
 export async function awaitingApproval(invoice: {
   id: string;
   firmId: string;
+  supplierPartyId: string;
+  buyerPartyId: string;
   status: string;
+  kind: string;
 }): Promise<boolean> {
+  if (invoice.kind !== "invoice") return false;
   if (!APPROVABLE_STATUSES.includes(invoice.status)) return false;
   if (!(await firmSubmitApprovalRequired(invoice.firmId))) return false;
+  if ((await invoiceOrientation(invoice)) !== "receivable") return false;
   const [live] = await getDb()
     .select({ id: invoiceApprovalsTable.id })
     .from(invoiceApprovalsTable)

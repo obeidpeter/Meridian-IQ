@@ -53,6 +53,13 @@ export function computeStatusLight(input: StatusLightInput): StatusLightResult {
         code
           ? `Submission was rejected with code ${code}`
           : "Submission failed on all rails",
+        // Failed paper is still approvable — resubmission will ALSO demand
+        // the colleague's approval, so say so now rather than after the fix.
+        ...(input.awaitingApproval
+          ? [
+              "After fixing, a colleague's approval is also required before resubmission",
+            ]
+          : []),
       ],
       recommendedAction:
         "Open the rejection, fix the flagged field and resubmit the invoice.",

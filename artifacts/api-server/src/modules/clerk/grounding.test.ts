@@ -84,6 +84,36 @@ test("an invented or mangled numeral is a violation", () => {
   );
 });
 
+test("sign flips and non-ASCII digits are violations; ranges and dates are not", () => {
+  const facts = "Net VAT position: NGN 45000.00 (period 2026-06)";
+  // A flipped sign is a DIFFERENT number — an owed position must not read
+  // as a refund (both ASCII hyphen and U+2212).
+  assert.deepEqual(
+    numberGroundingViolations("A refund of NGN -45,000 is due.", facts),
+    ["-45000"],
+  );
+  assert.deepEqual(
+    numberGroundingViolations("A refund of NGN −45,000 is due.", facts),
+    ["-45000"],
+  );
+  // Interior hyphens still split dates/ranges — no false negatives.
+  assert.deepEqual(
+    numberGroundingViolations("Due in 2026-06.", facts),
+    [],
+  );
+  // Fullwidth digits fold under NFKC and compare by value…
+  assert.deepEqual(
+    numberGroundingViolations("Total ４５０００ naira.", facts),
+    [],
+  );
+  // …while any other digit script is a violation outright — the fact
+  // builders never produce one.
+  assert.deepEqual(
+    numberGroundingViolations("Total ٤٥٠٠٠ naira.", facts),
+    ["non-ascii-digit"],
+  );
+});
+
 before(async () => {
   await saveAndEnableClerkFlag();
 });
