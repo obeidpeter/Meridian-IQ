@@ -301,9 +301,12 @@ test("bulk submit runs outside the request transaction with per-item caller-post
   // carries no GUCs, so an unwrapped engagement read would false-deny under
   // RLS for firm principals.
   const block = routeBlock(src("routes/invoices.ts"), "/invoices/bulk-submit");
+  // One spanning regex, not two includes: an unwrapped assertPartyAccess
+  // beside a vestigial runRequestContext(noop) must not pass.
   assert.ok(
-    block.includes("runRequestContext(") &&
-      block.includes("assertPartyAccess(req.principal, body.clientPartyId)"),
+    /runRequestContext\([\s\S]*?assertPartyAccess\(req\.principal, body\.clientPartyId\)/.test(
+      block,
+    ),
     "the route's assertPartyAccess must run inside a caller-posture context",
   );
   // The module re-binds the CALLER's posture per stage: firm principals get

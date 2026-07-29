@@ -1,7 +1,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   getDb,
   firmsTable,
@@ -203,11 +203,17 @@ test("a mixed batch submits the valid drafts and reports the invalid ones", asyn
     "an invalid draft is reported, not touched",
   );
 
-  // The batch itself is audited with its tallies.
+  // The batch itself is audited with its tallies. Entity-pinned to OUR
+  // salted party so a concurrent emitter can never make "latest" flaky.
   const [auditRow] = await db
     .select()
     .from(auditEventsTable)
-    .where(eq(auditEventsTable.action, "invoice.bulk_submit"))
+    .where(
+      and(
+        eq(auditEventsTable.action, "invoice.bulk_submit"),
+        eq(auditEventsTable.entityId, supplier),
+      ),
+    )
     .orderBy(sql`${auditEventsTable.seq} DESC`)
     .limit(1);
   assert.ok(auditRow);
@@ -294,7 +300,12 @@ test("a validated draft whose submission is refused stays validated", async () =
   const [auditRow] = await getDb()
     .select()
     .from(auditEventsTable)
-    .where(eq(auditEventsTable.action, "invoice.bulk_submit"))
+    .where(
+      and(
+        eq(auditEventsTable.action, "invoice.bulk_submit"),
+        eq(auditEventsTable.entityId, supplierApproval),
+      ),
+    )
     .orderBy(sql`${auditEventsTable.seq} DESC`)
     .limit(1);
   assert.equal(
@@ -334,7 +345,12 @@ test("a cross-tenant caller (firmId null) submits via the bypass posture", async
   const [auditRow] = await db
     .select()
     .from(auditEventsTable)
-    .where(eq(auditEventsTable.action, "invoice.bulk_submit"))
+    .where(
+      and(
+        eq(auditEventsTable.action, "invoice.bulk_submit"),
+        eq(auditEventsTable.entityId, supplierOp),
+      ),
+    )
     .orderBy(sql`${auditEventsTable.seq} DESC`)
     .limit(1);
   assert.equal(auditRow.firmId, null);

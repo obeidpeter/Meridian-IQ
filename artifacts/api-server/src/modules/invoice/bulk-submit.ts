@@ -35,7 +35,13 @@ import type { FieldError } from "./canonical";
 // submitted with their per-invoice lifecycle/audit events but NO
 // invoice.bulk_submit summary event. Per-row validate and submit each
 // commit separately, so a draft that validates and then fails submission
-// stays VALIDATED (today's observable behavior, preserved).
+// stays VALIDATED (today's observable behavior, preserved). Two more
+// deltas vs the buffered transaction: a client disconnect mid-batch no
+// longer aborts the run (the old close-handler rollback) — the batch
+// completes and commits with nobody reading the response, and a re-run
+// self-heals because submitted rows leave the pending scan; and the 30s
+// request-transaction cap no longer applies — a full 200-row batch is
+// EXPECTED to outrun it, which is half the reason to leave.
 
 const MAX_BATCH = 200;
 
@@ -65,7 +71,12 @@ export async function bulkSubmit(
   // The caller's own tenancy posture, re-bound per stage: firm principals
   // get their firm GUC (RLS exactly as their request transaction carried);
   // cross-tenant staff — firmId null, which is precisely how the route
-  // derives it via tenantFirmId — get bypass, matching theirs.
+  // derives it via tenantFirmId — get bypass, matching theirs. Passing
+  // null is an ACTIVE grant of platform-wide bypass (the old in-transaction
+  // module merely inherited ambient posture): only a caller that verified a
+  // cross-tenant principal may do it. Unreachable via HTTP today —
+  // invoice.submit is held by firm-bound roles only — so the arm exists
+  // for posture completeness and direct callers.
   const ctx = <T>(fn: () => Promise<T>): Promise<T> =>
     firmId
       ? runRequestContext({ bypass: false, firmId }, fn)
