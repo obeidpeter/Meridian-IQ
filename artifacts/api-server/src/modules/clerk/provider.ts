@@ -67,6 +67,12 @@ export function modelForPurpose(
   if (purpose === "eval_phrasing_chaser") {
     return tiers.get("draft_chaser") ?? base;
   }
+  if (purpose === "eval_phrasing_statement") {
+    return tiers.get("client_statement") ?? base;
+  }
+  if (purpose === "eval_phrasing_vat_note") {
+    return tiers.get("draft_vat_note") ?? base;
+  }
   return base;
 }
 

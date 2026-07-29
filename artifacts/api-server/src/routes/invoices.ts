@@ -83,6 +83,8 @@ import {
   GetChaseEffectivenessResponse,
   GetPenaltyExposureQueryParams,
   GetPenaltyExposureResponse,
+  GetMonthEndCloseQueryParams,
+  GetMonthEndCloseResponse,
   RecordChaseReminderParams,
   RecordChaseReminderResponse,
   ApproveInvoiceParams,
@@ -124,6 +126,7 @@ import { listUnmatchedCredits } from "../modules/invoice/unmatched-credits";
 import { computeProjectionAccuracy } from "../modules/invoice/projection-accuracy";
 import { computeChaseEffectiveness } from "../modules/invoice/chase-effectiveness";
 import { computePenaltyExposure } from "../modules/invoice/penalty-exposure";
+import { computeMonthEndClose } from "../modules/invoice/month-end-close";
 import { computeRejectionRisk } from "../modules/invoice/rejection-risk";
 import { recordChase } from "../modules/invoice/chase-log";
 import { renderInvoicePdf, sendPdfAttachment } from "../modules/invoice/pdf";
@@ -645,6 +648,21 @@ router.get("/penalty-exposure", async (req, res): Promise<void> => {
   );
   const report = await computePenaltyExposure(firmId, clientPartyId);
   res.json(GetPenaltyExposureResponse.parse(report));
+});
+
+// Month-end close (round-19 idea #2): the platform's deterministic
+// advisories composed into one checklist — each line computed by the SAME
+// function that powers its own card, so the two can never disagree.
+// Nothing stored, nothing blocked. Same SEC-03 resolution as above.
+router.get("/month-end-close", async (req, res): Promise<void> => {
+  assertCan(req.principal, "invoice.read");
+  const query = parseOrThrow(GetMonthEndCloseQueryParams, req.query);
+  const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const close = await computeMonthEndClose(firmId, clientPartyId);
+  res.json(GetMonthEndCloseResponse.parse(close));
 });
 
 // Chase ladder (round-14 idea #3): record that a payment reminder was SENT —

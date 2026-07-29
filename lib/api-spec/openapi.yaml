@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.49.0
+  version: 0.50.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -1297,6 +1297,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PenaltyExposure"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /month-end-close:
+    get:
+      operationId: getMonthEndClose
+      tags: [invoices]
+      summary: Month-end close checklist — the platform's deterministic advisories composed into one list, each line computed by the same check that powers its own card (nothing stored)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The composed checklist with per-item status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthEndClose"
         "400":
           $ref: "#/components/responses/BadRequest"
   /invoices/{invoiceId}/chase-log:
@@ -2860,6 +2882,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FirmReceivables"
+  /console/compliance-scorecard:
+    get:
+      operationId: getComplianceScorecard
+      tags: [console]
+      summary: Cross-client compliance posture league table over the trailing window — attention first, sample floors on every rate, a prioritization aid, not a verdict
+      responses:
+        "200":
+          description: Per-client posture rows, worst first (pure SQL, computed on demand)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceScorecard"
   /console/operator-brief:
     get:
       operationId: getOperatorBrief
@@ -11315,7 +11349,7 @@ components:
           type: string
         surface:
           type: string
-          enum: [digest, chaser]
+          enum: [digest, chaser, statement, vat_note]
         label:
           type: string
         riskLabel:
@@ -11417,7 +11451,7 @@ components:
           maxLength: 20000
         surface:
           type: string
-          enum: [digest, chaser]
+          enum: [digest, chaser, statement, vat_note]
     PhrasingEvalOutcome:
       type: object
       required: [canary, run]
@@ -11429,7 +11463,7 @@ components:
           properties:
             surface:
               type: string
-              enum: [digest, chaser]
+              enum: [digest, chaser, statement, vat_note]
             incumbent:
               allOf:
                 - $ref: "#/components/schemas/PhrasingEvalReport"
@@ -12750,6 +12784,84 @@ components:
           type: string
         overdueDays:
           type: integer
+    # Month-end close (round 19): the deterministic advisories composed into
+    # one checklist — each line computed by the same check that powers its
+    # own card.
+    MonthEndClose:
+      type: object
+      required: [asOf, items, attentionCount, note]
+      properties:
+        asOf:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            required: [key, label, status, count, detail]
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              status:
+                type: string
+                enum: [clear, attention]
+              count:
+                type: integer
+              detail:
+                type: string
+        attentionCount:
+          type: integer
+        note:
+          type: string
+    # Client compliance scorecard (round 19): cross-client posture league
+    # table — pure SQL, sample floors, posture not blame.
+    ComplianceScorecard:
+      type: object
+      required: [asOf, windowDays, rows, note]
+      properties:
+        asOf:
+          type: string
+        windowDays:
+          type: integer
+        rows:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                clientPartyId,
+                clientName,
+                issuedCount,
+                acceptedCount,
+                withinWindowRate,
+                failureRate,
+                medianDaysToStamp,
+                overdueNow,
+                unverifiedBills,
+              ]
+            properties:
+              clientPartyId:
+                type: string
+                format: uuid
+              clientName:
+                type: string
+              issuedCount:
+                type: integer
+              acceptedCount:
+                type: integer
+              withinWindowRate:
+                type: ["number", "null"]
+              failureRate:
+                type: ["number", "null"]
+              medianDaysToStamp:
+                type: ["number", "null"]
+              overdueNow:
+                type: integer
+              unverifiedBills:
+                type: integer
+        note:
+          type: string
     # Double-payment guard (round 16): advisory only — evidence the platform
     # already holds, a human decides.
     DoublePaymentCheck:

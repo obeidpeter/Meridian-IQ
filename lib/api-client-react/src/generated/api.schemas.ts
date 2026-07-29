@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.49.0
+ * OpenAPI spec version: 0.50.0
  */
 export interface HealthStatus {
   status: string;
@@ -4217,6 +4217,8 @@ export type PhrasingEvalFixtureResultSurface = typeof PhrasingEvalFixtureResultS
 export const PhrasingEvalFixtureResultSurface = {
   digest: 'digest',
   chaser: 'chaser',
+  statement: 'statement',
+  vat_note: 'vat_note',
 } as const;
 
 export type PhrasingEvalFixtureResultRiskLabel = typeof PhrasingEvalFixtureResultRiskLabel[keyof typeof PhrasingEvalFixtureResultRiskLabel];
@@ -4281,6 +4283,8 @@ export type RunPhrasingEvalInputSurface = typeof RunPhrasingEvalInputSurface[key
 export const RunPhrasingEvalInputSurface = {
   digest: 'digest',
   chaser: 'chaser',
+  statement: 'statement',
+  vat_note: 'vat_note',
 } as const;
 
 export interface RunPhrasingEvalInput {
@@ -4295,6 +4299,8 @@ export type PhrasingEvalOutcomeCanarySurface = typeof PhrasingEvalOutcomeCanaryS
 export const PhrasingEvalOutcomeCanarySurface = {
   digest: 'digest',
   chaser: 'chaser',
+  statement: 'statement',
+  vat_note: 'vat_note',
 } as const;
 
 export type PhrasingEvalOutcomeCanaryIncumbent = PhrasingEvalReport & {
@@ -5172,6 +5178,51 @@ export interface MissingRecurringBill {
   overdueDays: number;
 }
 
+export type MonthEndCloseItemsItemStatus = typeof MonthEndCloseItemsItemStatus[keyof typeof MonthEndCloseItemsItemStatus];
+
+
+export const MonthEndCloseItemsItemStatus = {
+  clear: 'clear',
+  attention: 'attention',
+} as const;
+
+export type MonthEndCloseItemsItem = {
+  key: string;
+  label: string;
+  status: MonthEndCloseItemsItemStatus;
+  count: number;
+  detail: string;
+};
+
+export interface MonthEndClose {
+  asOf: string;
+  items: MonthEndCloseItemsItem[];
+  attentionCount: number;
+  note: string;
+}
+
+export type ComplianceScorecardRowsItem = {
+  clientPartyId: string;
+  clientName: string;
+  issuedCount: number;
+  acceptedCount: number;
+  /** @nullable */
+  withinWindowRate: number | null;
+  /** @nullable */
+  failureRate: number | null;
+  /** @nullable */
+  medianDaysToStamp: number | null;
+  overdueNow: number;
+  unverifiedBills: number;
+};
+
+export interface ComplianceScorecard {
+  asOf: string;
+  windowDays: number;
+  rows: ComplianceScorecardRowsItem[];
+  note: string;
+}
+
 export type DoublePaymentCheckMultiPaidItem = {
   invoiceId: string;
   invoiceNumber: string;
@@ -5575,6 +5626,13 @@ clientPartyId?: string;
 };
 
 export type GetPenaltyExposureParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
+export type GetMonthEndCloseParams = {
 /**
  * Required for firm principals; a client_user is pinned to its own party.
  */

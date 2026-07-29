@@ -643,6 +643,28 @@ call the model.
   count the digest's own facts query already computed
   (`bandExposure(count).small`, null when clean), never a second query
   that could straddle a Lagos midnight and contradict the count.
+- **Month-end close assistant** (`modules/invoice/month-end-close.ts`,
+  `GET /month-end-close`, nothing stored) — the deterministic advisories
+  COMPOSED: overdue submissions (with the s.104 floor), unbilled income,
+  unmatched credits, missing vendor bills, double payments, unmatched
+  collections and (policy-on only — the null-when-off rule) pending
+  approvals, one checklist with per-item clear/attention status. Contains
+  ZERO predicates of its own — every line is the existing detector's
+  answer (the net-position "nothing recomputed" discipline), so a line
+  can never disagree with the card it summarizes. SME dashboard card with
+  an all-clear state; same SEC-03 scope resolution as the advisories it
+  composes.
+- **Client compliance scorecard** (`modules/invoice/compliance-scorecard.ts`,
+  `GET /console/compliance-scorecard`, `console.portfolio.read` — the
+  firm-rollup gate, so client_users are refused) — the cross-client
+  posture league table over engaged clients, trailing 90 days: issued
+  volume, share of accepted paper whose FIRST acceptance landed inside
+  the statutory window, failure share over attempted invoices, median
+  issue-to-stamp days, current overdue count (not windowed) and captured
+  bills without a stamp verification. Attention first (overdue paper,
+  then the weakest window rate); every rate honours the 3-sample floor
+  (null, never a scary 0%); the note pins posture-not-blame. Console
+  portfolio card, pure SQL end to end.
 - **Missing recurring bills** (`modules/invoice/missing-bills.ts`,
   `GET /bills/missing-recurring`, nothing stored) — the payables mirror of
   unbilled-income: the SAME `detectMonthlyPattern` miner pointed at the
@@ -739,15 +761,18 @@ shared computation as the corresponding chart.
   `clerk.use`, `clerk_phrasing_eval_runs` bypass-only RLS migration 0027,
   console health card): the intent lane's pattern pointed at the PHRASING
   surfaces, which shipped every prompt change blind until round 18. Fixed
-  synthetic fact packs (busy/quiet/governance/money digests; first/third
-  chasers; two injection letters whose hostile text rides the one fact
-  slot an outsider controls, the buyer name) replay through the
-  BYTE-IDENTICAL production prompt builders — `DIGEST_PHRASING` /
-  `CHASER_PHRASING`, each surface's system prompt, version, schema,
+  synthetic fact packs replay through the BYTE-IDENTICAL production prompt
+  builders — `DIGEST_PHRASING` / `CHASER_PHRASING` / `STATEMENT_PHRASING`
+  / `VAT_NOTE_PHRASING` (round 19 grew the corpus to the client statement
+  and VAT cover note), each surface's system prompt, version, schema,
   validator and user-prompt assembly exported as one descriptor — via the
-  gateway, one purpose PER SURFACE (`eval_phrasing_digest` /
-  `eval_phrasing_chaser`) so each half of the corpus rides the model tier
-  its production surface actually uses. Scoring is
+  gateway, one purpose PER SURFACE (`eval_phrasing_digest` / `_chaser` /
+  `_statement` / `_vat_note`) so each slice of the corpus rides the model
+  tier its production surface actually uses. Every surface with an
+  outsider-influenced fact slot carries an injection fixture riding it
+  (the chaser's buyer name, the VAT note's client legal names); the
+  statement's facts are all platform-computed, so its fixtures are
+  clean-only. Scoring is
   DETERMINISTIC: number grounding via the production check itself
   (`numberGroundingViolations`, so the eval measures how often production
   would have fallen back to the template), required canonical numerals and

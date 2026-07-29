@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.49.0
+ * OpenAPI spec version: 0.50.0
  */
 import {
   useMutation,
@@ -95,6 +95,7 @@ import type {
   ComplianceCalendar,
   ComplianceDeadline,
   CompliancePackNotifyInput,
+  ComplianceScorecard,
   ConfirmStaffEmailInput,
   Confirmation,
   ConfirmationInput,
@@ -186,6 +187,7 @@ import type {
   GetDoublePaymentCheckParams,
   GetFirmVatPositionsParams,
   GetMergeImpactParams,
+  GetMonthEndCloseParams,
   GetNetCashPositionParams,
   GetPayablesSummaryParams,
   GetPenaltyExposureParams,
@@ -250,6 +252,7 @@ import type {
   MintIntentFixtureInput,
   MissingRecurringBill,
   ModelCanaryReport,
+  MonthEndClose,
   NetCashPosition,
   NotFoundResponse,
   NotificationFeed,
@@ -5306,6 +5309,90 @@ export function useGetPenaltyExposure<TData = Awaited<ReturnType<typeof getPenal
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetPenaltyExposureQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMonthEndCloseUrl = (params?: GetMonthEndCloseParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/month-end-close?${stringifiedParams}` : `/api/month-end-close`
+}
+
+/**
+ * @summary Month-end close checklist — the platform's deterministic advisories composed into one list, each line computed by the same check that powers its own card (nothing stored)
+ */
+export const getMonthEndClose = async (params?: GetMonthEndCloseParams, options?: RequestInit): Promise<MonthEndClose> => {
+
+  return customFetch<MonthEndClose>(getGetMonthEndCloseUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMonthEndCloseQueryKey = (params?: GetMonthEndCloseParams,) => {
+    return [
+    `/api/month-end-close`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMonthEndCloseQueryOptions = <TData = Awaited<ReturnType<typeof getMonthEndClose>>, TError = ErrorType<BadRequestResponse>>(params?: GetMonthEndCloseParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMonthEndClose>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMonthEndCloseQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMonthEndClose>>> = ({ signal }) => getMonthEndClose(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMonthEndClose>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMonthEndCloseQueryResult = NonNullable<Awaited<ReturnType<typeof getMonthEndClose>>>
+export type GetMonthEndCloseQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Month-end close checklist — the platform's deterministic advisories composed into one list, each line computed by the same check that powers its own card (nothing stored)
+ */
+
+export function useGetMonthEndClose<TData = Awaited<ReturnType<typeof getMonthEndClose>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetMonthEndCloseParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMonthEndClose>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMonthEndCloseQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -11812,6 +11899,83 @@ export function useGetFirmReceivables<TData = Awaited<ReturnType<typeof getFirmR
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetFirmReceivablesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetComplianceScorecardUrl = () => {
+
+
+
+
+  return `/api/console/compliance-scorecard`
+}
+
+/**
+ * @summary Cross-client compliance posture league table over the trailing window — attention first, sample floors on every rate, a prioritization aid, not a verdict
+ */
+export const getComplianceScorecard = async ( options?: RequestInit): Promise<ComplianceScorecard> => {
+
+  return customFetch<ComplianceScorecard>(getGetComplianceScorecardUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetComplianceScorecardQueryKey = () => {
+    return [
+    `/api/console/compliance-scorecard`
+    ] as const;
+    }
+
+
+export const getGetComplianceScorecardQueryOptions = <TData = Awaited<ReturnType<typeof getComplianceScorecard>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceScorecard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetComplianceScorecardQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComplianceScorecard>>> = ({ signal }) => getComplianceScorecard({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getComplianceScorecard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetComplianceScorecardQueryResult = NonNullable<Awaited<ReturnType<typeof getComplianceScorecard>>>
+export type GetComplianceScorecardQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Cross-client compliance posture league table over the trailing window — attention first, sample floors on every rate, a prioritization aid, not a verdict
+ */
+
+export function useGetComplianceScorecard<TData = Awaited<ReturnType<typeof getComplianceScorecard>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceScorecard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetComplianceScorecardQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

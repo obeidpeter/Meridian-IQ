@@ -216,6 +216,45 @@ export function buildTemplateStatement(
   return { headline, bullets };
 }
 
+// The user prompt the model phrases — extracted so the phrasing eval
+// (modules/clerk/phrasing-eval.ts) replays the BYTE-IDENTICAL assembly
+// production sends (the buildDigestUser precedent). Pure.
+export function buildStatementUser(
+  facts: ClientStatementFacts,
+  monthStart: string,
+): string {
+  return [
+    `Monthly compliance facts for one client business, covering ${monthLabel(monthStart)}:`,
+    `- Invoices issued in the month: ${facts.issuedCount} (total NGN ${facts.issuedTotal})`,
+    `- Invoices accepted by the e-invoicing rails during the month: ${facts.acceptedCount} (total NGN ${facts.acceptedTotal}, VAT NGN ${facts.acceptedVat})`,
+    `- Invoices with a failed submission during the month: ${facts.failedCount}`,
+    `- Invoices issued in the month and still unsubmitted today: ${facts.stillUnsubmittedCount}`,
+  ].join("\n");
+}
+
+// The statement surface's phrasing seam — the eval runs candidate prompts
+// and fixtures through EXACTLY what production uses (the DIGEST_PHRASING
+// shape). This surface's facts carry no outsider-controlled text (all
+// counts and platform-computed amounts), so its eval fixtures are
+// clean-only; grounding and zero-fact suppression are what can regress.
+export interface StatementPhrasingInput {
+  facts: ClientStatementFacts;
+  monthStart: string;
+}
+
+export const STATEMENT_PHRASING = {
+  surface: "statement" as const,
+  promptVersion: STATEMENT_PROMPT_VERSION,
+  system: STATEMENT_SYSTEM,
+  schemaName: "client_statement",
+  jsonSchema: statementJsonSchema,
+  validator: statementOutput,
+  buildUser: (input: StatementPhrasingInput): string =>
+    buildStatementUser(input.facts, input.monthStart),
+  joinOutput: (data: z.infer<typeof statementOutput>): string =>
+    [data.headline, ...data.bullets].join("\n"),
+};
+
 // Generate (or return the existing) statement for one (firm, client, month).
 // Charged to the firm's Clerk budget when the model phrases it; NEVER blocked
 // by budget or kill switch — the template path always succeeds. Quiet months
@@ -262,13 +301,7 @@ export async function generateClientStatement(
     }
   }
   if (clerkAvailable && gateway) {
-    const user = [
-      `Monthly compliance facts for one client business, covering ${monthLabel(monthStart)}:`,
-      `- Invoices issued in the month: ${facts.issuedCount} (total NGN ${facts.issuedTotal})`,
-      `- Invoices accepted by the e-invoicing rails during the month: ${facts.acceptedCount} (total NGN ${facts.acceptedTotal}, VAT NGN ${facts.acceptedVat})`,
-      `- Invoices with a failed submission during the month: ${facts.failedCount}`,
-      `- Invoices issued in the month and still unsubmitted today: ${facts.stillUnsubmittedCount}`,
-    ].join("\n");
+    const user = buildStatementUser(facts, monthStart);
     const result = await gateway.infer<z.infer<typeof statementOutput>>({
       purpose: "client_statement",
       firmId,

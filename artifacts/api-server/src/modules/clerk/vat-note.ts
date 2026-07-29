@@ -73,6 +73,22 @@ export function templateVatNote(pack: VatPack): string {
   );
 }
 
+// The VAT-note surface's phrasing seam — the eval runs candidate prompts
+// and fixtures through EXACTLY what production uses (the DIGEST_PHRASING
+// shape). The client names in the "largest clients" line are the one fact
+// slot an outsider influences (a client's registered legal name), so the
+// eval's injection fixture rides there.
+export const VAT_NOTE_PHRASING = {
+  surface: "vat_note" as const,
+  promptVersion: NOTE_PROMPT_VERSION,
+  system: NOTE_SYSTEM,
+  schemaName: "vat_cover_note",
+  jsonSchema: noteJsonSchema,
+  validator: noteOutput,
+  buildUser: (pack: VatPack): string => vatNoteFacts(pack),
+  joinOutput: (data: z.infer<typeof noteOutput>): string => data.note,
+};
+
 export async function draftVatCoverNote(
   firmId: string,
   monthStart: string,

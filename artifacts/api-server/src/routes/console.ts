@@ -55,6 +55,7 @@ import {
   ResolveOperatorCaseBody,
   ResolveOperatorCaseResponse,
   GetFirmReceivablesResponse,
+  GetComplianceScorecardResponse,
   GetClerkAdoptionReportResponse,
   GetOperatorBriefResponse,
   DraftEscalationReplyParams,
@@ -86,6 +87,7 @@ import {
 } from "../modules/invoice/billing-statement";
 import { gatewayOrNull } from "../modules/clerk/provider";
 import { getFirmReceivables } from "../modules/invoice/receivables";
+import { computeComplianceScorecard } from "../modules/invoice/compliance-scorecard";
 import {
   SUBMISSION_WINDOW_DAYS,
   daysUntil,
@@ -238,6 +240,17 @@ router.get("/console/receivables", async (req, res): Promise<void> => {
   const firmId = firmScope(req.principal);
   const rollup = await getFirmReceivables(firmId);
   res.json(GetFirmReceivablesResponse.parse(rollup));
+});
+
+// Client compliance scorecard (round-19 idea #3): the cross-client posture
+// league table — pure SQL over engaged clients, attention first, sample
+// floors on every rate, posture-not-blame note. Same firm-rollup gate as
+// the receivables above (client_users have no console.portfolio.read).
+router.get("/console/compliance-scorecard", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const firmId = firmScope(req.principal);
+  const scorecard = await computeComplianceScorecard(firmId);
+  res.json(GetComplianceScorecardResponse.parse(scorecard));
 });
 
 // Operator daily brief (round-12 idea #1): the desk's "what needs me first"
