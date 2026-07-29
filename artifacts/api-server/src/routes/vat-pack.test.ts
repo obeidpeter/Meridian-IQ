@@ -2,7 +2,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { getDb, firmsTable } from "@workspace/db";
-import invoicesRouter from "./invoices.ts";
+import invoicesRouter from "./invoices/index.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import {
   appFor,

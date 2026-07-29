@@ -67,7 +67,7 @@ router.get("/compliance-pack", async (req, res): Promise<void> => {
   // budget or invalid output all answer with the deterministic template
   // (never an error), so there is no route budget pre-check: the module
   // treats the gateway backstop's typed budget-exhausted failure as one more
-  // reason to answer with the template (the routes/invoices.ts vat-pack
+  // reason to answer with the template (the routes/invoices/packs.ts vat-pack
   // cover-note posture).
   const gateway = await gatewayOrNull();
   const note = await draftPackCoverNote(

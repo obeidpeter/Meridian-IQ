@@ -27,7 +27,7 @@ import { DomainError } from "../modules/errors";
 const router: IRouter = Router();
 
 // The live-month discipline — the position's mirror of resolveClosedPeriod
-// (routes/invoices.ts): the requested month, or the CURRENT Lagos month when
+// (routes/invoices/packs.ts): the requested month, or the CURRENT Lagos month when
 // omitted, must be on the position's own 12-month option list. Unlike the
 // closed-month VAT pack, that list INCLUDES the current month — a position is
 // a live month-to-date number.

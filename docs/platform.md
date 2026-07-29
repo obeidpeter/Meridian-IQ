@@ -17,7 +17,7 @@ The AI-assistant side lives in `docs/clerk-ai.md`.
   `client_user`s, so a client route must ALSO call `assertClientPartyScope` /
   filter by `clientPartyScope` — RLS is not a backstop for sibling-client
   isolation. When adding a client-facing read, copy the pattern in
-  `routes/invoices.ts` / `routes/engagements.ts`.
+  `routes/invoices/` (shared.ts `loadForTenant`) / `routes/engagements.ts`.
 - **The 4xx rollback rule.** `tenantContext` buffers the response and
   **commits on `status < 400`, rolls back on `status >= 400`** — nothing
   reaches the client until the transaction settles. Consequence: anything

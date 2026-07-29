@@ -15,7 +15,7 @@ import {
   usersTable,
   type Invoice,
 } from "@workspace/db";
-import invoicesRouter from "../../routes/invoices.ts";
+import invoicesRouter from "../../routes/invoices/index.ts";
 import firmPoliciesRouter from "../../routes/firm-policies.ts";
 import {
   createDraft,
