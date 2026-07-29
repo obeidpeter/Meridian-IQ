@@ -161,6 +161,23 @@ test("extractInvoiceNumbers is conservative and date-safe", () => {
   assert.deepEqual(extractInvoiceNumbers("where is invoice INV2041?"), [
     "INV2041",
   ]);
+  // The verification-pass residuals (N1-N3):
+  // an introduced number that is NOT the exact digit tail of another
+  // candidate is a distinct invoice — both surface, ask.ts refuses
+  // honestly instead of silently answering about the wrong one…
+  assert.equal(
+    extractInvoiceNumbers("what about invoice 123? It's blocking INV-1234")
+      .length,
+    2,
+  );
+  // …a word merely ENDING in an excluding term never eats a number…
+  assert.deepEqual(
+    extractInvoiceNumbers("the invoice from Eko Hotel INV-2041"),
+    ["INV-2041"],
+  );
+  // …and period compounds are periods, not numbers.
+  assert.deepEqual(extractInvoiceNumbers("the FY2025 accounts"), []);
+  assert.deepEqual(extractInvoiceNumbers("billed in July2026"), []);
 });
 
 test("the lookup answers status, next step and a link", async () => {

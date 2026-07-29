@@ -116,7 +116,13 @@ const DATE_SHAPES = [
 ];
 // A token introduced by one of these words is that thing, not an invoice
 // number — the rail error code and TIN false positives the review probed.
-const EXCLUDING_CONTEXT_RE = /(?:code|error|tin|phone|tel|call)[\s:#-]*$/i;
+// The leading \b keeps word TAILS out ("Eko Hotel INV-2041" must not lose
+// its number to the "tel" of "Hotel").
+const EXCLUDING_CONTEXT_RE = /\b(?:code|error|tin|phone|tel|call)[\s:#-]*$/i;
+// A compound whose letters are a period word is a period, not a number
+// (FY2025, Q32026, July2026).
+const PERIOD_COMPOUND_RE =
+  /^(?:fy|q\d?|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun[e]?|jul[y]?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\d+$/i;
 
 export function extractInvoiceNumbers(question: string): string[] {
   const seen = new Map<string, string>(); // lower -> first-seen casing
@@ -132,17 +138,25 @@ export function extractInvoiceNumbers(question: string): string[] {
     consider(m[0], m.index ?? 0);
   }
   for (const m of question.matchAll(COMPOUND_TOKEN_RE)) {
+    if (PERIOD_COMPOUND_RE.test(m[0])) continue;
     // A compound inside a separated token (the "TIN" of "IS-TIN-01") was
     // already considered as its whole token.
     if ([...seen.keys()].some((k) => k.includes(m[0].toLowerCase()))) continue;
     consider(m[0], m.index ?? 0);
   }
+  // The digit TAILS of already-found candidates: an introduced bare number
+  // equal to one ("invoice INV2041" → "2041") is not a second candidate —
+  // but exact-tail only, never substring (the review-confirmed N1: "invoice
+  // 123" beside "INV-1234" is a DIFFERENT invoice and must surface both,
+  // which then refuses honestly rather than silently answering about one).
+  const seenTails = new Set(
+    [...seen.keys()]
+      .map((k) => /(\d+)$/.exec(k)?.[1])
+      .filter((t): t is string => t !== undefined),
+  );
   for (const m of question.matchAll(INTRODUCED_NUMBER_RE)) {
-    // A bare number that is the digit tail of a candidate already found
-    // ("invoice INV2041" → the intro pattern's "2041") is not a second
-    // candidate.
     const key = m[1].toLowerCase();
-    if ([...seen.keys()].some((k) => k.includes(key))) continue;
+    if (seenTails.has(key)) continue;
     if (!seen.has(key)) seen.set(key, m[1]);
   }
   return [...seen.values()];
