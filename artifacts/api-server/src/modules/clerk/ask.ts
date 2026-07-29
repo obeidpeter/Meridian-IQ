@@ -33,7 +33,7 @@ import {
 
 // Ask Clerk (Task #40, C1 + idea #6). The model's ONLY job is picking which
 // key a question is about — from a closed enum of active claim keys plus, for
-// firm-scoped askers, the data-intent catalogue (data-intents.ts). The answer
+// firm-scoped askers, the data-intent catalogue (data-intents/). The answer
 // itself is assembled deterministically: claim answers insert protected facts
 // verbatim from the claim row; data answers run a fixed, fully parameterized
 // query under the asker's own firm scope. Anything outside the two catalogues
