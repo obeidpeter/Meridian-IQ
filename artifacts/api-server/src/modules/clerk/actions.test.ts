@@ -10,18 +10,22 @@ import {
   firmsTable,
   invoicesTable,
   partiesTable,
+  submissionAttemptsTable,
   usersTable,
 } from "@workspace/db";
 import { recordConsent } from "../consent/consent.ts";
 import { createDraft } from "../invoice/service.ts";
 import { setFirmOverride } from "../flags/flags.ts";
+import type { Principal } from "../auth/rbac.ts";
 import {
   ACTIONS_FLAG_KEY,
   MAX_ACTION_TARGETS,
+  MAX_CHASER_TARGETS,
   executeAction,
   listActionDecisions,
   listActionProposals,
 } from "./actions.ts";
+import { CLIENT_SAFE_DATA_INTENTS, DATA_INTENTS } from "./data-intents.ts";
 import { executeActionBodyInvoiceIdsMax } from "@workspace/api-zod";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
@@ -54,6 +58,18 @@ const LINE = {
   unitPrice: "1000",
   vatRate: "0.075",
 };
+
+// executeAction's principal is the DRAFTING path's scope handle
+// (draftPaymentChaser asserts tenant + party scope with it); the submit
+// kinds derive nothing from it beyond what firmId/clientPartyId carry.
+const firmPrincipal: Principal = {
+  userId,
+  role: "firm_admin",
+  firmId,
+  clientPartyId: null,
+  buyerPartyId: null,
+};
+const foreignPrincipal: Principal = { ...firmPrincipal, firmId: foreignFirmId };
 
 function daysAgo(n: number): string {
   return new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
@@ -165,7 +181,14 @@ test("dark flag: proposals answer empty and execution refuses — both ends", as
   assert.deepEqual(proposals.actions, []);
   assert.ok(proposals.note.length > 0, "the note still explains the surface");
   await assert.rejects(
-    executeAction(firmId, supplier, userId, "submit_overdue", [overdueA]),
+    executeAction(
+      firmId,
+      supplier,
+      userId,
+      "submit_overdue",
+      [overdueA],
+      firmPrincipal,
+    ),
     isDomainError("ACTIONS_DISABLED", 503),
   );
 });
@@ -200,6 +223,7 @@ test("execution re-checks every target and records an honest decision", async ()
     userId,
     "submit_overdue",
     [overdueA, overdueBad, fresh, missing],
+    firmPrincipal,
   );
 
   const outcomes = new Map(decision.targets.map((t) => [t.invoiceId, t]));
@@ -255,9 +279,14 @@ test("execution re-checks every target and records an honest decision", async ()
   assert.equal(audit.entityId, decision.id);
 
   // Approving the same batch again re-processes NOTHING.
-  const again = await executeAction(firmId, supplier, userId, "submit_overdue", [
-    overdueA,
-  ]);
+  const again = await executeAction(
+    firmId,
+    supplier,
+    userId,
+    "submit_overdue",
+    [overdueA],
+    firmPrincipal,
+  );
   assert.equal(again.decision.executedCount, 0);
   assert.equal(again.decision.skippedCount, 1);
   assert.match(
@@ -279,6 +308,7 @@ test("a repeated id is processed once and counted once", async () => {
     userId,
     "submit_overdue",
     [dup, dup],
+    firmPrincipal,
   );
   assert.equal(decision.requestedCount, 1);
   assert.equal(decision.targets.length, 1);
@@ -288,11 +318,18 @@ test("a repeated id is processed once and counted once", async () => {
 
 test("the catalogue is closed and the batch is bounded", async () => {
   await assert.rejects(
-    executeAction(firmId, supplier, userId, "retry_failed", [randomUUID()]),
+    executeAction(
+      firmId,
+      supplier,
+      userId,
+      "send_everything",
+      [randomUUID()],
+      firmPrincipal,
+    ),
     isDomainError("UNKNOWN_ACTION", 400),
   );
   await assert.rejects(
-    executeAction(firmId, supplier, userId, "submit_overdue", []),
+    executeAction(firmId, supplier, userId, "submit_overdue", [], firmPrincipal),
     isDomainError("BAD_TARGETS", 400),
   );
   await assert.rejects(
@@ -302,6 +339,19 @@ test("the catalogue is closed and the batch is bounded", async () => {
       userId,
       "submit_overdue",
       Array.from({ length: MAX_ACTION_TARGETS + 1 }, () => randomUUID()),
+      firmPrincipal,
+    ),
+    isDomainError("BAD_TARGETS", 400),
+  );
+  // The chaser batch is a batch of MODEL calls — its own, much lower cap.
+  await assert.rejects(
+    executeAction(
+      firmId,
+      supplier,
+      userId,
+      "draft_chasers",
+      Array.from({ length: MAX_CHASER_TARGETS + 1 }, () => randomUUID()),
+      firmPrincipal,
     ),
     isDomainError("BAD_TARGETS", 400),
   );
@@ -310,10 +360,158 @@ test("the catalogue is closed and the batch is bounded", async () => {
 test("a client without layer-1 consent is refused up front", async () => {
   await draftFor(buyer, daysAgo(15), supplierNoConsent);
   await assert.rejects(
-    executeAction(firmId, supplierNoConsent, userId, "submit_overdue", [
-      randomUUID(),
-    ]),
+    executeAction(
+      firmId,
+      supplierNoConsent,
+      userId,
+      "submit_overdue",
+      [randomUUID()],
+      firmPrincipal,
+    ),
     isDomainError("CONSENT_REQUIRED", 403),
+  );
+});
+
+test("retry_failed proposes rail-rejected paper and retries it through the ordinary path", async () => {
+  const failedInv = randomUUID();
+  const db = getDb();
+  await db.insert(invoicesTable).values({
+    id: failedInv,
+    firmId,
+    supplierPartyId: supplier,
+    buyerPartyId: buyer,
+    invoiceNumber: `ACT-${SALT}-F1`,
+    issueDate: daysAgo(12),
+    status: "failed",
+    grandTotal: "50000.00",
+    subtotal: "46511.63",
+    vatTotal: "3488.37",
+  });
+  await db.insert(submissionAttemptsTable).values({
+    invoiceId: failedInv,
+    rail: "rail_primary",
+    attemptNo: 1,
+    idempotencyKey: `act-${SALT}-f1`,
+    status: "rejected",
+    errorCode: "MBS_INVALID_TIN",
+  });
+
+  const { actions } = await listActionProposals(firmId, supplier);
+  const retry = actions.find((a) => a.kind === "retry_failed");
+  assert.ok(retry, "the failed paper is proposed for retry");
+  assert.equal(retry.targetCount, 1);
+  assert.equal(retry.targets[0].invoiceId, failedInv);
+  assert.equal(
+    retry.targets[0].note,
+    "last failure: MBS_INVALID_TIN",
+    "the last rail error rides the target so the human can judge the fix",
+  );
+  assert.match(retry.why, /fail again/);
+
+  // Approval retries THROUGH submitInvoice (failed → submitted is the
+  // lifecycle's own fix-and-retry edge); a non-failed id skips.
+  const { decision, drafts } = await executeAction(
+    firmId,
+    supplier,
+    userId,
+    "retry_failed",
+    [failedInv, fresh],
+    firmPrincipal,
+  );
+  assert.equal(drafts, null, "a submit kind carries no drafts");
+  const byId = new Map(decision.targets.map((t) => [t.invoiceId, t]));
+  assert.equal(byId.get(failedInv)?.outcome, "submitted");
+  assert.equal(byId.get(fresh)?.outcome, "skipped_not_eligible");
+  assert.equal(decision.evidence.failedCountAtDecision, 1);
+  const [row] = await db
+    .select({ status: invoicesTable.status })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, failedInv));
+  assert.equal(row.status, "submitted", "the retry is a REAL resubmission");
+});
+
+test("draft_chasers drafts staged reminders — the platform sends nothing", async () => {
+  const chaseInv = randomUUID();
+  const db = getDb();
+  await db.insert(invoicesTable).values({
+    id: chaseInv,
+    firmId,
+    supplierPartyId: supplier,
+    buyerPartyId: buyer,
+    invoiceNumber: `ACT-${SALT}-C1`,
+    issueDate: daysAgo(45),
+    dueDate: daysAgo(30),
+    status: "submitted",
+    grandTotal: "80000.00",
+    subtotal: "74418.60",
+    vatTotal: "5581.40",
+  });
+
+  const { actions } = await listActionProposals(firmId, supplier);
+  const chase = actions.find((a) => a.kind === "draft_chasers");
+  assert.ok(chase, "the late receivable is proposed for a reminder");
+  assert.match(chase.why, /platform sends nothing/);
+  const target = chase.targets.find((t) => t.invoiceId === chaseInv);
+  assert.ok(target, "the chase-worthy invoice is a target");
+  assert.match(target.note ?? "", /Actions Buyer/);
+
+  const { decision, drafts } = await executeAction(
+    firmId,
+    supplier,
+    userId,
+    "draft_chasers",
+    [chaseInv, fresh],
+    firmPrincipal,
+  );
+  const byId = new Map(decision.targets.map((t) => [t.invoiceId, t]));
+  assert.equal(byId.get(chaseInv)?.outcome, "drafted");
+  assert.equal(byId.get(fresh)?.outcome, "skipped_not_eligible");
+  assert.equal(decision.executedCount, 1);
+  assert.ok(drafts && drafts.length === 1, "the drafted text rides the response");
+  assert.equal(
+    drafts[0].source,
+    "template",
+    "no gateway in tests — the deterministic ladder answers",
+  );
+  assert.match(drafts[0].body, new RegExp(`ACT-${SALT}-C1`));
+  // Drafting changed NOTHING on the invoice — no lifecycle event, no
+  // chase-log row (the log records what the client actually sent).
+  const [row] = await db
+    .select({ status: invoicesTable.status })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, chaseInv));
+  assert.equal(row.status, "submitted");
+  // The round's headline claim, PINNED: neither the decision row nor the
+  // batch audit carries the drafted subject/body — the text rides the
+  // response only.
+  const decisionJson = JSON.stringify(decision);
+  assert.ok(!decisionJson.includes(drafts[0].subject));
+  assert.ok(!decisionJson.includes(drafts[0].body.slice(0, 40)));
+  const [audit] = await db
+    .select()
+    .from(auditEventsTable)
+    .where(eq(auditEventsTable.action, "clerk.action.executed"))
+    .orderBy(desc(auditEventsTable.seq))
+    .limit(1);
+  assert.ok(audit);
+  assert.ok(!JSON.stringify(audit.after).includes(drafts[0].subject));
+});
+
+test("the data.proposed_actions intent points at the approval surface", async () => {
+  const intent = DATA_INTENTS.find((i) => i.key === "data.proposed_actions");
+  assert.ok(intent, "the intent is registered");
+  assert.ok(
+    CLIENT_SAFE_DATA_INTENTS.some((i) => i.key === "data.proposed_actions"),
+    "client askers may see their own pending batches",
+  );
+  const named = await intent.run(firmId, { clientPartyId: supplier });
+  assert.match(named.text, /waiting for approval/);
+  assert.match(named.text, /Nothing runs until a person approves/);
+  const unnamed = await intent.run(firmId, {});
+  assert.match(
+    unnamed.text,
+    /name the client/,
+    "a firm asker without a client pin is asked to name one",
   );
 });
 
@@ -326,22 +524,49 @@ test("firm walls hold on both surfaces", async () => {
   // The foreign firm sees no proposals for a client it does not hold…
   const proposals = await listActionProposals(foreignFirmId, supplier);
   assert.deepEqual(proposals.actions, []);
-  // …and executing against our invoice ids touches nothing.
-  const { decision } = await executeAction(
-    foreignFirmId,
-    supplier,
-    userId,
-    "submit_overdue",
-    [overdueB],
+  // …and executing against our client refuses at the CONSENT gate: every
+  // stage runs as meridian_app under the CALLER's firm GUC (round 22's
+  // per-stage contexts), so the engagement-scoped consent policy (0013)
+  // hides the foreign client's grant — the refusal is byte-identical to an
+  // unconsented own client's, never a consent oracle, and no decision row
+  // is written. (The route's assertPartyAccess refuses even earlier.)
+  await assert.rejects(
+    executeAction(
+      foreignFirmId,
+      supplier,
+      userId,
+      "submit_overdue",
+      [overdueB],
+      foreignPrincipal,
+    ),
+    isDomainError("CONSENT_REQUIRED", 403),
   );
-  assert.equal(decision.executedCount, 0);
-  assert.equal(decision.skippedCount, 1);
   const [row] = await getDb()
     .select({ status: invoicesTable.status })
     .from(invoicesTable)
     .where(eq(invoicesTable.id, overdueB));
   assert.equal(row.status, "draft", "the foreign approval changed nothing");
-  // The foreign decision never appears on our firm's list.
+  // The CHASER kind carries no consent gate, so its wall is the candidates
+  // query alone (review L1): a foreign chaser batch drafts nothing and
+  // leaks nothing — every target skips as not-found, and no draft is
+  // produced for another firm's paper.
+  const foreignChase = await executeAction(
+    foreignFirmId,
+    supplier,
+    userId,
+    "draft_chasers",
+    [overdueB],
+    foreignPrincipal,
+  );
+  assert.equal(foreignChase.decision.executedCount, 0);
+  assert.equal(foreignChase.decision.skippedCount, 1);
+  assert.deepEqual(foreignChase.drafts, []);
+  assert.match(
+    foreignChase.decision.targets[0].error ?? "",
+    /Not found/,
+    "the wall answers non-disclosure, not the sibling's invoice number",
+  );
+  // Nothing foreign ever lands on our firm's decision list.
   const ours = await listActionDecisions(firmId, supplier);
   assert.ok(ours.every((d) => d.firmId === firmId));
 });

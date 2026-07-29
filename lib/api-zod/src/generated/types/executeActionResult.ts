@@ -3,10 +3,13 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.52.0
+ * OpenAPI spec version: 0.53.0
  */
 import type { ClerkActionDecision } from './clerkActionDecision';
+import type { PaymentChaserDraft } from './paymentChaserDraft';
 
 export interface ExecuteActionResult {
   decision: ClerkActionDecision;
+  /** @nullable */
+  drafts: PaymentChaserDraft[] | null;
 }

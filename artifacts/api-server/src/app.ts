@@ -108,6 +108,14 @@ const NO_CONTEXT_ROUTES = new Set([
   // (modules/collections/service.ts recordInboundCollection) and the 202
   // goes out only after the settle is durably committed.
   "POST /api/collections/inbound",
+  // Proposed-action execution (round 22): a draft_chasers batch makes up to
+  // ten sequential model calls (far past the 30s cap), and a submit batch's
+  // per-invoice audits would otherwise hold the GLOBAL audit advisory lock
+  // batch-wide (the bulk-approve rationale). The module commits every stage
+  // in its own short FIRM-BOUND context (modules/clerk/actions.ts) — not
+  // bypass: callers are firm principals and the per-stage transactions
+  // carry their firm GUC, so RLS posture matches the ordinary request.
+  "POST /api/clerk/action-proposals/execute",
 ]);
 
 // Parameterized-path variant of NO_CONTEXT_ROUTES: the Set above can only

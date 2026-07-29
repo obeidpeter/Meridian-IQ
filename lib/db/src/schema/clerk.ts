@@ -719,7 +719,9 @@ export type ClerkPhrasingEvalRun = typeof clerkPhrasingEvalRunsTable.$inferSelec
 export interface ActionTargetOutcome {
   invoiceId: string;
   invoiceNumber: string;
-  outcome: "submitted" | "invalid" | "skipped_not_eligible" | "failed";
+  // "drafted" is the draft_chasers success outcome (round 22): a reminder
+  // was written for the human to send — nothing was submitted anywhere.
+  outcome: "submitted" | "invalid" | "skipped_not_eligible" | "failed" | "drafted";
   error: string | null;
 }
 

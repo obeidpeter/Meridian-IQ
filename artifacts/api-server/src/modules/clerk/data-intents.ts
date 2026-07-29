@@ -26,6 +26,7 @@ import {
 } from "../invoice/vat-position";
 import { pendingApprovals } from "../invoice/approvals";
 import { computePenaltyExposure } from "../invoice/penalty-exposure";
+import { listActionProposals } from "./actions";
 import { firmClerkUsage } from "./budget";
 import { monthLabel } from "./client-statement";
 import { isAre, MONTH_NAMES, plural } from "./text";
@@ -1092,6 +1093,49 @@ export const DATA_INTENTS: readonly DataIntent[] = [
       };
     },
   },
+  {
+    // Round-22 arc awareness: what Clerk stands ready to DO. The lookup
+    // runs the SAME live proposal assembly as the dashboard cards
+    // (flag-gated, fail-closed — a dark clerk_actions flag answers "none
+    // waiting"), and the answer only POINTS at the approval surface: Ask
+    // can never execute anything.
+    key: "data.proposed_actions",
+    title:
+      "the action batches Clerk has assembled and is WAITING FOR APPROVAL on (submit overdue paper, retry failed submissions, draft payment reminders) — what Clerk could do next, not a status report",
+    accepts: { client: true },
+    async run(firmId, params) {
+      if (!params?.clientPartyId) {
+        return {
+          text: "Clerk assembles action batches per client — name the client you mean and I will check what is waiting for approval.",
+          facts: [countFact("proposed_actions", "Batches ready", 0)],
+        };
+      }
+      const { actions } = await listActionProposals(
+        firmId,
+        params.clientPartyId,
+      );
+      if (actions.length === 0) {
+        return {
+          text: `Clerk has no action batches waiting for approval${forClient(params)} right now — nothing is currently overdue, failed or chase-worthy enough to batch (or the proposed-actions surface is not enabled for this firm).`,
+          facts: [countFact("proposed_actions", "Batches ready", 0)],
+        };
+      }
+      const lines = actions.map(
+        (a) => `"${a.title}" (${plural(a.targetCount, "invoice")})`,
+      );
+      return {
+        text:
+          `Clerk has ${actions.length === 1 ? "1 action batch" : `${actions.length} action batches`} assembled and waiting for approval${forClient(params)}: ${lines.join("; ")}. ` +
+          `Nothing runs until a person approves it on the dashboard — every target is re-checked at that moment, and the decision is recorded.`,
+        facts: [
+          countFact("proposed_actions", "Batches ready", actions.length),
+          ...actions.map((a) =>
+            countFact(`targets_${a.kind}`, a.title, a.targetCount),
+          ),
+        ],
+      };
+    },
+  },
 ];
 
 // Client-facing Ask (SEC-03). clerk.ask is open to client_users, but the
@@ -1149,6 +1193,11 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // scope wall's non-disclosure posture. The single link is the caller's
   // own paper.
   "data.invoice_status",
+  // Proposed actions with the forced own-party pin: the batches are
+  // assembled over the caller's OWN paper (the same per-client assembly the
+  // SME dashboard card runs), titles and counts only — no other client is
+  // ever named, and the answer cannot execute anything.
+  "data.proposed_actions",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

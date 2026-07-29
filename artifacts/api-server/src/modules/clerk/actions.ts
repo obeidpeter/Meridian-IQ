@@ -1,6 +1,7 @@
 import { desc, eq, and, sql } from "drizzle-orm";
 import {
   getDb,
+  runRequestContext,
   clerkActionDecisionsTable,
   type ActionTargetOutcome,
   type ClerkActionDecision,
@@ -11,47 +12,83 @@ import { isFeatureEnabled } from "../flags/flags";
 import { isPurposePermitted } from "../consent/consent";
 import { validateInvoice, submitInvoice } from "../invoice/service";
 import { firmSubmitApprovalRequired } from "../invoice/approvals";
-import { RECEIVABLE_ORIENTATION } from "../invoice/receivables";
+import { OUTSTANDING, RECEIVABLE_ORIENTATION } from "../invoice/receivables";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window";
 import { bandExposure } from "../invoice/penalty-exposure";
+import { listChaseRows } from "../invoice/cashflow";
+import {
+  draftPaymentChaser,
+  type PaymentChaserDraft,
+} from "./draft-chaser";
+import { gatewayOrNull } from "./provider";
+import type { Principal } from "../auth/rbac";
 import { lagosDateString, lagosTodaySql } from "../../lib/lagos-time";
 
-// Proposed actions (round 21 — the advice→assisted-action arc's
-// foundation). Every Clerk surface so far ends with "…you should submit
-// these" and the human goes clicking one invoice at a time. This module
-// closes that gap WITHOUT crossing the platform's one hard line — Clerk
-// still never files anything:
+// Proposed actions (rounds 21-22 — the advice→assisted-action arc). Every
+// Clerk surface ends with "…you should submit these" and the human goes
+// clicking one invoice at a time. This module closes that gap WITHOUT
+// crossing the platform's one hard line — Clerk still never files anything:
 //
-//  - The action CATALOGUE is closed and code-defined. v1 carries exactly
-//    one action, submit_overdue: the safest (submission is the statutory
-//    obligation itself), highest-value (it clears s.104 exposure), and
-//    fully re-checkable at execution time.
+//  - The action CATALOGUE is closed and code-defined. Three actions:
+//    submit_overdue (round 21 — the statutory obligation itself),
+//    retry_failed (round 22 — resubmission of rail-rejected paper once the
+//    cause is fixed), and draft_chasers (round 22 — one approval drafts a
+//    staged payment reminder for every chase-worthy receivable; the CLIENT
+//    still sends them — the platform sends nothing, exactly the chaser
+//    surface's standing posture).
 //  - PROPOSALS are computed live from the same detector predicates the
-//    digest and penalty card use — never stored, so never stale, and no
-//    model call anywhere (deterministic assembly; the model's only role
-//    on this surface is nothing at all).
-//  - A human APPROVES an explicit target list — the exact invoices the
-//    card showed. Approval EXECUTES through the platform's existing
-//    per-invoice machinery (validateInvoice's compare-and-set,
-//    submitInvoice's exactly-once outbox enqueue, the consent gate, the
-//    maker-checker assertSubmitApproved) — the bulk-submit discipline:
-//    the batch adds nothing but iteration.
-//  - Every target is RE-VALIDATED against the action's predicate at
-//    execution: an invoice someone already submitted, cancelled, or that
-//    aged out of the proposal is SKIPPED, never double-processed.
-//  - The DECISION is the durable artifact: who approved, on what
-//    evidence, over which targets, with per-target outcomes
-//    (clerk_action_decisions, firm-keyed RLS 0028) plus a pointer-only
-//    audit event.
+//    digest, penalty card and chase list use — never stored, so never
+//    stale, and no model call anywhere in assembly.
+//  - A human APPROVES an explicit target list. Approval EXECUTES through
+//    the platform's existing per-invoice machinery (validateInvoice's
+//    compare-and-set, submitInvoice's exactly-once outbox + per-row
+//    maker-checker, draftPaymentChaser's ladder) — the bulk-submit
+//    discipline: the batch adds nothing but iteration.
+//  - Every target is RE-VALIDATED against its action's predicate at
+//    execution; anything that changed since the proposal is SKIPPED.
+//  - The DECISION is the durable artifact (clerk_action_decisions,
+//    firm-keyed RLS 0028) plus a pointer-only audit event. Chaser draft
+//    TEXT rides only the response — the decision row and the audit carry
+//    ids/counts, never subject or body (SEC-12; the client owns what is
+//    sent). Honesty note (round-22 review M1): a MODEL-phrased draft's
+//    output is retained in the firm-scoped inference ledger like every
+//    Clerk call — the platform never claims otherwise; template drafts
+//    involve no model call and genuinely live nowhere.
 //
-// Rollout is fail-closed behind the opt-in `clerk_actions` flag: dark
-// means proposals answer empty (the card hides) and execution refuses.
+// Transaction shape (round 22): the execute route runs OUTSIDE the request
+// transaction (app.ts NO_CONTEXT_ROUTES) and every stage below commits in
+// its own short runRequestContext transaction bound to the CALLER's firm —
+// the bulk-approve posture. The honest crash window that buys: a crash
+// after per-target commits but before stage Z leaves REAL submits/drafts
+// with no decision row and no batch audit — each invoice's own lifecycle
+// events and audits still exist, but the batch-level record does not. Two reasons, both hard: a chaser batch makes up
+// to MAX_CHASER_TARGETS sequential model calls (far past the 30s
+// request-transaction cap), and a submit batch inside one transaction held
+// the GLOBAL audit advisory lock from its first appendAudit to the final
+// commit — a platform-wide convoy plus a real deadlock window (the round-21
+// review's F2 follow-up, closed here). The trade is bulk-approve's: an
+// executed target is durable IMMEDIATELY — nothing later in the batch (or a
+// response failure) can undo it — and the decision row records what
+// actually happened.
+//
+// Rollout is fail-closed behind the opt-in `clerk_actions` flag (per-firm
+// override capable): dark means proposals answer empty (the cards hide) and
+// execution refuses.
 
 export const ACTIONS_FLAG_KEY = "clerk_actions";
+
+export type ActionKind = "submit_overdue" | "retry_failed" | "draft_chasers";
 
 // One proposal shows at most this many targets, and one approval executes
 // at most this many — a bounded request (SEC-M3), repeated until done.
 export const MAX_ACTION_TARGETS = 50;
+// A chaser batch is a batch of MODEL calls — bounded much lower; the chase
+// list is ranked, so the cap keeps the worst-first ten.
+export const MAX_CHASER_TARGETS = 10;
+
+function maxTargetsFor(kind: ActionKind): number {
+  return kind === "draft_chasers" ? MAX_CHASER_TARGETS : MAX_ACTION_TARGETS;
+}
 
 export interface ActionTarget {
   invoiceId: string;
@@ -60,10 +97,13 @@ export interface ActionTarget {
   daysOverdue: number;
   grandTotal: string | null;
   currency: string;
+  // Per-kind context line: the last rail error for retry_failed, the buyer
+  // and expected date for draft_chasers, null for submit_overdue.
+  note: string | null;
 }
 
 export interface ActionProposal {
-  kind: "submit_overdue";
+  kind: ActionKind;
   title: string;
   why: string;
   targets: ActionTarget[];
@@ -89,18 +129,31 @@ function overdueCond(firmId: string, clientPartyId: string) {
     AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${lagosTodaySql()}`;
 }
 
-export async function listActionProposals(
+// The retry_failed predicate: receivable paper the rails rejected. The
+// lifecycle allows failed → submitted directly (fix-and-retry), so the
+// executor is submitInvoice itself.
+function failedCond(firmId: string, clientPartyId: string) {
+  return sql`i.firm_id = ${firmId}
+    AND i.kind = 'invoice'
+    AND i.supplier_party_id = ${clientPartyId}
+    AND i.status = 'failed'
+    AND ${RECEIVABLE_ORIENTATION}`;
+}
+
+// The draft_chasers eligibility core: an outstanding receivable of this
+// client (the chase list ranks WITHIN this set; draftPaymentChaser re-checks
+// it again per invoice).
+function chaseableCond(firmId: string, clientPartyId: string) {
+  return sql`i.firm_id = ${firmId}
+    AND i.supplier_party_id = ${clientPartyId}
+    AND ${OUTSTANDING}
+    AND ${RECEIVABLE_ORIENTATION}`;
+}
+
+async function submitOverdueProposal(
   firmId: string,
   clientPartyId: string,
-): Promise<ActionProposals> {
-  const note =
-    "Clerk assembles these batches from the same checks that power the dashboards — nothing runs until you approve, " +
-    "approval executes through the ordinary submission path (validation, consent, any approval policy), and every target is re-checked at that moment. " +
-    "The decision and per-invoice outcomes are recorded.";
-  if (!(await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId))) {
-    return { actions: [], note };
-  }
-
+): Promise<ActionProposal | null> {
   const rows = (
     await getDb().execute<{
       id: string;
@@ -121,7 +174,7 @@ export async function listActionProposals(
       LIMIT ${MAX_ACTION_TARGETS}
     `)
   ).rows;
-  if (rows.length === 0) return { actions: [], note };
+  if (rows.length === 0) return null;
 
   const targetCount = Number(rows[0].full_count);
   const targets: ActionTarget[] = rows.map((r) => ({
@@ -131,67 +184,203 @@ export async function listActionProposals(
     daysOverdue: Math.max(Number(r.days_overdue), 0),
     grandTotal: r.grand_total,
     currency: r.currency,
+    note: null,
   }));
   const floor = bandExposure(targetCount).small;
   return {
-    actions: [
-      {
-        kind: "submit_overdue",
-        title: `Submit ${targetCount} overdue invoice${targetCount === 1 ? "" : "s"}`,
-        why:
-          `${targetCount} invoice${targetCount === 1 ? " is" : "s are"} past the ${SUBMISSION_WINDOW_DAYS}-day statutory submission window — ` +
-          `at least NGN ${floor} of estimated s.104 exposure (lowest band, an estimate not advice). Submitting them removes it` +
-          // The floor spans the FULL overdue count; a capped batch only
-          // clears its own share, so say so.
-          (targetCount > MAX_ACTION_TARGETS
-            ? ` — approve in batches of up to ${MAX_ACTION_TARGETS}.`
-            : "."),
-        targets,
-        targetCount,
-        truncated: targetCount > targets.length,
-        evidence: {
-          overdueCount: targetCount,
-          exposureFloorNgn: floor,
-          asOf: lagosDateString(new Date()),
-        },
-      },
-    ],
+    kind: "submit_overdue",
+    title: `Submit ${targetCount} overdue invoice${targetCount === 1 ? "" : "s"}`,
+    why:
+      `${targetCount} invoice${targetCount === 1 ? " is" : "s are"} past the ${SUBMISSION_WINDOW_DAYS}-day statutory submission window — ` +
+      `at least NGN ${floor} of estimated s.104 exposure (lowest band, an estimate not advice). Submitting them removes it` +
+      // The floor spans the FULL overdue count; a capped batch only
+      // clears its own share, so say so.
+      (targetCount > MAX_ACTION_TARGETS
+        ? ` — approve in batches of up to ${MAX_ACTION_TARGETS}.`
+        : "."),
+    targets,
+    targetCount,
+    truncated: targetCount > targets.length,
+    evidence: {
+      overdueCount: targetCount,
+      exposureFloorNgn: floor,
+      asOf: lagosDateString(new Date()),
+    },
+  };
+}
+
+async function retryFailedProposal(
+  firmId: string,
+  clientPartyId: string,
+): Promise<ActionProposal | null> {
+  const rows = (
+    await getDb().execute<{
+      id: string;
+      invoice_number: string;
+      issue_date: string;
+      days_overdue: number;
+      grand_total: string | null;
+      currency: string;
+      error_code: string | null;
+      full_count: number;
+    }>(sql`
+      SELECT i.id, i.invoice_number, i.issue_date::text AS issue_date,
+        GREATEST((${lagosTodaySql()} - (i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int))::int, 0) AS days_overdue,
+        i.grand_total::text AS grand_total, i.currency,
+        (SELECT a.error_code FROM submission_attempts a
+          WHERE a.invoice_id = i.id AND a.error_code IS NOT NULL
+          ORDER BY a.created_at DESC LIMIT 1) AS error_code,
+        COUNT(*) OVER ()::int AS full_count
+      FROM invoices i
+      WHERE ${failedCond(firmId, clientPartyId)}
+      ORDER BY i.issue_date ASC, i.id
+      LIMIT ${MAX_ACTION_TARGETS}
+    `)
+  ).rows;
+  if (rows.length === 0) return null;
+
+  const targetCount = Number(rows[0].full_count);
+  return {
+    kind: "retry_failed",
+    title: `Retry ${targetCount} failed submission${targetCount === 1 ? "" : "s"}`,
+    why:
+      `${targetCount} submission${targetCount === 1 ? "" : "s"} came back failed from the rails. ` +
+      `If the cause has been fixed — a corrected TIN, a rail outage that passed — retrying sends them through the ordinary submission path again. ` +
+      `An unchanged invoice with an unfixed cause will simply fail again.`,
+    targets: rows.map((r) => ({
+      invoiceId: r.id,
+      invoiceNumber: r.invoice_number,
+      issueDate: r.issue_date,
+      daysOverdue: Math.max(Number(r.days_overdue), 0),
+      grandTotal: r.grand_total,
+      currency: r.currency,
+      note: r.error_code ? `last failure: ${r.error_code}` : null,
+    })),
+    targetCount,
+    truncated: targetCount > rows.length,
+    evidence: {
+      failedCount: targetCount,
+      asOf: lagosDateString(new Date()),
+    },
+  };
+}
+
+async function draftChasersProposal(
+  firmId: string,
+  clientPartyId: string,
+): Promise<ActionProposal | null> {
+  // The chase list EXACTLY as the dashboard card ranks it — late against
+  // each buyer's OWN rhythm, worst first, primary currency.
+  const rows = await listChaseRows(firmId, clientPartyId);
+  if (rows.length === 0) return null;
+  const capped = rows.slice(0, MAX_CHASER_TARGETS);
+
+  // issue_date for the target line (ChaseRow carries the projection dates,
+  // not the paper's own) — one bounded lookup over the capped ids.
+  const issueDates = new Map(
+    (
+      await getDb().execute<{ id: string; issue_date: string }>(sql`
+        SELECT i.id, i.issue_date::text AS issue_date FROM invoices i
+        WHERE i.firm_id = ${firmId} AND i.id IN (${sql.join(
+          capped.map((r) => sql`${r.invoiceId}`),
+          sql`, `,
+        )})
+      `)
+    ).rows.map((r) => [r.id, r.issue_date]),
+  );
+
+  return {
+    kind: "draft_chasers",
+    title: `Draft ${rows.length} payment reminder${rows.length === 1 ? "" : "s"}`,
+    why:
+      `${rows.length} receivable${rows.length === 1 ? " is" : "s are"} late against the buyer's own payment rhythm. ` +
+      `Approving drafts a staged reminder for each — a first nudge or a follow-up, per its own ladder — for you to review and send yourself. ` +
+      `The platform sends nothing.`,
+    targets: capped.map((r) => ({
+      invoiceId: r.invoiceId,
+      invoiceNumber: r.invoiceNumber,
+      issueDate: issueDates.get(r.invoiceId) ?? r.expectedDate,
+      daysOverdue: Math.max(r.daysBeyondExpected, 0),
+      grandTotal: r.grandTotal,
+      currency: r.currency,
+      note: `${r.buyerName} · expected by ${r.expectedDate}`,
+    })),
+    targetCount: rows.length,
+    truncated: rows.length > capped.length,
+    evidence: {
+      chaseWorthyCount: rows.length,
+      asOf: lagosDateString(new Date()),
+    },
+  };
+}
+
+export async function listActionProposals(
+  firmId: string,
+  clientPartyId: string,
+): Promise<ActionProposals> {
+  const note =
+    "Clerk assembles these batches from the same checks that power the dashboards — nothing runs until you approve, " +
+    "approval executes through the ordinary per-invoice path (validation, consent, any approval policy), and every target is re-checked at that moment. " +
+    "The decision and per-invoice outcomes are recorded.";
+  if (!(await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId))) {
+    return { actions: [], note };
+  }
+
+  const proposals = [
+    await submitOverdueProposal(firmId, clientPartyId),
+    await retryFailedProposal(firmId, clientPartyId),
+    await draftChasersProposal(firmId, clientPartyId),
+  ];
+  return {
+    actions: proposals.filter((p): p is ActionProposal => p !== null),
     note,
   };
 }
 
 export interface ActionExecution {
   decision: ClerkActionDecision;
+  // Chaser batches only: the drafted reminders, shown once for the human
+  // to copy and send — no DRAFT is stored anywhere (the chaser posture;
+  // model output lands in the inference ledger like every Clerk call).
+  drafts: PaymentChaserDraft[] | null;
 }
 
-// Approve-and-execute one batch. The caller's route owns authz
-// (invoice.submit + the client scope wall); this function owns the flag,
-// the consent gate, per-target re-validation and the decision record.
+type Candidate = {
+  id: string;
+  invoice_number: string;
+  status: string;
+  eligible: boolean;
+};
+
+// Approve-and-execute one batch. The caller's route owns authz (the
+// capability + the client scope wall + assertPartyAccess); this function
+// owns the flag, the consent gate (submit kinds), per-target re-validation
+// and the decision record. Runs OUTSIDE any ambient transaction — every
+// stage opens its own short firm-bound context (see the header).
 export async function executeAction(
   firmId: string,
   clientPartyId: string,
   actorId: string,
   kind: string,
   invoiceIds: string[],
+  principal: Principal,
 ): Promise<ActionExecution> {
-  if (!(await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId))) {
-    throw new DomainError(
-      "ACTIONS_DISABLED",
-      "Proposed actions are not enabled for this firm",
-      503,
-    );
-  }
-  if (kind !== "submit_overdue") {
+  if (
+    kind !== "submit_overdue" &&
+    kind !== "retry_failed" &&
+    kind !== "draft_chasers"
+  ) {
     throw new DomainError(
       "UNKNOWN_ACTION",
       "That action is not in the catalogue",
       400,
     );
   }
-  if (invoiceIds.length === 0 || invoiceIds.length > MAX_ACTION_TARGETS) {
+  const max = maxTargetsFor(kind);
+  if (invoiceIds.length === 0 || invoiceIds.length > max) {
     throw new DomainError(
       "BAD_TARGETS",
-      `An action batch names between 1 and ${MAX_ACTION_TARGETS} invoices`,
+      `A ${kind} batch names between 1 and ${max} invoices`,
       400,
     );
   }
@@ -200,88 +389,139 @@ export async function executeAction(
   // two concurrent batches over overlapping sets in different orders is a
   // classic crossed-lock deadlock — a canonical order removes that variant.
   const ids = [...new Set(invoiceIds)].sort();
-  // Consent gates every submission identically — checked once up front,
-  // exactly like a single submit would refuse (CORE-03).
-  if (!(await isPurposePermitted(clientPartyId, "compliance_submission"))) {
-    throw new DomainError(
-      "CONSENT_REQUIRED",
-      "Supplier has not granted compliance (layer 1) consent",
-      403,
-    );
-  }
 
-  // The batch audit's one annotation (bulk-submit's shape): an approval
-  // policy surfaces per row as APPROVAL_REQUIRED failures, and the hoisted
-  // read makes an all-failed batch explicable at a glance.
-  const submitApprovalRequired = await firmSubmitApprovalRequired(firmId);
+  const ctx = <T>(fn: () => Promise<T>): Promise<T> =>
+    runRequestContext({ bypass: false, firmId }, fn);
 
-  // Load ONLY the requested ids that are in scope, and re-check the
-  // action predicate per row RIGHT NOW: the approval was given on a
-  // snapshot, and anything that changed since (submitted elsewhere,
-  // cancelled, no longer overdue) must be skipped, never re-processed.
-  const candidates = (
-    await getDb().execute<{
-      id: string;
-      invoice_number: string;
-      status: string;
-      eligible: boolean;
-    }>(sql`
-      SELECT i.id, i.invoice_number, i.status,
-        (${overdueCond(firmId, clientPartyId)}) AS eligible
-      FROM invoices i
-      WHERE i.firm_id = ${firmId}
-        AND i.supplier_party_id = ${clientPartyId}
-        AND i.id IN (${sql.join(
-          ids.map((id) => sql`${id}`),
-          sql`, `,
-        )})
-    `)
-  ).rows;
-  const byId = new Map(candidates.map((c) => [c.id, c]));
+  // Stage A — gates, candidates and pre-execution evidence, one short
+  // read-mostly transaction bound to the caller's firm.
+  const staged = await ctx(async () => {
+    if (!(await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId))) {
+      throw new DomainError(
+        "ACTIONS_DISABLED",
+        "Proposed actions are not enabled for this firm",
+        503,
+      );
+    }
+    // Consent gates every SUBMISSION identically — checked once up front,
+    // exactly like a single submit would refuse (CORE-03). Drafting a
+    // reminder submits nothing, so the chaser kind carries no consent gate
+    // (the single draft-chaser route has none either).
+    if (kind !== "draft_chasers") {
+      if (!(await isPurposePermitted(clientPartyId, "compliance_submission"))) {
+        throw new DomainError(
+          "CONSENT_REQUIRED",
+          "Supplier has not granted compliance (layer 1) consent",
+          403,
+        );
+      }
+    }
 
-  // The evidence a reader of the decision needs — the client's live overdue
-  // count and the penalty floor it implies — captured NOW, before the batch
-  // runs (verification-pass F4: counting after the loop would record the
-  // residual, making a fully-successful approval look baseless).
-  const [overdueNow] = (
-    await getDb().execute<{ n: number }>(sql`
-      SELECT COUNT(*)::int AS n FROM invoices i
-      WHERE ${overdueCond(firmId, clientPartyId)}
-    `)
-  ).rows;
-  const overdueCountAtDecision = Number(overdueNow?.n ?? 0);
+    const eligibleCond =
+      kind === "submit_overdue"
+        ? overdueCond(firmId, clientPartyId)
+        : kind === "retry_failed"
+          ? failedCond(firmId, clientPartyId)
+          : chaseableCond(firmId, clientPartyId);
+
+    // Load ONLY the requested ids that are in scope, and re-check the
+    // action predicate per row RIGHT NOW: the approval was given on a
+    // snapshot, and anything that changed since (submitted elsewhere,
+    // cancelled, settled, no longer overdue) must be skipped, never
+    // re-processed.
+    const candidates = (
+      await getDb().execute<Candidate>(sql`
+        SELECT i.id, i.invoice_number, i.status,
+          (${eligibleCond}) AS eligible
+        FROM invoices i
+        WHERE i.firm_id = ${firmId}
+          AND i.supplier_party_id = ${clientPartyId}
+          AND i.id IN (${sql.join(
+            ids.map((id) => sql`${id}`),
+            sql`, `,
+          )})
+      `)
+    ).rows;
+
+    // The evidence a reader of the decision needs — captured NOW, before
+    // the batch runs (counting after would record the residual, making a
+    // fully-successful approval look baseless).
+    const [countRow] = (
+      await getDb().execute<{ n: number }>(sql`
+        SELECT COUNT(*)::int AS n FROM invoices i WHERE ${eligibleCond}
+      `)
+    ).rows;
+
+    // The batch audit's one annotation (bulk-submit's shape): an approval
+    // policy surfaces per row as APPROVAL_REQUIRED failures, and the
+    // hoisted read makes an all-failed batch explicable at a glance.
+    const approvalRequired =
+      kind === "draft_chasers"
+        ? null
+        : await firmSubmitApprovalRequired(firmId);
+
+    return {
+      byId: new Map(candidates.map((c) => [c.id, c])),
+      eligibleAtDecision: Number(countRow?.n ?? 0),
+      approvalRequired,
+    };
+  });
+
+  // Chaser batches phrase through the gateway when one is constructible;
+  // the deterministic template always answers otherwise (the chaser
+  // surface's standing guarantee — a batch never 502s for a model reason).
+  const gateway = kind === "draft_chasers" ? await gatewayOrNull() : null;
 
   const targets: ActionTargetOutcome[] = [];
+  const drafts: PaymentChaserDraft[] = [];
   for (const invoiceId of ids) {
-    const candidate = byId.get(invoiceId);
+    const candidate = staged.byId.get(invoiceId);
     if (!candidate || !candidate.eligible) {
       targets.push({
         invoiceId,
         invoiceNumber: candidate?.invoice_number ?? "(not found)",
         outcome: "skipped_not_eligible",
         error: candidate
-          ? "No longer matches the action (already submitted, cancelled, or aged out)"
+          ? "No longer matches the action (already processed, cancelled, or aged out)"
           : "Not found in this client's records",
       });
       continue;
     }
-    // The bulk-submit loop body: the EXISTING per-invoice machinery, so
-    // every invoice gets the same lifecycle events, audit rows,
-    // maker-checker enforcement and idempotency as a single submit.
+    // Each target runs in its OWN short firm-bound transaction: the
+    // existing per-invoice machinery commits per item, the global audit
+    // lock is held per item only, and an executed target is durable
+    // immediately (bulk-approve semantics). Known trade (round-22 review
+    // M3, owned for the next round): the chaser target's transaction spans
+    // its provider call, pinning a pooled connection for that latency —
+    // the fix is splitting draftPaymentChaser's reads from its infer so
+    // the model call runs outside any transaction.
     try {
-      if (candidate.status === "draft") {
-        const validation = await validateInvoice(invoiceId, actorId);
-        if (!validation.ok) {
-          targets.push({
-            invoiceId,
-            invoiceNumber: candidate.invoice_number,
-            outcome: "invalid",
-            error: `${validation.errors.length} validation issue(s) — open the invoice to fix them`,
-          });
-          continue;
-        }
+      if (kind === "draft_chasers") {
+        const draft = await ctx(() =>
+          draftPaymentChaser(invoiceId, principal, gateway),
+        );
+        drafts.push(draft);
+        targets.push({
+          invoiceId,
+          invoiceNumber: candidate.invoice_number,
+          outcome: "drafted",
+          error: null,
+        });
+        continue;
       }
-      await submitInvoice(invoiceId, actorId);
+      await ctx(async () => {
+        if (kind === "submit_overdue" && candidate.status === "draft") {
+          const validation = await validateInvoice(invoiceId, actorId);
+          if (!validation.ok) {
+            throw new DomainError(
+              "INVALID_DRAFT",
+              `${validation.errors.length} validation issue(s) — open the invoice to fix them`,
+              422,
+            );
+          }
+        }
+        await submitInvoice(invoiceId, actorId);
+      });
       targets.push({
         invoiceId,
         invoiceNumber: candidate.invoice_number,
@@ -289,19 +529,25 @@ export async function executeAction(
         error: null,
       });
     } catch (err) {
+      const invalid =
+        err instanceof DomainError && err.code === "INVALID_DRAFT";
       targets.push({
         invoiceId,
         invoiceNumber: candidate.invoice_number,
-        outcome: "failed",
+        outcome: invalid ? "invalid" : "failed",
         error:
           err instanceof DomainError
             ? err.message
-            : "Submission failed unexpectedly",
+            : kind === "draft_chasers"
+              ? "Drafting failed unexpectedly"
+              : "Submission failed unexpectedly",
       });
     }
   }
 
-  const executedCount = targets.filter((t) => t.outcome === "submitted").length;
+  const executedCount = targets.filter(
+    (t) => t.outcome === "submitted" || t.outcome === "drafted",
+  ).length;
   const skippedCount = targets.filter(
     (t) => t.outcome === "skipped_not_eligible",
   ).length;
@@ -309,47 +555,63 @@ export async function executeAction(
     (t) => t.outcome === "failed" || t.outcome === "invalid",
   ).length;
 
-  const [decision] = await getDb()
-    .insert(clerkActionDecisionsTable)
-    .values({
-      firmId,
-      clientPartyId,
-      kind,
-      decidedBy: actorId,
-      evidence: {
-        requestedCount: ids.length,
-        overdueCountAtDecision,
-        exposureFloorNgn: bandExposure(overdueCountAtDecision).small,
-        asOf: lagosDateString(new Date()),
-      },
-      targets,
-      requestedCount: ids.length,
-      executedCount,
-      skippedCount,
-      failedCount,
-    })
-    .returning();
+  const evidenceCountKey =
+    kind === "submit_overdue"
+      ? "overdueCountAtDecision"
+      : kind === "retry_failed"
+        ? "failedCountAtDecision"
+        : "chaseableAtDecision";
 
-  // Pointer-only audit (SEC-12): counts and the decision id — the
-  // per-invoice detail lives on the decision row and each invoice's own
-  // lifecycle events.
-  await appendAudit({
-    actorId,
-    firmId,
-    action: "clerk.action.executed",
-    entityType: "clerk_action_decision",
-    entityId: decision.id,
-    after: {
-      kind,
+  // Stage Z — the durable decision + the pointer-only batch audit, one
+  // final short transaction.
+  const decision = await ctx(async () => {
+    const evidence: Record<string, unknown> = {
       requestedCount: ids.length,
-      executedCount,
-      skippedCount,
-      failedCount,
-      submitApprovalRequired,
-    },
+      [evidenceCountKey]: staged.eligibleAtDecision,
+      asOf: lagosDateString(new Date()),
+    };
+    if (kind === "submit_overdue") {
+      evidence.exposureFloorNgn = bandExposure(staged.eligibleAtDecision).small;
+    }
+    const [row] = await getDb()
+      .insert(clerkActionDecisionsTable)
+      .values({
+        firmId,
+        clientPartyId,
+        kind,
+        decidedBy: actorId,
+        evidence,
+        targets,
+        requestedCount: ids.length,
+        executedCount,
+        skippedCount,
+        failedCount,
+      })
+      .returning();
+
+    // Pointer-only audit (SEC-12): counts and the decision id — the
+    // per-invoice detail lives on the decision row and each invoice's own
+    // lifecycle events; no chaser subject/body appears here or on the
+    // decision row.
+    await appendAudit({
+      actorId,
+      firmId,
+      action: "clerk.action.executed",
+      entityType: "clerk_action_decision",
+      entityId: row.id,
+      after: {
+        kind,
+        requestedCount: ids.length,
+        executedCount,
+        skippedCount,
+        failedCount,
+        submitApprovalRequired: staged.approvalRequired,
+      },
+    });
+    return row;
   });
 
-  return { decision };
+  return { decision, drafts: kind === "draft_chasers" ? drafts : null };
 }
 
 export async function listActionDecisions(

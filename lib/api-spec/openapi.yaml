@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.52.0
+  version: 0.53.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -11444,12 +11444,21 @@ components:
           type: ["number", "null"]
         improvedShare:
           type: ["number", "null"]
-    # Proposed actions (round 21): Clerk assembles, a human disposes. The
-    # catalogue is closed and code-defined — v1 carries submit_overdue only.
+    # Proposed actions (rounds 21-22): Clerk assembles, a human disposes.
+    # The catalogue is closed and code-defined — submit_overdue,
+    # retry_failed, and draft_chasers (drafting only; the client sends).
     ActionTarget:
       type: object
       required:
-        [invoiceId, invoiceNumber, issueDate, daysOverdue, grandTotal, currency]
+        [
+          invoiceId,
+          invoiceNumber,
+          issueDate,
+          daysOverdue,
+          grandTotal,
+          currency,
+          note,
+        ]
       properties:
         invoiceId:
           type: string
@@ -11464,13 +11473,17 @@ components:
           type: ["string", "null"]
         currency:
           type: string
+        # Per-kind context line: the last rail error for retry_failed, the
+        # buyer and expected date for draft_chasers, null for submit_overdue.
+        note:
+          type: ["string", "null"]
     ActionProposal:
       type: object
       required: [kind, title, why, targets, targetCount, truncated, evidence]
       properties:
         kind:
           type: string
-          enum: [submit_overdue]
+          enum: [submit_overdue, retry_failed, draft_chasers]
         title:
           type: string
         why:
@@ -11502,7 +11515,9 @@ components:
       properties:
         kind:
           type: string
-          enum: [submit_overdue]
+          enum: [submit_overdue, retry_failed, draft_chasers]
+        # The submit kinds accept up to 50; a draft_chasers batch is capped
+        # at 10 server-side (each target is a model call).
         invoiceIds:
           type: array
           minItems: 1
@@ -11524,7 +11539,9 @@ components:
           type: string
         outcome:
           type: string
-          enum: [submitted, invalid, skipped_not_eligible, failed]
+          # 'drafted' is the draft_chasers success: a reminder was written
+          # for the human to send — nothing was submitted anywhere.
+          enum: [submitted, invalid, skipped_not_eligible, failed, drafted]
         error:
           type: ["string", "null"]
     ClerkActionDecision:
@@ -11579,10 +11596,18 @@ components:
           format: date-time
     ExecuteActionResult:
       type: object
-      required: [decision]
+      required: [decision, drafts]
       properties:
         decision:
           $ref: "#/components/schemas/ClerkActionDecision"
+        # draft_chasers only: the drafted reminders, shown once for the
+        # human to copy and send — no draft is stored (model-phrased output
+        # is retained in the inference ledger like every Clerk call). Null
+        # for the submit kinds.
+        drafts:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/PaymentChaserDraft"
     ActionDecisionList:
       type: object
       required: [decisions]
