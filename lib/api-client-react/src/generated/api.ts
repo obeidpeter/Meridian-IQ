@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.51.0
+ * OpenAPI spec version: 0.52.0
  */
 import {
   useMutation,
@@ -21,6 +21,8 @@ import type {
 
 import type {
   AcceptInvitationInput,
+  ActionDecisionList,
+  ActionProposals,
   AlertDeliveryResult,
   AlertPreferences,
   AlertPreferencesInput,
@@ -147,6 +149,8 @@ import type {
   EscalationReplyDraft,
   EvalFixtureReport,
   EvalFixtureSummary,
+  ExecuteActionInput,
+  ExecuteActionResult,
   ExplainFailureInput,
   ExportBillingStatementCsvParams,
   ExportInvoicesCsvParams,
@@ -175,6 +179,8 @@ import type {
   ForbiddenResponse,
   GateMetrics,
   GenerateStatementsInput,
+  GetActionDecisionsParams,
+  GetActionProposalsParams,
   GetBillingStatementParams,
   GetCashflowOutlookParams,
   GetChaseEffectivenessParams,
@@ -21225,4 +21231,242 @@ export const useRunModelCanary = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getRunModelCanaryMutationOptions(options));
     }
+
+export const getGetActionProposalsUrl = (params?: GetActionProposalsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/action-proposals?${stringifiedParams}` : `/api/clerk/action-proposals`
+}
+
+/**
+ * @summary Clerk-assembled action batches from the closed catalogue, computed live from the detector predicates — nothing is stored and nothing runs until a human approves (empty while the clerk_actions flag is dark)
+ */
+export const getActionProposals = async (params?: GetActionProposalsParams, options?: RequestInit): Promise<ActionProposals> => {
+
+  return customFetch<ActionProposals>(getGetActionProposalsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetActionProposalsQueryKey = (params?: GetActionProposalsParams,) => {
+    return [
+    `/api/clerk/action-proposals`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetActionProposalsQueryOptions = <TData = Awaited<ReturnType<typeof getActionProposals>>, TError = ErrorType<BadRequestResponse>>(params?: GetActionProposalsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionProposals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetActionProposalsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getActionProposals>>> = ({ signal }) => getActionProposals(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getActionProposals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetActionProposalsQueryResult = NonNullable<Awaited<ReturnType<typeof getActionProposals>>>
+export type GetActionProposalsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Clerk-assembled action batches from the closed catalogue, computed live from the detector predicates — nothing is stored and nothing runs until a human approves (empty while the clerk_actions flag is dark)
+ */
+
+export function useGetActionProposals<TData = Awaited<ReturnType<typeof getActionProposals>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetActionProposalsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionProposals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetActionProposalsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExecuteActionUrl = () => {
+
+
+
+
+  return `/api/clerk/action-proposals/execute`
+}
+
+/**
+ * @summary Approve one proposed batch — executes through the ordinary per-invoice submission path (validation, consent, approval policy), re-checks every target's eligibility at this moment, and records the decision with per-target outcomes
+ */
+export const executeAction = async (executeActionInput: ExecuteActionInput, options?: RequestInit): Promise<ExecuteActionResult> => {
+
+  return customFetch<ExecuteActionResult>(getExecuteActionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(executeActionInput)
+  }
+);}
+
+
+
+
+export const getExecuteActionMutationOptions = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof executeAction>>, TError,{data: BodyType<ExecuteActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof executeAction>>, TError,{data: BodyType<ExecuteActionInput>}, TContext> => {
+
+const mutationKey = ['executeAction'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof executeAction>>, {data: BodyType<ExecuteActionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  executeAction(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExecuteActionMutationResult = NonNullable<Awaited<ReturnType<typeof executeAction>>>
+    export type ExecuteActionMutationBody = BodyType<ExecuteActionInput>
+    export type ExecuteActionMutationError = ErrorType<BadRequestResponse>
+
+    /**
+ * @summary Approve one proposed batch — executes through the ordinary per-invoice submission path (validation, consent, approval policy), re-checks every target's eligibility at this moment, and records the decision with per-target outcomes
+ */
+export const useExecuteAction = <TError = ErrorType<BadRequestResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof executeAction>>, TError,{data: BodyType<ExecuteActionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof executeAction>>,
+        TError,
+        {data: BodyType<ExecuteActionInput>},
+        TContext
+      > => {
+      return useMutation(getExecuteActionMutationOptions(options));
+    }
+
+export const getGetActionDecisionsUrl = (params?: GetActionDecisionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/action-decisions?${stringifiedParams}` : `/api/clerk/action-decisions`
+}
+
+/**
+ * @summary The client's most recent action decisions — who approved what, on which evidence, with per-target outcomes
+ */
+export const getActionDecisions = async (params?: GetActionDecisionsParams, options?: RequestInit): Promise<ActionDecisionList> => {
+
+  return customFetch<ActionDecisionList>(getGetActionDecisionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetActionDecisionsQueryKey = (params?: GetActionDecisionsParams,) => {
+    return [
+    `/api/clerk/action-decisions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetActionDecisionsQueryOptions = <TData = Awaited<ReturnType<typeof getActionDecisions>>, TError = ErrorType<BadRequestResponse>>(params?: GetActionDecisionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionDecisions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetActionDecisionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getActionDecisions>>> = ({ signal }) => getActionDecisions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getActionDecisions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetActionDecisionsQueryResult = NonNullable<Awaited<ReturnType<typeof getActionDecisions>>>
+export type GetActionDecisionsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary The client's most recent action decisions — who approved what, on which evidence, with per-target outcomes
+ */
+
+export function useGetActionDecisions<TData = Awaited<ReturnType<typeof getActionDecisions>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetActionDecisionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionDecisions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetActionDecisionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

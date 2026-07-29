@@ -709,3 +709,53 @@ export const clerkPhrasingEvalRunsTable = pgTable("clerk_phrasing_eval_runs", {
 });
 
 export type ClerkPhrasingEvalRun = typeof clerkPhrasingEvalRunsTable.$inferSelect;
+
+// Proposed actions (round 21): the durable APPROVAL artifact. Proposals
+// themselves are never stored — they are computed live from the detectors,
+// so they can never be stale — but the moment a human APPROVES a batch,
+// this row records who decided, on what evidence (the facts the card
+// showed), over which targets, and what the platform's own execution path
+// then did per invoice. Firm-keyed RLS via migration 0028.
+export interface ActionTargetOutcome {
+  invoiceId: string;
+  invoiceNumber: string;
+  outcome: "submitted" | "invalid" | "skipped_not_eligible" | "failed";
+  error: string | null;
+}
+
+export const clerkActionDecisionsTable = pgTable(
+  "clerk_action_decisions",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    // A key from the closed action catalogue (modules/clerk/actions.ts) —
+    // stored as text so old rows survive catalogue growth.
+    kind: text("kind").notNull(),
+    decidedBy: uuid("decided_by")
+      .notNull()
+      .references(() => usersTable.id),
+    // The facts the approval surface showed at decision time.
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
+    targets: jsonb("targets").$type<ActionTargetOutcome[]>().notNull(),
+    requestedCount: integer("requested_count").notNull(),
+    executedCount: integer("executed_count").notNull(),
+    skippedCount: integer("skipped_count").notNull(),
+    failedCount: integer("failed_count").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("clerk_action_decisions_scope_idx").on(
+      t.firmId,
+      t.clientPartyId,
+      t.createdAt,
+    ),
+  ],
+);
+
+export type ClerkActionDecision =
+  typeof clerkActionDecisionsTable.$inferSelect;

@@ -305,6 +305,11 @@ const LADDER: LadderStep[] = [
     atTop: [bypass("clerk_phrasing_eval_runs")],
     afterRollback: [not(bypass("clerk_phrasing_eval_runs"))],
   },
+  {
+    version: 28, // proposed-actions decision ledger guardrails
+    atTop: [clerkTenant("clerk_action_decisions")],
+    afterRollback: [not(clerkTenant("clerk_action_decisions"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

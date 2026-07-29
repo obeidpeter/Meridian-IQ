@@ -102,6 +102,17 @@ export function FeatureFlags() {
       { key: flag.key, data: { enabled } },
       {
         onSuccess: () => {
+          // Settle the controlled Switch IMMEDIATELY: the invalidation
+          // below refetches asynchronously, and a second click landing
+          // before it resolves reads the STALE `enabled` and re-sends the
+          // same state (on a slow runner the round-trip toggle then never
+          // reaches "disabled"). The server confirmed the write — make the
+          // cache say so now.
+          queryClient.setQueryData<FeatureFlag[]>(
+            getListFeatureFlagsQueryKey(),
+            (prev) =>
+              prev?.map((f) => (f.key === flag.key ? { ...f, enabled } : f)),
+          );
           toast({
             title: `${flag.key} ${enabled ? "enabled" : "disabled"}`,
             description: enabled

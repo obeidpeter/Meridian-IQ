@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.51.0
+ * OpenAPI spec version: 0.52.0
  */
 import * as zod from 'zod';
 
@@ -7714,6 +7714,100 @@ export const RunModelCanaryResponse = zod.object({
 })),
   "verdict": zod.enum(['improvement', 'comparable', 'regression']),
   "verdictReason": zod.string()
+})
+
+
+/**
+ * @summary Clerk-assembled action batches from the closed catalogue, computed live from the detector predicates — nothing is stored and nothing runs until a human approves (empty while the clerk_actions flag is dark)
+ */
+export const GetActionProposalsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetActionProposalsResponse = zod.object({
+  "actions": zod.array(zod.object({
+  "kind": zod.enum(['submit_overdue']),
+  "title": zod.string(),
+  "why": zod.string(),
+  "targets": zod.array(zod.object({
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "issueDate": zod.string(),
+  "daysOverdue": zod.number(),
+  "grandTotal": zod.string().nullable(),
+  "currency": zod.string()
+})),
+  "targetCount": zod.number(),
+  "truncated": zod.boolean(),
+  "evidence": zod.record(zod.string(), zod.unknown())
+})),
+  "note": zod.string()
+})
+
+
+/**
+ * @summary Approve one proposed batch — executes through the ordinary per-invoice submission path (validation, consent, approval policy), re-checks every target's eligibility at this moment, and records the decision with per-target outcomes
+ */
+export const executeActionBodyInvoiceIdsMax = 50;
+
+
+
+export const ExecuteActionBody = zod.object({
+  "kind": zod.enum(['submit_overdue']),
+  "invoiceIds": zod.array(zod.string().uuid()).min(1).max(executeActionBodyInvoiceIdsMax),
+  "clientPartyId": zod.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const ExecuteActionResponse = zod.object({
+  "decision": zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "kind": zod.string(),
+  "decidedBy": zod.string().uuid(),
+  "evidence": zod.record(zod.string(), zod.unknown()),
+  "targets": zod.array(zod.object({
+  "invoiceId": zod.string(),
+  "invoiceNumber": zod.string(),
+  "outcome": zod.enum(['submitted', 'invalid', 'skipped_not_eligible', 'failed']),
+  "error": zod.string().nullable()
+})),
+  "requestedCount": zod.number(),
+  "executedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "failedCount": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+})
+
+
+/**
+ * @summary The client's most recent action decisions — who approved what, on which evidence, with per-target outcomes
+ */
+export const GetActionDecisionsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetActionDecisionsResponse = zod.object({
+  "decisions": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "kind": zod.string(),
+  "decidedBy": zod.string().uuid(),
+  "evidence": zod.record(zod.string(), zod.unknown()),
+  "targets": zod.array(zod.object({
+  "invoiceId": zod.string(),
+  "invoiceNumber": zod.string(),
+  "outcome": zod.enum(['submitted', 'invalid', 'skipped_not_eligible', 'failed']),
+  "error": zod.string().nullable()
+})),
+  "requestedCount": zod.number(),
+  "executedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "failedCount": zod.number(),
+  "createdAt": zod.coerce.date()
+}))
 })
 
 
