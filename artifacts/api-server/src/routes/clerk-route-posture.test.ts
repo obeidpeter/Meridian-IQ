@@ -275,4 +275,12 @@ test("action execution runs outside the request transaction, model call outside 
       !/ctx\(\(\) =>\s*draftPaymentChaser/.test(moduleSrc),
     "no context wrapper may span the chaser model call (round-22 review M3)",
   );
+  // Evasion guard (review NIT-1): the negative regexes above only match the
+  // plain arrow form — pinning phrasePaymentChaser to exactly ONE call site
+  // (the asserted transaction-free one) closes the async/braced variants.
+  assert.equal(
+    moduleSrc.match(/phrasePaymentChaser\(/g)?.length,
+    1,
+    "phrasePaymentChaser must be called exactly once, at the pinned transaction-free site",
+  );
 });

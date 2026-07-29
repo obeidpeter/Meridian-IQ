@@ -50,10 +50,11 @@ export const OUTSTANDING_STATUSES = [
 
 // Exported for the cash-flow outlook / chase list, which must share this
 // exact outstanding definition (alias `i` for invoices at every use site).
-// The status list is spelled from OUTSTANDING_STATUSES above — keep them
-// together.
+// COMPOSED from OUTSTANDING_STATUSES above (review NIT-2), so the SQL and
+// JS sides cannot fork — the raw interpolation is safe because the list is
+// this module's own const, never input.
 export const OUTSTANDING = sql`i.kind = 'invoice'
-  AND i.status IN ('submitted', 'stamped', 'confirmed')`;
+  AND i.status IN (${sql.raw(OUTSTANDING_STATUSES.map((s) => `'${s}'`).join(", "))})`;
 
 // ---------------------------------------------------------------------------
 // Invoice ORIENTATION (payables round, contract 0.44.0) — the ONE home for
