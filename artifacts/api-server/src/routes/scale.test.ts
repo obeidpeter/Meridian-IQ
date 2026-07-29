@@ -12,7 +12,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { API_CONTRACT_VERSION } from "@workspace/api-zod";
-import invoicesRouter from "./invoices.ts";
+import invoicesRouter from "./invoices/index.ts";
 import partiesRouter from "./parties.ts";
 import healthRouter from "./health.ts";
 import type { Principal } from "../modules/auth/rbac.ts";

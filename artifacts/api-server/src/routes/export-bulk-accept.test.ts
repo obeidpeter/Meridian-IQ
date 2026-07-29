@@ -15,7 +15,7 @@ import {
   matchProposalsTable,
   auditEventsTable,
 } from "@workspace/db";
-import invoicesRouter from "./invoices.ts";
+import invoicesRouter from "./invoices/index.ts";
 import smeRouter from "./sme.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
 import { bulkAcceptProposals } from "../modules/statements/bulk-accept.ts";

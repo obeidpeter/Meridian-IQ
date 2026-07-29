@@ -10,7 +10,7 @@ import {
   errorCatalogueTable,
 } from "@workspace/db";
 import { computeRejectionRisk } from "./rejection-risk.ts";
-import invoicesRouter from "../../routes/invoices.ts";
+import invoicesRouter from "../../routes/invoices/index.ts";
 import type { Principal } from "../auth/rbac.ts";
 import {
   appFor,

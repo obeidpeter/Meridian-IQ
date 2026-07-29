@@ -9,7 +9,7 @@ import {
   firmApiKeysTable,
 } from "@workspace/db";
 import integrationsRouter from "../../routes/integrations.ts";
-import invoicesRouter from "../../routes/invoices.ts";
+import invoicesRouter from "../../routes/invoices/index.ts";
 import { can, type Principal } from "../auth/rbac.ts";
 import {
   API_KEY_ROLE,

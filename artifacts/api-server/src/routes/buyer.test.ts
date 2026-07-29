@@ -15,7 +15,7 @@ import {
   messagesTable,
 } from "@workspace/db";
 import buyerRouter from "./buyer.ts";
-import invoicesRouter from "./invoices.ts";
+import invoicesRouter from "./invoices/index.ts";
 import { setFlag } from "../modules/flags/flags.ts";
 import { pointerEntityRef } from "../modules/messaging/recipient-ref.ts";
 import { parseCsv } from "../lib/csv.ts";

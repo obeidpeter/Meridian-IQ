@@ -300,7 +300,7 @@ test("bulk submit runs outside the request transaction with per-item caller-post
   // The route's own party-access gate needs a context too — the raw pool
   // carries no GUCs, so an unwrapped engagement read would false-deny under
   // RLS for firm principals.
-  const block = routeBlock(src("routes/invoices.ts"), "/invoices/bulk-submit");
+  const block = routeBlock(src("routes/invoices/lifecycle.ts"), "/invoices/bulk-submit");
   // One spanning regex, not two includes: an unwrapped assertPartyAccess
   // beside a vestigial runRequestContext(noop) must not pass.
   assert.ok(

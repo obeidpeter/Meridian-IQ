@@ -484,27 +484,31 @@ export async function supplierDetail(
 // Bulk confirmation response (contract 0.42.0). A buyer clears up to 50
 // awaiting invoices in one action while the per-invoice machinery stays
 // EXACTLY what a single response runs. confirmInvoiceForBuyer below is a
-// deliberate re-implementation of the respond branch of
-// routes/invoices.ts POST /invoices/:id/confirmations — mirrored line by
-// line rather than extracted, because that route's edit budget is pinned
-// elsewhere this round; if the single route's semantics change, change this
-// helper too. The mirrored source, piece by piece:
-//   - :916-919  load the invoice, 404 unknown, assertBuyerPartyAccess scope;
-//   - :922-931  body/invoice buyerPartyId mismatch — structurally impossible
-//               here (bulk carries no body buyerPartyId; the row below is
-//               always written with the invoice's own buyer);
-//   - :934-945  TIN gate: an unvalidated buyer party never enters the
-//               workflow (TIN_NOT_VALIDATED, the 422 becomes a skip reason);
-//   - :948-953, :972-978  the latest lineage row must be an open `requested`
-//               (NO_OPEN_REQUEST) — a duplicate id later in the same batch
-//               lands here too, because the first occurrence closed the lane;
-//   - :979-985  METHOD_REQUIRED — the bulk contract requires `method`
-//               (minLength 1), so every item carries the caller's method;
-//   - :987-995  CORE-09: a cancelled/credited invoice collects no
-//               confirmation (INVOICE_NOT_ELIGIBLE);
-//   - :998-1010 the append-only row, confirmingUserId captured (BR-02);
-//   - :1011-1034 compare-and-set status transition + lifecycle ledger row;
-//   - :1035-1042 the invoice.confirmation audit event.
+// deliberate re-implementation of the respond branch of the single
+// confirmation write — whose domain rules now live in
+// modules/invoice/confirmations.ts recordConfirmation (the invoices.ts
+// split extracted them from the route) — mirrored rather than shared,
+// because the bulk path repurposes several refusals as per-item skip
+// reasons; if recordConfirmation's semantics change, change this helper
+// too. The mirrored rules, piece by piece:
+//   - route fork: load the invoice, 404 unknown, assertBuyerPartyAccess;
+//   - BUYER_PARTY_MISMATCH — structurally impossible here (bulk carries no
+//     body buyerPartyId; the row below is always written with the invoice's
+//     own buyer);
+//   - TIN gate: an unvalidated buyer party never enters the workflow
+//     (TIN_NOT_VALIDATED, the 422 becomes a skip reason);
+//   - the latest lineage row must be an open `requested` (NO_OPEN_REQUEST)
+//     — a duplicate id later in the same batch lands here too, because the
+//     first occurrence closed the lane;
+//   - METHOD_REQUIRED — the bulk contract requires `method` (minLength 1),
+//     so every item carries the caller's method;
+//   - CORE-09: a cancelled/credited invoice collects no confirmation
+//     (INVOICE_NOT_ELIGIBLE);
+//   - the append-only row, confirmingUserId captured (BR-02);
+//   - compare-and-set status transition + lifecycle ledger row;
+//   - the invoice.confirmation audit event.
+// (The single path's request-side buyer NUDGE is respond-only-irrelevant:
+// neither path sends anything on a response.)
 // ---------------------------------------------------------------------------
 
 async function confirmInvoiceForBuyer(

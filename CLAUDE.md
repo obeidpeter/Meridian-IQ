@@ -78,7 +78,7 @@ you must not learn the hard way:
 - **SEC-03.** Firm-keyed RLS shares a firm across all its `client_user`s, so
   a client route must ALSO call `assertClientPartyScope` / filter by
   `clientPartyScope` — RLS is not a backstop for sibling-client isolation.
-  Copy the pattern in `routes/invoices.ts` / `routes/engagements.ts`.
+  Copy the pattern in `routes/invoices/` (shared.ts loadForTenant) / `routes/engagements.ts`.
 - **The 4xx rollback rule.** `tenantContext` buffers the response and commits
   on `status < 400`, rolls back on `status >= 400`. Anything that must
   persist even when the handler errors (login throttle counters, the
