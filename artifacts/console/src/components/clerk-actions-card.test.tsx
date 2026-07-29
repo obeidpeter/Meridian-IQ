@@ -27,9 +27,9 @@ import type {
   PaymentChaserDraft,
 } from "@workspace/api-client-react";
 
-// Controllable stand-ins for the three generated hooks the card renders
-// with. The rest of the module stays real — in particular the query-key
-// builders, so the invalidation assertions compare against genuine keys.
+// Controllable stand-ins for the generated hooks the card renders with. The
+// rest of the module stays real — in particular the query-key builders, so
+// the invalidation assertions compare against genuine keys.
 const harness = vi.hoisted(() => ({
   proposals: {
     data: undefined as unknown,
@@ -38,24 +38,53 @@ const harness = vi.hoisted(() => ({
   decisions: {
     data: undefined as unknown,
   },
+  policies: {
+    data: undefined as unknown,
+  },
   execute: {
     calls: [] as unknown[],
     pending: false,
     result: null as unknown,
   },
+  policyCalls: {
+    grant: [] as unknown[],
+    pause: [] as unknown[],
+    resume: [] as unknown[],
+    revoke: [] as unknown[],
+  },
   reset() {
     this.proposals.data = undefined;
     this.proposals.isSuccess = false;
     this.decisions.data = undefined;
+    this.policies.data = undefined;
     this.execute.calls = [];
     this.execute.pending = false;
     this.execute.result = null;
+    this.policyCalls.grant = [];
+    this.policyCalls.pause = [];
+    this.policyCalls.resume = [];
+    this.policyCalls.revoke = [];
   },
 }));
 
 vi.mock("@workspace/api-client-react", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@workspace/api-client-react")>();
+  // A policy mutation stand-in that resolves instantly and fires both the
+  // hook-level onSuccess (the card's invalidation) and the per-call one
+  // (dialog close), like a live mutation would.
+  type MutationOpts = {
+    mutation?: { onSuccess?: () => void; onError?: (e: unknown) => void };
+  };
+  const policyMutation =
+    (name: keyof typeof harness.policyCalls) => (options?: MutationOpts) => ({
+      isPending: false,
+      mutate: (vars: unknown, callOpts?: { onSuccess?: () => void }) => {
+        harness.policyCalls[name].push(vars);
+        options?.mutation?.onSuccess?.();
+        callOpts?.onSuccess?.();
+      },
+    });
   return {
     ...actual,
     useGetActionProposals: () => ({
@@ -65,6 +94,13 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     useGetActionDecisions: () => ({
       data: harness.decisions.data,
     }),
+    useGetActionPolicies: () => ({
+      data: harness.policies.data,
+    }),
+    useGrantActionPolicy: policyMutation("grant"),
+    usePauseActionPolicy: policyMutation("pause"),
+    useResumeActionPolicy: policyMutation("resume"),
+    useRevokeActionPolicy: policyMutation("revoke"),
     useExecuteAction: () => ({
       // Getter so the object handed to the handlers always reflects the
       // in-flight state, exactly like a live mutation object would.
@@ -84,10 +120,12 @@ import { ClerkActionsCard } from "./clerk-actions-card";
 import {
   ActionTargetOutcomeOutcome,
   getGetActionDecisionsQueryKey,
+  getGetActionPoliciesQueryKey,
   getGetActionProposalsQueryKey,
   getGetClientPortfolioQueryKey,
 } from "@workspace/api-client-react";
-import { ACTION_OUTCOME_LABELS } from "@/lib/format";
+import type { ClerkActionPolicy } from "@workspace/api-client-react";
+import { ACTION_OUTCOME_LABELS, policyGrantDescription } from "@/lib/format";
 
 function target(invoiceId: string, invoiceNumber: string): ActionTarget {
   return {
@@ -134,6 +172,7 @@ function decision(
     clientPartyId: "cp-1",
     kind: "submit_overdue",
     decidedBy: "u-1",
+    policyId: null,
     evidence: {},
     targets,
     requestedCount: targets.length,
@@ -141,6 +180,27 @@ function decision(
     skippedCount: skipped,
     failedCount: targets.length - executed - skipped,
     createdAt: "2026-07-29T10:00:00Z",
+    ...over,
+  };
+}
+
+function policy(over: Partial<ClerkActionPolicy> = {}): ClerkActionPolicy {
+  return {
+    id: "pol-1",
+    firmId: "f-1",
+    clientPartyId: "cp-1",
+    kind: "submit_overdue",
+    maxTargetsPerRun: 50,
+    grantedBy: "u-1",
+    grantedByRole: "firm_admin",
+    pausedAt: null,
+    pausedReason: null,
+    pausedBy: null,
+    revokedAt: null,
+    revokedBy: null,
+    lastRunAt: null,
+    lastRunDay: null,
+    createdAt: "2026-07-28T09:00:00Z",
     ...over,
   };
 }
@@ -201,6 +261,9 @@ beforeEach(() => {
   harness.proposals.data = proposals([proposal()]);
   harness.proposals.isSuccess = true;
   harness.decisions.data = { decisions: [] };
+  // The pre-round-28 default: no grants, flag dark — the card renders
+  // exactly as it always did.
+  harness.policies.data = { policies: [], enabled: false };
 });
 
 describe("ClerkActionsCard (console)", () => {
@@ -364,6 +427,116 @@ describe("ClerkActionsCard (console)", () => {
     expect(screen.getByTestId("card-clerk-actions")).toBeTruthy();
     expect(screen.getByTestId("decision-dec-1").textContent).toContain(
       "1 executed",
+    );
+  });
+
+  // ---- Standing approvals (round 28) --------------------------------------
+
+  test("the automate affordance: submit kinds only, flag lit, no live grant — and granting sends kind + client", async () => {
+    harness.proposals.data = proposals([
+      proposal(),
+      proposal({ kind: "draft_chasers", title: "Draft 1 payment reminder" }),
+    ]);
+    harness.policies.data = { policies: [], enabled: true };
+    const { invalidatedKeys } = renderCard();
+
+    // draft_chasers is not automatable — no affordance, by design.
+    expect(screen.getByTestId("button-automate-submit_overdue")).toBeTruthy();
+    expect(screen.queryByTestId("button-automate-draft_chasers")).toBeNull();
+
+    // The confirm dialog carries the consent-grade copy verbatim.
+    await click(screen.getByTestId("button-automate-submit_overdue"));
+    expect(
+      screen.getByText(policyGrantDescription("submit_overdue", "console")),
+    ).toBeTruthy();
+
+    await click(screen.getByTestId("button-confirm-automate"));
+    expect(harness.policyCalls.grant).toEqual([
+      { data: { kind: "submit_overdue", clientPartyId: "cp-1" } },
+    ]);
+    // Granting closes the dialog and refetches the grants.
+    expect(
+      screen.queryByText(policyGrantDescription("submit_overdue", "console")),
+    ).toBeNull();
+    expect(invalidatedKeys()).toContainEqual(getGetActionPoliciesQueryKey());
+  });
+
+  test("no affordance while the policies flag is dark, or once a live grant exists", () => {
+    // Dark flag (the beforeEach default): the proposal renders, the
+    // affordance does not.
+    renderCard();
+    expect(screen.getByTestId("button-approve-submit_overdue")).toBeTruthy();
+    expect(screen.queryByTestId("button-automate-submit_overdue")).toBeNull();
+    cleanup();
+
+    // A live grant of the kind: managing it replaces granting it again.
+    harness.policies.data = { policies: [policy()], enabled: true };
+    renderCard();
+    expect(screen.queryByTestId("button-automate-submit_overdue")).toBeNull();
+  });
+
+  test("a live grant keeps the card up on a quiet day, and pause/revoke act on it", async () => {
+    harness.proposals.data = proposals([]);
+    harness.policies.data = {
+      policies: [policy({ lastRunAt: "2026-07-28T06:10:00Z" })],
+      enabled: true,
+    };
+    renderCard();
+    expect(screen.getByTestId("card-clerk-actions")).toBeTruthy();
+    const strip = screen.getByTestId("policy-submit_overdue");
+    expect(strip.textContent).toContain("Auto-submit overdue invoices");
+    expect(
+      screen.getByTestId("text-policy-status-submit_overdue").textContent,
+    ).toMatch(/^runs daily · up to 50 per run · last ran /);
+
+    await click(screen.getByTestId("button-policy-pause-submit_overdue"));
+    expect(harness.policyCalls.pause).toEqual([{ id: "pol-1" }]);
+    await click(screen.getByTestId("button-policy-revoke-submit_overdue"));
+    expect(harness.policyCalls.revoke).toEqual([{ id: "pol-1" }]);
+  });
+
+  test("a paused grant reads why and offers resume", async () => {
+    harness.proposals.data = proposals([]);
+    harness.policies.data = {
+      policies: [
+        policy({
+          pausedAt: "2026-07-29T06:00:00Z",
+          pausedReason: "failed_targets",
+        }),
+      ],
+      enabled: true,
+    };
+    renderCard();
+    expect(
+      screen.getByTestId("text-policy-status-submit_overdue").textContent,
+    ).toBe("paused — too many failures in the last run");
+    expect(
+      screen.queryByTestId("button-policy-pause-submit_overdue"),
+    ).toBeNull();
+    await click(screen.getByTestId("button-policy-resume-submit_overdue"));
+    expect(harness.policyCalls.resume).toEqual([{ id: "pol-1" }]);
+  });
+
+  test("a policy-run decision line is tagged auto", () => {
+    harness.proposals.data = proposals([]);
+    harness.decisions.data = {
+      decisions: [
+        decision(
+          [{ invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null }],
+          { policyId: "pol-1" },
+        ),
+        decision(
+          [{ invoiceId: "inv-2", invoiceNumber: "INV-002", outcome: "submitted", error: null }],
+          { id: "dec-2" },
+        ),
+      ],
+    };
+    renderCard();
+    expect(screen.getByTestId("decision-dec-1").textContent).toContain(
+      "· auto",
+    );
+    expect(screen.getByTestId("decision-dec-2").textContent).not.toContain(
+      "· auto",
     );
   });
 });

@@ -348,6 +348,101 @@ export function draftClipboardText(d: {
   return `${d.subject}\n\n${d.body}`;
 }
 
+// ---- Standing approvals (round 28) -----------------------------------------
+// The automation strip both "Clerk suggests" cards render under a proposal:
+// grant affordance, live-grant status line, pause/tripwire vocabulary, and
+// the "· auto" tag on policy-run decision lines. Pure builders — one home
+// for the exact wording, unit-tested in action-dialog-copy.test.ts.
+
+// The automatable subset of the action catalogue (GrantActionPolicyInput's
+// enum): draft_chasers is excluded by design — its drafts exist only on the
+// response for a human to read and send, which an unattended run cannot do.
+// Both cards use this to decide which proposals carry an "automate" button.
+export const AUTOMATABLE_ACTION_KINDS = [
+  "submit_overdue",
+  "retry_failed",
+] as const;
+export type AutomatableActionKind = (typeof AUTOMATABLE_ACTION_KINDS)[number];
+
+export function automatableActionKind(
+  kind: string,
+): AutomatableActionKind | null {
+  return (AUTOMATABLE_ACTION_KINDS as readonly string[]).includes(kind)
+    ? (kind as AutomatableActionKind)
+    : null;
+}
+
+// Keyed by the automatable kinds (GrantActionPolicyInput's enum). A kind an
+// older client does not know renders through the fallback in
+// policyKindLabel, never as a blank.
+export const POLICY_KIND_LABELS: Record<string, string> = {
+  submit_overdue: "Auto-submit overdue invoices",
+  retry_failed: "Auto-retry failed submissions",
+};
+
+export function policyKindLabel(kind: string): string {
+  return POLICY_KIND_LABELS[kind] ?? kind;
+}
+
+// Why a grant is paused, in card-sized words. The three tripwire reasons are
+// the sweep's own vocabulary (modules/clerk/action-policies.ts); "manual"
+// is a human pause.
+export const POLICY_PAUSE_REASON_LABELS: Record<string, string> = {
+  manual: "paused manually",
+  grantor_inactive: "paused — the granter's access changed",
+  consent_missing: "paused — compliance consent is missing",
+  failed_targets: "paused — too many failures in the last run",
+  unknown_kind: "paused — this action kind can't run automatically",
+};
+
+export function policyPauseReasonLabel(reason: string | null): string {
+  return (
+    POLICY_PAUSE_REASON_LABELS[reason ?? "manual"] ??
+    `paused — ${reason}`
+  );
+}
+
+/**
+ * One status line per live grant: paused grants lead with why (amber-worthy
+ * — the sweep is NOT running); active grants say the cadence, the per-run
+ * cap, and when the sweep last ran (or that it has not yet).
+ */
+export function policyStatusLine(policy: {
+  pausedAt: string | null;
+  pausedReason: string | null;
+  maxTargetsPerRun: number;
+  lastRunAt: string | null;
+}): string {
+  if (policy.pausedAt) return policyPauseReasonLabel(policy.pausedReason);
+  const lastRun = policy.lastRunAt
+    ? `last ran ${formatDateTime(policy.lastRunAt)}`
+    : "has not run yet";
+  return `runs daily · up to ${policy.maxTargetsPerRun} per run · ${lastRun}`;
+}
+
+/**
+ * The consent-grade description under the "automate" button: what a standing
+ * approval DOES, in the same honest register as the per-batch confirm copy.
+ * The audience split mirrors actionConfirmDescription's.
+ */
+export function policyGrantDescription(
+  kind: string,
+  audience: "sme" | "console",
+): string {
+  const what =
+    kind === "retry_failed"
+      ? "resubmit invoices that failed on the rails"
+      : "submit invoices past the statutory window";
+  const who =
+    audience === "sme"
+      ? "under your name, without asking again each day"
+      : "under your name, without a fresh approval each day";
+  return (
+    `Clerk will run this check every day and ${what} ${who}. ` +
+    `Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.`
+  );
+}
+
 // ---- Notification bell vocabulary -----------------------------------------
 // Channel labels/tones, relative-time buckets and the badge/mark-read
 // helpers shared by the console and SME notification bells.

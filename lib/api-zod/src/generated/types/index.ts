@@ -3,11 +3,12 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.53.0
+ * OpenAPI spec version: 0.54.0
  */
 
 export * from './acceptInvitationInput';
 export * from './actionDecisionList';
+export * from './actionPolicyList';
 export * from './actionProposal';
 export * from './actionProposalEvidence';
 export * from './actionProposalKind';
@@ -113,6 +114,7 @@ export * from './claimRecordState';
 export * from './claimUpdateInput';
 export * from './clerkActionDecision';
 export * from './clerkActionDecisionEvidence';
+export * from './clerkActionPolicy';
 export * from './clerkAdoptionReport';
 export * from './clerkAdoptionReportClientsItem';
 export * from './clerkAdoptionReportTotals';
@@ -352,6 +354,7 @@ export * from './gapItemSeverity';
 export * from './gateMetrics';
 export * from './generateStatementsInput';
 export * from './getActionDecisionsParams';
+export * from './getActionPoliciesParams';
 export * from './getActionProposalsParams';
 export * from './getBillingStatementParams';
 export * from './getCashflowOutlookParams';
@@ -378,6 +381,8 @@ export * from './getUnmatchedCreditsParams';
 export * from './getVatPackParams';
 export * from './getVatPositionParams';
 export * from './getVatSettlementCheckParams';
+export * from './grantActionPolicyInput';
+export * from './grantActionPolicyInputKind';
 export * from './graphEdge';
 export * from './graphNode';
 export * from './graphNodeKind';

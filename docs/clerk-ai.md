@@ -264,6 +264,75 @@ the bulk-submit conversion (the last batch surface now commits per item
 in the caller's posture outside the request transaction, closing the
 audit-lock convoy class platform-wide).
 
+### Standing approvals (round 28 — the policy autopilot)
+
+Rounds 21/22 still leave a human clicking APPROVE on the same batch every
+day. A standing approval makes that decision durable instead:
+`clerk_action_policies` (firm-keyed RLS migration 0029) holds one live,
+revocable GRANT per (firm, client, kind) — who granted it (and their role
+at grant time), a per-run target cap, and its own lifecycle. The daily
+sweep then runs it — but a grant is authorization, never a bypass:
+
+- **Narrower catalogue.** `POLICY_KINDS` = the submit kinds only
+  (`modules/clerk/action-policies.ts`); `draft_chasers` is excluded by
+  design — its drafts exist only on the HTTP response for a human to read
+  and send, which an unattended sweep cannot do.
+- **Doubly fail-closed.** The `clerk_action_policies` flag layers ON
+  `clerk_actions`: either dark means granting refuses
+  `503 POLICIES_DISABLED` and the sweep skips WITHOUT consuming the day
+  (an ops toggle is not a policy state — relighting the flag lets today's
+  batch still run). Granting also re-walks the per-batch gates: consent
+  (CORE-03, `403 CONSENT_REQUIRED`), the SEC-03 party wall +
+  `assertPartyAccess`, `invoice.submit`, one live grant per kind
+  (`409 POLICY_EXISTS`, backstopped by a partial unique index
+  `WHERE revoked_at IS NULL`).
+- **Every run re-validates the world.** Both flags; the grantor's CURRENT
+  membership still carries `invoice.submit` in this firm (a client_user
+  grantor only for their OWN party) — else the policy auto-pauses
+  `grantor_inactive`; consent — else `consent_missing`; then
+  `executeAction` re-checks every target's predicate per invoice exactly
+  as a fresh click would. Batches assemble from the SAME live proposal
+  builders the cards render (`proposalForKind`), capped at the grant's
+  `maxTargetsPerRun`, oldest first.
+- **At most once per Lagos day, exactly once across instances.** The sweep
+  claims the policy's `lastRunDay` cell with a compare-and-set BEFORE
+  executing; the loser of a concurrent claim skips. An EMPTY assembly
+  leaves the day unclaimed — the hourly pass keeps watching and the first
+  non-empty batch of the day runs. Registered via `registerSweep`
+  (`atMostHourly`), per-policy failures isolated.
+- **The sweep polices itself.** A run where half or more of the targets
+  fail auto-pauses the policy (`failed_targets`) — something is
+  structurally wrong and a human must look before it runs again. A row
+  whose `kind` falls outside `POLICY_KINDS` (an ops fix-up, a backfill
+  bug — the API never writes one) pauses as `unknown_kind` instead of
+  falling through the proposal dispatcher into the chaser builder's
+  model calls. Pause is reversible (a human resume clears a tripwire;
+  the next run re-checks everything anyway); revoke is permanent
+  evidence — the row survives and re-automating takes a fresh grant.
+  Tripwire pauses audit as `clerk.action.policy_auto_paused` with the
+  system actor (`action-policy-sweep`); grant/pause/resume/revoke audit
+  under the human's id — including the revocations `offboardClient`
+  performs: offboarding a client revokes the firm's live grants for that
+  party (step d2), because no sweep tripwire would ever catch a
+  STAFF-granted policy after offboarding deleted the client logins that
+  could have paused it (the staff membership survives, and consent is
+  client-owned and untouched).
+- **The paper trail stays one human deep.** A policy run's decision row
+  carries `policyId` and `decidedBy` = the GRANTOR (maker-checker still
+  bites per row inside `submitInvoice`); the batch audit carries the
+  policy pointer. Eyes-open caveat: the PER-INVOICE lifecycle events and
+  audits inside `submitInvoice` name the grantor with no policy marker —
+  a row-level reader correlates through the decision row. Surfaces: both
+  cards grow an Automation strip (status line, pause/resume/revoke) and
+  an "Automate daily" affordance next to each automatable proposal —
+  consent-grade grant copy lives in `@workspace/format`
+  (`policyGrantDescription`); the CONSOLE card additionally tags
+  policy-run lines "· auto" in its recent-decisions strip (the SME card
+  has no decisions strip — its evidence is the status line's last-run
+  stamp). Deferred, deliberately visible: an SME-side run record and a
+  digest/inbox signal for auto-pauses — until then a paused autopilot
+  surfaces only when someone opens a dashboard.
+
 ## Ask Clerk (grounded firm-data Q&A)
 
 - `modules/clerk/data-intents/`: Ask carries a second closed catalogue next

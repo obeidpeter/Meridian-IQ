@@ -6,6 +6,7 @@ import {
   getDb,
   alertPreferencesTable,
   auditEventsTable,
+  clerkActionPoliciesTable,
   clerkCasesTable,
   clerkEvalFixturesTable,
   engagementsTable,
@@ -125,6 +126,20 @@ before(async () => {
       fullName: `Off B ${SALT}`,
       passwordHash: `hash-${SALT}`,
     },
+    // The offboarding admins themselves: step (d2) stamps revokedBy with the
+    // acting principal's userId, which carries a real FK to users.
+    {
+      id: adminA.userId,
+      email: `off-admin-a-${SALT}@test.local`,
+      fullName: `Off Admin A ${SALT}`,
+      passwordHash: `hash-${SALT}`,
+    },
+    {
+      id: adminB.userId,
+      email: `off-admin-b-${SALT}@test.local`,
+      fullName: `Off Admin B ${SALT}`,
+      passwordHash: `hash-${SALT}`,
+    },
   ]);
   await db.insert(membershipsTable).values([
     { userId: userA, firmId: firmA, role: "client_user", clientPartyId: partyId },
@@ -144,6 +159,27 @@ before(async () => {
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     invitedByUserId: adminA.userId,
   });
+  // Standing approvals (round-28 review M1): one live grant per firm. Firm
+  // A's must die with firm A's offboard; firm B's — the firm still serving
+  // the client — must survive it, then die with firm B's own offboard.
+  await db.insert(clerkActionPoliciesTable).values([
+    {
+      firmId: firmA,
+      clientPartyId: partyId,
+      kind: "submit_overdue",
+      maxTargetsPerRun: 50,
+      grantedBy: userA,
+      grantedByRole: "client_user",
+    },
+    {
+      firmId: firmB,
+      clientPartyId: partyId,
+      kind: "submit_overdue",
+      maxTargetsPerRun: 50,
+      grantedBy: userB,
+      grantedByRole: "client_user",
+    },
+  ]);
   await db.insert(alertPreferencesTable).values({
     clientPartyId: partyId,
     whatsappTo: "+2348099990001",
@@ -376,6 +412,41 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
   assert.equal(siblingFixture.supplierName, `Off Sibling Client ${SALT}`);
   assert.equal(siblingFixture.supplierTin, "30000003-0003");
 
+  // Standing approvals (round-28 review M1): firm A's autopilot dies with
+  // the relationship — no sweep tripwire would ever catch a staff-granted
+  // policy after (b) deleted the client logins that could have stopped it.
+  // Firm B still serves the client, so ITS grant survives untouched.
+  const policies = await getDb()
+    .select()
+    .from(clerkActionPoliciesTable)
+    .where(eq(clerkActionPoliciesTable.clientPartyId, partyId));
+  const policyByFirm = new Map(policies.map((p) => [p.firmId, p]));
+  assert.ok(
+    policyByFirm.get(firmA)?.revokedAt,
+    "firm A's standing approval is revoked by the offboard",
+  );
+  assert.equal(policyByFirm.get(firmA)?.revokedBy, adminA.userId);
+  assert.equal(
+    policyByFirm.get(firmB)?.revokedAt,
+    null,
+    "firm B's grant survives — that firm still serves the client",
+  );
+  const [policyRevokedAudit] = await getDb()
+    .select()
+    .from(auditEventsTable)
+    .where(
+      and(
+        eq(auditEventsTable.action, "clerk.action.policy_revoked"),
+        eq(auditEventsTable.entityId, policyByFirm.get(firmA)!.id),
+      ),
+    );
+  assert.ok(policyRevokedAudit, "the revocation is audited per policy");
+  assert.equal(
+    (policyRevokedAudit.after as { via?: string }).via,
+    "offboard",
+    "the audit names the offboard as the revoker",
+  );
+
   const events = await getDb()
     .select()
     .from(auditEventsTable)
@@ -391,6 +462,7 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
   assert.equal(afterPayload.engagementsArchived, 1);
   assert.equal(afterPayload.lastEngagement, false);
   assert.equal(afterPayload.fixturesRetired, 1);
+  assert.equal(afterPayload.standingApprovalsRevoked, 1);
   assert.ok(
     !JSON.stringify(events).includes("+2348099990001"),
     "the ledger never carries contact values",
@@ -446,6 +518,17 @@ test("last firm offboards: contact PII cleared, devices removed, statutory ident
   assert.equal(party.legalName, LEGAL_NAME);
   assert.equal(party.tin, TIN);
   assert.equal(party.cacNumber, "RC777777");
+
+  // Firm B's own offboard now retires ITS standing approval too — no live
+  // grant survives the end of the last relationship.
+  const livePolicies = await getDb()
+    .select()
+    .from(clerkActionPoliciesTable)
+    .where(eq(clerkActionPoliciesTable.clientPartyId, partyId));
+  assert.ok(
+    livePolicies.every((p) => p.revokedAt !== null),
+    "every firm's grant is revoked once its relationship ends",
+  );
 });
 
 test("a repeat offboard is a clean 409 NOT_ENGAGED", async () => {

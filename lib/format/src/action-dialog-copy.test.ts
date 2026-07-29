@@ -5,6 +5,10 @@ import {
   actionConfirmDescription,
   actionOutcomeSummary,
   draftClipboardText,
+  policyGrantDescription,
+  policyKindLabel,
+  policyPauseReasonLabel,
+  policyStatusLine,
 } from "./index";
 
 // The approve/results dialog copy (round-27 extraction). Both cards render
@@ -84,4 +88,77 @@ describe("draftClipboardText", () => {
 
 test("the display cap both cards slice by stays 8", () => {
   expect(ACTION_TARGET_DISPLAY_CAP).toBe(8);
+});
+
+// ---- Standing approvals (round 28) ----------------------------------------
+
+describe("policyKindLabel", () => {
+  test("the automatable kinds have card labels; unknown kinds fall through raw", () => {
+    expect(policyKindLabel("submit_overdue")).toBe(
+      "Auto-submit overdue invoices",
+    );
+    expect(policyKindLabel("retry_failed")).toBe(
+      "Auto-retry failed submissions",
+    );
+    expect(policyKindLabel("future_kind")).toBe("future_kind");
+  });
+});
+
+describe("policyPauseReasonLabel", () => {
+  test("the sweep's tripwire vocabulary, in card-sized words", () => {
+    expect(policyPauseReasonLabel("manual")).toBe("paused manually");
+    expect(policyPauseReasonLabel("grantor_inactive")).toBe(
+      "paused — the granter's access changed",
+    );
+    expect(policyPauseReasonLabel("consent_missing")).toBe(
+      "paused — compliance consent is missing",
+    );
+    expect(policyPauseReasonLabel("failed_targets")).toBe(
+      "paused — too many failures in the last run",
+    );
+    expect(policyPauseReasonLabel("unknown_kind")).toBe(
+      "paused — this action kind can't run automatically",
+    );
+    expect(policyPauseReasonLabel(null)).toBe("paused manually");
+    expect(policyPauseReasonLabel("new_reason")).toBe("paused — new_reason");
+  });
+});
+
+describe("policyStatusLine", () => {
+  test("a paused grant leads with why; an active one says cadence, cap and last run", () => {
+    expect(
+      policyStatusLine({
+        pausedAt: "2026-07-29T08:00:00Z",
+        pausedReason: "failed_targets",
+        maxTargetsPerRun: 50,
+        lastRunAt: "2026-07-29T07:00:00Z",
+      }),
+    ).toBe("paused — too many failures in the last run");
+    expect(
+      policyStatusLine({
+        pausedAt: null,
+        pausedReason: null,
+        maxTargetsPerRun: 10,
+        lastRunAt: null,
+      }),
+    ).toBe("runs daily · up to 10 per run · has not run yet");
+    const active = policyStatusLine({
+      pausedAt: null,
+      pausedReason: null,
+      maxTargetsPerRun: 50,
+      lastRunAt: "2026-07-28T06:10:00Z",
+    });
+    expect(active).toMatch(/^runs daily · up to 50 per run · last ran /);
+  });
+});
+
+describe("policyGrantDescription", () => {
+  test("says what runs, under whose name, and that it is revocable — per audience", () => {
+    expect(policyGrantDescription("submit_overdue", "sme")).toBe(
+      "Clerk will run this check every day and submit invoices past the statutory window under your name, without asking again each day. Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.",
+    );
+    expect(policyGrantDescription("retry_failed", "console")).toBe(
+      "Clerk will run this check every day and resubmit invoices that failed on the rails under your name, without a fresh approval each day. Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.",
+    );
+  });
 });

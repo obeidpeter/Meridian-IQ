@@ -321,6 +321,21 @@ async function draftChasersProposal(
   };
 }
 
+// Round 28: the standing-approval sweep assembles a policy's batch from the
+// SAME live builders the proposal surface uses — one entry point keyed by
+// kind, so the autopilot can never select targets the card would not show.
+export function proposalForKind(
+  kind: ActionKind,
+  firmId: string,
+  clientPartyId: string,
+): Promise<ActionProposal | null> {
+  return kind === "submit_overdue"
+    ? submitOverdueProposal(firmId, clientPartyId)
+    : kind === "retry_failed"
+      ? retryFailedProposal(firmId, clientPartyId)
+      : draftChasersProposal(firmId, clientPartyId);
+}
+
 export async function listActionProposals(
   firmId: string,
   clientPartyId: string,
@@ -371,6 +386,10 @@ export async function executeAction(
   kind: string,
   invoiceIds: string[],
   principal: Principal,
+  // Round 28: set by the standing-approval sweep — the decision row and the
+  // audit then name the policy that authorized this run (actorId is the
+  // GRANTOR, re-validated by the sweep just before this call).
+  opts?: { policyId?: string },
 ): Promise<ActionExecution> {
   if (
     kind !== "submit_overdue" &&
@@ -588,6 +607,7 @@ export async function executeAction(
         clientPartyId,
         kind,
         decidedBy: actorId,
+        policyId: opts?.policyId ?? null,
         evidence,
         targets,
         requestedCount: ids.length,
@@ -614,6 +634,7 @@ export async function executeAction(
         skippedCount,
         failedCount,
         submitApprovalRequired: staged.approvalRequired,
+        ...(opts?.policyId ? { policyId: opts.policyId } : {}),
       },
     });
     return row;

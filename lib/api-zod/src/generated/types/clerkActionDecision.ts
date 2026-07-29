@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.53.0
+ * OpenAPI spec version: 0.54.0
  */
 import type { ActionTargetOutcome } from './actionTargetOutcome';
 import type { ClerkActionDecisionEvidence } from './clerkActionDecisionEvidence';
@@ -14,6 +14,8 @@ export interface ClerkActionDecision {
   clientPartyId: string;
   kind: string;
   decidedBy: string;
+  /** @nullable */
+  policyId: string | null;
   evidence: ClerkActionDecisionEvidence;
   targets: ActionTargetOutcome[];
   requestedCount: number;
