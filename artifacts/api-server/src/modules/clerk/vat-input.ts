@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
-import { BILL_ORIENTATION } from "../invoice/receivables";
+import { NEWEST_BILL_VERIFICATION } from "../invoice/payables";
+import { monthBillsSql } from "../invoice/vat-position";
 import { closedLagosMonths, computeVatPack } from "./vat-pack";
 import { monthLabel } from "./client-statement";
 
@@ -58,24 +59,12 @@ export interface VatPosition {
   note: string;
 }
 
-// The month's bills with their newest verification verdict — one fragment
-// for the aggregate and the row list so the two can never disagree. A bill
-// is VERIFIED when its newest bill_verifications row says valid.
-function monthBills(firmId: string, monthStart: string) {
-  return sql`i.firm_id = ${firmId}
-    AND i.kind = 'invoice'
-    AND i.status <> 'cancelled'
-    AND ${BILL_ORIENTATION}
-    AND i.issue_date >= ${monthStart}::date
-    AND i.issue_date < (${monthStart}::date + interval '1 month')`;
-}
-
-const VERIFIED = sql`COALESCE((
-  SELECT v.valid FROM bill_verifications v
-  WHERE v.invoice_id = i.id
-  ORDER BY v.checked_at DESC, v.created_at DESC, v.id DESC
-  LIMIT 1
-), false)`;
+// The month's bills with their newest verification verdict — the VAT
+// position's own fragments (monthBillsSql, invoice/vat-position.ts;
+// NEWEST_BILL_VERIFICATION, invoice/payables.ts — imported, not mirrored),
+// shared by the aggregate and the row list so no two surfaces can disagree.
+// A bill is VERIFIED when its newest bill_verifications row says valid:
+// COALESCE(bv.valid, false) against the fragment's `bv` alias.
 
 export async function computeVatPosition(
   firmId: string,
@@ -95,10 +84,11 @@ export async function computeVatPosition(
       SELECT
         COUNT(*)::int AS n,
         COALESCE(SUM(i.vat_total), 0)::numeric(18,2)::text AS vat,
-        COUNT(*) FILTER (WHERE ${VERIFIED})::int AS verified_n,
-        COALESCE(SUM(i.vat_total) FILTER (WHERE ${VERIFIED}), 0)::numeric(18,2)::text AS verified_vat
+        COUNT(*) FILTER (WHERE COALESCE(bv.valid, false))::int AS verified_n,
+        COALESCE(SUM(i.vat_total) FILTER (WHERE COALESCE(bv.valid, false)), 0)::numeric(18,2)::text AS verified_vat
       FROM invoices i
-      WHERE ${monthBills(firmId, monthStart)}
+      ${NEWEST_BILL_VERIFICATION}
+      WHERE ${monthBillsSql(firmId, monthStart)}
     `)
   ).rows;
 
@@ -121,8 +111,9 @@ export async function computeVatPosition(
       FROM invoices i
       JOIN parties pc ON pc.id = i.buyer_party_id
       JOIN parties ps ON ps.id = i.supplier_party_id
-      WHERE ${monthBills(firmId, monthStart)}
-        AND NOT ${VERIFIED}
+      ${NEWEST_BILL_VERIFICATION}
+      WHERE ${monthBillsSql(firmId, monthStart)}
+        AND NOT COALESCE(bv.valid, false)
         AND i.vat_total > 0
       ORDER BY i.vat_total DESC, i.issue_date ASC, i.id
       LIMIT ${MAX_UNVERIFIED_ROWS + 1}

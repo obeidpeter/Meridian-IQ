@@ -23,7 +23,7 @@ import {
   ListMissingRecurringBillsQueryParams,
   ListMissingRecurringBillsResponse,
 } from "@workspace/api-zod";
-import { parseOrThrow } from "../lib/parse";
+import { assertPlainDecimalAmount, parseOrThrow } from "../lib/parse";
 import { resolveClientAnalyticsScope } from "../lib/client-scope";
 import {
   assertCan,
@@ -146,16 +146,9 @@ router.post("/bills/:id/payment-flag", async (req, res): Promise<void> => {
   const params = parseOrThrow(FlagBillPaymentParams, req.params);
   const body = parseOrThrow(FlagBillPaymentBody, req.body);
   const invoice = await loadBillForScope(req.principal, params.id);
-  // The contract types amount as a bare string; reject anything that is not a
-  // plain decimal before it reaches the numeric column (400, not a DB 500) —
-  // the buyer payment-flag route's exact guard.
-  if (body.amount !== undefined && !/^\d+(\.\d{1,2})?$/.test(body.amount)) {
-    throw new DomainError(
-      "INVALID_AMOUNT",
-      "amount must be a plain decimal string (e.g. 120000.00)",
-      400,
-    );
-  }
+  // The shared payment-flag amount guard (lib/parse.ts) — the same guard the
+  // buyer payment-flag route applies.
+  assertPlainDecimalAmount(body.amount);
   const [event] = await getDb()
     .insert(settlementEventsTable)
     .values({

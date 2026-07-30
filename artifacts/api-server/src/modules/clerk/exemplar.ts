@@ -6,6 +6,7 @@ import {
   clerkEvalFixturesTable,
 } from "@workspace/db";
 import { logger } from "../../lib/logger";
+import { GENERIC_TOKENS, normalizeTin } from "./alias";
 
 // Supplier memory (exhaust idea #1). The learning loop already turns every
 // corrected approval into a ground-truth fixture (eval-growth.ts): the
@@ -72,25 +73,6 @@ interface SupplierIdentity {
 function normalizeBlob(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
-
-function normalizeTin(raw: string | null | undefined): string {
-  return (raw ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
-// Mirrors party-match.ts: legal-form suffixes carry no identity.
-const GENERIC_TOKENS = new Set([
-  "LTD",
-  "LIMITED",
-  "PLC",
-  "CO",
-  "COMPANY",
-  "ENTERPRISES",
-  "ENTERPRISE",
-  "VENTURES",
-  "AND",
-  "THE",
-  "OF",
-]);
 
 function nameTokens(name: string): string[] {
   return name

@@ -15,7 +15,7 @@ import {
   BulkRespondConfirmationsBody,
   BulkRespondConfirmationsResponse,
 } from "@workspace/api-zod";
-import { parseOrThrow } from "../lib/parse";
+import { assertPlainDecimalAmount, parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertBuyerPartyAccess,
@@ -166,18 +166,9 @@ router.post("/invoices/:id/payment-flags", requireBuyerRails, async (req, res): 
       409,
     );
   }
-  // The contract types amount as a bare string; reject anything that is not a
-  // plain decimal before it reaches the numeric column (400, not a DB 500).
-  if (
-    body.amount !== undefined &&
-    !/^\d+(\.\d{1,2})?$/.test(body.amount)
-  ) {
-    throw new DomainError(
-      "INVALID_AMOUNT",
-      "amount must be a plain decimal string (e.g. 120000.00)",
-      400,
-    );
-  }
+  // The shared payment-flag amount guard (lib/parse.ts) — the same guard the
+  // bills payment-flag route applies.
+  assertPlainDecimalAmount(body.amount);
   const occurredAt = body.occurredAt
     ? new Date(body.occurredAt)
     : new Date();

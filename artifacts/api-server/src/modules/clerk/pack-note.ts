@@ -1,6 +1,5 @@
-import { z } from "zod/v4";
-import { ensureGrounded } from "./grounding";
-import { inferPhrasing, type ClerkGateway } from "./gateway";
+import { coverNoteSchemas, phraseCoverNote } from "./cover-note";
+import { type ClerkGateway } from "./gateway";
 import {
   computeCompliancePack,
   type CompliancePackFacts,
@@ -25,14 +24,8 @@ const NOTE_SYSTEM = [
   'Return JSON: {"note": string}.',
 ].join("\n");
 
-const noteOutput = z.object({ note: z.string().min(1).max(2000) });
-
-const noteJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["note"],
-  properties: { note: { type: "string" } },
-};
+// The shared `{note}` schema pair (cover-note.ts).
+const NOTE_SCHEMAS = coverNoteSchemas(2000);
 
 export interface CompliancePackCoverNote {
   monthStart: string;
@@ -108,38 +101,18 @@ export async function draftPackCoverNote(
   if (facts.register.rows.length === 0 && facts.vat.billCount === 0) {
     return fallback;
   }
-  const factsText = packNoteFacts(facts);
-  // One phrasing call under the digest posture — the kill-switch check and
-  // its TOCTOU catch live in inferPhrasing (gateway.ts); the outer try
-  // keeps the surface's stronger guarantee that even a grounding-check
-  // failure answers with the template.
-  try {
-    const data = await inferPhrasing<z.infer<typeof noteOutput>>(gateway, {
-      purpose: "draft_pack_note",
-      caseId: null,
-      // Firm work product, so the firm's own allowance funds it. There is
-      // deliberately NO route budget pre-check: the gateway backstop turns
-      // an exhausted allowance into a typed failure, which answers with the
-      // template below — never a 429 (see the route comment).
-      firmId,
-      promptVersion: PACK_NOTE_PROMPT_VERSION,
-      system: NOTE_SYSTEM,
-      user: factsText,
-      schemaName: "pack_cover_note",
-      jsonSchema: noteJsonSchema,
-      validator: noteOutput,
-      inputForHash: factsText,
-    });
-    // Number grounding: a numeral the facts never stated → template answers
-    // (grounding.ts).
-    if (
-      !data ||
-      !(await ensureGrounded("pack_note", firmId, data.note, factsText))
-    ) {
-      return fallback;
-    }
-    return { ...fallback, note: data.note, source: "clerk" };
-  } catch {
-    return fallback;
-  }
+  // The phrase-or-null machinery (kill-switch TOCTOU catch, no-budget
+  // pre-check, number grounding) lives in cover-note.ts.
+  const note = await phraseCoverNote(gateway, {
+    firmId,
+    purpose: "draft_pack_note",
+    promptVersion: PACK_NOTE_PROMPT_VERSION,
+    system: NOTE_SYSTEM,
+    factsText: packNoteFacts(facts),
+    schemaName: "pack_cover_note",
+    groundingSurface: "pack_note",
+    jsonSchema: NOTE_SCHEMAS.jsonSchema,
+    validator: NOTE_SCHEMAS.validator,
+  });
+  return note === null ? fallback : { ...fallback, note, source: "clerk" };
 }

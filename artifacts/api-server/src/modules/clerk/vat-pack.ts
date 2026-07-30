@@ -78,6 +78,28 @@ export function packMonthInvoicesSql(firmId: string, monthStart: string) {
     )`;
 }
 
+// The pack-month membership predicate for the pack's FULL document set —
+// computeVatPack's own WHERE body: invoices plus credit-note offsets,
+// cancelled documents excluded, issue-month bucketing, rails-accepted only.
+// Kept in ONE fragment consumed by the pack's query below and by the VAT
+// position's output side (modules/invoice/vat-position.ts), so those surfaces
+// can never disagree with the pack about what "accepted in the month" means.
+// Table alias is `i`.
+export function packMonthDocsSql(firmId: string, monthStart: string) {
+  return sql`i.firm_id = ${firmId}
+    AND i.kind IN ('invoice', 'credit_note')
+    -- A cancelled document is void whatever the rails once said.
+    AND i.status <> 'cancelled'
+    -- Issue-month basis: output VAT belongs to the supply month.
+    AND i.issue_date >= ${monthStart}::date
+    AND i.issue_date < (${monthStart}::date + interval '1 month')
+    -- ...but only documents that actually cleared the rails count.
+    AND EXISTS (
+      SELECT 1 FROM submission_attempts sa
+      WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
+    )`;
+}
+
 const ZERO_TOTALS: VatPackTotals = {
   acceptedCount: 0,
   acceptedTotal: "0",
@@ -116,18 +138,7 @@ export async function computeVatPack(
         GROUPING(i.supplier_party_id)::int AS is_total
       FROM invoices i
       JOIN parties p ON p.id = i.supplier_party_id
-      WHERE i.firm_id = ${firmId}
-        AND i.kind IN ('invoice', 'credit_note')
-        -- A cancelled document is void whatever the rails once said.
-        AND i.status <> 'cancelled'
-        -- Issue-month basis: output VAT belongs to the supply month.
-        AND i.issue_date >= ${monthStart}::date
-        AND i.issue_date < (${monthStart}::date + interval '1 month')
-        -- ...but only documents that actually cleared the rails count.
-        AND EXISTS (
-          SELECT 1 FROM submission_attempts sa
-          WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
-        )
+      WHERE ${packMonthDocsSql(firmId, monthStart)}
       GROUP BY GROUPING SETS ((i.supplier_party_id), ())
       ORDER BY GROUPING(i.supplier_party_id), MIN(p.legal_name)
     `)

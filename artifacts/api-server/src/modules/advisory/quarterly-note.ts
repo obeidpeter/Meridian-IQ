@@ -1,7 +1,5 @@
-import { z } from "zod/v4";
-import { isFeatureEnabled } from "../flags/flags";
-import { ensureGrounded } from "../clerk/grounding";
-import { CLERK_FLAG_KEY, type ClerkGateway } from "../clerk/gateway";
+import { coverNoteSchemas, phraseCoverNote } from "../clerk/cover-note";
+import { type ClerkGateway } from "../clerk/gateway";
 import { computeQuarterlyReview, type QuarterlyReview } from "./quarterly-pack";
 
 // Quarterly review cover note (round-13 idea #4, second half). The review
@@ -23,14 +21,9 @@ const NOTE_SYSTEM = [
   'Return JSON: {"note": string}.',
 ].join("\n");
 
-const noteOutput = z.object({ note: z.string().min(1).max(2500) });
-
-const noteJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["note"],
-  properties: { note: { type: "string" } },
-};
+// The shared `{note}` schema pair (clerk/cover-note.ts) — a longer cap than
+// the monthly notes: a quarter carries more to say.
+const NOTE_SCHEMAS = coverNoteSchemas(2500);
 
 export interface QuarterlyReviewCoverNote {
   quarterStart: string;
@@ -119,38 +112,19 @@ export async function draftQuarterlyCoverNote(
   ) {
     return fallback;
   }
-  if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
-
-  const facts = quarterlyNoteFacts(review);
-  // The try/catch closes the kill-switch TOCTOU: if clerk_ai flips off
-  // between the check above and the call, the gateway's own assert throws —
-  // and this surface must still answer with the template.
-  try {
-    const result = await gateway.infer<z.infer<typeof noteOutput>>({
-      purpose: "draft_quarterly_note",
-      caseId: null,
-      // Firm work product — the firm's own allowance funds it. Deliberately
-      // NO route budget pre-check: the gateway backstop turns an exhausted
-      // allowance into a typed failure, which answers with the template.
-      firmId,
-      promptVersion: NOTE_PROMPT_VERSION,
-      system: NOTE_SYSTEM,
-      user: facts,
-      schemaName: "quarterly_cover_note",
-      jsonSchema: noteJsonSchema,
-      validator: noteOutput,
-      inputForHash: facts,
-    });
-    // Number grounding: a numeral the facts never stated → template answers
-    // (grounding.ts).
-    if (
-      !result.ok ||
-      !(await ensureGrounded("quarterly_note", firmId, result.data.note, facts))
-    ) {
-      return fallback;
-    }
-    return { ...fallback, note: result.data.note, source: "clerk" };
-  } catch {
-    return fallback;
-  }
+  // The phrase-or-null machinery (kill-switch check + TOCTOU catch,
+  // no-budget pre-check, number grounding) lives in clerk/cover-note.ts —
+  // the vat-note/pack-note shape exactly.
+  const note = await phraseCoverNote(gateway, {
+    firmId,
+    purpose: "draft_quarterly_note",
+    promptVersion: NOTE_PROMPT_VERSION,
+    system: NOTE_SYSTEM,
+    factsText: quarterlyNoteFacts(review),
+    schemaName: "quarterly_cover_note",
+    groundingSurface: "quarterly_note",
+    jsonSchema: NOTE_SCHEMAS.jsonSchema,
+    validator: NOTE_SCHEMAS.validator,
+  });
+  return note === null ? fallback : { ...fallback, note, source: "clerk" };
 }

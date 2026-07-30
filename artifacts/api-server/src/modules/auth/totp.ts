@@ -22,8 +22,8 @@ import { getSessionSecret, signSessionPayload } from "./session";
 // token, even though they share a key.
 
 export const TOTP_STEP_SECONDS = 30;
-export const TOTP_DIGITS = 6;
-export const TOTP_WINDOW_STEPS = 1;
+const TOTP_DIGITS = 6;
+const TOTP_WINDOW_STEPS = 1;
 
 // ---- base32 (RFC 4648, no padding) ----
 

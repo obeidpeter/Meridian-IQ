@@ -14,9 +14,8 @@ import {
   computeFirmVatPositions,
   computeVatPosition,
   listVatPositionDocuments,
-  vatPositionMonths,
+  resolveVatPositionMonth,
 } from "../modules/invoice/vat-position";
-import { DomainError } from "../modules/errors";
 
 // Monthly VAT position (contract 0.45.0): output VAT vs input VAT for a
 // Lagos month, per client and across the firm's book, with the verified-input
@@ -26,23 +25,13 @@ import { DomainError } from "../modules/errors";
 
 const router: IRouter = Router();
 
-// The live-month discipline — the position's mirror of resolveClosedPeriod
-// (routes/invoices/packs.ts): the requested month, or the CURRENT Lagos month when
-// omitted, must be on the position's own 12-month option list. Unlike the
-// closed-month VAT pack, that list INCLUDES the current month — a position is
-// a live month-to-date number.
-function resolvePositionMonth(raw: string | undefined): string {
-  const months = vatPositionMonths();
-  const month = raw ?? months[0];
-  if (!months.includes(month)) {
-    throw new DomainError(
-      "BAD_MONTH",
-      "month must be one of the last 12 Lagos months, current month included (YYYY-MM-01)",
-      400,
-    );
-  }
-  return month;
-}
+// The live-month discipline — resolveVatPositionMonth (modules/invoice/
+// vat-position.ts), the ONE resolver shared with the compliance-pack routes:
+// the requested month, or the CURRENT Lagos month when omitted, must be on
+// the position's own 12-month option list. Unlike the closed-month VAT pack
+// (resolveClosedPeriod, routes/invoices/packs.ts — deliberately a DIFFERENT
+// resolver over the CLOSED months; keep them separate), that list INCLUDES
+// the current month — a position is a live month-to-date number.
 
 // The firm a console rollup is scoped to: firmScope, imported from rbac —
 // the ONE definition, so /console/vat-positions carries EXACTLY the gate of
@@ -57,7 +46,7 @@ router.get("/vat-position", async (req, res): Promise<void> => {
     req.principal,
     query.clientPartyId,
   );
-  const month = resolvePositionMonth(query.month);
+  const month = resolveVatPositionMonth(query.month);
   const position = await computeVatPosition(firmId, clientPartyId, month);
   res.json(GetClientVatPositionResponse.parse(position));
 });
@@ -73,7 +62,7 @@ router.get("/vat-position/export", async (req, res): Promise<void> => {
     req.principal,
     query.clientPartyId,
   );
-  const month = resolvePositionMonth(query.month);
+  const month = resolveVatPositionMonth(query.month);
   const position = await computeVatPosition(firmId, clientPartyId, month);
   const docs = await listVatPositionDocuments(firmId, clientPartyId, month);
   const csv = toCsv(
@@ -112,7 +101,7 @@ router.get("/console/vat-positions", async (req, res): Promise<void> => {
   assertCan(req.principal, "console.portfolio.read");
   const firmId = firmScope(req.principal);
   const query = parseOrThrow(GetFirmVatPositionsQueryParams, req.query);
-  const month = resolvePositionMonth(query.month);
+  const month = resolveVatPositionMonth(query.month);
   const positions = await computeFirmVatPositions(firmId, month);
   res.json(GetFirmVatPositionsResponse.parse(positions));
 });

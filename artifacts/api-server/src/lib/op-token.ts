@@ -10,6 +10,18 @@ import type { NextFunction, Request, Response } from "express";
 // that can only hit a URL. Unset env = open, so existing deployments and the
 // Replit scheduler keep working untouched.
 
+/**
+ * The secret as the caller presented it: the `x-op-token` header, falling back
+ * to the `?token=` query param. One home for the shape every op-token/webhook
+ * gate accepts (requireOpToken below and the fail-closed machine rails).
+ */
+export function presentedOpToken(req: Request): string | undefined {
+  return (
+    req.get("x-op-token") ??
+    (typeof req.query.token === "string" ? req.query.token : undefined)
+  );
+}
+
 /** True when no secret is configured, or the presented value matches it. */
 export function opTokenAllows(
   expected: string | undefined,
@@ -30,9 +42,7 @@ export function opTokenAllows(
  */
 export function requireOpToken(envName: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const presented =
-      req.get("x-op-token") ??
-      (typeof req.query.token === "string" ? req.query.token : undefined);
+    const presented = presentedOpToken(req);
     if (opTokenAllows(process.env[envName], presented)) {
       next();
       return;

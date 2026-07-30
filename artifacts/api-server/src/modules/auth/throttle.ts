@@ -1,5 +1,6 @@
 import type { Request } from "express";
 import { pool } from "@workspace/db";
+import { bumpFixedWindow } from "../../lib/fixed-window";
 import { registerSweep } from "../pipeline/pipeline";
 import { normalizeEmail } from "./session";
 
@@ -71,37 +72,17 @@ export async function isLoginThrottled(
   return waits.length ? Math.max(...waits) : null;
 }
 
-// Atomic increment-and-window-reset: within the window the count rises; once
-// the window has elapsed it resets to 1 with a fresh start. RETURNING keeps it
-// a single round-trip and correct under concurrent failures on the same key —
-// every concurrent bump on one key observes a distinct post-increment count.
-async function bump(
-  key: string,
-  windowMs: number,
-): Promise<{ count: number; window_start: Date }> {
-  const { rows } = await pool.query<{ count: number; window_start: Date }>(
-    `INSERT INTO login_attempts (key, count, window_start)
-     VALUES ($1, 1, now())
-     ON CONFLICT (key) DO UPDATE SET
-       count = CASE
-         WHEN login_attempts.window_start < now() - make_interval(secs => $2)
-         THEN 1 ELSE login_attempts.count + 1 END,
-       window_start = CASE
-         WHEN login_attempts.window_start < now() - make_interval(secs => $2)
-         THEN now() ELSE login_attempts.window_start END
-     RETURNING count, window_start`,
-    [key, windowMs / 1000],
-  );
-  return rows[0];
-}
+// Counter bumps use the shared atomic increment-and-window-reset statement
+// (lib/fixed-window.ts bumpFixedWindow — also the rate limiter's counter),
+// correct under concurrent failures on the same key.
 
 export async function recordLoginFailure(
   req: Request,
   email: string,
 ): Promise<void> {
   await Promise.all([
-    bump(ipKey(req, email), LOGIN_WINDOW_MS),
-    bump(accountKey(email), ACCOUNT_WINDOW_MS),
+    bumpFixedWindow(ipKey(req, email), LOGIN_WINDOW_MS),
+    bumpFixedWindow(accountKey(email), ACCOUNT_WINDOW_MS),
   ]);
 }
 
@@ -134,7 +115,7 @@ export async function isActionThrottled(key: string): Promise<number | null> {
 }
 
 export async function recordActionFailure(key: string): Promise<void> {
-  await bump(key, ACTION_WINDOW_MS);
+  await bumpFixedWindow(key, ACTION_WINDOW_MS);
 }
 
 // Atomic bump-FIRST gate for burst-exposed credential checks (e.g. the public,
@@ -150,7 +131,7 @@ export async function recordActionFailure(key: string): Promise<void> {
 export async function throttleActionAttempt(
   key: string,
 ): Promise<number | null> {
-  const row = await bump(key, ACTION_WINDOW_MS);
+  const row = await bumpFixedWindow(key, ACTION_WINDOW_MS);
   if (row.count <= ACTION_MAX_FAILURES) return null;
   const elapsed = Date.now() - new Date(row.window_start).getTime();
   return Math.max(1, Math.ceil((ACTION_WINDOW_MS - elapsed) / 1000));

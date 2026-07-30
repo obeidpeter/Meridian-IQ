@@ -5,7 +5,7 @@ import {
   lagosMidnightFor,
   lagosParts,
 } from "../../lib/lagos-time";
-import { SUBMISSION_WINDOW_DAYS } from "./compliance-window";
+import { SUBMISSION_WINDOW_DAYS, UNSUBMITTED_STATE } from "./compliance-window";
 import { RECEIVABLE_ORIENTATION } from "./receivables";
 
 // Firm-level compliance calendar (round-6 idea #5). The SME dashboard already
@@ -68,7 +68,7 @@ export async function computeComplianceCalendar(
         COUNT(DISTINCT i.supplier_party_id)::int AS clients
       FROM invoices i
       WHERE i.firm_id = ${firmId}
-        AND i.status IN ('draft', 'validated')
+        AND ${UNSUBMITTED_STATE}
         AND ${RECEIVABLE_ORIENTATION}
       GROUP BY 1
       ORDER BY 1
@@ -106,7 +106,7 @@ export async function computeComplianceCalendar(
       SELECT COUNT(DISTINCT i.supplier_party_id)::int AS clients
       FROM invoices i
       WHERE i.firm_id = ${firmId}
-        AND i.status IN ('draft', 'validated')
+        AND ${UNSUBMITTED_STATE}
         AND ${RECEIVABLE_ORIENTATION}
         AND (i.issue_date + make_interval(days => ${SUBMISSION_WINDOW_DAYS}))::date <= ${today}::date
     `)

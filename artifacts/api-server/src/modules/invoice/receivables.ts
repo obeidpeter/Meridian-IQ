@@ -40,8 +40,9 @@ export interface ReceivablesSummary {
 
 // The outstanding status triple, ONE home (refactoring round): the SQL
 // fragment below and every JS-side membership check (draft-chaser's
-// chaseability gate, chase-log's loggability gate) derive from this list —
-// a lifecycle status addition lands everywhere or nowhere.
+// chaseability gate, chase-log's loggability gate, the collections bindable
+// gate — collections/service.ts) derive from this list — a lifecycle status
+// addition lands everywhere or nowhere.
 export const OUTSTANDING_STATUSES = [
   "submitted",
   "stamped",
@@ -83,6 +84,18 @@ export const BILL_ORIENTATION = sql`(EXISTS (
   WHERE e.firm_id = i.firm_id
     AND e.client_party_id = i.buyer_party_id
 ) AND NOT ${RECEIVABLE_ORIENTATION})`;
+
+// The "clients the firm actively serves" policy, ONE home (alias `e` for
+// engagements): the live-engagement status pair shared by the firm rollups,
+// sweeps and radars — the engagements enum also holds completed/archived, so
+// this is a real subset choice. COMPOSED like OUTSTANDING above so the SQL
+// and JS sides cannot fork. NOTE: the orientation fragments above deliberately
+// do NOT filter by engagement status — do not fold this into them. Two known
+// consumers still spell the pair inline pending follow-up:
+// compliance-scorecard.ts and the drizzle-flavored clerk/client-statement.ts
+// sweep enumeration.
+export const LIVE_ENGAGEMENT_STATUSES = ["open", "in_progress"] as const;
+export const LIVE_ENGAGEMENT = sql`e.status IN (${sql.raw(LIVE_ENGAGEMENT_STATUSES.map((s) => `'${s}'`).join(", "))})`;
 
 // The single definition of a receivable's reference date: age is measured
 // against the due date where one exists, otherwise the issue date.

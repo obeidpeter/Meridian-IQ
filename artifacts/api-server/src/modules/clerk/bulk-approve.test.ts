@@ -21,11 +21,8 @@ import {
   getCase,
   type CaseDecisionInput,
 } from "./cases.ts";
-import {
-  bulkApproveCases,
-  fastLaneBlocker,
-  FAST_LANE_CONFIDENCE,
-} from "./bulk-approve.ts";
+import { bulkApproveCases, fastLaneBlocker } from "./bulk-approve.ts";
+import { FAST_LANE_DEFAULT } from "./metrics.ts";
 
 // Fast-lane bulk approval. The invariants pinned here:
 //  - eligibility is enforced SERVER-SIDE before any decision: only extracted
@@ -156,7 +153,7 @@ test("fastLaneBlocker mirrors the console predicate (clerk-shared isReadyToAppro
         {
           field: "invoiceNumber",
           value: "X",
-          confidence: FAST_LANE_CONFIDENCE,
+          confidence: FAST_LANE_DEFAULT,
           sourceSnippet: null,
           critical: true,
           flagged: true,

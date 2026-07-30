@@ -224,8 +224,8 @@ test("every gateway-touching route handler is in the MODEL rate class", () => {
 // itself (inferPhrasing's internals) or on the allowlist below, each entry
 // carrying the reason a naked call is correct there. A NEW phrasing surface
 // (template fallback + "clerk"/"template" source tag) must use inferPhrasing
-// — or, if its params don't fit, copy quarterly-note.ts's documented local
-// try/catch AND justify its allowlist entry here.
+// — a params mismatch means fixing the params, or justifying a new allowlist
+// entry with a documented local try/catch.
 // Known limitation: the scan keys on the `.infer` member name with a
 // non-`z` receiver (the codebase convention names the binding `gateway`);
 // laundering the call through an alias of the METHOD itself would evade it
@@ -234,9 +234,6 @@ test("every gateway-touching route handler is in the MODEL rate class", () => {
 
 // modules/-relative path -> why a bare gateway.infer is correct there.
 const BARE_INFER_ALLOWED = new Map<string, string>([
-  // Phrasing surface whose local try/catch (documented in-file) already
-  // closes the TOCTOU — the pre-inferPhrasing shape, kept as-is.
-  ["advisory/quarterly-note.ts", "documented local TOCTOU try/catch"],
   // Classification/extraction/segmentation surfaces: a typed failure REFUSES
   // or marks the work item failed — there is no template to fall back to,
   // and a mid-request kill-switch throw is their documented 503 posture.
@@ -310,24 +307,4 @@ test("no module calls gateway.infer outside gateway.ts and the allowlist", () =>
     );
   }
   assert.ok(found.size >= 10, "the bare-infer scan parsed the module tree");
-});
-
-test("quarterly-note's allowlisted bare call really sits inside a try", () => {
-  // The ONE allowlisted phrasing surface: its TOCTOU protection is a local
-  // try/catch, so pin that shape — a refactor that lifts the call out of the
-  // try silently reopens the CLERK_DISABLED-throw class this scan closes.
-  const source = readFileSync(
-    join(import.meta.dirname, "..", "modules", "advisory", "quarterly-note.ts"),
-    "utf8",
-  );
-  const callAt = source.search(/\bgateway\.infer\s*[<(]/);
-  assert.ok(callAt >= 0, "the bare call exists (else drop this pin AND the allowlist entry)");
-  const tryAt = source.lastIndexOf("try {", callAt);
-  assert.ok(tryAt >= 0, "a try opens before the gateway.infer call");
-  const catchAt = source.indexOf("} catch", callAt);
-  assert.ok(catchAt >= 0, "a catch closes after the gateway.infer call");
-  assert.ok(
-    source.slice(catchAt).includes("return fallback"),
-    "the catch answers with the template fallback",
-  );
 });

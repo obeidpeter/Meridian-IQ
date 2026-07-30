@@ -131,8 +131,11 @@ export async function seedPlatform(): Promise<void> {
 }
 
 // Fixed identifiers for the demo SME tenant so the frontend can inject stable
-// x-mock-* headers and deep-links stay valid across restarts.
-export const DEMO = {
+// x-mock-* headers and deep-links stay valid across restarts (the frontends
+// and e2e journeys hardcode their own copies of these ids — landing/App.tsx,
+// scripts/src/e2e/journeys/shared.mjs — so stability, not import, is the
+// contract).
+const DEMO = {
   firmId: "11111111-1111-4111-8111-111111111111",
   firmPartyId: "33333333-3333-4333-8333-333333333333",
   // The SME's own business Party — it is the supplier on every invoice and the
@@ -152,6 +155,27 @@ function isoDate(daysFromNow: number): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + daysFromNow);
   return d.toISOString().slice(0, 10);
+}
+
+// Layer-1 (compliance) consent so submission and vault storage are permitted
+// for a demo client party; inserts only where absent, so a real consent
+// history is never duplicated by a reseed.
+async function seedLayer1ConsentIfAbsent(partyId: string): Promise<void> {
+  const [existingConsent] = await getDb()
+    .select({ id: consentRecordsTable.id })
+    .from(consentRecordsTable)
+    .where(eq(consentRecordsTable.partyId, partyId))
+    .limit(1);
+  if (!existingConsent) {
+    await getDb().insert(consentRecordsTable).values({
+      partyId,
+      layer: 1,
+      action: "grant",
+      scope: "compliance_submission",
+      basis: "contract",
+      channel: "seed",
+    });
+  }
 }
 
 type SeedLine = {
@@ -348,22 +372,7 @@ async function seedDemo(): Promise<void> {
     })
     .onConflictDoNothing({ target: engagementsTable.id });
 
-  // Layer-1 (compliance) consent so submission and vault storage are permitted.
-  const [existingConsent] = await getDb()
-    .select({ id: consentRecordsTable.id })
-    .from(consentRecordsTable)
-    .where(eq(consentRecordsTable.partyId, DEMO.clientPartyId))
-    .limit(1);
-  if (!existingConsent) {
-    await getDb().insert(consentRecordsTable).values({
-      partyId: DEMO.clientPartyId,
-      layer: 1,
-      action: "grant",
-      scope: "compliance_submission",
-      basis: "contract",
-      channel: "seed",
-    });
-  }
+  await seedLayer1ConsentIfAbsent(DEMO.clientPartyId);
 
   await seedInvoice({
     id: "aaaa1001-0000-4000-8000-000000001001",
@@ -471,9 +480,10 @@ async function seedDemo(): Promise<void> {
 }
 
 // --- Buyer Rails demo principals (BR-01..BR-05) ------------------------------
-// Fixed identifiers so the buyer portal can inject stable x-mock-* headers.
-// One buyer-side finance user per demo anchor buyer.
-export const BUYERS = {
+// Fixed identifiers so the buyer portal can inject stable x-mock-* headers
+// (hardcoded on its side — stability is the contract). One buyer-side finance
+// user per demo anchor buyer.
+const BUYERS = {
   zenithUserId: "b0000001-0000-4000-8000-0000000000d1",
   saharaUserId: "b0000002-0000-4000-8000-0000000000d2",
 } as const;
@@ -523,7 +533,7 @@ async function seedBuyerDemo(): Promise<void> {
 // Every seeded demo user can sign in through the first-party session login with
 // this shared demo password. Hashes are set only where absent, so a changed
 // password in a real deployment is never overwritten by a reseed.
-export const DEMO_PASSWORD = "meridian2027";
+const DEMO_PASSWORD = "meridian2027";
 
 async function seedDemoPasswords(): Promise<void> {
   const hash = await hashPassword(DEMO_PASSWORD);
@@ -604,8 +614,9 @@ async function seedCpdCourses(): Promise<void> {
 
 // --- Console / accountant tooling demo data (Task #4) -----------------------
 // Fixed identifiers so the console frontend can inject stable headers and
-// deep-links survive restarts.
-export const CONSOLE = {
+// deep-links survive restarts (hardcoded on its side — stability is the
+// contract).
+const CONSOLE = {
   adminUserId: "44444444-4444-4444-8444-4444444444a0",
   operatorUserId: "99999999-9999-4999-8999-999999999999",
   auditorUserId: "88888888-8888-4888-8888-888888888888",
@@ -761,21 +772,7 @@ async function seedConsoleDemo(): Promise<void> {
       .update(partiesTable)
       .set({ street: c.street })
       .where(and(eq(partiesTable.id, c.id), isNull(partiesTable.street)));
-    const [hasConsent] = await getDb()
-      .select({ id: consentRecordsTable.id })
-      .from(consentRecordsTable)
-      .where(eq(consentRecordsTable.partyId, c.id))
-      .limit(1);
-    if (!hasConsent) {
-      await getDb().insert(consentRecordsTable).values({
-        partyId: c.id,
-        layer: 1,
-        action: "grant",
-        scope: "compliance_submission",
-        basis: "contract",
-        channel: "seed",
-      });
-    }
+    await seedLayer1ConsentIfAbsent(c.id);
   }
 
   const engagements: { id: string; clientPartyId: string; title: string }[] = [
@@ -1126,7 +1123,7 @@ async function seedConsoleDemo(): Promise<void> {
 // claim version can never approve it), plus a small register of ACTIVE claims
 // so Ask Clerk answers from approved facts out of the box, and one claim in
 // review so the approval flow can be exercised live.
-export const CLERK = {
+const CLERK = {
   approverUserId: "9a000002-0000-4000-8000-0000000000a2",
   claims: {
     vatRate: "c1a00001-0000-4000-8000-000000000001",

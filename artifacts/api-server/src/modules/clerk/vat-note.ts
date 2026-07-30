@@ -1,6 +1,5 @@
-import { z } from "zod/v4";
-import { ensureGrounded } from "./grounding";
-import { inferPhrasing, type ClerkGateway } from "./gateway";
+import { coverNoteSchemas, phraseCoverNote } from "./cover-note";
+import { type ClerkGateway } from "./gateway";
 import { computeVatPack, type VatPack } from "./vat-pack";
 
 // VAT filing cover note (round-4 idea #6). The VAT pack is deterministic end
@@ -22,14 +21,9 @@ const NOTE_SYSTEM = [
   'Return JSON: {"note": string}.',
 ].join("\n");
 
-const noteOutput = z.object({ note: z.string().min(1).max(2000) });
-
-const noteJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["note"],
-  properties: { note: { type: "string" } },
-};
+// The shared `{note}` schema pair (cover-note.ts) — the SAME objects feed
+// both the production call below and the eval seam, so neither can drift.
+const NOTE_SCHEMAS = coverNoteSchemas(2000);
 
 export interface VatPackCoverNote {
   monthStart: string;
@@ -82,10 +76,10 @@ export const VAT_NOTE_PHRASING = {
   promptVersion: NOTE_PROMPT_VERSION,
   system: NOTE_SYSTEM,
   schemaName: "vat_cover_note",
-  jsonSchema: noteJsonSchema,
-  validator: noteOutput,
+  jsonSchema: NOTE_SCHEMAS.jsonSchema,
+  validator: NOTE_SCHEMAS.validator,
   buildUser: (pack: VatPack): string => vatNoteFacts(pack),
-  joinOutput: (data: z.infer<typeof noteOutput>): string => data.note,
+  joinOutput: (data: { note: string }): string => data.note,
 };
 
 export async function draftVatCoverNote(
@@ -106,38 +100,18 @@ export async function draftVatCoverNote(
   if (pack.totals.acceptedCount === 0 && pack.totals.creditCount === 0) {
     return fallback;
   }
-  const facts = vatNoteFacts(pack);
-  // One phrasing call under the digest posture — the kill-switch check and
-  // its TOCTOU catch live in inferPhrasing (gateway.ts); the outer try
-  // keeps the surface's stronger guarantee that even a grounding-check
-  // failure answers with the template.
-  try {
-    const data = await inferPhrasing<z.infer<typeof noteOutput>>(gateway, {
-      purpose: "draft_vat_note",
-      caseId: null,
-      // Firm work product, so the firm's own allowance funds it. There is
-      // deliberately NO route budget pre-check: the gateway backstop turns
-      // an exhausted allowance into a typed failure, which answers with the
-      // template below — never a 429 (see the route comment).
-      firmId,
-      promptVersion: NOTE_PROMPT_VERSION,
-      system: NOTE_SYSTEM,
-      user: facts,
-      schemaName: "vat_cover_note",
-      jsonSchema: noteJsonSchema,
-      validator: noteOutput,
-      inputForHash: facts,
-    });
-    // Number grounding: a numeral the facts never stated → template answers
-    // (grounding.ts).
-    if (
-      !data ||
-      !(await ensureGrounded("vat_note", firmId, data.note, facts))
-    ) {
-      return fallback;
-    }
-    return { ...fallback, note: data.note, source: "clerk" };
-  } catch {
-    return fallback;
-  }
+  // The phrase-or-null machinery (kill-switch TOCTOU catch, no-budget
+  // pre-check, number grounding) lives in cover-note.ts.
+  const note = await phraseCoverNote(gateway, {
+    firmId,
+    purpose: "draft_vat_note",
+    promptVersion: NOTE_PROMPT_VERSION,
+    system: NOTE_SYSTEM,
+    factsText: vatNoteFacts(pack),
+    schemaName: "vat_cover_note",
+    groundingSurface: "vat_note",
+    jsonSchema: NOTE_SCHEMAS.jsonSchema,
+    validator: NOTE_SCHEMAS.validator,
+  });
+  return note === null ? fallback : { ...fallback, note, source: "clerk" };
 }

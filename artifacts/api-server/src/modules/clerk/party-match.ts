@@ -2,7 +2,7 @@ import { inArray, isNull, and } from "drizzle-orm";
 import { getDb, partiesTable, type Party } from "@workspace/db";
 import { DomainError } from "../errors";
 import { getCase } from "./cases";
-import { lookupPartyAlias } from "./alias";
+import { GENERIC_TOKENS, lookupPartyAlias, normalizeTin } from "./alias";
 
 // Party-matching suggestions at approval (pilot target: ≥70% of cases without
 // manual re-keying). The extraction already proposes supplier/buyer names and
@@ -37,10 +37,6 @@ const WEIGHTS = { tin: 0.6, name: 0.4 } as const;
 const SUGGESTION_THRESHOLD = 0.3;
 const MAX_SUGGESTIONS = 3;
 
-function normalizeTin(raw: string | null | undefined): string {
-  return (raw ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
 // Exact match after stripping separators ("1234-5678" vs "12345678").
 // Anything else is 0: TINs are identifiers, not prose — near-misses are
 // different taxpayers, and a wrong pre-selected identity is worse than none.
@@ -50,21 +46,6 @@ export function tinScore(extracted: string | null, party: string | null): number
   if (a.length < 6 || b.length < 6) return 0;
   return a === b ? 1 : 0;
 }
-
-// Legal-form suffixes carry no identity ("LTD" matches every other company).
-const GENERIC_TOKENS = new Set([
-  "LTD",
-  "LIMITED",
-  "PLC",
-  "CO",
-  "COMPANY",
-  "ENTERPRISES",
-  "ENTERPRISE",
-  "VENTURES",
-  "AND",
-  "THE",
-  "OF",
-]);
 
 function nameTokens(name: string): string[] {
   const all = name

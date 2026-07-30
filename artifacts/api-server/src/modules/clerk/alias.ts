@@ -11,9 +11,10 @@ import { logger } from "../../lib/logger";
 // best-effort exhaust (an alias failure must never fail an approval), and
 // the newest confirmation wins when a name is re-pointed.
 
-// Mirrors party-match/exemplar/register-preflight: legal-form suffixes carry
-// no identity.
-const GENERIC_TOKENS = new Set([
+// The ONE legal-form-suffix stoplist — shared by party-match, exemplar,
+// register-preflight and the alias key below; suffixes carry no identity
+// ("LTD" matches every other company).
+export const GENERIC_TOKENS = new Set([
   "LTD",
   "LIMITED",
   "PLC",
@@ -26,6 +27,14 @@ const GENERIC_TOKENS = new Set([
   "THE",
   "OF",
 ]);
+
+// The ONE match-side TIN normalization (party-match, exemplar,
+// register-preflight): uppercase, separators stripped. The write-side
+// validator (party/party.ts normalizeTinOrThrow) is a different, throwing
+// function and stays where it is.
+export function normalizeTin(raw: string | null | undefined): string {
+  return (raw ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
 // The normalized alias key: uppercase meaningful tokens, sorted and joined.
 // Sorting makes "Foods Adaeze" and "Adaeze Foods" the same memory; dropping

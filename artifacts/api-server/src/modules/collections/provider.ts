@@ -2,9 +2,10 @@ import { randomBytes } from "node:crypto";
 import { DomainError } from "../errors";
 
 // Collection provider seam (billing provider.ts's PaymentProvider idiom):
-// every virtual-account provision flows through ONE injectable function, so
-// tests and a future real bank/PSP integration swap the provider without
-// touching the account semantics.
+// every virtual-account provision flows through ONE function, and the
+// COLLECTION_PROVIDER_URL relay below is the swap point — tests and a future
+// real bank/PSP integration point it at their own endpoint without touching
+// the account semantics.
 //
 // DARK BY DEFAULT: with no COLLECTION_PROVIDER_URL configured every provision
 // stays in-process on the simulator — a reference is minted, no real virtual
@@ -97,19 +98,9 @@ const defaultProvider: CollectionProvider = async (input) => {
   return { accountReference };
 };
 
-let provider: CollectionProvider = defaultProvider;
-
-export function setCollectionProvider(p: CollectionProvider): void {
-  provider = p;
-}
-
-export function resetCollectionProvider(): void {
-  provider = defaultProvider;
-}
-
-// The one call site seam consumers use; keeps the module-level `let` private.
+// The one call site seam consumers use.
 export async function provisionAccount(
   input: CollectionProvisionInput,
 ): Promise<CollectionProvisionResult> {
-  return provider(input);
+  return defaultProvider(input);
 }

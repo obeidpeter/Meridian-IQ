@@ -15,6 +15,7 @@ import {
   type HistoryRow,
 } from "./recurring-suggest";
 import { ngnRankFor } from "./missing-bills";
+import { LIVE_ENGAGEMENT } from "./receivables";
 
 // Unbilled-income detection (round-8 idea #1). The flip side of the recurring
 // suggestions: the same deterministic miner that spots "this client bills that
@@ -192,7 +193,7 @@ export async function countFirmUnbilled(
           SELECT 1 FROM ${engagementsTable} e
           WHERE e.firm_id = ${invoicesTable.firmId}
             AND e.client_party_id = ${invoicesTable.supplierPartyId}
-            AND e.status IN ('open', 'in_progress')
+            AND ${LIVE_ENGAGEMENT}
         )`,
       ),
     );
