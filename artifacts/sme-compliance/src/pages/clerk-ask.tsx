@@ -16,11 +16,14 @@ import { useToast } from "@/hooks/use-toast";
 import {
   dataAnswerScope,
   feedbackToSubmit,
+  followupPinsLine,
   handleClerkGatewayError,
+  holdsFollowupCase,
   invoiceLinks,
+  planLine,
   type AskFeedback,
 } from "@/lib/clerk";
-import { ShieldCheck, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ShieldCheck, ThumbsDown, ThumbsUp, X } from "lucide-react";
 
 // Register-grounded Q&A behind clerk.ask. Firm principals ask across their
 // portfolio; since contract 0.36.0 a client_user can ask too, pinned
@@ -49,6 +52,8 @@ const SUGGESTED_QUESTIONS = [
   // data.aged_receivables (client-safe) — not "who owes us?", which lands in
   // data.outstanding_receivables and refuses for client askers.
   "What's been outstanding longest?",
+  // The month-over-month delta intent added with Ask 2.0 (contract 0.56.0).
+  "How does this month compare to last month?",
 ];
 
 function AnswerCard({
@@ -96,11 +101,84 @@ function AnswerCard({
       </Alert>
     );
   }
+  // Multi-intent answers (contract 0.56.0) carry sections — the proposition
+  // is a lead-in line and the flat facts are empty. Single-intent answers
+  // carry no sections and render the flat fields exactly as before.
+  const sections = answer.sections ?? [];
+  const hasSections = sections.length > 0;
+  const plan = planLine(answer);
   return (
     <Card data-testid="card-clerk-answer">
       <CardContent className="pt-6 space-y-3">
         <p className="text-base">{answer.proposition}</p>
-        {answer.facts && answer.facts.length > 0 && (
+        {/* Plan transparency: which catalogued intents answered, in server
+            order — quiet, above the sections. */}
+        {plan && (
+          <p
+            className="text-xs text-muted-foreground"
+            data-testid="text-answer-plan"
+          >
+            {plan}
+          </p>
+        )}
+        {hasSections &&
+          sections.map((s, i) => {
+            const sectionLinks = invoiceLinks(s.links);
+            const scope = dataAnswerScope(s.dataParams);
+            return (
+              <div
+                key={i}
+                className="border rounded-md p-3 space-y-2"
+                data-testid={`section-answer-${i}`}
+              >
+                <p className="text-sm font-medium">{s.title}</p>
+                <p className="text-sm">{s.text}</p>
+                {s.facts.length > 0 && (
+                  <div className="border rounded-md divide-y text-sm">
+                    {s.facts.map((f) => (
+                      <div
+                        key={f.key}
+                        className="flex items-center gap-2 px-3 py-2"
+                        // Section-indexed so the row stays unique when two
+                        // sections carry the same fact key (e.g. "count").
+                        data-testid={`row-fact-${i}-${f.key}`}
+                      >
+                        <span className="flex-1">{f.label}</span>
+                        <span className="font-medium tabular-nums">
+                          {f.value}
+                          {f.unit ? ` ${f.unit}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {sectionLinks.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Open</span>
+                    {sectionLinks.map((l) => (
+                      <Button key={l.id} asChild size="sm" variant="outline">
+                        <Link
+                          href={`/invoices/${l.id}`}
+                          data-testid={`link-answer-invoice-${l.id}`}
+                        >
+                          {l.label}
+                        </Link>
+                      </Button>
+                    ))}
+                  </div>
+                )}
+                {scope && (
+                  <p
+                    className="text-xs text-muted-foreground"
+                    data-testid={`text-section-scope-${i}`}
+                  >
+                    {scope}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        {!hasSections && answer.facts && answer.facts.length > 0 && (
           <div className="border rounded-md divide-y text-sm">
             {answer.facts.map((f) => (
               <div
@@ -119,7 +197,7 @@ function AnswerCard({
         )}
         {/* Deep links to the records the answer named: invoice-kind links
             with an id only — anything else was dropped by invoiceLinks. */}
-        {links.length > 0 && (
+        {!hasSections && links.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Open</span>
             {links.map((l) => (
@@ -134,25 +212,38 @@ function AnswerCard({
             ))}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          {answer.dataIntent ? (
-            // Data-grounded answer: computed live from the asker's own
-            // records, scoped to the labels the server resolved (a month, a
-            // client) — dataParams carries display labels, never ids.
-            <span data-testid="text-answer-from-records">
-              From your records
-              {dataAnswerScope(answer.dataParams)
-                ? ` (${dataAnswerScope(answer.dataParams)})`
-                : ""}{" "}
-              · {answer.citation}
-            </span>
-          ) : (
-            <>
-              Source: {answer.citation} · approved claim{" "}
-              <code>{answer.claimKey}</code> v{answer.claimVersion}
-            </>
-          )}
-        </p>
+        {hasSections ? (
+          // A sectioned answer is data-grounded per section (each block shows
+          // its own scope), so the one source line carries the citation only
+          // — and only when the server sent one.
+          answer.citation ? (
+            <p className="text-xs text-muted-foreground">
+              <span data-testid="text-answer-from-records">
+                From your records · {answer.citation}
+              </span>
+            </p>
+          ) : null
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {answer.dataIntent ? (
+              // Data-grounded answer: computed live from the asker's own
+              // records, scoped to the labels the server resolved (a month, a
+              // client) — dataParams carries display labels, never ids.
+              <span data-testid="text-answer-from-records">
+                From your records
+                {dataAnswerScope(answer.dataParams)
+                  ? ` (${dataAnswerScope(answer.dataParams)})`
+                  : ""}{" "}
+                · {answer.citation}
+              </span>
+            ) : (
+              <>
+                Source: {answer.citation} · approved claim{" "}
+                <code>{answer.claimKey}</code> v{answer.claimVersion}
+              </>
+            )}
+          </p>
+        )}
         {caseId && (
           <div className="flex items-center gap-1.5 pt-1">
             <span className="text-xs text-muted-foreground">
@@ -215,10 +306,11 @@ export function AskContent() {
         // screen; an error (onError below) keeps the previous answer.
         setLastAnswer(row.answer ?? null);
         setLastCaseId(row.answer ? row.id : null);
-        // Only a DATA answer carries scope worth threading — keeping the
-        // last data-answered id preserves the thread across a refusal or
-        // register-claim answer in between.
-        if (row.answer?.answered && row.answer?.dataIntent) {
+        // Only an answer carrying scope worth inheriting threads: a data
+        // answer, a multi-intent (sections) answer, or pinned scope (Ask
+        // 2.0). Keeping the last such id preserves the thread across a
+        // refusal or register-claim answer in between.
+        if (holdsFollowupCase(row.answer)) {
           setPreviousCaseId(row.id);
         }
       },
@@ -252,6 +344,12 @@ export function AskContent() {
     });
   };
 
+  // The visible face of the multi-turn thread: when the held answer pinned a
+  // display scope (a month label, a client name), say what a follow-up will
+  // keep — and offer a way off the thread. Clearing drops previousCaseId
+  // only; the answer stays on screen.
+  const pinsLine = previousCaseId ? followupPinsLine(lastAnswer) : "";
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -283,6 +381,27 @@ export function AskContent() {
               maxLength={QUESTION_MAX}
               data-testid="input-ask-question"
             />
+            {pinsLine && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className="rounded-full border px-3 py-1 text-xs text-muted-foreground"
+                  data-testid="chip-followup-pins"
+                >
+                  {pinsLine}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                  onClick={() => setPreviousCaseId(null)}
+                  aria-label="Start a new topic"
+                  data-testid="button-clear-followup"
+                >
+                  <X className="h-3 w-3" aria-hidden="true" />
+                  New topic
+                </Button>
+              </div>
+            )}
             <SuggestedQuestions
               questions={SUGGESTED_QUESTIONS}
               disabled={ask.isPending}

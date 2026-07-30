@@ -5,7 +5,10 @@
  * imports so the node:test suite can exercise them directly.
  */
 
-import type { ClerkAnswer } from "@workspace/api-client-react";
+import type {
+  AskAnswerSection,
+  ClerkAnswer,
+} from "@workspace/api-client-react";
 
 // AskClerkInput bounds — mirrored client-side so the Ask button and the
 // input's maxLength agree with what the server will accept.
@@ -27,6 +30,8 @@ export const SUGGESTED_QUESTIONS: readonly string[] = [
   // data.aged_receivables (client-safe) — not "who owes us?", which lands in
   // data.outstanding_receivables and refuses for client askers.
   "What's been outstanding longest?",
+  // The month-over-month delta intent added with Ask 2.0 (contract 0.56.0).
+  "How does this month compare to last month?",
 ];
 
 /**
@@ -119,6 +124,88 @@ export function dataAnswerScope(
   return Object.values(dataParams ?? {})
     .filter((v) => v.trim().length > 0)
     .join(" · ");
+}
+
+/**
+ * The section blocks of a multi-intent answer (contract 0.56.0), normalized
+ * to an empty array so the screen can gate on length. A single-intent answer
+ * carries no sections and renders the flat fields exactly as before; a
+ * multi-intent answer's proposition is a lead-in line and its flat facts are
+ * empty — the sections carry the substance.
+ */
+export function answerSections(
+  answer: Pick<ClerkAnswer, "sections"> | null | undefined,
+): AskAnswerSection[] {
+  return answer?.sections ?? [];
+}
+
+/**
+ * The plan-transparency line over a multi-intent answer (contract 0.56.0):
+ * "Answered using: <plan titles joined ' · '>". The titles are app-trusted
+ * display strings resolved server-side from the closed intent catalogue and
+ * are shown verbatim, in server order, so the line is deterministic. Empty
+ * string when the answer carries no plan (single-intent), so the line is
+ * simply omitted. Mirrors the SME web app's planLine.
+ */
+export function planLine(
+  answer: Pick<ClerkAnswer, "plan"> | null | undefined,
+): string {
+  const titles = (answer?.plan ?? [])
+    .map((p) => p.title.trim())
+    .filter((t) => t.length > 0);
+  return titles.length > 0 ? `Answered using: ${titles.join(" · ")}` : "";
+}
+
+/**
+ * The follow-up chip's label: the scope a threaded follow-up will inherit,
+ * read off the held answer's pins. Display labels only — a month label, a
+ * client name; the machine pins (monthStart, clientPartyId) never render.
+ * Empty string when the answer pins nothing displayable, so the chip is
+ * omitted (matching today's UX for plain data answers without pins).
+ * Mirrors the SME web app's followupPinsLine.
+ */
+export function followupPinsLine(
+  answer: Pick<ClerkAnswer, "pins"> | null | undefined,
+): string {
+  const labels = [answer?.pins?.monthLabel, answer?.pins?.clientName].filter(
+    (v): v is string => typeof v === "string" && v.trim().length > 0,
+  );
+  return labels.length > 0 ? `Follow-ups keep: ${labels.join(" · ")}` : "";
+}
+
+/**
+ * The testID of one fact row inside a section block:
+ * `row-fact-<sectionIndex>-<factKey>`. Section-indexed because two sections
+ * routinely carry the same fact key (e.g. "count" this month and last), and
+ * the id must stay unique across the whole answer. The flat single-intent
+ * rows keep their un-indexed `row-fact-<factKey>` ids untouched; the pattern
+ * here matches the SME web app's section rows byte for byte.
+ */
+export function sectionKey(sectionIndex: number, factKey: string): string {
+  return `row-fact-${sectionIndex}-${factKey}`;
+}
+
+/**
+ * Whether an answer holds the multi-turn thread — i.e. whether the screen
+ * should keep its case id as previousCaseId for the next question. Since
+ * contract 0.56.0 that is any ANSWERED reply carrying scope a follow-up
+ * could inherit: a data answer (dataIntent), a multi-intent answer
+ * (sections), or explicit pins — machine pins included, because the server
+ * threads on those even when there is no label to display. Register-claim
+ * answers and refusals still don't thread; and because a refusal must not
+ * sever an existing thread, this predicate gates SETTING previousCaseId,
+ * never clearing it. Kept semantically identical to the console page's and
+ * the SME web app's copy.
+ */
+export function holdsFollowupCase(
+  answer: ClerkAnswer | null | undefined,
+): boolean {
+  if (!answer?.answered) return false;
+  if (answer.dataIntent) return true;
+  if ((answer.sections?.length ?? 0) > 0) return true;
+  return Object.values(answer.pins ?? {}).some(
+    (v) => typeof v === "string" && v.trim().length > 0,
+  );
 }
 
 /**

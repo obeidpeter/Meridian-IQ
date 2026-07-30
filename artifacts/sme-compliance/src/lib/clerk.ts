@@ -1,4 +1,7 @@
-import type { ClerkAnswerLink } from "@workspace/api-client-react";
+import type {
+  ClerkAnswer,
+  ClerkAnswerLink,
+} from "@workspace/api-client-react";
 import { humanize, pillClasses, type BadgeTone } from "@/lib/format";
 import { clerkBudgetExhausted, killSwitchTripped } from "@workspace/api-errors";
 import { serverErrorMessage } from "@/lib/errors";
@@ -102,6 +105,62 @@ export function invoiceLinks(
 ): { label: string; id: string }[] {
   return (links ?? []).flatMap((l) =>
     l.kind === "invoice" && l.id != null ? [{ label: l.label, id: l.id }] : [],
+  );
+}
+
+/**
+ * The plan-transparency line over a multi-intent answer (contract 0.56.0):
+ * "Answered using: <plan titles joined ' · '>". The titles are app-trusted
+ * display strings resolved server-side from the closed intent catalogue and
+ * are shown verbatim, in server order, so the line is deterministic. Empty
+ * string when the answer carries no plan (single-intent), so the line is
+ * simply omitted.
+ */
+export function planLine(
+  answer: Pick<ClerkAnswer, "plan"> | null | undefined,
+): string {
+  const titles = (answer?.plan ?? [])
+    .map((p) => p.title.trim())
+    .filter((t) => t.length > 0);
+  return titles.length > 0 ? `Answered using: ${titles.join(" · ")}` : "";
+}
+
+/**
+ * The follow-up chip's label: the scope a threaded follow-up will inherit,
+ * read off the held answer's pins. Display labels only — a month label, a
+ * client name; the machine pins (monthStart, clientPartyId) never render.
+ * Empty string when the answer pins nothing displayable, so the chip is
+ * omitted (matching today's UX for plain data answers without pins).
+ */
+export function followupPinsLine(
+  answer: Pick<ClerkAnswer, "pins"> | null | undefined,
+): string {
+  const labels = [answer?.pins?.monthLabel, answer?.pins?.clientName].filter(
+    (v): v is string => typeof v === "string" && v.trim().length > 0,
+  );
+  return labels.length > 0 ? `Follow-ups keep: ${labels.join(" · ")}` : "";
+}
+
+/**
+ * Whether an answer holds the multi-turn thread — i.e. whether the page
+ * should keep its case id as previousCaseId for the next question. Since
+ * contract 0.56.0 that is any ANSWERED reply carrying scope a follow-up
+ * could inherit: a data answer (dataIntent), a multi-intent answer
+ * (sections), or explicit pins — machine pins included, because the server
+ * threads on those even when there is no label to display. Register-claim
+ * answers and refusals still don't thread; and because a refusal must not
+ * sever an existing thread, this predicate gates SETTING previousCaseId,
+ * never clearing it. Kept semantically identical to the console page's and
+ * the mobile lib's copy.
+ */
+export function holdsFollowupCase(
+  answer: ClerkAnswer | null | undefined,
+): boolean {
+  if (!answer?.answered) return false;
+  if (answer.dataIntent) return true;
+  if ((answer.sections?.length ?? 0) > 0) return true;
+  return Object.values(answer.pins ?? {}).some(
+    (v) => typeof v === "string" && v.trim().length > 0,
   );
 }
 

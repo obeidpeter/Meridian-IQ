@@ -6,6 +6,7 @@ import { MONEY_INTENTS } from "./money";
 import { PAYABLES_INTENTS } from "./payables";
 import { FILING_INTENTS } from "./filing";
 import { STATUS_INTENTS } from "./status";
+import { DELTA_INTENTS } from "./deltas";
 
 // Grounded firm-data Q&A (Clerk idea #6). Ask Clerk gains a SECOND closed
 // catalogue next to the claims register: data intents — live lookups over the
@@ -40,16 +41,21 @@ import { STATUS_INTENTS } from "./status";
 //   payables.ts     supplier bills due, total owed
 //   filing.ts       VAT position, penalty exposure
 //   status.ts       one pinned invoice, approvals, allowance, proposed actions
+//   deltas.ts       month-over-month comparison, per-client movers (Ask 2.0)
 
 // The catalogue. Keys are namespaced "data.*" so they can never collide with
 // operator-authored claim keys; resolution in ask.ts checks this catalogue
-// first, so the platform-defined meaning always wins.
+// first, so the platform-defined meaning always wins. The order is
+// MODEL-FACING (it is the key-list order every classifier prompt renders and
+// the eval corpus freezes) — APPEND ONLY: new groups join at the END, never
+// between existing ones.
 export const DATA_INTENTS: readonly DataIntent[] = [
   ...SUBMISSION_INTENTS,
   ...MONEY_INTENTS,
   ...PAYABLES_INTENTS,
   ...FILING_INTENTS,
   ...STATUS_INTENTS,
+  ...DELTA_INTENTS,
 ];
 
 // Client-facing Ask (SEC-03). clerk.ask is open to client_users, but the
@@ -117,6 +123,15 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // status words are app-computed, and the answer only points at the
   // Automation strip — Ask can never grant, pause or revoke anything.
   "data.automation_status",
+  // Month-over-month comparison with the forced own-party pin: every side
+  // reduces to an own-party one-home — invoiceAggregate pins the supplier
+  // side, billAggregate the buyer side, and the VAT pair runs
+  // computeVatPosition over the caller's own documents (the firm-wide
+  // totals branch is unreachable under the pin). Linkless like the payables
+  // and VAT keys above, for the same bills-are-not-linkable reason.
+  // data.client_breakdown is deliberately ABSENT: it ranks the firm's
+  // clients against each other — firm-wide content by definition.
+  "data.month_delta",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.55.0
+ * OpenAPI spec version: 0.56.0
  */
 import * as zod from 'zod';
 
@@ -5351,6 +5351,34 @@ export const ListClerkCasesResponseItem = zod.object({
   "label": zod.string(),
   "kind": zod.enum(['invoice']),
   "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 })).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
@@ -5453,6 +5481,34 @@ export const CreateClerkCaseResponse = zod.object({
   "label": zod.string(),
   "kind": zod.enum(['invoice']),
   "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 })).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
@@ -5539,6 +5595,34 @@ export const GetClerkCaseResponse = zod.object({
   "label": zod.string(),
   "kind": zod.enum(['invoice']),
   "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 })).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
@@ -5650,6 +5734,34 @@ export const DecideClerkCaseResponse = zod.object({
   "label": zod.string(),
   "kind": zod.enum(['invoice']),
   "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 })).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
@@ -5786,6 +5898,34 @@ export const AskClerkResponse = zod.object({
   "label": zod.string(),
   "kind": zod.enum(['invoice']),
   "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 })).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
@@ -5971,6 +6111,34 @@ export const RetryClerkCaseResponse = zod.object({
   "label": zod.string(),
   "kind": zod.enum(['invoice']),
   "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 })).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
@@ -6060,6 +6228,34 @@ export const ClaimClerkCaseResponse = zod.object({
   "label": zod.string(),
   "kind": zod.enum(['invoice']),
   "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 })).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
@@ -6149,6 +6345,34 @@ export const ReleaseClerkCaseResponse = zod.object({
   "label": zod.string(),
   "kind": zod.enum(['invoice']),
   "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 })).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
@@ -6859,6 +7083,34 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "label": zod.string(),
   "kind": zod.enum(['invoice']),
   "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
 })).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),

@@ -82,6 +82,32 @@ const BILL_PAID_NUM = `BILL-PAID-${SALT}`;
 // Month options as ask.ts offers them: [0] = current, [2] = two months back.
 const MONTHS = lagosMonthOptions();
 
+// The scripted gateway outputs below deliberately keep the LEGACY v5
+// single-intent shape ({claimKey, category, month, client}): planValidator's
+// compatibility branch must keep accepting it — clerk.test.ts and the
+// grown-fixture minting lane's scripted runs speak it — and a legacy-shaped
+// single step must answer byte-identically to the flat pre-plan shape. The
+// plan-shaped path (steps arrays, sections, pins) is exercised in
+// ask-plan.test.ts. The JSON schema the calls carry is ALWAYS the v6 plan
+// schema: key/month/client enums live under steps.items.
+
+// The v6 plan schema's step properties, for enum assertions.
+const stepProps = (
+  schema: Record<string, unknown>,
+): {
+  key: { enum: string[] };
+  month: { enum: string[] };
+  client: { enum: string[] };
+} =>
+  (
+    (schema.properties as { steps: { items: { properties: unknown } } }).steps
+      .items.properties
+  ) as {
+    key: { enum: string[] };
+    month: { enum: string[] };
+    client: { enum: string[] };
+  };
+
 before(async () => {
   await saveAndEnableClerkFlag();
   const db = getDb();
@@ -397,13 +423,15 @@ test("askClerk answers a data question with platform-computed numbers", async ()
   );
 
   // The closed enum and the prompt offered the data keys to this firm-scoped
-  // asker — and only keys the platform defined.
+  // asker — and only keys the platform defined. ONE model call per ask, plan
+  // or no plan.
   assert.equal(calls.length, 1);
-  const props = calls[0].jsonSchema.properties as {
-    claimKey: { enum: string[] };
-  };
-  assert.ok(props.claimKey.enum.includes("data.overdue_submissions"));
-  assert.ok(props.claimKey.enum.includes("none"));
+  const props = stepProps(calls[0].jsonSchema);
+  assert.ok(props.key.enum.includes("data.overdue_submissions"));
+  assert.ok(
+    !props.key.enum.includes("none"),
+    "the v6 key enum has no 'none' — an empty steps array is the refusal",
+  );
   assert.ok(typeof calls[0].user === "string");
   assert.ok((calls[0].user as string).includes("Available data keys"));
 });
@@ -425,11 +453,10 @@ test("without a firm scope, data keys are never offered and never answer", async
   assert.equal(kase.status, "escalated");
   assert.equal(kase.answer?.answered, false);
   for (const call of calls) {
-    const props = call.jsonSchema.properties as {
-      claimKey: { enum: string[] };
-    };
     assert.ok(
-      props.claimKey.enum.every((k) => !k.startsWith(DATA_INTENT_PREFIX)),
+      stepProps(call.jsonSchema).key.enum.every(
+        (k) => !k.startsWith(DATA_INTENT_PREFIX),
+      ),
       "no data key may be offered without a firm scope",
     );
   }
@@ -537,11 +564,9 @@ test("askClerk resolves month and client keys through its own option lists", asy
   assert.ok(!kase.answer?.proposition?.includes(ACCEPTED_OLD_NUM));
 
   // The classifier was offered the closed option lists — and only those.
+  // The month-enum SHAPE pin: the offered keys plus "none", per step.
   assert.equal(calls.length, 1);
-  const props = calls[0].jsonSchema.properties as {
-    month: { enum: string[] };
-    client: { enum: string[] };
-  };
+  const props = stepProps(calls[0].jsonSchema);
   assert.deepEqual(props.month.enum, [...MONTHS.map((m) => m.key), "none"]);
   assert.deepEqual(props.client.enum, ["c1", "c2", "none"]);
   assert.ok((calls[0].user as string).includes("Month keys"));
@@ -933,16 +958,13 @@ test("client-scoped Ask offers only the caller's own party and pins the lookup t
   // The closed enums offered to the classifier: exactly one client option
   // (the caller), and no excluded intent key anywhere.
   assert.equal(calls.length, 1);
-  const props = calls[0].jsonSchema.properties as {
-    claimKey: { enum: string[] };
-    client: { enum: string[] };
-  };
+  const props = stepProps(calls[0].jsonSchema);
   assert.deepEqual(
     props.client.enum,
     ["c1", "none"],
     "the client option list is EXACTLY the caller's own party",
   );
-  assert.ok(props.claimKey.enum.includes("data.overdue_submissions"));
+  assert.ok(props.key.enum.includes("data.overdue_submissions"));
   for (const excluded of [
     "data.outstanding_receivables",
     "data.expected_inflows",
@@ -950,7 +972,7 @@ test("client-scoped Ask offers only the caller's own party and pins the lookup t
     "data.clerk_allowance",
   ]) {
     assert.ok(
-      !props.claimKey.enum.includes(excluded),
+      !props.key.enum.includes(excluded),
       `${excluded} must not be offered to a client asker`,
     );
   }
