@@ -16,6 +16,7 @@ import {
   listLineItemSuggestions,
 } from "../invoice/line-items";
 import { firmPartySphereCondition } from "../party/party";
+import { GENERIC_TOKENS, normalizeTin } from "./alias";
 
 // Register-history pre-flight (exhaust idea #6). The pure pre-flight checks
 // internal consistency; the firm's own register and invoice history can catch
@@ -65,29 +66,10 @@ const HISTORY_STATUSES = [
   "settled",
 ] as const;
 
-function normalizeTin(raw: string | null | undefined): string {
-  return (raw ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
 function maskTin(tin: string): string {
   const n = normalizeTin(tin);
   return n.length <= 3 ? "…" : `…${n.slice(-3)}`;
 }
-
-// Mirrors party-match.ts / exemplar.ts: legal-form suffixes carry no identity.
-const GENERIC_TOKENS = new Set([
-  "LTD",
-  "LIMITED",
-  "PLC",
-  "CO",
-  "COMPANY",
-  "ENTERPRISES",
-  "ENTERPRISE",
-  "VENTURES",
-  "AND",
-  "THE",
-  "OF",
-]);
 
 function meaningfulTokens(name: string): Set<string> {
   return new Set(

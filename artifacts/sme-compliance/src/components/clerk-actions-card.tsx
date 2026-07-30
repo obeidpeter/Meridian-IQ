@@ -1,18 +1,21 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useGetMe,
   useGetActionProposals,
   getGetActionProposalsQueryKey,
   useExecuteAction,
-  getGetActionDecisionsQueryKey,
   useGetActionDecisions,
-  getGetActionPoliciesQueryKey,
+  getGetActionDecisionsQueryKey,
   useGetActionPolicies,
+  getGetActionPoliciesQueryKey,
   useGrantActionPolicy,
   usePauseActionPolicy,
   useResumeActionPolicy,
   useRevokeActionPolicy,
-  getGetClientPortfolioQueryKey,
+  getListInvoicesQueryKey,
+  getGetDashboardSummaryQueryKey,
+  getGetReceivablesSummaryQueryKey,
+  getGetPenaltyExposureQueryKey,
+  getGetMonthEndCloseQueryKey,
 } from "@workspace/api-client-react";
 import type {
   ActionProposal,
@@ -61,27 +64,20 @@ import {
 } from "@/lib/format";
 import { Send, Sparkles } from "lucide-react";
 
-// Proposed actions, firm side (round 22): the SME dashboard card's twin on
-// the console client page. Clerk assembles each batch from the same checks
-// that power the analytics cards; NOTHING runs until the firm user approves,
-// approval executes through the ordinary per-invoice path, and every target
-// is re-checked at that moment. Renders when a proposal exists OR the client
-// has decision history — a dark clerk_actions flag empties the proposals
-// (fail-closed; execution refuses 503 regardless), but past decisions remain
-// legitimately visible: the strip is the firm's durable record of who
-// approved what. The dialog machine (F1 unmount guard, mid-flight close
-// gate, deferred invalidations) is the shared headless core
+// Proposed actions (round 21): Clerk assembles the batch from the same
+// checks that power the dashboard cards; NOTHING runs until the owner
+// approves. Approval executes through the ordinary submission path —
+// validation, consent, any approval policy — and every target is re-checked
+// at that moment. Renders when a proposal exists OR the results dialog is
+// open (the F1 rule) OR a live standing approval exists OR decision history
+// exists — a dark clerk_actions flag still answers an empty proposals list
+// (fail-closed), which empties the suggestions without by itself hiding the
+// card. The dialog machine (F1 unmount guard, mid-flight close gate,
+// deferred invalidations, transient drafts) is the shared headless core
 // (@workspace/web-ui useClerkActionsDialog); the copy is lib/format's.
 export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  // The server gates every write on this card behind invoice.submit
-  // (routes/clerk/actions.ts: execute for submit kinds, grant/pause/resume/
-  // revoke all assertCan invoice.submit). Mirror that here so a read-only
-  // viewer (auditor) sees the status, the paused pill and the run record —
-  // but no buttons that could only ever 403.
-  const { data: me } = useGetMe();
-  const canAct = !!me?.capabilities.includes("invoice.submit");
   const execute = useExecuteAction();
   const { data: proposals, isSuccess } = useGetActionProposals(
     { clientPartyId },
@@ -94,6 +90,10 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
+  // The run record (round 29): who approved what — including the sweep's
+  // policy runs — with per-target outcomes. The console card has carried
+  // this strip since round 22; the SME owner who GRANTS an automation gets
+  // the same evidence where they granted it.
   const { data: decisions } = useGetActionDecisions(
     { clientPartyId },
     {
@@ -105,7 +105,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
-  // Standing approvals (round 28): the client's live grants plus the
+  // Standing approvals (round 28): the owner's live grants plus the
   // clerk_action_policies flag — `enabled` gates the "automate" affordance,
   // while existing grants stay visible (and revocable) regardless.
   const { data: policies } = useGetActionPolicies(
@@ -191,8 +191,23 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       return { decision: res.decision, drafts: res.drafts };
     },
     onExecuted: () => {
+      // Not awaited: a background refetch rejection must not surface as a
+      // false "action failed" error after the batch already ran. The
+      // no-args keys prefix-match every param variant. The proposals and
+      // decisions queries are deliberately NOT here — see the hook's
+      // onCloseAfterDecision (the F1 rule).
+      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       queryClient.invalidateQueries({
-        queryKey: getGetClientPortfolioQueryKey(clientPartyId),
+        queryKey: getGetDashboardSummaryQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetReceivablesSummaryQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetPenaltyExposureQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetMonthEndCloseQueryKey(),
       });
     },
     onCloseAfterDecision: () => {
@@ -211,27 +226,29 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       }),
   });
   const { confirming, decision, drafts, closeDialog } = dialog;
-
-  // The dialog must survive the proposals list emptying after a full batch
-  // (the SME card's F1 lesson): stay mounted while the dialog is up, defer
-  // the proposals refetch to closeDialog. A live standing approval also
-  // keeps the card up — it must stay manageable on a quiet day.
+  // The card must survive the proposals list emptying: after a full batch
+  // submits, the refetched list is [] and an early return would unmount the
+  // OPEN results view mid-read (review F1) — so the card stays mounted while
+  // the dialog is up. A live standing approval also keeps the card up — it
+  // must stay manageable on a quiet day — and so does run history (round
+  // 29): the owner's evidence of what automation did must not vanish just
+  // because today's batch already ran.
   const hasDecisions = (decisions?.decisions.length ?? 0) > 0;
   if (
     !isSuccess ||
     !proposals ||
     (proposals.actions.length === 0 &&
       !dialog.dialogOpen &&
-      !hasDecisions &&
-      livePolicies.length === 0)
+      livePolicies.length === 0 &&
+      !hasDecisions)
   ) {
     return null;
   }
 
   return (
-    <Card data-testid="card-clerk-actions">
+    <Card data-testid="clerk-actions">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle className="flex items-center gap-2">
           <Sparkles className="w-5 h-5" aria-hidden="true" /> Clerk suggests
           {pausedCount > 0 && (
             <span
@@ -244,24 +261,32 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {proposals.actions.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Nothing to batch right now — the checks behind the dashboards found
-            no overdue, failed or chase-worthy paper for this client.
-          </p>
-        )}
+        {/* A quiet day with automation or history to show: say why the card
+            is otherwise silent instead of opening straight on the strips. */}
+        {proposals.actions.length === 0 &&
+          (livePolicies.length > 0 || hasDecisions) && (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="text-actions-empty"
+            >
+              Nothing to suggest right now — automation and history below.
+            </p>
+          )}
         {proposals.actions.map((action) => (
-          <div
-            key={action.kind}
-            className="space-y-2"
-            data-testid={`action-${action.kind}`}
-          >
-            <p className="font-medium text-sm">{action.title}</p>
+          <div key={action.kind} className="space-y-2" data-testid={`action-${action.kind}`}>
+            <p className="font-medium">{action.title}</p>
             <p className="text-sm text-muted-foreground">{action.why}</p>
             <div className="space-y-1 text-xs text-muted-foreground">
               {action.targets.slice(0, ACTION_TARGET_DISPLAY_CAP).map((t) => (
                 <p key={t.invoiceId} data-testid={`action-target-${t.invoiceId}`}>
                   {t.invoiceNumber} · issued {formatDate(t.issueDate)}
+                  {action.kind === "submit_overdue" && (
+                    <>
+                      {" "}
+                      · {t.daysOverdue} day{t.daysOverdue === 1 ? "" : "s"} past
+                      the window
+                    </>
+                  )}
                   {t.grandTotal
                     ? ` · ${formatAmount(t.grandTotal, t.currency)}`
                     : ""}
@@ -280,40 +305,38 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                 </p>
               )}
             </div>
-            {canAct && (
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => dialog.beginConfirm(action)}
-                  disabled={execute.isPending}
-                  data-testid={`button-approve-${action.kind}`}
-                >
-                  <Send className="w-4 h-4 mr-2" aria-hidden="true" />
-                  Review &amp; approve
-                </Button>
-                {/* The automate affordance: submit kinds only, flag lit, no
-                    live grant yet — a standing approval is granted NEXT TO
-                    the evidence it will act on. */}
-                {policies?.enabled &&
-                  automatableActionKind(action.kind) &&
-                  !policyByKind.has(action.kind) && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => beginAutomate(action)}
-                      disabled={policyBusy}
-                      data-testid={`button-automate-${action.kind}`}
-                    >
-                      Automate daily
-                    </Button>
-                  )}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => dialog.beginConfirm(action)}
+                disabled={execute.isPending}
+                data-testid={`button-approve-${action.kind}`}
+              >
+                <Send className="w-4 h-4 mr-2" aria-hidden="true" />
+                Review &amp; approve
+              </Button>
+              {/* The automate affordance: submit kinds only, flag lit, no
+                  live grant yet — a standing approval is granted NEXT TO the
+                  evidence it will act on. */}
+              {policies?.enabled &&
+                automatableActionKind(action.kind) &&
+                !policyByKind.has(action.kind) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => beginAutomate(action)}
+                    disabled={policyBusy}
+                    data-testid={`button-automate-${action.kind}`}
+                  >
+                    Automate daily
+                  </Button>
+                )}
+            </div>
           </div>
         ))}
         {livePolicies.length > 0 && (
           <div className="space-y-2 border-t pt-3">
-            <p className="font-medium text-foreground text-sm">Automation</p>
+            <p className="font-medium text-sm">Automation</p>
             {livePolicies.map((p) => (
               <div
                 key={p.id}
@@ -333,40 +356,38 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                 >
                   {policyStatusLine(p)}
                 </span>
-                {canAct && (
-                  <span className="ml-auto flex gap-1">
-                    {p.pausedAt ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => resume.mutate({ id: p.id })}
-                        disabled={policyBusy}
-                        data-testid={`button-policy-resume-${p.kind}`}
-                      >
-                        Resume
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => pause.mutate({ id: p.id })}
-                        disabled={policyBusy}
-                        data-testid={`button-policy-pause-${p.kind}`}
-                      >
-                        Pause
-                      </Button>
-                    )}
+                <span className="ml-auto flex gap-1">
+                  {p.pausedAt ? (
                     <Button
                       size="sm"
-                      variant="ghost"
-                      onClick={() => revoke.mutate({ id: p.id })}
+                      variant="outline"
+                      onClick={() => resume.mutate({ id: p.id })}
                       disabled={policyBusy}
-                      data-testid={`button-policy-revoke-${p.kind}`}
+                      data-testid={`button-policy-resume-${p.kind}`}
                     >
-                      Revoke
+                      Resume
                     </Button>
-                  </span>
-                )}
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => pause.mutate({ id: p.id })}
+                      disabled={policyBusy}
+                      data-testid={`button-policy-pause-${p.kind}`}
+                    >
+                      Pause
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => revoke.mutate({ id: p.id })}
+                    disabled={policyBusy}
+                    data-testid={`button-policy-revoke-${p.kind}`}
+                  >
+                    Revoke
+                  </Button>
+                </span>
               </div>
             ))}
           </div>
@@ -374,7 +395,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
         {hasDecisions && (
           <div className="space-y-1 border-t pt-3 text-xs text-muted-foreground">
             <p className="font-medium text-foreground text-sm">
-              Recent decisions
+              Recent activity
             </p>
             {decisions?.decisions.slice(0, 5).map((d) => (
               <p key={d.id} data-testid={`decision-${d.id}`}>
@@ -398,7 +419,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                     ? actionConfirmDescription(
                         confirming.kind,
                         confirming.targets.length,
-                        "console",
+                        "sme",
                       )
                     : ""}
                 </DialogDescription>
@@ -453,8 +474,9 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               {drafts && drafts.length > 0 && (
                 <div className="space-y-3 border-t pt-3">
                   <p className="text-sm font-medium">
-                    Drafted reminders — copy each for the client to send. This
-                    dialog will not show them again: copy them before closing.
+                    Your drafted reminders — copy each into your own email.
+                    This dialog will not show them again: copy them before
+                    closing.
                   </p>
                   {drafts.map((d) => (
                     <div
@@ -468,7 +490,9 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                           size="sm"
                           variant="outline"
                           onClick={() =>
-                            navigator.clipboard.writeText(draftClipboardText(d))
+                            navigator.clipboard.writeText(
+                              draftClipboardText(d),
+                            )
                           }
                           data-testid={`button-copy-draft-${d.invoiceId}`}
                         >
@@ -511,7 +535,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               {automating
                 ? policyGrantDescription(
                     automating.kind,
-                    "console",
+                    "sme",
                     policyCap ?? POLICY_CAP_DEFAULT,
                   )
                 : ""}

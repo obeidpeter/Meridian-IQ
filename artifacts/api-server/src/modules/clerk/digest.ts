@@ -33,6 +33,7 @@ import {
   withinDueSoonWindow,
 } from "../invoice/compliance-window";
 import { RECEIVABLE_ORIENTATION } from "../invoice/receivables";
+import { RECEIVABLE_AGE_DAYS } from "./data-intents/shared";
 import { countFirmPayablesDue } from "../invoice/payables";
 import { countFirmUnbilled } from "../invoice/unbilled-income";
 import { firmMoneySummary } from "../invoice/cashflow";
@@ -212,9 +213,12 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
             AND ${pastSubmissionDeadline(today)}
         )::int AS overdue,
         COUNT(*) FILTER (WHERE i.status = 'failed')::int AS failed,
+        -- The age cutoff is RECEIVABLE_AGE_DAYS (data-intents/shared.ts) —
+        -- the same constant the data.aged_receivables Ask intent
+        -- interpolates, so the two spellings cannot drift apart.
         COUNT(*) FILTER (
           WHERE i.status IN ('submitted', 'stamped', 'confirmed')
-            AND COALESCE(i.due_date, i.issue_date) < ${today} - 60
+            AND COALESCE(i.due_date, i.issue_date) < ${today} - ${RECEIVABLE_AGE_DAYS}::int
         )::int AS recv_over_60
       FROM invoices i
       WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}
@@ -270,7 +274,7 @@ export function buildDigestUser(facts: DigestFacts): string {
     `- Invoices whose submission deadline falls in the next 7 days: ${facts.dueSoonCount}`,
     `- Invoices that failed submission: ${facts.failedCount}`,
     `- Unsubmitted invoices in total (draft or validated): ${facts.unsubmittedCount}`,
-    `- Receivables older than 60 days: ${facts.receivablesOver60Count}`,
+    `- Receivables older than ${RECEIVABLE_AGE_DAYS} days: ${facts.receivablesOver60Count}`,
     `- Regular monthly invoices that look unraised this cycle: ${facts.unbilledCount} (across ${facts.unbilledClients} client(s))`,
     `- Payments expected in the coming week (customers' own rhythms): ${facts.expectedWeekCount} invoice(s), NGN ${facts.expectedWeekTotalNgn}`,
     `- Receivables worth chasing (past due date AND the customer's usual rhythm): ${facts.chaseWorthyCount}`,
@@ -333,7 +337,7 @@ export function buildTemplateDigest(facts: DigestFacts): {
   }
   if (facts.receivablesOver60Count > 0) {
     bullets.push(
-      `${plural(facts.receivablesOver60Count, "receivable")} ${isAre(facts.receivablesOver60Count)} more than 60 days old — consider chasing payment.`,
+      `${plural(facts.receivablesOver60Count, "receivable")} ${isAre(facts.receivablesOver60Count)} more than ${RECEIVABLE_AGE_DAYS} days old — consider chasing payment.`,
     );
   }
   if (facts.unbilledCount > 0) {

@@ -19,6 +19,7 @@ import {
   severityLabel,
   statusLabel,
   statusTone,
+  summaryPillClasses,
 } from "./index";
 
 describe("formatNaira", () => {
@@ -129,6 +130,19 @@ describe("pillClasses", () => {
     expect(out).toContain("rounded-full");
     expect(out).toContain("bg-emerald-100");
     expect(out).toContain("dark:bg-emerald-950");
+  });
+});
+
+describe("summaryPillClasses", () => {
+  test("the borderless header-count recipe, per tone, light and dark", () => {
+    expect(summaryPillClasses("amber")).toBe(
+      "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+    );
+    expect(summaryPillClasses("emerald")).toBe(
+      "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300",
+    );
+    // Borderless by design — distinct from the bordered pillClasses recipe.
+    expect(summaryPillClasses("amber")).not.toContain("border");
   });
 });
 

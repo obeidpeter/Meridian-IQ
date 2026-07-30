@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { opTokenAllows } from "../lib/op-token";
+import { opTokenAllows, presentedOpToken } from "../lib/op-token";
 import { logger } from "../lib/logger";
 import { processInboundEmail } from "../modules/inbound/email";
 import { processInboundWhatsApp } from "../modules/inbound/whatsapp";
@@ -54,9 +54,7 @@ router.post("/inbound/email", (req, res): void => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  const presented =
-    req.get("x-op-token") ??
-    (typeof req.query.token === "string" ? req.query.token : undefined);
+  const presented = presentedOpToken(req);
   if (!presented || !opTokenAllows(expected, presented)) {
     res.status(401).json({ error: "Invalid or missing inbound token" });
     return;
@@ -115,9 +113,7 @@ router.post("/inbound/whatsapp", (req, res): void => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  const presented =
-    req.get("x-op-token") ??
-    (typeof req.query.token === "string" ? req.query.token : undefined);
+  const presented = presentedOpToken(req);
   if (!presented || !opTokenAllows(expected, presented)) {
     res.status(401).json({ error: "Invalid or missing inbound token" });
     return;

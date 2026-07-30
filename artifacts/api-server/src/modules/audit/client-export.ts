@@ -14,6 +14,11 @@ import {
   usersTable,
 } from "@workspace/db";
 import { DomainError } from "../errors";
+import {
+  MEMBER_EXPORT_COLUMNS,
+  makeSectionCollector,
+  type ExportSectionCount,
+} from "./export-shared";
 import { EXPORT_SECTION_ROW_CAP } from "./firm-export";
 
 // Client data-subject export (NDPA data portability, GET /clients/{id}/export).
@@ -45,7 +50,8 @@ import { EXPORT_SECTION_ROW_CAP } from "./firm-export";
 //    raw bank_statement_lines are bulk transaction data the bundle omits;
 //  - members carry identity + role only (the explicit column list IS the
 //    redaction): NEVER password hashes, TOTP secrets/recovery codes, or
-//    session epochs — byte-for-byte the firm-export members column list;
+//    session epochs — MEMBER_EXPORT_COLUMNS (export-shared.ts), the same
+//    list firm-export selects;
 //  - alert_preferences is the party's contact row — whatsappTo/phone/email
 //    are the data subject's own contact PII, so they belong in ITS bundle;
 //  - audit_events are the ledger rows with entity_type='party' naming this
@@ -56,11 +62,7 @@ import { EXPORT_SECTION_ROW_CAP } from "./firm-export";
 // Every section is capped (cap+1 probe) and reports rows + a truncated flag
 // in `counts`, so a partial bundle is always visibly partial.
 
-export interface ClientExportCount {
-  section: string;
-  rows: number;
-  truncated: boolean;
-}
+export type ClientExportCount = ExportSectionCount;
 
 export interface ClientExportBundle {
   partyId: string;
@@ -105,14 +107,7 @@ async function exportClientDataWithin(
     .limit(1);
   if (!party) throw new DomainError("NOT_FOUND", "Client party not found", 404);
 
-  const sections: Record<string, Record<string, unknown>[]> = {};
-  const counts: ClientExportCount[] = [];
-  const addSection = (section: string, rows: object[]) => {
-    const truncated = rows.length > cap;
-    const kept = truncated ? rows.slice(0, cap) : rows;
-    sections[section] = kept as Record<string, unknown>[];
-    counts.push({ section, rows: kept.length, truncated });
-  };
+  const { sections, counts, addSection } = makeSectionCollector(cap);
 
   addSection("party", [party]);
 
@@ -180,19 +175,10 @@ async function exportClientDataWithin(
     .limit(cap + 1);
   addSection("consent_records", consent);
 
-  // Identity + role only — the explicit column list IS the redaction
-  // (identical to firm-export's members section): passwordHash, totpSecret,
-  // totpRecoveryCodes, sessionEpoch never leave.
+  // Identity + role only — MEMBER_EXPORT_COLUMNS (export-shared.ts) is the
+  // single home of the redaction list both exports select.
   const members = await db
-    .select({
-      membershipId: membershipsTable.id,
-      userId: usersTable.id,
-      email: usersTable.email,
-      fullName: usersTable.fullName,
-      role: membershipsTable.role,
-      clientPartyId: membershipsTable.clientPartyId,
-      createdAt: membershipsTable.createdAt,
-    })
+    .select(MEMBER_EXPORT_COLUMNS)
     .from(membershipsTable)
     .innerJoin(usersTable, eq(usersTable.id, membershipsTable.userId))
     .where(

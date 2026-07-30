@@ -32,8 +32,7 @@ import {
   type MatchCandidate,
   type MatchableLine,
 } from "../reconciliation/matcher.ts";
-import { BILL_ORIENTATION } from "../invoice/receivables.ts";
-import { BILL_UNPAID } from "../invoice/payables.ts";
+import { BILL_OF_CLIENT, BILL_UNPAID } from "../invoice/payables.ts";
 
 // Bank-statement ingestion and reconciliation v1 (INT-05, SME-07).
 //
@@ -193,8 +192,8 @@ export async function ingestStatement(input: IngestInput): Promise<IngestResult>
 //    confirmed (still awaiting settlement) and presentable as eligible
 //    (CORE-09); the narration counterparty is the BUYER.
 //  - BILLS (debit lane): captured supplier invoices where this client is the
-//    BUYER (BILL_ORIENTATION), still unpaid (no payment evidence — bills
-//    never transition, so status alone says nothing), any non-cancelled
+//    BUYER (BILL_OF_CLIENT, payables.ts), still unpaid (no payment evidence —
+//    bills never transition, so status alone says nothing), any non-cancelled
 //    status; the narration counterparty is the SUPPLIER.
 async function loadCandidates(
   firmId: string,
@@ -245,11 +244,8 @@ async function loadCandidates(
         p.legal_name AS supplier_name
       FROM invoices i
       JOIN parties p ON p.id = i.supplier_party_id
-      WHERE i.firm_id = ${firmId}
-        AND i.buyer_party_id = ${clientPartyId}
-        AND i.kind = 'invoice'
+      WHERE ${BILL_OF_CLIENT(firmId, clientPartyId)}
         AND i.status <> 'cancelled'
-        AND ${BILL_ORIENTATION}
         AND ${BILL_UNPAID}
     `)
   ).rows;

@@ -66,6 +66,7 @@
     "expo-audio": "~1.1.1",
     "expo-dev-client": "~6.0.21",
     "expo-notifications": "~0.32.17",
-    "expo-secure-store": "~15.0.8"
+    "expo-secure-store": "~15.0.8",
+    "@workspace/format": "workspace:*"
   }
 }

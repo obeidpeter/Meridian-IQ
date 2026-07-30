@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -6,10 +6,7 @@ import {
   outboxTable,
   firmWebhookDeliveriesTable,
   membershipsTable,
-  auditEventsTable,
 } from "@workspace/db";
-import { logger } from "../../lib/logger";
-import { appendAudit } from "../audit/audit";
 import { registerSweep } from "../pipeline/pipeline";
 import { alertOnceViaAuditLedger, atMostHourly } from "../clerk/watch-shared";
 import { isFeatureEnabled } from "../flags/flags";
@@ -109,50 +106,16 @@ const alertOutboxDead = alertOnceViaAuditLedger({
   actorId: "health-watch",
 });
 
-// The webhook alert must carry the owning firm in the audit row's firmId
-// field, which alertOnceViaAuditLedger's config cannot stamp — so this is the
-// shared helper's discipline verbatim (in-process cache over the ledger's
-// (action, entityId) dedup key; the worst-case simultaneous-first-detection
-// duplicate is accepted the same way) with the one added field. The `after`
-// evidence is pointer-only (SEC-12): the webhook id, never its URL, the event
-// payload or the delivery error text.
-const webhookAlerted = new Set<string>();
-async function alertWebhookDeadOnce(delivery: DeadDeliveryRow): Promise<boolean> {
-  if (webhookAlerted.has(delivery.id)) return false;
-  const [existing] = await getDb()
-    .select({ seq: auditEventsTable.seq })
-    .from(auditEventsTable)
-    .where(
-      and(
-        eq(auditEventsTable.action, WEBHOOK_DELIVERY_DEAD_ACTION),
-        eq(auditEventsTable.entityId, delivery.id),
-      ),
-    )
-    .limit(1);
-  if (existing) {
-    webhookAlerted.add(delivery.id);
-    return false;
-  }
-  await appendAudit({
-    actorId: "health-watch",
-    actorRole: "system",
-    firmId: delivery.firmId,
-    action: WEBHOOK_DELIVERY_DEAD_ACTION,
-    entityType: "webhook_delivery",
-    entityId: delivery.id,
-    after: {
-      webhookId: delivery.webhookId,
-      reason:
-        "A firm webhook delivery exhausted its retries and went dead: the firm's endpoint never acknowledged the event.",
-    },
-  });
-  logger.error(
-    { firmId: delivery.firmId, webhookId: delivery.webhookId },
-    "Firm webhook delivery DEAD after max attempts: the firm's endpoint is not accepting events.",
-  );
-  webhookAlerted.add(delivery.id);
-  return true;
-}
+// The webhook alert carries the owning firm on the audit row and the log line
+// (the shared helper's per-alert firmId option — module level, like its two
+// siblings above, so the in-process dedup cache persists across sweep
+// passes). The `after` evidence is pointer-only (SEC-12): the webhook id,
+// never its URL, the event payload or the delivery error text.
+const alertWebhookDead = alertOnceViaAuditLedger({
+  action: WEBHOOK_DELIVERY_DEAD_ACTION,
+  entityType: "webhook_delivery",
+  actorId: "health-watch",
+});
 
 // Offer NEW alerts to operators over the messaging rail, one pointer-only
 // nudge per operator per new alert. Gated on the messaging_notifications flag
@@ -246,9 +209,17 @@ export async function sweepHealthWatch(
     }
 
     for (const delivery of deadDeliveries) {
-      if (await alertWebhookDeadOnce(delivery)) {
-        newAlerts.push(WEBHOOK_DELIVERY_DEAD_ACTION);
-      }
+      const appended = await alertWebhookDead(
+        delivery.id,
+        {
+          webhookId: delivery.webhookId,
+          reason:
+            "A firm webhook delivery exhausted its retries and went dead: the firm's endpoint never acknowledged the event.",
+        },
+        "Firm webhook delivery DEAD after max attempts: the firm's endpoint is not accepting events.",
+        { firmId: delivery.firmId },
+      );
+      if (appended) newAlerts.push(WEBHOOK_DELIVERY_DEAD_ACTION);
     }
 
     // Sends run LAST and outside any failure path: nothing after them can

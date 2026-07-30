@@ -9,7 +9,7 @@ import {
   type HistoryRow,
 } from "./recurring-suggest";
 import { BILL_OF_CLIENT } from "./payables";
-import { BILL_ORIENTATION } from "./receivables";
+import { BILL_ORIENTATION, LIVE_ENGAGEMENT } from "./receivables";
 
 // Missing recurring bills (round-18 idea #3) — the payables mirror of
 // unbilled-income detection: the same deterministic monthly-pattern miner
@@ -231,7 +231,7 @@ export async function countFirmMissingBills(
           SELECT 1 FROM engagements e
           WHERE e.firm_id = i.firm_id
             AND e.client_party_id = i.buyer_party_id
-            AND e.status IN ('open', 'in_progress')
+            AND ${LIVE_ENGAGEMENT}
         )
         AND i.issue_date >= (now() AT TIME ZONE 'Africa/Lagos')::date - ${LOOKBACK_DAYS}::int
       ORDER BY i.issue_date ASC, i.id

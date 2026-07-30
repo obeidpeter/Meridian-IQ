@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { ROLE_CAPABILITIES } from "../modules/auth/rbac.ts";
+import { routeBlock, setBlock, src } from "../test-helpers/source-pins.ts";
 
 // Route-posture tripwires. These invariants live in route wiring that no
 // module test can reach (there is no HTTP-level harness; the e2e journeys
@@ -25,17 +24,6 @@ import { ROLE_CAPABILITIES } from "../modules/auth/rbac.ts";
 // The Clerk surface lives in routes/clerk/ (split by concern; see the
 // barrel's map in routes/clerk/index.ts) — each tripwire reads the group
 // file that carries its route.
-
-const src = (rel: string): string =>
-  readFileSync(join(import.meta.dirname, "..", rel), "utf8");
-
-function routeBlock(source: string, path: string): string {
-  const start = source.indexOf(`"${path}"`);
-  assert.ok(start >= 0, `route ${path} exists`);
-  // Up to the next route registration (or EOF) — enough to hold the handler.
-  const next = source.indexOf("router.", source.indexOf("=>", start));
-  return source.slice(start, next === -1 ? undefined : next);
-}
 
 test("explain-failure stays reachable for the client who owns the failed invoice", () => {
   const block = routeBlock(src("routes/clerk/ask.ts"), "/clerk/explain-failure");
@@ -62,14 +50,10 @@ test("draft-invoice checks the firm budget before any provider spend", () => {
 });
 
 test("draft-invoice runs outside the per-request transaction", () => {
-  const appSrc = src("app.ts");
-  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
-  assert.ok(setStart >= 0);
-  const setEnd = appSrc.indexOf("])", setStart);
   assert.ok(
-    appSrc
-      .slice(setStart, setEnd)
-      .includes('"POST /api/clerk/draft-invoice"'),
+    setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
+      '"POST /api/clerk/draft-invoice"',
+    ),
     "two sequential provider calls (transcription + inference) must not hold a pooled connection under the 30s request-transaction cap",
   );
 });
@@ -149,13 +133,10 @@ test("bulk approval is operator-gated and runs OUTSIDE the request transaction",
   // ordering of reject/claim. The module instead commits each item in its
   // own short bypass transaction (bulk-approve.ts), so the route must skip
   // the ambient transaction.
-  const appSrc = src("app.ts");
-  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
-  const setEnd = appSrc.indexOf("])", setStart);
   assert.ok(
-    appSrc
-      .slice(setStart, setEnd)
-      .includes('"POST /api/clerk/cases/bulk-approve"'),
+    setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
+      '"POST /api/clerk/cases/bulk-approve"',
+    ),
     "bulk-approve must run outside the request transaction: per-item commits keep the global audit lock per-item and a decided item durable (bulk-submit semantics)",
   );
   assert.ok(
@@ -174,10 +155,7 @@ test("BOTH inbound rails run outside the request transaction", () => {
   // interleave into whatever request grabs the pooled connection next. The
   // rails must therefore both be NO_CONTEXT; their detached DB stages open
   // their own short transactions (clerk scope.ts / appendAudit's own tx).
-  const appSrc = src("app.ts");
-  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
-  assert.ok(setStart >= 0);
-  const set = appSrc.slice(setStart, appSrc.indexOf("])", setStart));
+  const set = setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(");
   assert.ok(
     set.includes('"POST /api/inbound/email"'),
     "the inbound email webhook must skip the request transaction",
@@ -194,16 +172,15 @@ test("statement import runs outside the request transaction, in the MODEL class,
   // token-spending route (the CSV branch shares the class — the
   // /clerk/batches precedent), and the route re-establishes write atomicity
   // itself by running ingestStatement inside its own bypass transaction.
-  const appSrc = src("app.ts");
-  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
-  const set = appSrc.slice(setStart, appSrc.indexOf("])", setStart));
+  const set = setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(");
   assert.ok(
     set.includes('"POST /api/statements"'),
     "POST /api/statements must skip the request transaction (bounded model call)",
   );
-  const rlSrc = src("middleware/rate-limit.ts");
-  const rlStart = rlSrc.indexOf("MODEL_RATE_LIMITED_ROUTES");
-  const rlSet = rlSrc.slice(rlStart, rlSrc.indexOf("])", rlStart));
+  const rlSet = setBlock(
+    src("middleware/rate-limit.ts"),
+    "MODEL_RATE_LIMITED_ROUTES",
+  );
   assert.ok(
     rlSet.includes('"POST /api/statements"'),
     "POST /api/statements must be in the MODEL rate-limit class",
@@ -245,14 +222,10 @@ test("case retry runs outside the request transaction via the pattern list", () 
 // audit-lock convoy — and the round-22 M3 split additionally requires the
 // chaser MODEL call to run outside any transaction at all.
 test("action execution runs outside the request transaction, model call outside any transaction", () => {
-  const appSrc = src("app.ts");
-  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
-  assert.ok(setStart >= 0);
-  const setEnd = appSrc.indexOf("])", setStart);
   assert.ok(
-    appSrc
-      .slice(setStart, setEnd)
-      .includes('"POST /api/clerk/action-proposals/execute"'),
+    setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
+      '"POST /api/clerk/action-proposals/execute"',
+    ),
     "the execute route must be exempted from the request transaction",
   );
   const moduleSrc = src("modules/clerk/actions.ts");
@@ -362,11 +335,10 @@ test("bulk submit runs outside the request transaction with per-item caller-post
   // transaction the first row's appendAudit held the GLOBAL audit advisory
   // lock for the whole 200-row batch — the convoy/deadlock class the
   // bulk-approve and execute-route blocks above document.
-  const appSrc = src("app.ts");
-  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
-  const setEnd = appSrc.indexOf("])", setStart);
   assert.ok(
-    appSrc.slice(setStart, setEnd).includes('"POST /api/invoices/bulk-submit"'),
+    setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(").includes(
+      '"POST /api/invoices/bulk-submit"',
+    ),
     "bulk-submit must be exempted from the request transaction",
   );
   // The route's own party-access gate needs a context too — the raw pool

@@ -2,18 +2,21 @@ import { sql, type SQL } from "drizzle-orm";
 import { getDb } from "@workspace/db";
 import { lagosDateString } from "../../lib/lagos-time";
 import { lagosMonthStart, monthLabel } from "../clerk/client-statement";
-import { BILL_ORIENTATION } from "./receivables";
+import { packMonthDocsSql } from "../clerk/vat-pack";
+import { DomainError } from "../errors";
+import { NEWEST_BILL_VERIFICATION } from "./payables";
+import { BILL_ORIENTATION, LIVE_ENGAGEMENT } from "./receivables";
 
 // Monthly VAT position (contract 0.45.0). The client's month in one number
 // pair: output VAT from the documents it issued vs input VAT from the
 // supplier bills it captured, with the VERIFIED-input split that makes the
 // "defensible" net position honest. Deterministic SQL, zero model calls,
 // nothing stored. The basis, stated once:
-//  - OUTPUT side mirrors the VAT pack (vat-pack.ts computeVatPack /
-//    packMonthInvoicesSql) exactly — issue-month bucketing, only documents
-//    with an accepted submission attempt, credit notes netted, cancelled
-//    documents excluded — so the position and the pack can never disagree
-//    about what "accepted in the month" means;
+//  - OUTPUT side IS the VAT pack's own membership fragment (packMonthDocsSql,
+//    vat-pack.ts — imported, not mirrored): issue-month bucketing, only
+//    documents with an accepted submission attempt, credit notes netted,
+//    cancelled documents excluded — so the position and the pack can never
+//    disagree about what "accepted in the month" means;
 //  - INPUT side is the captured supplier bills (BILL_ORIENTATION,
 //    receivables.ts): bills stay status 'draft' forever and never touch the
 //    stamping rails, so no accepted-attempt basis EXISTS for them — every
@@ -81,6 +84,26 @@ export function vatPositionMonths(
   return Array.from({ length: count }, (_, i) => lagosMonthStart(i, now));
 }
 
+// The live-month discipline, ONE resolver shared by the position routes AND
+// the compliance-pack routes (routes/vat-position.ts, routes/
+// compliance-pack.ts — the pack embeds the position, so the two surfaces
+// accept exactly the same months by construction): the requested month, or
+// the CURRENT Lagos month when omitted, must be on the position's own
+// 12-month option list. The CLOSED-month resolver (resolveClosedPeriod,
+// routes/invoices/packs.ts) is deliberately different and must stay separate.
+export function resolveVatPositionMonth(raw: string | undefined): string {
+  const months = vatPositionMonths();
+  const month = raw ?? months[0];
+  if (!months.includes(month)) {
+    throw new DomainError(
+      "BAD_MONTH",
+      "month must be one of the last 12 Lagos months, current month included (YYYY-MM-01)",
+      400,
+    );
+  }
+  return month;
+}
+
 // FX posture fragments (alias `i`). A document is CONVERTIBLE when it has an
 // NGN value at all; VAT_NGN is only meaningful under CONVERTIBLE — every
 // consumer below pairs them, so an unrated non-NGN document can never reach a
@@ -93,27 +116,16 @@ const VAT_NGN = sql`(CASE WHEN i.currency = 'NGN'
 const SIGNED_VAT_NGN = sql`(CASE WHEN i.kind = 'credit_note'
   THEN -${VAT_NGN} ELSE ${VAT_NGN} END)`;
 
-// The output-side month membership (alias `i`): MIRRORS computeVatPack's
-// WHERE / packMonthInvoicesSql (vat-pack.ts) predicate for predicate, widened
-// from kind='invoice' to the pack's full document set (credit notes as
-// offsets). Any edit here must keep the two surfaces agreeing.
-function acceptedMonthDocsSql(firmId: string, monthStart: string): SQL {
-  return sql`i.firm_id = ${firmId}
-    AND i.kind IN ('invoice', 'credit_note')
-    AND i.status <> 'cancelled'
-    AND i.issue_date >= ${monthStart}::date
-    AND i.issue_date < (${monthStart}::date + interval '1 month')
-    AND EXISTS (
-      SELECT 1 FROM submission_attempts sa
-      WHERE sa.invoice_id = i.id AND sa.status = 'accepted'
-    )`;
-}
+// The output-side month membership (alias `i`) is packMonthDocsSql
+// (vat-pack.ts) — computeVatPack's own fragment, imported rather than
+// mirrored, so the position and the pack agree by construction.
 
 // The input-side month membership (alias `i`): captured supplier bills issued
 // in the month. Bills are draft for life (payables.ts), so the only status
 // with meaning is 'cancelled' — everything else counts, paid or not (input
-// VAT hangs on the bill, not on payment evidence).
-function monthBillsSql(firmId: string, monthStart: string): SQL {
+// VAT hangs on the bill, not on payment evidence). Exported for the firm net
+// position (clerk/vat-input.ts), whose bill basis must match this one.
+export function monthBillsSql(firmId: string, monthStart: string): SQL {
   return sql`i.firm_id = ${firmId}
     AND i.kind = 'invoice'
     AND ${BILL_ORIENTATION}
@@ -122,17 +134,10 @@ function monthBillsSql(firmId: string, monthStart: string): SQL {
     AND i.issue_date < (${monthStart}::date + interval '1 month')`;
 }
 
-// The newest verification per bill (checked_at DESC, created_at DESC, LIMIT
-// 1) — the SAME "newest check wins" ordering as the bills ledger
-// (payables.ts listBills), so the position's verified split can never
-// disagree with what the ledger shows per bill. Alias `bv`.
-const NEWEST_VERIFICATION = sql`LEFT JOIN LATERAL (
-  SELECT v.valid
-  FROM bill_verifications v
-  WHERE v.invoice_id = i.id
-  ORDER BY v.checked_at DESC, v.created_at DESC
-  LIMIT 1
-) bv ON true`;
+// The newest verification per bill IS the bills ledger's own rule
+// (NEWEST_BILL_VERIFICATION, payables.ts — imported, not mirrored), so the
+// position's verified split can never disagree with what the ledger shows per
+// bill. Only bv.valid is read here; the fragment's other columns are inert.
 
 interface OutputAgg {
   outputVat: number;
@@ -179,7 +184,7 @@ async function outputAggregates(
         COUNT(*) FILTER (WHERE i.kind = 'invoice' AND ${CONVERTIBLE})::int AS invoice_count,
         COUNT(*) FILTER (WHERE NOT ${CONVERTIBLE})::int AS excluded
       FROM invoices i
-      WHERE ${acceptedMonthDocsSql(firmId, monthStart)}
+      WHERE ${packMonthDocsSql(firmId, monthStart)}
         AND ${clientFilter}
       GROUP BY i.supplier_party_id
     `)
@@ -218,7 +223,7 @@ async function inputAggregates(
         COUNT(*) FILTER (WHERE ${CONVERTIBLE})::int AS bill_count,
         COUNT(*) FILTER (WHERE NOT ${CONVERTIBLE})::int AS excluded
       FROM invoices i
-      ${NEWEST_VERIFICATION}
+      ${NEWEST_BILL_VERIFICATION}
       WHERE ${monthBillsSql(firmId, monthStart)}
         AND ${clientFilter}
       GROUP BY i.buyer_party_id
@@ -292,22 +297,22 @@ export async function computeFirmVatPositions(
   firmId: string,
   monthStart: string,
 ): Promise<FirmVatPositions> {
-  // One row per client the firm ACTIVELY serves — open/in_progress
-  // engagements only, the client-statement sweep's enumeration
-  // (clerk/client-statement.ts) — so archived clients drop off the rollup.
+  // One row per client the firm ACTIVELY serves — live engagements only
+  // (LIVE_ENGAGEMENT, receivables.ts — the client-statement sweep's
+  // enumeration) — so archived clients drop off the rollup.
   // selectDistinct because a client can hold several engagements.
   const clients = (
     await getDb().execute<{ id: string; legal_name: string }>(sql`
       SELECT DISTINCT e.client_party_id AS id, p.legal_name
       FROM engagements e
       JOIN parties p ON p.id = e.client_party_id
-      WHERE e.firm_id = ${firmId} AND e.status IN ('open', 'in_progress')
+      WHERE e.firm_id = ${firmId} AND ${LIVE_ENGAGEMENT}
       ORDER BY p.legal_name, e.client_party_id
     `)
   ).rows;
   const engaged = sql`(
     SELECT e.client_party_id FROM engagements e
-    WHERE e.firm_id = ${firmId} AND e.status IN ('open', 'in_progress')
+    WHERE e.firm_id = ${firmId} AND ${LIVE_ENGAGEMENT}
   )`;
   const outBy = await outputAggregates(
     firmId,
@@ -401,7 +406,7 @@ export async function listVatPositionDocuments(
           THEN ${SIGNED_VAT_NGN}::numeric(18,2)::text END AS vat_ngn
       FROM invoices i
       JOIN parties p ON p.id = i.buyer_party_id
-      WHERE ${acceptedMonthDocsSql(firmId, monthStart)}
+      WHERE ${packMonthDocsSql(firmId, monthStart)}
         AND i.supplier_party_id = ${clientPartyId}
       ORDER BY i.issue_date, i.invoice_number
       LIMIT 50000
@@ -428,7 +433,7 @@ export async function listVatPositionDocuments(
         COALESCE(bv.valid, false) AS verified
       FROM invoices i
       JOIN parties p ON p.id = i.supplier_party_id
-      ${NEWEST_VERIFICATION}
+      ${NEWEST_BILL_VERIFICATION}
       WHERE ${monthBillsSql(firmId, monthStart)}
         AND i.buyer_party_id = ${clientPartyId}
       ORDER BY i.issue_date, i.invoice_number

@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { routeBlock, setBlock, src } from "../test-helpers/source-pins.ts";
 
 // Route-posture tripwires for the payment collection seam (the
 // clerk-route-posture.test.ts idiom): these invariants live in route wiring
@@ -19,21 +18,8 @@ import { join } from "node:path";
 //    (console.portfolio.read + firm scope) — the firm that sees the bill is
 //    the firm that pays it.
 
-const src = (rel: string): string =>
-  readFileSync(join(import.meta.dirname, "..", rel), "utf8");
-
-function routeBlock(source: string, path: string): string {
-  const start = source.indexOf(`"${path}"`);
-  assert.ok(start >= 0, `route ${path} exists`);
-  const next = source.indexOf("router.", source.indexOf("=>", start));
-  return source.slice(start, next === -1 ? undefined : next);
-}
-
 test("the confirmation webhook is public, and ONLY because it fails closed", () => {
-  const principalSrc = src("middleware/principal.ts");
-  const setStart = principalSrc.indexOf("PUBLIC_PATHS = new Set(");
-  assert.ok(setStart >= 0);
-  const set = principalSrc.slice(setStart, principalSrc.indexOf("])", setStart));
+  const set = setBlock(src("middleware/principal.ts"), "PUBLIC_PATHS = new Set(");
   assert.ok(
     set.includes('"/api/billing/payments/confirm"'),
     "the provider webhook has no session — the shared secret is the credential",
@@ -61,10 +47,7 @@ test("the confirmation webhook is public, and ONLY because it fails closed", () 
 });
 
 test("the webhook skips the request transaction; the module owns its commit", () => {
-  const appSrc = src("app.ts");
-  const setStart = appSrc.indexOf("NO_CONTEXT_ROUTES = new Set(");
-  assert.ok(setStart >= 0);
-  const set = appSrc.slice(setStart, appSrc.indexOf("])", setStart));
+  const set = setBlock(src("app.ts"), "NO_CONTEXT_ROUTES = new Set(");
   assert.ok(
     set.includes('"POST /api/billing/payments/confirm"'),
     "the settle must not ride the buffered request transaction — the module commits durably before the 202, and the global audit lock is held per-settle only",

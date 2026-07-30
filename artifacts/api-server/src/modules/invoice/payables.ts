@@ -43,6 +43,20 @@ export const BILL_OF_CLIENT = (firmId: string, clientPartyId: string) => sql`
   AND i.kind = 'invoice'
   AND ${BILL_ORIENTATION}`;
 
+// The newest stamp verification per bill — the ONE home of the "newest check
+// wins" rule (checked_at DESC, created_at DESC, id DESC, LIMIT 1). Aliases:
+// `i` for the invoices row, `bv` for the verdict. The bills ledger below, the
+// VAT position's verified split (vat-position.ts) and the firm net position
+// (clerk/vat-input.ts) all interpolate this fragment, so no surface can
+// disagree with the ledger about which verification is current.
+export const NEWEST_BILL_VERIFICATION = sql`LEFT JOIN LATERAL (
+  SELECT v.valid, v.eligible, v.checked_at
+  FROM bill_verifications v
+  WHERE v.invoice_id = i.id
+  ORDER BY v.checked_at DESC, v.created_at DESC, v.id DESC
+  LIMIT 1
+) bv ON true`;
+
 // Classify one invoice's orientation without re-spelling the fragments: the
 // row's three keys are projected into a derived table aliased `i`, so the
 // receivables.ts fragments evaluate verbatim. Used by the submit guard
@@ -139,13 +153,7 @@ export async function listBills(
         FROM settlement_events se
         GROUP BY invoice_id
       ) se ON se.invoice_id = i.id
-      LEFT JOIN LATERAL (
-        SELECT v.valid, v.eligible, v.checked_at
-        FROM bill_verifications v
-        WHERE v.invoice_id = i.id
-        ORDER BY v.checked_at DESC, v.created_at DESC, v.id DESC
-        LIMIT 1
-      ) bv ON true
+      ${NEWEST_BILL_VERIFICATION}
       WHERE ${BILL_OF_CLIENT(firmId, clientPartyId)}
       ORDER BY i.created_at DESC
       LIMIT 5000

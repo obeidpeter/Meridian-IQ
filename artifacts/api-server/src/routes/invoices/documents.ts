@@ -30,7 +30,11 @@ import { awaitingApproval } from "../../modules/invoice/approvals";
 import { computeRejectionRisk } from "../../modules/invoice/rejection-risk";
 import { buildCanonical } from "../../modules/invoice/service";
 import { serializeToUbl } from "../../modules/invoice/canonical";
-import { renderInvoicePdf, sendPdfAttachment } from "../../modules/invoice/pdf";
+import {
+  renderInvoicePdf,
+  sendPdfAttachment,
+  themeWithBrandFallback,
+} from "../../modules/invoice/pdf";
 import { DomainError } from "../../modules/errors";
 import { loadForTenant } from "./shared";
 
@@ -79,11 +83,9 @@ router.get("/invoices/:id/pdf", async (req, res): Promise<void> => {
   if (!supplier || !buyer) {
     throw new DomainError("NOT_FOUND", "Invoice parties not found", 404);
   }
-  // brandName falls back to the firm's own name — the whitelabel page's rule.
-  const theme: Record<string, unknown> = { ...(firms[0]?.theme ?? {}) };
-  if (typeof theme.brandName !== "string" || !theme.brandName.trim()) {
-    if (firms[0]?.name) theme.brandName = firms[0].name;
-  }
+  // brandName falls back to the firm's own name — the whitelabel page's rule
+  // (themeWithBrandFallback, modules/invoice/pdf.ts).
+  const theme = themeWithBrandFallback(firms[0]?.theme, firms[0]?.name);
   const pdf = await renderInvoicePdf({
     invoice,
     lines,

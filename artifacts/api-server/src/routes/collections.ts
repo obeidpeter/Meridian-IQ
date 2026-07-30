@@ -16,7 +16,7 @@ import {
   GetUnmatchedCollectionsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../lib/parse";
-import { opTokenAllows } from "../lib/op-token";
+import { opTokenAllows, presentedOpToken } from "../lib/op-token";
 import {
   assertCan,
   assertPartyAccess,
@@ -148,9 +148,7 @@ router.post("/collections/inbound", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  const presented =
-    req.get("x-op-token") ??
-    (typeof req.query.token === "string" ? req.query.token : undefined);
+  const presented = presentedOpToken(req);
   if (!presented || !opTokenAllows(expected, presented)) {
     res
       .status(401)

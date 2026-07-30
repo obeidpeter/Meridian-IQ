@@ -16,6 +16,11 @@ import {
 } from "@workspace/db";
 import { DomainError } from "../errors";
 import { firmPartySphereCondition } from "../party/party";
+import {
+  MEMBER_EXPORT_COLUMNS,
+  makeSectionCollector,
+  type ExportSectionCount,
+} from "./export-shared";
 
 // Full-firm portability export (operator-gated, GET /firms/{id}/export). One
 // deterministic bundle of everything the platform holds FOR a firm — the
@@ -38,11 +43,7 @@ import { firmPartySphereCondition } from "../party/party";
 
 export const EXPORT_SECTION_ROW_CAP = 10_000;
 
-export interface FirmExportCount {
-  section: string;
-  rows: number;
-  truncated: boolean;
-}
+export type FirmExportCount = ExportSectionCount;
 
 export interface FirmExportBundle {
   firmId: string;
@@ -84,16 +85,7 @@ async function exportFirmDataWithin(
     .limit(1);
   if (!firm) throw new DomainError("NOT_FOUND", "Firm not found", 404);
 
-  const sections: Record<string, Record<string, unknown>[]> = {};
-  const counts: FirmExportCount[] = [];
-  // Drizzle rows are plain objects; the widening cast keeps the bundle shape
-  // schema-friendly without an index signature on every row type.
-  const addSection = (section: string, rows: object[]) => {
-    const truncated = rows.length > cap;
-    const kept = truncated ? rows.slice(0, cap) : rows;
-    sections[section] = kept as Record<string, unknown>[];
-    counts.push({ section, rows: kept.length, truncated });
-  };
+  const { sections, counts, addSection } = makeSectionCollector(cap);
 
   addSection("firm", [firm]);
 
@@ -179,18 +171,10 @@ async function exportFirmDataWithin(
     .limit(cap + 1);
   addSection("consent_records", consent);
 
-  // Identity + role only — the explicit column list IS the redaction:
-  // passwordHash, totpSecret, totpRecoveryCodes, sessionEpoch never leave.
+  // Identity + role only — MEMBER_EXPORT_COLUMNS (export-shared.ts) is the
+  // single home of the redaction list both exports select.
   const members = await db
-    .select({
-      membershipId: membershipsTable.id,
-      userId: usersTable.id,
-      email: usersTable.email,
-      fullName: usersTable.fullName,
-      role: membershipsTable.role,
-      clientPartyId: membershipsTable.clientPartyId,
-      createdAt: membershipsTable.createdAt,
-    })
+    .select(MEMBER_EXPORT_COLUMNS)
     .from(membershipsTable)
     .innerJoin(usersTable, eq(usersTable.id, membershipsTable.userId))
     .where(eq(membershipsTable.firmId, firmId))

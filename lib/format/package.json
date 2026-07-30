@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./action-copy": "./src/action-copy.ts",
     "./source.css": "./src/source.css"
   },
   "scripts": {

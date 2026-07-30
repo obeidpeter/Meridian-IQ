@@ -29,6 +29,17 @@ export function psql(url, sql) {
   return res.stdout.trim();
 }
 
+// The migration-ledger summary — "count|max(version)" over
+// _schema_migrations — that both restore-drill (source vs restored target)
+// and release (database vs the migration registry) assert on. One home so
+// the ledger's table name and summary shape can never drift between them.
+export function migrationLedgerSummary(url) {
+  return psql(
+    url,
+    "SELECT count(*) || '|' || coalesce(max(version), 0) FROM _schema_migrations",
+  );
+}
+
 // Streaming sha256 so multi-GB dumps do not need to fit in memory.
 export async function sha256File(file) {
   const hash = createHash("sha256");

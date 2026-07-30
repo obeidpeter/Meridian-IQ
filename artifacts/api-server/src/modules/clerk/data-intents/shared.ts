@@ -12,7 +12,9 @@ import {
 
 export const DATA_INTENT_PREFIX = "data.";
 
-// Aged-receivables cutoff, in days past due (mirrors the digest fact).
+// Aged-receivables cutoff, in days past due — the one spelling of the
+// cutoff: the digest fact (digest.ts) and the data.aged_receivables intent
+// both interpolate it.
 export const RECEIVABLE_AGE_DAYS = 60;
 
 // How many invoice numbers an answer names before summarising the rest.

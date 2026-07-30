@@ -5,6 +5,7 @@ import {
   CSRF,
   DEMO_CLIENT_PARTY_PREFIX,
   apiLogout,
+  createDraftInvoice,
   pollUntil,
   signIn,
   signOutFromApp,
@@ -124,25 +125,15 @@ async function journeyIntegrationLayer(
         "the seeded book to pattern the webhook probe on",
     );
   }
-  const createdRes = await page.request.post(BASE + "/api/invoices", {
-    data: {
-      supplierPartyId: pattern.supplierPartyId,
-      buyerPartyId: pattern.buyerPartyId,
-      invoiceNumber: `E2E-INT-${Date.now()}`,
-      issueDate: new Date().toISOString().slice(0, 10),
-      lines: [
-        {
-          description: "E2E integration probe",
-          quantity: "1",
-          unitPrice: "25000",
-          vatRate: "0.075",
-        },
-      ],
-    },
-    headers: CSRF,
+  const created = await createDraftInvoice(page, BASE, {
+    supplierPartyId: pattern.supplierPartyId,
+    buyerPartyId: pattern.buyerPartyId,
+    invoiceNumber: `E2E-INT-${Date.now()}`,
+    issueDate: new Date().toISOString().slice(0, 10),
+    description: "E2E integration probe",
+    unitPrice: "25000",
   });
-  const invoiceId =
-    createdRes.status() === 201 ? (await createdRes.json()).invoice?.id : null;
+  const invoiceId = created.invoiceId;
   if (invoiceId) {
     await page.request.post(BASE + `/api/invoices/${invoiceId}/validate`, {
       headers: CSRF,

@@ -13,15 +13,14 @@ import {
   requireFirmScope,
 } from "../modules/auth/rbac";
 import { computeCompliancePack } from "../modules/invoice/compliance-pack";
-import { vatPositionMonths } from "../modules/invoice/vat-position";
+import { resolveVatPositionMonth } from "../modules/invoice/vat-position";
 import { renderCompliancePackPdf } from "../modules/invoice/pack-pdf";
-import { sendPdfAttachment } from "../modules/invoice/pdf";
+import { sendPdfAttachment, themeWithBrandFallback } from "../modules/invoice/pdf";
 import { draftPackCoverNote } from "../modules/clerk/pack-note";
 import { gatewayOrNull } from "../modules/clerk/provider";
 import { fanOutAlert } from "../modules/messaging/fan-out";
 import { pointerEntityRef } from "../modules/messaging/recipient-ref";
 import { appendAudit } from "../modules/audit/audit";
-import { DomainError } from "../modules/errors";
 
 // Monthly client compliance pack (contract 0.45.0): one client's Lagos month
 // as a branded PDF — cover note, document register, receivables, payables,
@@ -33,23 +32,13 @@ import { DomainError } from "../modules/errors";
 
 const router: IRouter = Router();
 
-// The live-month discipline — the VAT position's resolvePositionMonth
-// (routes/vat-position.ts), shared verbatim in shape: the requested month, or
-// the CURRENT Lagos month when omitted, must be on the position's own
-// 12-month option list (the pack embeds the position, so the two surfaces
-// must accept exactly the same months).
-function resolvePackMonth(raw: string | undefined): string {
-  const months = vatPositionMonths();
-  const month = raw ?? months[0];
-  if (!months.includes(month)) {
-    throw new DomainError(
-      "BAD_MONTH",
-      "month must be one of the last 12 Lagos months, current month included (YYYY-MM-01)",
-      400,
-    );
-  }
-  return month;
-}
+// The live-month discipline — resolveVatPositionMonth (modules/invoice/
+// vat-position.ts), the VAT position's own resolver, imported rather than
+// mirrored: the requested month, or the CURRENT Lagos month when omitted,
+// must be on the position's own 12-month option list (the pack embeds the
+// position, so the two surfaces accept exactly the same months by
+// construction). The deliberately different CLOSED-month resolver is
+// resolveClosedPeriod (routes/invoices/packs.ts) — keep them separate.
 
 router.get("/compliance-pack", async (req, res): Promise<void> => {
   assertCan(req.principal, "invoice.read");
@@ -61,7 +50,7 @@ router.get("/compliance-pack", async (req, res): Promise<void> => {
     req.principal,
     query.clientPartyId,
   );
-  const month = resolvePackMonth(query.month);
+  const month = resolveVatPositionMonth(query.month);
   const facts = await computeCompliancePack(firmId, clientPartyId, month);
   // Digest posture end to end — kill switch, missing provider, exhausted
   // budget or invalid output all answer with the deterministic template
@@ -83,11 +72,8 @@ router.get("/compliance-pack", async (req, res): Promise<void> => {
     .where(eq(firmsTable.id, firmId))
     .limit(1);
   // brandName falls back to the firm's own name — the whitelabel page's rule
-  // (the invoice-PDF route's exact fallback).
-  const theme: Record<string, unknown> = { ...(firm?.theme ?? {}) };
-  if (typeof theme.brandName !== "string" || !theme.brandName.trim()) {
-    if (firm?.name) theme.brandName = firm.name;
-  }
+  // (themeWithBrandFallback, the invoice-PDF route's exact fallback).
+  const theme = themeWithBrandFallback(firm?.theme, firm?.name);
   const pdf = await renderCompliancePackPdf({
     facts,
     coverNote: note.note,
@@ -114,7 +100,7 @@ router.post("/compliance-pack/notify", async (req, res): Promise<void> => {
   // The month is advisory (the message itself is pointer-only and names no
   // month) but must still be a real requestable pack month, or the 202 would
   // "acknowledge" a pack that can never exist.
-  const month = resolvePackMonth(body.month);
+  const month = resolveVatPositionMonth(body.month);
   const [prefs] = await getDb()
     .select()
     .from(alertPreferencesTable)

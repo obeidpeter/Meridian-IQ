@@ -7,6 +7,7 @@ import {
 } from "../../lib/lagos-time";
 import { monthLabel } from "../clerk/client-statement";
 import { DomainError } from "../errors";
+import { UNSUBMITTED_STATE } from "./compliance-window";
 import {
   getReceivablesSummary,
   RECEIVABLE_ORIENTATION,
@@ -67,7 +68,7 @@ export interface CompliancePackFacts {
 }
 
 // The client's issued documents in the Lagos issue-month: the SAME month
-// window as vat-position.ts acceptedMonthDocsSql (issue_date in
+// window as the VAT position's packMonthDocsSql (vat-pack.ts; issue_date in
 // [monthStart, +1 month)), deliberately WITHOUT its accepted-attempt or
 // cancelled filters — a register lists every document the client put a
 // number on (drafts, failures and cancellations included; the status column
@@ -139,7 +140,8 @@ export function nextVatReturnDue(now: Date = new Date()): string {
 }
 
 // The submission backlog, pinned to ONE client: the compliance-calendar.ts
-// predicate (draft/validated, receivable orientation — captured bills are
+// predicate (UNSUBMITTED_STATE — compliance-window.ts, the ONE home of the
+// draft/validated pair — plus receivable orientation: captured bills are
 // draft forever and must not read as an eternal backlog; no `kind` filter,
 // because credit notes and corrections carry submission deadlines too).
 async function countUnsubmittedReceivables(
@@ -152,7 +154,7 @@ async function countUnsubmittedReceivables(
       FROM invoices i
       WHERE i.firm_id = ${firmId}
         AND i.supplier_party_id = ${clientPartyId}
-        AND i.status IN ('draft', 'validated')
+        AND ${UNSUBMITTED_STATE}
         AND ${RECEIVABLE_ORIENTATION}
     `)
   ).rows;

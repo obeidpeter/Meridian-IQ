@@ -3,10 +3,14 @@
  * approve-and-run confirm/outcome copy, the standing-approval (policy)
  * vocabulary, and the consent-grade grant copy.
  *
- * The load-bearing wording is ported verbatim from the web apps' shared
- * @workspace/format package (lib/format/src/index.ts) — mobile does not
- * depend on that web-shared package, so the copy lives in this RN-free
- * module; keep the two in sync when the wording changes there.
+ * The load-bearing wording is imported from the web apps' shared
+ * @workspace/format package via its Intl-free "action-copy" subpath —
+ * importing the package ROOT would execute its module-load Intl formatter
+ * construction, which mobile deliberately avoids (React Native's Hermes/JSC
+ * ICU builds are inconsistent — see ./penalty.ts). Only the mobile-specific
+ * pieces stay local: the RUNNABLE kind gate below, the mobile gate notes,
+ * the pause/resume/revoke confirms, and the builders that need mobile's own
+ * formatDateTime (policyStatusLine, decisionLine).
  *
  * Two deliberate mobile-v1 simplifications, stated here so they read as
  * decisions rather than gaps:
@@ -19,13 +23,33 @@
  *    running it here would silently burn the drafts.
  */
 
+import {
+  actionConfirmDescription as sharedActionConfirmDescription,
+  policyGrantDescription as sharedPolicyGrantDescription,
+  policyPauseReasonLabel,
+} from "@workspace/format/action-copy";
 import { formatDateTime } from "./format";
+
+// The shared vocabulary, re-exported verbatim: one home for the wording,
+// pinned by lib/format's action-dialog-copy.test.ts (and re-pinned by
+// automation.test.ts from this module's surface).
+export {
+  actionConfirmButtonLabel,
+  actionOutcomeSummary,
+  POLICY_CAP_DEFAULT,
+  POLICY_KIND_LABELS,
+  policyKindLabel,
+  POLICY_PAUSE_REASON_LABELS,
+} from "@workspace/format/action-copy";
+export { policyPauseReasonLabel };
 
 // ---- The automatable subset ------------------------------------------------
 // GrantActionPolicyInput's enum: draft_chasers is excluded by design — its
 // drafts exist only on the response for a human to read and send, which an
 // unattended run cannot do. On mobile this set doubles as the RUNNABLE set
-// (see the module comment).
+// (see the module comment), so it stays LOCAL rather than re-exporting the
+// web's set: growing the web set must never silently widen what the phone
+// can approve.
 
 export const AUTOMATABLE_ACTION_KINDS = [
   "submit_overdue",
@@ -74,76 +98,25 @@ export function proposalCountLine(action: {
   return `${n} invoice${n === 1 ? "" : "s"} in this batch.`;
 }
 
-// ---- Approve-and-run copy (ported from @workspace/format) ------------------
+// ---- Approve-and-run copy (shared with @workspace/format) ------------------
 
 /**
- * The consent-grade confirm body for a submit-kind batch. Ported from
- * actionConfirmDescription's submit branch (the SME/console texts are
- * identical for submit kinds).
+ * The consent-grade confirm body for a batch: the shared builder with the
+ * audience pinned to "sme" — the phone talks to the business owner in the
+ * SME dialogs' words. (Only submit kinds reach this on mobile; see the
+ * runnable-set gate above.)
  */
 export function actionConfirmDescription(kind: string, count: number): string {
-  const s = count === 1 ? "" : "s";
-  return `This ${kind === "retry_failed" ? "resubmits" : "submits"} ${count} invoice${s} to the e-invoicing rails through the ordinary path — validation, consent and any approval policy all apply. Each invoice is re-checked at this moment; anything already processed or no longer eligible is skipped, and the decision is recorded under your name.`;
-}
-
-export function actionConfirmButtonLabel(kind: string, count: number): string {
-  const s = count === 1 ? "" : "s";
-  return kind === "draft_chasers"
-    ? `Draft ${count} reminder${s}`
-    : `Approve ${count} invoice${s}`;
-}
-
-export function actionOutcomeSummary(decision: {
-  kind: string;
-  executedCount: number;
-  failedCount: number;
-  skippedCount: number;
-}): string {
-  return `${decision.executedCount} ${
-    decision.kind === "draft_chasers" ? "drafted" : "submitted"
-  } · ${decision.failedCount} need attention · ${decision.skippedCount} skipped.`;
+  return sharedActionConfirmDescription(kind, count, "sme");
 }
 
 // ---- Standing approvals ----------------------------------------------------
 
-// The per-run ceiling every mobile grant carries (the web dialogs' shared
-// default; the contract allows 1..50, chosen there).
-export const POLICY_CAP_DEFAULT = 10;
-
-// Keyed by the automatable kinds. A kind an older client does not know
-// renders through the fallback in policyKindLabel, never as a blank.
-export const POLICY_KIND_LABELS: Record<string, string> = {
-  submit_overdue: "Auto-submit overdue invoices",
-  retry_failed: "Auto-retry failed submissions",
-};
-
-export function policyKindLabel(kind: string): string {
-  return POLICY_KIND_LABELS[kind] ?? kind;
-}
-
-// Why a grant is paused, in card-sized words. The tripwire reasons are the
-// sweep's own vocabulary (modules/clerk/action-policies.ts); "manual" is a
-// human pause.
-export const POLICY_PAUSE_REASON_LABELS: Record<string, string> = {
-  manual: "paused manually",
-  grantor_inactive: "paused — the granter's access changed",
-  consent_missing: "paused — compliance consent is missing",
-  failed_targets: "paused — too many failures in the last run",
-  unknown_kind: "paused — this action kind can't run automatically",
-  rail_rejections:
-    "paused — the last run's submissions were rejected by the rails",
-  engagement_closed: "paused — the engagement with this client has ended",
-  run_error: "paused — the last run hit an unexpected error",
-};
-
-export function policyPauseReasonLabel(reason: string | null): string {
-  return POLICY_PAUSE_REASON_LABELS[reason ?? "manual"] ?? `paused — ${reason}`;
-}
-
 /**
  * One status line per live grant: paused grants lead with why (amber-worthy
  * — the sweep is NOT running); active grants say the cadence, the per-run
- * cap, and when the sweep last ran (or that it has not yet).
+ * cap, and when the sweep last ran (or that it has not yet). Stays local:
+ * it renders through mobile's own formatDateTime, not format's Intl one.
  */
 export function policyStatusLine(policy: {
   pausedAt: string | null;
@@ -177,22 +150,14 @@ export const AUTOMATION_PAUSED_HOME_MESSAGE =
 /**
  * The consent-grade description in the "Automate daily" confirm: what a
  * standing approval DOES — including the per-run ceiling being granted, so
- * the copy states the number being consented to. Ported from
- * policyGrantDescription (SME audience).
+ * the copy states the number being consented to. The shared builder with
+ * the audience pinned to "sme".
  */
 export function policyGrantDescription(
   kind: string,
   maxTargetsPerRun: number,
 ): string {
-  const s = maxTargetsPerRun === 1 ? "" : "s";
-  const what =
-    kind === "retry_failed"
-      ? `resubmit up to ${maxTargetsPerRun} invoice${s} that failed on the rails`
-      : `submit up to ${maxTargetsPerRun} invoice${s} past the statutory window`;
-  return (
-    `Clerk will run this check every day and ${what} under your name, without asking again each day. ` +
-    `Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.`
-  );
+  return sharedPolicyGrantDescription(kind, "sme", maxTargetsPerRun);
 }
 
 // The pause/resume/revoke confirms. Pause and resume are reversible
@@ -224,6 +189,8 @@ export const POLICY_REVOKE_CONFIRM = {
 /**
  * One line per recorded decision — date, kind, the three counts, and the
  * "· auto" tag when a standing-approval run (not a fresh click) made it.
+ * Stays local for the same reason as policyStatusLine: mobile's own
+ * formatDateTime renders the date.
  */
 export function decisionLine(decision: {
   createdAt: string;

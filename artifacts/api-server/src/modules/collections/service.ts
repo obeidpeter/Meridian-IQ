@@ -10,6 +10,7 @@ import {
 import { appendAudit } from "../audit/audit";
 import { assertPartyAccess, requireFirmScope, type Principal } from "../auth/rbac";
 import { canTransition, recordTransition } from "../invoice/lifecycle";
+import { OUTSTANDING_STATUSES } from "../invoice/receivables";
 import { provisionAccount } from "./provider";
 
 // Collection accounts: one virtual account reference per client, provisioned
@@ -20,10 +21,13 @@ import { provisionAccount } from "./provider";
 // `collection_account` settlement events — the mandatory-source settlement
 // hierarchy's auto-observed member (CR-01, Plan 7.4).
 
-// Receivable statuses a payment can bind to: post-submission, pre-terminal.
-// draft/validated paper has no fixed number the payer could be quoting;
-// settled/cancelled/credited must not resurrect (the CAS below also guards).
-const BINDABLE_STATUSES = ["submitted", "stamped", "confirmed"] as const;
+// Receivable statuses a payment can bind to: post-submission, pre-terminal —
+// exactly the outstanding set (OUTSTANDING_STATUSES, invoice/receivables.ts),
+// and DERIVED from it because a payment can bind precisely to an outstanding
+// receivable: draft/validated paper has no fixed number the payer could be
+// quoting; settled/cancelled/credited must not resurrect (the CAS below also
+// guards).
+const BINDABLE_STATUSES = OUTSTANDING_STATUSES;
 
 export async function createCollectionAccount(
   principal: Principal,

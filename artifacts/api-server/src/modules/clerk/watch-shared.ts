@@ -3,12 +3,13 @@ import { getDb, auditEventsTable } from "@workspace/db";
 import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
 
-// Shared plumbing for the zero-model-call watch sweeps (spend-watch,
-// quality-watch, resistance-watch). Each watch keeps its own detection rule;
-// what they share is the boring-but-critical alert discipline: env-tunable
-// thresholds that fail safe, a durable once-per-condition alert keyed on the
-// append-only audit ledger, and an hourly cadence (they alert on day/month
-// buckets — re-running every sweep minute buys nothing).
+// Shared plumbing for the zero-model-call watch sweeps and the other alert
+// tripwires (grep for importers to enumerate them — the list keeps growing).
+// Each consumer keeps its own detection rule; what they share is the
+// boring-but-critical alert discipline: env-tunable thresholds that fail
+// safe, a durable once-per-condition alert keyed on the append-only audit
+// ledger, and an hourly cadence (they alert on day/month buckets —
+// re-running every sweep minute buys nothing).
 
 // A malformed value (empty string → 0, garbage → NaN) must never produce
 // NaN comparisons/rates or a permanently-silent watch — fall back to the
@@ -30,6 +31,9 @@ export function envThreshold(raw: string | undefined, fallback: number): number 
 // entityId; the boolean says whether THIS call appended (false = deduped).
 // `after` carries the evidence payload (including a human `reason`); the log
 // line gets the same fields minus `reason` (the message is the reason there).
+// The config fields are per-watch; `opts.firmId` is per-alert, for alerts on
+// firm-owned entities (e.g. the health watch's webhook deliveries) that must
+// stamp the owning firm on the audit row and the log line.
 export function alertOnceViaAuditLedger(config: {
   action: string;
   entityType: string;
@@ -38,9 +42,10 @@ export function alertOnceViaAuditLedger(config: {
   entityId: string,
   after: Record<string, unknown>,
   logMessage: string,
+  opts?: { firmId?: string },
 ) => Promise<boolean> {
   const alerted = new Set<string>();
-  return async (entityId, after, logMessage) => {
+  return async (entityId, after, logMessage, opts) => {
     if (alerted.has(entityId)) return false;
 
     const [existing] = await getDb()
@@ -61,13 +66,17 @@ export function alertOnceViaAuditLedger(config: {
     await appendAudit({
       actorId: config.actorId,
       actorRole: "system",
+      firmId: opts?.firmId,
       action: config.action,
       entityType: config.entityType,
       entityId,
       after,
     });
     const { reason: _reason, ...logFields } = after;
-    logger.error(logFields, logMessage);
+    logger.error(
+      opts?.firmId ? { firmId: opts.firmId, ...logFields } : logFields,
+      logMessage,
+    );
     alerted.add(entityId);
     return true;
   };

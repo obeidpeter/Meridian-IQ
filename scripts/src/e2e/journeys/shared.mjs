@@ -49,6 +49,42 @@ export async function apiLogout(page, BASE) {
   await page.request.post(BASE + "/api/auth/logout", { headers: CSRF });
 }
 
+// The one-line draft-invoice scaffold every journey probe shares: POST
+// /api/invoices with a single line (vatRate defaults to the standard 7.5%),
+// CSRF marker included. Returns the response status plus the created
+// invoice's id — null unless the create answered 201 (the body is only
+// parsed on 201, so a refusal costs nothing extra).
+export async function createDraftInvoice(
+  page,
+  BASE,
+  {
+    supplierPartyId,
+    buyerPartyId,
+    invoiceNumber,
+    issueDate,
+    description,
+    unitPrice,
+    quantity = "1",
+    vatRate = "0.075",
+  },
+) {
+  const res = await page.request.post(BASE + "/api/invoices", {
+    data: {
+      supplierPartyId,
+      buyerPartyId,
+      invoiceNumber,
+      issueDate,
+      lines: [{ description, quantity, unitPrice, vatRate }],
+    },
+    headers: CSRF,
+  });
+  return {
+    status: res.status(),
+    invoiceId:
+      res.status() === 201 ? ((await res.json()).invoice?.id ?? null) : null,
+  };
+}
+
 // Poll a probe until it reports true. The delay runs BEFORE each attempt —
 // the search probes rely on it for the debounced input to settle.
 export async function pollUntil(fn, { tries = 10, delayMs = 700, page }) {

@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { pool } from "@workspace/db";
+import { bumpFixedWindow } from "../lib/fixed-window";
 import type { Principal } from "../modules/auth/rbac";
 import { PUBLIC_PATHS } from "./principal";
 
@@ -117,29 +117,18 @@ function limitFor(envName: string, fallback: number): number {
   return Math.floor(parsed); // 0 = class disabled
 }
 
-// Atomic increment-and-window-reset, same statement shape as throttle.ts's
-// bump but RETURNING the post-bump state: within the window the count rises;
-// once the window has elapsed it resets to 1 with a fresh start. One
-// round-trip, correct under concurrent requests on the same key.
+// Atomic increment-and-window-reset — the shared fixed-window bump
+// (lib/fixed-window.ts, the same statement as throttle.ts's bump): within the
+// window the count rises; once the window has elapsed it resets to 1 with a
+// fresh start. One round-trip, correct under concurrent requests on the same
+// key.
 async function bumpWindow(
   key: string,
 ): Promise<{ count: number; windowStart: Date }> {
-  const { rows } = await pool.query<{ count: number; window_start: Date }>(
-    `INSERT INTO login_attempts (key, count, window_start)
-     VALUES ($1, 1, now())
-     ON CONFLICT (key) DO UPDATE SET
-       count = CASE
-         WHEN login_attempts.window_start < now() - make_interval(secs => $2)
-         THEN 1 ELSE login_attempts.count + 1 END,
-       window_start = CASE
-         WHEN login_attempts.window_start < now() - make_interval(secs => $2)
-         THEN now() ELSE login_attempts.window_start END
-     RETURNING count, window_start`,
-    [key, WINDOW_MS / 1000],
-  );
+  const row = await bumpFixedWindow(key, WINDOW_MS);
   return {
-    count: Number(rows[0].count),
-    windowStart: new Date(rows[0].window_start),
+    count: Number(row.count),
+    windowStart: new Date(row.window_start),
   };
 }
 

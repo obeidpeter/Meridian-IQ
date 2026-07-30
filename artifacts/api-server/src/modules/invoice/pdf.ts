@@ -45,6 +45,22 @@ function themeString(
   return typeof v === "string" ? v.trim() : "";
 }
 
+// brandName falls back to the firm's own name — the whitelabel page's rule,
+// ONE-homed here for the routes that load a firms.theme and render paper
+// (the invoice-PDF and compliance-pack routes). Precedence: an explicit
+// non-blank brandName wins, else the firm name, else the renderer's own
+// DEFAULT_BRAND kicks in downstream.
+export function themeWithBrandFallback(
+  theme: Record<string, unknown> | null | undefined,
+  firmName: string | undefined,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...(theme ?? {}) };
+  if (typeof out.brandName !== "string" || !out.brandName.trim()) {
+    if (firmName) out.brandName = firmName;
+  }
+  return out;
+}
+
 function initialsFor(name: string): string {
   const parts = name.split(/\s+/).filter(Boolean);
   const initials = parts.map((p) => p[0]).join("");

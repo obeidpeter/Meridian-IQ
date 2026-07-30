@@ -44,11 +44,6 @@ import { FAST_LANE_DEFAULT, firmFastLaneThreshold } from "./metrics";
 //    "clear") with no non-advisory issue;
 //  - every critical extraction field must have a value at or above the
 //    firm's fast-lane confidence threshold.
-//
-// Compatibility alias: the historical exported name for the default bar.
-// New code should import FAST_LANE_DEFAULT / FAST_LANE_FLOOR /
-// firmFastLaneThreshold from metrics.ts.
-export const FAST_LANE_CONFIDENCE = FAST_LANE_DEFAULT;
 
 export function fastLaneBlocker(
   kase: Pick<ClerkCase, "status" | "preflight" | "extraction">,
