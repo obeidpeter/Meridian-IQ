@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.54.0
+  version: 0.55.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5438,6 +5438,36 @@ paths:
                 $ref: "#/components/schemas/ClerkActionPolicy"
         "404":
           $ref: "#/components/responses/NotFound"
+  /clerk/action-effectiveness:
+    get:
+      operationId: getActionEffectiveness
+      tags: [clerk]
+      summary: Whether the client's approved action batches WORKED — where executed submissions stand now (stamped, failed again, in flight), the autopilot's share of the window's decisions, and the s.104 exposure floor the submissions removed (pure ledger SQL, computed on demand)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+        - name: windowDays
+          in: query
+          required: false
+          description: Look-back window in days (default 90, max 365).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+      responses:
+        "200":
+          description: Per-kind decision-time tallies and current rail outcomes over the window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionEffectivenessReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
 components:
   parameters:
     IdParam:
@@ -11815,6 +11845,80 @@ components:
           type: integer
           minimum: 1
           maximum: 50
+    ActionEffectivenessKindRow:
+      type: object
+      required:
+        [
+          kind,
+          decisions,
+          autoDecisions,
+          requested,
+          executed,
+          skipped,
+          failed,
+          nowSucceeded,
+          nowInFlight,
+          nowFailedAgain,
+          nowOther,
+        ]
+      properties:
+        kind:
+          type: string
+        decisions:
+          type: integer
+        # Of which ran under a standing approval (policyId set).
+        autoDecisions:
+          type: integer
+        requested:
+          type: integer
+        executed:
+          type: integer
+        skipped:
+          type: integer
+        failed:
+          type: integer
+        # Current invoice status of the EXECUTED submit targets, re-read at
+        # request time. Null for draft_chasers — drafted text has no rail
+        # lifecycle to verify (reminder effectiveness audits chasing).
+        nowSucceeded:
+          type: ["integer", "null"]
+        nowInFlight:
+          type: ["integer", "null"]
+        # Failed AFTER the batch reported success — the number a reader must
+        # never lose.
+        nowFailedAgain:
+          type: ["integer", "null"]
+        nowOther:
+          type: ["integer", "null"]
+    ActionEffectivenessReport:
+      type: object
+      required: [windowDays, totals, exposureFloorClearedNgn, kinds]
+      properties:
+        windowDays:
+          type: integer
+        totals:
+          type: object
+          required: [decisions, autoDecisions, executed, failed]
+          properties:
+            decisions:
+              type: integer
+            autoDecisions:
+              type: integer
+            executed:
+              type: integer
+            failed:
+              type: integer
+        # Lowest-band s.104 exposure estimate removed by the window's
+        # executed submit_overdue targets STILL STANDING on the rails
+        # (failed-again targets are subtracted — their exposure is back),
+        # whole naira ("0" when none) — an estimate under the published
+        # penalty model, not advice.
+        exposureFloorClearedNgn:
+          type: string
+        kinds:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionEffectivenessKindRow"
     PhrasingEvalFixtureResult:
       type: object
       required:

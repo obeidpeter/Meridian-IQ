@@ -20,7 +20,8 @@ export type PushTemplateKey =
   | "b2c_window_alert"
   | "client_statement_ready"
   | "compliance_pack_ready"
-  | "firm_digest_ready";
+  | "firm_digest_ready"
+  | "automation_paused";
 
 const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   deadline_reminder: {
@@ -42,6 +43,10 @@ const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   firm_digest_ready: {
     title: "MeridianIQ",
     body: "Your firm's weekly Clerk digest is ready.",
+  },
+  automation_paused: {
+    title: "MeridianIQ",
+    body: "A standing approval was paused and needs attention. Open the app for details.",
   },
 };
 

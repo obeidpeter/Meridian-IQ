@@ -112,6 +112,11 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // SME dashboard card runs), titles and counts only — no other client is
   // ever named, and the answer cannot execute anything.
   "data.proposed_actions",
+  // Standing approvals with the forced own-party pin: the grants read are
+  // the caller's OWN client's (listActionPolicies is (firm, party)-scoped),
+  // status words are app-computed, and the answer only points at the
+  // Automation strip — Ask can never grant, pause or revoke anything.
+  "data.automation_status",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

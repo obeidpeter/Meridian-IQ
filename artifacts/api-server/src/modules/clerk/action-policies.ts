@@ -3,14 +3,20 @@ import {
   getDb,
   runInBypassContext,
   runRequestContext,
+  alertPreferencesTable,
   clerkActionPoliciesTable,
   membershipsTable,
+  staffNotificationPreferencesTable,
   type ClerkActionPolicy,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
 import { isPurposePermitted } from "../consent/consent";
+import { fanOutAlert } from "../messaging/fan-out";
+import { sendMessage } from "../messaging/messaging";
+import { pointerEntityRef } from "../messaging/recipient-ref";
+import { sendPushToUser } from "../push/push";
 import {
   ACTIONS_FLAG_KEY,
   MAX_ACTION_TARGETS,
@@ -419,6 +425,127 @@ async function autoPause(
   });
 }
 
+// A tripwire pause on an UNATTENDED feature must not wait for someone to
+// open a dashboard (round-29: a paused submit_overdue policy is statutory
+// exposure quietly accruing daily). One pointer-only signal to the GRANTOR
+// — the human whose standing instruction just stopped — through the rail
+// where they live:
+//  - a client-granted policy notifies the client PARTY via the ordinary
+//    alert fan-out (CORE-03 consent-gated, alert-preference channels, the
+//    deadline-reminder rails; a consent_missing pause therefore sends
+//    nothing — consent wins over notification, and the SME card still
+//    shows the pause);
+//  - a staff-granted policy notifies the grantor's own channels under the
+//    staff-preference OPT-INS (the digest rail's exact posture: email only
+//    with a verified, enabled address; push only when turned on) — and
+//    ONLY while they still hold a firm_admin/firm_staff membership in this
+//    firm (a departed or demoted grantor gets nothing; those pauses rely
+//    on the Automation strip).
+// Best-effort by design: sends run autocommit AFTER the pause committed,
+// and any failure lands in the messages ledger (or is absorbed) — never in
+// the sweep's control flow.
+async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
+  // PL-02 (round-29 review MAJOR): the platform-wide messaging kill switch
+  // gates every sweep-side send — the digest/reminder/statement rails'
+  // shared posture — and a dark rail means NO ledger rows and no provider
+  // traffic. The pause itself (and its audit) has already committed; only
+  // the signal goes quiet.
+  if (!(await isFeatureEnabled("messaging_notifications", null))) return;
+  const entityId = pointerEntityRef("pol", policy.id);
+  if (policy.grantedByRole === "client_user") {
+    const [prefs] = await getDb()
+      .select()
+      .from(alertPreferencesTable)
+      .where(eq(alertPreferencesTable.clientPartyId, policy.clientPartyId));
+    await fanOutAlert({
+      prefs,
+      clientPartyId: policy.clientPartyId,
+      firmId: policy.firmId,
+      templateKey: "automation_paused",
+      entityType: "clerk_action_policy",
+      entityId,
+      smsDefaultWhenNoPrefs: false,
+    });
+    return;
+  }
+  // Digest-rail parity end to end (round-29 review): the grantor must still
+  // be firm STAFF here (an operator/auditor membership is not a staff
+  // channel; a client_user grantor took the party branch above), and both
+  // channels honour the staff-preference opt-ins — email only under the
+  // proven-ownership gate, push only when the member turned it on. The
+  // Automation strip remains the guaranteed surface either way.
+  const memberships = await getDb()
+    .select({ role: membershipsTable.role })
+    .from(membershipsTable)
+    .where(
+      and(
+        eq(membershipsTable.userId, policy.grantedBy),
+        eq(membershipsTable.firmId, policy.firmId),
+      ),
+    );
+  const isStaff = memberships.some(
+    (m) => m.role === "firm_admin" || m.role === "firm_staff",
+  );
+  if (!isStaff) return;
+  const [prefs] = await getDb()
+    .select()
+    .from(staffNotificationPreferencesTable)
+    .where(
+      and(
+        eq(staffNotificationPreferencesTable.userId, policy.grantedBy),
+        eq(staffNotificationPreferencesTable.firmId, policy.firmId),
+      ),
+    );
+  if (prefs?.emailEnabled && prefs.email && prefs.emailVerifiedAt) {
+    try {
+      await sendMessage({
+        channel: "email",
+        recipientRef: pointerEntityRef("usr", policy.grantedBy),
+        recipientUserId: policy.grantedBy,
+        templateKey: "automation_paused",
+        entityType: "clerk_action_policy",
+        entityId,
+      });
+    } catch {
+      // Channel failures are recorded in the messages ledger.
+    }
+  }
+  if (prefs?.pushEnabled) {
+    try {
+      await sendPushToUser({
+        userId: policy.grantedBy,
+        templateKey: "automation_paused",
+        entityType: "clerk_action_policy",
+        entityId,
+      });
+    } catch {
+      // Push failures are likewise recorded by the push module.
+    }
+  }
+}
+
+// autoPause + the grantor signal, in that order: the pause is the durable
+// state change (compare-and-set, audited), the notification is best-effort
+// on top — only the CAS winner sends, so a concurrent instance can never
+// double-notify, and a notification failure never fails the sweep.
+async function autoPauseAndNotify(
+  policy: ClerkActionPolicy,
+  reason: Parameters<typeof autoPause>[1],
+): Promise<boolean> {
+  const won = await autoPause(policy, reason);
+  if (won) {
+    try {
+      await notifyAutoPause(policy);
+    } catch (err) {
+      console.error(
+        `action-policy sweep: pause notification for ${policy.id} failed:`,
+        err,
+      );
+    }
+  }
+  return won;
+}
+
 // The grantor's CURRENT standing: a membership in this firm whose role
 // still carries invoice.submit — and for a client_user, pinned to this very
 // party (SEC-03: a client grantor automating a sibling client is exactly
@@ -474,7 +601,7 @@ async function runOnePolicy(
   // survive the awaits below.)
   const kind = policy.kind;
   if (!isPolicyKind(kind)) {
-    return (await autoPause(policy, "unknown_kind"))
+    return (await autoPauseAndNotify(policy, "unknown_kind"))
       ? "auto_paused"
       : "skipped_raced";
   }
@@ -484,7 +611,7 @@ async function runOnePolicy(
     // autoPause reports whether THIS instance's compare-and-set won; a
     // loss means a concurrent instance (or a human pause) got there first
     // — same end state, but only the winner counts it (review NIT).
-    return (await autoPause(policy, "grantor_inactive"))
+    return (await autoPauseAndNotify(policy, "grantor_inactive"))
       ? "auto_paused"
       : "skipped_raced";
   }
@@ -498,7 +625,7 @@ async function runOnePolicy(
     () => isPurposePermitted(policy.clientPartyId, "compliance_submission"),
   );
   if (!consented) {
-    return (await autoPause(policy, "consent_missing"))
+    return (await autoPauseAndNotify(policy, "consent_missing"))
       ? "auto_paused"
       : "skipped_raced";
   }
@@ -564,7 +691,7 @@ async function runOnePolicy(
   );
 
   if (tooManyFailures(decision.requestedCount, decision.failedCount)) {
-    return (await autoPause(policy, "failed_targets"))
+    return (await autoPauseAndNotify(policy, "failed_targets"))
       ? "ran_then_paused"
       : "ran";
   }

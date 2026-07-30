@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.54.0
+ * OpenAPI spec version: 0.55.0
  */
 import * as zod from 'zod';
 
@@ -7963,6 +7963,43 @@ export const RevokeActionPolicyResponse = zod.object({
   "lastRunAt": zod.coerce.date().nullable(),
   "lastRunDay": zod.string().nullable(),
   "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Whether the client's approved action batches WORKED — where executed submissions stand now (stamped, failed again, in flight), the autopilot's share of the window's decisions, and the s.104 exposure floor the submissions removed (pure ledger SQL, computed on demand)
+ */
+export const getActionEffectivenessQueryWindowDaysMax = 365;
+
+
+
+export const GetActionEffectivenessQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.'),
+  "windowDays": zod.coerce.number().min(1).max(getActionEffectivenessQueryWindowDaysMax).optional().describe('Look-back window in days (default 90, max 365).')
+})
+
+export const GetActionEffectivenessResponse = zod.object({
+  "windowDays": zod.number(),
+  "totals": zod.object({
+  "decisions": zod.number(),
+  "autoDecisions": zod.number(),
+  "executed": zod.number(),
+  "failed": zod.number()
+}),
+  "exposureFloorClearedNgn": zod.string(),
+  "kinds": zod.array(zod.object({
+  "kind": zod.string(),
+  "decisions": zod.number(),
+  "autoDecisions": zod.number(),
+  "requested": zod.number(),
+  "executed": zod.number(),
+  "skipped": zod.number(),
+  "failed": zod.number(),
+  "nowSucceeded": zod.number().nullable(),
+  "nowInFlight": zod.number().nullable(),
+  "nowFailedAgain": zod.number().nullable(),
+  "nowOther": zod.number().nullable()
+}))
 })
 
 

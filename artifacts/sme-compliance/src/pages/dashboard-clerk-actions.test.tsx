@@ -35,6 +35,9 @@ const harness = vi.hoisted(() => ({
   policies: {
     data: undefined as unknown,
   },
+  decisions: {
+    data: undefined as unknown,
+  },
   execute: {
     calls: [] as unknown[],
     pending: false,
@@ -50,6 +53,7 @@ const harness = vi.hoisted(() => ({
     this.proposals.data = undefined;
     this.proposals.isSuccess = false;
     this.policies.data = undefined;
+    this.decisions.data = undefined;
     this.execute.calls = [];
     this.execute.pending = false;
     this.execute.result = null;
@@ -86,6 +90,9 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     }),
     useGetActionPolicies: () => ({
       data: harness.policies.data,
+    }),
+    useGetActionDecisions: () => ({
+      data: harness.decisions.data,
     }),
     useGrantActionPolicy: policyMutation("grant"),
     usePauseActionPolicy: policyMutation("pause"),
@@ -251,6 +258,7 @@ beforeEach(() => {
   // The pre-round-28 default: no grants, flag dark — the card renders
   // exactly as it always did.
   harness.policies.data = { policies: [], enabled: false };
+  harness.decisions.data = { decisions: [] };
 });
 
 describe("ClerkActionsCard (SME dashboard)", () => {
@@ -482,5 +490,37 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     ).toBeNull();
     await click(screen.getByTestId("button-policy-resume-submit_overdue"));
     expect(harness.policyCalls.resume).toEqual([{ id: "pol-1" }]);
+  });
+
+  // ---- The run record (round 29) -------------------------------------------
+
+  test("run history keeps the card up and tags policy runs auto", () => {
+    // A quiet day: no proposals, no live grants — but the owner's evidence
+    // of what automation did must stay visible.
+    harness.proposals.data = proposals([]);
+    harness.decisions.data = {
+      decisions: [
+        decision(
+          [{ invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null }],
+          { policyId: "pol-1" },
+        ),
+        decision(
+          [{ invoiceId: "inv-2", invoiceNumber: "INV-002", outcome: "submitted", error: null }],
+          { id: "dec-2" },
+        ),
+      ],
+    };
+    renderCard();
+    expect(screen.getByTestId("clerk-actions")).toBeTruthy();
+    expect(screen.getByText("Recent activity")).toBeTruthy();
+    expect(screen.getByTestId("decision-dec-1").textContent).toContain(
+      "1 executed",
+    );
+    expect(screen.getByTestId("decision-dec-1").textContent).toContain(
+      "· auto",
+    );
+    expect(screen.getByTestId("decision-dec-2").textContent).not.toContain(
+      "· auto",
+    );
   });
 });

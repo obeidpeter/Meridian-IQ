@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.54.0
+ * OpenAPI spec version: 0.55.0
  */
 import {
   useMutation,
@@ -22,6 +22,7 @@ import type {
 import type {
   AcceptInvitationInput,
   ActionDecisionList,
+  ActionEffectivenessReport,
   ActionPolicyList,
   ActionProposals,
   AlertDeliveryResult,
@@ -182,6 +183,7 @@ import type {
   GateMetrics,
   GenerateStatementsInput,
   GetActionDecisionsParams,
+  GetActionEffectivenessParams,
   GetActionPoliciesParams,
   GetActionProposalsParams,
   GetBillingStatementParams,
@@ -21837,4 +21839,88 @@ export const useRevokeActionPolicy = <TError = ErrorType<NotFoundResponse>,
       > => {
       return useMutation(getRevokeActionPolicyMutationOptions(options));
     }
+
+export const getGetActionEffectivenessUrl = (params?: GetActionEffectivenessParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/action-effectiveness?${stringifiedParams}` : `/api/clerk/action-effectiveness`
+}
+
+/**
+ * @summary Whether the client's approved action batches WORKED — where executed submissions stand now (stamped, failed again, in flight), the autopilot's share of the window's decisions, and the s.104 exposure floor the submissions removed (pure ledger SQL, computed on demand)
+ */
+export const getActionEffectiveness = async (params?: GetActionEffectivenessParams, options?: RequestInit): Promise<ActionEffectivenessReport> => {
+
+  return customFetch<ActionEffectivenessReport>(getGetActionEffectivenessUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetActionEffectivenessQueryKey = (params?: GetActionEffectivenessParams,) => {
+    return [
+    `/api/clerk/action-effectiveness`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetActionEffectivenessQueryOptions = <TData = Awaited<ReturnType<typeof getActionEffectiveness>>, TError = ErrorType<BadRequestResponse>>(params?: GetActionEffectivenessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionEffectiveness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetActionEffectivenessQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getActionEffectiveness>>> = ({ signal }) => getActionEffectiveness(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getActionEffectiveness>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetActionEffectivenessQueryResult = NonNullable<Awaited<ReturnType<typeof getActionEffectiveness>>>
+export type GetActionEffectivenessQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Whether the client's approved action batches WORKED — where executed submissions stand now (stamped, failed again, in flight), the autopilot's share of the window's decisions, and the s.104 exposure floor the submissions removed (pure ledger SQL, computed on demand)
+ */
+
+export function useGetActionEffectiveness<TData = Awaited<ReturnType<typeof getActionEffectiveness>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetActionEffectivenessParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActionEffectiveness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetActionEffectivenessQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
