@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import clerkRouter from "./clerk/index.ts";
 import type { Principal } from "../modules/auth/rbac.ts";
+import type { AskAnswer } from "../modules/clerk/ask.ts";
 import { firmFastLaneThreshold } from "../modules/clerk/metrics.ts";
 import {
   restoreClerkFlag,
@@ -32,7 +33,8 @@ import { clientPrincipal, crossTenantPrincipal, firmPrincipal } from "../test-he
 //  non-disclosure on tenant/creator mismatch, re-rating overwrites, refusals
 //  are ratable;
 //  - the ask-feedback report mines ratings per platform-recorded intent
-//  bucket (dataIntent | register | refused) with an honest unrated count;
+//  bucket (dataIntent | plan | register | refused) with an honest unrated
+//  count;
 //  - every listed/fetched case carries its firm's fast-lane threshold.
 
 const SALT = makeRunSalt();
@@ -62,6 +64,32 @@ let refusalCaseId = ""; // clientA's refusal
 let extractionCaseId = ""; // clientA's extraction case (never ratable)
 let registerCaseId = ""; // pre-rated register answer (helpful)
 let unratedCaseId = ""; // answered, never rated
+
+// An Ask 2.0 multi-part answer, shaped as ask.ts stores it: no flat
+// dataIntent, a non-empty plan with one section per executed step. The
+// stored jsonb type is the lean pre-0.56 ClerkAnswer, so this mirrors
+// ask.ts's own write-site typing (AskAnswer assigns to the column type).
+const planAnswer: AskAnswer = {
+  answered: true,
+  plan: [
+    { key: "data.overdue_submissions", title: "Overdue submissions" },
+    { key: "data.payables_due", title: "Bills due soon" },
+  ],
+  sections: [
+    {
+      title: "Overdue submissions",
+      text: "No overdue submissions.",
+      dataIntent: "data.overdue_submissions",
+      facts: [],
+    },
+    {
+      title: "Bills due soon",
+      text: "No bills due.",
+      dataIntent: "data.payables_due",
+      facts: [],
+    },
+  ],
+};
 
 before(async () => {
   await saveAndEnableClerkFlag();
@@ -153,6 +181,17 @@ before(async () => {
         status: "approved",
         question: `Unrated question ${SALT}`,
         answer: { answered: true, dataIntent: "data.failed_submissions" },
+        firmId: firm1,
+        createdBy: adminF1.userId,
+      },
+      // The multi-part (plan) answer: must bucket under 'plan' in the
+      // feedback report, never miscount as 'refused'.
+      {
+        kind: "question",
+        status: "approved",
+        question: `What is overdue and what do we owe? ${SALT}`,
+        answer: planAnswer,
+        feedback: "not_helpful",
         firmId: firm1,
         createdBy: adminF1.userId,
       },
@@ -315,6 +354,10 @@ test("the ask-feedback report mines totals, per-intent cells and the newest not-
   assert.ok(
     (cell("refused")?.helpful ?? 0) >= 1,
     "refusals group under 'refused'",
+  );
+  assert.ok(
+    (cell("plan")?.notHelpful ?? 0) >= 1,
+    "multi-part (plan) answers group under 'plan', not 'refused'",
   );
 
   // Our re-rated case is among the newest not-helpful rows, with its

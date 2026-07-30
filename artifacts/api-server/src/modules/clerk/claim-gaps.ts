@@ -40,6 +40,10 @@ const REASON_MATCHERS: ReadonlyArray<{ code: string; needle: string }> = [
   { code: "client_not_supported", needle: "cannot be filtered to one client" },
   { code: "lookup_failed", needle: "firm-record lookup failed" },
   { code: "ambiguous_claims", needle: "exactly one active claim" },
+  // Ask 2.0: a plan mixing a register claim with data lookups refuses whole
+  // (ask.ts claim-answers-alone rule) — its own code so these stop
+  // clustering under "other".
+  { code: "claim_in_plan", needle: "cannot be combined with other lookups" },
 ];
 
 // Map a stored refusalReason to its stable cause code. Pure and total: the

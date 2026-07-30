@@ -443,7 +443,7 @@ export async function askClerk(
   // its own party below) the client pick is irrelevant to identity.
   const seenSteps = new Set<string>();
   const steps = result.data.steps.filter((s) => {
-    const sig = `${s.key} ${s.month} ${clientScoped ? "own" : s.client}`;
+    const sig = `${s.key}\0${s.month}\0${clientScoped ? "own" : s.client}`;
     if (seenSteps.has(sig)) return false;
     seenSteps.add(sig);
     return true;

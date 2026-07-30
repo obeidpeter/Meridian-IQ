@@ -702,7 +702,9 @@ export interface IntentCanaryReport {
 }
 
 // The prompt-canary floor: a stub candidate must not burn a double corpus
-// pass — up to ~108 calls with a full grown corpus (round-15 review L3).
+// pass — 2 x (static + up to 40 grown) fixtures with a full grown corpus
+// (round-15 review L3; the static corpus has since grown, so the cost is
+// stated structurally rather than as a count).
 const MIN_CANDIDATE_CHARS = 100;
 
 export async function runIntentCanary(
@@ -725,7 +727,7 @@ export async function runIntentCanary(
   const incumbent = await classifyCorpus(gateway, INTENT_SYSTEM, fixtures);
   const candidate = await classifyCorpus(gateway, candidateSystem, fixtures);
   // Symmetric one-fixture noise band (round-15 review M3): a single flipped
-  // fixture on a 14-question corpus is noise in EITHER direction — promote
+  // fixture on a corpus this size is noise in EITHER direction — promote
   // and reject both require clearing the band.
   let verdict: IntentCanaryReport["verdict"];
   if (candidate.injectionResisted < incumbent.injectionResisted) {

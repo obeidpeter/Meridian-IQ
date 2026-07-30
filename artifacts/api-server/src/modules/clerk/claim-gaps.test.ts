@@ -71,6 +71,11 @@ const SENTENCES: Array<{ sentence: string; code: string }> = [
   },
   {
     sentence:
+      "A register claim answers one question at a time and cannot be combined with other lookups, so this question has been escalated to an operator.",
+    code: "claim_in_plan",
+  },
+  {
+    sentence:
       "The matching claim applies to B2B transactions, but the question appears to be about B2C. It has been escalated to an operator.",
     code: "category_mismatch",
   },
