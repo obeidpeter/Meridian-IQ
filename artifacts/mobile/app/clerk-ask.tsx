@@ -23,11 +23,17 @@ import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage, hasStatus } from "@/lib/api-error";
 import {
   answerLinks,
+  answerSections,
   answerSourceNote,
   askableQuestion,
+  dataAnswerScope,
   feedbackToSubmit,
+  followupPinsLine,
   heldAnswer,
+  holdsFollowupCase,
+  planLine,
   QUESTION_MAX,
+  sectionKey,
   SUGGESTED_QUESTIONS,
   type AskFeedback,
   type HeldAnswer,
@@ -82,10 +88,11 @@ export default function ClerkAskScreen() {
       setLastAnswer((prev) =>
         heldAnswer(prev, { type: "success", answer: row.answer, caseId: row.id }),
       );
-      // Only a DATA answer carries scope worth threading — keeping the last
-      // data-answered id preserves the thread across a refusal or a
+      // Only an answer carrying scope worth inheriting threads: a data
+      // answer, a multi-intent (sections) answer, or pinned scope (Ask 2.0).
+      // Keeping the last such id preserves the thread across a refusal or a
       // register-claim answer in between.
-      if (row.answer?.answered && row.answer.dataIntent) {
+      if (holdsFollowupCase(row.answer)) {
         setPreviousCaseId(row.id);
       }
       setQuestion("");
@@ -113,6 +120,12 @@ export default function ClerkAskScreen() {
       );
     }
   };
+
+  // The visible face of the multi-turn thread: when the held answer pinned a
+  // display scope (a month label, a client name), say what a follow-up will
+  // keep — and offer a way off the thread. Clearing drops previousCaseId
+  // only; the answer stays on screen.
+  const pinsLine = previousCaseId ? followupPinsLine(lastAnswer?.answer) : "";
 
   return (
     <>
@@ -153,6 +166,35 @@ export default function ClerkAskScreen() {
                 hint="Rules come from the approved register; numbers are computed live from your own records. Anything else is refused rather than guessed."
                 testID="input-ask-question"
               />
+              {pinsLine ? (
+                <View style={styles.followupRow} testID="chip-followup-pins">
+                  <AppText
+                    variant="caption"
+                    color={colors.mutedForeground}
+                    style={styles.followupLabel}
+                  >
+                    {pinsLine}
+                  </AppText>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Start a new topic"
+                    hitSlop={8}
+                    onPress={() => setPreviousCaseId(null)}
+                    style={({ pressed }) => [
+                      styles.chip,
+                      {
+                        borderColor: colors.border,
+                        opacity: pressed ? 0.7 : 1,
+                      },
+                    ]}
+                    testID="button-clear-followup"
+                  >
+                    <AppText variant="caption" color={colors.mutedForeground}>
+                      × New topic
+                    </AppText>
+                  </Pressable>
+                </View>
+              ) : null}
               <View style={styles.chipRow}>
                 {SUGGESTED_QUESTIONS.map((q, i) => (
                   <Pressable
@@ -249,10 +291,93 @@ function AnswerCard({
     );
   }
   const links = answerLinks(answer);
+  // Multi-intent answers (contract 0.56.0) carry sections — the proposition
+  // is a lead-in line and the flat facts are empty. Single-intent answers
+  // carry no sections and render the flat fields exactly as before.
+  const sections = answerSections(answer);
+  const hasSections = sections.length > 0;
+  const plan = planLine(answer);
+  const sourceNote = answerSourceNote(answer);
   return (
     <Card style={{ gap: 12 }}>
       <AppText variant="body">{answer.proposition ?? ""}</AppText>
-      {answer.facts && answer.facts.length > 0 ? (
+      {/* Plan transparency: which catalogued intents answered, in server
+          order — quiet, above the sections. */}
+      {plan ? (
+        <View testID="text-answer-plan">
+          <AppText variant="caption" color={colors.mutedForeground}>
+            {plan}
+          </AppText>
+        </View>
+      ) : null}
+      {hasSections
+        ? sections.map((s, i) => {
+            const sectionLinks = answerLinks({ links: s.links });
+            const scope = dataAnswerScope(s.dataParams);
+            return (
+              <View
+                key={`section-${i}`}
+                style={[styles.section, { borderColor: colors.border }]}
+                testID={`section-answer-${i}`}
+              >
+                <AppText variant="label">{s.title}</AppText>
+                <AppText variant="body">{s.text}</AppText>
+                {s.facts.length > 0 ? (
+                  <View style={{ gap: 8 }}>
+                    {s.facts.map((f) => (
+                      <View
+                        key={f.key}
+                        style={rowBetween}
+                        // Section-indexed (`row-fact-<i>-<key>`) so the row
+                        // stays unique when two sections carry the same
+                        // fact key (e.g. "count").
+                        testID={sectionKey(i, f.key)}
+                      >
+                        <AppText
+                          variant="caption"
+                          color={colors.mutedForeground}
+                        >
+                          {f.label}
+                        </AppText>
+                        <AppText
+                          variant="label"
+                          numberOfLines={2}
+                          style={styles.factValue}
+                        >
+                          {f.value}
+                          {f.unit ? ` ${f.unit}` : ""}
+                        </AppText>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                {sectionLinks.length > 0 ? (
+                  <View style={styles.linkRow}>
+                    {sectionLinks.map((l) => (
+                      <AppButton
+                        key={l.id}
+                        label={`Open ${l.label}`}
+                        icon="arrow-right"
+                        variant="ghost"
+                        fullWidth={false}
+                        onPress={() => router.push(`/invoices/${l.id}`)}
+                        testID={`link-answer-invoice-${l.id}`}
+                      />
+                    ))}
+                  </View>
+                ) : null}
+                {scope ? (
+                  <View testID={`text-section-scope-${i}`}>
+                    <AppText variant="caption" color={colors.mutedForeground}>
+                      {scope}
+                    </AppText>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })
+        : null}
+      {!hasSections && answer.facts && answer.facts.length > 0 ? (
         <>
           <Divider />
           <View style={{ gap: 8 }}>
@@ -272,7 +397,7 @@ function AnswerCard({
       ) : null}
       {/* Deep links to the records the answer named: invoice-kind links with
           an id only — anything else was dropped by answerLinks. */}
-      {links.length > 0 ? (
+      {!hasSections && links.length > 0 ? (
         <View style={styles.linkRow}>
           {links.map((l) => (
             <AppButton
@@ -287,9 +412,11 @@ function AnswerCard({
           ))}
         </View>
       ) : null}
-      <AppText variant="caption" color={colors.mutedForeground}>
-        {answerSourceNote(answer)}
-      </AppText>
+      {sourceNote ? (
+        <AppText variant="caption" color={colors.mutedForeground}>
+          {sourceNote}
+        </AppText>
+      ) : null}
       {caseId ? (
         <View style={styles.feedbackRow}>
           <AppText variant="caption" color={colors.mutedForeground}>
@@ -375,6 +502,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  followupRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  followupLabel: {
+    flexShrink: 1,
+  },
+  section: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
   },
   refusalHeader: {
     flexDirection: "row",

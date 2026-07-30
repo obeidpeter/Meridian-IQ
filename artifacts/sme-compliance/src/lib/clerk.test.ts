@@ -1,14 +1,17 @@
 import { test, expect, describe } from "vitest";
-import type { ClerkAnswerLink } from "@workspace/api-client-react";
+import type { ClerkAnswer, ClerkAnswerLink } from "@workspace/api-client-react";
 import {
   batchSummary,
   captureStatusLabel,
   captureBadgeClasses,
   dataAnswerScope,
   feedbackToSubmit,
+  followupPinsLine,
   formatTokens,
   handleClerkGatewayError,
+  holdsFollowupCase,
   invoiceLinks,
+  planLine,
   usageBreakdown,
   usagePct,
   fieldLabel,
@@ -67,6 +70,125 @@ describe("dataAnswerScope", () => {
     expect(dataAnswerScope({ month: "  ", client: "Adaeze Textiles" })).toBe(
       "Adaeze Textiles",
     );
+  });
+});
+
+describe("planLine", () => {
+  test("joins the plan titles verbatim, in server order", () => {
+    expect(
+      planLine({
+        plan: [
+          { key: "data.submitted_this_month", title: "This month's submissions" },
+          { key: "data.overdue_invoices", title: "Overdue invoices" },
+        ],
+      }),
+    ).toBe("Answered using: This month's submissions · Overdue invoices");
+    expect(
+      planLine({ plan: [{ key: "data.month_delta", title: "Month vs month" }] }),
+    ).toBe("Answered using: Month vs month");
+  });
+
+  test("yields an empty string when there is no plan, so the line is omitted", () => {
+    expect(planLine(undefined)).toBe("");
+    expect(planLine(null)).toBe("");
+    expect(planLine({})).toBe("");
+    expect(planLine({ plan: [] })).toBe("");
+    // A blank title contributes nothing rather than a dangling separator.
+    expect(
+      planLine({
+        plan: [
+          { key: "a", title: "  " },
+          { key: "b", title: "Overdue invoices" },
+        ],
+      }),
+    ).toBe("Answered using: Overdue invoices");
+  });
+});
+
+describe("followupPinsLine", () => {
+  test("shows the display pins a follow-up will keep", () => {
+    expect(
+      followupPinsLine({
+        pins: { monthLabel: "June 2026", clientName: "Adaeze Foods Ltd" },
+      }),
+    ).toBe("Follow-ups keep: June 2026 · Adaeze Foods Ltd");
+    expect(followupPinsLine({ pins: { monthLabel: "June 2026" } })).toBe(
+      "Follow-ups keep: June 2026",
+    );
+    expect(followupPinsLine({ pins: { clientName: "Adaeze Foods Ltd" } })).toBe(
+      "Follow-ups keep: Adaeze Foods Ltd",
+    );
+  });
+
+  test("yields an empty string when nothing displayable is pinned", () => {
+    expect(followupPinsLine(undefined)).toBe("");
+    expect(followupPinsLine(null)).toBe("");
+    expect(followupPinsLine({})).toBe("");
+    expect(followupPinsLine({ pins: {} })).toBe("");
+    // Machine pins (ids, ISO dates) never render — display labels only.
+    expect(
+      followupPinsLine({
+        pins: { monthStart: "2026-06-01", clientPartyId: "party-1" },
+      }),
+    ).toBe("");
+    // Blank labels contribute nothing rather than a dangling separator.
+    expect(
+      followupPinsLine({ pins: { monthLabel: "  ", clientName: "Acme" } }),
+    ).toBe("Follow-ups keep: Acme");
+  });
+});
+
+describe("holdsFollowupCase", () => {
+  const base: ClerkAnswer = { answered: true, proposition: "…" };
+
+  test("a data answer threads, as before", () => {
+    expect(
+      holdsFollowupCase({ ...base, dataIntent: "data.overdue_invoices" }),
+    ).toBe(true);
+  });
+
+  test("a multi-intent answer (sections) threads even without a flat dataIntent", () => {
+    expect(
+      holdsFollowupCase({
+        ...base,
+        sections: [
+          { title: "This month", text: "3 submitted.", facts: [] },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  test("pinned scope threads — machine pins included, display labels or not", () => {
+    expect(
+      holdsFollowupCase({ ...base, pins: { monthLabel: "June 2026" } }),
+    ).toBe(true);
+    expect(
+      holdsFollowupCase({ ...base, pins: { clientPartyId: "party-1" } }),
+    ).toBe(true);
+  });
+
+  test("register-claim answers, refusals, and empty carriers don't thread", () => {
+    expect(holdsFollowupCase(null)).toBe(false);
+    expect(holdsFollowupCase(undefined)).toBe(false);
+    expect(
+      holdsFollowupCase({ ...base, claimKey: "vat.standard_rate" }),
+    ).toBe(false);
+    expect(
+      holdsFollowupCase({ answered: false, refusalReason: "Not covered." }),
+    ).toBe(false);
+    // A refusal that somehow carries scope still never threads.
+    expect(
+      holdsFollowupCase({
+        answered: false,
+        refusalReason: "Not covered.",
+        pins: { monthLabel: "June 2026" },
+      }),
+    ).toBe(false);
+    // Empty sections/pins carry no scope to inherit.
+    expect(holdsFollowupCase({ ...base, sections: [], pins: {} })).toBe(false);
+    expect(
+      holdsFollowupCase({ ...base, pins: { monthLabel: "  " } }),
+    ).toBe(false);
   });
 });
 

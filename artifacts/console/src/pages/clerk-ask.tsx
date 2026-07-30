@@ -9,7 +9,8 @@ import { ShieldCheck } from "lucide-react";
 import { ClerkPageHeader } from "@/components/clerk-shell";
 import { usePageTitle } from "@/hooks/use-page-title";
 
-function AnswerCard({ answer }: { answer: ClerkAnswer }) {
+// Exported for the unit tests (rendered via AskPanel in the page itself).
+export function AnswerCard({ answer }: { answer: ClerkAnswer }) {
   if (!answer.answered) {
     return (
       <Alert data-testid="card-clerk-refusal">
@@ -19,11 +20,70 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
       </Alert>
     );
   }
+  // Multi-intent answers (contract 0.56.0) carry sections — the proposition
+  // is a lead-in line and the flat facts are empty. Single-intent answers
+  // carry no sections and render the flat fields exactly as before.
+  const sections = answer.sections ?? [];
+  const hasSections = sections.length > 0;
+  const plan = planLine(answer);
   return (
     <Card data-testid="card-clerk-answer">
       <CardContent className="pt-6 space-y-3">
         <p className="text-base">{answer.proposition}</p>
-        {answer.facts && answer.facts.length > 0 && (
+        {/* Plan transparency: which catalogued intents answered, in server
+            order — quiet, above the sections. */}
+        {plan && (
+          <p
+            className="text-xs text-muted-foreground"
+            data-testid="text-answer-plan"
+          >
+            {plan}
+          </p>
+        )}
+        {hasSections &&
+          sections.map((s, i) => {
+            const scope = Object.values(s.dataParams ?? {})
+              .filter((v) => v.trim().length > 0)
+              .join(" · ");
+            return (
+              <div
+                key={i}
+                className="border rounded-md p-3 space-y-2"
+                data-testid={`section-answer-${i}`}
+              >
+                <p className="text-sm font-medium">{s.title}</p>
+                <p className="text-sm">{s.text}</p>
+                {s.facts.length > 0 && (
+                  <div className="border rounded-md divide-y text-sm">
+                    {s.facts.map((f) => (
+                      <div
+                        key={f.key}
+                        className="flex items-center gap-2 px-3 py-2"
+                        // Section-indexed so the row stays unique when two
+                        // sections carry the same fact key (e.g. "count").
+                        data-testid={`row-fact-${i}-${f.key}`}
+                      >
+                        <span className="flex-1">{f.label}</span>
+                        <span className="font-medium tabular-nums">
+                          {f.value}
+                          {f.unit ? ` ${f.unit}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {scope && (
+                  <p
+                    className="text-xs text-muted-foreground"
+                    data-testid={`text-section-scope-${i}`}
+                  >
+                    scope: {scope}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        {!hasSections && answer.facts && answer.facts.length > 0 && (
           <div className="border rounded-md divide-y text-sm">
             {answer.facts.map((f) => (
               <div key={f.key} className="flex items-center gap-2 px-3 py-2">
@@ -36,25 +96,36 @@ function AnswerCard({ answer }: { answer: ClerkAnswer }) {
             ))}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          {answer.dataIntent ? (
-            <>
-              Source: {answer.citation} · live lookup{" "}
-              <code>{answer.dataIntent}</code>
-              {answer.dataParams && (
-                <>
-                  {" · scope: "}
-                  {Object.values(answer.dataParams).join(" · ")}
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              Source: {answer.citation} · approved claim{" "}
-              <code>{answer.claimKey}</code> v{answer.claimVersion}
-            </>
-          )}
-        </p>
+        {hasSections ? (
+          // A sectioned answer is data-grounded per section (each block shows
+          // its own scope), so the one source line carries the citation only
+          // — and only when the server sent one.
+          answer.citation ? (
+            <p className="text-xs text-muted-foreground">
+              Source: {answer.citation}
+            </p>
+          ) : null
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {answer.dataIntent ? (
+              <>
+                Source: {answer.citation} · live lookup{" "}
+                <code>{answer.dataIntent}</code>
+                {answer.dataParams && (
+                  <>
+                    {" · scope: "}
+                    {Object.values(answer.dataParams).join(" · ")}
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                Source: {answer.citation} · approved claim{" "}
+                <code>{answer.claimKey}</code> v{answer.claimVersion}
+              </>
+            )}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -73,6 +144,62 @@ export function heldAnswer(
     | { type: "error" },
 ): ClerkAnswer | null {
   return outcome.type === "success" ? (outcome.answer ?? null) : previous;
+}
+
+/**
+ * The plan-transparency line over a multi-intent answer (contract 0.56.0):
+ * "Answered using: <plan titles joined ' · '>". The titles are app-trusted
+ * display strings resolved server-side from the closed intent catalogue and
+ * are shown verbatim, in server order, so the line is deterministic. Empty
+ * string when the answer carries no plan (single-intent), so the line is
+ * simply omitted.
+ */
+export function planLine(
+  answer: Pick<ClerkAnswer, "plan"> | null | undefined,
+): string {
+  const titles = (answer?.plan ?? [])
+    .map((p) => p.title.trim())
+    .filter((t) => t.length > 0);
+  return titles.length > 0 ? `Answered using: ${titles.join(" · ")}` : "";
+}
+
+/**
+ * The follow-up chip's label: the scope a threaded follow-up will inherit,
+ * read off the held answer's pins. Display labels only — a month label, a
+ * client name; the machine pins (monthStart, clientPartyId) never render.
+ * Empty string when the answer pins nothing displayable, so the chip is
+ * omitted (matching today's UX for plain data answers without pins).
+ */
+export function followupPinsLine(
+  answer: Pick<ClerkAnswer, "pins"> | null | undefined,
+): string {
+  const labels = [answer?.pins?.monthLabel, answer?.pins?.clientName].filter(
+    (v): v is string => typeof v === "string" && v.trim().length > 0,
+  );
+  return labels.length > 0 ? `Follow-ups keep: ${labels.join(" · ")}` : "";
+}
+
+/**
+ * Whether an answer holds the multi-turn thread — i.e. whether the page
+ * should keep its case id as previousCaseId for the next question. Since
+ * contract 0.56.0 that is any ANSWERED reply carrying scope a follow-up
+ * could inherit: a data answer (dataIntent), a multi-intent answer
+ * (sections), or explicit pins — machine pins included, because the server
+ * threads on those even when there is no label to display. Register-claim
+ * answers and refusals still don't thread; and because a refusal must not
+ * sever an existing thread, this predicate gates SETTING previousCaseId,
+ * never clearing it. Kept semantically identical to the SME web app's and
+ * the mobile lib's copy.
+ */
+export function holdsFollowupCase(
+  answer: ClerkAnswer | null | undefined,
+): boolean {
+  if (!answer?.answered) return false;
+  if (answer.dataIntent) return true;
+  if ((answer.sections?.length ?? 0) > 0) return true;
+  return Object.values(answer.pins ?? {}).some(
+    (v) => typeof v === "string" && v.trim().length > 0,
+  );
 }
 
 // Routed Ask page inside the Clerk shell. Now that Ask is its own route
@@ -106,14 +233,15 @@ export function ClerkAskPage() {
               },
             },
             {
-              // Only a DATA answer carries scope worth threading — keeping
-              // the last data-answered id preserves the thread across a
-              // refusal or register-claim answer in between.
+              // Only an answer carrying scope worth inheriting threads: a
+              // data answer, a multi-intent (sections) answer, or pinned
+              // scope (Ask 2.0). Keeping the last such id preserves the
+              // thread across a refusal or register-claim answer in between.
               onSuccess: (row) => {
                 setAnswer((prev) =>
                   heldAnswer(prev, { type: "success", answer: row.answer }),
                 );
-                if (row.answer?.answered && row.answer?.dataIntent) {
+                if (holdsFollowupCase(row.answer)) {
                   setPreviousCaseId(row.id);
                 }
               },
@@ -127,6 +255,12 @@ export function ClerkAskPage() {
         }
         isPending={ask.isPending}
         answer={answer}
+        // The visible face of the multi-turn thread: when the held answer
+        // pinned a display scope, say what a follow-up will keep — and offer
+        // a way off the thread. Clearing drops previousCaseId only; the
+        // answer stays on screen.
+        followupPins={previousCaseId ? followupPinsLine(answer) : ""}
+        onClearFollowup={() => setPreviousCaseId(null)}
       />
     </div>
   );
@@ -139,12 +273,17 @@ export function AskPanel({
   onAsk,
   isPending,
   answer,
+  followupPins,
+  onClearFollowup,
 }: {
   question: string;
   onQuestionChange: (question: string) => void;
   onAsk: () => void;
   isPending: boolean;
   answer: ClerkAnswer | null | undefined;
+  /** Non-empty ⇒ show what a threaded follow-up will keep (Ask 2.0 pins). */
+  followupPins?: string;
+  onClearFollowup?: () => void;
 }) {
   return (
     <div className="max-w-2xl space-y-4">
@@ -163,6 +302,26 @@ export function AskPanel({
             aria-label="Your question"
             data-testid="input-ask-question"
           />
+          {followupPins ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="rounded-full border px-3 py-1 text-xs text-muted-foreground"
+                data-testid="chip-followup-pins"
+              >
+                {followupPins}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={onClearFollowup}
+                aria-label="Start a new topic"
+                data-testid="button-clear-followup"
+              >
+                New topic
+              </Button>
+            </div>
+          ) : null}
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
               Rules come from the approved claims register; numbers are

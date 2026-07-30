@@ -190,6 +190,10 @@ describe("AskContent answer persistence", () => {
     // client_users (CLIENT_SAFE_DATA_INTENTS).
     expect(chips.textContent).toContain("What's been outstanding longest?");
     expect(chips.textContent).not.toContain("Who owes us?");
+    // Ask 2.0's delta chip, appended fifth — byte-identical in the mobile app.
+    expect(chips.textContent).toContain(
+      "How does this month compare to last month?",
+    );
   });
 });
 
@@ -277,6 +281,179 @@ describe("AnswerCard links and feedback", () => {
     expect(harness.feedback.calls[1]).toEqual({
       id: "case-2",
       data: { helpful: false },
+    });
+  });
+});
+
+// Ask 2.0 (contract 0.56.0): multi-intent answers carry sections under a
+// lead-in proposition, a plan-transparency line, and pinned follow-up scope.
+// Single-intent answers carry none of it and must render exactly as before.
+describe("Ask 2.0 sections, plan, and follow-up pins", () => {
+  const multiAnswer = (): ClerkAnswer => ({
+    answered: true,
+    proposition: "Here's this month next to last month.",
+    citation: "computed from your invoices",
+    plan: [
+      { key: "data.submitted_this_month", title: "This month's submissions" },
+      { key: "data.month_delta", title: "Month-on-month change" },
+    ],
+    pins: {
+      monthStart: "2026-06-01",
+      monthLabel: "June 2026",
+      clientPartyId: "party-1",
+      clientName: "Adaeze Foods Ltd",
+    },
+    sections: [
+      {
+        title: "June 2026",
+        text: "3 invoices were submitted.",
+        dataIntent: "data.submitted_this_month",
+        dataParams: { month: "June 2026" },
+        facts: [
+          { key: "count", label: "Submitted", kind: "count", value: "3" },
+        ],
+        links: [
+          { label: "INV-001", kind: "invoice", id: "inv-1" },
+          { label: "INV-002", kind: "invoice", id: null },
+        ],
+      },
+      {
+        title: "May 2026",
+        text: "2 invoices were submitted.",
+        dataIntent: "data.submitted_this_month",
+        dataParams: { month: "May 2026" },
+        facts: [
+          { key: "count", label: "Submitted", kind: "count", value: "2" },
+        ],
+      },
+    ],
+  });
+
+  test("a multi-intent answer renders the lead-in, the plan line, and each section with unique fact rows", () => {
+    render(<AskContent />);
+    askQuestion("How does this month compare to last month?");
+    deliver(answeredCase("case-1", multiAnswer()));
+
+    const card = screen.getByTestId("card-clerk-answer");
+    expect(card.textContent).toContain("Here's this month next to last month.");
+    expect(screen.getByTestId("text-answer-plan").textContent).toBe(
+      "Answered using: This month's submissions · Month-on-month change",
+    );
+
+    // Section blocks: title, text, and SECTION-INDEXED fact rows — both
+    // sections carry the fact key "count", so the flat row testid would
+    // collide; the indexed one cannot.
+    expect(screen.getByTestId("section-answer-0").textContent).toContain(
+      "June 2026",
+    );
+    expect(screen.getByTestId("section-answer-1").textContent).toContain(
+      "May 2026",
+    );
+    expect(screen.getByTestId("row-fact-0-count").textContent).toContain("3");
+    expect(screen.getByTestId("row-fact-1-count").textContent).toContain("2");
+    expect(screen.queryByTestId("row-fact-count")).toBeNull();
+
+    // Section links keep the app's invoice-link contract: root-relative
+    // href, id-less links dropped.
+    const link = screen.getByTestId("link-answer-invoice-inv-1");
+    expect(link.getAttribute("href")).toBe("/invoices/inv-1");
+    expect(screen.queryByText("INV-002")).toBeNull();
+
+    // Per-section scope lines carry each lookup's resolved labels.
+    expect(screen.getByTestId("text-section-scope-0").textContent).toBe(
+      "June 2026",
+    );
+    expect(screen.getByTestId("text-section-scope-1").textContent).toBe(
+      "May 2026",
+    );
+
+    // One source line for the whole answer, and feedback still offered.
+    expect(screen.getByTestId("text-answer-from-records").textContent).toContain(
+      "computed from your invoices",
+    );
+    expect(screen.getByTestId("button-feedback-helpful")).toBeTruthy();
+  });
+
+  test("a single-intent answer renders none of the Ask 2.0 chrome", () => {
+    render(<AskContent />);
+    askQuestion("What did we submit this month?");
+    deliver(
+      answeredCase("case-1", {
+        ...dataAnswer("3 invoices were submitted."),
+        facts: [
+          { key: "count", label: "Submitted", kind: "count", value: "3" },
+        ],
+      }),
+    );
+    // Flat fact rows keep their un-indexed testid, untouched.
+    expect(screen.getByTestId("row-fact-count")).toBeTruthy();
+    expect(screen.queryByTestId("text-answer-plan")).toBeNull();
+    expect(screen.queryByTestId("section-answer-0")).toBeNull();
+    expect(screen.queryByTestId("chip-followup-pins")).toBeNull();
+  });
+
+  test("a sectioned answer threads follow-ups even without a flat dataIntent, and shows what they keep", () => {
+    render(<AskContent />);
+    askQuestion("How does this month compare to last month?");
+    deliver(answeredCase("case-1", multiAnswer()));
+
+    // The pinned display scope shows near the input…
+    expect(screen.getByTestId("chip-followup-pins").textContent).toBe(
+      "Follow-ups keep: June 2026 · Adaeze Foods Ltd",
+    );
+
+    // …and the next question threads the sectioned case's id.
+    askQuestion("and for Adaeze only?");
+    expect(harness.mutateCalls[1]).toEqual({
+      data: { question: "and for Adaeze only?", previousCaseId: "case-1" },
+    });
+  });
+
+  test("New topic drops the thread: the chip disappears and the next ask carries no previousCaseId", () => {
+    render(<AskContent />);
+    askQuestion("How does this month compare to last month?");
+    deliver(answeredCase("case-1", multiAnswer()));
+    expect(screen.getByTestId("chip-followup-pins")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("button-clear-followup"));
+    expect(screen.queryByTestId("chip-followup-pins")).toBeNull();
+    // The answer itself stays on screen — only the thread is dropped.
+    expect(screen.getByTestId("card-clerk-answer")).toBeTruthy();
+
+    askQuestion("What's overdue?");
+    expect(harness.mutateCalls[1]).toEqual({
+      data: { question: "What's overdue?" },
+    });
+  });
+
+  test("a data answer without display pins threads silently — no chip, exactly today's UX", () => {
+    render(<AskContent />);
+    askQuestion("What did we submit this month?");
+    deliver(answeredCase("case-1", dataAnswer("3 invoices were submitted.")));
+    expect(screen.queryByTestId("chip-followup-pins")).toBeNull();
+    askQuestion("and for June?");
+    expect(harness.mutateCalls[1]).toEqual({
+      data: { question: "and for June?", previousCaseId: "case-1" },
+    });
+  });
+
+  test("an answered reply carrying only pins threads too", () => {
+    render(<AskContent />);
+    askQuestion("What about Adaeze Foods?");
+    deliver(
+      answeredCase("case-1", {
+        answered: true,
+        proposition: "Adaeze Foods Ltd has 2 open invoices.",
+        citation: "computed from your invoices",
+        pins: { clientPartyId: "party-1", clientName: "Adaeze Foods Ltd" },
+      }),
+    );
+    expect(screen.getByTestId("chip-followup-pins").textContent).toBe(
+      "Follow-ups keep: Adaeze Foods Ltd",
+    );
+    askQuestion("and last month?");
+    expect(harness.mutateCalls[1]).toEqual({
+      data: { question: "and last month?", previousCaseId: "case-1" },
     });
   });
 });
