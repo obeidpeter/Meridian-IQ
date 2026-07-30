@@ -7,6 +7,7 @@ import {
   type ClerkCase,
   type ClaimRecord,
   type ClerkAnswer,
+  type ClerkAnswerLink,
   type ProtectedFact,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
@@ -20,24 +21,69 @@ import {
   extractInvoiceNumbers,
   CLIENT_SAFE_DATA_INTENTS,
   DATA_INTENTS,
+  type DataIntent,
   type DataIntentParams,
+  type DataIntentResult,
 } from "./data-intents";
 import {
   INTENT_PROMPT_VERSION,
   INTENT_SYSTEM,
   fenceUntrusted,
-  intentJsonSchema,
-  intentValidator,
-  type IntentOutput,
+  planJsonSchema,
+  planValidator,
+  type PlanOutput,
+  type PlanStep,
 } from "./prompts";
+import { plural } from "./text";
 
-// Ask Clerk (Task #40, C1 + idea #6). The model's ONLY job is picking which
-// key a question is about — from a closed enum of active claim keys plus, for
-// firm-scoped askers, the data-intent catalogue (data-intents/). The answer
-// itself is assembled deterministically: claim answers insert protected facts
-// verbatim from the claim row; data answers run a fixed, fully parameterized
-// query under the asker's own firm scope. Anything outside the two catalogues
-// produces a neutral refusal and an escalated case (fail closed).
+// Ask Clerk (Task #40, C1 + idea #6; Ask 2.0 plans, contract 0.56.0). The
+// model's ONLY job is producing an ordered PLAN of 1-3 keys — each from the
+// closed enum of active claim keys plus, for firm-scoped askers, the
+// data-intent catalogue (data-intents/) — in ONE call. The answer itself is
+// assembled deterministically: claim answers insert protected facts verbatim
+// from the claim row; each data step runs a fixed, fully parameterized query
+// under the asker's own firm scope with its OWN freshly resolved parameters.
+// Anything outside the two catalogues (or an empty plan) produces a neutral
+// refusal and an escalated case (fail closed).
+
+// ---------------------------------------------------------------------------
+// Ask 2.0 answer extension (contract 0.56.0). ClerkAnswer grew optional
+// plan/pins/sections in the API contract; the @workspace/db jsonb type still
+// carries the lean pre-0.56 shape, so the extension lives here and MUST
+// mirror components/schemas ClerkAnswer.plan / ClerkAnswer.pins /
+// AskAnswerSection in lib/api-spec/openapi.yaml — the stored answer IS the
+// API answer (the route returns the whole case row).
+// ---------------------------------------------------------------------------
+
+// The scope a data answer resolved to, BY ID (+ display labels). A follow-up
+// (previousCaseId) re-pins from these ids after validating them against the
+// live option lists — never from display labels, which two clients may share.
+export interface AskAnswerPins {
+  monthStart?: string;
+  monthLabel?: string;
+  clientPartyId?: string;
+  clientName?: string;
+}
+
+// One part of a multi-part answer: the executed intent's platform title, its
+// deterministic text/facts/links, and the per-step display params.
+export interface AskAnswerSection {
+  title: string;
+  text: string;
+  dataIntent?: string;
+  dataParams?: Record<string, string>;
+  facts: ProtectedFact[];
+  links?: ClerkAnswerLink[];
+}
+
+export type AskAnswer = ClerkAnswer & {
+  // The ordered intents the planner executed (app-resolved titles), present
+  // only on multi-part answers; single-step and register answers keep the
+  // exact pre-0.56 flat shape (plus pins on data answers).
+  plan?: { key: string; title: string }[];
+  pins?: AskAnswerPins;
+  sections?: AskAnswerSection[];
+};
 
 export function formatFact(fact: ProtectedFact): string {
   if (!fact.unit) return fact.value;
@@ -101,7 +147,10 @@ export function buildIntentUser(ctx: IntentPromptContext): string {
                 ),
                 ...(ctx.clientsTruncated
                   ? [
-                      'This client list is INCOMPLETE. If the question names a client that is not listed, answer claimKey "none" — never answer a client-scoped question firm-wide.',
+                      // The one plan-era wording change in this builder: the
+                      // v6 refusal is the EMPTY steps array, not claimKey
+                      // "none". Catalogue rendering above stays byte-stable.
+                      "This client list is INCOMPLETE. If the question names a client that is not listed, answer an EMPTY steps array — never answer a client-scoped question firm-wide.",
                     ]
                   : []),
               ]
@@ -159,13 +208,15 @@ export async function askClerk(
   );
 
   const finish = async (
-    answer: ClerkAnswer,
+    answer: AskAnswer,
     status: "approved" | "escalated",
   ): Promise<ClerkCase> => {
     const [row] = await inClerkScope(ctx.firmId, () =>
       getDb()
         .update(clerkCasesTable)
-        .set({ status, answer })
+        // The stored jsonb type has not grown the 0.56.0 plan/pins/sections
+        // fields yet — AskAnswer above is the contract-mirroring superset.
+        .set({ status, answer: answer as ClerkAnswer })
         .where(eq(clerkCasesTable.id, created.id))
         .returning(),
     );
@@ -179,6 +230,9 @@ export async function askClerk(
         claimKey: answer.claimKey ?? null,
         dataIntent: answer.dataIntent ?? null,
         refusalReason: answer.refusalReason ?? null,
+        // Ask 2.0: the executed plan's intent keys — pointer-only platform
+        // strings (catalogue keys, never user or model text).
+        plan: answer.plan ? answer.plan.map((p) => p.key) : null,
       },
     });
     return row;
@@ -257,13 +311,13 @@ export async function askClerk(
     .map((c, i) => ({ key: `c${i + 1}`, ...c }));
   const clientByKey = new Map(clientOptions.map((c) => [c.key, c]));
 
-  // Multi-turn context (round-12 idea #3): the previous question case's
-  // PLATFORM-RECORDED intent and resolved parameters, translated back into
-  // keys from THIS request's closed lists. Loaded under the same firm scope
-  // with an explicit firm filter, so a foreign or fabricated id yields no
-  // context; a previous client no longer in the offered list contributes no
-  // client key (never a raw id or name). Only data-intent answers carry
-  // context — claim answers need none.
+  // Multi-turn context (round-12 idea #3; pins-by-id since 0.56.0): the
+  // previous question case's PLATFORM-RECORDED intent and resolved scope,
+  // translated back into keys from THIS request's closed lists. Loaded under
+  // the same firm scope with an explicit firm filter, so a foreign or
+  // fabricated id yields no context; a previous scope no longer in the
+  // offered lists contributes nothing (never a raw id or name). Only
+  // data-intent answers carry context — claim answers need none.
   let previousContext: string[] = [];
   if (ctx.previousCaseId && ctx.firmId && dataIntents.length > 0) {
     const [prev] = await inClerkScope(ctx.firmId, () =>
@@ -289,25 +343,57 @@ export async function askClerk(
         )
         .limit(1),
     );
-    const prevIntent = prev?.answer?.dataIntent;
+    const prevAnswer = prev?.answer as AskAnswer | null | undefined;
+    // The lookup to thread: the flat single-intent key, or — for a
+    // multi-part answer — the LAST executed plan step, the same step whose
+    // scope the stored pins carry.
+    const prevIntent =
+      prevAnswer?.dataIntent ??
+      (prevAnswer?.plan && prevAnswer.plan.length > 0
+        ? prevAnswer.plan[prevAnswer.plan.length - 1].key
+        : undefined);
     if (prevIntent && keys.includes(prevIntent)) {
-      // The stored dataParams carry the resolved display LABELS (month label,
-      // client legal name) — map them back to THIS request's option keys; a
-      // label no longer in the offered lists contributes nothing. Stored
-      // month labels are stripped of the " (current month)" suffix at answer
-      // time, so strip the offered labels the same way before comparing —
-      // otherwise a same-month follow-up silently loses its month scope.
-      const prevParams = prev?.answer?.dataParams;
-      const prevMonthKey = prevParams?.month
-        ? (months.find(
-            (m) =>
-              m.label.replace(" (current month)", "") === prevParams.month,
-          )?.key ?? null)
-        : null;
-      const prevClientKey = prevParams?.client
-        ? (clientOptions.find((c) => c.name === prevParams.client)?.key ??
-          null)
-        : null;
+      let prevMonthKey: string | null = null;
+      let prevClientKey: string | null = null;
+      const pins = prevAnswer?.pins;
+      if (pins) {
+        // ID-based recovery (the 0.56.0 fix): the stored pins carry the
+        // resolved monthStart and clientPartyId, validated against THIS
+        // request's live option lists — lagosMonthOptions has moved on for a
+        // year-old thread, and clientOptions is already SEC-03-narrowed for
+        // a client asker, so a stale or out-of-scope pin is DROPPED silently
+        // rather than trusted. Ids, not labels: two clients sharing a legal
+        // name resolve to the exact party the previous answer used, where
+        // label matching resolved whichever sorted first.
+        prevMonthKey = pins.monthStart
+          ? (months.find((m) => m.monthStart === pins.monthStart)?.key ??
+            null)
+          : null;
+        prevClientKey = pins.clientPartyId
+          ? (clientOptions.find((c) => c.id === pins.clientPartyId)?.key ??
+            null)
+          : null;
+      } else {
+        // Legacy label matching, kept ONLY for pre-0.56 cases that stored no
+        // pins. The stored dataParams carry the resolved display LABELS
+        // (month label, client legal name) — map them back to THIS request's
+        // option keys; a label no longer in the offered lists contributes
+        // nothing. Stored month labels are stripped of the
+        // " (current month)" suffix at answer time, so strip the offered
+        // labels the same way before comparing — otherwise a same-month
+        // follow-up silently loses its month scope.
+        const prevParams = prevAnswer?.dataParams;
+        prevMonthKey = prevParams?.month
+          ? (months.find(
+              (m) =>
+                m.label.replace(" (current month)", "") === prevParams.month,
+            )?.key ?? null)
+          : null;
+        prevClientKey = prevParams?.client
+          ? (clientOptions.find((c) => c.name === prevParams.client)?.key ??
+            null)
+          : null;
+      }
       previousContext = [
         "",
         `Previous question context (platform-recorded): the asker's previous question used data key ${prevIntent}${prevMonthKey ? `, month ${prevMonthKey}` : ""}${prevClientKey ? `, client ${prevClientKey}` : ""}.`,
@@ -328,7 +414,12 @@ export async function askClerk(
 
   const monthKeys = months.map((m) => m.key);
   const clientKeys = clientOptions.map((c) => c.key);
-  const result = await gateway.infer<IntentOutput>({
+  // ONE model call per ask, plan or no plan (the data-intents.test.ts pin):
+  // the planner returns the whole ordered plan in a single inference, and
+  // everything after this line is deterministic app code. Bare gateway.infer
+  // is correct here (rate-limit-lockstep allowlist): a typed failure refuses
+  // and escalates — there is no template to fall back to.
+  const result = await gateway.infer<PlanOutput>({
     purpose: "classify_intent",
     caseId: created.id,
     firmId: ctx.firmId ?? null,
@@ -336,8 +427,8 @@ export async function askClerk(
     system: INTENT_SYSTEM,
     user,
     schemaName: "intent_classification",
-    jsonSchema: intentJsonSchema(keys, monthKeys, clientKeys),
-    validator: intentValidator(keys, monthKeys, clientKeys) as never,
+    jsonSchema: planJsonSchema(keys, monthKeys, clientKeys),
+    validator: planValidator(keys, monthKeys, clientKeys) as never,
     inputForHash: question,
   });
 
@@ -346,134 +437,315 @@ export async function askClerk(
       "The question could not be classified reliably, so it has been escalated to an operator.",
     );
   }
-  if (result.data.claimKey === "none") {
+  // Duplicate steps dedup, app-side: the prompt forbids repeating a key with
+  // identical pins, but the app enforces it — identity is the step's
+  // EFFECTIVE scope, so for a client asker (whose every lookup is forced to
+  // its own party below) the client pick is irrelevant to identity.
+  const seenSteps = new Set<string>();
+  const steps = result.data.steps.filter((s) => {
+    const sig = `${s.key} ${s.month} ${clientScoped ? "own" : s.client}`;
+    if (seenSteps.has(sig)) return false;
+    seenSteps.add(sig);
+    return true;
+  });
+  // An EMPTY plan is the model's refusal (the v6 schema has no "none" key —
+  // emptiness is the none), same neutral escalation as ever.
+  if (steps.length === 0) {
     return refuse(
       "This question is not covered by an approved claim, so it has been escalated to an operator.",
     );
   }
 
-  // Data-intent branch (idea #6), taken only when data keys were actually
-  // OFFERED (firm-scoped asker): resolution runs against the intents THIS
-  // asker was offered, so the platform-defined meaning of a "data.*" key
-  // wins over an identically named claim — and a client asker can never run
-  // an intent outside its client-safe subset (SEC-03), even via a colliding
-  // claim key. A firm-less asker's enum never contained data keys, so a
-  // "data.*" pick there can only be a register claim — it falls through to
-  // the claims path and answers normally.
+  // Step resolution runs against the intents THIS asker was OFFERED
+  // (firm-scoped asker only), so the platform-defined meaning of a "data.*"
+  // key wins over an identically named claim — and a client asker can never
+  // run an intent outside its client-safe subset (SEC-03), even via a
+  // colliding claim key. A firm-less asker's enum never contained data keys,
+  // so a "data.*" pick there can only be a register claim — it falls through
+  // to the claims path and answers normally.
   const firmId = ctx.firmId;
-  const dataIntent = firmId
-    ? dataIntents.find((i) => i.key === result.data.claimKey)
-    : undefined;
-  if (dataIntent && firmId) {
-    // Parameter resolution (idea #4): the model picked closed keys; the app
-    // maps them back through ITS OWN option lists. An unknown key, or a
-    // param the chosen lookup cannot honour, refuses — never a silently
-    // unfiltered answer pretending to be a filtered one.
-    const monthKey = result.data.month ?? "none";
-    const clientKey = result.data.client ?? "none";
-    const params: DataIntentParams = {};
-    if (monthKey !== "none") {
-      const month = monthByKey.get(monthKey);
-      if (!month) {
-        return refuse(
-          "The month in the question could not be resolved, so it has been escalated to an operator.",
-        );
+  const planned = steps.map((step) => ({
+    step,
+    dataIntent: firmId
+      ? dataIntents.find((i) => i.key === step.key)
+      : undefined,
+  }));
+
+  // A register claim answers ALONE: its category-applicability logic (below)
+  // is single-answer logic, and a claim proposition pasted between data
+  // sections would blur whose citation covers what. Any plan longer than one
+  // step containing a claim key refuses whole (fail closed).
+  if (planned.length > 1 && planned.some((p) => !p.dataIntent)) {
+    return refuse(
+      "A register claim answers one question at a time and cannot be combined with other lookups, so this question has been escalated to an operator.",
+    );
+  }
+
+  // ---- Data steps ----------------------------------------------------------
+  if (firmId && planned.every((p) => p.dataIntent)) {
+    // One step's execution, with a FRESH DataIntentParams per step (the
+    // 0.56.0 fix: the old single shared params object would have leaked one
+    // step's month/client into the next). Refusal reasons are returned, not
+    // thrown: a single-step plan refuses the whole case with them verbatim
+    // (the claim-gaps sentence catalogue), a multi-step plan turns them into
+    // a could-not-answer section.
+    type StepOutcome =
+      | {
+          ok: true;
+          dataIntent: DataIntent;
+          params: DataIntentParams;
+          result: DataIntentResult;
+        }
+      | { ok: false; dataIntent: DataIntent; reason: string };
+    const runDataStep = async (
+      dataIntent: DataIntent,
+      step: PlanStep,
+    ): Promise<StepOutcome> => {
+      // Parameter resolution (idea #4): the model picked closed keys; the
+      // app maps them back through ITS OWN option lists. An unknown key, or
+      // a param the chosen lookup cannot honour, refuses — never a silently
+      // unfiltered answer pretending to be a filtered one.
+      const params: DataIntentParams = {};
+      if (step.month !== "none") {
+        const month = monthByKey.get(step.month);
+        if (!month) {
+          return {
+            ok: false,
+            dataIntent,
+            reason:
+              "The month in the question could not be resolved, so it has been escalated to an operator.",
+          };
+        }
+        if (!dataIntent.accepts.month) {
+          return {
+            ok: false,
+            dataIntent,
+            reason:
+              "That lookup always answers as of today and cannot be filtered to a month. Ask about rail submissions for month-by-month figures.",
+          };
+        }
+        params.monthStart = month.monthStart;
+        params.monthLabel = month.label.replace(" (current month)", "");
       }
-      if (!dataIntent.accepts.month) {
-        return refuse(
-          "That lookup always answers as of today and cannot be filtered to a month. Ask about rail submissions for month-by-month figures.",
-        );
+      if (step.client !== "none") {
+        const client = clientByKey.get(step.client);
+        if (!client) {
+          return {
+            ok: false,
+            dataIntent,
+            reason:
+              "The client named in the question could not be resolved, so it has been escalated to an operator.",
+          };
+        }
+        if (!dataIntent.accepts.client) {
+          return {
+            ok: false,
+            dataIntent,
+            reason:
+              "That lookup covers the whole firm and cannot be filtered to one client.",
+          };
+        }
+        params.clientPartyId = client.id;
+        params.clientName = client.name;
       }
-      params.monthStart = month.monthStart;
-      params.monthLabel = month.label.replace(" (current month)", "");
-    }
-    if (clientKey !== "none") {
-      const client = clientByKey.get(clientKey);
-      if (!client) {
-        return refuse(
-          "The client named in the question could not be resolved, so it has been escalated to an operator.",
-        );
+      // SEC-03: a client asker's scope comes from the PRINCIPAL, never from
+      // the model. Whatever the planner picked (the only offered client
+      // option is the caller's own party anyway), the lookup is FORCED to
+      // that party before it runs — and ONLY onto an intent that honours a
+      // client filter. Every client-offered intent does (the client-safe
+      // test pin), so the refusal arm is defensive: an intent that would
+      // IGNORE the forced pin must never run for a client asker (0.56.0 —
+      // previously the pin was applied unconditionally AFTER the accepts
+      // check, so such an intent would have run firm-wide).
+      if (clientScoped && ctx.clientPartyId) {
+        if (!dataIntent.accepts.client) {
+          return {
+            ok: false,
+            dataIntent,
+            reason:
+              "That lookup covers the whole firm and cannot be filtered to one client.",
+          };
+        }
+        params.clientPartyId = ctx.clientPartyId;
+        const own = clientOptions.find((c) => c.id === ctx.clientPartyId);
+        if (own) params.clientName = own.name;
       }
-      if (!dataIntent.accepts.client) {
-        return refuse(
-          "That lookup covers the whole firm and cannot be filtered to one client.",
-        );
+      // Invoice-pinned lookup (round 20): the number is APP-EXTRACTED from
+      // the RAW question by a regex — the model only picked the key, and
+      // nothing model-authored reaches the lookup. No number, or several,
+      // refuses rather than guessing. Applied ONLY to a data.invoice_status
+      // step, exactly as before plans.
+      if (dataIntent.key === "data.invoice_status") {
+        const numbers = extractInvoiceNumbers(question);
+        if (numbers.length === 0) {
+          return {
+            ok: false,
+            dataIntent,
+            reason:
+              "No invoice number could be read from the question. Name it exactly as it appears on the invoice (e.g. INV-2041) and ask again.",
+          };
+        }
+        if (numbers.length > 1) {
+          return {
+            ok: false,
+            dataIntent,
+            reason:
+              "More than one invoice number appears in the question — ask about one invoice at a time.",
+          };
+        }
+        params.invoiceNumber = numbers[0];
       }
-      params.clientPartyId = client.id;
-      params.clientName = client.name;
-    }
-    // SEC-03: a client asker's scope comes from the PRINCIPAL, never from
-    // the model. Whatever the classifier picked (the only offered client
-    // option is the caller's own party anyway), the lookup is FORCED to
-    // that party before it runs.
-    if (clientScoped && ctx.clientPartyId) {
-      params.clientPartyId = ctx.clientPartyId;
-      const own = clientOptions.find((c) => c.id === ctx.clientPartyId);
-      if (own) params.clientName = own.name;
-    }
-    // Invoice-pinned lookup (round 20): the number is APP-EXTRACTED from
-    // the RAW question by a regex — the model only picked the key, and
-    // nothing model-authored reaches the lookup. No number, or several,
-    // refuses rather than guessing.
-    if (dataIntent.key === "data.invoice_status") {
-      const numbers = extractInvoiceNumbers(question);
-      if (numbers.length === 0) {
-        return refuse(
-          "No invoice number could be read from the question. Name it exactly as it appears on the invoice (e.g. INV-2041) and ask again.",
+      try {
+        // The lookup runs in the SAME firm-scoped RLS posture as the request
+        // (and every query also filters firm_id explicitly) — the asker can
+        // only ever see numbers computed from its own firm's rows.
+        const lookup = await inClerkScope(firmId, () =>
+          dataIntent.run(firmId, params),
         );
-      }
-      if (numbers.length > 1) {
-        return refuse(
-          "More than one invoice number appears in the question — ask about one invoice at a time.",
+        return { ok: true, dataIntent, params, result: lookup };
+      } catch (err) {
+        logger.warn(
+          { err, dataIntent: dataIntent.key },
+          "ask clerk: data-intent lookup failed",
         );
+        return {
+          ok: false,
+          dataIntent,
+          reason:
+            "The firm-record lookup failed, so the question has been escalated to an operator.",
+        };
       }
-      params.invoiceNumber = numbers[0];
+    };
+
+    // Sequential, in plan order — later sections may narrate later months,
+    // and the lookups share the caller's firm scope, not each other's params.
+    const outcomes: StepOutcome[] = [];
+    for (const p of planned) {
+      outcomes.push(await runDataStep(p.dataIntent!, p.step));
     }
 
-    let outcome;
-    try {
-      // The lookup runs in the SAME firm-scoped RLS posture as the request
-      // (and every query also filters firm_id explicitly) — the asker can
-      // only ever see numbers computed from its own firm's rows.
-      outcome = await inClerkScope(firmId, () =>
-        dataIntent.run(firmId, params),
-      );
-    } catch (err) {
-      logger.warn(
-        { err, dataIntent: dataIntent.key },
-        "ask clerk: data-intent lookup failed",
-      );
-      return refuse(
-        "The firm-record lookup failed, so the question has been escalated to an operator.",
+    const displayParams = (
+      params: DataIntentParams,
+    ): Record<string, string> | undefined => {
+      const d = {
+        ...(params.monthLabel ? { month: params.monthLabel } : {}),
+        ...(params.clientName ? { client: params.clientName } : {}),
+      };
+      return Object.keys(d).length > 0 ? d : undefined;
+    };
+    // The resolved scope BY ID (contract pins): what a follow-up re-pins
+    // from, validated against the then-live option lists before use.
+    const pinsOf = (params: DataIntentParams): AskAnswerPins => ({
+      ...(params.monthStart
+        ? { monthStart: params.monthStart, monthLabel: params.monthLabel }
+        : {}),
+      ...(params.clientPartyId
+        ? {
+            clientPartyId: params.clientPartyId,
+            ...(params.clientName ? { clientName: params.clientName } : {}),
+          }
+        : {}),
+    });
+    const citation = `Computed live from your firm's records on ${lagosDateString()} (Lagos)`;
+
+    // Single step: EXACTLY the pre-plan flat answer shape (plus pins), so
+    // every existing consumer, fixture and follow-up behaves identically —
+    // including a single-step refusal, which refuses the whole case with
+    // the step's reason verbatim.
+    if (outcomes.length === 1) {
+      const only = outcomes[0];
+      if (!only.ok) return refuse(only.reason);
+      const dataParams = displayParams(only.params);
+      return finish(
+        {
+          answered: true,
+          dataIntent: only.dataIntent.key,
+          ...(dataParams ? { dataParams } : {}),
+          proposition: only.result.text,
+          facts: only.result.facts,
+          // Open-the-invoice links (round 7), app-built from the lookup's
+          // own sample rows. The lookup already ran firm/SEC-03-scoped (and
+          // a client asker's party was FORCED above), so every id here is an
+          // invoice the asker may already see.
+          ...(only.result.links && only.result.links.length > 0
+            ? { links: only.result.links }
+            : {}),
+          citation,
+          pins: pinsOf(only.params),
+        },
+        "approved",
       );
     }
-    const dataParams = {
-      ...(params.monthLabel ? { month: params.monthLabel } : {}),
-      ...(params.clientName ? { client: params.clientName } : {}),
-    };
+
+    // Every step refused: the whole case refuses with the FIRST reason —
+    // one neutral escalation, exactly like a single-step refusal.
+    const answeredSteps = outcomes.filter(
+      (o): o is Extract<StepOutcome, { ok: true }> => o.ok,
+    );
+    if (answeredSteps.length === 0) {
+      const first = outcomes[0] as Extract<StepOutcome, { ok: false }>;
+      return refuse(first.reason);
+    }
+
+    // Multi-part answer: one section per executed step, in plan order. A
+    // refused step keeps its slot with an honest could-not-answer text (its
+    // escalation clause stripped — the case is APPROVED when any part
+    // answered, so the sentence must not claim an escalation that did not
+    // happen; the clause is this file's own pinned constant, see
+    // claim-gaps.test.ts).
+    const sections: AskAnswerSection[] = outcomes.map((o) => {
+      if (!o.ok) {
+        return {
+          title: o.dataIntent.title,
+          text: `This part could not be answered. ${o.reason.replace(
+            ", so it has been escalated to an operator.",
+            ".",
+          )}`,
+          dataIntent: o.dataIntent.key,
+          facts: [],
+        };
+      }
+      const dp = displayParams(o.params);
+      return {
+        title: o.dataIntent.title,
+        text: o.result.text,
+        dataIntent: o.dataIntent.key,
+        ...(dp ? { dataParams: dp } : {}),
+        facts: o.result.facts,
+        ...(o.result.links && o.result.links.length > 0
+          ? { links: o.result.links }
+          : {}),
+      };
+    });
+    const lastAnswered = answeredSteps[answeredSteps.length - 1];
     return finish(
       {
         answered: true,
-        dataIntent: dataIntent.key,
-        ...(Object.keys(dataParams).length > 0 ? { dataParams } : {}),
-        proposition: outcome.text,
-        facts: outcome.facts,
-        // Open-the-invoice links (round 7), app-built from the lookup's own
-        // sample rows. The lookup already ran firm/SEC-03-scoped (and a
-        // client asker's party was FORCED above), so every id here is an
-        // invoice the asker may already see.
-        ...(outcome.links && outcome.links.length > 0
-          ? { links: outcome.links }
-          : {}),
-        citation: `Computed live from your firm's records on ${lagosDateString()} (Lagos)`,
+        // Deterministic one-line lead-in naming the part count; the parts
+        // themselves live in sections, so the flat facts stay empty and the
+        // flat links stay absent (renderers show the sections).
+        proposition: `This question has ${plural(sections.length, "part")} — each is answered separately below.`,
+        facts: [],
+        plan: outcomes.map((o) => ({
+          key: o.dataIntent.key,
+          title: o.dataIntent.title,
+        })),
+        // Documented choice: a multi-part answer's follow-up scope is the
+        // LAST answered step's — "and for June?" after "X; also Y for Acme"
+        // most naturally continues the trailing lookup.
+        pins: pinsOf(lastAnswered.params),
+        sections,
+        citation,
       },
       "approved",
     );
   }
 
+  // ---- Register claim (single step) ----------------------------------------
+  const claimStep = steps[0];
   // Fail-closed re-verification: the app, not the model, decides which claim
   // answers. Exactly one active, in-date claim must match the key.
-  const matching = active.filter((c) => c.claimKey === result.data.claimKey);
+  const matching = active.filter((c) => c.claimKey === claimStep.key);
   if (matching.length !== 1) {
     return refuse(
       "The register does not have exactly one active claim for this topic, so it has been escalated to an operator.",
