@@ -28,11 +28,16 @@ export interface AskFeedbackReport {
 }
 
 // The one spelling of the intent bucket: a data answer's platform-recorded
-// intent key; an answered claim answer groups under "register"; everything
-// else (refusals, including still-unanswered ratables) under "refused".
+// intent key; an Ask 2.0 multi-part answer (no flat dataIntent, but a
+// non-empty plan) groups under "plan" — before this branch existed those
+// answered cases miscounted as "refused"; an answered claim answer groups
+// under "register"; everything else (refusals, including still-unanswered
+// ratables) under "refused".
 const INTENT_BUCKET = sql`COALESCE(
   answer->>'dataIntent',
   CASE
+    WHEN jsonb_array_length(COALESCE(answer->'plan', '[]'::jsonb)) > 0
+      THEN 'plan'
     WHEN (answer->>'answered')::boolean AND answer->>'claimKey' IS NOT NULL
       THEN 'register'
     ELSE 'refused'
