@@ -1289,9 +1289,11 @@ Settings** — plus screens reached from Home:
 - **Home** — greeting, penalty-risk card, the same stat tiles and
   receivables aging as the web dashboard, a **bills tile** (what you owe,
   opening the bills screen), next deadline, recent activity,
-  and quick actions (create/browse invoices, reconcile, estimator, and —
-  when your account has them — Send to Clerk, Ask Clerk, Digests &
-  statements).
+  and quick actions (create/browse invoices, reconcile, estimator,
+  month-end close, Automation, and — when your account has them — Send to
+  Clerk, Ask Clerk, Digests & statements). While any standing automation is
+  paused, Home shows an amber **"Automation is paused"** banner pointing at
+  the Automation screen.
 - **Invoices** — search, infinite scrolling, **Submit all drafts** with the
   same batch report as the web, and invoice detail with the compliance
   light, line items, transmission history, and **fix-and-resubmit** for
@@ -1301,7 +1303,26 @@ Settings** — plus screens reached from Home:
 - **Bills** — the supplier-bills ledger from the web app
   ([section 4](#4-the-compliance-app--for-smes) → Supplier bills): each
   bill's payment status at a glance, with the same **scheduled / paid**
-  payment flagging.
+  payment flagging, plus the amber **missing-recurring advisory** ("Expected
+  vendor bills not captured yet") when a vendor that bills you monthly has
+  nothing captured this cycle.
+- **Automation** — the mobile home of "Clerk suggests": today's proposed
+  batches (with the same "re-checked at this moment, recorded under your
+  name" approval confirms as the web), your **standing daily approvals**
+  with their status lines, and the run record (policy runs carry an
+  **· auto** tag). **"Automate daily" on the phone always grants the
+  default cap of 10 invoices per run** — the consent text states the
+  number; to choose a different ceiling, grant from the web instead. A
+  paused grant is shown prominently here with its plain-word reason
+  (pause/resume/revoke are one tap each), and Home carries the amber banner
+  until it's resumed or revoked. Reminder drafts (payment chasers) are
+  approved on the web only — their drafts are shown once for copying, which
+  the phone can't do yet. Accounts without submit rights see everything
+  read-only.
+- **Month-end close** — the same composed checklist as the web dashboard
+  card: each advisory line with its count, and rows whose work lives on a
+  mobile screen (invoices, bills, reconciliation, new invoice) link
+  straight there; web-only items show without a link.
 - **New Invoice** — the guided form, plus **"Speak it"**: record a voice
   note and Clerk drafts the invoice ("Heard: … — check every field before
   saving"). **Create & submit invoice** runs create → validate → submit in
@@ -1314,7 +1335,10 @@ Settings** — plus screens reached from Home:
   and accept/reject match proposals (scanned-PDF statements and bulk-accept
   are web-only; client accounts see matches read-only).
 - **Deadlines / B2C Reports** — the compliance calendar and 24-hour B2C
-  windows with live countdowns.
+  windows with live countdowns. When invoices sit past the statutory
+  submission window, the Deadlines tab leads with the **estimated penalty
+  exposure** card (always the lowest-band "at least" floor — an estimate,
+  not advice — and the fix stated: submitting removes it).
 - **Estimator** — the offline penalty calculator.
 - **Settings** — alert channels including **push notifications** (a
   mobile-only channel; toggling registers this device), alert types, a test

@@ -2,11 +2,13 @@
  * Pure helpers behind the Supplier bills screen: payStatus display mapping,
  * the payment-flag gate (flags record settlement EVIDENCE — "paid" is
  * terminal and re-flagging "scheduled" over itself is a no-op the UI must
- * not offer), and the verification chip derived from the bill's stored
- * stamp check. Kept free of React Native imports so the node:test suite can
- * exercise them directly; the tone union mirrors components/ui BadgeTone
- * structurally.
+ * not offer), the verification chip derived from the bill's stored stamp
+ * check, and the missing-recurring-bills advisory copy. Kept free of React
+ * Native imports so the node:test suite can exercise them directly; the
+ * tone union mirrors components/ui BadgeTone structurally.
  */
+
+import { formatCurrency, formatDate } from "./format";
 
 export type BillFlagTarget = "scheduled" | "paid";
 
@@ -72,4 +74,57 @@ export function verificationChip(
   return lastVerification.valid
     ? { label: "Stamp valid", tone: "success" }
     : { label: "Stamp not found", tone: "critical" };
+}
+
+// ---- Missing recurring bills advisory --------------------------------------
+// Vendors whose bill arrives every month with nothing captured this cycle —
+// an uncaptured bill is input VAT silently lost. Mined deterministically
+// server-side (and capped there at its own display limit, quietly — the
+// screen renders exactly what arrives, never a "+N more" of its own); the
+// wording mirrors the SME web bills page.
+
+export interface MissingBillPattern {
+  supplierName: string;
+  currency: string;
+  medianAmount: string;
+  medianGapDays: number;
+  count: number;
+  lastIssueDate: string;
+  expectedByDate: string;
+}
+
+/** Currency-aware amount: NGN as naira, anything else as "USD 1200.00". */
+function patternAmount(pattern: MissingBillPattern): string {
+  return pattern.currency === "NGN"
+    ? formatCurrency(pattern.medianAmount)
+    : `${pattern.currency} ${pattern.medianAmount}`;
+}
+
+/** One advisory line per vendor habit — the web page's exact shape. */
+export function missingBillLine(pattern: MissingBillPattern): string {
+  return `${pattern.supplierName} has billed about ${patternAmount(
+    pattern,
+  )} roughly every ${pattern.medianGapDays} days (${pattern.count} bills on record, last ${formatDate(
+    pattern.lastIssueDate,
+  )}) — this cycle's bill was expected by ${formatDate(
+    pattern.expectedByDate,
+  )} and has not been captured.`;
+}
+
+export const MISSING_BILLS_HEADER = "Expected vendor bills not captured yet";
+
+// The hedge: advisory only, and an ended arrangement is a fine reason to
+// ignore it.
+export const MISSING_BILLS_FOOTER =
+  "Advisory only, from your own capture history. An uncaptured bill means unclaimed input VAT — if the vendor arrangement has ended, you can ignore this.";
+
+/** The full advisory banner text: header, one line per pattern, hedge. */
+export function missingBillsBannerMessage(
+  patterns: readonly MissingBillPattern[],
+): string {
+  return [
+    MISSING_BILLS_HEADER,
+    ...patterns.map(missingBillLine),
+    MISSING_BILLS_FOOTER,
+  ].join("\n\n");
 }
