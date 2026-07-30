@@ -26,7 +26,7 @@ import {
   statementIsQuiet,
   sweepClientStatements,
 } from "./client-statement.ts";
-import type { CompletionRequest } from "./gateway.ts";
+import type { ClerkGateway, CompletionRequest } from "./gateway.ts";
 import {
   fakeGateway,
   restoreClerkFlag,
@@ -381,6 +381,34 @@ test("the model phrases an active month; the call is ledgered to the firm", asyn
   // The read path returns newest-first for the client.
   const list = await listClientStatements(firmA, clientA2);
   assert.ok(list.some((s) => s.clientPartyId === clientA2 && s.monthStart === MONTH));
+});
+
+test("generate stores the template when the gateway throws (kill-switch TOCTOU)", async () => {
+  // The sweep's clerk_ai check passed; then the gateway's internal assert
+  // throws (the flag flipped between check and call). Before the fix this
+  // threw CLERK_DISABLED out of a generation path documented as NEVER
+  // blocked by the kill switch — now the template row is stored, source
+  // tagged honestly. clientA is ACTIVE in the month before MONTH (the
+  // FAILED fixture was issued then) and has no stored row for it, so the
+  // phrasing path really is attempted.
+  const exploding: ClerkGateway = {
+    model: "exploding-test",
+    infer: async () => {
+      throw new Error("CLERK_DISABLED flipped mid-sweep");
+    },
+  };
+  const row = await generateClientStatement(
+    firmA,
+    clientA,
+    lagosMonthStart(2),
+    exploding,
+  );
+  assert.equal(row.source, "template");
+  assert.equal(
+    row.facts.issuedCount,
+    1,
+    "the month was active — the model path was taken, not skipped as quiet",
+  );
 });
 
 test("delivery: a busy statement is offered exactly once across two passes", async () => {

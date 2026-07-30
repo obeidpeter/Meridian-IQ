@@ -23,6 +23,7 @@ import {
 } from "./digest.ts";
 import { draftClaimWithClerk } from "./draft-claim.ts";
 import { createDraft } from "../invoice/service.ts";
+import type { ClerkGateway } from "./gateway.ts";
 import {
   fakeGateway,
   saveAndEnableClerkFlag,
@@ -590,6 +591,27 @@ test("generateFirmDigest falls back to the template on invalid model output", as
     fallbackFirmId,
     fakeGateway(() => "garbage, not json"),
   );
+  assert.equal(digest.source, "template");
+  assert.match(digest.headline, /on track/);
+});
+
+test("generateFirmDigest stores the template when the gateway throws (kill-switch TOCTOU)", async () => {
+  // The sweep's clerk_ai check passed; then the gateway's internal assert
+  // throws (the flag flipped between check and call). Before the fix this
+  // threw CLERK_DISABLED out of a generation path documented as NEVER
+  // blocked by the kill switch, failing the whole sweep pass — now the
+  // template row is stored, source tagged honestly.
+  const toctouFirmId = randomUUID();
+  await getDb()
+    .insert(firmsTable)
+    .values({ id: toctouFirmId, name: `TOCTOU Firm ${SALT}` });
+  const exploding: ClerkGateway = {
+    model: "exploding-test",
+    infer: async () => {
+      throw new Error("CLERK_DISABLED flipped mid-sweep");
+    },
+  };
+  const digest = await generateFirmDigest(toctouFirmId, exploding);
   assert.equal(digest.source, "template");
   assert.match(digest.headline, /on track/);
 });

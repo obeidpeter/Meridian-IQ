@@ -1,10 +1,12 @@
-import { and, desc, eq, isNull, ne, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
   runRequestContext,
   alertPreferencesTable,
+  clerkActionDecisionsTable,
   clerkActionPoliciesTable,
+  engagementsTable,
   membershipsTable,
   staffNotificationPreferencesTable,
   type ClerkActionPolicy,
@@ -19,17 +21,20 @@ import { pointerEntityRef } from "../messaging/recipient-ref";
 import { sendPushToUser } from "../push/push";
 import {
   ACTIONS_FLAG_KEY,
+  AUTO_RETRY_ATTEMPT_CAP,
   MAX_ACTION_TARGETS,
   executeAction,
   proposalForKind,
 } from "./actions";
+import { decisionRailStanding } from "./action-effectiveness";
 import { registerSweep } from "../pipeline/pipeline";
-import { atMostHourly } from "./watch-shared";
+import { alertOnceViaAuditLedger, atMostHourly } from "./watch-shared";
 import {
   ROLE_CAPABILITIES,
   assertClientPartyScope,
   type Principal,
 } from "../auth/rbac";
+import { logger } from "../../lib/logger";
 import { lagosDateString } from "../../lib/lagos-time";
 
 // Standing approvals (round 28 — the autopilot extension of the
@@ -60,12 +65,20 @@ import { lagosDateString } from "../../lib/lagos-time";
 //    first non-empty batch of the day runs.
 //  - The sweep polices itself. Tripwires PAUSE the policy (reversible,
 //    audited, pausedBy null = the system): grantor_inactive,
-//    consent_missing, and failed_targets (half or more of a run's targets
-//    failing means something is structurally wrong — a human must look
-//    before it runs again). Pause vs revoke is deliberate: pause keeps the
-//    grant and stops the engine; revoke is permanent evidence — the row
+//    consent_missing, engagement_closed (round 30: the firm↔client
+//    relationship went dormant — no open/in_progress engagement),
+//    failed_targets (half or more of a run's targets failing at DECISION
+//    time), rail_rejections (round 30: half or more of the PREVIOUS run's
+//    submitted targets are back in 'failed' — submitInvoice succeeds at
+//    enqueue, so only a later re-read sees the rails' verdict), and
+//    run_error (round 30: the run itself threw — fail closed, never
+//    silently retry tomorrow). Pause vs revoke is deliberate: pause keeps
+//    the grant and stops the engine; revoke is permanent evidence — the row
 //    survives, a partial unique index keeps one LIVE grant per
 //    (firm, client, kind), and re-automating takes a fresh grant.
+//  - Retry assembly under a policy additionally drops invoices with
+//    AUTO_RETRY_ATTEMPT_CAP+ submission attempts (round 30) — the autopilot
+//    gives up on rail-hammered paper; the HUMAN proposal keeps showing it.
 //  - Rollout is doubly fail-closed: clerk_action_policies (this module) is
 //    layered ON clerk_actions — either flag dark means no grants, no runs
 //    (unknown flag keys default to false, so shipping this code enables
@@ -106,6 +119,31 @@ async function policiesEnabled(firmId: string): Promise<boolean> {
     (await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId)) &&
     (await isFeatureEnabled(POLICIES_FLAG_KEY, firmId))
   );
+}
+
+// Live engagement = open/in_progress — the client-statement sweep's exact
+// enumeration of "clients the firm actively serves" (completed/archived is a
+// closed book of work). Deliberately a LOCAL helper: rbac's firmEngagesParty
+// counts ANY engagement, archived included, because retention-era reads need
+// that — this stricter wall must not replace it. Reads via the ambient
+// getDb(): the grant path runs in the caller's request context (engagements
+// are firm-keyed RLS), the sweep wraps it in its own firm-bound context.
+async function hasLiveEngagement(
+  firmId: string,
+  clientPartyId: string,
+): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ id: engagementsTable.id })
+    .from(engagementsTable)
+    .where(
+      and(
+        eq(engagementsTable.firmId, firmId),
+        eq(engagementsTable.clientPartyId, clientPartyId),
+        inArray(engagementsTable.status, ["open", "in_progress"]),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
 }
 
 export interface ActionPolicyList {
@@ -167,6 +205,20 @@ export async function grantActionPolicy(
       "POLICIES_DISABLED",
       "Standing approvals are not enabled for this firm",
       503,
+    );
+  }
+  // Offboard wall (round-30 review): a standing approval automates an ACTIVE
+  // firm↔client relationship. The route's assertPartyAccess accepts ANY
+  // engagement — archived included, so retention-era reads keep working —
+  // but a GRANT needs a live one (open/in_progress): a firm must not switch
+  // an autopilot on for a client it has already wound down. The sweep
+  // re-checks this per run (engagement_closed tripwire below) for the
+  // engagement-archived-AFTER-grant path.
+  if (!(await hasLiveEngagement(firmId, clientPartyId))) {
+    throw new DomainError(
+      "NO_LIVE_ENGAGEMENT",
+      "The firm has no open engagement with this client — a standing approval needs a live relationship",
+      409,
     );
   }
   // A standing approval IS a submission authorization — consent gates the
@@ -232,7 +284,122 @@ export async function grantActionPolicy(
     entityId: row.id,
     after: { kind, maxTargetsPerRun: cap },
   });
+  // Round-30 review: the OTHER side of the relationship learns a standing
+  // approval now exists (the grantor already knows — they clicked). Best-
+  // effort like every notification in this module: a send failure must
+  // never fail the grant (autoPauseAndNotify's absorb, mirrored).
+  try {
+    await notifyPolicyGranted(row);
+  } catch (err) {
+    console.error(
+      `action-policy grant: notification for ${row.id} failed:`,
+      err,
+    );
+  }
   return row;
+}
+
+// The grant signal — notifyAutoPause's mirror image, addressed to the side
+// that did NOT click (a client whose accountant switches an autopilot on, or
+// a firm whose client does, must not discover it from the decision ledger).
+// Same rails, same gates as the pause signal:
+//  - the platform messaging kill switch first (PL-02: a dark rail means NO
+//    ledger rows and no provider traffic);
+//  - a STAFF-granted policy notifies the client PARTY via the ordinary alert
+//    fan-out — consent-gated INSIDE fanOutAlert (CORE-03: no live layer-1
+//    grant, no message), SMS default off with no prefs row, pointer-only
+//    entity (SEC-12);
+//  - a CLIENT-granted policy notifies the firm's staff/admins under the
+//    staff-preference OPT-INS (email only verified+enabled, push only when
+//    turned on) — notifyAutoPause's staff resolution, widened from the one
+//    grantor to every staff member (the firm side has no single owner).
+// Exported ONLY for the consent-gate test (a policy replayed after consent
+// lapsed must send nothing); production's one caller is grantActionPolicy.
+export async function notifyPolicyGranted(
+  policy: ClerkActionPolicy,
+): Promise<void> {
+  if (!(await isFeatureEnabled("messaging_notifications", null))) return;
+  const entityId = pointerEntityRef("pol", policy.id);
+  if (policy.grantedByRole !== "client_user") {
+    // PRIVILEGE: explicit app.bypass for the prefs read — alert_preferences
+    // is party-keyed RLS (0013) and this helper also runs from test/raw
+    // callers with no principal; the query is pinned by explicit WHERE to
+    // the policy's own party, nothing broader. The sends ride the caller's
+    // ambient posture (the compliance-pack notify precedent).
+    const [prefs] = await runInBypassContext(() =>
+      getDb()
+        .select()
+        .from(alertPreferencesTable)
+        .where(eq(alertPreferencesTable.clientPartyId, policy.clientPartyId)),
+    );
+    await fanOutAlert({
+      prefs,
+      clientPartyId: policy.clientPartyId,
+      firmId: policy.firmId,
+      templateKey: "automation_granted",
+      entityType: "clerk_action_policy",
+      entityId,
+      // Deadline-reminder default: with no prefs row, SMS stays off.
+      smsDefaultWhenNoPrefs: false,
+    });
+    return;
+  }
+  // PRIVILEGE: explicit app.bypass for the recipient resolution — the grant
+  // path's ambient context is the CLIENT grantor's, which cannot read
+  // sibling staff rows (staff prefs are firm-keyed RLS 0019, memberships are
+  // pre-context tables). Both queries are pinned by explicit WHERE to the
+  // policy's own firm, so the privilege reaches exactly the recipients the
+  // signal is for.
+  const staffPrefs = await runInBypassContext(async () => {
+    const members = await getDb()
+      .select({ userId: membershipsTable.userId })
+      .from(membershipsTable)
+      .where(
+        and(
+          eq(membershipsTable.firmId, policy.firmId),
+          inArray(membershipsTable.role, ["firm_admin", "firm_staff"]),
+        ),
+      );
+    const ids = [...new Set(members.map((m) => m.userId))];
+    if (ids.length === 0) return [];
+    return getDb()
+      .select()
+      .from(staffNotificationPreferencesTable)
+      .where(
+        and(
+          eq(staffNotificationPreferencesTable.firmId, policy.firmId),
+          inArray(staffNotificationPreferencesTable.userId, ids),
+        ),
+      );
+  });
+  for (const prefs of staffPrefs) {
+    if (prefs.emailEnabled && prefs.email && prefs.emailVerifiedAt) {
+      try {
+        await sendMessage({
+          channel: "email",
+          recipientRef: pointerEntityRef("usr", prefs.userId),
+          recipientUserId: prefs.userId,
+          templateKey: "automation_granted",
+          entityType: "clerk_action_policy",
+          entityId,
+        });
+      } catch {
+        // Channel failures are recorded in the messages ledger.
+      }
+    }
+    if (prefs.pushEnabled) {
+      try {
+        await sendPushToUser({
+          userId: prefs.userId,
+          templateKey: "automation_granted",
+          entityType: "clerk_action_policy",
+          entityId,
+        });
+      } catch {
+        // Push failures are likewise recorded by the push module.
+      }
+    }
+  }
 }
 
 // Shared loader for the lifecycle mutations: the row by id (ambient RLS
@@ -393,11 +560,17 @@ function tooManyFailures(requested: number, failed: number): boolean {
 
 async function autoPause(
   policy: ClerkActionPolicy,
+  // pausedReason is free text at the contract layer; this union is the
+  // module's own closed catalogue of tripwires (round 30 added the last
+  // three — see the header).
   reason:
     | "grantor_inactive"
     | "consent_missing"
     | "failed_targets"
-    | "unknown_kind",
+    | "unknown_kind"
+    | "engagement_closed"
+    | "rail_rejections"
+    | "run_error",
 ): Promise<boolean> {
   return runInBypassContext(async () => {
     const [row] = await getDb()
@@ -453,10 +626,21 @@ async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
   if (!(await isFeatureEnabled("messaging_notifications", null))) return;
   const entityId = pointerEntityRef("pol", policy.id);
   if (policy.grantedByRole === "client_user") {
-    const [prefs] = await getDb()
-      .select()
-      .from(alertPreferencesTable)
-      .where(eq(alertPreferencesTable.clientPartyId, policy.clientPartyId));
+    // PRIVILEGE (round-30 review): this read runs under an EXPLICIT bypass
+    // context — before, it hit the raw pool only because the caller's bypass
+    // transaction had already closed, i.e. BYPASSRLS by omission. The sweep
+    // holds no request principal and alert_preferences is party-keyed RLS
+    // (0013), so app.bypass is the honest privilege level; the query is
+    // pinned by explicit WHERE to the policy's own party, nothing broader.
+    // The SENDS stay outside the context on purpose: autocommit ledger
+    // writes, and no transaction may span provider I/O (the statement-
+    // delivery rule).
+    const [prefs] = await runInBypassContext(() =>
+      getDb()
+        .select()
+        .from(alertPreferencesTable)
+        .where(eq(alertPreferencesTable.clientPartyId, policy.clientPartyId)),
+    );
     await fanOutAlert({
       prefs,
       clientPartyId: policy.clientPartyId,
@@ -474,28 +658,36 @@ async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
   // channels honour the staff-preference opt-ins — email only under the
   // proven-ownership gate, push only when the member turned it on. The
   // Automation strip remains the guaranteed surface either way.
-  const memberships = await getDb()
-    .select({ role: membershipsTable.role })
-    .from(membershipsTable)
-    .where(
-      and(
-        eq(membershipsTable.userId, policy.grantedBy),
-        eq(membershipsTable.firmId, policy.firmId),
-      ),
+  // PRIVILEGE (round-30 review): same explicit app.bypass as the party
+  // branch — memberships (cross-firm, pre-context) and staff prefs
+  // (firm-keyed RLS 0019) are reads no principal backs here, both pinned by
+  // explicit WHERE to the policy's own grantor and firm. Sends again run
+  // OUTSIDE the context (autocommit; provider I/O never inside a tx).
+  const prefs = await runInBypassContext(async () => {
+    const memberships = await getDb()
+      .select({ role: membershipsTable.role })
+      .from(membershipsTable)
+      .where(
+        and(
+          eq(membershipsTable.userId, policy.grantedBy),
+          eq(membershipsTable.firmId, policy.firmId),
+        ),
+      );
+    const isStaff = memberships.some(
+      (m) => m.role === "firm_admin" || m.role === "firm_staff",
     );
-  const isStaff = memberships.some(
-    (m) => m.role === "firm_admin" || m.role === "firm_staff",
-  );
-  if (!isStaff) return;
-  const [prefs] = await getDb()
-    .select()
-    .from(staffNotificationPreferencesTable)
-    .where(
-      and(
-        eq(staffNotificationPreferencesTable.userId, policy.grantedBy),
-        eq(staffNotificationPreferencesTable.firmId, policy.firmId),
-      ),
-    );
+    if (!isStaff) return null;
+    const [row] = await getDb()
+      .select()
+      .from(staffNotificationPreferencesTable)
+      .where(
+        and(
+          eq(staffNotificationPreferencesTable.userId, policy.grantedBy),
+          eq(staffNotificationPreferencesTable.firmId, policy.firmId),
+        ),
+      );
+    return row ?? null;
+  });
   if (prefs?.emailEnabled && prefs.email && prefs.emailVerifiedAt) {
     try {
       await sendMessage({
@@ -616,6 +808,23 @@ async function runOnePolicy(
       : "skipped_raced";
   }
 
+  // Offboard tripwire (round-30 review): the grant wall refuses without a
+  // live (open/in_progress) engagement, and this re-check catches the
+  // engagement archived AFTER the grant — a standing approval must not
+  // outlive the relationship it automates. (A full party offboard already
+  // revokes the grant in offboard.ts; this covers the status-only paths
+  // that delete nothing.) Firm-bound context: engagements are firm-keyed
+  // RLS and the policy names its own firm.
+  const engaged = await runRequestContext(
+    { bypass: false, firmId: policy.firmId },
+    () => hasLiveEngagement(policy.firmId, policy.clientPartyId),
+  );
+  if (!engaged) {
+    return (await autoPauseAndNotify(policy, "engagement_closed"))
+      ? "auto_paused"
+      : "skipped_raced";
+  }
+
   // Consent, re-checked per run under the firm's own RLS context exactly
   // as the execute path reads it (executeAction re-checks it again inside
   // Stage A — this earlier check exists to PAUSE the policy with a legible
@@ -630,12 +839,49 @@ async function runOnePolicy(
       : "skipped_raced";
   }
 
+  // Rail-rejection tripwire (round-30 review, mechanism 2): submitInvoice
+  // succeeds at ENQUEUE time, so a decision full of "submitted" outcomes can
+  // still be a batch the rails later rejected wholesale — and the
+  // tooManyFailures check after executeAction only ever sees DECISION-time
+  // failures. Re-read the policy's PREVIOUS run through the effectiveness
+  // report's own helper (decisionRailStanding — one SQL spelling of
+  // nowFailedAgain, never a second): half or more of its submitted targets
+  // back in 'failed' means the autopilot is feeding rejected paper to the
+  // rails, so pause INSTEAD of running today (same half rule as the
+  // decision-time tripwire). Firm-bound read, like the assembly below.
+  const previous = await runRequestContext(
+    { bypass: false, firmId: policy.firmId },
+    async () => {
+      const [prev] = await getDb()
+        .select({ id: clerkActionDecisionsTable.id })
+        .from(clerkActionDecisionsTable)
+        .where(eq(clerkActionDecisionsTable.policyId, policy.id))
+        .orderBy(
+          desc(clerkActionDecisionsTable.createdAt),
+          desc(clerkActionDecisionsTable.id),
+        )
+        .limit(1);
+      return prev ? decisionRailStanding(prev.id) : null;
+    },
+  );
+  if (previous && tooManyFailures(previous.submitted, previous.nowFailedAgain)) {
+    return (await autoPauseAndNotify(policy, "rail_rejections"))
+      ? "auto_paused"
+      : "skipped_raced";
+  }
+
   // Assemble from the live proposal builders under the firm's context —
   // the same targets, same ordering (oldest first), same caps the card
-  // would show a human.
+  // would show a human. The one automation-only narrowing: the attempt cap
+  // (mechanism 1 of the rail-rejection fix) drops retry candidates the
+  // rails have already bounced AUTO_RETRY_ATTEMPT_CAP times — the human
+  // proposal keeps offering them, a person may still choose.
   const proposal = await runRequestContext(
     { bypass: false, firmId: policy.firmId },
-    () => proposalForKind(kind, policy.firmId, policy.clientPartyId),
+    () =>
+      proposalForKind(kind, policy.firmId, policy.clientPartyId, {
+        maxSubmissionAttempts: AUTO_RETRY_ATTEMPT_CAP,
+      }),
   );
   const ids = (proposal?.targets ?? [])
     .slice(0, policy.maxTargetsPerRun)
@@ -704,6 +950,19 @@ export interface ActionPolicySweepResult {
   policiesAutoPaused: number;
 }
 
+// Fleet alert identity (round-30 review): a once-per-Lagos-day, durable
+// operator signal that the sweep auto-paused SOMETHING — the append-only
+// audit ledger is the cross-instance dedup key (health-watch's discipline).
+// The payload carries COUNTS only (pointer-only, SEC-12): per-policy detail
+// lives on each policy's own clerk.action.policy_auto_paused audit row.
+export const ACTION_POLICY_AUTO_PAUSE_ALERT = "ops.action_policy.auto_paused";
+
+const alertAutoPaused = alertOnceViaAuditLedger({
+  action: ACTION_POLICY_AUTO_PAUSE_ALERT,
+  entityType: "action_policy_sweep",
+  actorId: SWEEP_ACTOR,
+});
+
 // One pass: every live, unpaused policy that has not yet claimed today
 // (Lagos calendar). Per-policy failures are isolated — one broken firm
 // must never stall the rest of the fleet.
@@ -747,9 +1006,58 @@ export async function runActionPolicySweep(): Promise<ActionPolicySweepResult> {
         `action-policy sweep: policy ${policy.id} (${policy.kind}) failed:`,
         err,
       );
+      // Fail CLOSED (round-30 review): the day may already be claimed, so
+      // "log and leave live" meant a policy whose run THROWS — a bug, a
+      // dependency down mid-run — would silently retry every day forever,
+      // exactly the unattended-repeat class the tripwires exist for. Pause
+      // it like any other tripwire (CAS + audit + grantor signal); the
+      // pause's own failure is absorbed so one broken policy still cannot
+      // stall the rest of the fleet.
+      try {
+        if (await autoPauseAndNotify(policy, "run_error")) {
+          policiesAutoPaused++;
+        }
+      } catch (pauseErr) {
+        console.error(
+          `action-policy sweep: run_error pause for ${policy.id} failed:`,
+          pauseErr,
+        );
+      }
     }
   }
-  return { policiesDue: due.length, policiesRun, policiesAutoPaused };
+
+  const result: ActionPolicySweepResult = {
+    policiesDue: due.length,
+    policiesRun,
+    policiesAutoPaused,
+  };
+  // Fleet visibility (round-30 review): these counters were computed and
+  // discarded — no operator could see the autopilot fleet move. One info
+  // line per pass, and NEW auto-pauses additionally raise the durable
+  // once-per-Lagos-day audit alert declared above (counts only; best-effort
+  // — a failed alert never fails the sweep, the per-policy audits already
+  // landed). Bypass context: the ledger dedup read + append are ops-level
+  // work with no principal, same as the health-watch sweep's posture.
+  logger.info(result, "action-policy sweep: pass complete");
+  if (policiesAutoPaused > 0) {
+    try {
+      await runInBypassContext(() =>
+        alertAutoPaused(
+          `auto-paused:${today}`,
+          {
+            ...result,
+            day: today,
+            reason:
+              "The action-policy sweep auto-paused standing approvals: tripwires fired and the affected automations are stopped until a human reviews and resumes them.",
+          },
+          "Standing approvals were auto-paused by the action-policy sweep; review the policy audit trail and the firms' Automation strips.",
+        ),
+      );
+    } catch (err) {
+      console.error("action-policy sweep: auto-pause alert failed:", err);
+    }
+  }
+  return result;
 }
 
 // The sweep loop ticks every minute; day-granularity work needs at most an

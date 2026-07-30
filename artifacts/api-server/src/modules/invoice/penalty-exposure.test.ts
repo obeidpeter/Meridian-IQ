@@ -1,6 +1,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   getDb,
   engagementsTable,
@@ -109,11 +111,56 @@ before(async () => {
 test("S104_PER_INVOICE mirrors the published calculator model", () => {
   // artifacts/penalty-calculator/src/lib/penalty.ts — if the calculator's
   // published charges change, this mirror (and this pin) must move with it.
+  // The parity ANCHOR below cross-reads the calculator's source, so the two
+  // copies cannot drift even if this literal pin is updated carelessly.
   assert.deepEqual(S104_PER_INVOICE, {
     small: 25_000,
     medium: 50_000,
     large: 100_000,
   });
+});
+
+test("s.104 parity anchor: the calculator's source literals equal this table", () => {
+  // A REAL cross-read, not two independent pins: the public calculator is a
+  // standalone workspace artifact with no dependency edge to the api-server
+  // (it ships as its own bundle; importing it here would invert that package
+  // boundary and drag its build config into this one), so the test reads the
+  // calculator's SOURCE from the workspace path and regex-extracts the three
+  // band charge literals. Changing either copy without the other now fails
+  // CI here instead of drifting silently.
+  const calcPath = join(
+    import.meta.dirname,
+    "..",
+    "..",
+    "..",
+    "..",
+    "penalty-calculator",
+    "src",
+    "lib",
+    "penalty.ts",
+  );
+  const calcSrc = readFileSync(calcPath, "utf8");
+  const block = calcSrc.match(
+    /S104_PER_INVOICE:\s*Record<TurnoverBand,\s*number>\s*=\s*\{([\s\S]*?)\}/,
+  );
+  assert.ok(
+    block,
+    "the calculator's S104_PER_INVOICE literal parsed — its declaration shape changed; update this extractor with it",
+  );
+  const bands: Record<string, number> = {};
+  for (const m of block[1].matchAll(/\b(small|medium|large)\b\s*:\s*([\d_]+)/g)) {
+    bands[m[1]] = Number(m[2].replace(/_/g, ""));
+  }
+  assert.deepEqual(
+    Object.keys(bands).sort(),
+    ["large", "medium", "small"],
+    "all three band literals were extracted",
+  );
+  assert.deepEqual(
+    bands,
+    S104_PER_INVOICE,
+    "the api-server's s.104 band table must equal the public calculator's — update BOTH copies together",
+  );
 });
 
 test("bandExposure multiplies per band and clamps junk", () => {

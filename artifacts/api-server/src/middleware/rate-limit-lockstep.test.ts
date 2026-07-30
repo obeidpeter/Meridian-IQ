@@ -211,3 +211,123 @@ test("every gateway-touching route handler is in the MODEL rate class", () => {
     `the gateway scan found only ${scanned} gateway-touching handlers (24 at the time of writing) — the registration parser has likely drifted from the route style`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// The bare-infer scan (fix round, TOCTOU class): every PHRASING surface must
+// reach the model through inferPhrasing (gateway.ts) — the wrapper that
+// re-checks the clerk_ai flag and folds every gateway failure to null, so a
+// kill-switch flip between a surface's own flag check and the call can never
+// throw CLERK_DISABLED out of a "template always answers" surface. That
+// drift shipped FOUR times (draft-reply in #93; narrative, digest and
+// client-statement in this round), so the rule is now structural: a module
+// file may contain a bare `<gateway>.infer` call ONLY if it is gateway.ts
+// itself (inferPhrasing's internals) or on the allowlist below, each entry
+// carrying the reason a naked call is correct there. A NEW phrasing surface
+// (template fallback + "clerk"/"template" source tag) must use inferPhrasing
+// — or, if its params don't fit, copy quarterly-note.ts's documented local
+// try/catch AND justify its allowlist entry here.
+// Known limitation: the scan keys on the `.infer` member name with a
+// non-`z` receiver (the codebase convention names the binding `gateway`);
+// laundering the call through an alias of the METHOD itself would evade it
+// — that is a review-visible contortion, not a drift.
+// ---------------------------------------------------------------------------
+
+// modules/-relative path -> why a bare gateway.infer is correct there.
+const BARE_INFER_ALLOWED = new Map<string, string>([
+  // Phrasing surface whose local try/catch (documented in-file) already
+  // closes the TOCTOU — the pre-inferPhrasing shape, kept as-is.
+  ["advisory/quarterly-note.ts", "documented local TOCTOU try/catch"],
+  // Classification/extraction/segmentation surfaces: a typed failure REFUSES
+  // or marks the work item failed — there is no template to fall back to,
+  // and a mid-request kill-switch throw is their documented 503 posture.
+  ["clerk/ask.ts", "intent classification — failure refuses and escalates"],
+  ["clerk/batch.ts", "segmentation — failure fails the batch (typed 502)"],
+  ["clerk/cases.ts", "extraction — failure marks the case failed"],
+  ["clerk/scan-batch.ts", "vision segmentation — coverage-validated, fails the scan"],
+  ["statements/scan-intake.ts", "statement extraction — typed operator-facing failure"],
+  ["desk/triage.ts", "closed-enum triage — failure marks the item failed, sweep moves on"],
+  // Drafting proposals: a failed draft is a typed refusal the user sees and
+  // retries; silently substituting template text would misrepresent it.
+  ["clerk/draft-catalogue.ts", "drafting proposal — typed refusal on failure"],
+  ["clerk/draft-claim.ts", "drafting proposal — typed refusal on failure"],
+  ["clerk/draft-client-import.ts", "drafting proposal — typed refusal on failure"],
+  ["clerk/draft-format.ts", "drafting proposal — typed refusal on failure"],
+  ["clerk/draft-invoice.ts", "drafting proposal — typed refusal on failure"],
+  // Eval/canary machinery: a kill-switch throw must ABORT the run — folding
+  // it to null would silently score zeros and corrupt the cohorts.
+  ["clerk/eval.ts", "eval machinery — a throw aborts the run"],
+  ["clerk/intent-eval.ts", "eval machinery — a throw aborts the run"],
+  ["clerk/phrasing-eval.ts", "eval machinery — a throw aborts the run"],
+  ["clerk/prompt-canary.ts", "canary machinery — a throw aborts the run"],
+  ["clerk/red-team.ts", "adversarial eval generation — a throw aborts the run"],
+]);
+
+function moduleFiles(dir: string, rel = ""): string[] {
+  const out: string[] = [];
+  for (const name of readdir(dir)) {
+    const full = join(dir, name);
+    const relPath = rel ? `${rel}/${name}` : name;
+    if (statSync(full).isDirectory()) out.push(...moduleFiles(full, relPath));
+    else if (name.endsWith(".ts") && !name.endsWith(".test.ts"))
+      out.push(relPath);
+  }
+  return out;
+}
+
+// A member CALL `<receiver>.infer<...>(...)` / `<receiver>.infer(...)` whose
+// receiver is not the zod namespace (`z.infer<...>` is the ubiquitous
+// TYPE-level usage and never a model call). Comments are stripped first —
+// several surfaces' history comments NAME gateway.infer in prose.
+const BARE_INFER_RE = /\b([A-Za-z_$][\w$]*)\.infer\s*[<(]/g;
+
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
+}
+
+test("no module calls gateway.infer outside gateway.ts and the allowlist", () => {
+  const modulesDir = join(import.meta.dirname, "..", "modules");
+  const found = new Set<string>();
+  for (const rel of moduleFiles(modulesDir)) {
+    if (rel === "clerk/gateway.ts") continue; // inferPhrasing's own internals
+    const source = stripComments(readFileSync(join(modulesDir, rel), "utf8"));
+    for (const m of source.matchAll(BARE_INFER_RE)) {
+      if (m[1] === "z") continue;
+      found.add(rel);
+      assert.ok(
+        BARE_INFER_ALLOWED.has(rel),
+        `${rel} calls ${m[1]}.infer directly — a phrasing surface here is the kill-switch TOCTOU that shipped four times. Route it through inferPhrasing (gateway.ts); if a bare call is genuinely correct (no template fallback, or a documented local try/catch), add the file to BARE_INFER_ALLOWED with its reason`,
+      );
+    }
+  }
+  // The allowlist stays honest: an entry whose file no longer contains a
+  // bare call is stale and must be deleted, or it will mask a future one.
+  for (const rel of BARE_INFER_ALLOWED.keys()) {
+    assert.ok(
+      found.has(rel),
+      `${rel} is in BARE_INFER_ALLOWED but no longer contains a bare .infer call — delete the stale entry`,
+    );
+  }
+  assert.ok(found.size >= 10, "the bare-infer scan parsed the module tree");
+});
+
+test("quarterly-note's allowlisted bare call really sits inside a try", () => {
+  // The ONE allowlisted phrasing surface: its TOCTOU protection is a local
+  // try/catch, so pin that shape — a refactor that lifts the call out of the
+  // try silently reopens the CLERK_DISABLED-throw class this scan closes.
+  const source = readFileSync(
+    join(import.meta.dirname, "..", "modules", "advisory", "quarterly-note.ts"),
+    "utf8",
+  );
+  const callAt = source.search(/\bgateway\.infer\s*[<(]/);
+  assert.ok(callAt >= 0, "the bare call exists (else drop this pin AND the allowlist entry)");
+  const tryAt = source.lastIndexOf("try {", callAt);
+  assert.ok(tryAt >= 0, "a try opens before the gateway.infer call");
+  const catchAt = source.indexOf("} catch", callAt);
+  assert.ok(catchAt >= 0, "a catch closes after the gateway.infer call");
+  assert.ok(
+    source.slice(catchAt).includes("return fallback"),
+    "the catch answers with the template fallback",
+  );
+});

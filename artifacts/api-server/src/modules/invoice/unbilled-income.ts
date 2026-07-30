@@ -14,6 +14,7 @@ import {
   patternAlertFor,
   type HistoryRow,
 } from "./recurring-suggest";
+import { ngnRankFor } from "./missing-bills";
 
 // Unbilled-income detection (round-8 idea #1). The flip side of the recurring
 // suggestions: the same deterministic miner that spots "this client bills that
@@ -53,9 +54,55 @@ export function unbilledAlertFor(
   return patternAlertFor(invoices, todayLagos);
 }
 
-// One client's expected-but-absent invoices, biggest money first. The caller
-// (route layer) owns tenancy + SEC-03 party scoping, same as the recurring
-// suggestions this mirrors.
+// Most recent captured non-null fx_rate_to_ngn per foreign (buyer, currency)
+// group of one client's invoice history, keyed `${buyerPartyId}:${currency}`.
+// buyerBillingHistories (recurring-suggest.ts — shared with the suggestions
+// card, which ranks by COUNT and needs no rates) does not carry fx rates, so
+// the ranking rate is a second pass over the same mined year: same firm,
+// client, kind and cancelled/credited exclusions, so the rate can only come
+// from paper the miner itself would see.
+async function latestForeignFxRates(
+  firmId: string,
+  clientPartyId: string,
+  since: string,
+): Promise<Map<string, number>> {
+  const rows = (
+    await getDb().execute<{
+      buyer_party_id: string;
+      currency: string;
+      fx_rate: string;
+    }>(sql`
+      SELECT DISTINCT ON (i.buyer_party_id, i.currency)
+        i.buyer_party_id, i.currency, i.fx_rate_to_ngn::text AS fx_rate
+      FROM invoices i
+      WHERE i.firm_id = ${firmId}
+        AND i.supplier_party_id = ${clientPartyId}
+        AND i.kind = 'invoice'
+        AND i.status NOT IN ('cancelled', 'credited')
+        AND i.currency <> 'NGN'
+        AND i.fx_rate_to_ngn IS NOT NULL
+        AND i.issue_date >= ${since}
+      ORDER BY i.buyer_party_id, i.currency, i.issue_date DESC, i.id DESC
+    `)
+  ).rows;
+  const rates = new Map<string, number>();
+  for (const r of rows) {
+    const rate = Number(r.fx_rate);
+    if (Number.isFinite(rate) && rate > 0) {
+      rates.set(`${r.buyer_party_id}:${r.currency}`, rate);
+    }
+  }
+  return rates;
+}
+
+// One client's expected-but-absent invoices, biggest money (in naira
+// equivalent) first: the top-N cut orders by ngnRankFor (missing-bills.ts —
+// the shared rule: NGN at face value, foreign at the group's most recent
+// captured rate, unconvertible foreign at face value), never by raw face
+// value — a USD retainer must not lose its slot to a smaller NGN one.
+// Displayed amounts stay in the original currency. The caller (route layer)
+// owns tenancy + SEC-03 party scoping, same as the recurring suggestions
+// this mirrors.
 export async function listUnbilledIncome(
   firmId: string,
   clientPartyId: string,
@@ -75,7 +122,22 @@ export async function listUnbilledIncome(
       });
     }
   }
-  alerts.sort((a, b) => Number(b.medianAmount) - Number(a.medianAmount));
+  // Rates are only fetched when a foreign-currency alert actually needs one
+  // — the all-NGN common case stays a single query.
+  const rates = alerts.some((a) => a.currency !== "NGN")
+    ? await latestForeignFxRates(
+        firmId,
+        clientPartyId,
+        lagosDateString(new Date(now.getTime() - LOOKBACK_DAYS * 86_400_000)),
+      )
+    : new Map<string, number>();
+  const rankOf = (a: UnbilledIncomeAlert): number =>
+    ngnRankFor(
+      a.medianAmount,
+      a.currency,
+      rates.get(`${a.buyerPartyId}:${a.currency}`) ?? null,
+    );
+  alerts.sort((a, b) => rankOf(b) - rankOf(a));
   return alerts.slice(0, MAX_PATTERN_ALERTS);
 }
 

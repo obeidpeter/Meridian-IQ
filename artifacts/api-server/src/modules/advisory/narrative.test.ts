@@ -13,6 +13,7 @@ import {
   buildVatRiskTemplate,
   draftEngagementNarrative,
 } from "./narrative.ts";
+import type { ClerkGateway } from "../clerk/gateway.ts";
 import {
   fakeGateway,
   restoreClerkFlag,
@@ -165,6 +166,27 @@ test("a valid phrasing is used; garbage output falls back to the template", asyn
   );
   assert.equal(fallback.source, "template");
   assert.ok(fallback.narrative.includes("62%"));
+});
+
+test("a gateway that throws mid-call (kill-switch TOCTOU) still answers with the template", async () => {
+  // The module's own clerk_ai pre-check passed; then the gateway's internal
+  // assert throws (the flag flipped between check and call). Before the fix
+  // this surfaced CLERK_DISABLED 503 out of a route that promises it never
+  // errors for AI-availability reasons — now inferPhrasing (plus the outer
+  // try) folds ANY gateway failure to the template, source tagged honestly.
+  const exploding: ClerkGateway = {
+    model: "exploding-test",
+    infer: async () => {
+      throw new Error("CLERK_DISABLED flipped mid-request");
+    },
+  };
+  const out = await draftEngagementNarrative(
+    assessmentId,
+    firmPrincipal,
+    exploding,
+  );
+  assert.equal(out.source, "template");
+  assert.ok(out.narrative.includes("62%"));
 });
 
 test("unsupported engagement types refuse rather than invent", async () => {

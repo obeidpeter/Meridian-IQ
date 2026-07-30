@@ -39,7 +39,7 @@ import { firmMoneySummary } from "../invoice/cashflow";
 import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
 import { countFirmChasedTwice } from "../invoice/chase-log";
 import { assertFirmClerkBudget } from "./budget";
-import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
+import { CLERK_FLAG_KEY, inferPhrasing, type ClerkGateway } from "./gateway";
 import { gatewayOrNull } from "./provider";
 import { isAre, plural } from "./text";
 
@@ -448,32 +448,46 @@ export async function generateFirmDigest(
   }
   if (clerkAvailable && gateway) {
     const user = buildDigestUser(facts);
-    const result = await gateway.infer<z.infer<typeof digestOutput>>({
-      purpose: "digest",
-      firmId,
-      promptVersion: DIGEST_PROMPT_VERSION,
-      system: DIGEST_SYSTEM,
-      user,
-      schemaName: "weekly_digest",
-      jsonSchema: digestJsonSchema,
-      validator: digestOutput,
-      inputForHash: `${firmId}:${weekStart.toISOString()}:${JSON.stringify(facts)}`,
-    });
-    // Number grounding: a numeral the facts never stated means the template
-    // answers instead (grounding.ts) — the phrased digest may only re-say
-    // the computed numbers.
-    if (
-      result.ok &&
-      (await ensureGrounded(
-        "digest",
+    // One phrasing call under the digest posture (fix round, after #93): the
+    // bare gateway.infer here was a kill-switch TOCTOU — a clerk_ai flip
+    // between the clerkAvailable check and the call made the gateway's own
+    // assert throw CLERK_DISABLED out of the sweep, failing a generation
+    // pass this module documents as NEVER blocked by the kill switch.
+    // inferPhrasing re-checks the flag and folds every typed gateway failure
+    // to null → template; the outer try keeps the stronger draft-reply.ts
+    // guarantee that even a ledger-insert failure after the provider
+    // answered, or a grounding-check crash, stores the template row with
+    // source tagged honestly.
+    try {
+      const data = await inferPhrasing<z.infer<typeof digestOutput>>(gateway, {
+        purpose: "digest",
         firmId,
-        [result.data.headline, ...result.data.bullets].join("\n"),
+        promptVersion: DIGEST_PROMPT_VERSION,
+        system: DIGEST_SYSTEM,
         user,
-      ))
-    ) {
-      headline = result.data.headline;
-      bullets = result.data.bullets.length ? result.data.bullets : bullets;
-      source = "clerk";
+        schemaName: "weekly_digest",
+        jsonSchema: digestJsonSchema,
+        validator: digestOutput,
+        inputForHash: `${firmId}:${weekStart.toISOString()}:${JSON.stringify(facts)}`,
+      });
+      // Number grounding: a numeral the facts never stated means the template
+      // answers instead (grounding.ts) — the phrased digest may only re-say
+      // the computed numbers.
+      if (
+        data &&
+        (await ensureGrounded(
+          "digest",
+          firmId,
+          [data.headline, ...data.bullets].join("\n"),
+          user,
+        ))
+      ) {
+        headline = data.headline;
+        bullets = data.bullets.length ? data.bullets : bullets;
+        source = "clerk";
+      }
+    } catch {
+      // The template narrative stands; the row below stores it as-is.
     }
   }
 
