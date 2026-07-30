@@ -112,7 +112,7 @@ pnpm --filter @workspace/landing run test
 pnpm --filter @workspace/penalty-calculator run test
 pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-ui run test
 # web builds (each needs BASE_PATH + PORT), then the e2e journeys:
-pnpm --filter @workspace/scripts run e2e        # 77 checks vs real builds + DB (standard seed run)
+pnpm --filter @workspace/scripts run e2e        # 84 checks vs real builds + DB (standard seed run)
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of the above.

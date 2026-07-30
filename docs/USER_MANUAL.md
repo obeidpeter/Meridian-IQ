@@ -225,7 +225,28 @@ set of cards that appear as their data becomes relevant:
 - **Money you usually bill** — months where a customer you normally invoice
   hasn't been invoiced yet ("Draft invoice" raises it), and **Money in with
   no invoice** — bank credits on reconciled statements with no invoice
-  behind them ("Raise invoice").
+  behind them ("Raise invoice"). Where these lists are capped, the biggest
+  money keeps its slot by *naira value* — a foreign-currency habit is
+  ranked at its own captured exchange rate (amounts still display in their
+  own currency).
+- **Penalty exposure** — an amber card that appears when you have invoices
+  past the statutory submission window, pricing what that overdue paper
+  could *cost* under the published s.104 penalty model. It always quotes
+  the **lowest turnover band** — a floor, never a scare figure — shows the
+  oldest few offenders, and its one message is always the same: submitting
+  removes the exposure. An estimate, not advice.
+- **Month-end close** — a checklist that pulls the deterministic advisories
+  into one place when you're closing a month: overdue submissions (with the
+  penalty floor), months you usually bill but haven't, money in with no
+  invoice, expected supplier bills not yet captured, possible double
+  payments, unmatched collection-account payments, and (only when your firm
+  uses the approval policy) drafts waiting on a colleague. Each line is
+  *clear* or *needs attention*, and each is exactly the number its own card
+  shows — the checklist recomputes nothing, so it can never disagree with
+  the cards it summarizes. All clear? It says so.
+- **Clerk suggests** — batches Clerk has assembled for your approval, and
+  the daily automation you can build on them — see
+  [section 5](#5-clerk--the-ai-assistant) → Clerk suggests & automation.
 - **Your week** (firm accounts) — Clerk's weekly digest, and **Your
   compliance month** (client accounts) — Clerk's monthly statement for the
   business. Both appear only when their features are switched on
@@ -386,6 +407,14 @@ stamping from your account.
   you pay.
 - **Payables card** — the dashboard's **Payables** card totals what you owe,
   split into overdue and coming-due weekly buckets, with your top suppliers.
+- **Missing recurring bills** — an amber advisory on the Bills page for
+  vendors you normally capture a bill from every month when this cycle's
+  bill hasn't arrived. An uncaptured bill is unclaimed input VAT plus a
+  payment your cash outlook can't see. The advisory is mined from your own
+  capture history, gives a new bill a few days' grace, and stops asking
+  after ~6 weeks (a cancelled subscription is not a missing bill). Like the
+  dashboard's habit cards, a capped list keeps the biggest money by naira
+  value — foreign-currency bills rank at their own captured rate.
 - **Calendar** — each bill's due date appears on your compliance calendar as
   a *bill due* entry, so committed outflows sit beside your statutory
   deadlines.
@@ -625,14 +654,115 @@ mines them into a "register gaps" list, so the firm can see which claims to
 draft next — and the helpfulness ratings feed a matching operator view of
 the questions Clerk *did* answer.
 
-### Digests, statements and drafting helpers
+### Clerk suggests & automation
+
+*(Feature-flagged — the operator switches proposed actions on, and daily
+automation on top of that; until then the card simply doesn't appear.)*
+
+The **Clerk suggests** card (on the SME dashboard, with a twin on the
+firm's client page in the console) closes the gap between advice and
+action. Every other card ends with "…you should submit these"; this one
+assembles the batch for you — and still **never files anything by itself**.
+
+**Proposed actions.** Clerk builds up to three batches from the same checks
+that power the dashboards — nothing is stored, so a proposal is never
+stale:
+
+- **Submit overdue invoices** — your unsubmitted invoices past the 7-day
+  statutory window, oldest first, with the penalty floor they carry.
+- **Retry failed submissions** — invoices the rails rejected, each showing
+  its last failure code so you can judge whether the cause is fixed (an
+  unchanged invoice will simply fail again).
+- **Draft payment reminders** — one approval drafts a staged reminder for
+  every receivable that's late against its buyer's own rhythm. The drafts
+  are shown once for *you* to copy and send — the platform sends nothing.
+
+**Approving.** **Review & approve** shows exactly what will run, then asks
+you to confirm. Approval executes through the ordinary per-invoice path —
+validation, consent, your firm's approval policy if it has one — and every
+invoice is **re-checked at that moment**: anything that changed since the
+proposal (paid, cancelled, already submitted) is skipped, never
+re-processed. You get a per-invoice results dialog, and the whole decision
+is recorded (see "The run record" below).
+
+**Automate daily.** Approving the same batch every morning gets old, so
+next to the two *submit* kinds (reminders always stay a human job — someone
+has to read and send them) there's an **Automate daily** button. Granting a
+standing approval means:
+
+- Once a day at most, MeridianIQ assembles that batch and runs it **under
+  your name, without asking again** — the confirmation dialog says exactly
+  that, and states the ceiling you chose.
+- **Daily limit (invoices per run)** — you pick how many invoices one run
+  may touch (1–50, preset to **10**). The limit is part of what you
+  consent to, and the dialog's wording restates the number.
+- **Every run re-checks the world first**: the feature switches, whether
+  the person who granted it still has submission rights, the client's
+  consent, whether the firm still actively engages the client — and then
+  every invoice's own eligibility, exactly as a fresh click would. A
+  standing approval is authorization, never a bypass.
+- Automation also knows when to give up: an invoice the rails have already
+  bounced **5 times** stops being offered back to them automatically. A
+  person can still choose it by hand from the proposal — deliberately.
+
+**When automation pauses itself.** The card's header wears an amber
+**"N paused"** pill whenever any of your automations is stopped, and the
+Automation strip says why, in plain words:
+
+- *paused manually* — someone clicked Pause.
+- *the granter's access changed* — the person who set it up left the firm
+  or lost submission rights; their standing instruction stops with them.
+- *compliance consent is missing* — the business's layer-1 consent lapsed;
+  nothing may be submitted, so nothing is.
+- *the engagement has ended* — the firm no longer actively engages this
+  client, so the autopilot must not outlive the relationship.
+- *too many failures in the last run* — half or more of a run's invoices
+  failed outright; something structural needs a human look first.
+- *the rails rejected the last run* — the previous run's submissions were
+  accepted at first but half or more later came back rejected; automation
+  stops feeding the rails rejected paper until someone investigates.
+- *the run itself hit an error* — rather than silently retrying every day,
+  an automation whose run breaks is stopped until a human looks.
+- *this action kind can't run automatically* — a safety stop you should
+  never see in practice.
+
+A pause is **reversible**: fix the cause, click **Resume**, and the next
+run re-checks everything anyway. **Revoke** is permanent — the grant
+becomes evidence, and re-automating takes a fresh grant.
+
+**The run record.** Every approved batch — clicked or automatic — lands in
+the card's recent-runs strip: who approved it, on what evidence, and what
+happened to each invoice (submitted / skipped / failed, with reasons).
+Automatic runs are tagged **"· auto"** and always name the person whose
+standing approval authorized them — the paper trail stays one human deep.
+The record is permanent: it can never be edited or deleted, by anyone.
+The console's client page adds an **effectiveness** view on top — whether
+the batches *worked*: where the submitted invoices stand now (stamped,
+failed again, still in flight) and the penalty exposure the automation
+actually removed.
+
+**You're told, not surprised.** When your accountant switches automation on
+for your business, the business is notified over its alert channels (with
+its consent, pointer-only like every alert); when a business account sets
+one up, the firm's staff are notified per their own notification
+preferences. And when an automation pauses itself, the person who granted
+it is notified through the same rails — the card is the source of truth,
+but you shouldn't have to open it to learn your autopilot stopped.
 
 - **Weekly firm digest** *(opt-in)* — a short Monday briefing per firm:
-  submissions, failures, money expected this week, who's worth chasing,
-  unbilled habits, unmatched credits. Every fact is computed from your
-  records; Clerk only phrases them. Staff opt in individually (**Your
-  notifications** card on the console portfolio — email delivery requires a
-  verified address; a 6–8 character code confirms it).
+  unsubmitted and overdue invoices (with the estimated s.104 penalty floor
+  when anything is overdue), failures, money expected this week, who's
+  worth chasing (including invoices already chased twice), unbilled
+  habits, expected supplier bills not yet captured, unmatched bank
+  credits, supplier bills due or overdue this week, unmatched
+  collection-account payments, drafts waiting on a colleague's approval
+  (only when the firm uses the policy — "0 waiting" and "no policy" never
+  read the same), and a VAT-return countdown once the monthly deadline is
+  within a week. Every fact is computed from your records; Clerk only
+  phrases them — and a plain template answers even when Clerk is off.
+  Staff opt in individually (**Your notifications** card on the console
+  portfolio — email delivery requires a verified address; a 6–8 character
+  code confirms it).
 - **Monthly client statement** *(opt-in)* — a per-client compliance summary
   of each closed month, shown on the SME dashboard and offered over the
   alert rails (with the client's layer-1 consent).
@@ -715,6 +845,12 @@ invoice list — a partner can reach any failing invoice in three clicks.
   deactivated (the reference stops resolving; the record stays). On
   deployments without a configured provider the reference is simulated —
   ask your administrator ([section 14](#14-for-administrators)).
+  **Unmatched inbound payments** — when money arrives on a live collection
+  account but quotes no invoice the platform can bind it to, an amber
+  advisory under the accounts card counts those payments per account over
+  the trailing 90 days (first/last seen included). Amounts were
+  deliberately never recorded — reconcile the details against your payment
+  provider's own statement. The weekly digest carries the same count.
 - **Monthly compliance pack** — also on the drill-down: pick a month and
   **download the pack (PDF)** — a branded, client-ready summary of that
   client's month: a cover note, the document register, receivables,
@@ -761,6 +897,14 @@ Money / Compliance / Connections & delivery**:
   snapshot, Clerk throughput, and its own cover note.
 - **Compliance calendar** — the month ahead of statutory deadlines across
   every client, from the same clocks each client's dashboard shows.
+- **Compliance scorecard** — the client book as a posture league table over
+  the trailing 90 days: issued volume, the share of accepted invoices that
+  cleared inside the statutory window, failure share, median days from
+  issue to stamp, current overdue count, and captured bills without a
+  stamp check — with an improving/worsening arrow against the previous 90
+  days, so it answers "who's slipping", not just "who's bad". Clients
+  needing attention sort first; rates with too little data show blank
+  rather than a scary 0%. Posture, never blame.
 - **Recurring rejection causes** — the firm's own failed submissions
   clustered into catalogue-grounded causes, with trend.
 - **Clerk adoption & impact** — per-client capture volume, kept-rate and
@@ -1253,13 +1397,16 @@ your operator to flip its flag (Compliance Desk → Feature flags).
 | `credit_readiness` | R3 | Credit layer (dormant by design) | Dark |
 | `bank_data_room` | R4 | Bank data room (dormant by design) | Dark |
 | `clerk_ai` | R3 | Every Clerk AI surface — this is the kill switch: flipping it off instantly disables them all | **On** |
+| `clerk_actions` | R3 | Clerk's proposed actions ("Clerk suggests" — human-approved batch execution) | Dark |
+| `clerk_action_policies` | R3 | Daily automation on top of proposed actions (standing approvals) — both flags must be on | Dark |
 
 The credit/bank R3/R4 flags stay dark until their business gates pass — that's
 policy, not an oversight (`clerk_ai` is the exception: it ships on, and exists
-to be switched *off*). Five further Clerk flags are opt-in and unseeded, so
+to be switched *off*). Six further Clerk flags are opt-in and unseeded, so
 they default dark until an operator creates and enables them:
 `clerk_digest` (weekly firm digests), `clerk_client_statements` (monthly
 client statements), `clerk_auto_eval` (nightly eval run — spends tokens),
+`clerk_auto_phrasing_eval` (nightly phrasing eval — spends tokens),
 `clerk_triage` (escalation routing suggestions), and `clerk_red_team`
 (adversarial eval-fixture generation — spends tokens).
 
@@ -1351,9 +1498,12 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **77 headless user-journey checks** on the
+  path-router and drives **84 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
-  an already-collected billing month) covering: auth incl. throttling,
+  an already-collected billing month). The journeys live as ordered groups
+  in `scripts/src/e2e/journeys/` (roles, money, controls, lifecycle,
+  integration — the run order is load-bearing, since journeys mutate the
+  shared seed), covering: auth incl. throttling,
   password change and reset, the full 2FA enrol → challenge → disable
   journey, the operator Desk, admin advisory, the auditor's read-only
   boundary, consent round-trip, supplier bills (payment flags, the payables
@@ -1362,7 +1512,11 @@ if the running server's version differs, every app shows a dismissible
   and its consent-gated notify, the maker-checker submission-approval
   round-trip (409 without a second approver, 202 with one, policy restored),
   collection accounts (provisioning and the fail-closed inbound webhook
-  settling a stamped invoice), the
+  settling a stamped invoice), Clerk automation (the operator lights the
+  action flags, a live proposal picks up a backdated overdue draft,
+  approval submits it and records the decision, and a standing approval
+  grants with its chosen daily limit, pauses, resumes and revokes — flags
+  restored to dark as their own check), the
   credit-note lifecycle, the SME dashboard/search/bulk-submit/recurring
   flows, and the integration layer
   end-to-end (API-key mint / bearer auth / revocation, a webhook delivery
@@ -1524,6 +1678,9 @@ on the invoice itself.
 | **Claims register** | The store of approved rule statements Ask Clerk answers from, maintained under maker-checker (draft → review → active). |
 | **Maker-checker** | Two-person control: whoever proposes can never be the one who approves. Applies to register claims (draft vs approve) and — when a firm switches the policy on — invoice submission (approver vs submitter). |
 | **Digest** | Clerk's weekly firm briefing (opt-in) — every fact computed from records, Clerk only phrases. |
+| **Proposed action** | A batch Clerk assembles from the live dashboard checks (submit overdue / retry failed / draft reminders) for a human to approve — computed fresh each time, never stored, and nothing runs until someone approves it. |
+| **Standing approval** | A durable, revocable grant that lets the platform run one proposed-action kind for one client daily, unattended, under the granter's name and up to a chosen per-run limit — re-validated on every run, and self-pausing when anything looks wrong. |
+| **Run record** | The permanent, append-only record of every approved batch: who approved it (automatic runs are tagged "· auto" and name the standing approval's granter), the evidence at decision time, and each invoice's outcome — submitted, skipped or failed, with reasons. |
 | **Error catalogue** | The living map from every rejection code to a plain-language cause and fix. |
 | **Escalation** | A client's "I'm stuck" — lands in the operator queue with context. |
 | **Case** | A unit of Compliance Desk work: an escalation, a dead-lettered failure, or an unmapped code. |

@@ -239,7 +239,11 @@ dark means proposals answer empty (the cards hide) and execution refuses
   `invalid` (draft untouched); rail-path `DomainError`s are `failed`;
   chaser successes are `drafted`.
 - **The decision is the durable artifact** (`clerk_action_decisions`,
-  firm-keyed RLS migration 0028): who approved, on what pre-execution
+  firm-keyed RLS migration 0028; **append-only since migration 0030** —
+  the shared `meridian_block_mutations` trigger blocks UPDATE/DELETE like
+  every sibling Clerk evidence table, so the row that answers "who
+  authorized this filing" is tamper-evident at the data layer, not just
+  witnessed by its audit pointer): who approved, on what pre-execution
   evidence, over which targets, with per-target outcomes and honest
   tallies; surfaced via `GET /clerk/action-decisions` (newest 10) and a
   pointer-only `clerk.action.executed` audit event (SEC-12) — neither
@@ -260,8 +264,12 @@ The follow-ups this list has carried have all since shipped: the
 chaser's stage/phrase split (no transaction spans a model call — round
 23), the bulk-submit conversion (the last batch surface now commits per
 item in the caller's posture outside the request transaction, closing
-the audit-lock convoy class platform-wide), and the action-effectiveness
-report (round 29 — below).
+the audit-lock convoy class platform-wide — and, round 30, bounded by a
+wall clock again: `BULK_DEADLINE_MS` (25s) is checked BEFORE each item
+starts, so every row is either fully attempted or untouched, untouched
+rows flow into the honest `remaining` count for the UI's
+repeat-until-done loop, and items completed before the deadline stay
+committed), and the action-effectiveness report (round 29 — below).
 
 ### Standing approvals (round 28 — the policy autopilot)
 
@@ -284,29 +292,63 @@ sweep then runs it — but a grant is authorization, never a bypass:
   (CORE-03, `403 CONSENT_REQUIRED`), the SEC-03 party wall +
   `assertPartyAccess`, `invoice.submit`, one live grant per kind
   (`409 POLICY_EXISTS`, backstopped by a partial unique index
-  `WHERE revoked_at IS NULL`).
+  `WHERE revoked_at IS NULL`) — and, round 30, the **engagement wall**: a
+  grant REFUSES `409 NO_LIVE_ENGAGEMENT` unless the firm holds a live
+  (open/in_progress) engagement with the client. `assertPartyAccess`
+  deliberately accepts ANY engagement, archived included, so retention-era
+  reads keep working — but a firm must not switch an autopilot on for a
+  client it has already wound down (`hasLiveEngagement` is a stricter
+  LOCAL wall, never a replacement for rbac's `firmEngagesParty`).
+- **The grant's per-run cap is a chosen number.** `maxTargetsPerRun`
+  (contract 1..50, defaulting to the batch maximum server-side) is entered
+  in the grant dialogs' "Daily limit (invoices per run)" input — default
+  **10** (`POLICY_CAP_DEFAULT` in `@workspace/format`, alongside
+  `parsePolicyCap`, the one gate both dialogs run the raw input through) —
+  and the consent-grade grant copy (`policyGrantDescription`) restates the
+  chosen ceiling, so the number being consented to is in the sentence.
 - **Every run re-validates the world.** Both flags; the grantor's CURRENT
   membership still carries `invoice.submit` in this firm (a client_user
   grantor only for their OWN party) — else the policy auto-pauses
-  `grantor_inactive`; consent — else `consent_missing`; then
-  `executeAction` re-checks every target's predicate per invoice exactly
-  as a fresh click would. Batches assemble from the SAME live proposal
-  builders the cards render (`proposalForKind`), capped at the grant's
-  `maxTargetsPerRun`, oldest first.
+  `grantor_inactive`; the engagement wall again — an engagement archived
+  AFTER the grant pauses it `engagement_closed` (a standing approval must
+  not outlive the relationship it automates; a full offboard already
+  revokes grants, this catches the status-only paths); consent — else
+  `consent_missing`; then the **rail-rejection tripwire**: the PREVIOUS
+  run's decision is re-read through `decisionRailStanding` (the
+  effectiveness report's own SQL — one spelling of `nowFailedAgain`), and
+  if half or more of its submitted targets are back in `failed` the policy
+  pauses `rail_rejections` INSTEAD of running today — `submitInvoice`
+  succeeds at enqueue, so only a later re-read ever sees the rails'
+  verdict. Only then does `executeAction` re-check every target's
+  predicate per invoice exactly as a fresh click would. Batches assemble
+  from the SAME live proposal builders the cards render
+  (`proposalForKind`), capped at the grant's `maxTargetsPerRun`, oldest
+  first — with one automation-only narrowing (rail-rejection mechanism 1):
+  retry assembly under a policy drops invoices with
+  `AUTO_RETRY_ATTEMPT_CAP` (5) or more total submission attempts — the
+  autopilot gives up on rail-hammered paper for good, while the HUMAN
+  proposal keeps offering it (a person may still deliberately re-choose
+  it).
 - **At most once per Lagos day, exactly once across instances.** The sweep
   claims the policy's `lastRunDay` cell with a compare-and-set BEFORE
   executing; the loser of a concurrent claim skips. An EMPTY assembly
   leaves the day unclaimed — the hourly pass keeps watching and the first
   non-empty batch of the day runs. Registered via `registerSweep`
   (`atMostHourly`), per-policy failures isolated.
-- **The sweep polices itself.** A run where half or more of the targets
-  fail auto-pauses the policy (`failed_targets`) — something is
-  structurally wrong and a human must look before it runs again. A row
-  whose `kind` falls outside `POLICY_KINDS` (an ops fix-up, a backfill
-  bug — the API never writes one) pauses as `unknown_kind` instead of
-  falling through the proposal dispatcher into the chaser builder's
-  model calls. Pause is reversible (a human resume clears a tripwire;
-  the next run re-checks everything anyway); revoke is permanent
+- **The sweep polices itself.** The tripwire catalogue (round 30 added the
+  last three): `grantor_inactive`, `consent_missing`, `engagement_closed`
+  and `rail_rejections` (all above); `failed_targets` — a run where half
+  or more of the targets fail at DECISION time (something is structurally
+  wrong and a human must look before it runs again); `unknown_kind` — a
+  row whose `kind` falls outside `POLICY_KINDS` (an ops fix-up, a backfill
+  bug — the API never writes one) pauses instead of falling through the
+  proposal dispatcher into the chaser builder's model calls; and
+  `run_error` — a policy whose run THROWS (a bug, a dependency down
+  mid-run) is paused like any other tripwire instead of silently retrying
+  every day forever — fail closed, with the pause's own failure absorbed
+  so one broken policy still cannot stall the fleet. Pause is reversible
+  (a human resume clears a tripwire — the audit records the cleared
+  reason; the next run re-checks everything anyway); revoke is permanent
   evidence — the row survives and re-automating takes a fresh grant.
   Tripwire pauses audit as `clerk.action.policy_auto_paused` with the
   system actor (`action-policy-sweep`); grant/pause/resume/revoke audit
@@ -316,17 +358,46 @@ sweep then runs it — but a grant is authorization, never a bypass:
   STAFF-granted policy after offboarding deleted the client logins that
   could have paused it (the staff membership survives, and consent is
   client-owned and untouched).
+- **Fleet visibility (round 30).** Every sweep pass logs its result
+  (`policiesDue` / `policiesRun` / `policiesAutoPaused`), and a pass that
+  auto-paused ANYTHING additionally raises a durable once-per-Lagos-day
+  operator alert (`ops.action_policy.auto_paused`,
+  `alertOnceViaAuditLedger` — the health-watch discipline: the append-only
+  audit ledger is the cross-instance dedup key). The alert payload carries
+  COUNTS only (SEC-12) — per-policy detail lives on each policy's own
+  `clerk.action.policy_auto_paused` audit row — and is best-effort: a
+  failed alert never fails the sweep.
 - **The paper trail stays one human deep.** A policy run's decision row
   carries `policyId` and `decidedBy` = the GRANTOR (maker-checker still
   bites per row inside `submitInvoice`); the batch audit carries the
-  policy pointer. Eyes-open caveat: the PER-INVOICE lifecycle events and
-  audits inside `submitInvoice` name the grantor with no policy marker —
-  a row-level reader correlates through the decision row. Surfaces: both
-  cards grow an Automation strip (status line, pause/resume/revoke) and
-  an "Automate daily" affordance next to each automatable proposal —
-  consent-grade grant copy lives in `@workspace/format`
-  (`policyGrantDescription`); BOTH cards tag policy-run lines "· auto"
-  in their run-record strips (SME's landed in round 29).
+  policy pointer — and the decision ledger itself is append-only
+  (migration 0030, above). Eyes-open caveat: the PER-INVOICE lifecycle
+  events and audits inside `submitInvoice` name the grantor with no
+  policy marker — a row-level reader correlates through the decision row.
+  Surfaces: both cards grow an Automation strip (status line,
+  pause/resume/revoke) and an "Automate daily" affordance next to each
+  automatable proposal — consent-grade grant copy lives in
+  `@workspace/format` (`policyGrantDescription`, restating the chosen
+  per-run cap); BOTH cards tag policy-run lines "· auto" in their
+  run-record strips (SME's landed in round 29), and both wear an amber
+  "N paused" header pill whenever any live grant is paused. Console-side,
+  every write affordance on the card (approve, automate,
+  pause/resume/revoke) renders only for principals holding
+  `invoice.submit` — a read-only viewer (auditor) sees status, pill and
+  run record, never buttons that could only 403.
+- **Granting notifies the OTHER side (round 30).** The grantor already
+  knows — they clicked — so `notifyPolicyGranted` (the pause signal's
+  mirror, same rails, same gates, behind the platform-wide
+  `messaging_notifications` kill switch) tells the side that did NOT: a
+  STAFF-granted policy notifies the client PARTY through the ordinary
+  alert fan-out (`automation_granted` template — CORE-03 consent-gated
+  inside `fanOutAlert`, pointer-only entity, SMS off by default with no
+  prefs row); a CLIENT-granted policy notifies the firm's staff/admins
+  under the staff-preference OPT-INS (email only verified+enabled, push
+  only when turned on — `notifyAutoPause`'s staff resolution widened from
+  the one grantor to every staff member, since the firm side has no
+  single owner). Best-effort like every notification in the module: a
+  send failure never fails the grant.
 
 ### Automation accountability (round 29)
 
@@ -451,6 +522,29 @@ The unattended half of the arc: evidence and signals, all deterministic.
 Common contract: facts/grounding are deterministic, the model only phrases or
 names, a template fallback always answers, and nothing is stored or sent
 without a human owner.
+
+**How a phrasing surface reaches the model** — through `inferPhrasing`
+(`modules/clerk/gateway.ts`): one call that re-checks the `clerk_ai` flag and
+folds EVERY typed gateway failure (kill switch, missing provider, the budget
+backstop, discarded output) to null, so the caller's deterministic template
+answers — never an error, and never the kill-switch TOCTOU where a `clerk_ai`
+flip between a surface's own flag check and its bare `gateway.infer` call
+threw `CLERK_DISABLED 503` out of a route that promises it cannot error for
+AI-availability reasons. That drift shipped four times (draft-reply in #93;
+the advisory narrative, the weekly digest and the monthly client statement in
+the round-30 fix wave, all three now wrapped — each also keeps an outer try
+so even a post-provider ledger failure or a grounding-check crash still
+answers with the template, source tagged honestly). The rule is now
+STRUCTURAL: a source-scan test (`middleware/rate-limit-lockstep.test.ts`,
+"no module calls gateway.infer outside gateway.ts and the allowlist") fails
+on any bare `<gateway>.infer` call in a module file unless the file is on a
+reasoned allowlist — classification/extraction surfaces whose typed failure
+correctly refuses, drafting proposals whose failure is a typed refusal the
+user retries, eval/canary machinery where a throw must abort the run, and
+quarterly-note.ts's documented local try/catch. A NEW phrasing surface
+(template fallback + "clerk"/"template" source tag) must use `inferPhrasing`
+or justify its allowlist entry; the scan also fails on stale allowlist
+entries.
 
 - **Failure explainer** (`modules/clerk/explain.ts`) — catalogue-grounded:
   the model only rephrases; kill switch/budget failures fall back to the
@@ -756,7 +850,12 @@ call the model.
   suggestions so the two cards can never disagree about what a habit is;
   alerts only inside a bounded window (grace 5 days, lapsed after 45 — an
   ended arrangement stops nagging); surfaced as an SME dashboard card and a
-  fact line in the weekly digest (`countFirmUnbilled`).
+  fact line in the weekly digest (`countFirmUnbilled`). The top-N cut
+  RANKS by naira equivalent (`ngnRankFor`, shared with missing-bills.ts:
+  NGN at face value, foreign currency at the group's most recent captured
+  `fx_rate_to_ngn`, unconvertible foreign at face value — under-rank and
+  say so, never an assumed rate), so a USD retainer cannot lose its slot
+  to a smaller NGN habit; DISPLAYED amounts stay in the original currency.
 - **Unmatched-credit detector** (`modules/invoice/unmatched-credits.ts`,
   `GET /unmatched-credits`, nothing stored) — unbilled-income's compliance
   mirror: money that came IN with no invoice behind it. Parsed credit lines
@@ -875,7 +974,10 @@ call the model.
   subscription is not a missing bill); an uncaptured bill is unclaimed
   input VAT plus a payment the cash outlook cannot see. Amber advisory on
   the SME bills page; firm-wide digest fact (`countFirmMissingBills`,
-  live-engagement-scoped like `countFirmUnbilled`).
+  live-engagement-scoped like `countFirmUnbilled`). Ranking is the same
+  naira-equivalent rule as the unbilled card (`ngnRankFor` lives here):
+  the alert cap keeps the biggest money in NGN terms, display currency
+  unchanged.
 - **Net cash position** (`modules/invoice/net-position.ts`,
   `GET /dashboard/net-position`, nothing stored) merges the outlook's
   projected inflows with the payables summary's committed outflows per

@@ -325,6 +325,17 @@ firm-keyed RLS via migration 0024; `modules/invoice/approvals.ts`,
   live approval was recorded by the person about to submit reads as "not
   waiting" everywhere, yet THAT person's submit still 409s — the guard's
   approver ≠ submitter rule bites per-actor at submit time.
+- **The standing-approval engagement wall** (round 30 — the automation
+  sibling of these controls; full detail in `docs/clerk-ai.md` § Standing
+  approvals): granting a Clerk standing approval REFUSES
+  `409 NO_LIVE_ENGAGEMENT` unless the firm holds a live
+  (open/in_progress) engagement with the client — `assertPartyAccess`
+  deliberately accepts archived engagements so retention-era reads keep
+  working, but an autopilot must not be switched on for a client the firm
+  has wound down. The daily sweep re-checks the same wall per run and
+  auto-pauses the grant `engagement_closed` when the engagement lapses
+  after the grant (the status-only paths a full offboard — which revokes
+  grants outright — never touches).
 
 ## Collection accounts
 
