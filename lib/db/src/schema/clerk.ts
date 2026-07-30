@@ -112,6 +112,11 @@ export const claimRecordsTable = pgTable(
 export const clerkCaseKindEnum = pgEnum("clerk_case_kind", [
   "extraction",
   "question",
+  // Notice Desk: a tax-authority notice awaiting review. Same capture rails
+  // and review queue as extraction cases, its own proposal column
+  // (noticeExtraction) and approve path (creates an obligation, never an
+  // invoice). Appended trailing — enum values only ever grow at the end.
+  "notice",
 ]);
 
 export const clerkCaseStatusEnum = pgEnum("clerk_case_status", [
@@ -161,6 +166,18 @@ export interface ClerkExtraction {
   // Supplier memory: the approved case whose fixture rode along as the
   // one-shot example for this extraction (absent when extracted cold).
   exemplarCaseId?: string;
+}
+
+// Notice Desk: the proposed reading of a tax-authority notice (kind "notice"
+// cases). Reuses the ExtractionField shape — the review UI and corrections
+// machinery key on field arrays — but has no lines, and carries the
+// model-classified noticeType from the closed catalogue in notice-prompts.ts.
+// Proposal only: the obligation row is created by the human approve step.
+export interface ClerkNoticeExtraction {
+  fields: ExtractionField[];
+  noticeType: string;
+  promptVersion: string;
+  model: string;
 }
 
 // Deterministic pre-approval checks run over the extraction (never the model):
@@ -237,6 +254,9 @@ export const clerkCasesTable = pgTable("clerk_cases", {
   // Recorder-reported length of a voice note, in seconds (voice sources only).
   sourceDurationSec: integer("source_duration_sec"),
   extraction: jsonb("extraction").$type<ClerkExtraction>(),
+  // Notice Desk (kind "notice" cases): the proposed notice reading. Mutually
+  // exclusive with `extraction` — a case is one document kind for life.
+  noticeExtraction: jsonb("notice_extraction").$type<ClerkNoticeExtraction>(),
   // Recomputed on every successful (re-)extraction; see modules/clerk/preflight.
   preflight: jsonb("preflight").$type<PreflightIssue[]>(),
   // The async batch this case was created from, when it came out of one

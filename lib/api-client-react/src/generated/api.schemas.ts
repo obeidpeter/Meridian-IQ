@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.56.0
+ * OpenAPI spec version: 0.57.0
  */
 export interface HealthStatus {
   status: string;
@@ -3545,6 +3545,7 @@ export type ClerkCaseKind = typeof ClerkCaseKind[keyof typeof ClerkCaseKind];
 export const ClerkCaseKind = {
   extraction: 'extraction',
   question: 'question',
+  notice: 'notice',
 } as const;
 
 export type ClerkCaseStatus = typeof ClerkCaseStatus[keyof typeof ClerkCaseStatus];
@@ -3584,6 +3585,13 @@ export type ClerkCasePreflightItem = {
   severity?: ClerkCasePreflightItemSeverity;
 };
 
+export interface ClerkNoticeExtraction {
+  fields: ClerkExtractionField[];
+  noticeType: string;
+  promptVersion: string;
+  model: string;
+}
+
 export interface ClerkCorrection {
   field: string;
   /** @nullable */
@@ -3615,6 +3623,7 @@ export interface ClerkCase {
   /** @nullable */
   preflight?: ClerkCasePreflightItem[] | null;
   extraction?: ClerkExtraction | null;
+  noticeExtraction?: ClerkNoticeExtraction | null;
   /** @nullable */
   question?: string | null;
   answer?: ClerkAnswer | null;
@@ -3653,8 +3662,17 @@ export const ClerkCaseCreateInputSourceType = {
   voice: 'voice',
 } as const;
 
+export type ClerkCaseCreateInputDocumentKind = typeof ClerkCaseCreateInputDocumentKind[keyof typeof ClerkCaseCreateInputDocumentKind];
+
+
+export const ClerkCaseCreateInputDocumentKind = {
+  invoice: 'invoice',
+  notice: 'notice',
+} as const;
+
 export interface ClerkCaseCreateInput {
   sourceType: ClerkCaseCreateInputSourceType;
+  documentKind?: ClerkCaseCreateInputDocumentKind;
   name?: string;
   contentType?: string;
   imageBase64?: string;
@@ -3664,6 +3682,177 @@ export interface ClerkCaseCreateInput {
   /** @minimum 0 */
   durationSec?: number;
   allowDuplicate?: boolean;
+}
+
+export type NoticeDecisionInputAction = typeof NoticeDecisionInputAction[keyof typeof NoticeDecisionInputAction];
+
+
+export const NoticeDecisionInputAction = {
+  approve: 'approve',
+  reject: 'reject',
+  escalate: 'escalate',
+} as const;
+
+export type NoticeDecisionInputNoticeType = typeof NoticeDecisionInputNoticeType[keyof typeof NoticeDecisionInputNoticeType];
+
+
+export const NoticeDecisionInputNoticeType = {
+  assessment: 'assessment',
+  demand: 'demand',
+  information_request: 'information_request',
+  audit: 'audit',
+  penalty: 'penalty',
+  reminder: 'reminder',
+  other: 'other',
+} as const;
+
+export type NoticeDecisionInputAuthority = typeof NoticeDecisionInputAuthority[keyof typeof NoticeDecisionInputAuthority];
+
+
+export const NoticeDecisionInputAuthority = {
+  firs: 'firs',
+  state_irs: 'state_irs',
+  customs: 'customs',
+  other: 'other',
+} as const;
+
+export type NoticeDecisionInputTaxType = typeof NoticeDecisionInputTaxType[keyof typeof NoticeDecisionInputTaxType];
+
+
+export const NoticeDecisionInputTaxType = {
+  vat: 'vat',
+  cit: 'cit',
+  wht: 'wht',
+  paye: 'paye',
+  stamp_duty: 'stamp_duty',
+  other: 'other',
+} as const;
+
+export interface NoticeDecisionInput {
+  action: NoticeDecisionInputAction;
+  reason?: string;
+  firmId?: string;
+  clientPartyId?: string;
+  noticeType?: NoticeDecisionInputNoticeType;
+  authority?: NoticeDecisionInputAuthority;
+  reference?: string;
+  taxType?: NoticeDecisionInputTaxType;
+  period?: string;
+  amount?: string;
+  currency?: string;
+  issueDate?: string;
+  responseDueDate?: string;
+  notes?: string;
+}
+
+export type ObligationStatus = typeof ObligationStatus[keyof typeof ObligationStatus];
+
+
+export const ObligationStatus = {
+  open: 'open',
+  responded: 'responded',
+  closed: 'closed',
+} as const;
+
+export interface Obligation {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  /** @nullable */
+  sourceCaseId?: string | null;
+  noticeType: string;
+  authority: string;
+  /** @nullable */
+  reference?: string | null;
+  /** @nullable */
+  taxType?: string | null;
+  /** @nullable */
+  period?: string | null;
+  /** @nullable */
+  amount?: string | null;
+  /** @nullable */
+  currency?: string | null;
+  /** @nullable */
+  issueDate?: string | null;
+  responseDueDate: string;
+  status: ObligationStatus;
+  /** @nullable */
+  notes?: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoticeDecisionResult {
+  case: ClerkCase;
+  obligation?: Obligation;
+}
+
+export interface ObligationList {
+  obligations: Obligation[];
+}
+
+export type CreateObligationInputNoticeType = typeof CreateObligationInputNoticeType[keyof typeof CreateObligationInputNoticeType];
+
+
+export const CreateObligationInputNoticeType = {
+  assessment: 'assessment',
+  demand: 'demand',
+  information_request: 'information_request',
+  audit: 'audit',
+  penalty: 'penalty',
+  reminder: 'reminder',
+  other: 'other',
+} as const;
+
+export type CreateObligationInputAuthority = typeof CreateObligationInputAuthority[keyof typeof CreateObligationInputAuthority];
+
+
+export const CreateObligationInputAuthority = {
+  firs: 'firs',
+  state_irs: 'state_irs',
+  customs: 'customs',
+  other: 'other',
+} as const;
+
+export type CreateObligationInputTaxType = typeof CreateObligationInputTaxType[keyof typeof CreateObligationInputTaxType];
+
+
+export const CreateObligationInputTaxType = {
+  vat: 'vat',
+  cit: 'cit',
+  wht: 'wht',
+  paye: 'paye',
+  stamp_duty: 'stamp_duty',
+  other: 'other',
+} as const;
+
+export interface CreateObligationInput {
+  clientPartyId: string;
+  noticeType: CreateObligationInputNoticeType;
+  authority: CreateObligationInputAuthority;
+  reference?: string;
+  taxType?: CreateObligationInputTaxType;
+  period?: string;
+  amount?: string;
+  currency?: string;
+  issueDate?: string;
+  responseDueDate: string;
+  notes?: string;
+}
+
+export type UpdateObligationStatusInputStatus = typeof UpdateObligationStatusInputStatus[keyof typeof UpdateObligationStatusInputStatus];
+
+
+export const UpdateObligationStatusInputStatus = {
+  open: 'open',
+  responded: 'responded',
+  closed: 'closed',
+} as const;
+
+export interface UpdateObligationStatusInput {
+  status: UpdateObligationStatusInputStatus;
+  notes?: string;
 }
 
 export type ClerkCaseDecisionInputAction = typeof ClerkCaseDecisionInputAction[keyof typeof ClerkCaseDecisionInputAction];
@@ -6051,6 +6240,7 @@ export type ListClerkCasesKind = typeof ListClerkCasesKind[keyof typeof ListCler
 export const ListClerkCasesKind = {
   extraction: 'extraction',
   question: 'question',
+  notice: 'notice',
 } as const;
 
 export type ListClerkCasesStatus = typeof ListClerkCasesStatus[keyof typeof ListClerkCasesStatus];
@@ -6127,4 +6317,30 @@ clientPartyId?: string;
  */
 windowDays?: number;
 };
+
+export type ListObligationsParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+status?: ListObligationsStatus;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
+};
+
+export type ListObligationsStatus = typeof ListObligationsStatus[keyof typeof ListObligationsStatus];
+
+
+export const ListObligationsStatus = {
+  open: 'open',
+  responded: 'responded',
+  closed: 'closed',
+} as const;
 

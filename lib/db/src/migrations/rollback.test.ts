@@ -336,6 +336,14 @@ const LADDER: LadderStep[] = [
     atTop: [appendOnly("clerk_action_decisions")],
     afterRollback: [not(appendOnly("clerk_action_decisions"))],
   },
+  {
+    version: 31, // Notice Desk obligations guardrails
+    atTop: [pol("obligations"), pol("obligation_reminder_sends")],
+    afterRollback: [
+      not(pol("obligations")),
+      not(pol("obligation_reminder_sends")),
+    ],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

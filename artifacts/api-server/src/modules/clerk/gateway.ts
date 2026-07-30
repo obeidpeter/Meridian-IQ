@@ -64,6 +64,10 @@ export interface ClerkProvider {
 
 export type ClerkPurpose =
   | "extract_invoice"
+  // Notice Desk: read a tax-authority notice into the closed notice-field
+  // catalogue (kind "notice" cases). Proposal only — approval creates the
+  // obligation, never this call.
+  | "extract_notice"
   | "classify_intent"
   | "transcribe_voice"
   // Per-client monthly statement (idea #5): phrases SQL-computed facts about

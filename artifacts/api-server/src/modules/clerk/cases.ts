@@ -673,7 +673,7 @@ async function attachFastLaneThreshold<T extends { firmId: string | null }>(
 // sourceScanPagesB64); the detail endpoint returns the row, from which the
 // response schema strips the scan pages (server-side retry material only).
 export async function listCases(filter: {
-  kind?: "extraction" | "question";
+  kind?: "extraction" | "question" | "notice";
   status?: ClerkCase["status"];
   limit?: number;
   offset?: number;
@@ -703,6 +703,7 @@ export async function listCases(filter: {
       sourceHash: clerkCasesTable.sourceHash,
       sourceDurationSec: clerkCasesTable.sourceDurationSec,
       extraction: clerkCasesTable.extraction,
+      noticeExtraction: clerkCasesTable.noticeExtraction,
       preflight: clerkCasesTable.preflight,
       question: clerkCasesTable.question,
       answer: clerkCasesTable.answer,

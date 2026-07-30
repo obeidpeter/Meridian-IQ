@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.56.0
+  version: 0.57.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -36,6 +36,7 @@ tags:
   - name: connectors
   - name: claims
   - name: clerk
+  - name: obligations
   - name: recurring
   - name: invitation
 paths:
@@ -4037,7 +4038,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [extraction, question]
+            enum: [extraction, question, notice]
         - name: status
           in: query
           required: false
@@ -4138,6 +4139,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClerkCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/cases/{id}/notice-decision:
+    post:
+      operationId: decideNoticeCase
+      tags: [clerk]
+      summary: Operator decision on a notice case — approve creates an open obligation (never an invoice); notices have no fast lane
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoticeDecisionInput"
+      responses:
+        "200":
+          description: Decided case, with the created obligation on approve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoticeDecisionResult"
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -5468,6 +5495,107 @@ paths:
                 $ref: "#/components/schemas/ActionEffectivenessReport"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /obligations:
+    get:
+      operationId: listObligations
+      tags: [obligations]
+      summary: Tracked authority obligations for the firm, soonest deadline first — a client_user sees only its own party's
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, responded, closed]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Obligations in scope, soonest response deadline first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObligationList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      operationId: createObligation
+      tags: [obligations]
+      summary: Record a notice received outside Clerk (paper, walk-in) as a tracked obligation — firm staff only, no model involved
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateObligationInput"
+      responses:
+        "201":
+          description: The recorded obligation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Obligation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /obligations/{id}:
+    get:
+      operationId: getObligation
+      tags: [obligations]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: One obligation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Obligation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /obligations/{id}/status:
+    post:
+      operationId: updateObligationStatus
+      tags: [obligations]
+      summary: Move an obligation through its response lifecycle (open → responded → closed) — compare-and-set, firm staff only
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateObligationStatusInput"
+      responses:
+        "200":
+          description: The updated obligation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Obligation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 components:
   parameters:
     IdParam:
@@ -10595,7 +10723,7 @@ components:
           type: string
         kind:
           type: string
-          enum: [extraction, question]
+          enum: [extraction, question, notice]
         status:
           type: string
           enum: [pending, extracted, in_review, approved, rejected, escalated, failed]
@@ -10639,6 +10767,12 @@ components:
         extraction:
           anyOf:
             - $ref: "#/components/schemas/ClerkExtraction"
+            - type: "null"
+        # Notice Desk (kind "notice" cases): the proposed notice reading.
+        # Mutually exclusive with `extraction`.
+        noticeExtraction:
+          anyOf:
+            - $ref: "#/components/schemas/ClerkNoticeExtraction"
             - type: "null"
         question:
           type: ["string", "null"]
@@ -10686,6 +10820,12 @@ components:
         sourceType:
           type: string
           enum: [image, pdf, text, voice]
+        # What the document IS (Notice Desk). Absent = invoice, the historic
+        # behavior; "notice" routes the capture down the notice extraction
+        # lane (kind "notice" case, obligation on approval, never an invoice).
+        documentKind:
+          type: string
+          enum: [invoice, notice]
         name:
           type: string
         contentType:
@@ -10703,6 +10843,181 @@ components:
           minimum: 0
         allowDuplicate:
           type: boolean
+    # Notice Desk: the proposed reading of a tax-authority notice (kind
+    # "notice" cases). Field shape is shared with invoice extraction; there
+    # are no lines, and noticeType is the model's pick from the closed
+    # catalogue (a key, echoed as plain string so old rows outlive catalogue
+    # growth).
+    ClerkNoticeExtraction:
+      type: object
+      required: [fields, noticeType, promptVersion, model]
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkExtractionField"
+        noticeType:
+          type: string
+        promptVersion:
+          type: string
+        model:
+          type: string
+    NoticeDecisionInput:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [approve, reject, escalate]
+        reason:
+          type: string
+        # Confirmed values (approve only; the server rejects an approve that
+        # omits firmId, clientPartyId, noticeType, authority or
+        # responseDueDate). The human's confirmation IS the data — the model's
+        # proposal never writes an obligation.
+        firmId:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+        noticeType:
+          type: string
+          enum: [assessment, demand, information_request, audit, penalty, reminder, other]
+        authority:
+          type: string
+          enum: [firs, state_irs, customs, other]
+        reference:
+          type: string
+        taxType:
+          type: string
+          enum: [vat, cit, wht, paye, stamp_duty, other]
+        period:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        issueDate:
+          type: string
+        responseDueDate:
+          type: string
+        notes:
+          type: string
+    NoticeDecisionResult:
+      type: object
+      required: [case]
+      properties:
+        case:
+          $ref: "#/components/schemas/ClerkCase"
+        # Present on approve only: the obligation the decision created.
+        obligation:
+          $ref: "#/components/schemas/Obligation"
+    Obligation:
+      type: object
+      required:
+        [
+          id,
+          firmId,
+          clientPartyId,
+          noticeType,
+          authority,
+          responseDueDate,
+          status,
+          createdBy,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        clientPartyId:
+          type: string
+        # The notice case this was approved from; null when recorded by hand.
+        sourceCaseId:
+          type: ["string", "null"]
+        # Catalogue keys echoed as plain strings so rows outlive catalogue
+        # growth (write inputs pin the closed enums).
+        noticeType:
+          type: string
+        authority:
+          type: string
+        reference:
+          type: ["string", "null"]
+        taxType:
+          type: ["string", "null"]
+        period:
+          type: ["string", "null"]
+        amount:
+          type: ["string", "null"]
+        currency:
+          type: ["string", "null"]
+        issueDate:
+          type: ["string", "null"]
+        responseDueDate:
+          type: string
+        status:
+          type: string
+          enum: [open, responded, closed]
+        notes:
+          type: ["string", "null"]
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ObligationList:
+      type: object
+      required: [obligations]
+      properties:
+        obligations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Obligation"
+    CreateObligationInput:
+      type: object
+      required: [clientPartyId, noticeType, authority, responseDueDate]
+      properties:
+        clientPartyId:
+          type: string
+          format: uuid
+        noticeType:
+          type: string
+          enum: [assessment, demand, information_request, audit, penalty, reminder, other]
+        authority:
+          type: string
+          enum: [firs, state_irs, customs, other]
+        reference:
+          type: string
+        taxType:
+          type: string
+          enum: [vat, cit, wht, paye, stamp_duty, other]
+        period:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        issueDate:
+          type: string
+        responseDueDate:
+          type: string
+        notes:
+          type: string
+    UpdateObligationStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [open, responded, closed]
+        notes:
+          type: string
     ClerkCaseDecisionInput:
       type: object
       required: [action]
