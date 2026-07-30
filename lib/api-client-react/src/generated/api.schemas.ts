@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.55.0
+ * OpenAPI spec version: 0.56.0
  */
 export interface HealthStatus {
   status: string;
@@ -3485,6 +3485,18 @@ export interface MintFixtureInput {
 
 export type ClerkAnswerDataParams = {[key: string]: string};
 
+export type ClerkAnswerPlanItem = {
+  key: string;
+  title: string;
+};
+
+export type ClerkAnswerPins = {
+  monthStart?: string;
+  monthLabel?: string;
+  clientPartyId?: string;
+  clientName?: string;
+};
+
 export type ClerkAnswerLinkKind = typeof ClerkAnswerLinkKind[keyof typeof ClerkAnswerLinkKind];
 
 
@@ -3499,6 +3511,17 @@ export interface ClerkAnswerLink {
   id?: string | null;
 }
 
+export type AskAnswerSectionDataParams = {[key: string]: string};
+
+export interface AskAnswerSection {
+  title: string;
+  text: string;
+  dataIntent?: string;
+  dataParams?: AskAnswerSectionDataParams;
+  facts: ProtectedFact[];
+  links?: ClerkAnswerLink[];
+}
+
 export interface ClerkAnswer {
   answered: boolean;
   claimId?: string;
@@ -3511,6 +3534,9 @@ export interface ClerkAnswer {
   citation?: string;
   refusalReason?: string;
   links?: ClerkAnswerLink[];
+  plan?: ClerkAnswerPlanItem[];
+  pins?: ClerkAnswerPins;
+  sections?: AskAnswerSection[];
 }
 
 export type ClerkCaseKind = typeof ClerkCaseKind[keyof typeof ClerkCaseKind];

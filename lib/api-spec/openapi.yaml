@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.55.0
+  version: 0.56.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -10513,6 +10513,65 @@ components:
           type: string
         # Deterministic action links derived from the data-intent facts by the
         # app (never the model): each names a surface the asker may open.
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkAnswerLink"
+        # Ask 2.0: the ordered intents the planner executed (display titles,
+        # app-resolved — never model text). Absent on single-intent and
+        # register answers for backward compatibility.
+        plan:
+          type: array
+          items:
+            type: object
+            required: [key, title]
+            properties:
+              key:
+                type: string
+              title:
+                type: string
+        # Ask 2.0: the scope this answer resolved to, BY ID, so a follow-up
+        # (previousCaseId) re-pins the exact month/party rather than
+        # re-matching display labels (two clients may share a legal name).
+        # Server-validated against the asker's live offered context on every
+        # follow-up — never trusted as-is.
+        pins:
+          type: object
+          properties:
+            monthStart:
+              type: string
+            monthLabel:
+              type: string
+            clientPartyId:
+              type: string
+            clientName:
+              type: string
+        # Ask 2.0: per-intent sections of a multi-part answer. When present,
+        # the flat proposition is a short lead-in and the flat facts/links are
+        # empty — renderers show the sections. Absent on single-intent
+        # answers, whose flat fields render exactly as before.
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/AskAnswerSection"
+    AskAnswerSection:
+      type: object
+      required: [title, text, facts]
+      properties:
+        title:
+          type: string
+        text:
+          type: string
+        dataIntent:
+          type: string
+        dataParams:
+          type: object
+          additionalProperties:
+            type: string
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProtectedFact"
         links:
           type: array
           items:
