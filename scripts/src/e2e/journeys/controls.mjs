@@ -1,5 +1,6 @@
-// The control journeys: maker-checker submission approval (governance) and
-// collection accounts with the inbound settlement rail.
+// The control journeys: maker-checker submission approval (governance),
+// collection accounts with the inbound settlement rail, and the Clerk
+// proposed-actions + standing-approval (automation) round-trip.
 import {
   CSRF,
   DEMO_CLIENT_PARTY_ID,
@@ -223,4 +224,215 @@ async function journeyCollections(page, BASE, check, hookToken) {
   await apiLogout(page, BASE);
 }
 
-export { journeyGovernance, journeyCollections };
+// ---------- Clerk automation: proposals, execute, standing approval ----------
+// The advice→action rails end to end against the real stack: the operator
+// lights the two opt-in flags (both seeded DARK — PL-02), a staff member sees
+// a live submit_overdue proposal for a deliberately backdated draft, approves
+// it through the execute route (the decision ledger records the batch), then
+// grants / pauses / resumes / revokes a standing approval. The finally
+// restores the seeded world as its own checks — the governance journey's
+// restore-as-a-check discipline — because flags left lit would change what
+// every later SME-dashboard render shows.
+//
+// PLACEMENT (index.mjs runs this after journeyCollections, before
+// journeyStaffCreditNoteAndWorkflow) and why it disturbs nothing:
+//  - AUTO-9001 uses a number outside every pinned namespace (INV-100*,
+//    BILL-2001, KAN/NDP/LBR-*, CN-*, E2E-*, GOV-9001).
+//  - AUTO-9001 leaves this journey `submitted` and stamps in the background,
+//    exactly like GOV-9001: the credit-note journey targets the OLDEST
+//    stamped demo-client invoice (bare GET /api/invoices is createdAt ASC),
+//    and the boot-seeded INV-1003 always precedes an invoice created here.
+//  - No later journey counts pending drafts: the lifecycle journey's
+//    bulk-submit check only opens and cancels the dialog (no count
+//    assertion), and the integration journey patterns party ids off the
+//    FIRST demo-client invoice in the asc book (INV-1001, untouched — this
+//    journey executes ONLY its own AUTO-9001, never the proposal's other
+//    targets).
+//  - No other journey reads or asserts clerk_actions/clerk_action_policies
+//    (the operator-desk journey toggles `reconciliation`, via the UI).
+//  - The action-policy sweep is atMostHourly and consumed its first tick at
+//    boot while both flags were dark, so the grant below can never be
+//    auto-run mid-journey by the background worker.
+async function journeyAutomation(page, BASE, check) {
+  const BUYER = "55555555-5555-4555-8555-555555555555"; // Zenith Retail
+  const FLAG_KEYS = ["clerk_actions", "clerk_action_policies"];
+
+  const setFlags = async (enabled) => {
+    const statuses = [];
+    for (const key of FLAG_KEYS) {
+      const r = await page.request.patch(BASE + `/api/feature-flags/${key}`, {
+        data: { enabled },
+        headers: CSRF,
+      });
+      statuses.push(r.status());
+    }
+    return statuses;
+  };
+
+  try {
+    // Operator lights both flags (seeded rows, so PATCH answers 204).
+    await apiLogin(page, BASE, "ops@meridianiq.example");
+    const onStatuses = await setFlags(true);
+    check(
+      "operator lights the clerk_actions + clerk_action_policies flags",
+      onStatuses.every((s) => s === 204),
+      `statuses ${onStatuses.join(", ")}`,
+    );
+
+    // Staff: a fresh draft backdated ~20 days — past the 7-day statutory
+    // submission window, so the live submit_overdue proposal must pick it up
+    // (alongside the seeded overdue INV-1001, which this journey never
+    // touches).
+    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+    const issueDate = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const createdRes = await page.request.post(BASE + "/api/invoices", {
+      data: {
+        supplierPartyId: DEMO_CLIENT_PARTY_ID,
+        buyerPartyId: BUYER,
+        invoiceNumber: "AUTO-9001",
+        issueDate,
+        lines: [
+          {
+            description: "Automation probe goods",
+            quantity: "1",
+            unitPrice: "40000",
+            vatRate: "0.075",
+          },
+        ],
+      },
+      headers: CSRF,
+    });
+    const invoiceId =
+      createdRes.status() === 201 ? (await createdRes.json()).invoice?.id : null;
+    const propRes = await page.request.get(
+      BASE + `/api/clerk/action-proposals?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const proposals = propRes.status() === 200 ? await propRes.json() : null;
+    const overdue = (proposals?.actions ?? []).find(
+      (a) => a.kind === "submit_overdue",
+    );
+    check(
+      "submit_overdue proposal lists the backdated AUTO-9001 draft",
+      createdRes.status() === 201 &&
+        (overdue?.targets ?? []).some((t) => t.invoiceId === invoiceId),
+      `create ${createdRes.status()}, proposals ${propRes.status()}`,
+    );
+
+    // Approve exactly the one target: execute validates + submits it through
+    // the ordinary per-invoice path and answers the durable decision row.
+    const execRes = await page.request.post(
+      BASE + "/api/clerk/action-proposals/execute",
+      {
+        data: {
+          kind: "submit_overdue",
+          invoiceIds: [invoiceId],
+          clientPartyId: DEMO_CLIENT_PARTY_ID,
+        },
+        headers: CSRF,
+      },
+    );
+    const decision =
+      execRes.status() === 200 ? (await execRes.json()).decision : null;
+    check(
+      "approving the batch submits AUTO-9001 and records the decision",
+      execRes.status() === 200 &&
+        decision?.executedCount === 1 &&
+        (decision?.targets ?? []).some(
+          (t) => t.invoiceId === invoiceId && t.outcome === "submitted",
+        ),
+      `execute ${execRes.status()}, executedCount ${decision?.executedCount}`,
+    );
+
+    // Standing approval with a chosen per-run cap (the grant dialog's
+    // "Daily limit" input; contract answers 200 with the new grant).
+    const grantRes = await page.request.post(
+      BASE + "/api/clerk/action-policies",
+      {
+        data: {
+          kind: "submit_overdue",
+          clientPartyId: DEMO_CLIENT_PARTY_ID,
+          maxTargetsPerRun: 5,
+        },
+        headers: CSRF,
+      },
+    );
+    const policy = grantRes.status() === 200 ? await grantRes.json() : null;
+    check(
+      "standing approval grants with maxTargetsPerRun 5",
+      grantRes.status() === 200 &&
+        policy?.maxTargetsPerRun === 5 &&
+        policy?.kind === "submit_overdue" &&
+        policy?.revokedAt === null,
+      `status ${grantRes.status()}`,
+    );
+
+    // Lifecycle walk: pause (manual, reversible) → resume (pause cleared).
+    const pauseRes = await page.request.post(
+      BASE + `/api/clerk/action-policies/${policy?.id}/pause`,
+      { headers: CSRF },
+    );
+    const paused = pauseRes.status() === 200 ? await pauseRes.json() : null;
+    const resumeRes = await page.request.post(
+      BASE + `/api/clerk/action-policies/${policy?.id}/resume`,
+      { headers: CSRF },
+    );
+    const resumed = resumeRes.status() === 200 ? await resumeRes.json() : null;
+    check(
+      "grant pauses (manual) and resumes clean",
+      Boolean(paused?.pausedAt) &&
+        paused?.pausedReason === "manual" &&
+        resumed !== null &&
+        resumed.pausedAt === null,
+      `pause ${pauseRes.status()}, resume ${resumeRes.status()}`,
+    );
+
+    // Revoke is permanent evidence: the row survives with revokedAt set.
+    const revokeRes = await page.request.post(
+      BASE + `/api/clerk/action-policies/${policy?.id}/revoke`,
+      { headers: CSRF },
+    );
+    const revoked = revokeRes.status() === 200 ? await revokeRes.json() : null;
+    check(
+      "revoke retires the grant permanently (revokedAt set)",
+      revokeRes.status() === 200 && Boolean(revoked?.revokedAt),
+      `status ${revokeRes.status()}`,
+    );
+  } finally {
+    // MUST run even when a check above failed or threw. Two restores:
+    //  1. Revoke any live grant for the demo client (idempotent — revoking
+    //     the already-revoked grant, or nothing, is a no-op): a live policy
+    //     left behind would let the daily sweep submit demo drafts on a
+    //     rerun against a kept database.
+    //  2. As the operator, restore BOTH flags to their seeded dark state —
+    //     itself a check, so a silent restore failure can never masquerade
+    //     as a pass. (Revocation deliberately runs FIRST: grants stay
+    //     pausable/revocable while the flags are dark, but the order keeps
+    //     the finally independent of that guarantee.)
+    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+    const listRes = await page.request.get(
+      BASE + `/api/clerk/action-policies?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const live =
+      listRes.status() === 200
+        ? (await listRes.json()).policies.filter((p) => !p.revokedAt)
+        : [];
+    for (const p of live) {
+      await page.request.post(
+        BASE + `/api/clerk/action-policies/${p.id}/revoke`,
+        { headers: CSRF },
+      );
+    }
+    await apiLogin(page, BASE, "ops@meridianiq.example");
+    const offStatuses = await setFlags(false);
+    check(
+      "clerk automation flags restored to dark",
+      offStatuses.every((s) => s === 204),
+      `statuses ${offStatuses.join(", ")}`,
+    );
+    await apiLogout(page, BASE);
+  }
+}
+
+export { journeyGovernance, journeyCollections, journeyAutomation };

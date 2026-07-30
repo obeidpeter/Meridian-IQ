@@ -56,6 +56,8 @@ import type {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -88,6 +90,9 @@ import { Link } from "wouter";
 import {
   ACTION_OUTCOME_LABELS,
   ACTION_TARGET_DISPLAY_CAP,
+  POLICY_CAP_DEFAULT,
+  POLICY_CAP_MAX,
+  POLICY_CAP_MIN,
   actionConfirmButtonLabel,
   actionConfirmDescription,
   actionOutcomeSummary,
@@ -98,6 +103,7 @@ import {
   formatDate,
   formatDateTime,
   formatNaira,
+  parsePolicyCap,
   policyGrantDescription,
   policyKindLabel,
   policyStatusLine,
@@ -842,6 +848,12 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   );
   // Which submit-kind proposal is awaiting the standing-approval confirm.
   const [automating, setAutomating] = useState<ActionProposal | null>(null);
+  // The per-run ceiling the grant will carry (string: the field must survive
+  // a cleared box mid-edit). Reset to the default each time the dialog
+  // opens; parsePolicyCap is the single validity gate — out-of-bounds means
+  // the confirm button disables, never a silent clamp.
+  const [capInput, setCapInput] = useState(String(POLICY_CAP_DEFAULT));
+  const policyCap = parsePolicyCap(capInput);
   const onPolicyChanged = () =>
     queryClient.invalidateQueries({
       queryKey: getGetActionPoliciesQueryKey(),
@@ -868,6 +880,10 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
     grant.isPending || pause.isPending || resume.isPending || revoke.isPending;
   const livePolicies = policies?.policies ?? [];
   const policyByKind = new Map(livePolicies.map((p) => [p.kind, p]));
+  // A paused grant means the sweep is NOT running — amber-worthy in the
+  // header (MonthEndCloseCard's pill pattern), visible wherever the card is
+  // scrolled to, alongside the inline amber status rows below.
+  const pausedCount = livePolicies.filter((p) => p.pausedAt).length;
   const dialog = useClerkActionsDialog<
     ActionProposal,
     ClerkActionDecision,
@@ -944,9 +960,28 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Sparkles className="w-5 h-5" aria-hidden="true" /> Clerk suggests
+          {pausedCount > 0 && (
+            <span
+              className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+              data-testid="pill-automation-paused"
+            >
+              {pausedCount} paused
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* A quiet day with automation or history to show: say why the card
+            is otherwise silent instead of opening straight on the strips. */}
+        {proposals.actions.length === 0 &&
+          (livePolicies.length > 0 || hasDecisions) && (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="text-actions-empty"
+            >
+              Nothing to suggest right now — automation and history below.
+            </p>
+          )}
         {proposals.actions.map((action) => (
           <div key={action.kind} className="space-y-2" data-testid={`action-${action.kind}`}>
             <p className="font-medium">{action.title}</p>
@@ -984,7 +1019,7 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                 size="sm"
                 onClick={() => dialog.beginConfirm(action)}
                 disabled={execute.isPending}
-                data-testid="button-approve-action"
+                data-testid={`button-approve-${action.kind}`}
               >
                 <Send className="w-4 h-4 mr-2" aria-hidden="true" />
                 Review &amp; approve
@@ -998,7 +1033,10 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setAutomating(action)}
+                    onClick={() => {
+                      setCapInput(String(POLICY_CAP_DEFAULT));
+                      setAutomating(action);
+                    }}
                     disabled={policyBusy}
                     data-testid={`button-automate-${action.kind}`}
                   >
@@ -1206,9 +1244,31 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               {automating ? policyKindLabel(automating.kind) : ""}
             </DialogTitle>
             <DialogDescription>
-              {automating ? policyGrantDescription(automating.kind, "sme") : ""}
+              {/* The consent copy restates the ceiling being chosen below;
+                  while the box is mid-edit (invalid) it reads the default
+                  and the confirm button is disabled anyway. */}
+              {automating
+                ? policyGrantDescription(
+                    automating.kind,
+                    "sme",
+                    policyCap ?? POLICY_CAP_DEFAULT,
+                  )
+                : ""}
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="policy-cap">Daily limit (invoices per run)</Label>
+            <Input
+              id="policy-cap"
+              type="number"
+              inputMode="numeric"
+              min={POLICY_CAP_MIN}
+              max={POLICY_CAP_MAX}
+              value={capInput}
+              onChange={(e) => setCapInput(e.target.value)}
+              data-testid="input-policy-cap"
+            />
+          </div>
           <DialogFooter>
             <Button
               variant="outline"
@@ -1220,13 +1280,13 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             <Button
               onClick={() => {
                 const kind = automating && automatableActionKind(automating.kind);
-                if (!kind) return;
+                if (!kind || policyCap === null) return;
                 grant.mutate(
-                  { data: { kind, clientPartyId } },
+                  { data: { kind, clientPartyId, maxTargetsPerRun: policyCap } },
                   { onSuccess: () => setAutomating(null) },
                 );
               }}
-              disabled={grant.isPending}
+              disabled={grant.isPending || policyCap === null}
               data-testid="button-confirm-automate"
             >
               {grant.isPending ? "Working…" : "Turn on daily automation"}

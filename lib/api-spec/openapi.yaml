@@ -11790,7 +11790,8 @@ components:
           type: ["string", "null"]
           format: date-time
         # "manual" for a human pause; the sweep's tripwires write
-        # grantor_inactive | consent_missing | failed_targets.
+        # grantor_inactive | consent_missing | failed_targets | unknown_kind |
+        # rail_rejections | engagement_closed | run_error.
         pausedReason:
           type: ["string", "null"]
         # Null when a sweep tripwire paused it (pausedReason says why).

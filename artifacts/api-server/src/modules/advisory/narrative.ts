@@ -10,7 +10,11 @@ import {
   type Principal,
 } from "../auth/rbac";
 import { assertFirmClerkBudget } from "../clerk/budget";
-import { CLERK_FLAG_KEY, type ClerkGateway } from "../clerk/gateway";
+import {
+  CLERK_FLAG_KEY,
+  inferPhrasing,
+  type ClerkGateway,
+} from "../clerk/gateway";
 import { fenceUntrusted } from "../clerk/prompts";
 import { isFeatureEnabled } from "../flags/flags";
 
@@ -257,29 +261,37 @@ export async function draftEngagementNarrative(
     }
   }
 
-  const result = await gateway.infer<z.infer<typeof narrativeOutput>>({
-    purpose: "draft_narrative",
-    firmId: tenant,
-    promptVersion: NARRATIVE_PROMPT_VERSION,
-    system: NARRATIVE_SYSTEM,
-    user: `Advisory facts computed by the platform:\n${facts}`,
-    schemaName: "engagement_narrative",
-    jsonSchema: NARRATIVE_JSON_SCHEMA,
-    validator: narrativeOutput,
-    inputForHash: `${engagementId}:${facts}`,
-  });
-  // Number grounding: a numeral the facts never stated → template answers
-  // (grounding.ts). The allowed source is the exact composed user prompt.
-  if (
-    !result.ok ||
-    !(await ensureGrounded(
-      "narrative",
-      tenant,
-      result.data.narrative,
-      `Advisory facts computed by the platform:\n${facts}`,
-    ))
-  ) {
+  const user = `Advisory facts computed by the platform:\n${facts}`;
+  // One phrasing call under the digest posture (fix round, after #93): the
+  // bare gateway.infer here was a kill-switch TOCTOU — a clerk_ai flip
+  // between the flag check above and the call made the gateway's own assert
+  // throw CLERK_DISABLED 503 out of a route that promises it never errors
+  // for AI-availability reasons. inferPhrasing re-checks the flag and folds
+  // every typed gateway failure (kill switch, budget backstop, discarded
+  // output) to null; the outer try keeps the stronger draft-reply.ts
+  // guarantee that ANYTHING failing past that — a ledger-insert failure
+  // inside the gateway after the provider answered, even a grounding-check
+  // crash — still answers with the template, source tagged honestly.
+  try {
+    const data = await inferPhrasing<z.infer<typeof narrativeOutput>>(gateway, {
+      purpose: "draft_narrative",
+      firmId: tenant,
+      promptVersion: NARRATIVE_PROMPT_VERSION,
+      system: NARRATIVE_SYSTEM,
+      user,
+      schemaName: "engagement_narrative",
+      jsonSchema: NARRATIVE_JSON_SCHEMA,
+      validator: narrativeOutput,
+      inputForHash: `${engagementId}:${facts}`,
+    });
+    if (!data) return fallback;
+    // Number grounding: a numeral the facts never stated → template answers
+    // (grounding.ts). The allowed source is the exact composed user prompt.
+    if (!(await ensureGrounded("narrative", tenant, data.narrative, user))) {
+      return fallback;
+    }
+    return { engagementId, narrative: data.narrative, source: "clerk" };
+  } catch {
     return fallback;
   }
-  return { engagementId, narrative: result.data.narrative, source: "clerk" };
 }

@@ -243,9 +243,12 @@ const click = (el: Element) =>
 
 // Drive the card from proposal to the results view: approve → confirm, with
 // the mutation resolving to `result`.
-async function openResults(result: ExecuteActionResult) {
+async function openResults(
+  result: ExecuteActionResult,
+  kind = "submit_overdue",
+) {
   harness.execute.result = result;
-  await click(screen.getByTestId("button-approve-action"));
+  await click(screen.getByTestId(`button-approve-${kind}`));
   await click(screen.getByTestId("button-confirm-action"));
   expect(screen.getByText("Batch result")).toBeTruthy();
 }
@@ -282,6 +285,9 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     expect(screen.getByTestId("outcome-inv-1").textContent).toContain(
       "Submitted",
     );
+    // No grants and no history: the quiet line has nothing to point at, so
+    // the dialog-open survival renders without it.
+    expect(screen.queryByTestId("text-actions-empty")).toBeNull();
   });
 
   test("closeDialog is a no-op while the execute mutation is in flight", async () => {
@@ -314,7 +320,7 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     const { invalidatedKeys } = renderCard();
 
     // Opening and cancelling the confirmation touches nothing.
-    await click(screen.getByTestId("button-approve-action"));
+    await click(screen.getByTestId("button-approve-submit_overdue"));
     await click(screen.getByText("Cancel"));
     expect(invalidatedKeys()).toEqual([]);
 
@@ -389,13 +395,16 @@ describe("ClerkActionsCard (SME dashboard)", () => {
       proposal({ kind: "draft_chasers", title: "Draft 1 payment reminder" }),
     ]);
     renderCard();
-    await openResults({
-      decision: decision(
-        [{ invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "drafted", error: null }],
-        { kind: "draft_chasers" },
-      ),
-      drafts: [draft],
-    });
+    await openResults(
+      {
+        decision: decision(
+          [{ invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "drafted", error: null }],
+          { kind: "draft_chasers" },
+        ),
+        drafts: [draft],
+      },
+      "draft_chasers",
+    );
 
     const card = screen.getByTestId("draft-inv-1");
     expect(card.textContent).toContain(draft.subject);
@@ -406,7 +415,7 @@ describe("ClerkActionsCard (SME dashboard)", () => {
 
   // ---- Standing approvals (round 28) --------------------------------------
 
-  test("the automate affordance: submit kinds only, flag lit, no live grant — and granting sends kind + client", async () => {
+  test("the automate affordance: submit kinds only, flag lit, no live grant — and granting sends kind + client + the default cap", async () => {
     harness.proposals.data = proposals([
       proposal(),
       proposal({ kind: "draft_chasers", title: "Draft 1 payment reminder" }),
@@ -419,28 +428,77 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     expect(screen.queryByTestId("button-automate-draft_chasers")).toBeNull();
 
     // The confirm dialog carries the consent-grade copy verbatim (the SME
-    // audience clause).
+    // audience clause), restating the default per-run cap of 10.
     await click(screen.getByTestId("button-automate-submit_overdue"));
     expect(
-      screen.getByText(policyGrantDescription("submit_overdue", "sme")),
+      screen.getByText(policyGrantDescription("submit_overdue", "sme", 10)),
     ).toBeTruthy();
+    expect(
+      (screen.getByTestId("input-policy-cap") as HTMLInputElement).value,
+    ).toBe("10");
 
     await click(screen.getByTestId("button-confirm-automate"));
     expect(harness.policyCalls.grant).toEqual([
-      { data: { kind: "submit_overdue", clientPartyId: "cp-1" } },
+      {
+        data: {
+          kind: "submit_overdue",
+          clientPartyId: "cp-1",
+          maxTargetsPerRun: 10,
+        },
+      },
     ]);
     // Granting closes the dialog and refetches the grants.
     expect(
-      screen.queryByText(policyGrantDescription("submit_overdue", "sme")),
+      screen.queryByText(policyGrantDescription("submit_overdue", "sme", 10)),
     ).toBeNull();
     expect(invalidatedKeys()).toContainEqual(getGetActionPoliciesQueryKey());
+  });
+
+  test("the chosen cap flows into the consent copy and the grant body; out-of-bounds disables confirm", async () => {
+    harness.policies.data = { policies: [], enabled: true };
+    renderCard();
+    await click(screen.getByTestId("button-automate-submit_overdue"));
+
+    // Choosing 25: the copy restates 25 and the grant carries it.
+    fireEvent.change(screen.getByTestId("input-policy-cap"), {
+      target: { value: "25" },
+    });
+    expect(
+      screen.getByText(policyGrantDescription("submit_overdue", "sme", 25)),
+    ).toBeTruthy();
+
+    // Out of the contract's 1..50: confirm disables, nothing is sent.
+    fireEvent.change(screen.getByTestId("input-policy-cap"), {
+      target: { value: "51" },
+    });
+    expect(
+      (screen.getByTestId("button-confirm-automate") as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    await click(screen.getByTestId("button-confirm-automate"));
+    expect(harness.policyCalls.grant).toEqual([]);
+
+    // Back in bounds: the grant sends the chosen 25.
+    fireEvent.change(screen.getByTestId("input-policy-cap"), {
+      target: { value: "25" },
+    });
+    await click(screen.getByTestId("button-confirm-automate"));
+    expect(harness.policyCalls.grant).toEqual([
+      {
+        data: {
+          kind: "submit_overdue",
+          clientPartyId: "cp-1",
+          maxTargetsPerRun: 25,
+        },
+      },
+    ]);
   });
 
   test("no affordance while the policies flag is dark, or once a live grant exists", () => {
     // Dark flag (the beforeEach default): the proposal renders, the
     // affordance does not.
     renderCard();
-    expect(screen.getByTestId("button-approve-action")).toBeTruthy();
+    expect(screen.getByTestId("button-approve-submit_overdue")).toBeTruthy();
     expect(screen.queryByTestId("button-automate-submit_overdue")).toBeNull();
     cleanup();
 
@@ -458,6 +516,11 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     };
     renderCard();
     expect(screen.getByTestId("clerk-actions")).toBeTruthy();
+    // The quiet line explains the silence; an active grant raises no pill.
+    expect(screen.getByTestId("text-actions-empty").textContent).toBe(
+      "Nothing to suggest right now — automation and history below.",
+    );
+    expect(screen.queryByTestId("pill-automation-paused")).toBeNull();
     const strip = screen.getByTestId("policy-submit_overdue");
     expect(strip.textContent).toContain("Auto-submit overdue invoices");
     expect(
@@ -492,6 +555,37 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     expect(harness.policyCalls.resume).toEqual([{ id: "pol-1" }]);
   });
 
+  test("any paused grant raises the amber header pill; none paused, no pill", () => {
+    // One paused among two grants: the pill counts the paused ones and sits
+    // in the HEADER, visible regardless of where the card is scrolled.
+    harness.policies.data = {
+      policies: [
+        policy({
+          pausedAt: "2026-07-29T06:00:00Z",
+          pausedReason: "failed_targets",
+        }),
+        policy({ id: "pol-2", kind: "retry_failed" }),
+      ],
+      enabled: true,
+    };
+    renderCard();
+    expect(screen.getByTestId("pill-automation-paused").textContent).toBe(
+      "1 paused",
+    );
+    // The inline amber detail row stays alongside the pill.
+    expect(
+      screen.getByTestId("text-policy-status-submit_overdue").textContent,
+    ).toBe("paused — too many failures in the last run");
+    // A live proposal is on the card (the beforeEach default), so the quiet
+    // empty line stays out of the way.
+    expect(screen.queryByTestId("text-actions-empty")).toBeNull();
+    cleanup();
+
+    harness.policies.data = { policies: [policy()], enabled: true };
+    renderCard();
+    expect(screen.queryByTestId("pill-automation-paused")).toBeNull();
+  });
+
   // ---- The run record (round 29) -------------------------------------------
 
   test("run history keeps the card up and tags policy runs auto", () => {
@@ -513,6 +607,8 @@ describe("ClerkActionsCard (SME dashboard)", () => {
     renderCard();
     expect(screen.getByTestId("clerk-actions")).toBeTruthy();
     expect(screen.getByText("Recent activity")).toBeTruthy();
+    // History alone also earns the quiet explanation line.
+    expect(screen.getByTestId("text-actions-empty")).toBeTruthy();
     expect(screen.getByTestId("decision-dec-1").textContent).toContain(
       "1 executed",
     );

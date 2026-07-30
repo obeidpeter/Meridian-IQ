@@ -15,7 +15,7 @@ import { sql } from "drizzle-orm";
 import { grantComplianceConsent } from "../../test-helpers/seeders.ts";
 import { createDraft, validateInvoice } from "./service.ts";
 import { updateFirmPolicies } from "./approvals.ts";
-import { bulkSubmit } from "./bulk-submit.ts";
+import { BULK_DEADLINE_MS, bulkSubmit } from "./bulk-submit.ts";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
@@ -41,6 +41,9 @@ const supplierBatch = randomUUID(); // complete + consented
 const supplierNoConsent = randomUUID(); // complete, NO consent
 const supplierApproval = randomUUID(); // complete + consented, under firmApprovalId
 const supplierOp = randomUUID(); // complete + consented, submitted cross-tenant
+// Own supplier for the deadline test (its own oldest-first queue, like the
+// batching supplier above).
+const supplierDeadline = randomUUID(); // complete + consented
 const buyer = randomUUID(); // complete
 const buyerNoTin = randomUUID(); // incomplete: fails canonical validation
 
@@ -137,6 +140,14 @@ before(async () => {
       city: "Lagos",
     },
     {
+      id: supplierDeadline,
+      type: "client_business",
+      legalName: `Bulk Deadline Supplier ${SALT}`,
+      tin: "10000000-0006",
+      street: "7 Marina Rd",
+      city: "Lagos",
+    },
+    {
       // No TIN/street/city: any invoice naming this buyer fails canonical
       // validation — the deterministic "invalid" fixture.
       id: buyerNoTin,
@@ -150,9 +161,10 @@ before(async () => {
     { firmId, clientPartyId: supplierNoConsent, type: "readiness_assessment", title: "bulk B" },
     { firmId: firmApprovalId, clientPartyId: supplierApproval, type: "readiness_assessment", title: "bulk D" },
     { firmId, clientPartyId: supplierOp, type: "readiness_assessment", title: "bulk E" },
+    { firmId, clientPartyId: supplierDeadline, type: "readiness_assessment", title: "bulk F" },
   ]);
   // Layer-1 compliance consent for the submitting suppliers only.
-  for (const partyId of [supplier, supplierBatch, supplierApproval, supplierOp]) {
+  for (const partyId of [supplier, supplierBatch, supplierApproval, supplierOp, supplierDeadline]) {
     await grantComplianceConsent(partyId, userId);
   }
 });
@@ -305,6 +317,46 @@ test("a validated draft whose submission is refused stays validated", async () =
       .submitApprovalRequired,
     true,
   );
+});
+
+// The wall-clock ceiling (BULK_DEADLINE_MS): checked BEFORE each item starts,
+// so a deadline stop leaves every untouched row out of `rows` entirely — it
+// is neither submitted nor failed, just still pending — and `remaining`
+// counts it truthfully. Completed items stay committed (per-item posture).
+test("the deadline stops the batch between items; untouched rows stay pending", async () => {
+  const a = await draftFor(supplierDeadline, buyer);
+  const b = await draftFor(supplierDeadline, buyer);
+  const c = await draftFor(supplierDeadline, buyer);
+
+  // Injected fake clock: start at 0; item 1's gate reads 1ms (inside the
+  // deadline); item 2's gate reads exactly BULK_DEADLINE_MS — the >= check
+  // stops the loop before item 2 is touched.
+  const ticks = [0, 1, BULK_DEADLINE_MS];
+  let call = 0;
+  const clock = () => ticks[Math.min(call++, ticks.length - 1)];
+
+  const first = await bulkSubmit(supplierDeadline, firmId, userId, undefined, clock);
+  assert.equal(first.total, 1, "only the first item was attempted");
+  assert.equal(first.submittedCount, 1);
+  assert.equal(first.rows[0]?.invoiceId, a.invoice.id);
+  assert.equal(first.failedCount, 0, "untouched rows are NOT reported as failures");
+  assert.equal(first.remaining, 2, "the honest pending count covers the untouched rows");
+
+  // The completed item stayed committed; a re-run with the real clock drains
+  // the rest in the same oldest-first order.
+  const second = await bulkSubmit(supplierDeadline, firmId, userId);
+  assert.equal(second.total, 2);
+  assert.deepEqual(
+    second.rows.map((r) => r.invoiceId),
+    [b.invoice.id, c.invoice.id],
+  );
+  assert.equal(second.remaining, 0);
+
+  const [aRow] = await getDb()
+    .select({ status: invoicesTable.status })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, a.invoice.id));
+  assert.equal(aRow.status, "submitted", "the pre-deadline item stayed committed");
 });
 
 // Cross-tenant staff carry firmId null (route: tenantFirmId(principal) is

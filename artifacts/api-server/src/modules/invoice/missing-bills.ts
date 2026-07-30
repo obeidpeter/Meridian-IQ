@@ -54,6 +54,28 @@ export function missingBillAlertFor(
   return patternAlertFor(bills, todayLagos);
 }
 
+// Ranking rule (currency fix): the top-N cut orders alerts by NAIRA
+// equivalent, never by raw face value — a USD 2,000 subscription must not
+// lose its slot to an NGN 100,000 one. The conversion uses the most recent
+// captured non-null fx_rate_to_ngn within the pattern's own (counterparty,
+// currency) history; NGN ranks at face value. A foreign pattern with NO
+// captured rate also ranks at face value — the schema's null-rate rule is
+// "unconvertible, never assume 1", and for an ORDERING the honest options
+// are hide, invent a rate, or under-rank: we under-rank and say so here.
+// DISPLAYED amounts stay in the original currency throughout — only the
+// ranking converts.
+export function ngnRankFor(
+  medianAmount: string,
+  currency: string,
+  latestFxRate: number | null,
+): number {
+  const face = Number(medianAmount);
+  if (currency === "NGN") return face;
+  return latestFxRate !== null && latestFxRate > 0
+    ? face * latestFxRate
+    : face;
+}
+
 // One client's captured-bill history per vendor over the trailing year,
 // through the canonical bill fragment (BILL_OF_CLIENT — a receivable can
 // never pollute a vendor's cadence). Cancelled/credited paper and null
@@ -66,7 +88,16 @@ async function vendorBillHistories(
 ): Promise<
   Map<
     string,
-    { supplierPartyId: string; name: string; currency: string; bills: HistoryRow[] }
+    {
+      supplierPartyId: string;
+      name: string;
+      currency: string;
+      bills: HistoryRow[];
+      // Most recent non-null fx_rate_to_ngn in this (vendor, currency)
+      // group — the ranking rate (ngnRankFor); null for NGN groups and for
+      // foreign groups that never captured a rate.
+      latestFxRate: number | null;
+    }
   >
 > {
   const rows = (
@@ -77,9 +108,11 @@ async function vendorBillHistories(
       id: string;
       issue_date: string;
       grand_total: string;
+      fx_rate: string | null;
     }>(sql`
       SELECT i.supplier_party_id, p.legal_name AS supplier_name, i.currency,
-        i.id, i.issue_date::text AS issue_date, i.grand_total::text AS grand_total
+        i.id, i.issue_date::text AS issue_date, i.grand_total::text AS grand_total,
+        i.fx_rate_to_ngn::text AS fx_rate
       FROM invoices i
       JOIN parties p ON p.id = i.supplier_party_id
       WHERE ${BILL_OF_CLIENT(firmId, clientPartyId)}
@@ -104,7 +137,13 @@ async function vendorBillHistories(
   // are different cadences (round-20 hygiene, buyerBillingHistories parity).
   const byVendor = new Map<
     string,
-    { supplierPartyId: string; name: string; currency: string; bills: HistoryRow[] }
+    {
+      supplierPartyId: string;
+      name: string;
+      currency: string;
+      bills: HistoryRow[];
+      latestFxRate: number | null;
+    }
   >();
   for (const r of rows) {
     const key = `${r.supplier_party_id}:${r.currency}`;
@@ -113,20 +152,27 @@ async function vendorBillHistories(
       name: r.supplier_name,
       currency: r.currency,
       bills: [],
+      latestFxRate: null,
     };
     entry.bills.push({
       id: r.id,
       issueDate: r.issue_date,
       grandTotal: Number(r.grand_total),
     });
+    // Rows arrive issue_date ASC, so the last non-null rate seen IS the most
+    // recent captured one for this group.
+    if (r.fx_rate !== null) {
+      const rate = Number(r.fx_rate);
+      if (Number.isFinite(rate) && rate > 0) entry.latestFxRate = rate;
+    }
     byVendor.set(key, entry);
   }
   return byVendor;
 }
 
-// One client's expected-but-uncaptured vendor bills, biggest money first.
-// The route layer owns tenancy + SEC-03 scoping (resolveClientAnalyticsScope,
-// the bills-surface idiom).
+// One client's expected-but-uncaptured vendor bills, biggest money (in naira
+// equivalent — ngnRankFor) first. The route layer owns tenancy + SEC-03
+// scoping (resolveClientAnalyticsScope, the bills-surface idiom).
 export async function listMissingRecurringBills(
   firmId: string,
   clientPartyId: string,
@@ -134,20 +180,23 @@ export async function listMissingRecurringBills(
 ): Promise<MissingBillAlert[]> {
   const byVendor = await vendorBillHistories(firmId, clientPartyId);
   const today = lagosDateString(now);
-  const alerts: MissingBillAlert[] = [];
+  const ranked: { alert: MissingBillAlert; ngnRank: number }[] = [];
   for (const entry of byVendor.values()) {
     const alert = missingBillAlertFor(entry.bills, today);
     if (alert) {
-      alerts.push({
-        supplierPartyId: entry.supplierPartyId,
-        supplierName: entry.name,
-        currency: entry.currency,
-        ...alert,
+      ranked.push({
+        alert: {
+          supplierPartyId: entry.supplierPartyId,
+          supplierName: entry.name,
+          currency: entry.currency,
+          ...alert,
+        },
+        ngnRank: ngnRankFor(alert.medianAmount, entry.currency, entry.latestFxRate),
       });
     }
   }
-  alerts.sort((a, b) => Number(b.medianAmount) - Number(a.medianAmount));
-  return alerts.slice(0, MAX_PATTERN_ALERTS);
+  ranked.sort((a, b) => b.ngnRank - a.ngnRank);
+  return ranked.slice(0, MAX_PATTERN_ALERTS).map((r) => r.alert);
 }
 
 // Firm-wide count for the weekly digest — the countFirmUnbilled posture:

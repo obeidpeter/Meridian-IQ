@@ -61,6 +61,58 @@ export interface ActionEffectivenessReport {
 
 const SUBMIT_KINDS = ["submit_overdue", "retry_failed"] as const;
 
+// The one SQL spelling of "unnest a decision's targets and re-read each
+// invoice NOW", shared by the report's NOW buckets and the per-decision
+// helper below (the round-30 rail-rejection tripwire) — the tripwire and the
+// report must count "failed again" identically, so neither may re-spell it.
+// The invoiceId cast is guarded by a CASE (evaluation order inside a plain
+// ON clause is not contractual): a malformed id — only reachable via a
+// hand-written ledger row, every real writer is uuid-validated — degrades to
+// a NULL join instead of 22P02-failing the caller. Requires the decisions
+// table aliased `d` in the enclosing FROM; callers still filter targets to
+// outcome = 'submitted' themselves.
+const EXECUTED_TARGET_INVOICE_JOIN = sql`
+  CROSS JOIN LATERAL jsonb_array_elements(d.targets) AS t(el)
+  LEFT JOIN invoices i ON i.id = CASE
+    WHEN t.el ->> 'invoiceId'
+      ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    THEN (t.el ->> 'invoiceId')::uuid
+  END`;
+
+export interface DecisionRailStanding {
+  // Executed submit targets on the decision (occurrence-counted, like the
+  // report's `executed`), and how many of them the rails have since bounced
+  // back to status 'failed' — the report's nowFailedAgain for ONE decision.
+  submitted: number;
+  nowFailedAgain: number;
+}
+
+// One decision's executed submit targets, re-read NOW. Exported for the
+// standing-approval sweep's rail-rejection tripwire (action-policies.ts):
+// submitInvoice reports success at ENQUEUE time, so only this re-read can
+// see an asynchronous rail rejection. Runs under whatever DB context the
+// caller holds (the sweep calls it firm-bound; the row is pinned by decision
+// id either way — clerk_action_decisions and invoices are both firm-keyed
+// RLS, so a foreign decision id simply answers zeros).
+export async function decisionRailStanding(
+  decisionId: string,
+): Promise<DecisionRailStanding> {
+  const [row] = (
+    await getDb().execute<{ submitted: number; now_failed_again: number }>(sql`
+      SELECT COUNT(*)::int AS submitted,
+        COUNT(*) FILTER (WHERE i.status = 'failed')::int AS now_failed_again
+      FROM clerk_action_decisions d
+      ${EXECUTED_TARGET_INVOICE_JOIN}
+      WHERE d.id = ${decisionId}
+        AND t.el ->> 'outcome' = 'submitted'
+    `)
+  ).rows;
+  return {
+    submitted: Number(row?.submitted ?? 0),
+    nowFailedAgain: Number(row?.now_failed_again ?? 0),
+  };
+}
+
 export async function computeActionEffectiveness(
   firmId: string,
   clientPartyId: string,
@@ -111,10 +163,9 @@ export async function computeActionEffectiveness(
   // retried) contributes its current status twice, so the NOW buckets
   // always sum to `executed` per kind. Do not "fix" this to DISTINCT
   // without deciding what `executed` should then mean.
-  // The invoiceId cast is guarded by a CASE (evaluation order inside a
-  // plain ON clause is not contractual): a malformed id — only reachable
-  // via a hand-written ledger row, every real writer is uuid-validated —
-  // degrades to the `other` bucket instead of 22P02-failing the report.
+  // The unnest + guarded invoice re-read is EXECUTED_TARGET_INVOICE_JOIN
+  // (shared with decisionRailStanding above): a malformed id degrades to
+  // the `other` bucket instead of 22P02-failing the report.
   const nowRows = (
     await db.execute<{
       kind: string;
@@ -135,12 +186,7 @@ export async function computeActionEffectiveness(
               ('stamped', 'confirmed', 'settled', 'credited', 'submitted', 'failed')
         )::int AS now_other
       FROM clerk_action_decisions d
-      CROSS JOIN LATERAL jsonb_array_elements(d.targets) AS t(el)
-      LEFT JOIN invoices i ON i.id = CASE
-        WHEN t.el ->> 'invoiceId'
-          ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-        THEN (t.el ->> 'invoiceId')::uuid
-      END
+      ${EXECUTED_TARGET_INVOICE_JOIN}
       WHERE d.firm_id = ${firmId}
         AND d.client_party_id = ${clientPartyId}
         AND d.created_at >= now() - make_interval(days => ${days})

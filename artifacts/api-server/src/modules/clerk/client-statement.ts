@@ -17,7 +17,7 @@ import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
 import { lagosParts, lagosWindowSql } from "../../lib/lagos-time";
 import { assertFirmClerkBudget } from "./budget";
-import { CLERK_FLAG_KEY, type ClerkGateway } from "./gateway";
+import { CLERK_FLAG_KEY, inferPhrasing, type ClerkGateway } from "./gateway";
 import { gatewayOrNull } from "./provider";
 import { MONTH_NAMES, plural } from "./text";
 
@@ -302,31 +302,48 @@ export async function generateClientStatement(
   }
   if (clerkAvailable && gateway) {
     const user = buildStatementUser(facts, monthStart);
-    const result = await gateway.infer<z.infer<typeof statementOutput>>({
-      purpose: "client_statement",
-      firmId,
-      promptVersion: STATEMENT_PROMPT_VERSION,
-      system: STATEMENT_SYSTEM,
-      user,
-      schemaName: "client_statement",
-      jsonSchema: statementJsonSchema,
-      validator: statementOutput,
-      inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(facts)}`,
-    });
-    // Number grounding: a numeral the facts never stated → template answers
-    // (grounding.ts).
-    if (
-      result.ok &&
-      (await ensureGrounded(
-        "client_statement",
-        firmId,
-        [result.data.headline, ...result.data.bullets].join("\n"),
-        user,
-      ))
-    ) {
-      headline = result.data.headline;
-      bullets = result.data.bullets.length ? result.data.bullets : bullets;
-      source = "clerk";
+    // One phrasing call under the digest posture (fix round, after #93): the
+    // bare gateway.infer here was a kill-switch TOCTOU — a clerk_ai flip
+    // between the clerkAvailable check and the call made the gateway's own
+    // assert throw CLERK_DISABLED out of the sweep, failing a generation
+    // pass this module documents as NEVER blocked by the kill switch.
+    // inferPhrasing re-checks the flag and folds every typed gateway failure
+    // to null → template; the outer try keeps the stronger draft-reply.ts
+    // guarantee that even a ledger-insert failure after the provider
+    // answered, or a grounding-check crash, stores the template row with
+    // source tagged honestly.
+    try {
+      const data = await inferPhrasing<z.infer<typeof statementOutput>>(
+        gateway,
+        {
+          purpose: "client_statement",
+          firmId,
+          promptVersion: STATEMENT_PROMPT_VERSION,
+          system: STATEMENT_SYSTEM,
+          user,
+          schemaName: "client_statement",
+          jsonSchema: statementJsonSchema,
+          validator: statementOutput,
+          inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(facts)}`,
+        },
+      );
+      // Number grounding: a numeral the facts never stated → template answers
+      // (grounding.ts).
+      if (
+        data &&
+        (await ensureGrounded(
+          "client_statement",
+          firmId,
+          [data.headline, ...data.bullets].join("\n"),
+          user,
+        ))
+      ) {
+        headline = data.headline;
+        bullets = data.bullets.length ? data.bullets : bullets;
+        source = "clerk";
+      }
+    } catch {
+      // The template narrative stands; the row below stores it as-is.
     }
   }
 

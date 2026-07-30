@@ -184,6 +184,74 @@ test("the firm-wide digest count sees the same alerts", async () => {
   assert.equal(empty.clients, 0);
 });
 
+test("the top-N cut ranks by naira equivalent, not raw face value", async () => {
+  // A USD 2,000 monthly retainer must outrank an NGN 100,000 one (at the
+  // (buyer, currency) group's most recently captured fx_rate_to_ngn:
+  // 2,000 x 1,500 = NGN 3,000,000), and a foreign habit with NO captured
+  // rate ranks at face value only (never hidden, never converted at an
+  // invented rate) — the ngnRankFor rule shared with missing-bills. Fresh
+  // firm/client so the sibling tests' single-alert pins stay intact.
+  const db = getDb();
+  const fxFirm = randomUUID();
+  const fxClient = randomUUID();
+  const buyerNgn = randomUUID();
+  const buyerUsd = randomUUID();
+  const buyerEur = randomUUID();
+  await db.insert(firmsTable).values({ id: fxFirm, name: `UB FX Firm ${SALT}` });
+  await db.insert(partiesTable).values([
+    { id: fxClient, type: "client_business", legalName: `UB FX Client ${SALT}` },
+    { id: buyerNgn, type: "buyer", legalName: `UB FX NGN Buyer ${SALT}` },
+    { id: buyerUsd, type: "buyer", legalName: `UB FX USD Buyer ${SALT}` },
+    { id: buyerEur, type: "buyer", legalName: `UB FX EUR Buyer ${SALT}` },
+  ]);
+  const fxRow = (over: {
+    buyerPartyId: string;
+    invoiceNumber: string;
+    issueDate: string;
+    currency: string;
+    grandTotal: string;
+    fxRateToNgn?: string;
+  }) => ({
+    firmId: fxFirm,
+    supplierPartyId: fxClient,
+    buyerPartyId: over.buyerPartyId,
+    invoiceNumber: over.invoiceNumber,
+    issueDate: over.issueDate,
+    status: "stamped" as const,
+    currency: over.currency,
+    grandTotal: over.grandTotal,
+    subtotal: over.grandTotal,
+    vatTotal: "0.00",
+    fxRateToNgn: over.fxRateToNgn ?? null,
+  });
+  await db.insert(invoicesTable).values([
+    // NGN habit, ~10 days late: face value 100,000.
+    fxRow({ buyerPartyId: buyerNgn, invoiceNumber: `UBFX-N1-${SALT}`, issueDate: daysAgo(100), currency: "NGN", grandTotal: "100000.00" }),
+    fxRow({ buyerPartyId: buyerNgn, invoiceNumber: `UBFX-N2-${SALT}`, issueDate: daysAgo(70), currency: "NGN", grandTotal: "100000.00" }),
+    fxRow({ buyerPartyId: buyerNgn, invoiceNumber: `UBFX-N3-${SALT}`, issueDate: daysAgo(40), currency: "NGN", grandTotal: "100000.00" }),
+    // USD habit, same lateness: the MOST RECENT non-null rate (1500, on the
+    // middle invoice — the newest carries none) sets the rank.
+    fxRow({ buyerPartyId: buyerUsd, invoiceNumber: `UBFX-U1-${SALT}`, issueDate: daysAgo(100), currency: "USD", grandTotal: "2000.00", fxRateToNgn: "1300" }),
+    fxRow({ buyerPartyId: buyerUsd, invoiceNumber: `UBFX-U2-${SALT}`, issueDate: daysAgo(70), currency: "USD", grandTotal: "2000.00", fxRateToNgn: "1500" }),
+    fxRow({ buyerPartyId: buyerUsd, invoiceNumber: `UBFX-U3-${SALT}`, issueDate: daysAgo(40), currency: "USD", grandTotal: "2000.00" }),
+    // EUR habit with no rate ever captured: unconvertible, ranks at face.
+    fxRow({ buyerPartyId: buyerEur, invoiceNumber: `UBFX-E1-${SALT}`, issueDate: daysAgo(100), currency: "EUR", grandTotal: "900.00" }),
+    fxRow({ buyerPartyId: buyerEur, invoiceNumber: `UBFX-E2-${SALT}`, issueDate: daysAgo(70), currency: "EUR", grandTotal: "900.00" }),
+    fxRow({ buyerPartyId: buyerEur, invoiceNumber: `UBFX-E3-${SALT}`, issueDate: daysAgo(40), currency: "EUR", grandTotal: "900.00" }),
+  ]);
+
+  const alerts = await listUnbilledIncome(fxFirm, fxClient);
+  assert.deepEqual(
+    alerts.map((a) => a.currency),
+    ["USD", "NGN", "EUR"],
+    "USD 2,000 @ 1,500 (NGN 3,000,000) first, then NGN 100,000, then rate-less EUR 900 at face",
+  );
+  // Displayed amounts stay in the ORIGINAL currency — only the rank converts.
+  assert.equal(Number(alerts[0].medianAmount), 2000);
+  assert.equal(Number(alerts[1].medianAmount), 100_000);
+  assert.equal(Number(alerts[2].medianAmount), 900);
+});
+
 test("an archived engagement drops the client from the digest count", async () => {
   await getDb()
     .update(engagementsTable)

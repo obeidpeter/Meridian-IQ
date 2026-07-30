@@ -41,9 +41,23 @@ import type { FieldError } from "./canonical";
 // completes and commits with nobody reading the response, and a re-run
 // self-heals because submitted rows leave the pending scan; and the 30s
 // request-transaction cap no longer applies — a full 200-row batch is
-// EXPECTED to outrun it, which is half the reason to leave.
+// EXPECTED to outrun it, which is half the reason to leave. The wall clock
+// is instead bounded by BULK_DEADLINE_MS below (checked between items).
 
 const MAX_BATCH = 200;
+
+// Wall-clock ceiling (fix round): leaving the request transaction also left
+// the 30s request-tx cap behind — a slow rail could pin this route for
+// minutes with NO bound at all. The deadline is checked BEFORE each item
+// STARTS, never mid-item, so every row is either fully attempted (in `rows`)
+// or untouched (not in `rows`); there is no third state. Untouched rows fall
+// into the honest `remaining = pending - rows.length` count exactly like
+// rows beyond the batch cap, and the UI's repeat-until-done loop picks them
+// up next call. Items completed before the deadline STAY COMMITTED (per-item
+// posture: each validate/submit committed in its own short transaction — a
+// deadline stop can never undo them). 25s leaves margin under typical 30s
+// proxy timeouts for the final audit write and the response.
+export const BULK_DEADLINE_MS = 25_000;
 
 export interface BulkSubmitRowResult {
   invoiceId: string;
@@ -67,7 +81,11 @@ export async function bulkSubmit(
   firmId: string | null,
   actorId: string,
   limit?: number,
+  // Injected clock (tests drive the deadline with a fake; production never
+  // passes it). Milliseconds, Date.now semantics.
+  now: () => number = Date.now,
 ): Promise<BulkSubmitResult> {
+  const startedAt = now();
   // The caller's own tenancy posture, re-bound per stage: firm principals
   // get their firm GUC (RLS exactly as their request transaction carried);
   // cross-tenant staff — firmId null, which is precisely how the route
@@ -140,6 +158,10 @@ export async function bulkSubmit(
 
   const rows: BulkSubmitRowResult[] = [];
   for (const inv of staged.batch) {
+    // Deadline gate BEFORE the item's first per-item ctx call (see
+    // BULK_DEADLINE_MS): stop, leave the rest untouched — they simply never
+    // enter `rows`, so the tallies and `remaining` below stay truthful.
+    if (now() - startedAt >= BULK_DEADLINE_MS) break;
     const row: BulkSubmitRowResult = {
       invoiceId: inv.id,
       invoiceNumber: inv.invoiceNumber,

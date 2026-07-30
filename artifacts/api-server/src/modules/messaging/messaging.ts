@@ -81,6 +81,17 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email", "push"],
     description: "A Clerk automation was paused and needs attention.",
   },
+  // Standing-approval grant (round 30): the side that did NOT click learns a
+  // new automation exists — a staff-granted policy notifies the client party
+  // through the consent-gated alert rails, a client-granted one notifies
+  // firm staff under their opt-ins. Pointer only (SEC-12): no kind, cap,
+  // client or grantor rides the message — the dashboard's Automation strip
+  // carries the what. Channels mirror automation_paused, its lifecycle twin.
+  automation_granted: {
+    key: "automation_granted",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "A Clerk standing approval (automation) was created.",
+  },
 };
 
 // Channel failover order when a provider fails. Push is terminal: if the Expo

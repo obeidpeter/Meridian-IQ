@@ -31,6 +31,9 @@ import type {
 // rest of the module stays real — in particular the query-key builders, so
 // the invalidation assertions compare against genuine keys.
 const harness = vi.hoisted(() => ({
+  me: {
+    data: undefined as unknown,
+  },
   proposals: {
     data: undefined as unknown,
     isSuccess: false,
@@ -53,6 +56,7 @@ const harness = vi.hoisted(() => ({
     revoke: [] as unknown[],
   },
   reset() {
+    this.me.data = undefined;
     this.proposals.data = undefined;
     this.proposals.isSuccess = false;
     this.decisions.data = undefined;
@@ -87,6 +91,7 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     });
   return {
     ...actual,
+    useGetMe: () => ({ data: harness.me.data }),
     useGetActionProposals: () => ({
       data: harness.proposals.data,
       isSuccess: harness.proposals.isSuccess,
@@ -258,6 +263,13 @@ async function openResults(
 afterEach(cleanup);
 beforeEach(() => {
   harness.reset();
+  // The default viewer holds invoice.submit — the capability the server
+  // gates every write on this card behind (routes/clerk/actions.ts).
+  harness.me.data = {
+    userId: "u-1",
+    role: "firm_admin",
+    capabilities: ["invoice.submit", "clerk.ask"],
+  };
   harness.proposals.data = proposals([proposal()]);
   harness.proposals.isSuccess = true;
   harness.decisions.data = { decisions: [] };
@@ -432,7 +444,7 @@ describe("ClerkActionsCard (console)", () => {
 
   // ---- Standing approvals (round 28) --------------------------------------
 
-  test("the automate affordance: submit kinds only, flag lit, no live grant — and granting sends kind + client", async () => {
+  test("the automate affordance: submit kinds only, flag lit, no live grant — and granting sends kind + client + the default cap", async () => {
     harness.proposals.data = proposals([
       proposal(),
       proposal({ kind: "draft_chasers", title: "Draft 1 payment reminder" }),
@@ -444,21 +456,73 @@ describe("ClerkActionsCard (console)", () => {
     expect(screen.getByTestId("button-automate-submit_overdue")).toBeTruthy();
     expect(screen.queryByTestId("button-automate-draft_chasers")).toBeNull();
 
-    // The confirm dialog carries the consent-grade copy verbatim.
+    // The confirm dialog carries the consent-grade copy verbatim, restating
+    // the default per-run cap of 10.
     await click(screen.getByTestId("button-automate-submit_overdue"));
     expect(
-      screen.getByText(policyGrantDescription("submit_overdue", "console")),
+      screen.getByText(policyGrantDescription("submit_overdue", "console", 10)),
     ).toBeTruthy();
+    expect(
+      (screen.getByTestId("input-policy-cap") as HTMLInputElement).value,
+    ).toBe("10");
 
     await click(screen.getByTestId("button-confirm-automate"));
     expect(harness.policyCalls.grant).toEqual([
-      { data: { kind: "submit_overdue", clientPartyId: "cp-1" } },
+      {
+        data: {
+          kind: "submit_overdue",
+          clientPartyId: "cp-1",
+          maxTargetsPerRun: 10,
+        },
+      },
     ]);
     // Granting closes the dialog and refetches the grants.
     expect(
-      screen.queryByText(policyGrantDescription("submit_overdue", "console")),
+      screen.queryByText(
+        policyGrantDescription("submit_overdue", "console", 10),
+      ),
     ).toBeNull();
     expect(invalidatedKeys()).toContainEqual(getGetActionPoliciesQueryKey());
+  });
+
+  test("the chosen cap flows into the consent copy and the grant body; out-of-bounds disables confirm", async () => {
+    harness.policies.data = { policies: [], enabled: true };
+    renderCard();
+    await click(screen.getByTestId("button-automate-submit_overdue"));
+
+    // Choosing 25: the copy restates 25 and the grant carries it.
+    fireEvent.change(screen.getByTestId("input-policy-cap"), {
+      target: { value: "25" },
+    });
+    expect(
+      screen.getByText(policyGrantDescription("submit_overdue", "console", 25)),
+    ).toBeTruthy();
+
+    // Out of the contract's 1..50: confirm disables, nothing is sent.
+    fireEvent.change(screen.getByTestId("input-policy-cap"), {
+      target: { value: "0" },
+    });
+    expect(
+      (screen.getByTestId("button-confirm-automate") as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    await click(screen.getByTestId("button-confirm-automate"));
+    expect(harness.policyCalls.grant).toEqual([]);
+
+    // Back in bounds: the grant sends the chosen 25.
+    fireEvent.change(screen.getByTestId("input-policy-cap"), {
+      target: { value: "25" },
+    });
+    await click(screen.getByTestId("button-confirm-automate"));
+    expect(harness.policyCalls.grant).toEqual([
+      {
+        data: {
+          kind: "submit_overdue",
+          clientPartyId: "cp-1",
+          maxTargetsPerRun: 25,
+        },
+      },
+    ]);
   });
 
   test("no affordance while the policies flag is dark, or once a live grant exists", () => {
@@ -538,5 +602,89 @@ describe("ClerkActionsCard (console)", () => {
     expect(screen.getByTestId("decision-dec-2").textContent).not.toContain(
       "· auto",
     );
+  });
+
+  test("any paused grant raises the amber header pill; none paused, no pill", () => {
+    // One paused among two grants: the pill counts the paused ones and sits
+    // in the HEADER, visible regardless of where the card is scrolled.
+    harness.policies.data = {
+      policies: [
+        policy({
+          pausedAt: "2026-07-29T06:00:00Z",
+          pausedReason: "failed_targets",
+        }),
+        policy({ id: "pol-2", kind: "retry_failed" }),
+      ],
+      enabled: true,
+    };
+    renderCard();
+    expect(screen.getByTestId("pill-automation-paused").textContent).toBe(
+      "1 paused",
+    );
+    // The inline amber detail row stays alongside the pill.
+    expect(
+      screen.getByTestId("text-policy-status-submit_overdue").textContent,
+    ).toBe("paused — too many failures in the last run");
+    cleanup();
+
+    harness.policies.data = { policies: [policy()], enabled: true };
+    renderCard();
+    expect(screen.queryByTestId("pill-automation-paused")).toBeNull();
+  });
+
+  // ---- Capability gating ----------------------------------------------------
+
+  test("a viewer without invoice.submit sees status, pill and run record — but no write affordances", () => {
+    // An auditor has read access to everything on this card, and every
+    // mutation would 403 server-side — so none may be offered.
+    harness.me.data = {
+      userId: "u-2",
+      role: "auditor",
+      capabilities: ["invoice.read", "clerk.ask"],
+    };
+    harness.policies.data = {
+      policies: [
+        policy({
+          pausedAt: "2026-07-29T06:00:00Z",
+          pausedReason: "failed_targets",
+        }),
+      ],
+      enabled: true,
+    };
+    harness.decisions.data = {
+      decisions: [
+        decision([
+          { invoiceId: "inv-1", invoiceNumber: "INV-001", outcome: "submitted", error: null },
+        ]),
+      ],
+    };
+    renderCard();
+
+    // The read surfaces stay: proposal evidence, grant status, the paused
+    // pill and the decision record.
+    expect(screen.getByTestId("card-clerk-actions")).toBeTruthy();
+    expect(screen.getByTestId("action-target-inv-1")).toBeTruthy();
+    expect(
+      screen.getByTestId("text-policy-status-submit_overdue").textContent,
+    ).toBe("paused — too many failures in the last run");
+    expect(screen.getByTestId("pill-automation-paused").textContent).toBe(
+      "1 paused",
+    );
+    expect(screen.getByTestId("decision-dec-1").textContent).toContain(
+      "1 executed",
+    );
+
+    // No write affordances of any kind.
+    expect(screen.queryByTestId("button-approve-submit_overdue")).toBeNull();
+    expect(screen.queryByTestId("button-automate-submit_overdue")).toBeNull();
+    expect(
+      screen.queryByTestId("button-policy-pause-submit_overdue"),
+    ).toBeNull();
+    expect(
+      screen.queryByTestId("button-policy-resume-submit_overdue"),
+    ).toBeNull();
+    expect(
+      screen.queryByTestId("button-policy-revoke-submit_overdue"),
+    ).toBeNull();
   });
 });

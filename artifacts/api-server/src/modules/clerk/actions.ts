@@ -91,6 +91,25 @@ export const MAX_ACTION_TARGETS = 50;
 // A chaser batch is a batch of MODEL calls — bounded much lower; the chase
 // list is ranked, so the cap keeps the worst-first ten.
 export const MAX_CHASER_TARGETS = 10;
+// Round 30 (rail-rejection tripwire, mechanism 1): how many total
+// submission_attempts an invoice may accumulate before the AUTOPILOT stops
+// offering it back to the rails. submitInvoice returns at ENQUEUE time and a
+// rail rejection lands asynchronously (invoice back to 'failed'), so without
+// this cap a standing retry_failed approval re-enqueues permanently-rejected
+// paper every Lagos day forever. The attempts ledger is append-only, so the
+// count only grows — a capped invoice stays out of AUTOMATED assembly for
+// good until a human intervenes (fixes and submits, or cancels).
+export const AUTO_RETRY_ATTEMPT_CAP = 5;
+
+// Assembly options for the POLICY path only (round 30): the standing-approval
+// sweep threads maxSubmissionAttempts through proposalForKind so the
+// AUTOMATED candidate SQL drops rail-hammered invoices. The human proposal
+// surface (listActionProposals) never sets it — a person still sees, and may
+// deliberately re-choose, a target the autopilot has given up on. The human
+// proposal SHAPE is unchanged by design.
+export interface AssemblyOptions {
+  maxSubmissionAttempts?: number;
+}
 
 function maxTargetsFor(kind: ActionKind): number {
   return kind === "draft_chasers" ? MAX_CHASER_TARGETS : MAX_ACTION_TARGETS;
@@ -219,7 +238,18 @@ async function submitOverdueProposal(
 async function retryFailedProposal(
   firmId: string,
   clientPartyId: string,
+  opts?: AssemblyOptions,
 ): Promise<ActionProposal | null> {
+  // The policy-path attempt cap (round 30): counts the FULL append-only
+  // attempts ledger — every enqueue the rails already bounced — so a capped
+  // invoice drops out of the automated candidate set (and its full_count)
+  // entirely. Absent the option (every human surface), the predicate is
+  // byte-identical to the historical one.
+  const attemptCapCond =
+    opts?.maxSubmissionAttempts === undefined
+      ? sql``
+      : sql`AND (SELECT COUNT(*) FROM submission_attempts ac
+          WHERE ac.invoice_id = i.id) < ${opts.maxSubmissionAttempts}`;
   const rows = (
     await getDb().execute<{
       id: string;
@@ -240,6 +270,7 @@ async function retryFailedProposal(
         COUNT(*) OVER ()::int AS full_count
       FROM invoices i
       WHERE ${failedCond(firmId, clientPartyId)}
+        ${attemptCapCond}
       ORDER BY i.issue_date ASC, i.id
       LIMIT ${MAX_ACTION_TARGETS}
     `)
@@ -324,15 +355,22 @@ async function draftChasersProposal(
 // Round 28: the standing-approval sweep assembles a policy's batch from the
 // SAME live builders the proposal surface uses — one entry point keyed by
 // kind, so the autopilot can never select targets the card would not show.
+// Round 30 narrows that to "a SUBSET of what the card would show": the
+// sweep's opts drop rail-hammered retry candidates (attempt cap) that the
+// human proposal keeps offering. Only retry_failed consumes the option —
+// submit_overdue targets are UNSUBMITTED paper (a rail rejection moves them
+// to 'failed' and out of that predicate on its own), and draft_chasers
+// submits nothing.
 export function proposalForKind(
   kind: ActionKind,
   firmId: string,
   clientPartyId: string,
+  opts?: AssemblyOptions,
 ): Promise<ActionProposal | null> {
   return kind === "submit_overdue"
     ? submitOverdueProposal(firmId, clientPartyId)
     : kind === "retry_failed"
-      ? retryFailedProposal(firmId, clientPartyId)
+      ? retryFailedProposal(firmId, clientPartyId, opts)
       : draftChasersProposal(firmId, clientPartyId);
 }
 

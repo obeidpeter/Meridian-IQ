@@ -101,6 +101,22 @@ const clerkTenant = (table: string): Probe => ({
   expect: true,
   check: (pool) => clerkTenantPolicyExists(pool, table),
 });
+const appendOnlyTriggerExists = async (
+  pool: pg.Pool,
+  table: string,
+): Promise<boolean> => {
+  const res = await pool.query(
+    `SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+      WHERE c.relname = $1 AND t.tgname = 'meridian_append_only'`,
+    [table],
+  );
+  return res.rowCount! > 0;
+};
+const appendOnly = (table: string): Probe => ({
+  desc: `append-only trigger on ${table} exists`,
+  expect: true,
+  check: (pool) => appendOnlyTriggerExists(pool, table),
+});
 const triggerAllowsFailed = (): Probe => ({
   desc: "line immutability trigger allows failed-status edits",
   expect: true,
@@ -314,6 +330,11 @@ const LADDER: LadderStep[] = [
     version: 29, // standing-approval policy guardrails
     atTop: [clerkTenant("clerk_action_policies")],
     afterRollback: [not(clerkTenant("clerk_action_policies"))],
+  },
+  {
+    version: 30, // action-decision ledger immutability
+    atTop: [appendOnly("clerk_action_decisions")],
+    afterRollback: [not(appendOnly("clerk_action_decisions"))],
   },
 ];
 

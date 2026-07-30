@@ -21,7 +21,8 @@ export type PushTemplateKey =
   | "client_statement_ready"
   | "compliance_pack_ready"
   | "firm_digest_ready"
-  | "automation_paused";
+  | "automation_paused"
+  | "automation_granted";
 
 const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   deadline_reminder: {
@@ -47,6 +48,10 @@ const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   automation_paused: {
     title: "MeridianIQ",
     body: "A standing approval was paused and needs attention. Open the app for details.",
+  },
+  automation_granted: {
+    title: "MeridianIQ",
+    body: "A standing approval was created for your account. Open the app for details.",
   },
 };
 

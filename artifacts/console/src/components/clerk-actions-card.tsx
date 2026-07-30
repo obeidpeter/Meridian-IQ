@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  useGetMe,
   useGetActionProposals,
   getGetActionProposalsQueryKey,
   useExecuteAction,
@@ -22,6 +23,8 @@ import type {
 import { useClerkActionsDialog } from "@workspace/web-ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +38,9 @@ import { serverErrorMessage } from "@/lib/errors";
 import {
   ACTION_OUTCOME_LABELS,
   ACTION_TARGET_DISPLAY_CAP,
+  POLICY_CAP_DEFAULT,
+  POLICY_CAP_MAX,
+  POLICY_CAP_MIN,
   actionConfirmButtonLabel,
   actionConfirmDescription,
   actionOutcomeSummary,
@@ -44,6 +50,7 @@ import {
   formatAmount,
   formatDate,
   formatDateTime,
+  parsePolicyCap,
   policyGrantDescription,
   policyKindLabel,
   policyStatusLine,
@@ -64,6 +71,13 @@ import { Send, Sparkles } from "lucide-react";
 export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // The server gates every write on this card behind invoice.submit
+  // (routes/clerk/actions.ts: execute for submit kinds, grant/pause/resume/
+  // revoke all assertCan invoice.submit). Mirror that here so a read-only
+  // viewer (auditor) sees the status, the paused pill and the run record —
+  // but no buttons that could only ever 403.
+  const { data: me } = useGetMe();
+  const canAct = !!me?.capabilities.includes("invoice.submit");
   const execute = useExecuteAction();
   const { data: proposals, isSuccess } = useGetActionProposals(
     { clientPartyId },
@@ -103,6 +117,12 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
   );
   // Which submit-kind proposal is awaiting the standing-approval confirm.
   const [automating, setAutomating] = useState<ActionProposal | null>(null);
+  // The per-run ceiling the grant will carry (string: the field must survive
+  // a cleared box mid-edit). Reset to the default each time the dialog
+  // opens; parsePolicyCap is the single validity gate — out-of-bounds means
+  // the confirm button disables, never a silent clamp.
+  const [capInput, setCapInput] = useState(String(POLICY_CAP_DEFAULT));
+  const policyCap = parsePolicyCap(capInput);
   const onPolicyChanged = () =>
     queryClient.invalidateQueries({
       queryKey: getGetActionPoliciesQueryKey(),
@@ -129,6 +149,10 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
     grant.isPending || pause.isPending || resume.isPending || revoke.isPending;
   const livePolicies = policies?.policies ?? [];
   const policyByKind = new Map(livePolicies.map((p) => [p.kind, p]));
+  // A paused grant means the sweep is NOT running — amber-worthy in the
+  // header (the SME dashboard's MonthEndCloseCard pill pattern), visible
+  // wherever the card is scrolled to, alongside the inline amber rows.
+  const pausedCount = livePolicies.filter((p) => p.pausedAt).length;
   const dialog = useClerkActionsDialog<
     ActionProposal,
     ClerkActionDecision,
@@ -188,6 +212,14 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Sparkles className="w-5 h-5" aria-hidden="true" /> Clerk suggests
+          {pausedCount > 0 && (
+            <span
+              className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+              data-testid="pill-automation-paused"
+            >
+              {pausedCount} paused
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -226,33 +258,38 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                onClick={() => dialog.beginConfirm(action)}
-                disabled={execute.isPending}
-                data-testid={`button-approve-${action.kind}`}
-              >
-                <Send className="w-4 h-4 mr-2" aria-hidden="true" />
-                Review &amp; approve
-              </Button>
-              {/* The automate affordance: submit kinds only, flag lit, no
-                  live grant yet — a standing approval is granted NEXT TO the
-                  evidence it will act on. */}
-              {policies?.enabled &&
-                automatableActionKind(action.kind) &&
-                !policyByKind.has(action.kind) && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setAutomating(action)}
-                    disabled={policyBusy}
-                    data-testid={`button-automate-${action.kind}`}
-                  >
-                    Automate daily
-                  </Button>
-                )}
-            </div>
+            {canAct && (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => dialog.beginConfirm(action)}
+                  disabled={execute.isPending}
+                  data-testid={`button-approve-${action.kind}`}
+                >
+                  <Send className="w-4 h-4 mr-2" aria-hidden="true" />
+                  Review &amp; approve
+                </Button>
+                {/* The automate affordance: submit kinds only, flag lit, no
+                    live grant yet — a standing approval is granted NEXT TO
+                    the evidence it will act on. */}
+                {policies?.enabled &&
+                  automatableActionKind(action.kind) &&
+                  !policyByKind.has(action.kind) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setCapInput(String(POLICY_CAP_DEFAULT));
+                        setAutomating(action);
+                      }}
+                      disabled={policyBusy}
+                      data-testid={`button-automate-${action.kind}`}
+                    >
+                      Automate daily
+                    </Button>
+                  )}
+              </div>
+            )}
           </div>
         ))}
         {livePolicies.length > 0 && (
@@ -277,38 +314,40 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
                 >
                   {policyStatusLine(p)}
                 </span>
-                <span className="ml-auto flex gap-1">
-                  {p.pausedAt ? (
+                {canAct && (
+                  <span className="ml-auto flex gap-1">
+                    {p.pausedAt ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => resume.mutate({ id: p.id })}
+                        disabled={policyBusy}
+                        data-testid={`button-policy-resume-${p.kind}`}
+                      >
+                        Resume
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => pause.mutate({ id: p.id })}
+                        disabled={policyBusy}
+                        data-testid={`button-policy-pause-${p.kind}`}
+                      >
+                        Pause
+                      </Button>
+                    )}
                     <Button
                       size="sm"
-                      variant="outline"
-                      onClick={() => resume.mutate({ id: p.id })}
+                      variant="ghost"
+                      onClick={() => revoke.mutate({ id: p.id })}
                       disabled={policyBusy}
-                      data-testid={`button-policy-resume-${p.kind}`}
+                      data-testid={`button-policy-revoke-${p.kind}`}
                     >
-                      Resume
+                      Revoke
                     </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => pause.mutate({ id: p.id })}
-                      disabled={policyBusy}
-                      data-testid={`button-policy-pause-${p.kind}`}
-                    >
-                      Pause
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => revoke.mutate({ id: p.id })}
-                    disabled={policyBusy}
-                    data-testid={`button-policy-revoke-${p.kind}`}
-                  >
-                    Revoke
-                  </Button>
-                </span>
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -450,11 +489,31 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
               {automating ? policyKindLabel(automating.kind) : ""}
             </DialogTitle>
             <DialogDescription>
+              {/* The consent copy restates the ceiling being chosen below;
+                  while the box is mid-edit (invalid) it reads the default
+                  and the confirm button is disabled anyway. */}
               {automating
-                ? policyGrantDescription(automating.kind, "console")
+                ? policyGrantDescription(
+                    automating.kind,
+                    "console",
+                    policyCap ?? POLICY_CAP_DEFAULT,
+                  )
                 : ""}
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="policy-cap">Daily limit (invoices per run)</Label>
+            <Input
+              id="policy-cap"
+              type="number"
+              inputMode="numeric"
+              min={POLICY_CAP_MIN}
+              max={POLICY_CAP_MAX}
+              value={capInput}
+              onChange={(e) => setCapInput(e.target.value)}
+              data-testid="input-policy-cap"
+            />
+          </div>
           <DialogFooter>
             <Button
               variant="outline"
@@ -466,13 +525,13 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             <Button
               onClick={() => {
                 const kind = automating && automatableActionKind(automating.kind);
-                if (!kind) return;
+                if (!kind || policyCap === null) return;
                 grant.mutate(
-                  { data: { kind, clientPartyId } },
+                  { data: { kind, clientPartyId, maxTargetsPerRun: policyCap } },
                   { onSuccess: () => setAutomating(null) },
                 );
               }}
-              disabled={grant.isPending}
+              disabled={grant.isPending || policyCap === null}
               data-testid="button-confirm-automate"
             >
               {grant.isPending ? "Working…" : "Turn on daily automation"}
