@@ -104,6 +104,7 @@ pnpm --filter @workspace/db run push            # prepare the scratch DB: tables
 pnpm --filter @workspace/db run migrate         # ...then guardrail migrations, or the tests hit permission-denied
 pnpm --filter @workspace/api-server run test    # DB-backed; run against meridian_ci
 pnpm --filter @workspace/db run test            # migration rollback (real Postgres)
+pnpm --filter @workspace/scripts run ops:restore-drill   # backup→restore→assert round-trip (needs DRILL_DATABASE_URL scratch target)
 pnpm --filter @workspace/mobile run test
 pnpm --filter @workspace/sme-compliance run test
 pnpm --filter @workspace/console run test
