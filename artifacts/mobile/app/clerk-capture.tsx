@@ -50,6 +50,7 @@ import {
   fieldLabel,
   MAX_FILE_BYTES,
 } from "@/lib/clerk-capture";
+import type { ClerkDocumentKind } from "@/lib/clerk-capture";
 import { timeAgo } from "@/lib/format";
 import { PENDING_POLL_STALLED_MESSAGE } from "@/lib/pending-poll";
 import { useSession } from "@/lib/session";
@@ -78,6 +79,11 @@ export default function ClerkCaptureScreen() {
   const canCapture = !!me?.capabilities?.includes("clerk.capture");
 
   const [text, setText] = useState("");
+  // What the user is sending: an invoice (the default — the body carries no
+  // documentKind, byte-identical to the pre-notices submission) or a
+  // tax-authority notice (documentKind: "notice"). There is no voice
+  // affordance on this screen, so notice mode needs nothing hidden here.
+  const [docKind, setDocKind] = useState<ClerkDocumentKind>("invoice");
   // Which local capture flow (camera or file pick) is mid-flight — tracked as
   // a discriminant so only the tapped button shows its spinner.
   const [working, setWorking] = useState<"camera" | "document" | null>(null);
@@ -197,7 +203,7 @@ export default function ClerkCaptureScreen() {
         // never a dead-end silent failure.
         setBanner({
           tone: "error",
-          message: "Camera access is needed to photograph an invoice.",
+          message: "Camera access is needed to photograph the document.",
         });
         return;
       }
@@ -219,7 +225,7 @@ export default function ClerkCaptureScreen() {
       // The picker should hand back base64 inline (requested above); fall
       // back to reading the captured file if a platform omits it.
       const base64 = asset.base64 ?? (await new File(asset.uri).base64());
-      const built = buildCameraCaseInput(base64, new Date());
+      const built = buildCameraCaseInput(base64, new Date(), docKind);
       if (!built.ok) {
         setBanner({ tone: "error", message: built.message });
         return;
@@ -259,7 +265,12 @@ export default function ClerkCaptureScreen() {
       // …but `size` is optional (Android pickers commonly omit it), so the
       // build re-measures the actual base64 payload and refuses oversized
       // files here instead of round-tripping to an opaque 413.
-      const built = buildDocumentCaseInput(base64, asset.name, asset.mimeType);
+      const built = buildDocumentCaseInput(
+        base64,
+        asset.name,
+        asset.mimeType,
+        docKind,
+      );
       if (!built.ok) {
         setBanner({ tone: "error", message: built.message });
         return;
@@ -269,7 +280,7 @@ export default function ClerkCaptureScreen() {
       setBanner({
         tone: "error",
         message:
-          "We couldn't read that file. Pick a PDF or a photo of the invoice, or paste its text below.",
+          "We couldn't read that file. Pick a PDF or a photo of the document, or paste its text below.",
       });
     } finally {
       setWorking(null);
@@ -279,7 +290,21 @@ export default function ClerkCaptureScreen() {
   const submitText = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    void submit({ sourceType: "text", text: trimmed });
+    void submit({
+      sourceType: "text",
+      // Only a notice marks the body; absent = invoice, unchanged.
+      ...(docKind === "notice" ? { documentKind: "notice" as const } : {}),
+      text: trimmed,
+    });
+  };
+
+  const switchKind = (kind: ClerkDocumentKind) => {
+    if (kind === docKind) return;
+    setDocKind(kind);
+    // A held duplicate payload belongs to the other kind — drop it rather
+    // than resubmitting a mismarked document.
+    setDuplicate(null);
+    setBanner(null);
   };
 
   return (
@@ -351,8 +376,66 @@ export default function ClerkCaptureScreen() {
             ) : null}
 
             <View style={{ gap: 12 }}>
-              <AppText variant="heading">Capture an invoice</AppText>
+              <AppText variant="heading">
+                {docKind === "notice"
+                  ? "Capture a tax notice"
+                  : "Capture an invoice"}
+              </AppText>
               <Card style={{ gap: 12 }}>
+                {/* Invoice / Tax-notice segmented pair (the estimator's
+                    radio idiom, compressed to pills). */}
+                <View
+                  accessibilityRole="radiogroup"
+                  accessibilityLabel="What are you sending?"
+                  style={styles.kindRow}
+                >
+                  {(
+                    [
+                      { kind: "invoice", label: "Invoice" },
+                      { kind: "notice", label: "Tax notice" },
+                    ] as const
+                  ).map(({ kind, label }) => {
+                    const selected = docKind === kind;
+                    return (
+                      <Pressable
+                        key={kind}
+                        onPress={() => switchKind(kind)}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                        accessibilityLabel={label}
+                        testID={`kind-${kind}`}
+                        style={({ pressed }) => [
+                          styles.kindPill,
+                          {
+                            backgroundColor: selected
+                              ? colors.primary
+                              : colors.secondary,
+                            borderRadius: colors.radius,
+                            opacity: pressed ? 0.85 : 1,
+                          },
+                        ]}
+                      >
+                        <AppText
+                          variant="label"
+                          color={
+                            selected
+                              ? colors.primaryForeground
+                              : colors.secondaryForeground
+                          }
+                        >
+                          {label}
+                        </AppText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {docKind === "notice" ? (
+                  <AppText variant="caption" color={colors.mutedForeground}>
+                    Photograph or upload the tax-authority notice, or paste its
+                    text — your accountant confirms the deadline before an
+                    obligation is recorded.
+                  </AppText>
+                ) : null}
                 {Platform.OS !== "web" ? (
                   <>
                     {/* The camera is the headline capture path — snap the
@@ -378,10 +461,18 @@ export default function ClerkCaptureScreen() {
                   </>
                 ) : null}
                 <TextField
-                  label="Or paste the invoice text"
+                  label={
+                    docKind === "notice"
+                      ? "Or paste the notice text"
+                      : "Or paste the invoice text"
+                  }
                   value={text}
                   onChangeText={setText}
-                  placeholder="Paste an email, message, or typed-out invoice — Clerk pulls out the details."
+                  placeholder={
+                    docKind === "notice"
+                      ? "Paste the notice text — Clerk pulls out the authority, reference and deadline."
+                      : "Paste an email, message, or typed-out invoice — Clerk pulls out the details."
+                  }
                   multiline
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -542,6 +633,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  kindRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  kindPill: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
   iconTile: {
     width: 32,

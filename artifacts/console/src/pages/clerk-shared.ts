@@ -10,6 +10,12 @@ import type {
   ClerkCaseDecisionInputCategory,
   ClerkPartySuggestions,
   InvoiceLineInput,
+  NoticeDecisionInput,
+} from "@workspace/api-client-react";
+import {
+  NoticeDecisionInputAuthority,
+  NoticeDecisionInputNoticeType,
+  NoticeDecisionInputTaxType,
 } from "@workspace/api-client-react";
 import type { LucideIcon } from "lucide-react";
 import { FileText, MessageSquareText, Mic, ScanLine } from "lucide-react";
@@ -40,6 +46,11 @@ export const STATUS_TONE: Record<string, BadgeTone> = {
 // wire-absent fallback for older servers that don't send one. Purely a
 // triage hint: approval still needs the operator's eyes.
 export function isReadyToApprove(kase: ClerkCase): boolean {
+  // The fast lane is for invoice extraction cases ONLY: a notice approval
+  // creates a statutory response obligation, and a question case never
+  // approves at all — neither may ever carry a "Ready" marker or ride a
+  // bulk approval.
+  if (kase.kind !== "extraction") return false;
   if (kase.status !== "extracted") return false;
   if (!Array.isArray(kase.preflight)) return false;
   if (kase.preflight.some((i) => i.severity !== "advisory")) return false;
@@ -394,6 +405,199 @@ export function intakeKind(sourceType: string | null | undefined) {
 export function fieldLabel(field: string): string {
   const spaced = field.replace(/([A-Z])/g, " $1").toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+// ---- Notice cases (Notice Desk) --------------------------------------------
+// A notice case is a photographed/uploaded tax-authority notice. Approval
+// never creates an invoice: it records a response OBLIGATION (client,
+// authority, response deadline). The three closed catalogues below are the
+// contract's own enums; every select in the notice decision form and the
+// obligations card is bound to them.
+
+export const NOTICE_TYPE_LABELS: Record<string, string> = {
+  assessment: "Assessment",
+  demand: "Demand notice",
+  information_request: "Information request",
+  audit: "Audit notice",
+  penalty: "Penalty notice",
+  reminder: "Reminder",
+  other: "Other notice",
+};
+
+export const AUTHORITY_LABELS: Record<string, string> = {
+  firs: "FIRS",
+  state_irs: "State IRS",
+  customs: "Customs",
+  other: "Other authority",
+};
+
+export const TAX_TYPE_LABELS: Record<string, string> = {
+  vat: "VAT",
+  cit: "CIT",
+  wht: "WHT",
+  paye: "PAYE",
+  stamp_duty: "Stamp duty",
+  other: "Other",
+};
+
+// Humanized labels with a fallback for values outside the maps (the CASE's
+// noticeType is a free string from extraction; only the decision's is closed).
+export function noticeTypeLabel(raw: string | null | undefined): string {
+  return NOTICE_TYPE_LABELS[raw ?? ""] ?? humanizeLoose(raw);
+}
+
+export function authorityLabel(raw: string | null | undefined): string {
+  return AUTHORITY_LABELS[raw ?? ""] ?? humanizeLoose(raw);
+}
+
+export function taxTypeLabel(raw: string | null | undefined): string {
+  return TAX_TYPE_LABELS[raw ?? ""] ?? humanizeLoose(raw);
+}
+
+function humanizeLoose(raw: string | null | undefined): string {
+  const s = (raw ?? "").replace(/[_-]+/g, " ").trim();
+  if (!s) return "Unknown";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Notice extraction fields carry a few labels the generic camelCase spacing
+// gets wrong (acronyms); everything else falls through to fieldLabel.
+const NOTICE_FIELD_LABELS: Record<string, string> = {
+  referenceNumber: "Reference number",
+  amountDemanded: "Amount demanded",
+  responseDueDate: "Response due date",
+  tin: "TIN",
+  taxpayerTin: "Taxpayer TIN",
+  firsOffice: "FIRS office",
+};
+
+export function noticeFieldLabel(field: string): string {
+  return NOTICE_FIELD_LABELS[field] ?? fieldLabel(field);
+}
+
+// Normalise a free-text extracted value onto a closed catalogue: "FIRS" ->
+// "firs", "State IRS" -> "state_irs", "Stamp duty" -> "stamp_duty". Anything
+// that doesn't land exactly on an option prefills NOTHING — the operator
+// must pick deliberately, the model never smuggles a choice in.
+export function closedOption<T extends string>(
+  catalogue: Record<string, T>,
+  raw: string | null | undefined,
+): T | "" {
+  if (!raw) return "";
+  const norm = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return (Object.values(catalogue) as string[]).includes(norm)
+    ? (norm as T)
+    : "";
+}
+
+function noticeFieldValue(kase: ClerkCase, field: string): string {
+  return (
+    kase.noticeExtraction?.fields.find((f) => f.field === field)?.value ?? ""
+  );
+}
+
+export interface NoticeApproveForm {
+  firmId: string;
+  clientPartyId: string;
+  noticeType: NoticeDecisionInputNoticeType | "";
+  authority: NoticeDecisionInputAuthority | "";
+  reference: string;
+  taxType: NoticeDecisionInputTaxType | "";
+  period: string;
+  amount: string;
+  currency: string;
+  issueDate: string;
+  responseDueDate: string;
+  notes: string;
+}
+
+// The notice decision form's prefill: extraction values seed the inputs
+// (referenceNumber -> reference, amountDemanded -> amount), the enum-bound
+// selects only prefill when the extracted text lands exactly on a catalogue
+// option, and the firm defaults to the case's own firm (same auto-selection
+// the invoice bulk prefill makes). The client party always starts empty —
+// pinning a notice to the wrong client is the costly mistake here.
+export function noticeApproveFormFromCase(kase: ClerkCase): NoticeApproveForm {
+  return {
+    firmId: kase.firmId ?? "",
+    clientPartyId: "",
+    noticeType: closedOption(
+      NoticeDecisionInputNoticeType,
+      kase.noticeExtraction?.noticeType,
+    ),
+    authority: closedOption(
+      NoticeDecisionInputAuthority,
+      noticeFieldValue(kase, "authority"),
+    ),
+    reference:
+      noticeFieldValue(kase, "referenceNumber") ||
+      noticeFieldValue(kase, "reference"),
+    taxType: closedOption(
+      NoticeDecisionInputTaxType,
+      noticeFieldValue(kase, "taxType"),
+    ),
+    period: noticeFieldValue(kase, "period"),
+    amount:
+      noticeFieldValue(kase, "amountDemanded") ||
+      noticeFieldValue(kase, "amount"),
+    currency: noticeFieldValue(kase, "currency"),
+    issueDate: noticeFieldValue(kase, "issueDate"),
+    responseDueDate: noticeFieldValue(kase, "responseDueDate"),
+    notes: "",
+  };
+}
+
+// Approve is held until the obligation the server will create is fully
+// determined: which firm, which client, what kind of notice, from whom, and
+// by when a response is due. Everything else is optional context.
+export function noticeApproveDisabled(
+  form: NoticeApproveForm | null,
+): boolean {
+  return (
+    !form ||
+    !form.firmId ||
+    !form.clientPartyId ||
+    !form.noticeType ||
+    !form.authority ||
+    !form.responseDueDate
+  );
+}
+
+// The one notice approve-decision builder (the invoice form's
+// approveDecisionFromForm twin): trims free-text inputs and OMITS empty
+// optionals — the contract's optional fields are absent-or-valued, never "".
+export function noticeDecisionFromForm(
+  form: NoticeApproveForm,
+  reason: string,
+): NoticeDecisionInput {
+  return {
+    action: "approve",
+    firmId: form.firmId,
+    clientPartyId: form.clientPartyId,
+    // Guarded by noticeApproveDisabled before submit ever fires.
+    noticeType: form.noticeType as NoticeDecisionInputNoticeType,
+    authority: form.authority as NoticeDecisionInputAuthority,
+    responseDueDate: form.responseDueDate,
+    ...(form.reference.trim() ? { reference: form.reference.trim() } : {}),
+    ...(form.taxType ? { taxType: form.taxType } : {}),
+    ...(form.period.trim() ? { period: form.period.trim() } : {}),
+    ...(form.amount.trim() ? { amount: form.amount.trim() } : {}),
+    ...(form.currency.trim() ? { currency: form.currency.trim() } : {}),
+    ...(form.issueDate ? { issueDate: form.issueDate } : {}),
+    ...(form.notes.trim() ? { notes: form.notes.trim() } : {}),
+    ...(reason.trim() ? { reason: reason.trim() } : {}),
+  };
+}
+
+// How a case presents in the queue and the detail header: source presentation
+// (icon) from intakeKind, with notice cases relabelled — a photographed
+// notice must never masquerade as an "Invoice scan".
+export function caseIntakeKind(
+  kase: Pick<ClerkCase, "kind" | "sourceType">,
+): { label: string; eyebrow: string; icon: LucideIcon } {
+  const base = intakeKind(kase.sourceType);
+  if (kase.kind !== "notice") return base;
+  return { ...base, label: "Tax notice", eyebrow: "Notice intake" };
 }
 
 // Batch-aware queue grouping (round-8 idea #3): cases that came out of the

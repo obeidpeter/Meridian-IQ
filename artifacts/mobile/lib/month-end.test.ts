@@ -24,6 +24,10 @@ test("bank-credit items route to reconciliation; unbilled income to New Invoice"
   assert.equal(closeItemRoute("unbilled_income"), "/invoice");
 });
 
+test("open tax-authority obligations route to the Obligations screen", () => {
+  assert.equal(closeItemRoute("open_obligations"), "/obligations");
+});
+
 test("items without a mobile surface render without a link", () => {
   assert.equal(closeItemRoute("unmatched_collections"), null);
   // A key from a newer server degrades to a plain row, never a dead link.

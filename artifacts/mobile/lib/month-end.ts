@@ -25,6 +25,8 @@ const CLOSE_ITEM_ROUTES: Record<string, Href> = {
   unmatched_credits: "/reconciliation",
   // A regular invoice not yet raised → draft one on the New Invoice tab.
   unbilled_income: "/invoice",
+  // Open tax-authority obligations (Notice Desk) live on their own screen.
+  open_obligations: "/obligations",
 };
 
 /**

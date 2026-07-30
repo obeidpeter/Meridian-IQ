@@ -129,6 +129,33 @@ test("buildCameraCaseInput assembles the picked-photo submission shape", () => {
   });
 });
 
+// documentKind (Notice Desk): a tax-authority notice rides the exact same
+// capture rails, marked only by documentKind: "notice" in the body. Absent
+// means invoice on the server, so "invoice"/omitted must produce a body with
+// NO documentKind key at all — the pre-notices submission, byte-identical.
+
+test("buildCameraCaseInput threads documentKind only when it is 'notice'", () => {
+  const b64 = Buffer.from("fake jpeg bytes").toString("base64");
+  const at = new Date("2026-07-19T09:00:00Z");
+
+  const notice = buildCameraCaseInput(b64, at, "notice");
+  assert.ok(notice.ok);
+  assert.equal(notice.input.documentKind, "notice");
+
+  const invoice = buildCameraCaseInput(b64, at, "invoice");
+  assert.ok(invoice.ok);
+  assert.equal("documentKind" in invoice.input, false);
+
+  const omitted = buildCameraCaseInput(b64, at);
+  assert.ok(omitted.ok);
+  assert.equal("documentKind" in omitted.input, false);
+  // Everything else is unchanged by the kind.
+  assert.deepEqual(
+    { ...notice.input, documentKind: undefined },
+    { ...omitted.input, documentKind: undefined },
+  );
+});
+
 test("buildCameraCaseInput accepts exactly 5 MB and refuses one byte more", () => {
   const at = new Date("2026-07-19T09:00:00Z");
   const atLimit = buildCameraCaseInput(
@@ -178,6 +205,38 @@ test("buildDocumentCaseInput assembles the pdf and image submission shapes", () 
   const bare = buildDocumentCaseInput(b64, null, null);
   assert.ok(bare.ok);
   assert.deepEqual(bare.input, { sourceType: "image", imageBase64: b64 });
+});
+
+test("buildDocumentCaseInput threads documentKind only when it is 'notice'", () => {
+  const b64 = Buffer.from("fake file bytes").toString("base64");
+
+  const notice = buildDocumentCaseInput(
+    b64,
+    "notice.pdf",
+    "application/pdf",
+    "notice",
+  );
+  assert.ok(notice.ok);
+  assert.deepEqual(notice.input, {
+    sourceType: "pdf",
+    documentKind: "notice",
+    name: "notice.pdf",
+    contentType: "application/pdf",
+    pdfBase64: b64,
+  });
+
+  const invoice = buildDocumentCaseInput(
+    b64,
+    "invoice.pdf",
+    "application/pdf",
+    "invoice",
+  );
+  assert.ok(invoice.ok);
+  assert.equal("documentKind" in invoice.input, false);
+
+  const omitted = buildDocumentCaseInput(b64, "invoice.pdf", "application/pdf");
+  assert.ok(omitted.ok);
+  assert.equal("documentKind" in omitted.input, false);
 });
 
 test("buildDocumentCaseInput catches an oversized file the picker reported no size for", () => {

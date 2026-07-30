@@ -7,6 +7,7 @@ import { PAYABLES_INTENTS } from "./payables";
 import { FILING_INTENTS } from "./filing";
 import { STATUS_INTENTS } from "./status";
 import { DELTA_INTENTS } from "./deltas";
+import { OBLIGATION_INTENTS } from "./obligations";
 
 // Grounded firm-data Q&A (Clerk idea #6). Ask Clerk gains a SECOND closed
 // catalogue next to the claims register: data intents — live lookups over the
@@ -42,6 +43,7 @@ import { DELTA_INTENTS } from "./deltas";
 //   filing.ts       VAT position, penalty exposure
 //   status.ts       one pinned invoice, approvals, allowance, proposed actions
 //   deltas.ts       month-over-month comparison, per-client movers (Ask 2.0)
+//   obligations.ts  open authority obligations (Notice Desk)
 
 // The catalogue. Keys are namespaced "data.*" so they can never collide with
 // operator-authored claim keys; resolution in ask.ts checks this catalogue
@@ -56,6 +58,9 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   ...FILING_INTENTS,
   ...STATUS_INTENTS,
   ...DELTA_INTENTS,
+  // APPEND ONLY: the Notice Desk group joins at the END (the key-list order
+  // is model-facing and frozen by the eval corpus).
+  ...OBLIGATION_INTENTS,
 ];
 
 // Client-facing Ask (SEC-03). clerk.ask is open to client_users, but the
@@ -132,6 +137,11 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // data.client_breakdown is deliberately ABSENT: it ranks the firm's
   // clients against each other — firm-wide content by definition.
   "data.month_delta",
+  // Open obligations with the forced own-party pin: accepts.client is true
+  // and countOpenObligations reduces to the caller's OWN notices under the
+  // pin — counts and a date only, no other client is ever named, and the
+  // answer carries no links at all.
+  "data.open_obligations",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

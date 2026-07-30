@@ -92,6 +92,20 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email", "push"],
     description: "A Clerk standing approval (automation) was created.",
   },
+  // Notice Desk: an authority notice's response deadline is approaching /
+  // has passed. Channels mirror deadline_reminder, the invoice twin. Pointer
+  // only (SEC-12): no authority, reference, amount or client rides the
+  // message — the app shows the obligation itself.
+  obligation_due_soon: {
+    key: "obligation_due_soon",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "Authority notice response due soon",
+  },
+  obligation_overdue: {
+    key: "obligation_overdue",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "Authority notice response overdue",
+  },
 };
 
 // Channel failover order when a provider fails. Push is terminal: if the Expo

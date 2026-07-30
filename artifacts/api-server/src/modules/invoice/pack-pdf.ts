@@ -12,6 +12,7 @@
 import PDFDocument from "pdfkit";
 import { lagosMidnight } from "../../lib/lagos-time";
 import { hslTripleToHex } from "./pdf";
+import { OBLIGATION_DUE_SOON_DAYS } from "../obligations/obligations";
 import type { CompliancePackFacts } from "./compliance-pack";
 
 // --- Theme resolution --------------------------------------------------------
@@ -393,6 +394,36 @@ export async function renderCompliancePackPdf(
     .fillColor("#666666")
     .text(facts.vat.note, MARGIN, y, { width: CONTENT_WIDTH });
   y = doc.y + 10;
+
+  // --- Open obligations (Notice Desk) ----------------------------------------
+  // As-of-render, not month-bound: an authority deadline is live whichever
+  // month the pack describes, so an open obligation belongs in every pack
+  // until it is answered.
+  section("Open obligations");
+  if (facts.obligations.open === 0) {
+    emptyLine("No authority notices are awaiting a response.");
+  } else {
+    kvRow(
+      `Open authority obligations (${facts.obligations.dueSoon} due within ${OBLIGATION_DUE_SOON_DAYS} days, ${facts.obligations.overdue} overdue)`,
+      String(facts.obligations.open),
+      true,
+    );
+    if (facts.obligations.nearestDue) {
+      kvRow("Nearest response due", facts.obligations.nearestDue);
+    }
+    for (const row of facts.obligations.rows) {
+      kvRow(
+        `  ${row.authority} — ${row.noticeType}${row.reference ? ` (ref ${row.reference})` : ""}`,
+        row.responseDueDate,
+      );
+    }
+    if (facts.obligations.open > facts.obligations.rows.length) {
+      emptyLine(
+        `Showing ${facts.obligations.rows.length} of ${facts.obligations.open} open obligations — the full list lives in the app.`,
+      );
+    }
+  }
+  y += 8;
 
   // --- Deadlines -------------------------------------------------------------
   section("Deadlines");

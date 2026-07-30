@@ -7,6 +7,7 @@ import {
   useCreateClerkCase,
   useCreateClerkCaseBatch,
   useDecideClerkCase,
+  useDecideNoticeCase,
   useBulkApproveClerkCases,
   useClaimClerkCase,
   useReleaseClerkCase,
@@ -24,6 +25,10 @@ import {
   getGetClerkCaseSourcePagesQueryKey,
   getGetClerkMetricsQueryKey,
   getGetClerkPartySuggestionsQueryKey,
+  getListObligationsQueryKey,
+  NoticeDecisionInputAuthority,
+  NoticeDecisionInputNoticeType,
+  NoticeDecisionInputTaxType,
 } from "@workspace/api-client-react";
 import type {
   BatchClerkCasesResult,
@@ -34,6 +39,7 @@ import type {
   ClerkPartySuggestions,
   InvoiceLineInput,
   ListClerkCasesParams,
+  Obligation,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,13 +77,15 @@ import {
 } from "@/lib/errors";
 import { formatDateTime, pillClasses } from "@/lib/format";
 import { PartySuggestionChips } from "@/pages/clerk-party-suggestions";
-import type { ApproveForm } from "@/pages/clerk-shared";
+import type { ApproveForm, NoticeApproveForm } from "@/pages/clerk-shared";
 import {
   approveDecisionFromForm,
   approveFormFromCase,
+  authorityLabel,
   bulkApproveFormFromCase,
   bulkApproveSummary,
   bulkDialogPhase,
+  caseIntakeKind,
   clerkDisabledToast,
   correctionHint,
   fastLaneCaseSummary,
@@ -87,13 +95,18 @@ import {
   fileToBase64,
   groupQueueByBatch,
   imageDataUri,
-  intakeKind,
   isReadyToApprove,
+  noticeApproveDisabled,
+  noticeApproveFormFromCase,
+  noticeDecisionFromForm,
+  noticeFieldLabel,
+  noticeTypeLabel,
   relativeTime,
   reviewEffort,
   serverErrorToast,
   shortActor,
   STATUS_TONE,
+  taxTypeLabel,
   truncateSnippet,
   vatPercentInvalid,
   voiceDuration,
@@ -120,6 +133,18 @@ import {
 // says so instead of pretending.
 
 const CATEGORIES: ClerkCaseDecisionInputCategory[] = ["b2b", "b2g", "b2c"];
+
+// The notice decision form's closed catalogues — the contract's own enums,
+// never free text (grounding split: the model may suggest, only a catalogue
+// value can be filed).
+const NOTICE_TYPES = Object.values(NoticeDecisionInputNoticeType);
+const AUTHORITIES = Object.values(NoticeDecisionInputAuthority);
+const TAX_TYPES = Object.values(NoticeDecisionInputTaxType);
+
+// The two intake queues the workspace can show: invoice extraction cases
+// (the default Capture tab) and tax-authority notice cases (Notice Desk).
+// Question cases live on their own Ask page, not here.
+type QueueKind = "extraction" | "notice";
 
 // The case queue loads in pages: with limit/offset present the server
 // returns a bounded, newest-first slice instead of the full legacy list. A
@@ -177,17 +202,27 @@ export function ClerkWorkspace() {
   const clerkFlag = flags?.find((f) => f.key === "clerk_ai");
   const firstName = me?.fullName?.split(" ")[0];
 
-  // Paged case queue. The Capture tab only ever shows extraction cases, so
-  // that kind filter now travels to the server with the page bounds (any
-  // filter change would restart from the first page — offset only ever grows
-  // within one filter set). Only the page at `offset` is a live query;
-  // earlier pages are kept in local state and re-appended below.
+  // Paged case queue. The workspace shows one kind at a time — invoice
+  // extraction cases or notice cases — and that kind filter travels to the
+  // server with the page bounds (any filter change restarts from the first
+  // page — offset only ever grows within one filter set). Only the page at
+  // `offset` is a live query; earlier pages are kept in local state and
+  // re-appended below.
+  const [queueKind, setQueueKind] = useState<QueueKind>("extraction");
   const [offset, setOffset] = useState(0);
   const [earlierCases, setEarlierCases] = useState<ClerkCase[]>([]);
   const caseParams: ListClerkCasesParams = {
-    kind: "extraction",
+    kind: queueKind,
     limit: PAGE_SIZE,
     offset,
+  };
+  const switchQueueKind = (kind: QueueKind) => {
+    if (kind === queueKind) return;
+    setQueueKind(kind);
+    // Restart paging for the new filter set; keep the selected case — the
+    // detail pane fetches by id and stays valid across tabs.
+    setEarlierCases([]);
+    setOffset(0);
   };
   const {
     data: casePage,
@@ -282,9 +317,21 @@ export function ClerkWorkspace() {
     message: string;
   } | null>(null);
 
-  // Decision form
+  // Decision forms — the invoice approve form and the notice decision form
+  // are mutually exclusive: at most one is non-null, keyed by the selected
+  // case's kind.
   const [form, setForm] = useState<ApproveForm | null>(null);
+  const [noticeForm, setNoticeForm] = useState<NoticeApproveForm | null>(null);
   const [reason, setReason] = useState("");
+  // The obligation created by the LAST notice approval on the selected case:
+  // survives the case refetching to "approved" (which clears the form), and
+  // resets when the operator moves to another case.
+  const [noticeObligation, setNoticeObligation] = useState<Obligation | null>(
+    null,
+  );
+  useEffect(() => {
+    setNoticeObligation(null);
+  }, [selectedId]);
   // Which field rows have their source snippet expanded — per-case, collapsed
   // by default.
   const [openSnippets, setOpenSnippets] = useState<Set<string>>(new Set());
@@ -297,9 +344,13 @@ export function ClerkWorkspace() {
     });
   useEffect(() => {
     if (selected && (selected.status === "extracted" || selected.status === "in_review")) {
-      setForm(approveFormFromCase(selected));
+      setForm(selected.kind === "extraction" ? approveFormFromCase(selected) : null);
+      setNoticeForm(
+        selected.kind === "notice" ? noticeApproveFormFromCase(selected) : null,
+      );
     } else {
       setForm(null);
+      setNoticeForm(null);
     }
     setReason("");
     setOpenSnippets(new Set());
@@ -469,6 +520,32 @@ export function ClerkWorkspace() {
     },
   });
 
+  // Notice decisions ride their own endpoint: approve creates an OPEN
+  // obligation (client, authority, response deadline) — never an invoice.
+  // The created obligation's deadline is surfaced in the success state, and
+  // the obligations lists (client cards) go stale together with the queue.
+  const decideNotice = useDecideNoticeCase({
+    mutation: {
+      onSuccess: (result) => {
+        invalidateCases();
+        queryClient.invalidateQueries({
+          queryKey: getListObligationsQueryKey(),
+        });
+        if (result.obligation) {
+          setNoticeObligation(result.obligation);
+          toast({
+            title: "Obligation recorded",
+            description: `Obligation recorded — response due ${result.obligation.responseDueDate}`,
+          });
+        } else {
+          toast({ title: `Case ${result.case.status}` });
+        }
+      },
+      onError: (e) =>
+        handleGatewayError(e, "Could not record the notice decision."),
+    },
+  });
+
   // Claiming is optional (a solo operator can decide straight from
   // "extracted") — it just tells other operators someone is on the case. A
   // 409 means someone else won the race, so refetch to show the real claimant.
@@ -546,6 +623,11 @@ export function ClerkWorkspace() {
     onCleared: () => setPendingDuplicate(null),
   });
 
+  // On the Notices tab a capture is a photographed/uploaded tax-authority
+  // notice: the create payload says so (documentKind), and the invoice-only
+  // affordances (voice dictation, batch splitting) don't apply.
+  const noticeCapture = queueKind === "notice";
+
   const submitCapture = async () => {
     if (captureVoice) {
       const b64 = await fileToBase64(captureVoice);
@@ -564,7 +646,7 @@ export function ClerkWorkspace() {
     } else if (captureFile) {
       const isPdf = fileIsPdf(captureFile);
       const b64 = await fileToBase64(captureFile);
-      if (batchMode && isPdf) {
+      if (batchMode && isPdf && !noticeCapture) {
         createCaseBatch.mutate({
           data: { sourceType: "pdf", name: captureFile.name, pdfBase64: b64 },
         });
@@ -576,10 +658,11 @@ export function ClerkWorkspace() {
           name: captureFile.name,
           contentType: captureFile.type || undefined,
           ...(isPdf ? { pdfBase64: b64 } : { imageBase64: b64 }),
+          ...(noticeCapture ? { documentKind: "notice" as const } : {}),
         },
       });
     } else if (captureText.trim()) {
-      if (batchMode) {
+      if (batchMode && !noticeCapture) {
         createCaseBatch.mutate({
           data: { sourceType: "text", name: "pasted-text.txt", text: captureText },
         });
@@ -590,6 +673,7 @@ export function ClerkWorkspace() {
           sourceType: "text",
           name: "pasted-text.txt",
           text: captureText,
+          ...(noticeCapture ? { documentKind: "notice" as const } : {}),
         },
       });
     }
@@ -793,6 +877,16 @@ export function ClerkWorkspace() {
     });
   };
 
+  // The review pane's fields table serves both case kinds: an invoice case
+  // carries `extraction`, a notice case carries `noticeExtraction` — same
+  // field shape (value/confidence/flagged/critical/snippet), same
+  // presentation, different label vocabulary. Correction hints stay
+  // invoice-only: the corrections exhaust is invoice-field evidence.
+  const detailExtraction =
+    selected?.extraction ?? selected?.noticeExtraction ?? null;
+  const detailFieldLabel =
+    selected?.kind === "notice" ? noticeFieldLabel : fieldLabel;
+
   // Pre-flight issues only steer the review while the case is still
   // decidable; decided cases keep their history without the amber paint.
   const activePreflight =
@@ -806,6 +900,49 @@ export function ClerkWorkspace() {
   const linesPreflightHit = activePreflight.some(
     (i) => i.field === "lines" || i.field.startsWith("lines."),
   );
+
+  // Claiming is optional: deciding straight from "extracted" stays possible
+  // (solo-operator fast path). A claim only marks the case as actively being
+  // reviewed so a second operator doesn't start the same work. Shared by the
+  // invoice and notice decision forms.
+  const claimControls =
+    selected == null ? null : (
+      <>
+        {selected.status === "extracted" && !selected.claimedBy && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => claimCase.mutate({ id: selected.id })}
+              disabled={claimCase.isPending}
+              data-testid="button-claim-case"
+            >
+              {claimCase.isPending ? "Claiming…" : "Claim for review"}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Optional — deciding below works without claiming.
+            </p>
+          </div>
+        )}
+        {selected.status === "in_review" && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={pillClasses("amber")} data-testid="badge-claimed">
+              Claimed by {shortActor(selected.claimedBy)} ·{" "}
+              {relativeTime(selected.claimedAt)}
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => releaseCase.mutate({ id: selected.id })}
+              disabled={releaseCase.isPending}
+              data-testid="button-release-case"
+            >
+              {releaseCase.isPending ? "Releasing…" : "Release"}
+            </Button>
+          </div>
+        )}
+      </>
+    );
 
   return (
     <div className="space-y-6">
@@ -876,6 +1013,35 @@ export function ClerkWorkspace() {
                 </Button>
               </CardHeader>
               <CardContent className="space-y-3">
+                {/* One queue kind at a time: invoice extraction cases or
+                    tax-authority notice cases (Notice Desk). The kind
+                    travels to the server as the list's kind param. */}
+                <div
+                  className="flex gap-1"
+                  role="tablist"
+                  aria-label="Intake kind"
+                >
+                  <Button
+                    size="sm"
+                    role="tab"
+                    aria-selected={queueKind === "extraction"}
+                    variant={queueKind === "extraction" ? "secondary" : "ghost"}
+                    onClick={() => switchQueueKind("extraction")}
+                    data-testid="tab-kind-extraction"
+                  >
+                    Invoices
+                  </Button>
+                  <Button
+                    size="sm"
+                    role="tab"
+                    aria-selected={queueKind === "notice"}
+                    variant={queueKind === "notice" ? "secondary" : "ghost"}
+                    onClick={() => switchQueueKind("notice")}
+                    data-testid="tab-kind-notice"
+                  >
+                    Notices
+                  </Button>
+                </div>
                 {/* Queue-level fast-lane approval: only when there is a lane
                     to bulk (2+ ready cases loaded). Everything it can do, the
                     dialog restates: fast-lane cases only, drafts only. */}
@@ -894,7 +1060,9 @@ export function ClerkWorkspace() {
                 {captureOpen && (
                   <div className="border rounded-md p-3 space-y-2">
                     <Label htmlFor="capture-file">
-                      Invoice document (PDF or photo)
+                      {noticeCapture
+                        ? "Notice document (PDF or photo)"
+                        : "Invoice document (PDF or photo)"}
                     </Label>
                     <Input
                       id="capture-file"
@@ -907,6 +1075,8 @@ export function ClerkWorkspace() {
                       disabled={captureVoice != null}
                       data-testid="input-capture-file"
                     />
+                    {!noticeCapture && (
+                    <>
                     <Label htmlFor="capture-voice">
                       or a voice note (max 5 MB)
                     </Label>
@@ -969,8 +1139,12 @@ export function ClerkWorkspace() {
                       English voice notes; the audio is transcribed and only
                       the transcript is kept.
                     </p>
+                    </>
+                    )}
                     <p className="text-xs text-muted-foreground">
-                      or paste the invoice text:
+                      {noticeCapture
+                        ? "or paste the notice text:"
+                        : "or paste the invoice text:"}
                     </p>
                     <Textarea
                       value={captureText}
@@ -984,7 +1158,10 @@ export function ClerkWorkspace() {
                       data-testid="input-capture-text"
                     />
                     {/* Batch splitting works on PDFs and pasted text only —
-                        the checkbox greys out for images and voice notes. */}
+                        the checkbox greys out for images and voice notes,
+                        and never shows for notice captures (a notice is one
+                        document, not an invoice bundle). */}
+                    {!noticeCapture && (
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id="batch-toggle"
@@ -1003,6 +1180,7 @@ export function ClerkWorkspace() {
                         This upload contains multiple invoices
                       </Label>
                     </div>
+                    )}
                     <Button
                       className="w-full"
                       onClick={submitCapture}
@@ -1079,17 +1257,25 @@ export function ClerkWorkspace() {
                       : ""}
                   </p>
                 )}
-                {/* The query is already extraction-only (kind param), so no
-                    client-side kind filter is needed here anymore. */}
+                {/* The query carries the active tab's kind param, so no
+                    client-side kind filter is needed here. */}
                 {sortedCases.length === 0 ? (
-                  // First-run empty state: show the two ways in — a single
-                  // capture, or a multi-invoice bundle (same form, batch
-                  // pre-ticked). Both only OPEN the form; reading still
-                  // takes the operator's click.
+                  // First-run empty state: show the ways in — a single
+                  // capture, or (invoices only) a multi-invoice bundle
+                  // (same form, batch pre-ticked). Both only OPEN the form;
+                  // reading still takes the operator's click.
                   <EmptyState
                     icon={Inbox}
-                    title="No documents read yet"
-                    description="Capture an invoice document, voice note or pasted text — Clerk reads it and queues it here for your review."
+                    title={
+                      queueKind === "notice"
+                        ? "No notices read yet"
+                        : "No documents read yet"
+                    }
+                    description={
+                      queueKind === "notice"
+                        ? "Capture a tax-authority notice — a photo, scan or pasted text — Clerk reads it and queues it here for your review."
+                        : "Capture an invoice document, voice note or pasted text — Clerk reads it and queues it here for your review."
+                    }
                     className="py-8 px-2"
                   >
                     <div className="flex flex-wrap justify-center gap-2 mt-1">
@@ -1099,26 +1285,30 @@ export function ClerkWorkspace() {
                         data-testid="button-empty-capture"
                       >
                         <Plus className="w-4 h-4 mr-1" aria-hidden="true" />
-                        Capture your first document
+                        {queueKind === "notice"
+                          ? "Capture your first notice"
+                          : "Capture your first document"}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setCaptureOpen(true);
-                          setBatchMode(true);
-                        }}
-                        data-testid="button-empty-import-batch"
-                      >
-                        Import a multi-invoice bundle
-                      </Button>
+                      {queueKind === "extraction" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setCaptureOpen(true);
+                            setBatchMode(true);
+                          }}
+                          data-testid="button-empty-import-batch"
+                        >
+                          Import a multi-invoice bundle
+                        </Button>
+                      )}
                     </div>
                   </EmptyState>
                 ) : (
                   <div className="space-y-2">
                     {queueGroups.map((g) => {
                       const rows = g.cases.map((c) => {
-                      const kind = intakeKind(c.sourceType);
+                      const kind = caseIntakeKind(c);
                       const Icon = kind.icon;
                       const status = QUEUE_STATUS[c.status];
                       const ready = isReadyToApprove(c);
@@ -1144,6 +1334,17 @@ export function ClerkWorkspace() {
                           <span className="flex-1 min-w-0 block">
                             <span className="block text-xs text-muted-foreground">
                               {kind.label} · {formatDateTime(c.createdAt)}
+                              {/* Kind badge: notices carry a distinct violet
+                                  marker so a statutory notice never blends
+                                  in with invoice paper. */}
+                              {c.kind === "notice" && (
+                                <span
+                                  className="ml-1.5 inline-flex items-center rounded-full border border-violet-200 bg-violet-100 px-1.5 py-px text-[10px] font-medium text-violet-800 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300"
+                                  data-testid="notice-pill"
+                                >
+                                  Notice
+                                </span>
+                              )}
                             </span>
                             <span className="block text-sm font-semibold truncate mt-0.5">
                               {c.sourceName ?? "Untitled"}
@@ -1223,7 +1424,7 @@ export function ClerkWorkspace() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {intakeKind(selected.sourceType).eyebrow}
+                        {caseIntakeKind(selected).eyebrow}
                       </p>
                       <CardTitle className="text-xl mt-1 truncate">
                         {selected.sourceName ?? "Case detail"}
@@ -1261,15 +1462,15 @@ export function ClerkWorkspace() {
                             aria-hidden="true"
                           >
                             {(() => {
-                              const Icon = intakeKind(selected.sourceType).icon;
+                              const Icon = caseIntakeKind(selected).icon;
                               return <Icon className="h-4 w-4" />;
                             })()}
                           </span>
                           <p className="text-sm text-muted-foreground">
                             <span className="font-medium text-foreground">
                               {selected.sourceDurationSec
-                                ? `${voiceDuration(selected.sourceDurationSec)} ${intakeKind(selected.sourceType).label.toLowerCase()}`
-                                : intakeKind(selected.sourceType).label}
+                                ? `${voiceDuration(selected.sourceDurationSec)} ${caseIntakeKind(selected).label.toLowerCase()}`
+                                : caseIntakeKind(selected).label}
                             </span>{" "}
                             · {formatDateTime(selected.createdAt)}
                           </p>
@@ -1377,11 +1578,33 @@ export function ClerkWorkspace() {
                           ))}
                       </div>
                     ) : null}
-                    {selected.extraction && (
+                    {detailExtraction && (
                       <p className="text-xs text-muted-foreground">
-                        read by {selected.extraction.model} (
-                        {selected.extraction.promptVersion})
+                        read by {detailExtraction.model} (
+                        {detailExtraction.promptVersion})
                       </p>
+                    )}
+
+                    {/* What kind of notice this is, front and centre — the
+                        first thing an operator triages a notice by. The
+                        extracted value is free text; the label maps
+                        humanize the catalogue values and anything else
+                        falls back to plain humanization. */}
+                    {selected.kind === "notice" && selected.noticeExtraction && (
+                      <div
+                        className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/30"
+                        data-testid="card-notice-type"
+                      >
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Tax authority notice
+                        </p>
+                        <p
+                          className="mt-1 text-lg font-semibold"
+                          data-testid="text-notice-type"
+                        >
+                          {noticeTypeLabel(selected.noticeExtraction.noticeType)}
+                        </p>
+                      </div>
                     )}
 
                     {selected.status === "failed" && (
@@ -1460,11 +1683,11 @@ export function ClerkWorkspace() {
                         </div>
                       ))}
 
-                    {selected.extraction && (
+                    {detailExtraction && (
                       <div>
                         <p className="text-xs font-medium text-muted-foreground uppercase mb-1.5 flex items-center gap-2">
                           Extracted fields — amber rows need checking
-                          {selected.extraction.exemplarCaseId && (
+                          {selected.extraction?.exemplarCaseId && (
                             /* Provenance is navigable: selecting the exemplar
                                id drives the same by-id case fetch the queue
                                uses, so it opens even when that case has
@@ -1485,13 +1708,16 @@ export function ClerkWorkspace() {
                           )}
                         </p>
                         <div className="divide-y text-sm">
-                          {selected.extraction.fields.map((f) => {
+                          {detailExtraction.fields.map((f) => {
                             const preflightHit = preflightFields.has(f.field);
                             const snippetOpen = openSnippets.has(f.field);
-                            const hint = correctionHint(
-                              f.field,
-                              queueMetrics?.corrections,
-                            );
+                            const hint =
+                              selected.kind === "extraction"
+                                ? correctionHint(
+                                    f.field,
+                                    queueMetrics?.corrections,
+                                  )
+                                : null;
                             return (
                               <div key={f.field}>
                                 <div
@@ -1507,7 +1733,7 @@ export function ClerkWorkspace() {
                                   data-testid={`row-field-${f.field}`}
                                 >
                                   <span className="w-36 shrink-0 text-muted-foreground">
-                                    {fieldLabel(f.field)}
+                                    {detailFieldLabel(f.field)}
                                   </span>
                                   <span className="flex-1 truncate text-right font-semibold">
                                     {f.value ?? (
@@ -1579,62 +1805,40 @@ export function ClerkWorkspace() {
                         </Alert>
                       )}
 
+                    {/* A notice approval's success state: the obligation the
+                        server just recorded, deadline front and centre. */}
+                    {selected.kind === "notice" && noticeObligation && (
+                      <Alert data-testid="banner-obligation-created">
+                        <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                        <AlertTitle>Obligation recorded</AlertTitle>
+                        <AlertDescription>
+                          Obligation recorded — response due{" "}
+                          {noticeObligation.responseDueDate}. Track and update
+                          it from the client&apos;s page.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {/* A notice case approved before this visit: the
+                        obligation itself lives on the client's page. */}
+                    {selected.kind === "notice" &&
+                      selected.status === "approved" &&
+                      !noticeObligation && (
+                        <Alert data-testid="banner-obligation-exists">
+                          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                          <AlertTitle>Notice approved</AlertTitle>
+                          <AlertDescription>
+                            An open response obligation was recorded for this
+                            notice — track it on the client&apos;s page.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
                     {form && (
                       <div className="border-t pt-4 space-y-3">
                         <p className="text-sm font-medium">
                           Review and approve — creates a draft invoice only
                         </p>
-                        {/* Claiming is optional: deciding straight from
-                            "extracted" stays possible (solo-operator fast
-                            path). A claim only marks the case as actively
-                            being reviewed so a second operator doesn't start
-                            the same work. */}
-                        {selected.status === "extracted" &&
-                          !selected.claimedBy && (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() =>
-                                  claimCase.mutate({ id: selected.id })
-                                }
-                                disabled={claimCase.isPending}
-                                data-testid="button-claim-case"
-                              >
-                                {claimCase.isPending
-                                  ? "Claiming…"
-                                  : "Claim for review"}
-                              </Button>
-                              <p className="text-xs text-muted-foreground">
-                                Optional — deciding below works without
-                                claiming.
-                              </p>
-                            </div>
-                          )}
-                        {selected.status === "in_review" && (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span
-                              className={pillClasses("amber")}
-                              data-testid="badge-claimed"
-                            >
-                              Claimed by {shortActor(selected.claimedBy)} ·{" "}
-                              {relativeTime(selected.claimedAt)}
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() =>
-                                releaseCase.mutate({ id: selected.id })
-                              }
-                              disabled={releaseCase.isPending}
-                              data-testid="button-release-case"
-                            >
-                              {releaseCase.isPending
-                                ? "Releasing…"
-                                : "Release"}
-                            </Button>
-                          </div>
-                        )}
+                        {claimControls}
                         <div className="grid sm:grid-cols-3 gap-3">
                           <div className="space-y-1">
                             <Label>Firm</Label>
@@ -1876,6 +2080,315 @@ export function ClerkWorkspace() {
                             }
                             disabled={!reason.trim() || decideCase.isPending}
                             data-testid="button-escalate-case"
+                          >
+                            Escalate
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* The NOTICE decision form — the invoice form's twin
+                        for notice cases. Approval records a response
+                        OBLIGATION (client, authority, deadline), never an
+                        invoice; the selects are bound to the contract's
+                        closed catalogues; reject/escalate take an optional
+                        reason. */}
+                    {noticeForm && (
+                      <div className="border-t pt-4 space-y-3">
+                        <p className="text-sm font-medium">
+                          Review and approve — records a response obligation
+                          only
+                        </p>
+                        {claimControls}
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label>Firm</Label>
+                            <Select
+                              value={noticeForm.firmId}
+                              onValueChange={(v) =>
+                                setNoticeForm({ ...noticeForm, firmId: v })
+                              }
+                            >
+                              <SelectTrigger data-testid="select-notice-firm">
+                                <SelectValue placeholder="Choose firm" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(firms ?? []).map((f) => (
+                                  <SelectItem key={f.id} value={f.id}>
+                                    {f.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Client party</Label>
+                            <Select
+                              value={noticeForm.clientPartyId}
+                              onValueChange={(v) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  clientPartyId: v,
+                                })
+                              }
+                            >
+                              <SelectTrigger data-testid="select-notice-client">
+                                <SelectValue placeholder="Choose client" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(parties ?? []).map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.legalName}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="grid sm:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <Label>Notice type</Label>
+                            <Select
+                              value={noticeForm.noticeType}
+                              onValueChange={(v) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  noticeType:
+                                    v as NoticeApproveForm["noticeType"],
+                                })
+                              }
+                            >
+                              <SelectTrigger data-testid="select-notice-type">
+                                <SelectValue placeholder="Choose type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {NOTICE_TYPES.map((t) => (
+                                  <SelectItem key={t} value={t}>
+                                    {noticeTypeLabel(t)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Authority</Label>
+                            <Select
+                              value={noticeForm.authority}
+                              onValueChange={(v) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  authority:
+                                    v as NoticeApproveForm["authority"],
+                                })
+                              }
+                            >
+                              <SelectTrigger data-testid="select-notice-authority">
+                                <SelectValue placeholder="Choose authority" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {AUTHORITIES.map((a) => (
+                                  <SelectItem key={a} value={a}>
+                                    {authorityLabel(a)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Tax type (optional)</Label>
+                            <Select
+                              value={noticeForm.taxType}
+                              onValueChange={(v) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  taxType: v as NoticeApproveForm["taxType"],
+                                })
+                              }
+                            >
+                              <SelectTrigger data-testid="select-notice-tax-type">
+                                <SelectValue placeholder="Optional" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {TAX_TYPES.map((t) => (
+                                  <SelectItem key={t} value={t}>
+                                    {taxTypeLabel(t)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="grid sm:grid-cols-4 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="ntc-reference">Reference</Label>
+                            <Input
+                              id="ntc-reference"
+                              value={noticeForm.reference}
+                              onChange={(e) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  reference: e.target.value,
+                                })
+                              }
+                              data-testid="input-notice-reference"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="ntc-period">Period</Label>
+                            <Input
+                              id="ntc-period"
+                              value={noticeForm.period}
+                              placeholder="e.g. 2026-Q1"
+                              onChange={(e) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  period: e.target.value,
+                                })
+                              }
+                              data-testid="input-notice-period"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="ntc-amount">Amount</Label>
+                            <Input
+                              id="ntc-amount"
+                              value={noticeForm.amount}
+                              onChange={(e) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  amount: e.target.value,
+                                })
+                              }
+                              data-testid="input-notice-amount"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="ntc-currency">Currency</Label>
+                            <Input
+                              id="ntc-currency"
+                              value={noticeForm.currency}
+                              placeholder="NGN"
+                              onChange={(e) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  currency: e.target.value,
+                                })
+                              }
+                              data-testid="input-notice-currency"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="ntc-issue">Issue date</Label>
+                            <Input
+                              id="ntc-issue"
+                              type="date"
+                              value={noticeForm.issueDate}
+                              onChange={(e) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  issueDate: e.target.value,
+                                })
+                              }
+                              data-testid="input-notice-issue-date"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="ntc-due">Response due date</Label>
+                            <Input
+                              id="ntc-due"
+                              type="date"
+                              value={noticeForm.responseDueDate}
+                              onChange={(e) =>
+                                setNoticeForm({
+                                  ...noticeForm,
+                                  responseDueDate: e.target.value,
+                                })
+                              }
+                              data-testid="input-notice-due-date"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="ntc-notes">Notes</Label>
+                          <Textarea
+                            id="ntc-notes"
+                            value={noticeForm.notes}
+                            onChange={(e) =>
+                              setNoticeForm({
+                                ...noticeForm,
+                                notes: e.target.value,
+                              })
+                            }
+                            rows={2}
+                            data-testid="input-notice-notes"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="ntc-reason">
+                            Reason (optional, kept with the decision)
+                          </Label>
+                          <Textarea
+                            id="ntc-reason"
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                            rows={2}
+                            data-testid="input-notice-reason"
+                          />
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                          <Button
+                            onClick={() =>
+                              decideNotice.mutate({
+                                id: selected.id,
+                                data: noticeDecisionFromForm(
+                                  noticeForm,
+                                  reason,
+                                ),
+                              })
+                            }
+                            disabled={
+                              noticeApproveDisabled(noticeForm) ||
+                              decideNotice.isPending
+                            }
+                            data-testid="button-approve-notice"
+                          >
+                            Approve — record obligation
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() =>
+                              decideNotice.mutate({
+                                id: selected.id,
+                                data: {
+                                  action: "reject",
+                                  ...(reason.trim()
+                                    ? { reason: reason.trim() }
+                                    : {}),
+                                },
+                              })
+                            }
+                            disabled={decideNotice.isPending}
+                            data-testid="button-reject-notice"
+                          >
+                            Reject
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() =>
+                              decideNotice.mutate({
+                                id: selected.id,
+                                data: {
+                                  action: "escalate",
+                                  ...(reason.trim()
+                                    ? { reason: reason.trim() }
+                                    : {}),
+                                },
+                              })
+                            }
+                            disabled={decideNotice.isPending}
+                            data-testid="button-escalate-notice"
                           >
                             Escalate
                           </Button>

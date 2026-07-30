@@ -37,6 +37,10 @@ import { RECEIVABLE_AGE_DAYS } from "./data-intents/shared";
 import { countFirmPayablesDue } from "../invoice/payables";
 import { countFirmUnbilled } from "../invoice/unbilled-income";
 import { firmMoneySummary } from "../invoice/cashflow";
+import {
+  OBLIGATION_DUE_SOON_DAYS,
+  countOpenObligations,
+} from "../obligations/obligations";
 import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
 import { countFirmChasedTwice } from "../invoice/chase-log";
 import { assertFirmClerkBudget } from "./budget";
@@ -72,7 +76,9 @@ const DELIVERY_BATCH = 50;
 // v6: the money-risk facts (s.104 penalty-exposure floor, missing recurring
 // vendor bills) joined the fact list — the version bump keeps the model
 // path in lockstep with the template path.
-const DIGEST_PROMPT_VERSION = "digest.v6";
+// v7 (Notice Desk): + the authority-obligation deadline lines (due-soon /
+// overdue notice responses, countOpenObligations), same reasoning.
+const DIGEST_PROMPT_VERSION = "digest.v7";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -143,6 +149,15 @@ export interface DigestFacts {
   penaltyExposureFloorNgn: string | null;
   missingBillsCount: number;
   missingBillsClients: number;
+  // Notice Desk: open authority obligations whose response date falls within
+  // OBLIGATION_DUE_SOON_DAYS / has passed (countOpenObligations — the single
+  // obligations fact function, so the digest can never disagree with the
+  // Notice Desk). OPTIONAL (builders default an absent value to 0): sibling
+  // test files construct full DigestFacts literals that predate these fields,
+  // and stored fact snapshots (clerk_digests.facts) from earlier weeks lack
+  // them; computeDigestFacts always populates both.
+  obligationsDueSoon?: number;
+  obligationsOverdue?: number;
 }
 
 // The monthly VAT-return countdown, PURE and Lagos-anchored (lagosParts /
@@ -233,6 +248,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const approvals = await pendingApprovals(firmId);
   const unmatchedCollections = await countFirmUnmatchedCollections(firmId, 7);
   const missingBills = await countFirmMissingBills(firmId);
+  const obligations = await countOpenObligations(firmId);
   // The penalty floor is DERIVED from the overdue count this query already
   // computed — a second COUNT under the same predicate could straddle a
   // Lagos midnight and let one digest say "0 overdue" next to a non-zero
@@ -261,6 +277,8 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
       overdueCount > 0 ? bandExposure(overdueCount).small : null,
     missingBillsCount: missingBills.alerts,
     missingBillsClients: missingBills.clients,
+    obligationsDueSoon: obligations.dueSoon,
+    obligationsOverdue: obligations.overdue,
   };
 }
 
@@ -290,6 +308,8 @@ export function buildDigestUser(facts: DigestFacts): string {
     `- Collection-account payments this week matching no invoice: ${facts.unmatchedCollectionsCount}`,
     `- Estimated s.104 penalty exposure for the overdue paper (small-band floor): ${facts.penaltyExposureFloorNgn !== null ? `NGN ${facts.penaltyExposureFloorNgn}` : "none — do not mention"}`,
     `- Regular vendor bills that look uncaptured this cycle: ${facts.missingBillsCount} (across ${facts.missingBillsClients} client(s))`,
+    `- Authority notices needing a response within ${OBLIGATION_DUE_SOON_DAYS} days: ${facts.obligationsDueSoon ?? 0}`,
+    `- Authority notice responses already overdue: ${facts.obligationsOverdue ?? 0}`,
     `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
   ].join("\n");
 }
@@ -398,6 +418,18 @@ export function buildTemplateDigest(facts: DigestFacts): {
   if (facts.missingBillsCount > 0) {
     bullets.push(
       `${plural(facts.missingBillsCount, "regular vendor bill")} ${facts.missingBillsCount === 1 ? "looks" : "look"} uncaptured this cycle across ${plural(facts.missingBillsClients, "client")} — input VAT may be going unclaimed.`,
+    );
+  }
+  const obligationsDueSoon = facts.obligationsDueSoon ?? 0;
+  if (obligationsDueSoon > 0) {
+    bullets.push(
+      `${plural(obligationsDueSoon, "authority notice")} ${obligationsDueSoon === 1 ? "needs" : "need"} a response within ${OBLIGATION_DUE_SOON_DAYS} days.`,
+    );
+  }
+  const obligationsOverdue = facts.obligationsOverdue ?? 0;
+  if (obligationsOverdue > 0) {
+    bullets.push(
+      `${plural(obligationsOverdue, "authority notice response")} ${isAre(obligationsOverdue)} overdue — these deadlines are the authority's, so respond or escalate first.`,
     );
   }
   const urgent = facts.overdueCount + facts.failedCount;

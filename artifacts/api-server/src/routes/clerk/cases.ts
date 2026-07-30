@@ -9,6 +9,9 @@ import {
   DecideClerkCaseParams,
   DecideClerkCaseBody,
   DecideClerkCaseResponse,
+  DecideNoticeCaseParams,
+  DecideNoticeCaseBody,
+  DecideNoticeCaseResponse,
   ClaimClerkCaseParams,
   ClaimClerkCaseResponse,
   ReleaseClerkCaseParams,
@@ -40,6 +43,7 @@ import {
   listCases,
   getCase,
   decideCase,
+  decideNoticeCase,
   releaseCase,
   retryExtraction,
   setCaseFeedback,
@@ -172,6 +176,27 @@ router.post("/clerk/cases/:id/decision", async (req, res): Promise<void> => {
   const row = await decideCase(params.id, parsed, req.principal.userId);
   res.json(DecideClerkCaseResponse.parse(row));
 });
+
+// Notice Desk: operator decision on a kind "notice" case. Approve creates an
+// OPEN OBLIGATION (never an invoice); reject/escalate mirror the extraction
+// endpoint. Deterministic (no model call), so unlike capture/retry it stays
+// INSIDE the request transaction — the obligation insert and the case's
+// compare-and-set commit or roll back together (the 4xx rollback rule is
+// what discards the loser's obligation on a decide race).
+router.post(
+  "/clerk/cases/:id/notice-decision",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "clerk.use");
+    const params = parseOrThrow(DecideNoticeCaseParams, req.params);
+    const parsed = parseOrThrow(DecideNoticeCaseBody, req.body);
+    const result = await decideNoticeCase(
+      params.id,
+      parsed,
+      req.principal.userId,
+    );
+    res.json(DecideNoticeCaseResponse.parse(result));
+  },
+);
 
 // Fast-lane bulk approval: a human-initiated batch of APPROVALS over cases
 // the server re-verifies as fast-lane eligible (extracted, clean pre-flight,

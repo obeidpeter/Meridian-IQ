@@ -183,6 +183,54 @@ review.
   (`console/src/components/clerk-shell.tsx`, dark teal rail in both color
   schemes) with four tabs: Intake queue, Claims, Ask Clerk, Health.
 
+## Notice Desk (authority notices → obligations)
+
+The second document domain (contract 0.57.0): a tax-authority notice —
+assessment, demand note, information request, audit letter, penalty — rides
+the SAME capture rails and review queue as invoice paper, but its approval
+creates an **obligation** (client, authority, response deadline), never an
+invoice. Obligations are compliance-spine data (firm-keyed +
+client-party-scoped, migration 0031); the model only ever proposes a reading
+of the letter.
+
+- **Capture.** `documentKind: "notice"` on the ordinary create-case body
+  (absent = invoice, byte-identical historic behavior) produces a kind
+  `"notice"` case: same source resolution, same sourceHash dedup, same
+  budget/kill-switch gateway path, purpose `extract_notice`
+  (`notice-prompts.ts`, `notice.v1`). Voice is rejected up front (a
+  read-aloud notice has no authoritative text) — before any decode or token
+  spend. The inbound email/WhatsApp rails still treat every attachment as an
+  invoice (MIME alone cannot say what a document IS) — explicit capture only,
+  a deliberate scope cut.
+- **Proposal.** `noticeExtraction` (its own jsonb column; `extraction` stays
+  invoice-only): ExtractionField-shaped candidates over the closed
+  NOTICE_FIELDS catalogue (reference, authority, taxType, period, amount,
+  currency, issueDate, responseDueDate) plus a model-classified
+  `noticeType` from the closed list. `noticePreflightChecks` is pure and
+  deterministic: missing criticals and impossible dates block; a
+  response deadline already in the past is an *advisory* ("overdue on
+  arrival" — reviewers must still see the case). Fail-closed exactly like
+  the invoice lane: invalid output → escalated, provider error → failed.
+- **Review.** Notices render first-class in the intake queue (kind tabs) but
+  NEVER fast-lane: `fastLaneBlocker` walls on kind, and
+  `decideNoticeCase` (`POST /clerk/cases/{id}/notice-decision`, clerk.use)
+  is the only approve path. Approve demands the human confirm firmId,
+  clientPartyId, noticeType, authority and responseDueDate
+  (DECISION_INCOMPLETE otherwise); the obligation insert is race-safe on
+  the unique `obligations.source_case_id` (double-approve → 409); per-field
+  notice corrections (including a noticeType row) land in the same
+  corrections exhaust.
+- **Obligations downstream (zero model calls).** `modules/obligations/`
+  owns every deadline predicate (one home): `/obligations`
+  list/create/get/status routes (`obligation.read`/`obligation.write`;
+  client_users read their own — SEC-03 narrowed; manual create covers paper
+  notices), a claim-first reminder sweep with its own at-most-once
+  sent-ledger (`obligation_reminder_sends`; consent purpose stays
+  `deadline_alerts`; templates `obligation_due_soon`/`obligation_overdue`),
+  digest facts (digest.v7), a month-end close item (`open_obligations`),
+  a compliance-pack section, and the Ask intent `data.open_obligations`
+  (client-safe, own-party-pinned).
+
 ## Proposed actions (advice → assisted action)
 
 The rounds-21/22 arc: every advisory surface ends with "…you should submit
@@ -627,14 +675,12 @@ The unattended half of the arc: evidence and signals, all deterministic.
   (`POST /clerk/cases/{id}/feedback`, creator-only, question cases including
   refusals; the signal lands on the case row, `feedback`).
   `GET /clerk/ask-feedback` (`clerk.use`, console health page card) mines
-  the ratings — totals, a per-intent split (`register` / `refused` /
-  data-intent keys), the newest not-helpful questions — the
+  the ratings — totals, a per-intent split (`register` / `plan` /
+  `refused` / data-intent keys), the newest not-helpful questions — the
   answered-question sibling of claim-gap mining: refusals say what to draft
-  next, not-helpful says what to fix next. KNOWN WART (0.56.0, flagged
-  for a future round): the by-intent bucket reads the FLAT
-  `answer->>'dataIntent'`, which a multi-part answer does not carry (its
-  intents live per-section), so multi-part answers currently count under
-  `refused` in this report.
+  next, not-helpful says what to fix next. Multi-part answers carry no flat
+  `dataIntent` (their intents live per-section), so they bucket under
+  `plan` — pinned by clerk-review-integrity.test.ts.
 - **Claim-gap mining** (`modules/clerk/claim-gaps.ts`,
   `GET /clerk/claim-gaps`, `clerk.use`, pure SQL, console claims-page card):
   Ask's refusals are themselves mined — a trailing window's refused answers
@@ -642,11 +688,11 @@ The unattended half of the arc: evidence and signals, all deterministic.
   produces (unknown text folds to `other`; the no-matching-claim needle is
   one constant shared between the TS matcher and the SQL LIKE so they can
   never disagree), listing the newest uncovered questions with their firm
-  names — the evidence for what claims to draft next. KNOWN WART (0.56.0,
-  flagged for a future round): the Ask 2.0 claim-mix refusal ("A register
-  claim answers one question at a time and cannot be combined with other
-  lookups…") is not in the matcher catalogue yet, so those refusals
-  cluster under `other`.
+  names — the evidence for what claims to draft next. The Ask 2.0
+  claim-mix refusal ("…cannot be combined with other lookups…") has its
+  own stable code `claim_in_plan`; the claim-gaps test pins every sentence
+  ask.ts produces to its code, so a reworded refusal fails there instead
+  of silently landing in `other`.
 
 ## Drafting & phrasing assists (digest posture)
 

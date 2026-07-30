@@ -45,6 +45,8 @@ import billingPaymentsRouter from "./billing-payments";
 import integrationsRouter from "./integrations";
 // Client lifecycle: single-client creation, data-subject export, offboarding.
 import clientsRouter from "./clients";
+// Notice Desk: tracked authority obligations (contract 0.57.0).
+import obligationsRouter from "./obligations";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 // Platform health watch (rails / dead letters / dead deliveries). Also
@@ -63,6 +65,8 @@ import "../modules/clerk/spend-watch";
 import "../modules/clerk/quality-watch";
 import "../modules/push/register";
 import "../modules/invoice/register";
+// Registers the obligation deadline-reminder sweep with the pipeline worker.
+import "../modules/obligations/register";
 import "../modules/messaging/retention";
 
 const router: IRouter = Router();
@@ -105,5 +109,6 @@ router.use(staffRouter);
 router.use(billingPaymentsRouter);
 router.use(integrationsRouter);
 router.use(clientsRouter);
+router.use(obligationsRouter);
 
 export default router;

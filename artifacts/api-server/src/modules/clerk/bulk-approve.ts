@@ -46,9 +46,18 @@ import { FAST_LANE_DEFAULT, firmFastLaneThreshold } from "./metrics";
 //    firm's fast-lane confidence threshold.
 
 export function fastLaneBlocker(
-  kase: Pick<ClerkCase, "status" | "preflight" | "extraction">,
+  kase: Pick<ClerkCase, "status" | "preflight" | "extraction"> &
+    Partial<Pick<ClerkCase, "kind">>,
   threshold: number = FAST_LANE_DEFAULT,
 ): string | null {
+  // Notice Desk: notices NEVER fast-lane — a deadline document gets human
+  // eyes on the single-case path (decideCase would 409 CASE_BAD_KIND anyway,
+  // but the blocker must say why). `kind` is optional so the pre-notice call
+  // shapes that pass extraction-shaped objects keep meaning "extraction";
+  // every real case row carries its kind.
+  if (kase.kind !== undefined && kase.kind !== "extraction") {
+    return "not an extraction case";
+  }
   if (kase.status !== "extracted") {
     return `only fast-lane cases awaiting review can be bulk-approved (status is '${kase.status}')`;
   }

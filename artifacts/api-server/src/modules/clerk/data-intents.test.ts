@@ -9,6 +9,7 @@ import {
   firmsTable,
   partiesTable,
   invoicesTable,
+  obligationsTable,
   settlementEventsTable,
   usersTable,
   submissionAttemptsTable,
@@ -1257,4 +1258,151 @@ test("register answers and refusals carry no links", async () => {
   });
   assert.equal(refused.answer?.answered, false);
   assert.equal(refused.answer?.links, undefined, "refusals carry no links");
+});
+
+// ---- Obligations (Notice Desk) ----------------------------------------------
+
+test("data.open_obligations counts open notices, pins to a client and stays client-safe", async () => {
+  const intent = getDataIntent("data.open_obligations");
+  assert.ok(intent, "the catalogue carries the obligations intent");
+  assert.deepEqual(
+    intent.accepts,
+    { client: true },
+    "as-of-today only: no month parameter, ever",
+  );
+  assert.ok(
+    CLIENT_SAFE_DATA_INTENTS.some((i) => i.key === "data.open_obligations"),
+    "client-safe: the forced own-party pin reduces it to the caller's own notices",
+  );
+  assert.equal(
+    DATA_INTENTS[DATA_INTENTS.length - 1].key,
+    "data.open_obligations",
+    "the Notice Desk group joined at the END of the append-only catalogue",
+  );
+
+  // Seed: an open due-soon notice for partyA, an open overdue one for
+  // partyA2, a closed one (never counted) and a foreign firm's (never
+  // visible to firm A).
+  await getDb().insert(obligationsTable).values([
+    {
+      firmId: firmA,
+      clientPartyId: partyA,
+      noticeType: "assessment",
+      authority: "firs",
+      reference: `OBL-A-${SALT}`,
+      responseDueDate: lagosDateOffset(3),
+      createdBy: askerId,
+    },
+    {
+      firmId: firmA,
+      clientPartyId: partyA2,
+      noticeType: "demand",
+      authority: "state_irs",
+      reference: `OBL-Z-${SALT}`,
+      responseDueDate: lagosDateOffset(-2),
+      createdBy: askerId,
+    },
+    {
+      firmId: firmA,
+      clientPartyId: partyA,
+      noticeType: "reminder",
+      authority: "firs",
+      status: "closed",
+      responseDueDate: lagosDateOffset(1),
+      createdBy: askerId,
+    },
+    {
+      firmId: firmB,
+      clientPartyId: partyB,
+      noticeType: "assessment",
+      authority: "firs",
+      responseDueDate: lagosDateOffset(1),
+      createdBy: askerId,
+    },
+  ]);
+
+  // Firm-wide: two open (one due soon, one overdue); the nearest deadline is
+  // the overdue one; the closed and foreign rows never count.
+  const firmWide = await lookup("data.open_obligations");
+  assert.ok(firmWide);
+  assert.equal(
+    firmWide.facts.find((f) => f.key === "obligations_open")?.value,
+    "2",
+  );
+  assert.equal(
+    firmWide.facts.find((f) => f.key === "obligations_due_soon")?.value,
+    "1",
+  );
+  assert.equal(
+    firmWide.facts.find((f) => f.key === "obligations_overdue")?.value,
+    "1",
+  );
+  const nearest = firmWide.facts.find((f) => f.key === "nearest_due");
+  assert.equal(nearest?.kind, "date");
+  assert.equal(nearest?.value, lagosDateOffset(-2));
+  assert.match(firmWide.text, /2 authority notices are awaiting a response/);
+  assert.match(firmWide.text, /1 already overdue/);
+  assert.equal(firmWide.links, undefined, "obligation answers carry no links");
+
+  // The client pin narrows every count to that party's own notices.
+  const pinned = await inClerkScope(firmA, () =>
+    runDataIntent("data.open_obligations", firmA, {
+      clientPartyId: partyA2,
+      clientName: `DI Party Z ${SALT}`,
+    }),
+  );
+  assert.ok(pinned);
+  assert.equal(
+    pinned.facts.find((f) => f.key === "obligations_open")?.value,
+    "1",
+  );
+  assert.equal(
+    pinned.facts.find((f) => f.key === "obligations_overdue")?.value,
+    "1",
+  );
+  assert.ok(pinned.text.includes(`for DI Party Z ${SALT}`));
+
+  // Firm isolation: firm B sees only its own notice.
+  const foreign = await lookup("data.open_obligations", firmB);
+  assert.equal(
+    foreign?.facts.find((f) => f.key === "obligations_open")?.value,
+    "1",
+  );
+  assert.equal(
+    foreign?.facts.find((f) => f.key === "nearest_due")?.value,
+    lagosDateOffset(1),
+  );
+});
+
+test("a client-scoped ask answers data.open_obligations for its OWN party only (SEC-03)", async () => {
+  const gateway = fakeGateway(() =>
+    // The model picks NO client — the app must still pin the lookup to the
+    // caller's own party (the scope comes from the principal).
+    JSON.stringify({
+      claimKey: "data.open_obligations",
+      category: "unknown",
+      month: "none",
+      client: "none",
+    }),
+  );
+  const kase = await askClerk(
+    `Which notices need a response? ${SALT}`,
+    clientAskerId,
+    gateway,
+    { firmId: firmA, clientScoped: true, clientPartyId: partyA2 },
+  );
+  assert.equal(kase.status, "approved");
+  assert.equal(kase.answer?.answered, true);
+  assert.equal(kase.answer?.dataIntent, "data.open_obligations");
+  assert.deepEqual(kase.answer?.dataParams, { client: `DI Party Z ${SALT}` });
+  assert.ok(
+    kase.answer?.proposition?.includes("1 authority notice"),
+    "only the caller's own notice is counted",
+  );
+  assert.equal(
+    kase.answer?.facts?.find((f) => f.key === "obligations_open")?.value,
+    "1",
+    "a sibling client's notices never inflate the count (SEC-03)",
+  );
+  assert.equal(kase.answer?.links, undefined);
 });

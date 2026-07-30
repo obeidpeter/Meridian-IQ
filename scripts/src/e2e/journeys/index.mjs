@@ -34,6 +34,7 @@ import {
   journeyGovernance,
   journeyCollections,
   journeyAutomation,
+  journeyObligations,
 } from "./controls.mjs";
 import {
   journeyStaffCreditNoteAndWorkflow,
@@ -62,6 +63,9 @@ export async function runJourneys(
   // background but createdAt ordering keeps INV-1003 the oldest stamped
   // demo-client invoice — see journeyAutomation's placement comment.
   await journeyAutomation(page, BASE, check);
+  // Self-contained (creates and closes its own obligation) — placed with the
+  // other deterministic control journeys; leaves no open state behind.
+  await journeyObligations(page, BASE, check);
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
   await journeyPasswordReset(page, BASE, check);
