@@ -393,6 +393,9 @@ export const POLICY_PAUSE_REASON_LABELS: Record<string, string> = {
   consent_missing: "paused — compliance consent is missing",
   failed_targets: "paused — too many failures in the last run",
   unknown_kind: "paused — this action kind can't run automatically",
+  rail_rejections: "paused — the last run's submissions were rejected by the rails",
+  engagement_closed: "paused — the engagement with this client has ended",
+  run_error: "paused — the last run hit an unexpected error",
 };
 
 export function policyPauseReasonLabel(reason: string | null): string {
@@ -420,19 +423,39 @@ export function policyStatusLine(policy: {
   return `runs daily · up to ${policy.maxTargetsPerRun} per run · ${lastRun}`;
 }
 
+// The per-run ceiling on a grant (GrantActionPolicyInput.maxTargetsPerRun,
+// 1..50 on the contract) and the cards' shared default. parsePolicyCap is
+// the one gate both grant dialogs run the raw input through: anything
+// outside the contract's bounds means "not grantable yet" (the confirm
+// button disables) — never a silent clamp the user didn't choose.
+export const POLICY_CAP_MIN = 1;
+export const POLICY_CAP_MAX = 50;
+export const POLICY_CAP_DEFAULT = 10;
+
+export function parsePolicyCap(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return n >= POLICY_CAP_MIN && n <= POLICY_CAP_MAX ? n : null;
+}
+
 /**
  * The consent-grade description under the "automate" button: what a standing
- * approval DOES, in the same honest register as the per-batch confirm copy.
- * The audience split mirrors actionConfirmDescription's.
+ * approval DOES — including the per-run ceiling the user chose, so the copy
+ * states the number being consented to — in the same honest register as the
+ * per-batch confirm copy. The audience split mirrors
+ * actionConfirmDescription's.
  */
 export function policyGrantDescription(
   kind: string,
   audience: "sme" | "console",
+  maxTargetsPerRun: number,
 ): string {
+  const s = maxTargetsPerRun === 1 ? "" : "s";
   const what =
     kind === "retry_failed"
-      ? "resubmit invoices that failed on the rails"
-      : "submit invoices past the statutory window";
+      ? `resubmit up to ${maxTargetsPerRun} invoice${s} that failed on the rails`
+      : `submit up to ${maxTargetsPerRun} invoice${s} past the statutory window`;
   const who =
     audience === "sme"
       ? "under your name, without asking again each day"

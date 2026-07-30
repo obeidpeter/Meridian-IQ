@@ -1,10 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
   ACTION_TARGET_DISPLAY_CAP,
+  POLICY_CAP_DEFAULT,
+  POLICY_CAP_MAX,
+  POLICY_CAP_MIN,
   actionConfirmButtonLabel,
   actionConfirmDescription,
   actionOutcomeSummary,
   draftClipboardText,
+  parsePolicyCap,
   policyGrantDescription,
   policyKindLabel,
   policyPauseReasonLabel,
@@ -153,12 +157,46 @@ describe("policyStatusLine", () => {
 });
 
 describe("policyGrantDescription", () => {
-  test("says what runs, under whose name, and that it is revocable — per audience", () => {
-    expect(policyGrantDescription("submit_overdue", "sme")).toBe(
-      "Clerk will run this check every day and submit invoices past the statutory window under your name, without asking again each day. Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.",
+  test("says what runs, how many at most, under whose name, and that it is revocable — per audience", () => {
+    expect(policyGrantDescription("submit_overdue", "sme", 10)).toBe(
+      "Clerk will run this check every day and submit up to 10 invoices past the statutory window under your name, without asking again each day. Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.",
     );
-    expect(policyGrantDescription("retry_failed", "console")).toBe(
-      "Clerk will run this check every day and resubmit invoices that failed on the rails under your name, without a fresh approval each day. Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.",
+    expect(policyGrantDescription("retry_failed", "console", 25)).toBe(
+      "Clerk will run this check every day and resubmit up to 25 invoices that failed on the rails under your name, without a fresh approval each day. Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.",
     );
+  });
+
+  test("a cap of 1 reads singular", () => {
+    expect(policyGrantDescription("submit_overdue", "console", 1)).toContain(
+      "submit up to 1 invoice past the statutory window",
+    );
+    expect(policyGrantDescription("retry_failed", "sme", 1)).toContain(
+      "resubmit up to 1 invoice that failed on the rails",
+    );
+  });
+});
+
+describe("parsePolicyCap", () => {
+  test("accepts whole numbers within the contract's 1..50", () => {
+    expect(parsePolicyCap("10")).toBe(10);
+    expect(parsePolicyCap(" 1 ")).toBe(1);
+    expect(parsePolicyCap("50")).toBe(50);
+  });
+
+  test("rejects empty, fractional, signed, non-numeric and out-of-range input", () => {
+    expect(parsePolicyCap("")).toBeNull();
+    expect(parsePolicyCap("0")).toBeNull();
+    expect(parsePolicyCap("51")).toBeNull();
+    expect(parsePolicyCap("2.5")).toBeNull();
+    expect(parsePolicyCap("-3")).toBeNull();
+    expect(parsePolicyCap("+3")).toBeNull();
+    expect(parsePolicyCap("ten")).toBeNull();
+  });
+
+  test("the bounds mirror the contract and the default sits inside them", () => {
+    expect(POLICY_CAP_MIN).toBe(1);
+    expect(POLICY_CAP_MAX).toBe(50);
+    expect(POLICY_CAP_DEFAULT).toBe(10);
+    expect(parsePolicyCap(String(POLICY_CAP_DEFAULT))).toBe(POLICY_CAP_DEFAULT);
   });
 });
