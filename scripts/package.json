@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "e2e": "node src/e2e/run.mjs",
-    "load-smoke": "node src/load-smoke.mjs"
+    "load-smoke": "node src/load-smoke.mjs",
+    "ops:backup": "node src/ops/backup.mjs",
+    "ops:restore-drill": "node src/ops/restore-drill.mjs",
+    "ops:release": "node src/ops/release.mjs"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

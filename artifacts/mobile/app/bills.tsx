@@ -3,8 +3,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   getGetPayablesSummaryQueryKey,
   getListBillsQueryKey,
+  getListMissingRecurringBillsQueryKey,
   useFlagBillPayment,
   useListBills,
+  useListMissingRecurringBills,
   useVerifyBillStamp,
 } from "@workspace/api-client-react";
 import type {
@@ -45,6 +47,7 @@ import {
   billStatusLabel,
   billStatusTone,
   canFlag,
+  missingBillsBannerMessage,
   verificationChip,
   type BillFlagTarget,
 } from "@/lib/bills";
@@ -289,10 +292,30 @@ export default function BillsScreen() {
     },
   );
 
+  // Missing recurring bills (round 18): vendors whose bill arrives every
+  // month with nothing captured this cycle. Render-on-success and advisory
+  // only — a failed or dark query must not add noise to the ledger. The
+  // server mines and caps the list quietly; the banner shows exactly what
+  // arrives, never a "+N more" of its own.
+  const missingQuery = useListMissingRecurringBills(
+    { clientPartyId: clientPartyId ?? "" },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getListMissingRecurringBillsQueryKey({
+          clientPartyId: clientPartyId ?? "",
+        }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+
   const flagMut = useFlagBillPayment();
   const verifyMut = useVerifyBillStamp();
 
   const bills = billsQuery.data ?? [];
+  const missingBills = missingQuery.isSuccess ? missingQuery.data : [];
 
   const refreshBills = useCallback(() => {
     // Prefix keys: every param variant of the list and the payables summary
@@ -384,7 +407,10 @@ export default function BillsScreen() {
         refreshControl={
           <RefreshControl
             refreshing={billsQuery.isRefetching}
-            onRefresh={() => void billsQuery.refetch()}
+            onRefresh={() => {
+              void billsQuery.refetch();
+              void missingQuery.refetch();
+            }}
             tintColor={colors.primary}
           />
         }
@@ -409,6 +435,15 @@ export default function BillsScreen() {
 
             {banner ? (
               <Banner tone={banner.tone} message={banner.message} />
+            ) : null}
+
+            {missingBills.length > 0 ? (
+              <View testID="missing-bills-advisory">
+                <Banner
+                  tone="warning"
+                  message={missingBillsBannerMessage(missingBills)}
+                />
+              </View>
             ) : null}
 
             {bills.length === 0 ? (

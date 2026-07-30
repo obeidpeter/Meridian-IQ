@@ -129,6 +129,16 @@ jobs:
       - name: Migration rollback test (real Postgres)
         run: pnpm --filter @workspace/db run test
 
+      # Data durability: an untested backup is a hope, not a backup. Dump the
+      # fully-migrated CI database, restore it into a scratch DB on the same
+      # service (the drill drops/creates it via the service superuser), and
+      # assert the migration ledger, sentinel row counts and the RLS posture
+      # survive the round-trip. Fails loud on any assertion.
+      - name: Restore drill (pg_dump → pg_restore → assert)
+        run: pnpm --filter @workspace/scripts run ops:restore-drill
+        env:
+          DRILL_DATABASE_URL: postgresql://meridian:meridian@127.0.0.1:5432/meridian_drill
+
       - name: Build landing
         run: pnpm --filter @workspace/landing run build
         env: { BASE_PATH: /, PORT: "3000" }

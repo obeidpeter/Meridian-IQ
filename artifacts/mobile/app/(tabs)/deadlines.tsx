@@ -3,7 +3,9 @@ import {
   ComplianceDeadlineSeverity,
   ComplianceDeadlineStatus,
   getGetComplianceCalendarQueryKey,
+  getGetPenaltyExposureQueryKey,
   useGetComplianceCalendar,
+  useGetPenaltyExposure,
 } from "@workspace/api-client-react";
 import type { ComplianceDeadline } from "@workspace/api-client-react";
 import React, { useCallback, useMemo } from "react";
@@ -36,6 +38,11 @@ import {
   humanize,
   monthKey,
 } from "@/lib/format";
+import {
+  PENALTY_EXPOSURE_FIX_LINE,
+  penaltyExposureLine,
+  penaltyExposureNote,
+} from "@/lib/penalty-exposure";
 import { useSession } from "@/lib/session";
 
 const STATUS_TONE: Record<ComplianceDeadlineStatus, BadgeTone> = {
@@ -75,6 +82,63 @@ function groupByMonth(deadlines: ComplianceDeadline[]): MonthGroup[] {
     groups[key].items.push(d);
   }
   return order.map((k) => groups[k]);
+}
+
+// What the overdue paper could cost under MeridianIQ's published s.104
+// model (the SME dashboard card, ported). Renders only when the query
+// succeeded AND something is overdue — a failure or a dark flag adds no
+// noise to the calendar, and the headline is always the small-band floor
+// ("at least"), never a scare figure.
+function PenaltyExposureCard({
+  clientPartyId,
+}: {
+  clientPartyId: string | null;
+}) {
+  const colors = useColors();
+  const query = useGetPenaltyExposure(
+    { clientPartyId: clientPartyId ?? "" },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetPenaltyExposureQueryKey({
+          clientPartyId: clientPartyId ?? "",
+        }),
+        retry: false,
+      },
+    },
+  );
+  const exposure = query.data;
+  if (!query.isSuccess || !exposure || exposure.overdueCount === 0) {
+    return null;
+  }
+  const line = penaltyExposureLine(exposure);
+  const note = penaltyExposureNote(formatDate(exposure.asOf));
+  return (
+    <View
+      accessible
+      accessibilityLabel={`Estimated penalty exposure. ${line} ${PENALTY_EXPOSURE_FIX_LINE}`}
+      testID="penalty-exposure"
+      style={{ marginBottom: 20 }}
+    >
+      <Card style={{ backgroundColor: colors.warningSoft, gap: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Feather name="alert-triangle" size={16} color={colors.warning} />
+          <AppText variant="overline" color={colors.warning}>
+            Estimated penalty exposure
+          </AppText>
+        </View>
+        <AppText variant="body" color={colors.warning}>
+          {line}
+        </AppText>
+        <AppText variant="label" color={colors.warning}>
+          {PENALTY_EXPOSURE_FIX_LINE}
+        </AppText>
+        <AppText variant="caption" color={colors.warning}>
+          {note}
+        </AppText>
+      </Card>
+    </View>
+  );
 }
 
 export default function DeadlinesScreen() {
@@ -157,6 +221,9 @@ export default function DeadlinesScreen() {
         contentContainerStyle={contentContainerStyle}
         refreshControl={refreshControl}
       >
+        {/* An empty calendar does not mean no exposure — overdue paper can
+            exist with no upcoming deadline, so the card renders here too. */}
+        <PenaltyExposureCard clientPartyId={clientPartyId} />
         <EmptyState
           icon="check-circle"
           title="No upcoming deadlines"
@@ -166,6 +233,7 @@ export default function DeadlinesScreen() {
     );
   }
 
+  const exposureCard = <PenaltyExposureCard clientPartyId={clientPartyId} />;
   const statHeader =
     overdueCount > 0 || dueSoonCount > 0 ? (
       <View style={{ flexDirection: "row", gap: 12, marginBottom: 20 }}>
@@ -241,7 +309,12 @@ export default function DeadlinesScreen() {
           {section.label}
         </AppText>
       )}
-      ListHeaderComponent={statHeader}
+      ListHeaderComponent={
+        <>
+          {exposureCard}
+          {statHeader}
+        </>
+      }
       stickySectionHeadersEnabled={false}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={contentContainerStyle}

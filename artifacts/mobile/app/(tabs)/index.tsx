@@ -1,8 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import {
   DashboardSummaryPenaltyRisk,
+  getGetActionPoliciesQueryKey,
   getGetDashboardSummaryQueryKey,
   getGetReceivablesSummaryQueryKey,
+  useGetActionPolicies,
   useGetDashboardSummary,
   useGetReceivablesSummary,
 } from "@workspace/api-client-react";
@@ -26,6 +28,7 @@ import {
   ActionTile,
   AppButton,
   AppText,
+  Banner,
   Card,
   CardSkeleton,
   Divider,
@@ -37,6 +40,10 @@ import {
   webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
+import {
+  AUTOMATION_PAUSED_HOME_MESSAGE,
+  pausedPolicyCount,
+} from "@/lib/automation";
 import { updatesAudience } from "@/lib/clerk-updates";
 import {
   countdownLabel,
@@ -97,10 +104,31 @@ export default function HomeScreen() {
     },
   );
 
+  // Standing-approval pulse: any paused grant means the daily sweep is NOT
+  // running, which is worth an amber line on Home. Render-on-success — a
+  // failed or dark (flag off → empty) query must add no dashboard noise.
+  const policiesQuery = useGetActionPolicies(
+    { clientPartyId: clientPartyId ?? "" },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetActionPoliciesQueryKey({
+          clientPartyId: clientPartyId ?? "",
+        }),
+        staleTime: 60_000,
+        retry: false,
+      },
+    },
+  );
+  const pausedAutomation = policiesQuery.isSuccess
+    ? pausedPolicyCount(policiesQuery.data.policies)
+    : 0;
+
   const onRefresh = useCallback(() => {
     void query.refetch();
     void receivablesQuery.refetch();
-  }, [query, receivablesQuery]);
+    void policiesQuery.refetch();
+  }, [query, receivablesQuery, policiesQuery]);
 
   const summary = query.data;
   const firstName = me?.fullName?.split(" ")[0];
@@ -153,6 +181,12 @@ export default function HomeScreen() {
             risk={summary.penaltyRisk}
             onEstimate={() => router.push("/estimator")}
           />
+
+          {pausedAutomation > 0 ? (
+            <View testID="banner-automation-paused">
+              <Banner tone="warning" message={AUTOMATION_PAUSED_HOME_MESSAGE} />
+            </View>
+          ) : null}
 
           <View style={{ flexDirection: "row", gap: 12 }}>
             <StatTile
@@ -231,6 +265,18 @@ export default function HomeScreen() {
                 icon="trending-up"
                 onPress={() => router.push("/estimator")}
                 testID="action-estimator"
+              />
+              <ActionTile
+                label="Month-end close"
+                icon="calendar"
+                onPress={() => router.push("/month-end")}
+                testID="action-month-end"
+              />
+              <ActionTile
+                label="Automation"
+                icon="zap"
+                onPress={() => router.push("/automation")}
+                testID="action-automation"
               />
               {canClerkCapture ? (
                 <ActionTile

@@ -705,3 +705,56 @@ actions are firm-scoped relationship changes, never party mutations.
   `METRICS_TOKEN` / `SWEEP_TOKEN` closes the endpoint behind that shared
   secret (`x-op-token` header or `?token=`, `lib/op-token.ts`). Opt-in:
   unset env keeps today's open behaviour.
+
+## Backups, restore drills & releases
+
+Three node-builtin-only tools live in `scripts/src/ops/` (they need node plus
+the Postgres client binaries — `pg_dump`/`pg_restore`/`psql` — and nothing
+else, so they run on a bare cron runner). All three take the target from
+`DATABASE_URL`, which must be a role that can bypass RLS
+(superuser/`BYPASSRLS`): several tables `FORCE ROW LEVEL SECURITY`, so
+`pg_dump` under a lesser role fails closed — better than a silently partial
+backup.
+
+- **Backup** — `DATABASE_URL=… pnpm --filter @workspace/scripts run ops:backup`.
+  Dumps `--format=custom` to `BACKUP_DIR` (default `./backups`) as
+  `meridian-<UTC stamp>.dump`, verifies the archive with `pg_restore --list`
+  (an unlistable archive is deleted, not kept), writes a `sha256sum -c`-
+  compatible `.sha256`, then prunes to the newest `BACKUP_KEEP` (default 14)
+  dumps. Run it OUTSIDE the app's failure domain (cron on the DB host or a
+  separate runner) and **copy dumps off-box** — a backup beside its database
+  shares its fate.
+- **Restore drill** — `DATABASE_URL=<source> DRILL_DATABASE_URL=<scratch>
+  pnpm --filter @workspace/scripts run ops:restore-drill`. Dumps the source,
+  checks the sha256 round-trip, **drops and recreates** the drill target
+  (maintenance connection derived from the drill URL, or `DRILL_ADMIN_URL`),
+  restores with `--exit-on-error`, then asserts: `_schema_migrations`
+  count/max match the source; row counts of `invoices`, `audit_events`,
+  `clerk_action_decisions` match; the restored `invoices` still has RLS
+  enabled **and forced** with >0 policies (pg_restore carries policies —
+  this proves it every run). Prints PASS/FAIL per assertion plus dump/restore
+  timings. CI runs it on every merge against the CI database; run it
+  per-release too — an untested backup is a hope, not a backup.
+- **Release** — `DATABASE_URL=… pnpm --filter @workspace/scripts run
+  ops:release -- --yes` (refuses without both; prints the redacted target
+  first). Sequence: optional pre-flight dump (`RELEASE_BACKUP=1`) →
+  `db run push` (`RELEASE_PUSH_FORCE=1` swaps in `push-force` for destructive
+  diffs, where plain push prompts and hangs) → `db run migrate` → verify that
+  `_schema_migrations` count/max equal the registry in
+  `lib/db/src/migrations/index.ts` (parsed at runtime, so it can never go
+  stale) and print the API contract version to compare against
+  `/api/healthz` after the Redeploy. **The hazard this kills:** the guardrail
+  RLS policies/triggers are not in the Drizzle schema, so a `push` can drop
+  them and only `migrate` re-asserts them — run manually as two steps, the
+  window between them (or a forgotten migrate) is a tenant-isolation hole.
+  A failed step aborts and lists what did not run; push and migrate are both
+  idempotent, so fix the cause and re-run to completion.
+
+**Honest DR statement.** RPO = your backup cadence: the tool does not
+schedule itself, so if you dump nightly you can lose a day. RTO = the restore
+drill's measured shape (it prints dump/restore timings at the current data
+volume; seconds on CI-sized data, scale accordingly). The audit-event hash
+chain is contiguous *within* a snapshot: restoring rewinds the world to the
+snapshot point, and events after it are **lost, not tampered with** — the
+chain verifies clean up to its new tip and simply ends there, so absence
+after a restore is expected and honest, not a break.

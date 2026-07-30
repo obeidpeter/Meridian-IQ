@@ -18,6 +18,12 @@ const TEMPLATE_ROUTES: Record<string, Href> = {
   // screen for both audiences, so both templates land there.
   firm_digest_ready: "/clerk-updates",
   client_statement_ready: "/clerk-updates",
+  // Standing-approval lifecycle alerts: a pause (tripwire or manual) and the
+  // grant fan-out both point at the Automation screen, where the grant's
+  // status line, plain-word pause reason and run record live. Pointer-only
+  // as ever — the payload names the template, never the client or policy.
+  automation_paused: "/automation",
+  automation_granted: "/automation",
 };
 
 /**

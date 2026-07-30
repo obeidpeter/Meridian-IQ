@@ -4,6 +4,10 @@ import {
   billStatusLabel,
   billStatusTone,
   canFlag,
+  MISSING_BILLS_FOOTER,
+  MISSING_BILLS_HEADER,
+  missingBillLine,
+  missingBillsBannerMessage,
   verificationChip,
 } from "./bills.ts";
 
@@ -48,6 +52,46 @@ test("an open bill accepts either flag", () => {
 test("off-contract statuses stay flaggable rather than dead-ending the row", () => {
   assert.equal(canFlag("disputed", "scheduled"), true);
   assert.equal(canFlag("disputed", "paid"), true);
+});
+
+const PATTERN = {
+  supplierName: "Lagos Power Ltd",
+  currency: "NGN",
+  medianAmount: "45000.00",
+  medianGapDays: 30,
+  count: 6,
+  lastIssueDate: "2026-05-28",
+  expectedByDate: "2026-06-30",
+};
+
+test("missingBillLine: the vendor habit in the web page's exact shape", () => {
+  assert.equal(
+    missingBillLine(PATTERN),
+    "Lagos Power Ltd has billed about ₦45,000 roughly every 30 days (6 bills on record, last 28 May 2026) — this cycle's bill was expected by 30 Jun 2026 and has not been captured.",
+  );
+});
+
+test("missingBillLine: a foreign-currency habit never masquerades as naira", () => {
+  assert.match(
+    missingBillLine({ ...PATTERN, currency: "USD", medianAmount: "120.00" }),
+    /billed about USD 120\.00 roughly every/,
+  );
+});
+
+test("missingBillsBannerMessage: header, one line per pattern, hedge footer", () => {
+  const message = missingBillsBannerMessage([
+    PATTERN,
+    { ...PATTERN, supplierName: "Ikeja Internet" },
+  ]);
+  const blocks = message.split("\n\n");
+  assert.equal(blocks.length, 4);
+  assert.equal(blocks[0], MISSING_BILLS_HEADER);
+  assert.match(blocks[1], /^Lagos Power Ltd has billed/);
+  assert.match(blocks[2], /^Ikeja Internet has billed/);
+  assert.equal(blocks[3], MISSING_BILLS_FOOTER);
+  // The hedge keeps its honesty markers.
+  assert.match(MISSING_BILLS_FOOTER, /Advisory only/);
+  assert.match(MISSING_BILLS_FOOTER, /unclaimed input VAT/);
 });
 
 test("verificationChip maps the stored result; never-checked bills get no chip", () => {
