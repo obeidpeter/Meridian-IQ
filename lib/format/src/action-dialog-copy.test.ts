@@ -7,6 +7,9 @@ import {
   actionConfirmButtonLabel,
   actionConfirmDescription,
   actionOutcomeSummary,
+  actionTargetOverflowNote,
+  actionTruncatedNote,
+  decisionLine,
   draftClipboardText,
   parsePolicyCap,
   policyGrantDescription,
@@ -92,6 +95,51 @@ describe("draftClipboardText", () => {
 
 test("the display cap both cards slice by stays 8", () => {
   expect(ACTION_TARGET_DISPLAY_CAP).toBe(8);
+});
+
+describe("actionTargetOverflowNote", () => {
+  test("counts only what the display cap hid — the ellipsis and full stop included", () => {
+    expect(actionTargetOverflowNote(ACTION_TARGET_DISPLAY_CAP + 1)).toBe(
+      "…and 1 more.",
+    );
+    expect(actionTargetOverflowNote(20)).toBe("…and 12 more.");
+  });
+});
+
+describe("actionTruncatedNote", () => {
+  test("says what is shown, of how many, and what to do next", () => {
+    expect(actionTruncatedNote(20, 45)).toBe(
+      "Showing the oldest 20 of 45 — approve this batch, then come back for the rest.",
+    );
+  });
+});
+
+describe("decisionLine", () => {
+  test("date, kind, the three counts — and · auto only on a policy run", () => {
+    const auto = decisionLine({
+      createdAt: "2026-07-29T05:00:00Z",
+      kind: "submit_overdue",
+      executedCount: 3,
+      skippedCount: 1,
+      failedCount: 0,
+      policyId: "pol-1",
+    });
+    expect(auto).toMatch(
+      / · submit_overdue · 3 executed · 1 skipped · 0 failed · auto$/,
+    );
+    const manual = decisionLine({
+      createdAt: "2026-07-29T05:00:00Z",
+      kind: "retry_failed",
+      executedCount: 2,
+      skippedCount: 0,
+      failedCount: 1,
+      policyId: null,
+    });
+    expect(manual).toMatch(
+      / · retry_failed · 2 executed · 0 skipped · 1 failed$/,
+    );
+    expect(manual.includes("auto")).toBe(false);
+  });
 });
 
 // ---- Standing approvals (round 28) ----------------------------------------

@@ -5,6 +5,7 @@ import {
   CSRF,
   DEMO_CLIENT_PARTY_PREFIX,
   DEMO_PASSWORD,
+  createDraftInvoice,
   pollUntil,
   signIn,
 } from "./shared.mjs";
@@ -101,24 +102,16 @@ async function journeyStaffCreditNoteAndWorkflow(page, BASE, check) {
       true,
     );
     const parties = await (await page.request.get(BASE + "/api/parties")).json();
-    const created = await page.request.post(BASE + "/api/invoices", {
-      data: {
-        supplierPartyId: parties[0].id,
-        buyerPartyId: parties[0].id,
-        invoiceNumber: draftNumber,
-        issueDate: new Date().toISOString().slice(0, 10),
-        lines: [
-          {
-            description: "E2E smoke goods",
-            quantity: "2",
-            unitPrice: "1500",
-            vatRate: "0.075",
-          },
-        ],
-      },
-      headers: CSRF,
+    const created = await createDraftInvoice(page, BASE, {
+      supplierPartyId: parties[0].id,
+      buyerPartyId: parties[0].id,
+      invoiceNumber: draftNumber,
+      issueDate: new Date().toISOString().slice(0, 10),
+      description: "E2E smoke goods",
+      unitPrice: "1500",
+      quantity: "2",
     });
-    check("draft created via the session API", created.status() === 201);
+    check("draft created via the session API", created.status === 201);
     await page.goto(BASE + "/app/invoices", { waitUntil: "networkidle" });
     await page.locator("#invoice-search").fill(draftNumber);
     const found = await pollUntil(

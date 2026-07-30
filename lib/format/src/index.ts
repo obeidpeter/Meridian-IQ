@@ -15,6 +15,11 @@ import type {
   InvoiceStatus,
 } from "@workspace/api-zod";
 
+// The pause vocabulary lives in the import-free ./action-copy module (see
+// the re-export further down); policyStatusLine below composes it with the
+// Intl-backed formatDateTime.
+import { policyPauseReasonLabel } from "./action-copy";
+
 // Intl formatter construction is expensive (locale-data setup) and these run
 // per table row per render — build each once at module load.
 const NAIRA_FORMAT = new Intl.NumberFormat("en-NG", {
@@ -152,6 +157,19 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
 /** Full pill class string for a tone: recipe + colors. */
 export function pillClasses(tone: BadgeTone): string {
   return `${PILL} ${TONE_CLASSES[tone]}`;
+}
+
+/**
+ * Borderless summary pill for a card-HEADER count ("3 to review",
+ * "1 paused", "All clear") — softer than the bordered status pill, same
+ * light+dark discipline. Distinct recipe from pillClasses. Two literal
+ * strings (never a template over the tone) so the Tailwind scanner sees
+ * every class; call sites keep their own positioning prefix ("ml-auto ").
+ */
+export function summaryPillClasses(tone: "amber" | "emerald"): string {
+  return tone === "amber"
+    ? "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+    : "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300";
 }
 
 // ---- Invoice lifecycle -----------------------------------------------------
@@ -299,111 +317,12 @@ export function actionOutcomeToneClasses(outcome: string): string {
 }
 
 // The approve/results dialog copy the two "Clerk suggests" cards render
-// verbatim (survey items 25+26 — extracted with the headless machine in
-// @workspace/web-ui). Pure builders so the exact wording has one home and
-// unit tests; the SME/console texts differ ONLY where the audience does.
-
-// How many batch targets a card lists before "…and N more."
-export const ACTION_TARGET_DISPLAY_CAP = 8;
-
-export function actionConfirmDescription(
-  kind: string,
-  count: number,
-  audience: "sme" | "console",
-): string {
-  const s = count === 1 ? "" : "s";
-  if (kind === "draft_chasers") {
-    const reviewer =
-      audience === "sme"
-        ? "for you to review, copy and send yourself"
-        : "for the client to review and send";
-    return `This drafts ${count} payment reminder${s} ${reviewer} — nothing is sent or submitted by the platform. Each invoice is re-checked at this moment, and the decision is recorded under your name.`;
-  }
-  return `This ${kind === "retry_failed" ? "resubmits" : "submits"} ${count} invoice${s} to the e-invoicing rails through the ordinary path — validation, consent and any approval policy all apply. Each invoice is re-checked at this moment; anything already processed or no longer eligible is skipped, and the decision is recorded under your name.`;
-}
-
-export function actionConfirmButtonLabel(kind: string, count: number): string {
-  const s = count === 1 ? "" : "s";
-  return kind === "draft_chasers"
-    ? `Draft ${count} reminder${s}`
-    : `Approve ${count} invoice${s}`;
-}
-
-export function actionOutcomeSummary(decision: {
-  kind: string;
-  executedCount: number;
-  failedCount: number;
-  skippedCount: number;
-}): string {
-  return `${decision.executedCount} ${
-    decision.kind === "draft_chasers" ? "drafted" : "submitted"
-  } · ${decision.failedCount} need attention · ${decision.skippedCount} skipped.`;
-}
-
-// The pinned clipboard contract for a transient chaser draft.
-export function draftClipboardText(d: {
-  subject: string;
-  body: string;
-}): string {
-  return `${d.subject}\n\n${d.body}`;
-}
-
-// ---- Standing approvals (round 28) -----------------------------------------
-// The automation strip both "Clerk suggests" cards render under a proposal:
-// grant affordance, live-grant status line, pause/tripwire vocabulary, and
-// the "· auto" tag on policy-run decision lines. Pure builders — one home
-// for the exact wording, unit-tested in action-dialog-copy.test.ts.
-
-// The automatable subset of the action catalogue (GrantActionPolicyInput's
-// enum): draft_chasers is excluded by design — its drafts exist only on the
-// response for a human to read and send, which an unattended run cannot do.
-// Both cards use this to decide which proposals carry an "automate" button.
-export const AUTOMATABLE_ACTION_KINDS = [
-  "submit_overdue",
-  "retry_failed",
-] as const;
-export type AutomatableActionKind = (typeof AUTOMATABLE_ACTION_KINDS)[number];
-
-export function automatableActionKind(
-  kind: string,
-): AutomatableActionKind | null {
-  return (AUTOMATABLE_ACTION_KINDS as readonly string[]).includes(kind)
-    ? (kind as AutomatableActionKind)
-    : null;
-}
-
-// Keyed by the automatable kinds (GrantActionPolicyInput's enum). A kind an
-// older client does not know renders through the fallback in
-// policyKindLabel, never as a blank.
-export const POLICY_KIND_LABELS: Record<string, string> = {
-  submit_overdue: "Auto-submit overdue invoices",
-  retry_failed: "Auto-retry failed submissions",
-};
-
-export function policyKindLabel(kind: string): string {
-  return POLICY_KIND_LABELS[kind] ?? kind;
-}
-
-// Why a grant is paused, in card-sized words. The three tripwire reasons are
-// the sweep's own vocabulary (modules/clerk/action-policies.ts); "manual"
-// is a human pause.
-export const POLICY_PAUSE_REASON_LABELS: Record<string, string> = {
-  manual: "paused manually",
-  grantor_inactive: "paused — the granter's access changed",
-  consent_missing: "paused — compliance consent is missing",
-  failed_targets: "paused — too many failures in the last run",
-  unknown_kind: "paused — this action kind can't run automatically",
-  rail_rejections: "paused — the last run's submissions were rejected by the rails",
-  engagement_closed: "paused — the engagement with this client has ended",
-  run_error: "paused — the last run hit an unexpected error",
-};
-
-export function policyPauseReasonLabel(reason: string | null): string {
-  return (
-    POLICY_PAUSE_REASON_LABELS[reason ?? "manual"] ??
-    `paused — ${reason}`
-  );
-}
+// verbatim, and the standing-approval (round 28) vocabulary: the wording
+// lives in ./action-copy — an import-free module also exported as the
+// "@workspace/format/action-copy" subpath so the mobile app can share it
+// without this file's module-load Intl construction (RN's ICU builds are
+// inconsistent). Only the builders needing formatDateTime live below.
+export * from "./action-copy";
 
 /**
  * One status line per live grant: paused grants lead with why (amber-worthy
@@ -423,47 +342,20 @@ export function policyStatusLine(policy: {
   return `runs daily · up to ${policy.maxTargetsPerRun} per run · ${lastRun}`;
 }
 
-// The per-run ceiling on a grant (GrantActionPolicyInput.maxTargetsPerRun,
-// 1..50 on the contract) and the cards' shared default. parsePolicyCap is
-// the one gate both grant dialogs run the raw input through: anything
-// outside the contract's bounds means "not grantable yet" (the confirm
-// button disables) — never a silent clamp the user didn't choose.
-export const POLICY_CAP_MIN = 1;
-export const POLICY_CAP_MAX = 50;
-export const POLICY_CAP_DEFAULT = 10;
-
-export function parsePolicyCap(raw: string): number | null {
-  const trimmed = raw.trim();
-  if (!/^\d+$/.test(trimmed)) return null;
-  const n = Number(trimmed);
-  return n >= POLICY_CAP_MIN && n <= POLICY_CAP_MAX ? n : null;
-}
-
 /**
- * The consent-grade description under the "automate" button: what a standing
- * approval DOES — including the per-run ceiling the user chose, so the copy
- * states the number being consented to — in the same honest register as the
- * per-batch confirm copy. The audience split mirrors
- * actionConfirmDescription's.
+ * One line per recorded decision in the run-record strip both cards render:
+ * date, kind, the three counts, and the "· auto" tag when a
+ * standing-approval run (not a fresh click) made it.
  */
-export function policyGrantDescription(
-  kind: string,
-  audience: "sme" | "console",
-  maxTargetsPerRun: number,
-): string {
-  const s = maxTargetsPerRun === 1 ? "" : "s";
-  const what =
-    kind === "retry_failed"
-      ? `resubmit up to ${maxTargetsPerRun} invoice${s} that failed on the rails`
-      : `submit up to ${maxTargetsPerRun} invoice${s} past the statutory window`;
-  const who =
-    audience === "sme"
-      ? "under your name, without asking again each day"
-      : "under your name, without a fresh approval each day";
-  return (
-    `Clerk will run this check every day and ${what} ${who}. ` +
-    `Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.`
-  );
+export function decisionLine(decision: {
+  createdAt: string;
+  kind: string;
+  executedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  policyId: string | null;
+}): string {
+  return `${formatDateTime(decision.createdAt)} · ${decision.kind} · ${decision.executedCount} executed · ${decision.skippedCount} skipped · ${decision.failedCount} failed${decision.policyId ? " · auto" : ""}`;
 }
 
 // ---- Notification bell vocabulary -----------------------------------------

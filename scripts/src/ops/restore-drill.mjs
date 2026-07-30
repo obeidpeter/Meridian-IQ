@@ -21,7 +21,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { dbNameFromUrl, fail, hostPortFromUrl, psql, redactUrl, run, sha256File } from "./common.mjs";
+import { dbNameFromUrl, fail, hostPortFromUrl, migrationLedgerSummary, psql, redactUrl, run, sha256File } from "./common.mjs";
 
 const P = "restore-drill";
 
@@ -92,9 +92,8 @@ try {
   const restoreSecs = ((Date.now() - tRestore) / 1000).toFixed(1);
 
   // 5. Content assertions, source vs restored target.
-  const MIG = "SELECT count(*) || '|' || coalesce(max(version), 0) FROM _schema_migrations";
-  const srcMig = psql(sourceUrl, MIG);
-  const tgtMig = psql(targetUrl, MIG);
+  const srcMig = migrationLedgerSummary(sourceUrl);
+  const tgtMig = migrationLedgerSummary(targetUrl);
   check("_schema_migrations count|max(version) match", srcMig === tgtMig, `source ${srcMig}, target ${tgtMig}`);
 
   for (const table of ["invoices", "audit_events", "clerk_action_decisions"]) {

@@ -6,6 +6,7 @@ import {
   DEMO_CLIENT_PARTY_ID,
   apiLogin,
   apiLogout,
+  createDraftInvoice,
   pollUntil,
 } from "./shared.mjs";
 
@@ -44,25 +45,15 @@ async function journeyGovernance(page, BASE, check) {
     // as {error: message} (no code field), so the check matches the guard's
     // message text.
     await apiLogin(page, BASE, "demo.staff@meridianiq.example");
-    const createdRes = await page.request.post(BASE + "/api/invoices", {
-      data: {
-        supplierPartyId: DEMO_CLIENT_PARTY_ID,
-        buyerPartyId: BUYER,
-        invoiceNumber: "GOV-9001",
-        issueDate: new Date().toISOString().slice(0, 10),
-        lines: [
-          {
-            description: "Governance probe goods",
-            quantity: "1",
-            unitPrice: "50000",
-            vatRate: "0.075",
-          },
-        ],
-      },
-      headers: CSRF,
+    const created = await createDraftInvoice(page, BASE, {
+      supplierPartyId: DEMO_CLIENT_PARTY_ID,
+      buyerPartyId: BUYER,
+      invoiceNumber: "GOV-9001",
+      issueDate: new Date().toISOString().slice(0, 10),
+      description: "Governance probe goods",
+      unitPrice: "50000",
     });
-    const invoiceId =
-      createdRes.status() === 201 ? (await createdRes.json()).invoice?.id : null;
+    const invoiceId = created.invoiceId;
     const validateRes = await page.request.post(
       BASE + `/api/invoices/${invoiceId}/validate`,
       { headers: CSRF },
@@ -74,11 +65,11 @@ async function journeyGovernance(page, BASE, check) {
     const blockedBody = await blockedRes.json().catch(() => null);
     check(
       "submit without a second person's approval answers 409 APPROVAL_REQUIRED",
-      createdRes.status() === 201 &&
+      created.status === 201 &&
         validateRes.status() === 200 &&
         blockedRes.status() === 409 &&
         String(blockedBody?.error ?? "").includes("approval"),
-      `create ${createdRes.status()}, validate ${validateRes.status()}, submit ${blockedRes.status()}`,
+      `create ${created.status}, validate ${validateRes.status()}, submit ${blockedRes.status()}`,
     );
 
     // A DIFFERENT human approves — evidence row, 201.
@@ -287,25 +278,15 @@ async function journeyAutomation(page, BASE, check) {
     const issueDate = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
-    const createdRes = await page.request.post(BASE + "/api/invoices", {
-      data: {
-        supplierPartyId: DEMO_CLIENT_PARTY_ID,
-        buyerPartyId: BUYER,
-        invoiceNumber: "AUTO-9001",
-        issueDate,
-        lines: [
-          {
-            description: "Automation probe goods",
-            quantity: "1",
-            unitPrice: "40000",
-            vatRate: "0.075",
-          },
-        ],
-      },
-      headers: CSRF,
+    const created = await createDraftInvoice(page, BASE, {
+      supplierPartyId: DEMO_CLIENT_PARTY_ID,
+      buyerPartyId: BUYER,
+      invoiceNumber: "AUTO-9001",
+      issueDate,
+      description: "Automation probe goods",
+      unitPrice: "40000",
     });
-    const invoiceId =
-      createdRes.status() === 201 ? (await createdRes.json()).invoice?.id : null;
+    const invoiceId = created.invoiceId;
     const propRes = await page.request.get(
       BASE + `/api/clerk/action-proposals?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );
@@ -315,9 +296,9 @@ async function journeyAutomation(page, BASE, check) {
     );
     check(
       "submit_overdue proposal lists the backdated AUTO-9001 draft",
-      createdRes.status() === 201 &&
+      created.status === 201 &&
         (overdue?.targets ?? []).some((t) => t.invoiceId === invoiceId),
-      `create ${createdRes.status()}, proposals ${propRes.status()}`,
+      `create ${created.status}, proposals ${propRes.status()}`,
     );
 
     // Approve exactly the one target: execute validates + submits it through

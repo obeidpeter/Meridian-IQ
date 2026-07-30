@@ -3,7 +3,8 @@
 //
 // Parity copy of the landing portal's artifacts/landing/src/lib/mfa.ts — the
 // two clients must classify a failed challenge identically, so any change to
-// the semantics here must land there too (and vice versa).
+// the semantics here must land there too (and vice versa). The parity is
+// PINNED: mfa.test.ts reads both sources and fails on any code drift.
 
 // The server's mfa pending token lives 5 minutes (api-server
 // modules/auth/totp.ts). The challenge endpoint answers a uniform 401 for a

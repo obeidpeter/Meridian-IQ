@@ -25,7 +25,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { dbNameFromUrl, fail, hostPortFromUrl, psql, redactUrl, run } from "./common.mjs";
+import { dbNameFromUrl, fail, hostPortFromUrl, migrationLedgerSummary, redactUrl, run } from "./common.mjs";
 
 const P = "release";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -81,7 +81,7 @@ step("verify migrations + contract version", () => {
   const expectedCount = versions.length;
   const expectedMax = Math.max(...versions);
 
-  const got = psql(url, "SELECT count(*) || '|' || coalesce(max(version), 0) FROM _schema_migrations");
+  const got = migrationLedgerSummary(url);
   const want = `${expectedCount}|${expectedMax}`;
   if (got !== want) {
     throw new Error(`_schema_migrations mismatch: database has count|max ${got}, registry expects ${want}`);

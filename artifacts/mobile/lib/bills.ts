@@ -5,19 +5,16 @@
  * not offer), the verification chip derived from the bill's stored stamp
  * check, and the missing-recurring-bills advisory copy. Kept free of React
  * Native imports so the node:test suite can exercise them directly; the
- * tone union mirrors components/ui BadgeTone structurally.
+ * tone type is imported type-only from components/ui (erased at runtime,
+ * so the suite still never loads React Native).
  */
 
+import type { BadgeTone } from "@/components/ui";
 import { formatCurrency, formatDate } from "./format";
 
 export type BillFlagTarget = "scheduled" | "paid";
 
-export type BillBadgeTone =
-  | "neutral"
-  | "success"
-  | "warning"
-  | "critical"
-  | "info";
+export type BillBadgeTone = BadgeTone;
 
 /** Buyer-side wording: an "open" bill reads as money still to pay. */
 export function billStatusLabel(payStatus: string): string {
