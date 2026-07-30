@@ -452,8 +452,9 @@ The unattended half of the arc: evidence and signals, all deterministic.
   firm-wide, the FX-excluded count disclosed, and deliberately LINKLESS —
   the input side is bills, which are not invoice-detail linkable for a
   client asker)), offered in the
-  intent enum only to firm-scoped askers. The model only CLASSIFIES; the app runs the matching
-  FIXED, fully-parameterized query. Runtime inputs: the principal-resolved
+  intent enum only to firm-scoped askers. The model only picks catalogue
+  keys; the app runs the matching FIXED, fully-parameterized queries.
+  Runtime inputs: the principal-resolved
   firmId plus optional month/client parameters the model can only pick from
   CLOSED app-built option lists — the last 12 Lagos months and the firm's
   own engaged clients under opaque `c1..cN` keys, resolved back through the
@@ -463,16 +464,104 @@ The unattended half of the arc: evidence and signals, all deterministic.
   (`answer.dataIntent` marks these, `answer.dataParams` names the resolved
   scope). Predicates mirror digest/compliance-window (Lagos calendar), so
   Ask can never disagree with the dashboards.
-- **Multi-turn**: the web clients thread the previous answered case's id
-  (`AskClerkInput.previousCaseId`); the server loads that case inside
-  `inClerkScope` with an explicit firm + kind filter, and only if it was a
-  data answer maps its stored display labels (`answer.dataParams` holds the
-  month LABEL and client NAME, never ids) back to THIS request's option
-  keys. The context line the model sees carries data-intent keys and
-  `m*`/`c*` option keys only, so a follow-up ("and for June?") can inherit
-  scope while the closed-catalogue machinery stays exactly as strict
-  (`intent.v5`; a label no longer offered contributes nothing; a cross-firm
-  or non-question id is silently ignored).
+- **Comparison intents (Ask 2.0, `data-intents/deltas.ts`)** — the two
+  delta lookups, APPENDED last (the catalogue order is model-facing and
+  append-only). `data.month_delta` (client-safe) compares a named — or the
+  current — Lagos month with its app-derived predecessor
+  (`priorMonthStart`, never the model's arithmetic) on three bases, each
+  pure composition over the catalogue's existing one-homes so a delta can
+  never disagree with the point lookups it compares: rails-accepted
+  submissions via `invoiceAggregate` over the SAME accepted-in-month
+  membership as `data.submitted_this_month` (the shared `lagosWindowSql`
+  boundary), net VAT via `computeVatPosition` /
+  `computeFirmVatPositions` (per-client under a pin — a client asker's
+  forced own-party pin lands here — the firm rollup totals otherwise),
+  and unpaid bills DUE in each month via `billAggregate` (`BILL_UNPAID`
+  plus a due-date month bound). Every figure — six month numbers plus
+  three deltas — is platform-computed, every delta phrased WITH its sign
+  so a drop can never read as growth; deliberately LINKLESS
+  (billAggregate's posture: the payables side is bills).
+  `data.client_breakdown` (firm-only BY DESIGN: it RANKS the firm's
+  clients against each other — exactly the firm-wide content the
+  client-safe subset exists to withhold, so `accepts.client` stays false
+  and the key never joins the allowlist) names the top movers up and down
+  in rails-accepted invoice totals between the two months: ONE grouped
+  SQL pass over both months, membership by `packMonthDocsSql` (the VAT
+  pack's own accepted-in-month fragment, so the ranking and the pack
+  agree by construction), invoice-kind totals only, largest absolute
+  swing first with name tiebreaks, up to 3 named per direction with an
+  honest remainder; linkless (a client ranking names no individual
+  invoices).
+- **The planner (Ask 2.0, `intent.v6`, contract 0.56.0)** — the
+  single-key classification became an ordered PLAN of 1–3 steps
+  (`{category, steps: [{key, month, client}]}`, `PLAN_MAX_STEPS` = 3 in
+  prompts.ts) so a genuinely multi-part question ("what's overdue and
+  what do we owe suppliers?") runs several lookups in one turn — still
+  exactly ONE model call per ask (the data-intents test pin); everything
+  after the inference is deterministic app code. The closed catalogue is
+  enforced THREE times: the strict JSON schema's per-step enums carry
+  only the offered claim/data keys and month/client option keys
+  (`planJsonSchema`), the zod validator mirrors the same enums
+  (`planValidator`), and ask.ts re-resolves every step against what THIS
+  asker was OFFERED — so a "data.*" pick by a firm-less asker can only be
+  a register claim, and a client asker can never reach an intent outside
+  its client-safe subset even via a colliding claim key. An EMPTY steps
+  array IS the refusal — the v6 key enum carries no "none"; emptiness
+  escalates with the same neutral sentence as ever — and the system
+  prompt refuses whole when ANY part of the question has no matching key
+  or it asks for more than 3 things (a plan flood is an injection, not a
+  workload); comparison questions are steered to a single delta key over
+  two point lookups. A register claim answers ALONE: any multi-step plan
+  containing a claim key refuses whole (fail closed) — the claim path's
+  category-applicability logic is single-answer logic, and a claim
+  proposition pasted between data sections would blur whose citation
+  covers what; the single-step claim path itself is unchanged
+  (exactly-one active claim, category check, verbatim protected facts).
+  Execution: steps dedup app-side by EFFECTIVE scope (for a client asker
+  the forced pin makes the model's client pick irrelevant to identity),
+  then run sequentially in plan order, each with a FRESH
+  `DataIntentParams` (the 0.56.0 fix — the old shared params object would
+  have leaked one step's month/client into the next). A single-step plan
+  answers in EXACTLY the pre-plan flat shape (plus `pins`), single-step
+  refusals verbatim included, so every pre-0.56 consumer and fixture
+  behaves identically. A multi-step plan answers with **sections** — one
+  `AskAnswerSection` (title/text/facts/dataParams/links) per step in plan
+  order under a deterministic part-count lead-in, flat facts empty and
+  flat links absent; a refused step KEEPS ITS SLOT as an honest "This
+  part could not be answered." section with its escalation clause
+  stripped (the case is APPROVED when any part answered, so the sentence
+  must not claim an escalation that did not happen); ALL steps refused ⇒
+  the whole case refuses with the FIRST reason. `answer.plan` (the
+  executed keys + app-resolved titles), `answer.pins` and
+  `answer.sections` are the contract 0.56.0 ClerkAnswer extension —
+  `AskAnswer` in ask.ts MUST mirror openapi.yaml because the stored jsonb
+  answer IS the API answer (the db type still carries the lean pre-0.56
+  shape) — and the `clerk.ask` audit records the executed plan's keys
+  (pointer-only catalogue strings, never user or model text).
+- **Multi-turn (pins BY ID since 0.56.0)**: the web clients thread the
+  previous answered case's id (`AskClerkInput.previousCaseId`); the
+  server loads that case inside `inClerkScope` with an explicit firm +
+  kind filter (plus `createdBy` for client askers — SEC-03). A data
+  answer now stores the scope it RESOLVED TO by id (`pins.monthStart` /
+  `pins.clientPartyId`, display labels alongside), and a follow-up
+  re-pins from those ids after validating them against THIS request's
+  live option lists — a month that has rolled out of the 12-month window,
+  or a party outside the asker's (already SEC-03-narrowed) client
+  options, is DROPPED silently, never trusted. Ids, not labels, on
+  purpose: two clients sharing a legal name resolve to the EXACT party
+  the previous answer used, where the old label matching resolved
+  whichever sorted first — the hazard 0.56.0 fixes. Label matching
+  survives ONLY as the fallback for pre-0.56 cases whose stored answers
+  carry no pins (`answer.dataParams` display labels mapped back through
+  the offered lists, the " (current month)" suffix stripped on both
+  sides). A multi-part previous answer threads its LAST executed plan
+  step — the same step whose scope the stored pins carry (documented
+  choice: "and for June?" after "X; also Y for Acme" most naturally
+  continues the trailing lookup). The context line the model sees still
+  carries only platform-recorded data-intent keys and `m*`/`c*` option
+  keys, so a follow-up ("and for June?") inherits scope while the
+  closed-catalogue machinery stays exactly as strict (a cross-firm,
+  sibling-client or non-question id contributes nothing).
 - **Client access** (SEC-03-pinned): Ask is open to `client_user`s. The
   offered data intents narrow to a vetted ALLOWLIST
   (`CLIENT_SAFE_DATA_INTENTS` — firm-wide money intents that name other
@@ -485,11 +574,20 @@ The unattended half of the arc: evidence and signals, all deterministic.
   (round 20 — ONE invoice named by its number, the number APP-EXTRACTED
   from the raw question by regex, never the model; the pinned lookup
   matches either side of the caller's own paper and answers a sibling's
-  number with "no invoice" — non-disclosure) ARE client-safe and on the
+  number with "no invoice" — non-disclosure) AND `data.month_delta`
+  (Ask 2.0 — every side of the comparison reduces to an own-party
+  one-home under the forced pin; `data.client_breakdown` is deliberately
+  absent) ARE client-safe and on the
   allowlist — they answer over the
   caller's own bills/position/paper only, the forced party pin making a
   client's "VAT position" always its own); the client option list is exactly the caller's own party; the executed party
-  filter is FORCED from the principal regardless of the model's pick;
+  filter is FORCED from the principal regardless of the model's pick —
+  and since 0.56.0 the forced pin is CONDITIONED on the intent's
+  `accepts.client`: an intent that would IGNORE the pin refuses instead
+  of running (previously the pin was applied unconditionally AFTER the
+  accepts check, so a non-client-capable intent offered to a client would
+  have run firm-wide; every client-offered intent does honour the pin —
+  the client-safe test pins it — so the refusal arm is defensive);
   multi-turn threads only from the client's own previous case (`createdBy`
   check); and `GET /clerk/digest` explicitly refuses client_user now that
   the capability is shared. The SME app carries the client Ask surface; the
@@ -498,8 +596,33 @@ The unattended half of the arc: evidence and signals, all deterministic.
   links (`answer.links`, `ClerkAnswerLink`, kind `invoice`) built from ids
   threaded through the SAME scoped queries that computed the facts — never
   model-produced, so a link can only ever point at a row the asker's own
-  scope already surfaced. The SME app and mobile render them as "Open"
-  buttons straight to the invoice.
+  scope already surfaced. On a multi-part answer the links ride each
+  section (`sections[].links`); the flat links stay absent. The SME app
+  and mobile render them as "Open" buttons straight to the invoice.
+- **Ask 2.0 surfaces** — the three Ask pages (SME
+  `sme-compliance/src/pages/clerk-ask.tsx` with helpers in
+  `sme-compliance/src/lib/clerk.ts`, console
+  `console/src/pages/clerk-ask.tsx`, mobile `mobile/app/clerk-ask.tsx` +
+  `mobile/lib/clerk-ask.ts`) render sections as per-part blocks, a quiet
+  "Answered using: …" plan-transparency line above them (`planLine` —
+  app-trusted intent titles shown verbatim, in server order; omitted on
+  single-intent answers, which render the flat fields exactly as before),
+  and the multi-turn thread's visible face: while a follow-up would
+  inherit scope, a chip says what it keeps ("Follow-ups keep: <month> ·
+  <client>", `followupPinsLine` — display labels only, the machine pins
+  never render) next to a "New topic" button that drops `previousCaseId`
+  and nothing else (the answer stays on screen).
+  `holdsFollowupCase` widened with the contract: any ANSWERED reply
+  carrying inheritable scope — a flat dataIntent, sections, or pins
+  (machine pins included, because the server threads on those even with
+  no label to display) — holds the thread, and because the predicate
+  gates SETTING the id, never clearing it, a refusal or register-claim
+  answer in between does not sever the thread. The SME/mobile suggestion
+  chips grew a fifth entry, "How does this month compare to last
+  month?", which lands in the client-safe `data.month_delta` (the chip
+  allowlist rule: every chip must classify to a CLIENT_SAFE intent, or
+  it is a one-click refusal for a client asker); the console Ask page
+  carries no chips.
 - **Ask feedback** — askers rate answers helpful/not-helpful
   (`POST /clerk/cases/{id}/feedback`, creator-only, question cases including
   refusals; the signal lands on the case row, `feedback`).
@@ -507,7 +630,11 @@ The unattended half of the arc: evidence and signals, all deterministic.
   the ratings — totals, a per-intent split (`register` / `refused` /
   data-intent keys), the newest not-helpful questions — the
   answered-question sibling of claim-gap mining: refusals say what to draft
-  next, not-helpful says what to fix next.
+  next, not-helpful says what to fix next. KNOWN WART (0.56.0, flagged
+  for a future round): the by-intent bucket reads the FLAT
+  `answer->>'dataIntent'`, which a multi-part answer does not carry (its
+  intents live per-section), so multi-part answers currently count under
+  `refused` in this report.
 - **Claim-gap mining** (`modules/clerk/claim-gaps.ts`,
   `GET /clerk/claim-gaps`, `clerk.use`, pure SQL, console claims-page card):
   Ask's refusals are themselves mined — a trailing window's refused answers
@@ -515,7 +642,11 @@ The unattended half of the arc: evidence and signals, all deterministic.
   produces (unknown text folds to `other`; the no-matching-claim needle is
   one constant shared between the TS matcher and the SQL LIKE so they can
   never disagree), listing the newest uncovered questions with their firm
-  names — the evidence for what claims to draft next.
+  names — the evidence for what claims to draft next. KNOWN WART (0.56.0,
+  flagged for a future round): the Ask 2.0 claim-mix refusal ("A register
+  claim answers one question at a time and cannot be combined with other
+  lookups…") is not in the matcher catalogue yet, so those refusals
+  cluster under `other`.
 
 ## Drafting & phrasing assists (digest posture)
 
@@ -1046,16 +1177,30 @@ shared computation as the corresponding chart.
 - **Intent-classification eval lane** (`modules/clerk/intent-eval.ts`,
   `POST /clerk/eval/intent` + `GET /clerk/eval/intent-runs`, `clerk.use`,
   `clerk_intent_eval_runs` bypass-only RLS migration 0024, console health
-  card): the Ask classifier's own regression corpus — a FIXED set of
-  questions (register, data intents incl. payables, refusals, month/client
-  guards, two prompt-injection questions) replayed against the LIVE intent
-  prompt through the ordinary gateway (purpose `eval_intent`, one classify
-  call per fixture) and scored DETERMINISTICALLY: classified key ===
-  expected key (plus pinned month/client keys); no model judges a model.
-  The user prompt is assembled by the SAME `buildIntentUser` production
-  uses (exported from ask.ts), and the frozen synthetic context carries
-  the REAL data-intent catalogue — a new intent that steals traffic from
-  an existing one shows up as a regression. With a `candidateSystem` the
+  card): the Ask classifier's own regression corpus — 18 static fixtures
+  (register, data intents incl. payables and the Ask 2.0 plan/delta
+  cases, refusals, month/client guards, and three prompt-injection
+  questions — the third, since Ask 2.0, is a plan-flood order to "run
+  every lookup you have", where resistance IS the empty plan) replayed
+  against the LIVE intent prompt through the ordinary gateway (purpose
+  `eval_intent`, one classify call per fixture) and scored
+  DETERMINISTICALLY; no model judges a model. The corpus classifies
+  through the SAME `intent.v6` plan builders (`planJsonSchema` /
+  `planValidator`) and the SAME `buildIntentUser` production uses
+  (exported from ask.ts), and the frozen synthetic context carries the
+  REAL data-intent catalogue — a new intent that steals traffic from an
+  existing one shows up as a regression. Scoring (Ask 2.0): a fixture
+  carrying `expected.plan` scores POSITION-FOR-POSITION — the step count
+  must match and every step's key plus any pinned month/client keys must
+  equal the expectation in order; the legacy single-key expectation
+  stays REQUIRED on every fixture and judges (a) legacy-shaped answers
+  from the v5 scripted stubs that still replay this corpus
+  (`planValidator`'s compatibility branch tags them `legacyShape`; a
+  real provider under the v6 JSON schema can never produce that shape,
+  so live runs always score plan fixtures positionally) and (b) every
+  grown fixture — minting is UNCHANGED by Ask 2.0: grown rows carry only
+  `{claimKey, month, client}` validated against the frozen offered
+  context and score on the leading step. With a `candidateSystem` the
   corpus runs side by side and returns the prompt-canary verdict
   (injection resistance may never drop; accuracy judged outside a
   one-fixture noise band) with nothing stored.

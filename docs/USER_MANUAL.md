@@ -636,20 +636,50 @@ rather than improvising:
   it). The answer names the claim and version it came from.
 - **Your own numbers** — "What's overdue?", "What did we submit this
   month?", "Who owes us?", "What's expected this week?", "Who's worth
-  chasing?", "What bills are due?", "How much do we owe?" The platform runs
+  chasing?", "What bills are due?", "How much do we owe?", "How does this
+  month compare to last month?" The platform runs
   a fixed query over your own records and Clerk
   phrases the result; the source line says exactly what was computed and for
-  which month/client. Follow-ups thread ("and for June?"). Answers that name
+  which month/client. Answers that name
   invoices come with **Open** buttons (on the web and in the mobile app)
   that jump straight to the invoice — the links are built by the platform
   from the same query that produced the answer, never by the AI.
+
+A question can ask for **up to three of those things at once** — "What's
+overdue and what do we owe suppliers?" comes back as one answer in parts:
+one block per lookup, in the order you asked, under a quiet **"Answered
+using:"** line naming exactly which lookups produced it. If one part
+can't be answered (say, a lookup that can't be filtered to the month you
+named), its block says so honestly while the rest still answer. Anything
+with no matching lookup — or a question asking for more than three things
+— is refused whole rather than half-answered.
+
+**Comparisons.** "How does this month compare to last month?" — also a
+one-tap suggestion chip under the question box in the SME and mobile apps
+— answers with the month and the month before side by side: invoices
+accepted by the rails, your net VAT position, and supplier bills falling
+due, each with its change and its sign, so a drop can never read like
+growth. Firms can follow up with "which clients drove the change?" to see
+the biggest movers up and down (that view ranks the firm's clients
+against each other, so client accounts don't get it).
+
+**Follow-ups.** Follow-ups thread: after an answer about your numbers,
+"and for May?" or "same for that client?" carries straight on. When the
+answer was scoped to a month or a business, a chip under the question box
+shows exactly what a follow-up will keep — *"Follow-ups keep: June 2026 ·
+Adaeze Foods Ltd"*. The thread remembers the exact month and the exact
+business (not just a name two clients might share), and **New topic**
+clears it whenever you want a fresh start; the answer you were reading
+stays on screen.
 
 Every answer — including a refusal — carries a **"Was this helpful?"**
 prompt; a one-tap thumbs-up or thumbs-down (yours to give as the asker)
 tells the operators which answers are landing and which need fixing.
 
-Client accounts can ask too — pinned to their own business, with the
-firm-wide questions excluded. Refused questions aren't wasted: the console
+Client accounts can ask too — pinned to their own business (the
+month-on-month comparison included: it then compares just that business),
+with the firm-wide questions excluded. Refused questions aren't wasted:
+the console
 mines them into a "register gaps" list, so the firm can see which claims to
 draft next — and the helpfulness ratings feed a matching operator view of
 the questions Clerk *did* answer.
@@ -1177,7 +1207,10 @@ they issue **password-reset links** — single-use, 24-hour, shown once.
 ### Clerk operations
 
 The **Clerk** rail (Intake queue, Claims, Ask Clerk, Health) is the
-operator's side of [section 5](#5-clerk--the-ai-assistant). Beyond review
+operator's side of [section 5](#5-clerk--the-ai-assistant); its Ask page
+answers like the web app's — multi-part answers under an "Answered
+using:" line, and the follow-up chip with **New topic** (no suggestion
+chips here). Beyond review
 and the claims register, the **Health** page carries the operating evidence:
 volume/latency/cost tiles, confidence calibration, per-field and per-supplier
 correction patterns, kept-rate and injection-resistance trends with alert
@@ -1330,7 +1363,8 @@ Settings** — plus screens reached from Home:
 - **Send to Clerk** — **Take a photo** of a paper invoice (or pick a
   document / paste text) and track your submissions, exactly as on the web.
 - **Ask Clerk** and **Digests & statements** — the same surfaces as the web
-  ([section 5](#5-clerk--the-ai-assistant)).
+  ([section 5](#5-clerk--the-ai-assistant)), multi-part answers, the
+  follow-up chip and the month-comparison suggestion included.
 - **Reconciliation** — upload or paste a bank CSV, check parsing, commit,
   and accept/reject match proposals (scanned-PDF statements and bulk-accept
   are web-only; client accounts see matches read-only).
