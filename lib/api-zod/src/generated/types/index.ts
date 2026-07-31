@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.57.0
+ * OpenAPI spec version: 0.58.0
  */
 
 export * from './acceptInvitationInput';
@@ -48,6 +48,7 @@ export * from './badRequestResponse';
 export * from './bankStatement';
 export * from './bankStatementLine';
 export * from './bankStatementLineDirection';
+export * from './bankStatementLineNarrationSuggestion';
 export * from './bankStatementLineParseStatus';
 export * from './bankStatementStatus';
 export * from './batchClerkCasesInput';
@@ -187,6 +188,7 @@ export * from './clerkMetricsInjectionTrend';
 export * from './clerkMetricsInjectionTrendByPromptVersionItem';
 export * from './clerkMetricsInjectionTrendMonthsItem';
 export * from './clerkMetricsKeptRateTrendItem';
+export * from './clerkMetricsNarrationMatch';
 export * from './clerkMetricsPlatformSpend';
 export * from './clerkMetricsQualityAlert';
 export * from './clerkMetricsResistanceAlert';
@@ -502,6 +504,10 @@ export * from './modelCanarySide';
 export * from './monthEndClose';
 export * from './monthEndCloseItemsItem';
 export * from './monthEndCloseItemsItemStatus';
+export * from './narrationSuggestionsInput';
+export * from './narrationSuggestionsResult';
+export * from './narrationSuggestionsResultLinesItem';
+export * from './narrationSuggestionsResultLinesItemOutcome';
 export * from './netCashPosition';
 export * from './netCashPositionGroupsItem';
 export * from './netCashPositionGroupsItemWeeksItem';

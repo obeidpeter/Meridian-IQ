@@ -57,6 +57,11 @@ const NO_CONTEXT_ROUTES = new Set([
   // Two sequential provider calls on the voice path (transcription + draft
   // inference) — far too slow to hold a pooled connection or fit the 30s cap.
   "POST /api/clerk/draft-invoice",
+  // Narration match sweep: up to NARRATION_SWEEP_CAP (20) sequential
+  // closed-list classification calls — far past the 30s cap. The module
+  // commits each line's suggestion in its own short firm-bound transaction
+  // (clerk scope.ts), so a mid-sweep failure keeps every already-read line.
+  "POST /api/clerk/narration-suggestions",
   "POST /api/clerk/client-import-draft",
   // A canary is 2× a corpus pass of model calls — far past the 30s cap.
   "POST /api/clerk/eval/canary",

@@ -60,6 +60,9 @@ export const MODEL_RATE_LIMITED_ROUTES: ReadonlySet<string> = new Set([
   "POST /api/clerk/eval/phrasing",
   "POST /api/clerk/format-draft",
   "POST /api/clerk/draft-invoice",
+  // Narration match sweep: up to 20 classification calls per request — the
+  // heaviest per-request spend on this list after the batch surfaces.
+  "POST /api/clerk/narration-suggestions",
   "POST /api/clerk/client-import-draft",
   "POST /api/clerk/catalogue-draft",
   "POST /api/clerk/claims/draft",

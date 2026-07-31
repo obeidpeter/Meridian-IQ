@@ -5,16 +5,21 @@ import {
   useImportBankStatement,
   useListBankStatements,
   useListBankStatementProposals,
+  useListBankStatementLines,
   useAcceptMatchProposal,
   useRejectMatchProposal,
   useBulkAcceptMatchProposals,
   useAssistMatchProposals,
+  useSuggestNarrationMatches,
   getListBankStatementsQueryKey,
   getListBankStatementProposalsQueryKey,
+  getListBankStatementLinesQueryKey,
   type StatementImportInput,
   type StatementImportResult,
   type MatchProposalView,
   type MatchAssist,
+  type BankStatementLine,
+  type NarrationSuggestionsResult,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +55,7 @@ import {
   formatNaira,
   formatDate,
   humanize,
+  pillClasses,
   statusLabel,
   statementStatusLabel,
   statementBadgeClasses,
@@ -62,6 +68,86 @@ function percent(rate: number | string): string {
   const n = Number(rate);
   if (Number.isNaN(n)) return "—";
   return `${Math.round(n * 100)}%`;
+}
+
+// ---- Narration match lane ---------------------------------------------------
+// Clerk reads the statement's middle-band narrations and records, per line,
+// either a suggested proposal or an abstention (on the LINE, as
+// `narrationSuggestion` — the proposals view never carries it). Everything
+// here is advisory: the chip never pre-selects Accept, and accepting or
+// rejecting stays the untouched decision buttons.
+
+// Closed cue catalogue → client wording. Unknown cues (a newer server) fall
+// back to a bare "Clerk suggests" rather than leaking a machine token.
+const NARRATION_CUE_LABELS: Record<string, string> = {
+  exact_reference: "exact reference",
+  reference_fragment: "reference fragment",
+  name_abbreviation: "name match",
+  payer_context: "payer context",
+  multi_invoice_hint: "part-payment hint",
+};
+
+/** Human label for a narration cue; null when the cue is absent or unknown. */
+export function narrationCueLabel(cue: string | null | undefined): string | null {
+  return (cue && NARRATION_CUE_LABELS[cue]) || null;
+}
+
+/**
+ * The chip text for one proposal card, or null for no chip. Only the proposal
+ * the line's suggestion points at gets one; sibling proposals on the same
+ * line, abstentions (proposalId null) and lines Clerk never read all resolve
+ * to null.
+ */
+export function narrationChipFor(
+  line: Pick<BankStatementLine, "narrationSuggestion"> | undefined,
+  proposalId: string,
+): string | null {
+  const suggestion = line?.narrationSuggestion;
+  if (!suggestion || suggestion.proposalId !== proposalId) return null;
+  const cue = narrationCueLabel(suggestion.cue);
+  return cue ? `Clerk suggests · ${cue}` : "Clerk suggests";
+}
+
+/**
+ * Whether the per-statement "Ask Clerk to read the narrations" trigger shows:
+ * the caller must hold `reconciliation.act` (the server 403s a client_user
+ * without it) AND at least one displayed line must be middle-band undecided —
+ * a proposed match strictly below the 0.85 bulk threshold — with a narration
+ * for Clerk to read. Confidence exactly 0.85 belongs to bulk accept, not
+ * this lane.
+ */
+export function narrationSuggestVisible(
+  proposals:
+    | Pick<MatchProposalView, "status" | "confidence" | "narration">[]
+    | undefined,
+  capabilities: string[] | undefined,
+): boolean {
+  if (!(capabilities ?? []).includes("reconciliation.act")) return false;
+  return (proposals ?? []).some(
+    (p) =>
+      p.status === "proposed" &&
+      Number(p.confidence) < 0.85 &&
+      (p.narration ?? "").trim().length > 0,
+  );
+}
+
+/**
+ * The one-line run summary: "Clerk read N lines — S suggestions, A
+ * abstentions", with ", F failed" appended only when any line failed.
+ */
+export function narrationSummaryLine(
+  res: Pick<
+    NarrationSuggestionsResult,
+    "considered" | "suggested" | "abstained" | "failed"
+  >,
+): string {
+  const n = (count: number, word: string) =>
+    `${count} ${word}${count === 1 ? "" : "s"}`;
+  const base = `Clerk read ${n(res.considered, "line")} — ${n(
+    res.suggested,
+    "suggestion",
+  )}, ${n(res.abstained, "abstention")}`;
+  return res.failed > 0 ? `${base}, ${res.failed} failed` : base;
 }
 
 /**
@@ -114,6 +200,15 @@ export function Reconciliation() {
   const reject = useRejectMatchProposal();
   const bulkAccept = useBulkAcceptMatchProposals();
   const assistMut = useAssistMatchProposals();
+  const narrationMut = useSuggestNarrationMatches();
+
+  // The last narration run's headline numbers; carries its statementId so a
+  // summary never renders against a different statement's panel.
+  const [narrationSummary, setNarrationSummary] =
+    useState<NarrationSuggestionsResult | null>(null);
+  // Narration lane's own down-banner: 503 (clerk_ai kill switch) and 404 (the
+  // lane's flag dark / older server) both mean "Clerk can't help right now".
+  const [narrationDown, setNarrationDown] = useState(false);
 
   // Clerk's read on an ambiguous line's candidates, keyed by the proposal
   // whose "Why this match?" was clicked. The ranking and highlights inside are
@@ -202,7 +297,64 @@ export function Reconciliation() {
     },
   });
 
+  // Narration suggestions live on the LINES (BankStatementLine.
+  // narrationSuggestion), not on the proposals view — fetch the expanded
+  // statement's lines alongside its proposals and join by statementLineId.
+  const { data: statementLines } = useListBankStatementLines(selectedId || "", {
+    query: {
+      enabled: !!selectedId,
+      queryKey: getListBankStatementLinesQueryKey(selectedId || ""),
+      retry: false,
+    },
+  });
+
+  const linesById = useMemo(() => {
+    const byId = new Map<string, BankStatementLine>();
+    (statementLines ?? []).forEach((l) => byId.set(l.id, l));
+    return byId;
+  }, [statementLines]);
+
   const bulkArmed = !!selectedId && bulkArmedId === selectedId;
+
+  const showNarrationSuggest = narrationSuggestVisible(
+    proposals,
+    me?.capabilities,
+  );
+
+  const runNarrationSuggest = async () => {
+    if (!selectedId) return;
+    setNarrationSummary(null);
+    try {
+      const res = await narrationMut.mutateAsync({
+        data: { statementId: selectedId },
+      });
+      setNarrationSummary(res);
+      // Not awaited: the suggestions are already recorded server-side, so a
+      // background refetch rejection must not read as a failed run. The chips
+      // read off the lines; proposals refetch too so the cards stay aligned
+      // with the join.
+      queryClient.invalidateQueries({
+        queryKey: getListBankStatementLinesQueryKey(selectedId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getListBankStatementProposalsQueryKey(selectedId),
+      });
+    } catch (e) {
+      // 404 = the lane is dark (feature flag off / older server); 503 = the
+      // clerk_ai kill switch — both raise the honest "matching stays manual"
+      // banner. 429 budget and typed rejections relay the server's own words
+      // through the shared gateway split.
+      if (isFeatureDisabled(e)) {
+        setNarrationDown(true);
+        return;
+      }
+      handleClerkGatewayError(e, {
+        onDisabled: () => setNarrationDown(true),
+        toast,
+        fallbackTitle: "Clerk couldn't read the narrations",
+      });
+    }
+  };
 
   // Statement lines with a pending proposal at/above the server's default 0.85
   // threshold. Bulk accept takes at most the best proposal per line, so the
@@ -424,6 +576,13 @@ export function Reconciliation() {
             <ClerkDisabledBanner>
               Scanned-statement reading is paused. Upload your bank&apos;s CSV
               export instead, or try the PDF again later.
+            </ClerkDisabledBanner>
+          )}
+
+          {narrationDown && (
+            <ClerkDisabledBanner>
+              Narration reading is paused — matching stays manual. Accept or
+              reject the proposals yourself, or try again later.
             </ClerkDisabledBanner>
           )}
 
@@ -676,21 +835,49 @@ export function Reconciliation() {
                   Accepting a match records a settlement against the invoice and marks it as
                   settled. Rejecting keeps the invoice outstanding.
                 </p>
-                {bulkEligibleCount > 0 && (
-                  <Button
-                    size="sm"
-                    onClick={runBulkAccept}
-                    disabled={bulkAccept.isPending || decidingId !== null}
-                    data-testid="button-bulk-accept"
-                  >
-                    <Check className="w-4 h-4 mr-1" aria-hidden="true" />
-                    {bulkAccept.isPending
-                      ? "Accepting…"
-                      : bulkArmed
-                        ? "Click again to confirm"
-                        : `Accept all ≥ 85% (${bulkEligibleCount})`}
-                  </Button>
+                {(bulkEligibleCount > 0 || showNarrationSuggest) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {bulkEligibleCount > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={runBulkAccept}
+                        disabled={bulkAccept.isPending || decidingId !== null}
+                        data-testid="button-bulk-accept"
+                      >
+                        <Check className="w-4 h-4 mr-1" aria-hidden="true" />
+                        {bulkAccept.isPending
+                          ? "Accepting…"
+                          : bulkArmed
+                            ? "Click again to confirm"
+                            : `Accept all ≥ 85% (${bulkEligibleCount})`}
+                      </Button>
+                    )}
+                    {showNarrationSuggest && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={runNarrationSuggest}
+                        disabled={narrationMut.isPending}
+                        data-testid="button-narration-suggest"
+                      >
+                        <Sparkles className="w-4 h-4 mr-1" aria-hidden="true" />
+                        {narrationMut.isPending
+                          ? "Reading narrations…"
+                          : "Ask Clerk to read the narrations"}
+                      </Button>
+                    )}
+                  </div>
                 )}
+                {narrationSummary &&
+                  narrationSummary.statementId === selectedId && (
+                    <p
+                      className="text-xs text-muted-foreground"
+                      role="status"
+                      data-testid="narration-summary"
+                    >
+                      {narrationSummaryLine(narrationSummary)}
+                    </p>
+                  )}
                 {proposalsLoading ? (
                   <div className="space-y-3">
                     <Skeleton className="h-16" />
@@ -720,7 +907,14 @@ export function Reconciliation() {
                     )}
                   </EmptyState>
                 ) : (
-                  (proposals || []).map((p) => (
+                  (proposals || []).map((p) => {
+                    // Advisory only: the chip marks the proposal Clerk's
+                    // narration read points at — it never pre-selects Accept.
+                    const narrationChip = narrationChipFor(
+                      linesById.get(p.statementLineId),
+                      p.id,
+                    );
+                    return (
                     <div key={p.id} className="border rounded-md px-3 py-2 text-sm space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0 flex-wrap">
@@ -737,6 +931,18 @@ export function Reconciliation() {
                           <span className={proposalBadgeClasses(p.status)}>
                             {proposalStatusLabel(p.status)}
                           </span>
+                          {narrationChip && (
+                            <span
+                              className={pillClasses("violet")}
+                              data-testid={`narration-chip-${p.id}`}
+                            >
+                              <Sparkles
+                                className="w-3 h-3"
+                                aria-hidden="true"
+                              />
+                              {narrationChip}
+                            </span>
+                          )}
                         </div>
                         {p.status === "proposed" && (
                           <div className="flex gap-2">
@@ -832,7 +1038,8 @@ export function Reconciliation() {
                         </div>
                       )}
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </CardContent>
             </Card>

@@ -6,6 +6,8 @@ import {
   DraftCatalogueEntryWithClerkResponse,
   AssistMatchProposalsBody,
   AssistMatchProposalsResponse,
+  SuggestNarrationMatchesBody,
+  SuggestNarrationMatchesResponse,
   DraftInvoiceWithClerkBody,
   DraftInvoiceWithClerkResponse,
   DraftStatementFormatWithClerkBody,
@@ -26,6 +28,7 @@ import { draftCatalogueEntryWithClerk } from "../../modules/clerk/draft-catalogu
 import { draftClaimWithClerk } from "../../modules/clerk/draft-claim";
 import { draftInvoiceWithClerk } from "../../modules/clerk/draft-invoice";
 import { assistMatch } from "../../modules/clerk/reconcile-assist";
+import { suggestNarrationMatches } from "../../modules/clerk/narration-match";
 import { requireFlag } from "../../modules/flags/flags";
 import { gatewayOrNull, getClerkGateway } from "../../modules/clerk/provider";
 
@@ -62,6 +65,39 @@ router.post(
       gateway,
     );
     res.json(AssistMatchProposalsResponse.parse(result));
+  },
+);
+
+// Narration match lane: Clerk reads a statement's middle-band narrations
+// against each line's own proposal shortlist and records a pick or abstention
+// per line (advisory only — acceptance stays the human decision path).
+// Unlike its assist sibling above this is a REAL classification spend (up to
+// NARRATION_SWEEP_CAP calls), so it is fail-closed: reconciliation.act (the
+// decider's capability — suggestions exist to serve the accept decision, and
+// client_user holds only reconciliation.read so it can never trigger spend),
+// the firm budget gate BEFORE any provider touch, and getClerkGateway() so a
+// broken provider or dark kill switch is an error, never a silent no-op.
+// Runs OUTSIDE the request transaction (app.ts NO_CONTEXT_ROUTES, mirrored
+// in the MODEL rate class): up to 20 sequential model calls must not pin a
+// pooled connection under the 30s cap — the module commits each line's write
+// in its own short firm-bound transaction (clerk scope.ts).
+router.post(
+  "/clerk/narration-suggestions",
+  requireFlag("reconciliation"),
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "reconciliation.act");
+    const parsed = parseOrThrow(SuggestNarrationMatchesBody, req.body);
+    const firmId = requireFirmScope(req.principal);
+    // Budget gate before the provider is touched (the statements-route
+    // idiom): an exhausted firm gets a clean 429 without any model call.
+    await assertFirmClerkBudget(firmId);
+    const gateway = await getClerkGateway();
+    const result = await suggestNarrationMatches(
+      parsed.statementId,
+      req.principal,
+      gateway,
+    );
+    res.json(SuggestNarrationMatchesResponse.parse(result));
   },
 );
 

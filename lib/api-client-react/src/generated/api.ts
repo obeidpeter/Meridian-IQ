@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.57.0
+ * OpenAPI spec version: 0.58.0
  */
 import {
   useMutation,
@@ -268,6 +268,8 @@ import type {
   MissingRecurringBill,
   ModelCanaryReport,
   MonthEndClose,
+  NarrationSuggestionsInput,
+  NarrationSuggestionsResult,
   NetCashPosition,
   NotFoundResponse,
   NoticeDecisionInput,
@@ -20347,6 +20349,76 @@ export const useAssistMatchProposals = <TError = ErrorType<NotFoundResponse>,
         TContext
       > => {
       return useMutation(getAssistMatchProposalsMutationOptions(options));
+    }
+
+export const getSuggestNarrationMatchesUrl = () => {
+
+
+
+
+  return `/api/clerk/narration-suggestions`
+}
+
+/**
+ * @summary Clerk reads a statement's middle-band narrations against each line's own proposal shortlist and records a pick or abstention per line — advisory only, acceptance stays the human decision path
+ */
+export const suggestNarrationMatches = async (narrationSuggestionsInput: NarrationSuggestionsInput, options?: RequestInit): Promise<NarrationSuggestionsResult> => {
+
+  return customFetch<NarrationSuggestionsResult>(getSuggestNarrationMatchesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(narrationSuggestionsInput)
+  }
+);}
+
+
+
+
+export const getSuggestNarrationMatchesMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suggestNarrationMatches>>, TError,{data: BodyType<NarrationSuggestionsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof suggestNarrationMatches>>, TError,{data: BodyType<NarrationSuggestionsInput>}, TContext> => {
+
+const mutationKey = ['suggestNarrationMatches'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof suggestNarrationMatches>>, {data: BodyType<NarrationSuggestionsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  suggestNarrationMatches(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SuggestNarrationMatchesMutationResult = NonNullable<Awaited<ReturnType<typeof suggestNarrationMatches>>>
+    export type SuggestNarrationMatchesMutationBody = BodyType<NarrationSuggestionsInput>
+    export type SuggestNarrationMatchesMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Clerk reads a statement's middle-band narrations against each line's own proposal shortlist and records a pick or abstention per line — advisory only, acceptance stays the human decision path
+ */
+export const useSuggestNarrationMatches = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suggestNarrationMatches>>, TError,{data: BodyType<NarrationSuggestionsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof suggestNarrationMatches>>,
+        TError,
+        {data: BodyType<NarrationSuggestionsInput>},
+        TContext
+      > => {
+      return useMutation(getSuggestNarrationMatchesMutationOptions(options));
     }
 
 export const getDraftInvoiceWithClerkUrl = () => {

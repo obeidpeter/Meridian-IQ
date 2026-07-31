@@ -243,6 +243,7 @@ const BARE_INFER_ALLOWED = new Map<string, string>([
   ["clerk/scan-batch.ts", "vision segmentation — coverage-validated, fails the scan"],
   ["statements/scan-intake.ts", "statement extraction — typed operator-facing failure"],
   ["desk/triage.ts", "closed-enum triage — failure marks the item failed, sweep moves on"],
+  ["clerk/narration-match.ts", "closed-list classification — a failed line is reported per line and retried on re-run; no template to fall back to"],
   // Drafting proposals: a failed draft is a typed refusal the user sees and
   // retries; silently substituting template text would misrepresent it.
   ["clerk/draft-catalogue.ts", "drafting proposal — typed refusal on failure"],

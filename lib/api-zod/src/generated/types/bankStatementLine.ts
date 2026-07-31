@@ -3,9 +3,10 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.57.0
+ * OpenAPI spec version: 0.58.0
  */
 import type { BankStatementLineDirection } from './bankStatementLineDirection';
+import type { BankStatementLineNarrationSuggestion } from './bankStatementLineNarrationSuggestion';
 import type { BankStatementLineParseStatus } from './bankStatementLineParseStatus';
 
 export interface BankStatementLine {
@@ -26,5 +27,6 @@ export interface BankStatementLine {
   /** @nullable */
   parseError?: string | null;
   rawLine: string;
+  narrationSuggestion?: BankStatementLineNarrationSuggestion;
   createdAt: Date;
 }

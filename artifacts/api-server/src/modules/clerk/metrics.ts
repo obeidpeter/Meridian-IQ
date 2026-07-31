@@ -5,6 +5,7 @@ import {
 } from "./resistance-watch";
 import { detectQualityDrop, keptRateMonths } from "./quality-watch";
 import { GROUNDING_VIOLATION_ACTION } from "./grounding";
+import { narrationKeptRate } from "./narration-match";
 import {
   getDb,
   type ClerkCorrection,
@@ -154,6 +155,18 @@ export interface ClerkMetrics {
   grounding: {
     violations: number;
     bySurface: { surface: string; count: number }[];
+  };
+  // Narration-match lane health (narration-match.ts narrationKeptRate — one
+  // source, so this block and any alerting can never disagree): suggestions
+  // in the window split pick vs abstention, and — of the picks whose line a
+  // human has since decided by ACCEPTING a proposal — kept (accepted the
+  // suggested proposal) vs overridden (accepted a different one). Pure SQL
+  // over the suggestion jsonb and the proposal decisions; nothing stored.
+  narrationMatch: {
+    suggested: number;
+    kept: number;
+    overridden: number;
+    abstained: number;
   };
   // Resistance-drop alert (round-8 idea #2): present when the newest measured
   // month's injection resistance fell materially below the previous one —
@@ -806,6 +819,15 @@ export async function getClerkMetrics(
       count: Number(r.count),
     })),
   };
+  // Narration-match kept-rate: the same window as the headline metrics, read
+  // from the lane's own SQL (narration-match.ts) so console and module agree.
+  const narrationRate = await narrationKeptRate(windowDays);
+  const narrationMatch = {
+    suggested: narrationRate.suggested,
+    kept: narrationRate.kept,
+    overridden: narrationRate.overridden,
+    abstained: narrationRate.abstained,
+  };
   // Kept-rate drift buckets, shared with the quality-watch sweep exactly as
   // the injection trend is shared with the resistance watch — one source, so
   // the chart and the alert can never disagree.
@@ -952,6 +974,7 @@ export async function getClerkMetrics(
       })),
     },
     grounding,
+    narrationMatch,
     ...(resistanceAlert ? { resistanceAlert } : {}),
     ...(keptRateTrend.length > 0 ? { keptRateTrend } : {}),
     ...(qualityAlert ? { qualityAlert } : {}),

@@ -764,6 +764,23 @@ entries.
   candidate set; ranking and highlights are computed from the matcher's
   recorded features, Clerk only phrases the comparison, template fallback
   always answers.
+- **Narration match lane** (`modules/clerk/narration-match.ts`,
+  `POST /clerk/narration-suggestions`, `reconciliation.act`, contract
+  0.58.0) — the assist's CLASSIFYING sibling, and deliberately NOT digest
+  posture: it is a real spend (fail-closed `getClerkGateway` + budget
+  pre-check, NO_CONTEXT + model-rate-limited, capped 20 lines/call). For
+  middle-band lines only (`[PROPOSAL_THRESHOLD, DEFAULT_BULK_ACCEPT_THRESHOLD)`
+  — each bound owned by the module that enforces it) the model reads the
+  fenced narration against a POSITIONAL candidate list (Candidate 1..3; it
+  never sees a proposal/invoice id, so it cannot hallucinate one) and
+  returns a pick + cue from the closed catalogue, or "none" —
+  abstain-by-default. The result lands on
+  `bank_statement_lines.narration_suggestion` (abstentions persist, so
+  re-runs never re-spend; failures persist nothing and stay retryable);
+  the SME page renders it as an advisory "Clerk suggests" chip, and
+  accepting stays the untouched human decision path. Kept-rate
+  (`narrationKeptRate` → the metrics report's `narrationMatch` block) is
+  pure SQL over suggestions vs the proposals humans later accepted.
 - **Advisory narratives** (`modules/advisory/narrative.ts`,
   `engagement.write`) — phrase a completed assessment/VAT-risk engagement's
   stored findings into a client letter body (template fallback, never

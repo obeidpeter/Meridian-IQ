@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.57.0
+  version: 0.58.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5000,6 +5000,29 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /clerk/narration-suggestions:
+    post:
+      operationId: suggestNarrationMatches
+      tags: [clerk]
+      summary: Clerk reads a statement's middle-band narrations against each line's own proposal shortlist and records a pick or abstention per line — advisory only, acceptance stays the human decision path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NarrationSuggestionsInput"
+      responses:
+        "200":
+          description: Per-line outcomes for the lines considered in this pass
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NarrationSuggestionsResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /clerk/draft-invoice:
     post:
       operationId: draftInvoiceWithClerk
@@ -9797,6 +9820,23 @@ components:
           type: ["string", "null"]
         rawLine:
           type: string
+        # Clerk's narration reading for this line (advisory only; absent until
+        # the firm asks Clerk to read the statement's narrations). proposalId
+        # null = Clerk read the narration and abstained.
+        narrationSuggestion:
+          anyOf:
+            - type: object
+              required: [proposalId, cue, at]
+              properties:
+                proposalId:
+                  type: ["string", "null"]
+                invoiceId:
+                  type: ["string", "null"]
+                cue:
+                  type: ["string", "null"]
+                at:
+                  type: string
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -11124,10 +11164,26 @@ components:
           injectionTrend,
           platformSpend,
           grounding,
+          narrationMatch,
         ]
       properties:
         windowDays:
           type: integer
+        # Narration-match lane health: window suggestions split pick vs
+        # abstention; of the picks whose line a human has since decided by
+        # accepting a proposal, kept (accepted the suggestion) vs overridden.
+        narrationMatch:
+          type: object
+          required: [suggested, kept, overridden, abstained]
+          properties:
+            suggested:
+              type: integer
+            kept:
+              type: integer
+            overridden:
+              type: integer
+            abstained:
+              type: integer
         # Number-grounding violations in the window: phrasing surfaces whose
         # model output carried a numeral the facts never stated — each such
         # output was replaced by its deterministic template. Zero is healthy.
@@ -11565,6 +11621,46 @@ components:
           type: array
           items:
             type: string
+    NarrationSuggestionsInput:
+      type: object
+      required: [statementId]
+      properties:
+        statementId:
+          type: string
+          format: uuid
+    NarrationSuggestionsResult:
+      type: object
+      required: [statementId, considered, suggested, abstained, failed, lines]
+      properties:
+        statementId:
+          type: string
+        # Middle-band lines with narration that this pass looked at (capped
+        # per call; re-running continues where the cap stopped).
+        considered:
+          type: integer
+        suggested:
+          type: integer
+        abstained:
+          type: integer
+        # Lines whose model call failed or returned unusable output — no
+        # suggestion recorded, nothing retried automatically.
+        failed:
+          type: integer
+        lines:
+          type: array
+          items:
+            type: object
+            required: [statementLineId, outcome]
+            properties:
+              statementLineId:
+                type: string
+              outcome:
+                type: string
+                enum: [suggested, abstained, failed, skipped]
+              proposalId:
+                type: ["string", "null"]
+              cue:
+                type: ["string", "null"]
     MatchAssist:
       type: object
       required: [statementLineId, explanation, source, ranked]

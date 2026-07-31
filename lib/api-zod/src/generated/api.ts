@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.57.0
+ * OpenAPI spec version: 0.58.0
  */
 import * as zod from 'zod';
 
@@ -4330,6 +4330,12 @@ export const ListBankStatementLinesResponseItem = zod.object({
   "parseStatus": zod.enum(['parsed', 'invalid']),
   "parseError": zod.string().nullish(),
   "rawLine": zod.string(),
+  "narrationSuggestion": zod.union([zod.object({
+  "proposalId": zod.string().nullable(),
+  "invoiceId": zod.string().nullish(),
+  "cue": zod.string().nullable(),
+  "at": zod.string()
+}),zod.null()]).optional(),
   "createdAt": zod.coerce.date()
 })
 export const ListBankStatementLinesResponse = zod.array(ListBankStatementLinesResponseItem)
@@ -7749,6 +7755,28 @@ export const AssistMatchProposalsResponse = zod.object({
 
 
 /**
+ * @summary Clerk reads a statement's middle-band narrations against each line's own proposal shortlist and records a pick or abstention per line — advisory only, acceptance stays the human decision path
+ */
+export const SuggestNarrationMatchesBody = zod.object({
+  "statementId": zod.string().uuid()
+})
+
+export const SuggestNarrationMatchesResponse = zod.object({
+  "statementId": zod.string(),
+  "considered": zod.number(),
+  "suggested": zod.number(),
+  "abstained": zod.number(),
+  "failed": zod.number(),
+  "lines": zod.array(zod.object({
+  "statementLineId": zod.string(),
+  "outcome": zod.enum(['suggested', 'abstained', 'failed', 'skipped']),
+  "proposalId": zod.string().nullish(),
+  "cue": zod.string().nullish()
+}))
+})
+
+
+/**
  * @summary Draft an invoice form from one sentence — returned for review, never saved
  */
 export const draftInvoiceWithClerkBodyTextMin = 5;
@@ -8021,6 +8049,12 @@ export const GetClerkMetricsQueryParams = zod.object({
 
 export const GetClerkMetricsResponse = zod.object({
   "windowDays": zod.number(),
+  "narrationMatch": zod.object({
+  "suggested": zod.number(),
+  "kept": zod.number(),
+  "overridden": zod.number(),
+  "abstained": zod.number()
+}),
   "grounding": zod.object({
   "violations": zod.number(),
   "bySurface": zod.array(zod.object({

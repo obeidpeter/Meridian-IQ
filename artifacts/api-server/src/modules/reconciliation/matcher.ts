@@ -59,7 +59,11 @@ const WEIGHTS = {
   name: 0.1,
 } as const;
 
-const PROPOSAL_THRESHOLD = 0.35;
+// Exported as the noise floor of the matcher's confidence scale: the
+// narration-match lane defines the human "middle band" as
+// [PROPOSAL_THRESHOLD, DEFAULT_BULK_ACCEPT_THRESHOLD) — each bound owned by
+// the module that enforces it.
+export const PROPOSAL_THRESHOLD = 0.35;
 const MAX_PROPOSALS_PER_LINE = 3;
 
 function normalizeToken(s: string): string {
