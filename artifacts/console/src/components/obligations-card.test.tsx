@@ -9,6 +9,11 @@
 //    payload, never sent as "".
 //  - Every write invalidates the obligations list by its real generated
 //    query key, so all filtered variants go stale together.
+//  - Response Desk: an OPEN row expands one inline panel at a time with the
+//    two response tools — the bundle PDF goes through the generated URL
+//    builder + the named-download helper, and the drafted letter renders
+//    read-only with a source-honest provenance line (clerk vs template) and
+//    a clipboard Copy. The platform never sends or files anything.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -32,6 +37,13 @@ const harness = vi.hoisted(() => ({
     calls: [] as unknown[],
     result: null as unknown,
   },
+  respond: {
+    calls: [] as unknown[],
+    result: null as unknown,
+    error: null as unknown,
+    isPending: false,
+  },
+  downloads: [] as [string, string][],
   reset() {
     this.list.data = undefined;
     this.list.isLoading = false;
@@ -41,6 +53,18 @@ const harness = vi.hoisted(() => ({
     this.create.result = null;
     this.status.calls = [];
     this.status.result = null;
+    this.respond.calls = [];
+    this.respond.result = null;
+    this.respond.error = null;
+    this.respond.isPending = false;
+    this.downloads = [];
+  },
+}));
+
+// The named-download helper is a browser navigation — record it instead.
+vi.mock("@/lib/download", () => ({
+  triggerDownload: (url: string, filename: string) => {
+    harness.downloads.push([url, filename]);
   },
 }));
 
@@ -77,6 +101,17 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
         options?.mutation?.onSuccess?.(harness.status.result, vars);
       },
     }),
+    useDraftObligationResponse: (options?: MutationOpts) => ({
+      isPending: harness.respond.isPending,
+      mutate: (vars: unknown) => {
+        harness.respond.calls.push(vars);
+        if (harness.respond.error) {
+          options?.mutation?.onError?.(harness.respond.error);
+        } else {
+          options?.mutation?.onSuccess?.(harness.respond.result, vars);
+        }
+      },
+    }),
   };
 });
 
@@ -88,9 +123,14 @@ import {
   obligationInputFromDraft,
   obligationOverdue,
   openObligationRows,
+  responsePackFilename,
   todayIso,
 } from "./obligations-card";
-import { getListObligationsQueryKey } from "@workspace/api-client-react";
+import {
+  getGetObligationResponsePackUrl,
+  getListObligationsQueryKey,
+} from "@workspace/api-client-react";
+import type { ObligationResponseDraft } from "@workspace/api-client-react";
 
 function obligation(over: Partial<Obligation> = {}): Obligation {
   return {
@@ -114,6 +154,19 @@ function obligation(over: Partial<Obligation> = {}): Obligation {
     createdBy: "u-1",
     createdAt: "2026-07-20T10:00:00Z",
     updatedAt: "2026-07-20T10:00:00Z",
+    ...over,
+  };
+}
+
+function responseDraft(
+  over: Partial<ObligationResponseDraft> = {},
+): ObligationResponseDraft {
+  return {
+    obligationId: "obl-1",
+    letter: "Dear Sir/Madam,\n\nWe write in response to your notice.",
+    source: "clerk",
+    monthStart: "2026-07-01",
+    monthLabel: "July 2026",
     ...over,
   };
 }
@@ -206,6 +259,24 @@ describe("obligations-card helpers", () => {
     expect(
       obligationDraftIncomplete({ ...ready, responseDueDate: "" }),
     ).toBe(true);
+  });
+
+  test("responsePackFilename: sanitized reference, else id prefix", () => {
+    // Reference slugged filename-safe: lowercased, runs of non-alphanumerics
+    // collapse to one dash, edges trimmed.
+    expect(
+      responsePackFilename({ id: "obl-1", reference: "FIRS/2026/0042" }),
+    ).toBe("response-pack-firs-2026-0042.pdf");
+    expect(
+      responsePackFilename({ id: "obl-1", reference: "  LIRS //  7 " }),
+    ).toBe("response-pack-lirs-7.pdf");
+    // No reference (or nothing usable in it): the obligation id's prefix.
+    expect(
+      responsePackFilename({ id: "0123456789abcdef", reference: null }),
+    ).toBe("response-pack-01234567.pdf");
+    expect(responsePackFilename({ id: "short", reference: "///" })).toBe(
+      "response-pack-short.pdf",
+    );
   });
 
   test("draft -> payload: client pinned, optionals trimmed or OMITTED", () => {
@@ -383,5 +454,164 @@ describe("ObligationsCard", () => {
       (screen.getByTestId("button-create-obligation") as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+});
+
+// ---- Response Desk ----------------------------------------------------------
+
+describe("ObligationsCard response desk", () => {
+  test("only OPEN rows offer Prepare response; one panel open at a time", async () => {
+    harness.list.data = {
+      obligations: [
+        obligation({ id: "a" }),
+        obligation({ id: "b", responseDueDate: "2999-02-01" }),
+        obligation({
+          id: "answered",
+          status: "responded",
+          responseDueDate: "2999-03-01",
+        }),
+      ],
+    };
+    renderCard();
+
+    // Responded rows keep their lifecycle actions but never the response
+    // tools; closed rows are not rendered at all (worklist).
+    expect(
+      screen.queryByTestId("button-obligation-respond-answered"),
+    ).toBeNull();
+
+    // Nothing expanded by default.
+    expect(screen.queryByTestId("panel-obligation-respond-a")).toBeNull();
+
+    await click(screen.getByTestId("button-obligation-respond-a"));
+    expect(screen.getByTestId("panel-obligation-respond-a")).toBeTruthy();
+    expect(screen.queryByTestId("panel-obligation-respond-b")).toBeNull();
+    // The covenant rides the panel.
+    expect(
+      screen.getByTestId("panel-obligation-respond-a").textContent,
+    ).toContain(
+      "The platform never sends or files the response — this is a draft for the firm to own.",
+    );
+
+    // Opening another row's panel closes the first.
+    await click(screen.getByTestId("button-obligation-respond-b"));
+    expect(screen.queryByTestId("panel-obligation-respond-a")).toBeNull();
+    expect(screen.getByTestId("panel-obligation-respond-b")).toBeTruthy();
+
+    // Clicking the open row's action again collapses it.
+    await click(screen.getByTestId("button-obligation-respond-b"));
+    expect(screen.queryByTestId("panel-obligation-respond-b")).toBeNull();
+  });
+
+  test("the bundle download rides the generated URL + the sanitized filename", async () => {
+    harness.list.data = {
+      obligations: [obligation({ id: "obl-7", reference: "FIRS/2026/0042" })],
+    };
+    renderCard();
+
+    await click(screen.getByTestId("button-obligation-respond-obl-7"));
+    await click(screen.getByTestId("button-response-pack-obl-7"));
+
+    expect(harness.downloads).toEqual([
+      [
+        getGetObligationResponsePackUrl({ obligationId: "obl-7" }),
+        "response-pack-firs-2026-0042.pdf",
+      ],
+    ]);
+    // The builder really is the pack endpoint with the row pinned.
+    expect(harness.downloads[0][0]).toContain("/api/obligation-response-pack");
+    expect(harness.downloads[0][0]).toContain("obligationId=obl-7");
+  });
+
+  test("drafting sends an empty body and renders the letter with clerk provenance", async () => {
+    harness.list.data = { obligations: [obligation({ id: "obl-1" })] };
+    harness.respond.result = responseDraft({
+      letter: "Dear Sir,\n\nRe: FIRS/2026/0042.",
+      source: "clerk",
+      monthLabel: "July 2026",
+    });
+    renderCard();
+
+    await click(screen.getByTestId("button-obligation-respond-obl-1"));
+    // No letter until the partner asks for one.
+    expect(screen.queryByTestId("text-response-letter-obl-1")).toBeNull();
+
+    await click(screen.getByTestId("button-response-draft-obl-1"));
+    // Empty body — the server defaults the month to the notice's issue month.
+    expect(harness.respond.calls).toEqual([{ id: "obl-1", data: {} }]);
+
+    const letterEl = screen.getByTestId(
+      "text-response-letter-obl-1",
+    ) as HTMLTextAreaElement;
+    expect(letterEl.value).toBe("Dear Sir,\n\nRe: FIRS/2026/0042.");
+    expect(letterEl.readOnly).toBe(true);
+
+    const provenance = screen.getByTestId(
+      "text-response-provenance-obl-1",
+    ).textContent;
+    expect(provenance).toContain("July 2026");
+    expect(provenance).toContain(
+      "Drafted by Clerk from the period's records — review and edit before sending.",
+    );
+  });
+
+  test("a template draft says so — the panel never dresses the fallback up as Clerk", async () => {
+    harness.list.data = { obligations: [obligation({ id: "obl-1" })] };
+    harness.respond.result = responseDraft({
+      source: "template",
+      monthLabel: "June 2026",
+    });
+    renderCard();
+
+    await click(screen.getByTestId("button-obligation-respond-obl-1"));
+    await click(screen.getByTestId("button-response-draft-obl-1"));
+
+    const provenance = screen.getByTestId(
+      "text-response-provenance-obl-1",
+    ).textContent;
+    expect(provenance).toContain("June 2026");
+    expect(provenance).toContain(
+      "Assembled from the period's records (Clerk unavailable) — review and edit before sending.",
+    );
+    expect(provenance).not.toContain("Drafted by Clerk");
+  });
+
+  test("a failed draft renders no letter", async () => {
+    harness.list.data = { obligations: [obligation({ id: "obl-1" })] };
+    harness.respond.error = new Error("boom");
+    renderCard();
+
+    await click(screen.getByTestId("button-obligation-respond-obl-1"));
+    await click(screen.getByTestId("button-response-draft-obl-1"));
+    expect(screen.queryByTestId("text-response-letter-obl-1")).toBeNull();
+  });
+
+  test("Copy letter writes the letter body to the clipboard", async () => {
+    harness.list.data = { obligations: [obligation({ id: "obl-1" })] };
+    harness.respond.result = responseDraft({ letter: "Dear Sir,\n\nBody." });
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    renderCard();
+
+    await click(screen.getByTestId("button-obligation-respond-obl-1"));
+    await click(screen.getByTestId("button-response-draft-obl-1"));
+    await click(screen.getByTestId("button-copy-letter-obl-1"));
+    expect(writeText).toHaveBeenCalledWith("Dear Sir,\n\nBody.");
+  });
+
+  test("the draft button shows its pending state", async () => {
+    harness.list.data = { obligations: [obligation({ id: "obl-1" })] };
+    harness.respond.isPending = true;
+    renderCard();
+
+    await click(screen.getByTestId("button-obligation-respond-obl-1"));
+    const draftBtn = screen.getByTestId(
+      "button-response-draft-obl-1",
+    ) as HTMLButtonElement;
+    expect(draftBtn.disabled).toBe(true);
+    expect(draftBtn.textContent).toContain("Drafting…");
   });
 });

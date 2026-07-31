@@ -1,0 +1,149 @@
+import PDFDocument from "pdfkit";
+import { lagosMidnight } from "../../lib/lagos-time";
+import {
+  CONTENT_WIDTH,
+  MARGIN,
+  PAGE_HEIGHT,
+  ensureRoom,
+  drawBrandHeader,
+  drawPayablesSection,
+  drawReceivablesSection,
+  drawRegisterSection,
+  drawVatSection,
+  packLayout,
+  resolvePackTheme,
+} from "../invoice/pack-pdf";
+import type { CompliancePackFacts } from "../invoice/compliance-pack";
+import { responsePackLines } from "./response-pack";
+import type { Obligation } from "@workspace/db";
+
+// Response Desk (Task #207): the obligation response bundle — the paper a
+// firm encloses with its reply to a tax-authority notice. A cover sheet keyed
+// to the authority's own reference, then the period's figures rendered by the
+// compliance pack's OWN section drawers (pack-pdf.ts, imported rather than
+// mirrored — the bundle and the monthly pack can never draw a month
+// differently). Zero model calls BY CONSTRUCTION: the input carries no letter
+// field, so nothing Clerk ever phrased can reach this paper. Rendering is
+// pure — no DB access — so the route owns loading and every tenancy/SEC-03
+// gate.
+//
+// Determinism: identical inputs render byte-identical buffers. pdfkit's only
+// nondeterministic input, info.CreationDate, is pinned to Lagos midnight on
+// the notice's response due date — the honest anchor for a paper whose whole
+// purpose is beating that clock (never `new Date()`).
+
+export interface ObligationResponsePdfInput {
+  obligation: Obligation;
+  pack: CompliancePackFacts;
+  monthStart: string;
+  // firms.theme jsonb — brandName / primary / logoInitials, all optional.
+  theme: Record<string, unknown> | null;
+}
+
+export async function renderObligationResponsePdf(
+  input: ObligationResponsePdfInput,
+): Promise<Buffer> {
+  const { obligation, pack, theme } = input;
+  const packTheme = resolvePackTheme(theme);
+
+  const doc = new PDFDocument({
+    size: "A4",
+    margin: MARGIN,
+    info: {
+      Title: `OBLIGATION RESPONSE ${obligation.reference ?? obligation.id} — ${pack.clientName}`,
+      Author: packTheme.brandName,
+      CreationDate: lagosMidnight(obligation.responseDueDate),
+    },
+  });
+  const chunks: Buffer[] = [];
+  doc.on("data", (c: Buffer) => chunks.push(c));
+  const done = new Promise<Buffer>((resolve, reject) => {
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+  });
+
+  // --- Brand header (the pack's block, response-titled) ----------------------
+  const layout = packLayout(doc, packTheme.primary);
+  const { cursor, section, kvRow, emptyLine } = layout;
+  cursor.y = drawBrandHeader(doc, packTheme, "RESPONSE BUNDLE", pack.monthLabel);
+
+  // --- Cover block: who, and what this paper answers -------------------------
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(13)
+    .fillColor("#222222")
+    .text(pack.clientName, MARGIN, cursor.y, { width: CONTENT_WIDTH });
+  cursor.y = doc.y + 2;
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor("#666666")
+    .text(
+      `Response bundle for an authority notice · Prepared by ${pack.firmName}`,
+      MARGIN,
+      cursor.y,
+      { width: CONTENT_WIDTH },
+    );
+  cursor.y = doc.y + 12;
+
+  // --- The notice, row by row (values verbatim off the obligation record) ----
+  section("Response to authority notice");
+  kvRow("Authority", obligation.authority);
+  kvRow("Notice type", obligation.noticeType);
+  if (obligation.reference) kvRow("Reference", obligation.reference);
+  if (obligation.taxType) kvRow("Tax type", obligation.taxType);
+  if (obligation.period) kvRow("Period on the notice", obligation.period);
+  if (obligation.amount) {
+    kvRow(
+      "Amount on the notice",
+      `${obligation.amount}${obligation.currency ? ` ${obligation.currency}` : ""}`,
+    );
+  }
+  if (obligation.issueDate) kvRow("Notice date", obligation.issueDate);
+  kvRow("Response due", obligation.responseDueDate, true);
+  kvRow("Status", obligation.status);
+  kvRow("Client", pack.clientName);
+  kvRow("Period covered by the enclosed figures", pack.monthLabel);
+  emptyLine(
+    `Enclosed: document register for ${pack.monthLabel}, receivables and payables summaries, VAT position.`,
+  );
+
+  // --- Figures at a glance: the SAME pre-rendered lines the letter draft is
+  // grounded in (responsePackLines — one home, so letter and bundle can
+  // never disagree).
+  for (const line of responsePackLines(pack)) {
+    cursor.y = layoutLine(doc, cursor.y, line);
+  }
+  cursor.y += 8;
+
+  // --- The period's figures, drawn by the pack's own drawers -----------------
+  drawRegisterSection(doc, layout, pack.register);
+  drawReceivablesSection(doc, layout, pack.receivables);
+  drawPayablesSection(doc, layout, pack.payables);
+  drawVatSection(doc, layout, pack.vat);
+
+  // --- Footer: the generation basis ------------------------------------------
+  doc.font("Helvetica").fontSize(7.5).fillColor("#999999");
+  doc.text(
+    `Generated by MeridianIQ for ${packTheme.brandName} · ${pack.clientName} · figures computed from the platform's records for ${pack.monthLabel}`,
+    MARGIN,
+    PAGE_HEIGHT - MARGIN - 10,
+    { width: CONTENT_WIDTH, align: "center", lineBreak: false },
+  );
+
+  doc.end();
+  return done;
+}
+
+// One plain 9.5pt figure line (the cover's at-a-glance block) — kvRow's body
+// style without the right-aligned split, since the lines are pre-rendered
+// "Label: value" strings.
+function layoutLine(doc: PDFKit.PDFDocument, y: number, text: string): number {
+  y = ensureRoom(doc, y, 14);
+  doc
+    .font("Helvetica")
+    .fontSize(9.5)
+    .fillColor("#444444")
+    .text(text, MARGIN, y, { width: CONTENT_WIDTH });
+  return doc.y + 3;
+}

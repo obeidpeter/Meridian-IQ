@@ -4,6 +4,8 @@ import {
   useListObligations,
   useCreateObligation,
   useUpdateObligationStatus,
+  useDraftObligationResponse,
+  getGetObligationResponsePackUrl,
   getListObligationsQueryKey,
   CreateObligationInputAuthority,
   CreateObligationInputNoticeType,
@@ -12,6 +14,7 @@ import {
 import type {
   CreateObligationInput,
   Obligation,
+  ObligationResponseDraft,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,16 +28,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorMessage } from "@/lib/errors";
+import { triggerDownload } from "@/lib/download";
 import { formatAmount, formatDate, pillClasses } from "@/lib/format";
 import {
   authorityLabel,
   noticeTypeLabel,
   taxTypeLabel,
 } from "@/pages/clerk-shared";
-import { Landmark, Plus } from "lucide-react";
+import { Copy, Download, Landmark, Plus } from "lucide-react";
 
 // Authority obligations for one client (Notice Desk): every tax-authority
 // notice that still needs a response, soonest deadline first, overdue rows
@@ -42,6 +47,14 @@ import { Landmark, Plus } from "lucide-react";
 // (clerk.tsx), or the inline "Record notice" form below for paper/walk-in
 // notices (no model involved, firm staff only server-side). Status moves
 // open → responded → closed via the per-row actions.
+//
+// Response Desk: each OPEN row can expand one inline panel (one open at a
+// time) with the two response tools — the deterministic response-bundle PDF
+// (a named download, same idiom as the compliance pack) and a drafted
+// response letter the partner copies and edits. The platform never sends or
+// files anything: the letter is body text for the firm to own, and the
+// provenance line always says whether Clerk phrased it or the deterministic
+// template did (the server degrades to template on its own).
 
 // The contract's closed catalogues — every select below is bound to them.
 const NOTICE_TYPES = Object.values(CreateObligationInputNoticeType);
@@ -80,6 +93,22 @@ export function openObligationRows(
   return (obligations ?? [])
     .filter((o) => o.status !== "closed")
     .sort((a, b) => a.responseDueDate.localeCompare(b.responseDueDate));
+}
+
+/**
+ * Saved-file name for the response bundle PDF: the notice reference
+ * sanitized to filename-safe characters ("FIRS/2026/0042" →
+ * "response-pack-firs-2026-0042.pdf"), or the obligation id's first 8
+ * characters when the notice carries no usable reference.
+ */
+export function responsePackFilename(
+  o: Pick<Obligation, "id" | "reference">,
+): string {
+  const slug = (o.reference ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `response-pack-${slug || o.id.slice(0, 8)}.pdf`;
 }
 
 export interface ObligationDraft {
@@ -158,6 +187,25 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
 
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState<ObligationDraft>(EMPTY_OBLIGATION_DRAFT);
+
+  // Response Desk: which row's response panel is expanded (one at a time),
+  // and the last drafted letter. The letter is keyed by obligationId, so it
+  // only ever renders under its own row — switching rows hides it without
+  // discarding it, and reopening the row brings it back.
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [letter, setLetter] = useState<ObligationResponseDraft | null>(null);
+
+  const draftResponse = useDraftObligationResponse({
+    mutation: {
+      onSuccess: (d) => setLetter(d),
+      onError: (e) =>
+        toast({
+          title: "Could not draft the letter",
+          description: serverErrorMessage(e) ?? "Try again.",
+          variant: "destructive",
+        }),
+    },
+  });
 
   const createObligation = useCreateObligation({
     mutation: {
@@ -424,6 +472,22 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
                     {o.status === "open" && (
                       <Button
                         size="sm"
+                        variant={
+                          respondingId === o.id ? "secondary" : "outline"
+                        }
+                        onClick={() =>
+                          setRespondingId((cur) =>
+                            cur === o.id ? null : o.id,
+                          )
+                        }
+                        data-testid={`button-obligation-respond-${o.id}`}
+                      >
+                        Prepare response
+                      </Button>
+                    )}
+                    {o.status === "open" && (
+                      <Button
+                        size="sm"
                         variant="secondary"
                         onClick={() =>
                           updateStatus.mutate({
@@ -452,6 +516,98 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
                       Close
                     </Button>
                   </div>
+                  {o.status === "open" && respondingId === o.id && (
+                    <div
+                      className="mt-2 rounded-md border p-3 space-y-2"
+                      data-testid={`panel-obligation-respond-${o.id}`}
+                    >
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            triggerDownload(
+                              getGetObligationResponsePackUrl({
+                                obligationId: o.id,
+                              }),
+                              responsePackFilename(o),
+                            )
+                          }
+                          data-testid={`button-response-pack-${o.id}`}
+                        >
+                          <Download
+                            className="w-3.5 h-3.5 mr-1.5"
+                            aria-hidden="true"
+                          />
+                          Download response bundle (PDF)
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            // Empty body: the server defaults the month to
+                            // the notice's issue month.
+                            draftResponse.mutate({ id: o.id, data: {} })
+                          }
+                          disabled={draftResponse.isPending}
+                          data-testid={`button-response-draft-${o.id}`}
+                        >
+                          {draftResponse.isPending
+                            ? "Drafting…"
+                            : "Draft response letter"}
+                        </Button>
+                      </div>
+                      {letter && letter.obligationId === o.id && (
+                        <div className="space-y-2">
+                          <p
+                            className="text-xs font-medium text-muted-foreground"
+                            data-testid={`text-response-provenance-${o.id}`}
+                          >
+                            {letter.monthLabel ? `${letter.monthLabel} — ` : ""}
+                            {letter.source === "clerk"
+                              ? "Drafted by Clerk from the period's records — review and edit before sending."
+                              : "Assembled from the period's records (Clerk unavailable) — review and edit before sending."}
+                          </p>
+                          <Textarea
+                            readOnly
+                            value={letter.letter}
+                            className="min-h-[140px] text-sm"
+                            data-testid={`text-response-letter-${o.id}`}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(
+                                  letter.letter,
+                                );
+                                toast({ title: "Letter copied" });
+                              } catch {
+                                toast({
+                                  title: "Could not copy",
+                                  description:
+                                    "Select the text and copy it manually.",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                            data-testid={`button-copy-letter-${o.id}`}
+                          >
+                            <Copy
+                              className="w-3.5 h-3.5 mr-1.5"
+                              aria-hidden="true"
+                            />
+                            Copy letter
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        The platform never sends or files the response — this
+                        is a draft for the firm to own.
+                      </p>
+                    </div>
+                  )}
                 </div>
               );
             })}
