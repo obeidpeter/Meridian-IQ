@@ -2,6 +2,7 @@ import app from "./app";
 import {
   pool,
   applyMigrations,
+  applyGuardrailMigrations,
   requireDatabaseUrl,
   ensureAppRoleAssumable,
 } from "@workspace/db";
@@ -23,14 +24,52 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+// Apply the hand-written guardrail migrations (RLS policies, append-only
+// triggers) to the production database on boot. They are NOT part of the
+// Drizzle schema, so Replit's Publish schema-diff never creates them — without
+// this, every guardrail added after the one-time dev->prod copy silently never
+// reaches production. Safety properties:
+//   - every migration `up` is idempotent (re-runnable), and the whole apply is
+//     serialized under a session advisory lock, so concurrent Autoscale
+//     instances booting at once cannot race;
+//   - a guardrail whose target table does not exist yet (Publish has not
+//     shipped that feature's schema) is SKIPPED and retried on the next boot,
+//     instead of aborting the run;
+//   - it runs after app.listen(), never blocks the port, and any failure is
+//     logged loudly rather than taking the server down.
+async function applyProductionGuardrails(): Promise<void> {
+  try {
+    const { applied, skipped } = await applyGuardrailMigrations(pool);
+    if (skipped.length > 0) {
+      logger.warn(
+        { skipped },
+        "Guardrail migrations skipped (target relation/object missing — " +
+          "expected when Publish has not yet created the table; they will " +
+          "apply on a boot after that schema ships)",
+      );
+    }
+    logger.info(
+      { applied: applied.length, skipped: skipped.length },
+      "Production guardrail migrations applied",
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "SECURITY: could not apply guardrail migrations to production; " +
+        "RLS/append-only protections may be missing or stale. Fix the error " +
+        "or run `pnpm --filter @workspace/db run migrate` with the production " +
+        "DATABASE_URL.",
+    );
+  }
+}
+
 // Read-only check that the data-layer tenant-isolation guardrails are present in
 // production. RLS policies (meridian_tenant_isolation) and append-only triggers
 // (meridian_append_only) live in hand-written migrations (0001/0002), not the
-// Drizzle schema, so Replit's Publish schema-diff does NOT create them. A
-// production database is expected to carry them via the Publish "overwrite data"
-// dev->prod copy. This never blocks startup or the port; it only surfaces a
-// missing guardrail loudly in the deployment logs so tenant isolation is never
-// silently absent.
+// Drizzle schema, so Replit's Publish schema-diff does NOT create them; the boot
+// step above (applyProductionGuardrails) is what applies them. This check never
+// blocks startup or the port; it only surfaces a missing guardrail loudly in the
+// deployment logs so tenant isolation is never silently absent.
 async function verifyProductionGuardrails(): Promise<void> {
   try {
     const { rows } = await pool.query(
@@ -167,11 +206,10 @@ async function main(): Promise<void> {
   startWorker();
 
   // Schema and seed data for PRODUCTION are owned by Replit's Publish flow (the
-  // schema diff applied on publish) and the one-time dev->prod data copy — NOT by
-  // the application. Running startup-time DDL migrations or demo seeding against
-  // production is unsafe (and disallowed), so bootstrap only runs outside
-  // production. It is wrapped so a failure is logged without taking the server
-  // down or blocking the port.
+  // schema diff applied on publish) — NOT by the application, so demo seeding and
+  // the full dev bootstrap only run outside production. The one exception is the
+  // hand-written guardrail migrations (RLS, append-only triggers): Publish cannot
+  // create those, so production applies them idempotently on boot below.
   if (!isProduction) {
     try {
       const applied = await applyMigrations(pool);
@@ -184,7 +222,9 @@ async function main(): Promise<void> {
       logger.error({ err }, "Bootstrap (migrate/seed) failed");
     }
   } else {
-    void verifyProductionGuardrails();
+    // Apply the guardrail migrations first (idempotent, advisory-locked), then
+    // run the read-only verification so the deploy logs state the final truth.
+    void applyProductionGuardrails().then(() => verifyProductionGuardrails());
   }
 }
 

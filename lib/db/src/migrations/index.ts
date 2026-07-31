@@ -101,8 +101,51 @@ export async function appliedVersions(client: Executor): Promise<number[]> {
 const MIGRATION_LOCK_ID = 991_001;
 
 export async function applyMigrations(pool: pg.Pool): Promise<number[]> {
+  const { applied } = await applyMigrationsInternal(pool, false);
+  return applied;
+}
+
+export interface SkippedMigration {
+  version: number;
+  name: string;
+  code: string;
+  message: string;
+}
+
+export interface GuardrailApplyResult {
+  applied: number[];
+  skipped: SkippedMigration[];
+}
+
+// Prod-boot variant of applyMigrations: a migration whose target relation/object
+// does not exist yet (because Replit's Publish schema-diff has not created the
+// table this guardrail attaches to) is SKIPPED — rolled back, NOT recorded in
+// _schema_migrations, and reported — instead of aborting the whole run. On a
+// later boot, once Publish has created the table, the still-pending guardrail
+// applies. Any other error still throws: a guardrail failing for a reason other
+// than a missing dependency must be loud, not swallowed.
+const MISSING_DEPENDENCY_CODES = new Set([
+  "42P01", // undefined_table
+  "42703", // undefined_column
+  "42704", // undefined_object
+  "3F000", // invalid_schema_name
+]);
+
+export async function applyGuardrailMigrations(
+  pool: pg.Pool,
+  migrationList: Migration[] = migrations, // injectable for tests only
+): Promise<GuardrailApplyResult> {
+  return applyMigrationsInternal(pool, true, migrationList);
+}
+
+async function applyMigrationsInternal(
+  pool: pg.Pool,
+  tolerateMissingDependencies: boolean,
+  migrationList: Migration[] = migrations,
+): Promise<GuardrailApplyResult> {
   await ensureTracking(pool);
   const applied: number[] = [];
+  const skipped: SkippedMigration[] = [];
   // Hold a session-level advisory lock across the whole apply so two instances
   // booting at once (or a boot racing a `drizzle push`) serialize instead of
   // deadlocking on the self-join delete / CREATE OR REPLACE FUNCTION in the
@@ -113,7 +156,7 @@ export async function applyMigrations(pool: pg.Pool): Promise<number[]> {
   const client = await pool.connect();
   try {
     await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_ID]);
-    for (const m of migrations) {
+    for (const m of migrationList) {
       try {
         await client.query("BEGIN");
         await client.query(m.up);
@@ -126,6 +169,16 @@ export async function applyMigrations(pool: pg.Pool): Promise<number[]> {
         applied.push(m.version);
       } catch (err) {
         await client.query("ROLLBACK").catch(() => {});
+        const code = (err as { code?: string }).code ?? "";
+        if (tolerateMissingDependencies && MISSING_DEPENDENCY_CODES.has(code)) {
+          skipped.push({
+            version: m.version,
+            name: m.name,
+            code,
+            message: (err as Error).message,
+          });
+          continue;
+        }
         throw err;
       }
     }
@@ -135,7 +188,7 @@ export async function applyMigrations(pool: pg.Pool): Promise<number[]> {
       .catch(() => {});
     client.release();
   }
-  return applied;
+  return { applied, skipped };
 }
 
 // Roll back the most recently applied migration (tested by rollback.test.ts).

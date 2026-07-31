@@ -118,3 +118,14 @@ DATABASE_URL=.../meridian_e2e pnpm --filter @workspace/scripts run e2e
 
 CI is immune (fresh DB per workflow run), so "local e2e fails, CI passes"
 with this exact signature means a polluted local e2e DB, not a regression.
+
+## Production guardrail application (July 2026)
+Production boot now runs `applyGuardrailMigrations()` (lib/db) after `app.listen()`:
+idempotent re-assert of all hand-written guardrail migrations under the boot
+advisory lock. Migrations whose target table Publish hasn't created yet fail with
+42P01/42703/42704/3F000, are SKIPPED (not recorded in `_schema_migrations`) and
+retried on a later boot. Any other error throws and is logged at error level.
+**Why:** Publish's schema-diff can never create RLS policies/triggers, and the
+old prod path (one-time dev→prod copy) silently missed every newer guardrail.
+**How to apply:** new guardrails just go in the migration registry; they reach
+prod on the first boot after the Publish that ships their table.
