@@ -37,6 +37,8 @@ export type { InboundAttachment, InboundProcessResult } from "./shared";
 
 export interface InboundEmailInput {
   sender: string;
+  // Weak triage signal only (shared.ts → triage.ts): the subject can tip an
+  // attachment onto the notice lane, but is never captured as a document.
   subject?: string;
   attachments: InboundAttachment[];
 }
@@ -167,7 +169,9 @@ async function processInboundEmailNow(
       skipped.push({ filename: att.filename, reason: "UNSUPPORTED_TYPE" });
       continue;
     }
-    await capture(att.filename, source);
+    // The subject line rides along as the triage message signal — it can
+    // switch the attachment onto the notice lane, never anything more.
+    await capture(att.filename, source, input.subject?.trim() || null);
   }
 
   // Pointer-only receipt: case ids and skip reasons, never attachment content.

@@ -199,9 +199,16 @@ of the letter.
   budget/kill-switch gateway path, purpose `extract_notice`
   (`notice-prompts.ts`, `notice.v1`). Voice is rejected up front (a
   read-aloud notice has no authoritative text) — before any decode or token
-  spend. The inbound email/WhatsApp rails still treat every attachment as an
-  invoice (MIME alone cannot say what a document IS) — explicit capture only,
-  a deliberate scope cut.
+  spend. The inbound email/WhatsApp rails triage each attachment with ONE
+  cheap fenced text-signal call (`modules/inbound/triage.ts`, purpose
+  `triage_document`, `triage.v1`: filename, the email subject / WhatsApp
+  caption, and a pdf text head — signals an outsider authors, so the whole
+  block rides one fence): a confident "notice" pick routes the capture down
+  the notice lane; "unknown", invalid output, provider error, dark kill
+  switch and exhausted budget ALL fall back silently to the invoice lane —
+  the pre-triage behavior exactly, so triage can never drop a document. The
+  call rides `inferPhrasing` precisely because its fold-to-null contract IS
+  that fallback.
 - **Proposal.** `noticeExtraction` (its own jsonb column; `extraction` stays
   invoice-only): ExtractionField-shaped candidates over the closed
   NOTICE_FIELDS catalogue (reference, authority, taxType, period, amount,

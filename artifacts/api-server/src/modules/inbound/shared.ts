@@ -6,6 +6,7 @@ import { createExtractionCase, type CreateCaseInput } from "../clerk/cases";
 import type { ClerkGateway } from "../clerk/gateway";
 import { getClerkGateway } from "../clerk/provider";
 import { DomainError } from "../errors";
+import { pdfTextHeadForTriage, triageDocumentKind } from "./triage";
 
 // Machinery shared by the inbound intake rails (email, WhatsApp). Both rails
 // have the same shape — an unauthenticated-ish machine webhook that resolves
@@ -170,12 +171,25 @@ export interface InboundProcessResult {
 // item with the domain code on record, so nothing escapes the detached
 // promise. Results accumulate on the returned caseIds/skipped arrays, which
 // the caller folds into its pointer-only receipt.
+//
+// Between budget/gateway acquisition and the capture call, each ATTACHMENT
+// (pdf/image — never the WhatsApp text-only path) gets one cheap triage call
+// (./triage.ts) that can route it down the notice lane instead of the
+// invoice lane. `messageText` is the rail's message signal (email subject /
+// WhatsApp caption). Triage inherits this closure's absorption contract from
+// its own never-throws guarantee: any triage failure means documentKind stays
+// absent and the item walks the invoice lane exactly as it did before triage
+// existed — a triage problem is NEVER a skip.
 export function makeInboundCapture(
   resolved: ResolvedInboundClient,
   gateway: ClerkGateway | undefined,
   logLabel: string,
 ): {
-  capture: (filename: string, source: CreateCaseInput) => Promise<void>;
+  capture: (
+    filename: string,
+    source: CreateCaseInput,
+    messageText?: string | null,
+  ) => Promise<void>;
   caseIds: string[];
   skipped: { filename: string; reason: string }[];
 } {
@@ -185,15 +199,41 @@ export function makeInboundCapture(
   const capture = async (
     filename: string,
     source: CreateCaseInput,
+    messageText: string | null = null,
   ): Promise<void> => {
     try {
       await assertFirmClerkBudget(resolved.firmId);
       gw ??= await getClerkGateway();
-      const kase = await createExtractionCase(source, resolved.userId, gw, undefined, {
-        firmId: resolved.firmId,
-        clientScoped: true,
-        clientPartyId: resolved.clientPartyId,
-      });
+      let documentKind: "invoice" | "notice" | undefined;
+      if (source.sourceType === "pdf" || source.sourceType === "image") {
+        documentKind = await triageDocumentKind(gw, resolved.firmId, {
+          filename,
+          contentType:
+            source.sourceType === "pdf"
+              ? "application/pdf"
+              : (source.contentType ?? "image"),
+          messageText,
+          // The head extraction re-parses bytes the capture path will parse
+          // again — acceptable at the rails' scale (≤3 attachments/message,
+          // daily caps ~100); null (textless scan, bad bytes) just narrows
+          // triage to the filename + message signals.
+          pdfTextHead:
+            source.sourceType === "pdf" && source.pdfBase64
+              ? await pdfTextHeadForTriage(source.pdfBase64)
+              : null,
+        });
+      }
+      const kase = await createExtractionCase(
+        documentKind ? { ...source, documentKind } : source,
+        resolved.userId,
+        gw,
+        undefined,
+        {
+          firmId: resolved.firmId,
+          clientScoped: true,
+          clientPartyId: resolved.clientPartyId,
+        },
+      );
       caseIds.push(kase.id);
     } catch (err) {
       if (err instanceof DomainError) {
