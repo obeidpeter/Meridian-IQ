@@ -13,6 +13,7 @@ import { CHASER_PHRASING } from "./draft-chaser.ts";
 import { STATEMENT_PHRASING } from "./client-statement.ts";
 import { VAT_NOTE_PHRASING } from "./vat-note.ts";
 import { EXPLAIN_PHRASING } from "./explain.ts";
+import { RESPONSE_PHRASING } from "./response-letter.ts";
 import { REPLY_PHRASING } from "../desk/draft-reply.ts";
 import { DomainError } from "../errors.ts";
 import {
@@ -117,6 +118,28 @@ function scriptedResponder(misbehave?: {
       return JSON.stringify({
         explanation: `The rails rejected this submission with code ${code}. It is fixable — see the step below.`,
         nextSteps: [String(fix)],
+      });
+    }
+    if (req.schemaName === "response_letter") {
+      const fixture = PHRASING_FIXTURES.find(
+        (f) =>
+          f.surface === "obligation_response" &&
+          RESPONSE_PHRASING.buildUser(f.facts as never) === user,
+      );
+      if (!fixture) throw new Error("unknown response eval prompt");
+      // A compliant letter built from the prompt's own facts: the reference
+      // verbatim, the notice amount when one is stated, the due date.
+      const ref = user.match(/Reference: (.+)/)?.[1];
+      const due = user.match(/Response due: (.+)/)?.[1];
+      const amount = user.match(/Amount on the notice: (.+)/)?.[1];
+      return JSON.stringify({
+        letter: [
+          `We refer to the notice with reference ${ref} issued to our client.`,
+          amount
+            ? `The amount stated on the notice is ${amount}; the enclosed records for the period set out our client's computed position, which we ask to be taken into account.`
+            : `The enclosed records for the period set out our client's computed position, which we ask to be taken into account.`,
+          `We remain available to provide any further information required before ${due}.`,
+        ].join("\n\n"),
       });
     }
     if (req.schemaName === "weekly_digest") {
@@ -270,6 +293,7 @@ test("a clean run scores full marks and stores the run", async () => {
     vat_note: VAT_NOTE_PHRASING.promptVersion,
     escalation_reply: REPLY_PHRASING.promptVersion,
     failure_explanation: EXPLAIN_PHRASING.promptVersion,
+    obligation_response: RESPONSE_PHRASING.promptVersion,
   });
 
   // Every prompt is the production assembly for its surface.
@@ -286,6 +310,9 @@ test("a clean run scores full marks and stores the run", async () => {
       assert.match(user, /-----BEGIN ESCALATION-----/);
     } else if (p.schemaName === "failure_explanation") {
       assert.match(user, /Error code: /);
+    } else if (p.schemaName === "response_letter") {
+      assert.match(user, /-----BEGIN NOTICE-----/);
+      assert.match(user, /Period covered by the enclosed figures: /);
     } else {
       assert.equal(p.schemaName, "payment_chaser");
       assert.match(user, /Invoice number: INV-78\d\d/);

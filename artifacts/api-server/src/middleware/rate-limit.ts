@@ -98,6 +98,8 @@ export const MODEL_RATE_LIMITED_ROUTE_PATTERNS: ReadonlyArray<{
   // Digest-posture drafting with an :id segment.
   { method: "POST", pattern: /^\/api\/engagements\/[^/]+\/narrative$/ },
   { method: "POST", pattern: /^\/api\/escalations\/[^/]+\/reply-draft$/ },
+  // Response Desk letter draft — same digest-posture spend as the two above.
+  { method: "POST", pattern: /^\/api\/obligations\/[^/]+\/response-draft$/ },
 ];
 
 function isModelRoute(req: Request): boolean {

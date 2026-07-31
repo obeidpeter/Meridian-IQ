@@ -461,6 +461,35 @@ async function journeyObligations(page, BASE, check) {
       `status ${list.status()}, ${listBody.obligations?.length ?? 0} rows`,
     );
 
+    // Response Desk, deterministic halves only: without a model provider the
+    // letter draft MUST still answer (template fallback — the digest-posture
+    // claim), and the bundle PDF is zero-model by construction.
+    const draft = await page.request.post(
+      BASE + `/api/obligations/${obligationId}/response-draft`,
+      { data: {}, headers: CSRF },
+    );
+    const draftBody = draft.ok() ? await draft.json() : {};
+    check(
+      "response letter drafts without a provider (template fallback)",
+      draft.status() === 200 &&
+        draftBody.source === "template" &&
+        typeof draftBody.letter === "string" &&
+        draftBody.letter.includes(reference),
+      `status ${draft.status()}, source ${draftBody.source ?? "-"}`,
+    );
+
+    const pack = await page.request.get(
+      BASE + `/api/obligation-response-pack?obligationId=${obligationId}`,
+    );
+    const packBody = pack.status() === 200 ? await pack.body() : null;
+    check(
+      "response bundle renders a PDF",
+      pack.status() === 200 &&
+        (pack.headers()["content-type"] ?? "").startsWith("application/pdf") &&
+        packBody?.subarray(0, 4).toString() === "%PDF",
+      `status ${pack.status()}`,
+    );
+
     const close = await page.request.get(
       BASE + `/api/month-end-close?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
     );

@@ -230,6 +230,27 @@ of the letter.
   digest facts (digest.v7), a month-end close item (`open_obligations`),
   a compliance-pack section, and the Ask intent `data.open_obligations`
   (client-safe, own-party-pinned).
+- **Response Desk (contract 0.59.0)** — the loop's closing arc: preparing
+  the actual reply. Two halves, split exactly on the covenant line.
+  `GET /obligation-response-pack` (query-params-only; `obligation.write` —
+  firm work product; 404 non-disclosure) renders a DETERMINISTIC response
+  bundle PDF: a cover sheet keyed to the authority's reference plus the
+  period's compliance figures and document register, drawn by the same
+  extracted pack-pdf section drawers the monthly pack uses
+  (`CreationDate` pinned to the obligation's response deadline —
+  byte-identical on identical inputs; the renderer's input has no letter
+  field, so model output cannot reach the bundle by construction).
+  `POST /obligations/{id}/response-draft` drafts the letter BODY
+  (`modules/clerk/response-letter.ts`, purpose `draft_response_letter`,
+  `response-letter.v1`): the advisory-narrative posture — no gateway /
+  flag off / budget exhausted → the deterministic template letter; model
+  output must pass `ensureGrounded`; the notice's own free text rides
+  fenced; source is tagged `clerk`/`template` honestly and the partner
+  copies, edits and owns the letter — never sent or filed by the
+  platform. `responsePackLines` is the ONE home for the figure lines, so
+  letter and bundle can never disagree; the phrasing-eval surface
+  `obligation_response` replays the exact production prompt (injection
+  fixture rides the notice free-text slot).
 
 ## Proposed actions (advice → assisted action)
 

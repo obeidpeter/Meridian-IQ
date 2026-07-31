@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.58.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.59.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.58.0</title>
+<title>MeridianIQ API reference — v0.59.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.58.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.59.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -156,7 +156,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">20</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">64</span></a><a href="#tag-obligations">obligations<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">20</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">64</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -1271,6 +1271,14 @@ request's writes were rolled back.</li>
 <summary><span class="method m-get">GET</span><code class="path">/api/obligations/{id}</code><span class="sum">getObligation</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>Obligation</code> <span class="dim">One obligation</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
+<details class="op" id="getObligationResponsePack">
+<summary><span class="method m-get">GET</span><code class="path">/api/obligation-response-pack</code><span class="sum">Deterministic response bundle PDF for one obligation — cover sheet keyed to the authority's reference plus the period's compliance figures and document register; firm work product, zero model calls</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <span class="dim">PDF document (Content-Disposition attachment)</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
+<details class="op" id="draftObligationResponse">
+<summary><span class="method m-post">POST</span><code class="path">/api/obligations/{id}/response-draft</code><span class="sum">Draft the body of a reply to the authority — facts computed in SQL, Clerk only phrases, a deterministic template always answers, and the partner owns and edits the letter (never sent or filed by the platform)</span></summary>
+<div class="opbody"><div class="req">Request body: <code>DraftObligationResponseInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>ObligationResponseDraft</code> <span class="dim">The letter body draft with its provenance</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
+</details>
 <details class="op" id="updateObligationStatus">
 <summary><span class="method m-post">POST</span><code class="path">/api/obligations/{id}/status</code><span class="sum">Move an obligation through its response lifecycle (open → responded → closed) — compare-and-set, firm staff only</span></summary>
 <div class="opbody"><div class="req">Request body: <code>UpdateObligationStatusInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>Obligation</code> <span class="dim">The updated obligation</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li></ul></div>
@@ -1440,7 +1448,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>EngagementNarrative</code> <span class="dim">Letter body for the firm to edit and own</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li><li><span class="status s4xx">409</span> <span class="err">Conflict</span> <span class="dim">— state moved — the request no longer applies</span></li><li><span class="status s4xx">422</span> <code>Error</code> <span class="dim">The engagement's findings do not match the expected shape</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.58.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.59.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>
