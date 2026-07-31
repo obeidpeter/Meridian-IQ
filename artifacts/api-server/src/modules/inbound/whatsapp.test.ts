@@ -343,7 +343,7 @@ test("resolved sender: media walks the capture path stamped for the client; rede
   });
   const input = {
     sender: PRESENTED_RESOLVED,
-    text: "see attached", // caption alongside media is ignored
+    text: "see attached", // caption: a triage signal, never captured itself
     attachments: [
       pdfAttachment("wamain"),
       // No filename: WhatsApp media often has none — the rail defaults one.
@@ -354,7 +354,19 @@ test("resolved sender: media walks the capture path stamped for the client; rede
   assert.equal(result.resolved, true);
   assert.equal(result.caseIds.length, 2);
   assert.deepEqual(result.skipped, []);
-  assert.equal(calls.length, 2, "one extraction per attachment");
+  // Each media item makes one triage call (whose okExtraction() answer fails
+  // the triage schema and falls back to the invoice lane — triage.test.ts
+  // covers the lane switch) and one extraction call.
+  assert.equal(
+    calls.filter((c) => c.schemaName === "invoice_extraction").length,
+    2,
+    "one extraction per attachment",
+  );
+  assert.equal(
+    calls.filter((c) => c.schemaName === "document_triage").length,
+    2,
+    "one triage call per attachment",
+  );
 
   const rows = await getDb()
     .select()

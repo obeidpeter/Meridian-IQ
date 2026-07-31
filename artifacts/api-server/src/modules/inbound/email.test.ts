@@ -281,11 +281,17 @@ test("resolved sender: PDF walks the text path, PNG the vision path, cases stamp
   assert.equal(result.caseIds.length, 2);
   assert.deepEqual(result.skipped, []);
 
-  assert.equal(calls.length, 2, "one extraction per attachment");
-  const textCall = calls.find((c) => typeof c.user === "string");
+  // Each attachment makes one triage call (whose okExtraction() answer fails
+  // the triage schema and falls back to the invoice lane — triage.test.ts
+  // covers the lane switch) and one extraction call.
+  const extractCalls = calls.filter((c) => c.schemaName === "invoice_extraction");
+  const triageCalls = calls.filter((c) => c.schemaName === "document_triage");
+  assert.equal(extractCalls.length, 2, "one extraction per attachment");
+  assert.equal(triageCalls.length, 2, "one triage call per attachment");
+  const textCall = extractCalls.find((c) => typeof c.user === "string");
   assert.ok(textCall, "the text PDF travelled as fenced text");
   assert.match(textCall.user as string, /INVOICE main/);
-  const visionCall = calls.find((c) => Array.isArray(c.user));
+  const visionCall = extractCalls.find((c) => Array.isArray(c.user));
   assert.ok(visionCall, "the PNG travelled as an image part");
   assert.ok(
     (visionCall.user as Array<{ type: string }>).some(

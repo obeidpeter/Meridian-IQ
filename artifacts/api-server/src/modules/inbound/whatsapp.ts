@@ -247,13 +247,16 @@ async function processInboundWhatsAppNow(
       skipped.push({ filename, reason: "UNSUPPORTED_TYPE" });
       continue;
     }
-    await capture(filename, source);
+    // The caption rides along as the triage message signal — it can switch
+    // this media item onto the notice lane (shared.ts → triage.ts), same as
+    // the email rail's subject line; it is still never captured as a
+    // document of its own.
+    await capture(filename, source, input.text?.trim() || null);
   }
 
   // A text-only message (no media) walks the TEXT capture path — but only
   // when it plausibly carries invoice details. Text alongside media is a
-  // caption, not a document: it is ignored, exactly like the email rail
-  // ignores the subject line.
+  // caption: a triage signal for the media above, never a document.
   const text = input.text?.trim() ?? "";
   if (input.attachments.length === 0 && text) {
     const filename = "whatsapp-message";

@@ -164,7 +164,13 @@ export type ClerkPurpose =
   // Response Desk: draft the body of a reply to a tax-authority notice from
   // the obligation's own facts and the period figures — template fallback,
   // grounded, the partner owns and edits the letter; never sent or filed.
-  | "draft_response_letter";
+  | "draft_response_letter"
+  // Inbound document triage: classify an inbound-rail attachment's cheap
+  // text signals (filename, subject/caption, pdf text head) into the closed
+  // document-kind catalogue so notices stop misrouting down the invoice
+  // lane. Abstain and every failure mode fall back to the invoice lane —
+  // today's behavior exactly; triage can never drop a document.
+  | "triage_document";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;
