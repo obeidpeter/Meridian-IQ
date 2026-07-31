@@ -8049,6 +8049,12 @@ export const GetClerkMetricsQueryParams = zod.object({
 
 export const GetClerkMetricsResponse = zod.object({
   "windowDays": zod.number(),
+  "narrationMatch": zod.object({
+  "suggested": zod.number(),
+  "kept": zod.number(),
+  "overridden": zod.number(),
+  "abstained": zod.number()
+}),
   "grounding": zod.object({
   "violations": zod.number(),
   "bySurface": zod.array(zod.object({

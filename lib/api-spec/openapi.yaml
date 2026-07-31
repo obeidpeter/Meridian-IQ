@@ -11164,10 +11164,26 @@ components:
           injectionTrend,
           platformSpend,
           grounding,
+          narrationMatch,
         ]
       properties:
         windowDays:
           type: integer
+        # Narration-match lane health: window suggestions split pick vs
+        # abstention; of the picks whose line a human has since decided by
+        # accepting a proposal, kept (accepted the suggestion) vs overridden.
+        narrationMatch:
+          type: object
+          required: [suggested, kept, overridden, abstained]
+          properties:
+            suggested:
+              type: integer
+            kept:
+              type: integer
+            overridden:
+              type: integer
+            abstained:
+              type: integer
         # Number-grounding violations in the window: phrasing surfaces whose
         # model output carried a numeral the facts never stated — each such
         # output was replaced by its deterministic template. Zero is healthy.

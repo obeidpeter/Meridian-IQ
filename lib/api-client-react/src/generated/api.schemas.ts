@@ -3956,6 +3956,13 @@ export interface StatusLight {
   recommendedAction: string;
 }
 
+export type ClerkMetricsNarrationMatch = {
+  suggested: number;
+  kept: number;
+  overridden: number;
+  abstained: number;
+};
+
 export type ClerkMetricsGroundingBySurfaceItem = {
   surface: string;
   count: number;
@@ -4147,6 +4154,7 @@ export type ClerkMetricsQualityAlert = {
 
 export interface ClerkMetrics {
   windowDays: number;
+  narrationMatch: ClerkMetricsNarrationMatch;
   grounding: ClerkMetricsGrounding;
   calibration?: ClerkMetricsCalibration;
   cases: ClerkMetricsCases;

@@ -188,6 +188,7 @@ export * from './clerkMetricsInjectionTrend';
 export * from './clerkMetricsInjectionTrendByPromptVersionItem';
 export * from './clerkMetricsInjectionTrendMonthsItem';
 export * from './clerkMetricsKeptRateTrendItem';
+export * from './clerkMetricsNarrationMatch';
 export * from './clerkMetricsPlatformSpend';
 export * from './clerkMetricsQualityAlert';
 export * from './clerkMetricsResistanceAlert';

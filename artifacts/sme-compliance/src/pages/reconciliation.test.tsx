@@ -13,6 +13,10 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
+  BankStatement,
+  BankStatementLine,
+  MatchProposalView,
+  NarrationSuggestionsInput,
   StatementImportInput,
   StatementImportResult,
 } from "@workspace/api-client-react";
@@ -20,9 +24,21 @@ import type {
 const harness = vi.hoisted(() => ({
   importCalls: [] as StatementImportInput[],
   importResult: null as unknown,
+  capabilities: [] as string[],
+  statements: [] as unknown[],
+  proposals: [] as unknown[],
+  lines: [] as unknown[],
+  narrationCalls: [] as { statementId: string }[],
+  narrationResult: null as unknown,
   reset() {
     this.importCalls = [];
     this.importResult = null;
+    this.capabilities = [];
+    this.statements = [];
+    this.proposals = [];
+    this.lines = [];
+    this.narrationCalls = [];
+    this.narrationResult = null;
   },
 }));
 
@@ -30,16 +46,18 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@workspace/api-client-react")>();
   const idleMutation = { mutateAsync: vi.fn(), isPending: false };
-  const emptyList = {
-    data: [],
+  const listOf = (data: () => unknown[]) => () => ({
+    data: data(),
     isLoading: false,
     isError: false,
     error: null,
     refetch: vi.fn(),
-  };
+  });
   return {
     ...actual,
-    useGetMe: () => ({ data: { clientPartyId: "cp-1" } }),
+    useGetMe: () => ({
+      data: { clientPartyId: "cp-1", capabilities: harness.capabilities },
+    }),
     useImportBankStatement: () => ({
       isPending: false,
       mutateAsync: (vars: { data: StatementImportInput }) => {
@@ -47,17 +65,32 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
         return Promise.resolve(harness.importResult);
       },
     }),
-    useListBankStatements: () => emptyList,
-    useListBankStatementProposals: () => emptyList,
+    useListBankStatements: listOf(() => harness.statements),
+    useListBankStatementProposals: listOf(() => harness.proposals),
+    useListBankStatementLines: listOf(() => harness.lines),
     useAcceptMatchProposal: () => idleMutation,
     useRejectMatchProposal: () => idleMutation,
     useBulkAcceptMatchProposals: () => idleMutation,
     useAssistMatchProposals: () => idleMutation,
+    useSuggestNarrationMatches: () => ({
+      isPending: false,
+      mutateAsync: (vars: { data: NarrationSuggestionsInput }) => {
+        harness.narrationCalls.push(vars.data);
+        return Promise.resolve(harness.narrationResult);
+      },
+    }),
   };
 });
 
 // Import AFTER the mock so the page module binds the stand-ins.
-import { Reconciliation, statementImportBody } from "./reconciliation";
+import {
+  Reconciliation,
+  narrationChipFor,
+  narrationCueLabel,
+  narrationSuggestVisible,
+  narrationSummaryLine,
+  statementImportBody,
+} from "./reconciliation";
 
 const PROPOSED_CSV =
   "Date,Narration,Amount,Direction\n2026-07-01,NIP transfer,150000,credit";
@@ -250,5 +283,266 @@ describe("statementImportBody", () => {
       csv: "Date,Amount\n2026-07-02,1000",
       commit: true,
     });
+  });
+});
+
+// ---- Narration match lane ---------------------------------------------------
+
+function reconciledStatement(over: Partial<BankStatement> = {}): BankStatement {
+  return {
+    id: "st-1",
+    firmId: "f-1",
+    clientPartyId: "cp-1",
+    formatKey: "gtb_csv_v1",
+    filename: "july.csv",
+    accountRef: null,
+    uploadedByUserId: null,
+    status: "reconciled",
+    lineCount: 2,
+    parsedCount: 2,
+    createdAt: "2026-07-30T09:00:00Z",
+    updatedAt: "2026-07-30T09:00:00Z",
+    ...over,
+  };
+}
+
+function midBandProposal(
+  over: Partial<MatchProposalView> = {},
+): MatchProposalView {
+  return {
+    id: "p-1",
+    statementId: "st-1",
+    statementLineId: "ln-1",
+    invoiceId: "inv-1",
+    invoiceNumber: "INV-001",
+    invoiceStatus: "stamped",
+    invoiceTotal: "150000",
+    buyerName: "Acme Ltd",
+    lineNo: 1,
+    lineAmount: "150000",
+    lineDate: "2026-07-01",
+    narration: "NIP/ACME/INV001",
+    confidence: "0.62",
+    status: "proposed",
+    createdAt: "2026-07-30T09:00:00Z",
+    ...over,
+  };
+}
+
+function statementLine(over: Partial<BankStatementLine> = {}): BankStatementLine {
+  return {
+    id: "ln-1",
+    statementId: "st-1",
+    lineNo: 1,
+    valueDate: "2026-07-01",
+    amount: "150000",
+    direction: "credit",
+    narration: "NIP/ACME/INV001",
+    counterpartyRef: null,
+    parseStatus: "parsed",
+    parseError: null,
+    rawLine: "2026-07-01,NIP/ACME/INV001,150000,credit",
+    narrationSuggestion: null,
+    createdAt: "2026-07-30T09:00:00Z",
+    ...over,
+  };
+}
+
+const suggestion = (over: Partial<NonNullable<BankStatementLine["narrationSuggestion"]>> = {}) => ({
+  proposalId: "p-1" as string | null,
+  invoiceId: "inv-1" as string | null,
+  cue: "exact_reference" as string | null,
+  at: "2026-07-30T10:00:00Z",
+  ...over,
+});
+
+describe("narrationCueLabel", () => {
+  test("maps the closed cue catalogue to client wording", () => {
+    expect(narrationCueLabel("exact_reference")).toBe("exact reference");
+    expect(narrationCueLabel("reference_fragment")).toBe("reference fragment");
+    expect(narrationCueLabel("name_abbreviation")).toBe("name match");
+    expect(narrationCueLabel("payer_context")).toBe("payer context");
+    expect(narrationCueLabel("multi_invoice_hint")).toBe("part-payment hint");
+  });
+
+  test("unknown or absent cues yield null — never a leaked machine token", () => {
+    expect(narrationCueLabel("brand_new_cue")).toBeNull();
+    expect(narrationCueLabel(null)).toBeNull();
+    expect(narrationCueLabel(undefined)).toBeNull();
+    expect(narrationCueLabel("")).toBeNull();
+  });
+});
+
+describe("narrationChipFor", () => {
+  test("the suggested proposal gets the chip with its cue humanized", () => {
+    const line = statementLine({ narrationSuggestion: suggestion() });
+    expect(narrationChipFor(line, "p-1")).toBe(
+      "Clerk suggests · exact reference",
+    );
+  });
+
+  test("an unknown cue degrades to a bare 'Clerk suggests'", () => {
+    const line = statementLine({
+      narrationSuggestion: suggestion({ cue: "brand_new_cue" }),
+    });
+    expect(narrationChipFor(line, "p-1")).toBe("Clerk suggests");
+  });
+
+  test("a sibling proposal on the same line gets no chip", () => {
+    const line = statementLine({ narrationSuggestion: suggestion() });
+    expect(narrationChipFor(line, "p-2")).toBeNull();
+  });
+
+  test("an abstention (proposalId null) renders nothing on any card", () => {
+    const line = statementLine({
+      narrationSuggestion: suggestion({ proposalId: null, cue: null }),
+    });
+    expect(narrationChipFor(line, "p-1")).toBeNull();
+  });
+
+  test("no suggestion / unknown line yield no chip", () => {
+    expect(narrationChipFor(statementLine(), "p-1")).toBeNull();
+    expect(narrationChipFor(undefined, "p-1")).toBeNull();
+  });
+});
+
+describe("narrationSuggestVisible", () => {
+  const act = ["reconciliation.act"];
+
+  test("shows for a middle-band undecided proposal with narration", () => {
+    expect(narrationSuggestVisible([midBandProposal()], act)).toBe(true);
+  });
+
+  test("band edge: exactly 0.85 belongs to bulk accept, not this lane", () => {
+    expect(
+      narrationSuggestVisible([midBandProposal({ confidence: "0.85" })], act),
+    ).toBe(false);
+    expect(
+      narrationSuggestVisible([midBandProposal({ confidence: "0.84" })], act),
+    ).toBe(true);
+  });
+
+  test("a line without narration gives Clerk nothing to read", () => {
+    expect(
+      narrationSuggestVisible([midBandProposal({ narration: null })], act),
+    ).toBe(false);
+    expect(
+      narrationSuggestVisible([midBandProposal({ narration: "   " })], act),
+    ).toBe(false);
+  });
+
+  test("hidden without the reconciliation.act capability", () => {
+    expect(narrationSuggestVisible([midBandProposal()], [])).toBe(false);
+    expect(narrationSuggestVisible([midBandProposal()], undefined)).toBe(false);
+    expect(
+      narrationSuggestVisible([midBandProposal()], ["reconciliation.read"]),
+    ).toBe(false);
+  });
+
+  test("decided proposals and empty lists never show the trigger", () => {
+    expect(
+      narrationSuggestVisible([midBandProposal({ status: "accepted" })], act),
+    ).toBe(false);
+    expect(narrationSuggestVisible([], act)).toBe(false);
+    expect(narrationSuggestVisible(undefined, act)).toBe(false);
+  });
+});
+
+describe("narrationSummaryLine", () => {
+  test("headline numbers, pluralized", () => {
+    expect(
+      narrationSummaryLine({
+        considered: 3,
+        suggested: 1,
+        abstained: 2,
+        failed: 0,
+      }),
+    ).toBe("Clerk read 3 lines — 1 suggestion, 2 abstentions");
+    expect(
+      narrationSummaryLine({
+        considered: 1,
+        suggested: 0,
+        abstained: 1,
+        failed: 0,
+      }),
+    ).toBe("Clerk read 1 line — 0 suggestions, 1 abstention");
+  });
+
+  test("failures are appended only when any line failed", () => {
+    expect(
+      narrationSummaryLine({
+        considered: 4,
+        suggested: 2,
+        abstained: 1,
+        failed: 1,
+      }),
+    ).toBe("Clerk read 4 lines — 2 suggestions, 1 abstention, 1 failed");
+  });
+});
+
+describe("narration match lane (render)", () => {
+  function seedReconciled() {
+    harness.statements = [reconciledStatement()];
+    harness.proposals = [midBandProposal()];
+  }
+
+  async function selectStatement() {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /july\.csv/i }));
+    await screen.findByText(/3\. match proposals/i);
+  }
+
+  test("the trigger runs Clerk over the statement and reports the summary", async () => {
+    harness.capabilities = ["reconciliation.act"];
+    seedReconciled();
+    harness.narrationResult = {
+      statementId: "st-1",
+      considered: 2,
+      suggested: 1,
+      abstained: 1,
+      failed: 0,
+      lines: [
+        {
+          statementLineId: "ln-1",
+          outcome: "suggested",
+          proposalId: "p-1",
+          cue: "exact_reference",
+        },
+      ],
+    };
+    await selectStatement();
+
+    const trigger = screen.getByTestId("button-narration-suggest");
+    expect(trigger.textContent).toContain("Ask Clerk to read the narrations");
+    fireEvent.click(trigger);
+
+    const summary = await screen.findByTestId("narration-summary");
+    expect(summary.textContent).toBe(
+      "Clerk read 2 lines — 1 suggestion, 1 abstention",
+    );
+    expect(harness.narrationCalls).toEqual([{ statementId: "st-1" }]);
+  });
+
+  test("the chip marks only the proposal the line's suggestion points at", async () => {
+    harness.capabilities = ["reconciliation.act"];
+    harness.statements = [reconciledStatement()];
+    harness.proposals = [
+      midBandProposal(),
+      midBandProposal({ id: "p-2", invoiceId: "inv-2", invoiceNumber: "INV-002" }),
+    ];
+    harness.lines = [statementLine({ narrationSuggestion: suggestion() })];
+    await selectStatement();
+
+    const chip = screen.getByTestId("narration-chip-p-1");
+    expect(chip.textContent).toContain("Clerk suggests");
+    expect(chip.textContent).toContain("exact reference");
+    expect(screen.queryByTestId("narration-chip-p-2")).toBeNull();
+  });
+
+  test("without reconciliation.act the trigger never renders", async () => {
+    harness.capabilities = [];
+    seedReconciled();
+    await selectStatement();
+    expect(screen.queryByTestId("button-narration-suggest")).toBeNull();
   });
 });

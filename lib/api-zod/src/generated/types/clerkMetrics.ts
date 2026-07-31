@@ -16,6 +16,7 @@ import type { ClerkMetricsGrounding } from './clerkMetricsGrounding';
 import type { ClerkMetricsInference } from './clerkMetricsInference';
 import type { ClerkMetricsInjectionTrend } from './clerkMetricsInjectionTrend';
 import type { ClerkMetricsKeptRateTrendItem } from './clerkMetricsKeptRateTrendItem';
+import type { ClerkMetricsNarrationMatch } from './clerkMetricsNarrationMatch';
 import type { ClerkMetricsPlatformSpend } from './clerkMetricsPlatformSpend';
 import type { ClerkMetricsQualityAlert } from './clerkMetricsQualityAlert';
 import type { ClerkMetricsResistanceAlert } from './clerkMetricsResistanceAlert';
@@ -23,6 +24,7 @@ import type { ClerkMetricsSupplierAccuracyItem } from './clerkMetricsSupplierAcc
 
 export interface ClerkMetrics {
   windowDays: number;
+  narrationMatch: ClerkMetricsNarrationMatch;
   grounding: ClerkMetricsGrounding;
   calibration?: ClerkMetricsCalibration;
   cases: ClerkMetricsCases;
