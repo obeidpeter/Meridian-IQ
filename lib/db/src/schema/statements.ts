@@ -60,6 +60,20 @@ export const statementDirectionEnum = pgEnum("statement_direction", [
   "debit",
 ]);
 
+// Clerk narration-match lane: the model's reading of one line's narration,
+// resolved to one of the line's OWN proposals (the model only ever picks
+// from a positional closed list; the app maps the pick back to a proposal
+// id) — or an abstention. `cue` names which signal the model matched on,
+// from the closed catalogue in modules/clerk/narration-match.ts.
+export interface NarrationSuggestion {
+  proposalId: string | null;
+  invoiceId: string | null;
+  cue: string | null;
+  promptVersion: string;
+  model: string;
+  at: string;
+}
+
 export const bankStatementLinesTable = pgTable("bank_statement_lines", {
   id: id(),
   statementId: uuid("statement_id")
@@ -75,6 +89,13 @@ export const bankStatementLinesTable = pgTable("bank_statement_lines", {
   parseError: text("parse_error"),
   // The raw source line is retained so a parse failure is always diagnosable.
   rawLine: text("raw_line").notNull(),
+  // Clerk's narration reading for this line (narration-match lane): which of
+  // the line's own proposals the model believes the narration names, or an
+  // explicit abstention (proposalId null). Advisory only — acceptance stays
+  // the human decision path; nothing downstream keys on this column.
+  narrationSuggestion: jsonb(
+    "narration_suggestion",
+  ).$type<NarrationSuggestion>(),
   createdAt: createdAt(),
 },
 // Every reconciliation view loads a statement's lines by this FK.

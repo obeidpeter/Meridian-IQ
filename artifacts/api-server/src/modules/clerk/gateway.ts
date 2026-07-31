@@ -139,6 +139,10 @@ export type ClerkPurpose =
   // Reconciliation match assist (reconcile-assist.ts): phrases the matcher's
   // recorded per-feature evidence for one statement line; template fallback.
   | "explain_match"
+  // Narration-match lane: read a statement line's narration against the
+  // line's own proposal shortlist and pick one (or abstain). Advisory only —
+  // acceptance stays the human decision path.
+  | "match_narration"
   // Natural-language invoice drafting (draft-invoice.ts): one sentence into a
   // prefilled draft form the client reviews and saves through createDraft.
   | "draft_invoice"

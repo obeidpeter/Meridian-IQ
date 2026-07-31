@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.57.0
+ * OpenAPI spec version: 0.58.0
  */
 export interface HealthStatus {
   status: string;
@@ -2836,6 +2836,16 @@ export const BankStatementLineParseStatus = {
   invalid: 'invalid',
 } as const;
 
+export type BankStatementLineNarrationSuggestion = {
+  /** @nullable */
+  proposalId: string | null;
+  /** @nullable */
+  invoiceId?: string | null;
+  /** @nullable */
+  cue: string | null;
+  at: string;
+} | null;
+
 export interface BankStatementLine {
   id: string;
   statementId: string;
@@ -2854,6 +2864,7 @@ export interface BankStatementLine {
   /** @nullable */
   parseError?: string | null;
   rawLine: string;
+  narrationSuggestion?: BankStatementLineNarrationSuggestion;
   createdAt: string;
 }
 
@@ -4180,6 +4191,38 @@ export interface MatchAssistCandidate {
   invoiceNumber: string;
   confidence: string;
   highlights: string[];
+}
+
+export interface NarrationSuggestionsInput {
+  statementId: string;
+}
+
+export type NarrationSuggestionsResultLinesItemOutcome = typeof NarrationSuggestionsResultLinesItemOutcome[keyof typeof NarrationSuggestionsResultLinesItemOutcome];
+
+
+export const NarrationSuggestionsResultLinesItemOutcome = {
+  suggested: 'suggested',
+  abstained: 'abstained',
+  failed: 'failed',
+  skipped: 'skipped',
+} as const;
+
+export type NarrationSuggestionsResultLinesItem = {
+  statementLineId: string;
+  outcome: NarrationSuggestionsResultLinesItemOutcome;
+  /** @nullable */
+  proposalId?: string | null;
+  /** @nullable */
+  cue?: string | null;
+};
+
+export interface NarrationSuggestionsResult {
+  statementId: string;
+  considered: number;
+  suggested: number;
+  abstained: number;
+  failed: number;
+  lines: NarrationSuggestionsResultLinesItem[];
 }
 
 export type MatchAssistSource = typeof MatchAssistSource[keyof typeof MatchAssistSource];
