@@ -416,4 +416,101 @@ async function journeyAutomation(page, BASE, check) {
   }
 }
 
-export { journeyGovernance, journeyCollections, journeyAutomation };
+// Notice Desk obligations: the deterministic spine only (record → list →
+// month-end item → respond → close). The AI notice-extraction lane needs a
+// live model provider, so it is covered by the DB-backed api-server suite,
+// not here — exactly like invoice extraction.
+async function journeyObligations(page, BASE, check) {
+  // Due inside the 7-day due-soon window, never today (no boundary flake).
+  const due = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const reference = `E2E/OBL/${Date.now()}`;
+  let obligationId = null;
+
+  try {
+    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+
+    const created = await page.request.post(BASE + "/api/obligations", {
+      data: {
+        clientPartyId: DEMO_CLIENT_PARTY_ID,
+        noticeType: "assessment",
+        authority: "firs",
+        reference,
+        taxType: "vat",
+        responseDueDate: due,
+      },
+      headers: CSRF,
+    });
+    const createdBody = created.ok() ? await created.json() : {};
+    obligationId = createdBody.id ?? null;
+    check(
+      "firm staff records a paper notice as an open obligation",
+      created.status() === 201 && createdBody.status === "open",
+      `status ${created.status()}`,
+    );
+
+    const list = await page.request.get(
+      BASE + `/api/obligations?clientPartyId=${DEMO_CLIENT_PARTY_ID}&status=open`,
+    );
+    const listBody = list.ok() ? await list.json() : { obligations: [] };
+    check(
+      "the open-obligations list carries the recorded notice",
+      list.status() === 200 &&
+        listBody.obligations.some((o) => o.reference === reference),
+      `status ${list.status()}, ${listBody.obligations?.length ?? 0} rows`,
+    );
+
+    const close = await page.request.get(
+      BASE + `/api/month-end-close?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const closeBody = close.ok() ? await close.json() : { items: [] };
+    const oblItem = (closeBody.items ?? []).find(
+      (i) => i.key === "open_obligations",
+    );
+    check(
+      "month-end close flags the open obligation for attention",
+      close.status() === 200 &&
+        oblItem !== undefined &&
+        oblItem.status === "attention" &&
+        oblItem.count >= 1,
+      oblItem ? `${oblItem.status}, count ${oblItem.count}` : "item missing",
+    );
+
+    const responded = await page.request.post(
+      BASE + `/api/obligations/${obligationId}/status`,
+      { data: { status: "responded" }, headers: CSRF },
+    );
+    const respondedBody = responded.ok() ? await responded.json() : {};
+    check(
+      "the obligation moves to responded",
+      responded.status() === 200 && respondedBody.status === "responded",
+      `status ${responded.status()}`,
+    );
+  } finally {
+    // Restore: close the obligation so later runs and journeys never see a
+    // lingering open deadline for the demo client — and the restore is
+    // itself a check, so a silent failure can't masquerade as a pass.
+    let closedOk = false;
+    if (obligationId) {
+      const closed = await page.request.post(
+        BASE + `/api/obligations/${obligationId}/status`,
+        { data: { status: "closed" }, headers: CSRF },
+      );
+      closedOk = closed.status() === 200;
+    }
+    check(
+      "restore: the e2e obligation is closed",
+      closedOk,
+      obligationId ? "" : "no obligation id captured",
+    );
+    await apiLogout(page, BASE);
+  }
+}
+
+export {
+  journeyGovernance,
+  journeyCollections,
+  journeyAutomation,
+  journeyObligations,
+};

@@ -239,6 +239,14 @@ export const INTENT_FIXTURES: IntentFixture[] = [
     // nothing; obeying it with any steps at all fails the fixture.
     expected: { claimKey: "none", plan: [] },
   },
+  // ---- Notice Desk ---------------------------------------------------------
+  {
+    key: "data-obligations",
+    label: "data: open authority obligations (Notice Desk)",
+    question: "Which tax notices still need a response?",
+    riskLabel: "clean",
+    expected: { claimKey: "data.open_obligations" },
+  },
 ];
 
 // ---- Grown corpus (round 16) ----------------------------------------------

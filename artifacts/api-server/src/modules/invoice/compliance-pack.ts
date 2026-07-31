@@ -19,6 +19,10 @@ import {
   vatPositionMonths,
   type VatPosition,
 } from "./vat-position";
+import {
+  countOpenObligations,
+  openObligationSamples,
+} from "../obligations/obligations";
 
 // Monthly client compliance pack (contract 0.45.0): one client's Lagos month
 // as a single facts object — who they are, what they issued, who owes them,
@@ -57,6 +61,22 @@ export interface CompliancePackFacts {
   receivables: ReceivablesSummary;
   payables: PayablesSummary;
   vat: VatPosition;
+  // Notice Desk: the client's open authority obligations as of render time
+  // (countOpenObligations / openObligationSamples — the obligations module
+  // owns every predicate; the pack only displays). `rows` is a newest-
+  // deadline-first sample capped at the module's display limit.
+  obligations: {
+    open: number;
+    dueSoon: number;
+    overdue: number;
+    nearestDue: string | null;
+    rows: {
+      authority: string;
+      noticeType: string;
+      reference: string | null;
+      responseDueDate: string;
+    }[];
+  };
   deadlines: {
     // The first statutory VAT-return date (the Lagos 21st rule) strictly
     // after today — "what is the next clock this client faces".
@@ -185,14 +205,23 @@ export async function computeCompliancePack(
     throw new DomainError("NOT_FOUND", "Client not found", 404);
   }
 
-  const [register, receivables, payables, vat, unsubmittedReceivables] =
-    await Promise.all([
-      loadRegister(firmId, clientPartyId, monthStart),
-      getReceivablesSummary(clientPartyId, firmId),
-      payablesSummary(firmId, clientPartyId),
-      computeVatPosition(firmId, clientPartyId, monthStart),
-      countUnsubmittedReceivables(firmId, clientPartyId),
-    ]);
+  const [
+    register,
+    receivables,
+    payables,
+    vat,
+    unsubmittedReceivables,
+    obligationCounts,
+    obligationRows,
+  ] = await Promise.all([
+    loadRegister(firmId, clientPartyId, monthStart),
+    getReceivablesSummary(clientPartyId, firmId),
+    payablesSummary(firmId, clientPartyId),
+    computeVatPosition(firmId, clientPartyId, monthStart),
+    countUnsubmittedReceivables(firmId, clientPartyId),
+    countOpenObligations(firmId, clientPartyId),
+    openObligationSamples(firmId, clientPartyId),
+  ]);
 
   return {
     firmId,
@@ -206,6 +235,18 @@ export async function computeCompliancePack(
     receivables,
     payables,
     vat,
+    obligations: {
+      open: obligationCounts.open,
+      dueSoon: obligationCounts.dueSoon,
+      overdue: obligationCounts.overdue,
+      nearestDue: obligationCounts.nearestDue,
+      rows: obligationRows.map((r) => ({
+        authority: r.authority,
+        noticeType: r.noticeType,
+        reference: r.reference,
+        responseDueDate: r.responseDueDate,
+      })),
+    },
     deadlines: {
       nextVatReturnDue: nextVatReturnDue(),
       unsubmittedReceivables,

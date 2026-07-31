@@ -3,12 +3,14 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.56.0
+ * OpenAPI spec version: 0.57.0
  */
+import type { ClerkCaseCreateInputDocumentKind } from './clerkCaseCreateInputDocumentKind';
 import type { ClerkCaseCreateInputSourceType } from './clerkCaseCreateInputSourceType';
 
 export interface ClerkCaseCreateInput {
   sourceType: ClerkCaseCreateInputSourceType;
+  documentKind?: ClerkCaseCreateInputDocumentKind;
   name?: string;
   contentType?: string;
   imageBase64?: string;

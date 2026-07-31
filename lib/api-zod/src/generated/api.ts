@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.56.0
+ * OpenAPI spec version: 0.57.0
  */
 import * as zod from 'zod';
 
@@ -5286,7 +5286,7 @@ export const listClerkCasesQueryOffsetMin = 0;
 
 
 export const ListClerkCasesQueryParams = zod.object({
-  "kind": zod.enum(['extraction', 'question']).optional(),
+  "kind": zod.enum(['extraction', 'question', 'notice']).optional(),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']).optional(),
   "limit": zod.coerce.number().min(1).max(listClerkCasesQueryLimitMax).optional(),
   "offset": zod.coerce.number().min(listClerkCasesQueryOffsetMin).optional()
@@ -5294,7 +5294,7 @@ export const ListClerkCasesQueryParams = zod.object({
 
 export const ListClerkCasesResponseItem = zod.object({
   "id": zod.string(),
-  "kind": zod.enum(['extraction', 'question']),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
   "sourceType": zod.string().nullish(),
   "sourceName": zod.string().nullish(),
@@ -5326,6 +5326,19 @@ export const ListClerkCasesResponseItem = zod.object({
   "confidence": zod.number()
 })),
   "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -5412,6 +5425,7 @@ export const createClerkCaseBodyDurationSecMin = 0;
 
 export const CreateClerkCaseBody = zod.object({
   "sourceType": zod.enum(['image', 'pdf', 'text', 'voice']),
+  "documentKind": zod.enum(['invoice', 'notice']).optional(),
   "name": zod.string().optional(),
   "contentType": zod.string().optional(),
   "imageBase64": zod.string().optional(),
@@ -5424,7 +5438,7 @@ export const CreateClerkCaseBody = zod.object({
 
 export const CreateClerkCaseResponse = zod.object({
   "id": zod.string(),
-  "kind": zod.enum(['extraction', 'question']),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
   "sourceType": zod.string().nullish(),
   "sourceName": zod.string().nullish(),
@@ -5456,6 +5470,19 @@ export const CreateClerkCaseResponse = zod.object({
   "confidence": zod.number()
 })),
   "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -5538,7 +5565,7 @@ export const GetClerkCaseParams = zod.object({
 
 export const GetClerkCaseResponse = zod.object({
   "id": zod.string(),
-  "kind": zod.enum(['extraction', 'question']),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
   "sourceType": zod.string().nullish(),
   "sourceName": zod.string().nullish(),
@@ -5570,6 +5597,19 @@ export const GetClerkCaseResponse = zod.object({
   "confidence": zod.number()
 })),
   "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -5677,7 +5717,7 @@ export const DecideClerkCaseBody = zod.object({
 
 export const DecideClerkCaseResponse = zod.object({
   "id": zod.string(),
-  "kind": zod.enum(['extraction', 'question']),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
   "sourceType": zod.string().nullish(),
   "sourceName": zod.string().nullish(),
@@ -5709,6 +5749,19 @@ export const DecideClerkCaseResponse = zod.object({
   "confidence": zod.number()
 })),
   "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -5786,6 +5839,175 @@ export const DecideClerkCaseResponse = zod.object({
 
 
 /**
+ * @summary Operator decision on a notice case — approve creates an open obligation (never an invoice); notices have no fast lane
+ */
+export const DecideNoticeCaseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DecideNoticeCaseBody = zod.object({
+  "action": zod.enum(['approve', 'reject', 'escalate']),
+  "reason": zod.string().optional(),
+  "firmId": zod.string().uuid().optional(),
+  "clientPartyId": zod.string().uuid().optional(),
+  "noticeType": zod.enum(['assessment', 'demand', 'information_request', 'audit', 'penalty', 'reminder', 'other']).optional(),
+  "authority": zod.enum(['firs', 'state_irs', 'customs', 'other']).optional(),
+  "reference": zod.string().optional(),
+  "taxType": zod.enum(['vat', 'cit', 'wht', 'paye', 'stamp_duty', 'other']).optional(),
+  "period": zod.string().optional(),
+  "amount": zod.string().optional(),
+  "currency": zod.string().optional(),
+  "issueDate": zod.string().optional(),
+  "responseDueDate": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const DecideNoticeCaseResponse = zod.object({
+  "case": zod.object({
+  "id": zod.string(),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
+  "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
+  "sourceType": zod.string().nullish(),
+  "sourceName": zod.string().nullish(),
+  "sourceText": zod.string().nullish(),
+  "sourceImageB64": zod.string().nullish(),
+  "sourceHash": zod.string().nullish(),
+  "sourceDurationSec": zod.number().nullish(),
+  "fastLaneThreshold": zod.number().optional(),
+  "feedback": zod.union([zod.literal('helpful'),zod.literal('not_helpful'),zod.literal(null)]).nullish(),
+  "preflight": zod.array(zod.object({
+  "field": zod.string(),
+  "message": zod.string(),
+  "severity": zod.enum(['advisory']).optional()
+})).nullish(),
+  "extraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "lines": zod.array(zod.object({
+  "description": zod.string().nullable(),
+  "quantity": zod.string().nullable(),
+  "unitPrice": zod.string().nullable(),
+  "vatRate": zod.string().nullable(),
+  "confidence": zod.number()
+})),
+  "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "question": zod.string().nullish(),
+  "answer": zod.union([zod.object({
+  "answered": zod.boolean(),
+  "claimId": zod.string().optional(),
+  "claimKey": zod.string().optional(),
+  "claimVersion": zod.number().optional(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "proposition": zod.string().optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})).optional(),
+  "citation": zod.string().optional(),
+  "refusalReason": zod.string().optional(),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional(),
+  "plan": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string()
+})).optional(),
+  "pins": zod.object({
+  "monthStart": zod.string().optional(),
+  "monthLabel": zod.string().optional(),
+  "clientPartyId": zod.string().optional(),
+  "clientName": zod.string().optional()
+}).optional(),
+  "sections": zod.array(zod.object({
+  "title": zod.string(),
+  "text": zod.string(),
+  "dataIntent": zod.string().optional(),
+  "dataParams": zod.record(zod.string(), zod.string()).optional(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "links": zod.array(zod.object({
+  "label": zod.string(),
+  "kind": zod.enum(['invoice']),
+  "id": zod.string().nullish()
+})).optional()
+})).optional()
+}),zod.null()]).optional(),
+  "firmId": zod.string().nullish(),
+  "batchId": zod.string().nullish(),
+  "claimedBy": zod.string().nullish(),
+  "claimedAt": zod.coerce.date().nullish(),
+  "createdBy": zod.string(),
+  "decidedBy": zod.string().nullish(),
+  "decisionAction": zod.string().nullish(),
+  "decisionReason": zod.string().nullish(),
+  "corrections": zod.array(zod.object({
+  "field": zod.string(),
+  "extracted": zod.string().nullable(),
+  "final": zod.string().nullable(),
+  "changed": zod.boolean()
+})).nullish(),
+  "createdInvoiceId": zod.string().nullish(),
+  "failReason": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "obligation": zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "sourceCaseId": zod.string().nullish(),
+  "noticeType": zod.string(),
+  "authority": zod.string(),
+  "reference": zod.string().nullish(),
+  "taxType": zod.string().nullish(),
+  "period": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "currency": zod.string().nullish(),
+  "issueDate": zod.string().nullish(),
+  "responseDueDate": zod.string(),
+  "status": zod.enum(['open', 'responded', 'closed']),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).optional()
+})
+
+
+/**
  * @summary Human-initiated bulk approval of fast-lane cases — per-case CAS, per-case eligibility, never automatic
  */
 
@@ -5841,7 +6063,7 @@ export const AskClerkBody = zod.object({
 
 export const AskClerkResponse = zod.object({
   "id": zod.string(),
-  "kind": zod.enum(['extraction', 'question']),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
   "sourceType": zod.string().nullish(),
   "sourceName": zod.string().nullish(),
@@ -5873,6 +6095,19 @@ export const AskClerkResponse = zod.object({
   "confidence": zod.number()
 })),
   "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -6054,7 +6289,7 @@ export const RetryClerkCaseParams = zod.object({
 
 export const RetryClerkCaseResponse = zod.object({
   "id": zod.string(),
-  "kind": zod.enum(['extraction', 'question']),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
   "sourceType": zod.string().nullish(),
   "sourceName": zod.string().nullish(),
@@ -6086,6 +6321,19 @@ export const RetryClerkCaseResponse = zod.object({
   "confidence": zod.number()
 })),
   "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -6171,7 +6419,7 @@ export const ClaimClerkCaseParams = zod.object({
 
 export const ClaimClerkCaseResponse = zod.object({
   "id": zod.string(),
-  "kind": zod.enum(['extraction', 'question']),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
   "sourceType": zod.string().nullish(),
   "sourceName": zod.string().nullish(),
@@ -6203,6 +6451,19 @@ export const ClaimClerkCaseResponse = zod.object({
   "confidence": zod.number()
 })),
   "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -6288,7 +6549,7 @@ export const ReleaseClerkCaseParams = zod.object({
 
 export const ReleaseClerkCaseResponse = zod.object({
   "id": zod.string(),
-  "kind": zod.enum(['extraction', 'question']),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
   "sourceType": zod.string().nullish(),
   "sourceName": zod.string().nullish(),
@@ -6320,6 +6581,19 @@ export const ReleaseClerkCaseResponse = zod.object({
   "confidence": zod.number()
 })),
   "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -7026,7 +7300,7 @@ export const CreateClerkCaseBatchBody = zod.object({
 export const CreateClerkCaseBatchResponse = zod.object({
   "cases": zod.array(zod.object({
   "id": zod.string(),
-  "kind": zod.enum(['extraction', 'question']),
+  "kind": zod.enum(['extraction', 'question', 'notice']),
   "status": zod.enum(['pending', 'extracted', 'in_review', 'approved', 'rejected', 'escalated', 'failed']),
   "sourceType": zod.string().nullish(),
   "sourceName": zod.string().nullish(),
@@ -7058,6 +7332,19 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "confidence": zod.number()
 })),
   "exemplarCaseId": zod.string().optional(),
+  "promptVersion": zod.string(),
+  "model": zod.string()
+}),zod.null()]).optional(),
+  "noticeExtraction": zod.union([zod.object({
+  "fields": zod.array(zod.object({
+  "field": zod.string(),
+  "value": zod.string().nullable(),
+  "confidence": zod.number(),
+  "sourceSnippet": zod.string().nullable(),
+  "critical": zod.boolean(),
+  "flagged": zod.boolean()
+})),
+  "noticeType": zod.string(),
   "promptVersion": zod.string(),
   "model": zod.string()
 }),zod.null()]).optional(),
@@ -8252,6 +8539,145 @@ export const GetActionEffectivenessResponse = zod.object({
   "nowFailedAgain": zod.number().nullable(),
   "nowOther": zod.number().nullable()
 }))
+})
+
+
+/**
+ * @summary Tracked authority obligations for the firm, soonest deadline first — a client_user sees only its own party's
+ */
+export const listObligationsQueryLimitMax = 200;
+
+export const listObligationsQueryOffsetMin = 0;
+
+
+
+export const ListObligationsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.'),
+  "status": zod.enum(['open', 'responded', 'closed']).optional(),
+  "limit": zod.coerce.number().min(1).max(listObligationsQueryLimitMax).optional(),
+  "offset": zod.coerce.number().min(listObligationsQueryOffsetMin).optional()
+})
+
+export const ListObligationsResponse = zod.object({
+  "obligations": zod.array(zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "sourceCaseId": zod.string().nullish(),
+  "noticeType": zod.string(),
+  "authority": zod.string(),
+  "reference": zod.string().nullish(),
+  "taxType": zod.string().nullish(),
+  "period": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "currency": zod.string().nullish(),
+  "issueDate": zod.string().nullish(),
+  "responseDueDate": zod.string(),
+  "status": zod.enum(['open', 'responded', 'closed']),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Record a notice received outside Clerk (paper, walk-in) as a tracked obligation — firm staff only, no model involved
+ */
+export const CreateObligationBody = zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "noticeType": zod.enum(['assessment', 'demand', 'information_request', 'audit', 'penalty', 'reminder', 'other']),
+  "authority": zod.enum(['firs', 'state_irs', 'customs', 'other']),
+  "reference": zod.string().optional(),
+  "taxType": zod.enum(['vat', 'cit', 'wht', 'paye', 'stamp_duty', 'other']).optional(),
+  "period": zod.string().optional(),
+  "amount": zod.string().optional(),
+  "currency": zod.string().optional(),
+  "issueDate": zod.string().optional(),
+  "responseDueDate": zod.string(),
+  "notes": zod.string().optional()
+})
+
+export const CreateObligationResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "sourceCaseId": zod.string().nullish(),
+  "noticeType": zod.string(),
+  "authority": zod.string(),
+  "reference": zod.string().nullish(),
+  "taxType": zod.string().nullish(),
+  "period": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "currency": zod.string().nullish(),
+  "issueDate": zod.string().nullish(),
+  "responseDueDate": zod.string(),
+  "status": zod.enum(['open', 'responded', 'closed']),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+export const GetObligationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetObligationResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "sourceCaseId": zod.string().nullish(),
+  "noticeType": zod.string(),
+  "authority": zod.string(),
+  "reference": zod.string().nullish(),
+  "taxType": zod.string().nullish(),
+  "period": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "currency": zod.string().nullish(),
+  "issueDate": zod.string().nullish(),
+  "responseDueDate": zod.string(),
+  "status": zod.enum(['open', 'responded', 'closed']),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Move an obligation through its response lifecycle (open → responded → closed) — compare-and-set, firm staff only
+ */
+export const UpdateObligationStatusParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateObligationStatusBody = zod.object({
+  "status": zod.enum(['open', 'responded', 'closed']),
+  "notes": zod.string().optional()
+})
+
+export const UpdateObligationStatusResponse = zod.object({
+  "id": zod.string(),
+  "firmId": zod.string(),
+  "clientPartyId": zod.string(),
+  "sourceCaseId": zod.string().nullish(),
+  "noticeType": zod.string(),
+  "authority": zod.string(),
+  "reference": zod.string().nullish(),
+  "taxType": zod.string().nullish(),
+  "period": zod.string().nullish(),
+  "amount": zod.string().nullish(),
+  "currency": zod.string().nullish(),
+  "issueDate": zod.string().nullish(),
+  "responseDueDate": zod.string(),
+  "status": zod.enum(['open', 'responded', 'closed']),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
 })
 
 

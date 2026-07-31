@@ -69,6 +69,7 @@ test("one overdue draft turns exactly one line to attention", async () => {
     "missing_bills",
     "double_payments",
     "unmatched_collections",
+    "open_obligations",
   ]);
   assert.ok(
     !keys.includes("pending_approvals"),

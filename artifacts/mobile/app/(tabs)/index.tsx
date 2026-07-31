@@ -134,6 +134,7 @@ export default function HomeScreen() {
   const firstName = me?.fullName?.split(" ")[0];
   const canClerkCapture = !!me?.capabilities?.includes("clerk.capture");
   const canClerkAsk = !!me?.capabilities?.includes("clerk.ask");
+  const canObligations = !!me?.capabilities?.includes("obligation.read");
   // Firm staff get the weekly digest, clients their monthly statements —
   // null (no capability / platform role) hides the tile entirely.
   const updates = updatesAudience(me?.role, me?.capabilities);
@@ -278,6 +279,14 @@ export default function HomeScreen() {
                 onPress={() => router.push("/automation")}
                 testID="action-automation"
               />
+              {canObligations ? (
+                <ActionTile
+                  label="Obligations"
+                  icon="clipboard"
+                  onPress={() => router.push("/obligations")}
+                  testID="action-obligations"
+                />
+              ) : null}
               {canClerkCapture ? (
                 <ActionTile
                   label="Send to Clerk"

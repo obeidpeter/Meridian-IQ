@@ -8,6 +8,7 @@
 
 import type {
   ClerkCaseCreateInput,
+  ClerkCaseCreateInputDocumentKind,
   ClerkCaseStatus,
 } from "@workspace/api-client-react";
 
@@ -101,15 +102,28 @@ export type CameraCaseBuild =
   | { ok: true; input: ClerkCaseCreateInput }
   | { ok: false; message: string };
 
+export type ClerkDocumentKind = ClerkCaseCreateInputDocumentKind;
+
+// documentKind is threaded into the body ONLY when "notice" — absent means
+// invoice on the server, so the default (invoice) submission stays
+// byte-identical to what this app sent before notices existed.
+function documentKindFields(
+  documentKind: ClerkDocumentKind | undefined,
+): Pick<ClerkCaseCreateInput, "documentKind"> {
+  return documentKind === "notice" ? { documentKind: "notice" } : {};
+}
+
 /**
  * Turn a camera capture's base64 JPEG into the same `image` case submission a
  * picked photo file produces, or refuse with user-facing copy. expo-image-
  * picker always transcodes camera output to JPEG when returning base64, so
- * the content type is fixed rather than sniffed.
+ * the content type is fixed rather than sniffed. `documentKind` marks a
+ * tax-authority notice; omitted (or "invoice") keeps the invoice path.
  */
 export function buildCameraCaseInput(
   base64: string,
   capturedAt: Date,
+  documentKind?: ClerkDocumentKind,
 ): CameraCaseBuild {
   const bytes = base64ByteLength(base64);
   if (bytes === 0) return { ok: false, message: CAMERA_EMPTY_MESSAGE };
@@ -120,6 +134,7 @@ export function buildCameraCaseInput(
     ok: true,
     input: {
       sourceType: "image",
+      ...documentKindFields(documentKind),
       name: cameraPhotoName(capturedAt),
       contentType: "image/jpeg",
       imageBase64: base64,
@@ -135,7 +150,7 @@ export const DOCUMENT_TOO_LARGE_MESSAGE =
   "That file is too large to send. Keep it under 5 MB — a phone photo of the document works well.";
 
 export const DOCUMENT_UNREADABLE_MESSAGE =
-  "We couldn't read that file. Pick a PDF or a photo of the invoice, or paste its text below.";
+  "We couldn't read that file. Pick a PDF or a photo of the document, or paste its text below.";
 
 /**
  * Turn a picked document's base64 into the pdf/image case submission a file
@@ -143,11 +158,14 @@ export const DOCUMENT_UNREADABLE_MESSAGE =
  * base64 that will actually be sent (base64ByteLength) rather than trusting
  * DocumentPicker's optional `size` — Android providers commonly omit it, and
  * an unmeasured oversized file would otherwise round-trip to an opaque 413.
+ * `documentKind` marks a tax-authority notice; omitted (or "invoice") keeps
+ * the invoice path.
  */
 export function buildDocumentCaseInput(
   base64: string,
   name?: string | null,
   mimeType?: string | null,
+  documentKind?: ClerkDocumentKind,
 ): CameraCaseBuild {
   const bytes = base64ByteLength(base64);
   if (bytes === 0) return { ok: false, message: DOCUMENT_UNREADABLE_MESSAGE };
@@ -159,6 +177,7 @@ export function buildDocumentCaseInput(
     ok: true,
     input: {
       sourceType,
+      ...documentKindFields(documentKind),
       ...(name ? { name } : {}),
       ...(mimeType ? { contentType: mimeType } : {}),
       ...(sourceType === "pdf"

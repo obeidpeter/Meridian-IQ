@@ -5,13 +5,30 @@ import type {
   ClerkExtractionLine,
 } from "@workspace/api-client-react";
 import {
+  NoticeDecisionInputAuthority,
+  NoticeDecisionInputNoticeType,
+  NoticeDecisionInputTaxType,
+} from "@workspace/api-client-react";
+import {
   approveDecisionFromForm,
   approveFormFromCase,
+  AUTHORITY_LABELS,
+  authorityLabel,
   bulkApproveFormFromCase,
   bulkApproveSummary,
   bulkDialogPhase,
+  caseIntakeKind,
+  closedOption,
   fastLaneCaseSummary,
   isReadyToApprove,
+  NOTICE_TYPE_LABELS,
+  noticeApproveDisabled,
+  noticeApproveFormFromCase,
+  noticeDecisionFromForm,
+  noticeFieldLabel,
+  noticeTypeLabel,
+  TAX_TYPE_LABELS,
+  taxTypeLabel,
   vatFractionFromPercent,
   vatPercentFromRaw,
   vatPercentInvalid,
@@ -21,6 +38,7 @@ import {
   imageDataUri,
   reviewEffort,
   type ApproveForm,
+  type NoticeApproveForm,
 } from "./clerk-shared";
 
 function field(patch: Partial<ClerkExtractionField>): ClerkExtractionField {
@@ -735,5 +753,239 @@ describe("bulkDialogPhase", () => {
         approvalPending: false,
       }),
     ).toBe("report");
+  });
+});
+
+// ---- Notice Desk helpers ----------------------------------------------------
+
+function noticeCase(patch: Partial<ClerkCase> = {}): ClerkCase {
+  return makeCase({
+    kind: "notice",
+    firmId: "firm-1",
+    extraction: null,
+    noticeExtraction: {
+      noticeType: "assessment",
+      promptVersion: "n1",
+      model: "test-model",
+      fields: [
+        field({ field: "referenceNumber", value: "FIRS/2026/0042" }),
+        field({ field: "amountDemanded", value: "150000.00" }),
+        field({ field: "authority", value: "State IRS" }),
+        field({ field: "taxType", value: "Stamp duty" }),
+        field({ field: "issueDate", value: "2026-07-01" }),
+        field({ field: "responseDueDate", value: "2026-08-15" }),
+      ],
+    },
+    ...patch,
+  });
+}
+
+function noticeForm(patch: Partial<NoticeApproveForm> = {}): NoticeApproveForm {
+  return {
+    firmId: "firm-1",
+    clientPartyId: "party-1",
+    noticeType: "assessment",
+    authority: "firs",
+    reference: "FIRS/2026/0042",
+    taxType: "vat",
+    period: "2026-Q1",
+    amount: "150000.00",
+    currency: "NGN",
+    issueDate: "2026-07-01",
+    responseDueDate: "2026-08-15",
+    notes: "",
+    ...patch,
+  };
+}
+
+describe("notice label maps", () => {
+  test("every closed catalogue value carries a human label", () => {
+    for (const v of Object.values(NoticeDecisionInputNoticeType)) {
+      expect(NOTICE_TYPE_LABELS[v]).toBeTruthy();
+    }
+    for (const v of Object.values(NoticeDecisionInputAuthority)) {
+      expect(AUTHORITY_LABELS[v]).toBeTruthy();
+    }
+    for (const v of Object.values(NoticeDecisionInputTaxType)) {
+      expect(TAX_TYPE_LABELS[v]).toBeTruthy();
+    }
+  });
+
+  test("the labels read as vocabulary, not raw enums", () => {
+    expect(NOTICE_TYPE_LABELS.information_request).toBe("Information request");
+    expect(NOTICE_TYPE_LABELS.demand).toBe("Demand notice");
+    expect(AUTHORITY_LABELS.firs).toBe("FIRS");
+    expect(AUTHORITY_LABELS.state_irs).toBe("State IRS");
+    expect(TAX_TYPE_LABELS.stamp_duty).toBe("Stamp duty");
+    expect(TAX_TYPE_LABELS.paye).toBe("PAYE");
+  });
+
+  test("the label helpers fall back to humanization for off-catalogue values", () => {
+    expect(noticeTypeLabel("assessment")).toBe("Assessment");
+    expect(noticeTypeLabel("best_of_judgement")).toBe("Best of judgement");
+    expect(authorityLabel("lagos-irs")).toBe("Lagos irs");
+    expect(authorityLabel(null)).toBe("Unknown");
+    expect(taxTypeLabel("vat")).toBe("VAT");
+    expect(taxTypeLabel("")).toBe("Unknown");
+  });
+});
+
+describe("noticeFieldLabel", () => {
+  test("named notice fields get their curated labels", () => {
+    expect(noticeFieldLabel("referenceNumber")).toBe("Reference number");
+    expect(noticeFieldLabel("amountDemanded")).toBe("Amount demanded");
+    expect(noticeFieldLabel("responseDueDate")).toBe("Response due date");
+    expect(noticeFieldLabel("tin")).toBe("TIN");
+  });
+
+  test("anything else falls through to the generic camelCase spacing", () => {
+    expect(noticeFieldLabel("taxpayerName")).toBe("Taxpayer name");
+    expect(noticeFieldLabel("period")).toBe("Period");
+  });
+});
+
+describe("isReadyToApprove: the notice guard", () => {
+  test("only extraction cases can be fast-lane ready", () => {
+    // Control: the same clean, confident case IS ready as an extraction.
+    expect(isReadyToApprove(makeCase({}))).toBe(true);
+    // Identical read, kind notice: never ready — a notice approval records
+    // a statutory obligation and must always pass through the full form.
+    expect(isReadyToApprove(makeCase({ kind: "notice" }))).toBe(false);
+    expect(isReadyToApprove(makeCase({ kind: "question" }))).toBe(false);
+  });
+});
+
+describe("closedOption", () => {
+  test("normalises free text onto the catalogue, else prefills nothing", () => {
+    expect(closedOption(NoticeDecisionInputAuthority, "FIRS")).toBe("firs");
+    expect(closedOption(NoticeDecisionInputAuthority, "State IRS")).toBe(
+      "state_irs",
+    );
+    expect(closedOption(NoticeDecisionInputTaxType, "Stamp duty")).toBe(
+      "stamp_duty",
+    );
+    expect(closedOption(NoticeDecisionInputAuthority, "Lagos LIRS")).toBe("");
+    expect(closedOption(NoticeDecisionInputAuthority, null)).toBe("");
+  });
+});
+
+describe("noticeApproveFormFromCase", () => {
+  test("prefills the inputs from the extraction and normalises catalogue values", () => {
+    const f = noticeApproveFormFromCase(noticeCase());
+    expect(f.reference).toBe("FIRS/2026/0042");
+    expect(f.amount).toBe("150000.00");
+    expect(f.noticeType).toBe("assessment");
+    expect(f.authority).toBe("state_irs");
+    expect(f.taxType).toBe("stamp_duty");
+    expect(f.issueDate).toBe("2026-07-01");
+    expect(f.responseDueDate).toBe("2026-08-15");
+    // The case's own firm pre-selects; the client NEVER does — pinning a
+    // notice to the wrong client is the costly mistake.
+    expect(f.firmId).toBe("firm-1");
+    expect(f.clientPartyId).toBe("");
+  });
+
+  test("off-catalogue extracted text leaves the closed selects empty", () => {
+    const kase = noticeCase();
+    kase.noticeExtraction = {
+      ...kase.noticeExtraction!,
+      noticeType: "letter of intent",
+      fields: [field({ field: "authority", value: "Lagos LIRS" })],
+    };
+    const f = noticeApproveFormFromCase(kase);
+    expect(f.noticeType).toBe("");
+    expect(f.authority).toBe("");
+    expect(f.reference).toBe("");
+  });
+});
+
+describe("noticeApproveDisabled", () => {
+  test("enabled only when firm, client, notice type, authority and deadline are all set", () => {
+    expect(noticeApproveDisabled(noticeForm())).toBe(false);
+    expect(noticeApproveDisabled(null)).toBe(true);
+    expect(noticeApproveDisabled(noticeForm({ firmId: "" }))).toBe(true);
+    expect(noticeApproveDisabled(noticeForm({ clientPartyId: "" }))).toBe(true);
+    expect(noticeApproveDisabled(noticeForm({ noticeType: "" }))).toBe(true);
+    expect(noticeApproveDisabled(noticeForm({ authority: "" }))).toBe(true);
+    expect(noticeApproveDisabled(noticeForm({ responseDueDate: "" }))).toBe(
+      true,
+    );
+    // The optionals never gate approval.
+    expect(
+      noticeApproveDisabled(
+        noticeForm({
+          reference: "",
+          taxType: "",
+          period: "",
+          amount: "",
+          currency: "",
+          issueDate: "",
+        }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("noticeDecisionFromForm", () => {
+  test("a full form becomes a complete approve payload with trimmed optionals", () => {
+    expect(
+      noticeDecisionFromForm(
+        noticeForm({ reference: "  FIRS/2026/0042  " }),
+        "looks right",
+      ),
+    ).toEqual({
+      action: "approve",
+      firmId: "firm-1",
+      clientPartyId: "party-1",
+      noticeType: "assessment",
+      authority: "firs",
+      responseDueDate: "2026-08-15",
+      reference: "FIRS/2026/0042",
+      taxType: "vat",
+      period: "2026-Q1",
+      amount: "150000.00",
+      currency: "NGN",
+      issueDate: "2026-07-01",
+      reason: "looks right",
+    });
+  });
+
+  test("empty optionals are OMITTED, never sent as empty strings", () => {
+    const payload = noticeDecisionFromForm(
+      noticeForm({
+        reference: "",
+        taxType: "",
+        period: " ",
+        amount: "",
+        currency: "",
+        issueDate: "",
+        notes: "",
+      }),
+      "",
+    );
+    expect(payload).toEqual({
+      action: "approve",
+      firmId: "firm-1",
+      clientPartyId: "party-1",
+      noticeType: "assessment",
+      authority: "firs",
+      responseDueDate: "2026-08-15",
+    });
+    expect("reference" in payload).toBe(false);
+    expect("reason" in payload).toBe(false);
+  });
+});
+
+describe("caseIntakeKind", () => {
+  test("a notice case relabels its source; invoice cases pass through", () => {
+    const notice = caseIntakeKind({ kind: "notice", sourceType: "image" });
+    expect(notice.label).toBe("Tax notice");
+    expect(notice.eyebrow).toBe("Notice intake");
+    const invoice = caseIntakeKind({ kind: "extraction", sourceType: "image" });
+    expect(invoice.label).toBe("Invoice scan");
+    expect(invoice.eyebrow).toBe("Document intake");
+    // The icon still follows the SOURCE — a scanned notice keeps the scan
+    // icon, only the words change.
+    expect(notice.icon).toBe(invoice.icon);
   });
 });

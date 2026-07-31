@@ -1,4 +1,4 @@
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { getDb, clerkCasesTable } from "@workspace/db";
 import { logger } from "../../lib/logger";
 import { appendAudit } from "../audit/audit";
@@ -128,7 +128,9 @@ export async function sweepStuckPendingCases(): Promise<number> {
     })
     .where(
       and(
-        eq(clerkCasesTable.kind, "extraction"),
+        // Both model-calling capture lanes: an invoice extraction OR a notice
+        // reading stranded mid-call is stuck in exactly the same way.
+        inArray(clerkCasesTable.kind, ["extraction", "notice"]),
         eq(clerkCasesTable.status, "pending"),
         lt(clerkCasesTable.createdAt, cutoff),
       ),

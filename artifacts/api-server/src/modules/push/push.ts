@@ -22,7 +22,9 @@ export type PushTemplateKey =
   | "compliance_pack_ready"
   | "firm_digest_ready"
   | "automation_paused"
-  | "automation_granted";
+  | "automation_granted"
+  | "obligation_due_soon"
+  | "obligation_overdue";
 
 const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   deadline_reminder: {
@@ -52,6 +54,14 @@ const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   automation_granted: {
     title: "MeridianIQ",
     body: "A standing approval was created for your account. Open the app for details.",
+  },
+  obligation_due_soon: {
+    title: "MeridianIQ",
+    body: "An authority notice needs a response soon. Open the app for details.",
+  },
+  obligation_overdue: {
+    title: "MeridianIQ",
+    body: "An authority notice response is overdue. Open the app for details.",
   },
 };
 

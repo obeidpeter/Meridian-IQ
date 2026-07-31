@@ -16,6 +16,7 @@ import type {
   ClerkBatchView,
   ClerkCase,
   ClerkCaseCreateInput,
+  ClerkCaseCreateInputDocumentKind,
   ListClerkCasesParams,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -231,6 +232,13 @@ function CaptureContent() {
   const [captureText, setCaptureText] = useState("");
   const [captureFile, setCaptureFile] = useState<File | null>(null);
   const [captureVoice, setCaptureVoice] = useState<File | null>(null);
+  // What the user is sending: an invoice (the default — the body carries no
+  // documentKind, byte-identical to the pre-notices submission) or a
+  // tax-authority notice (documentKind: "notice"). Notice mode hides the
+  // voice option (the server rejects voice notices) and batch intake (the
+  // splitter segments invoices only).
+  const [documentKind, setDocumentKind] =
+    useState<ClerkCaseCreateInputDocumentKind>("invoice");
   const [disabledBanner, setDisabledBanner] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Duplicate guard: a 409 DUPLICATE_SOURCE on create means this exact
@@ -355,13 +363,34 @@ function CaptureContent() {
     captureFile != null &&
     (captureFile.type === "application/pdf" ||
       captureFile.name.toLowerCase().endsWith(".pdf"));
+  const isNotice = documentKind === "notice";
   // The batch splitter only takes text it can segment (pasted text or a
-  // PDF's text layer), so the toggle hides for photo and voice sources.
-  const batchEligible = captureVoice == null && (captureFile == null || isPdfFile);
+  // PDF's text layer), so the toggle hides for photo and voice sources —
+  // and it segments INVOICES only, so notice mode hides it too (which also
+  // keeps submitCapture off the batch path if batchMode was left on).
+  const batchEligible =
+    !isNotice && captureVoice == null && (captureFile == null || isPdfFile);
+
+  // Only a notice marks the create body; absent = invoice, so the default
+  // submission stays byte-identical to what this page sent before notices.
+  // Voice never carries it — the server rejects voice notices and the voice
+  // option is hidden in notice mode.
+  const kindFields = isNotice ? { documentKind: "notice" as const } : {};
+
+  // Switching kinds drops per-source residue: a held duplicate payload
+  // belongs to the other kind, and a picked voice note has no notice path.
+  const switchKind = (kind: ClerkCaseCreateInputDocumentKind) => {
+    if (kind === documentKind) return;
+    setDocumentKind(kind);
+    setPendingDuplicate(null);
+    setActiveBatchId(null);
+    if (kind === "notice") setCaptureVoice(null);
+  };
 
   // The pasted-text payload both the single and batch paths submit. The
   // "as const" keeps sourceType a literal so it satisfies both create inputs
-  // outside mutate()'s contextual position.
+  // outside mutate()'s contextual position. documentKind is spread in at the
+  // single-case call site only — the batch input has no notice mode.
   const textPayload = () => ({
     sourceType: "text" as const,
     name: "pasted-text.txt",
@@ -395,13 +424,14 @@ function CaptureContent() {
       createCase.mutate({
         data: {
           sourceType: isPdfFile ? "pdf" : "image",
+          ...kindFields,
           name: captureFile.name,
           contentType: captureFile.type || undefined,
           ...(isPdfFile ? { pdfBase64: b64 } : { imageBase64: b64 }),
         },
       });
     } else if (captureText.trim()) {
-      createCase.mutate({ data: textPayload() });
+      createCase.mutate({ data: { ...textPayload(), ...kindFields } });
     }
   };
 
@@ -432,8 +462,43 @@ function CaptureContent() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="radiogroup"
+            aria-label="What are you sending?"
+          >
+            {(
+              [
+                { kind: "invoice", label: "Invoice" },
+                { kind: "notice", label: "Tax notice" },
+              ] as const
+            ).map(({ kind, label }) => {
+              const isActive = documentKind === kind;
+              return (
+                <button
+                  key={kind}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  onClick={() => switchKind(kind)}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border min-h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    isActive
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-card text-foreground hover:bg-muted"
+                  }`}
+                  data-testid={`toggle-kind-${kind}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
           <div className="space-y-1.5">
-            <Label htmlFor="capture-file">Invoice document (PDF or photo)</Label>
+            <Label htmlFor="capture-file">
+              {isNotice
+                ? "Notice document (PDF or photo)"
+                : "Invoice document (PDF or photo)"}
+            </Label>
             <Input
               id="capture-file"
               type="file"
@@ -447,41 +512,55 @@ function CaptureContent() {
               data-testid="input-capture-file"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="capture-voice">or a voice note (max 5 MB)</Label>
-            <Input
-              id="capture-voice"
-              type="file"
-              accept="audio/*"
-              onChange={(e) => {
-                const f = e.target.files?.[0] ?? null;
-                setPendingDuplicate(null);
-                setActiveBatchId(null);
-                if (f && f.size > MAX_VOICE_BYTES) {
-                  toast({
-                    title: "Voice note too large",
-                    description: `Voice notes are capped at 5 MB; this file is ${(
-                      f.size /
-                      (1024 * 1024)
-                    ).toFixed(1)} MB. Record a shorter note.`,
-                    variant: "destructive",
-                  });
-                  e.target.value = "";
-                  setCaptureVoice(null);
-                  return;
-                }
-                setCaptureVoice(f);
-              }}
-              disabled={captureFile != null}
-              data-testid="input-voice-file"
-            />
-            <p className="text-xs text-muted-foreground">
-              English voice notes; the audio is transcribed and only the
-              transcript is kept.
+          {isNotice ? (
+            // The server rejects voice notices, so notice mode swaps the
+            // voice option for a short explanation instead of a dead control.
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="text-notice-no-voice"
+            >
+              Photograph or upload the notice — voice notes aren&apos;t
+              accepted for notices.
             </p>
-          </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="capture-voice">or a voice note (max 5 MB)</Label>
+              <Input
+                id="capture-voice"
+                type="file"
+                accept="audio/*"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setPendingDuplicate(null);
+                  setActiveBatchId(null);
+                  if (f && f.size > MAX_VOICE_BYTES) {
+                    toast({
+                      title: "Voice note too large",
+                      description: `Voice notes are capped at 5 MB; this file is ${(
+                        f.size /
+                        (1024 * 1024)
+                      ).toFixed(1)} MB. Record a shorter note.`,
+                      variant: "destructive",
+                    });
+                    e.target.value = "";
+                    setCaptureVoice(null);
+                    return;
+                  }
+                  setCaptureVoice(f);
+                }}
+                disabled={captureFile != null}
+                data-testid="input-voice-file"
+              />
+              <p className="text-xs text-muted-foreground">
+                English voice notes; the audio is transcribed and only the
+                transcript is kept.
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
-            <Label htmlFor="capture-text">or paste the invoice text</Label>
+            <Label htmlFor="capture-text">
+              {isNotice ? "or paste the notice text" : "or paste the invoice text"}
+            </Label>
             <Textarea
               id="capture-text"
               value={captureText}
@@ -490,7 +569,7 @@ function CaptureContent() {
                 setPendingDuplicate(null);
                 setActiveBatchId(null);
               }}
-              placeholder="INVOICE No: ..."
+              placeholder={isNotice ? "NOTICE OF ASSESSMENT ..." : "INVOICE No: ..."}
               rows={5}
               disabled={captureFile != null || captureVoice != null}
               data-testid="input-capture-text"

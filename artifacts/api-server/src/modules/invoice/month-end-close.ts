@@ -9,6 +9,10 @@ import {
   countClientUnmatchedCollections,
   UNMATCHED_COLLECTIONS_WINDOW_DAYS,
 } from "../collections/unmatched";
+import {
+  OBLIGATION_DUE_SOON_DAYS,
+  countOpenObligations,
+} from "../obligations/obligations";
 
 // Month-end close assistant (round-19 idea #2). The platform now runs seven
 // independent deterministic advisories that a client discovers one card at a
@@ -61,6 +65,7 @@ export async function computeMonthEndClose(
     firmId,
     clientPartyId,
   );
+  const obligations = await countOpenObligations(firmId, clientPartyId);
   const doublePayCount =
     doublePay.multiPaid.length + doublePay.duplicateCandidates.length;
 
@@ -148,6 +153,18 @@ export async function computeMonthEndClose(
       clientCollections > 0
         ? `Payments arrived on your collection accounts (trailing ${UNMATCHED_COLLECTIONS_WINDOW_DAYS} days) that could not be bound to any invoice — reconcile against the provider statement.`
         : "Every collection-account payment bound to an invoice.",
+    ),
+    // Authority obligations (Notice Desk): the deadlines here are the
+    // AUTHORITY's, not the platform's, so a month must not close with one
+    // unlooked-at. Computed by the obligations module's single fact function
+    // — this module keeps zero predicates of its own.
+    item(
+      "open_obligations",
+      "Authority obligations",
+      obligations.open,
+      obligations.open > 0
+        ? `${obligations.open} authority notice(s) await a response — ${obligations.dueSoon} due within ${OBLIGATION_DUE_SOON_DAYS} days, ${obligations.overdue} overdue${obligations.nearestDue ? `; the nearest response is due ${obligations.nearestDue}` : ""}.`
+        : "No authority notices are awaiting a response.",
     ),
     // Approval item only when the maker-checker policy is ON for the firm
     // (null means off — a checklist line for a policy the firm never

@@ -96,6 +96,13 @@ const ALL = [
   // ask = the register-grounded Q&A. Both are budget-capped per firm.
   "clerk.capture",
   "clerk.ask",
+  // Notice Desk: obligations are compliance-spine records (a confirmed
+  // authority notice + response deadline). Clients see their own (SEC-03
+  // scoped); creating/updating them is firm work — the approve step in the
+  // notice review queue runs under clerk.use, manual entry under
+  // obligation.write.
+  "obligation.read",
+  "obligation.write",
 ] as const;
 
 export type Capability = (typeof ALL)[number];
@@ -147,6 +154,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "claims.read",
     "clerk.capture",
     "clerk.ask",
+    "obligation.read",
+    "obligation.write",
   ],
   firm_staff: [
     "invoice.read",
@@ -176,6 +185,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "claims.read",
     "clerk.capture",
     "clerk.ask",
+    "obligation.read",
+    "obligation.write",
   ],
   client_user: [
     "invoice.read",
@@ -201,6 +212,9 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     // surfaces that share this capability must refuse client_user explicitly
     // (see GET /clerk/digest) — the capability was widened for Ask, not them.
     "clerk.ask",
+    // Own obligations only (SEC-03: routes pin the party scope). Recording
+    // and updating obligations stays with the firm.
+    "obligation.read",
   ],
   operator: [
     "invoice.read",
@@ -226,6 +240,9 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "clerk.use",
     "clerk.capture",
     "clerk.ask",
+    // Operators review notice cases (clerk.use) and support firms — read
+    // visibility on the obligations those approvals create, never write.
+    "obligation.read",
   ],
   bank_user: ["buyer.verify", "audit.read"],
   // Buyer Rails role (Appendix C "Y (buyer org)"): verification, confirmation

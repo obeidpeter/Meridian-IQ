@@ -114,6 +114,10 @@ function digestFacts(overrides: Partial<DigestFacts>): DigestFacts {
     penaltyExposureFloorNgn: null,
     missingBillsCount: 0,
     missingBillsClients: 0,
+    // Notice Desk (optional in DigestFacts, explicit here so the baseline
+    // documents the full fact shape the prompt renders).
+    obligationsDueSoon: 0,
+    obligationsOverdue: 0,
     ...overrides,
   };
 }
@@ -178,6 +182,11 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
         pattern: "penalt",
         flags: "i",
         label: "no exposure — do not mention",
+      },
+      {
+        pattern: "authority notice",
+        flags: "i",
+        label: "no open obligations — do not mention",
       },
     ],
   },

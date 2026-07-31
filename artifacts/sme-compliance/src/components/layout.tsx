@@ -16,6 +16,7 @@ import {
   Receipt,
   Repeat,
   Grid2x2,
+  Scale,
   ShieldCheck,
   FileCheck2,
 } from "lucide-react";
@@ -60,6 +61,12 @@ const LINKS: NavLink[] = [
   { href: "/clerk/ask", label: "Ask Clerk", icon: Bot, capability: "clerk.ask" },
   { href: "/reconciliation", label: "Reconciliation", icon: Landmark },
   { href: "/b2c", label: "B2C reports", icon: Store },
+  {
+    href: "/obligations",
+    label: "Obligations",
+    icon: Scale,
+    capability: "obligation.read",
+  },
   { href: "/calendar", label: "Calendar", icon: CalendarIcon },
   { href: "/alerts", label: "Alert settings", icon: Bell },
   { href: "/consent", label: "Consent", icon: ShieldCheck },

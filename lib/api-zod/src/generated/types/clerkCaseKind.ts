@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.56.0
+ * OpenAPI spec version: 0.57.0
  */
 
 export type ClerkCaseKind = typeof ClerkCaseKind[keyof typeof ClerkCaseKind];
@@ -12,4 +12,5 @@ export type ClerkCaseKind = typeof ClerkCaseKind[keyof typeof ClerkCaseKind];
 export const ClerkCaseKind = {
   extraction: 'extraction',
   question: 'question',
+  notice: 'notice',
 } as const;

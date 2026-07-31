@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.56.0
+ * OpenAPI spec version: 0.57.0
  */
 import {
   useMutation,
@@ -118,6 +118,7 @@ import type {
   CreateFirmApiKeyInput,
   CreateFirmWebhookInput,
   CreateInvitationInput,
+  CreateObligationInput,
   CreatePasswordResetInput,
   CreatePaymentIntentInput,
   CreateStatementConnectionInput,
@@ -243,6 +244,7 @@ import type {
   ListLineItemSuggestionsParams,
   ListMissingRecurringBillsParams,
   ListNotificationsParams,
+  ListObligationsParams,
   ListOperatorCasesParams,
   ListPartiesParams,
   ListPaymentBehaviourParams,
@@ -268,7 +270,11 @@ import type {
   MonthEndClose,
   NetCashPosition,
   NotFoundResponse,
+  NoticeDecisionInput,
+  NoticeDecisionResult,
   NotificationFeed,
+  Obligation,
+  ObligationList,
   OffboardClientInput,
   OffboardClientResult,
   OnboardingProspect,
@@ -352,6 +358,7 @@ import type {
   UnmatchedCollections,
   UnmatchedCredits,
   UpdateFirmPoliciesInput,
+  UpdateObligationStatusInput,
   UpdateStaffNotificationPreferencesInput,
   User,
   UserInput,
@@ -16903,6 +16910,77 @@ export const useDecideClerkCase = <TError = ErrorType<BadRequestResponse | NotFo
       return useMutation(getDecideClerkCaseMutationOptions(options));
     }
 
+export const getDecideNoticeCaseUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/cases/${id}/notice-decision`
+}
+
+/**
+ * @summary Operator decision on a notice case — approve creates an open obligation (never an invoice); notices have no fast lane
+ */
+export const decideNoticeCase = async (id: string,
+    noticeDecisionInput: NoticeDecisionInput, options?: RequestInit): Promise<NoticeDecisionResult> => {
+
+  return customFetch<NoticeDecisionResult>(getDecideNoticeCaseUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(noticeDecisionInput)
+  }
+);}
+
+
+
+
+export const getDecideNoticeCaseMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideNoticeCase>>, TError,{id: string;data: BodyType<NoticeDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideNoticeCase>>, TError,{id: string;data: BodyType<NoticeDecisionInput>}, TContext> => {
+
+const mutationKey = ['decideNoticeCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideNoticeCase>>, {id: string;data: BodyType<NoticeDecisionInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  decideNoticeCase(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideNoticeCaseMutationResult = NonNullable<Awaited<ReturnType<typeof decideNoticeCase>>>
+    export type DecideNoticeCaseMutationBody = BodyType<NoticeDecisionInput>
+    export type DecideNoticeCaseMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Operator decision on a notice case — approve creates an open obligation (never an invoice); notices have no fast lane
+ */
+export const useDecideNoticeCase = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideNoticeCase>>, TError,{id: string;data: BodyType<NoticeDecisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideNoticeCase>>,
+        TError,
+        {id: string;data: BodyType<NoticeDecisionInput>},
+        TContext
+      > => {
+      return useMutation(getDecideNoticeCaseMutationOptions(options));
+    }
+
 export const getBulkApproveClerkCasesUrl = () => {
 
 
@@ -21923,4 +22001,300 @@ export function useGetActionEffectiveness<TData = Awaited<ReturnType<typeof getA
 
 
 
+
+export const getListObligationsUrl = (params?: ListObligationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/obligations?${stringifiedParams}` : `/api/obligations`
+}
+
+/**
+ * @summary Tracked authority obligations for the firm, soonest deadline first — a client_user sees only its own party's
+ */
+export const listObligations = async (params?: ListObligationsParams, options?: RequestInit): Promise<ObligationList> => {
+
+  return customFetch<ObligationList>(getListObligationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListObligationsQueryKey = (params?: ListObligationsParams,) => {
+    return [
+    `/api/obligations`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListObligationsQueryOptions = <TData = Awaited<ReturnType<typeof listObligations>>, TError = ErrorType<BadRequestResponse>>(params?: ListObligationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listObligations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListObligationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listObligations>>> = ({ signal }) => listObligations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listObligations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListObligationsQueryResult = NonNullable<Awaited<ReturnType<typeof listObligations>>>
+export type ListObligationsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Tracked authority obligations for the firm, soonest deadline first — a client_user sees only its own party's
+ */
+
+export function useListObligations<TData = Awaited<ReturnType<typeof listObligations>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ListObligationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listObligations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListObligationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateObligationUrl = () => {
+
+
+
+
+  return `/api/obligations`
+}
+
+/**
+ * @summary Record a notice received outside Clerk (paper, walk-in) as a tracked obligation — firm staff only, no model involved
+ */
+export const createObligation = async (createObligationInput: CreateObligationInput, options?: RequestInit): Promise<Obligation> => {
+
+  return customFetch<Obligation>(getCreateObligationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createObligationInput)
+  }
+);}
+
+
+
+
+export const getCreateObligationMutationOptions = <TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createObligation>>, TError,{data: BodyType<CreateObligationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createObligation>>, TError,{data: BodyType<CreateObligationInput>}, TContext> => {
+
+const mutationKey = ['createObligation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createObligation>>, {data: BodyType<CreateObligationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createObligation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateObligationMutationResult = NonNullable<Awaited<ReturnType<typeof createObligation>>>
+    export type CreateObligationMutationBody = BodyType<CreateObligationInput>
+    export type CreateObligationMutationError = ErrorType<BadRequestResponse | ForbiddenResponse>
+
+    /**
+ * @summary Record a notice received outside Clerk (paper, walk-in) as a tracked obligation — firm staff only, no model involved
+ */
+export const useCreateObligation = <TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createObligation>>, TError,{data: BodyType<CreateObligationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createObligation>>,
+        TError,
+        {data: BodyType<CreateObligationInput>},
+        TContext
+      > => {
+      return useMutation(getCreateObligationMutationOptions(options));
+    }
+
+export const getGetObligationUrl = (id: string,) => {
+
+
+
+
+  return `/api/obligations/${id}`
+}
+
+export const getObligation = async (id: string, options?: RequestInit): Promise<Obligation> => {
+
+  return customFetch<Obligation>(getGetObligationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetObligationQueryKey = (id: string,) => {
+    return [
+    `/api/obligations/${id}`
+    ] as const;
+    }
+
+
+export const getGetObligationQueryOptions = <TData = Awaited<ReturnType<typeof getObligation>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getObligation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetObligationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getObligation>>> = ({ signal }) => getObligation(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getObligation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetObligationQueryResult = NonNullable<Awaited<ReturnType<typeof getObligation>>>
+export type GetObligationQueryError = ErrorType<NotFoundResponse>
+
+
+
+export function useGetObligation<TData = Awaited<ReturnType<typeof getObligation>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getObligation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetObligationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateObligationStatusUrl = (id: string,) => {
+
+
+
+
+  return `/api/obligations/${id}/status`
+}
+
+/**
+ * @summary Move an obligation through its response lifecycle (open → responded → closed) — compare-and-set, firm staff only
+ */
+export const updateObligationStatus = async (id: string,
+    updateObligationStatusInput: UpdateObligationStatusInput, options?: RequestInit): Promise<Obligation> => {
+
+  return customFetch<Obligation>(getUpdateObligationStatusUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateObligationStatusInput)
+  }
+);}
+
+
+
+
+export const getUpdateObligationStatusMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateObligationStatus>>, TError,{id: string;data: BodyType<UpdateObligationStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateObligationStatus>>, TError,{id: string;data: BodyType<UpdateObligationStatusInput>}, TContext> => {
+
+const mutationKey = ['updateObligationStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateObligationStatus>>, {id: string;data: BodyType<UpdateObligationStatusInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateObligationStatus(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateObligationStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateObligationStatus>>>
+    export type UpdateObligationStatusMutationBody = BodyType<UpdateObligationStatusInput>
+    export type UpdateObligationStatusMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Move an obligation through its response lifecycle (open → responded → closed) — compare-and-set, firm staff only
+ */
+export const useUpdateObligationStatus = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateObligationStatus>>, TError,{id: string;data: BodyType<UpdateObligationStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateObligationStatus>>,
+        TError,
+        {id: string;data: BodyType<UpdateObligationStatusInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateObligationStatusMutationOptions(options));
+    }
 

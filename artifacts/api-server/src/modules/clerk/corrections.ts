@@ -1,6 +1,7 @@
 import type {
   ClerkCorrection,
   ClerkExtraction,
+  ClerkNoticeExtraction,
   ExtractionLine,
 } from "@workspace/db";
 
@@ -131,4 +132,64 @@ export function computeCorrections(
     const raw = extracted.get(field) ?? null;
     return { field, extracted: raw, final, changed: !eq(raw, final) };
   });
+}
+
+// Notice Desk: the corrections diff for a notice approval — the model's
+// proposed reading versus the operator-confirmed obligation values. Field
+// names use the EXTRACTION vocabulary (NOTICE_FIELDS in notice-prompts.ts)
+// so the console anchors each row to the proposal it already renders; the
+// approved side maps amountDemanded↔amount and referenceNumber↔reference.
+// The extra "noticeType" row compares the model's closed-catalogue
+// classification against the approved type. Note the honest asymmetry on
+// authority/taxType: the extraction holds verbatim document text ("Federal
+// Inland Revenue Service") while the approval holds a catalogue key
+// ("firs"), so those rows often read changed — that IS the operator's
+// mapping work, and hiding it would under-report review effort.
+export function computeNoticeCorrections(
+  extraction: ClerkNoticeExtraction | null,
+  approved: {
+    noticeType: string;
+    authority: string;
+    reference?: string | null;
+    taxType?: string | null;
+    period?: string | null;
+    amount?: string | null;
+    currency?: string | null;
+    issueDate?: string | null;
+    responseDueDate?: string | null;
+  },
+): ClerkCorrection[] {
+  const extracted = new Map(
+    (extraction?.fields ?? []).map((f) => [f.field, f.value]),
+  );
+  const compare: {
+    field: string;
+    final: string | null;
+    eq: (a: string | null, b: string | null) => boolean;
+  }[] = [
+    { field: "referenceNumber", final: approved.reference ?? null, eq: textEq },
+    { field: "authority", final: approved.authority, eq: textEq },
+    { field: "taxType", final: approved.taxType ?? null, eq: textEq },
+    { field: "period", final: approved.period ?? null, eq: textEq },
+    { field: "amountDemanded", final: approved.amount ?? null, eq: numericEq },
+    { field: "currency", final: approved.currency ?? null, eq: textEq },
+    { field: "issueDate", final: approved.issueDate ?? null, eq: textEq },
+    {
+      field: "responseDueDate",
+      final: approved.responseDueDate ?? null,
+      eq: textEq,
+    },
+  ];
+  const rows: ClerkCorrection[] = compare.map(({ field, final, eq }) => {
+    const raw = extracted.get(field) ?? null;
+    return { field, extracted: raw, final, changed: !eq(raw, final) };
+  });
+  const proposedType = extraction?.noticeType ?? null;
+  rows.push({
+    field: "noticeType",
+    extracted: proposedType,
+    final: approved.noticeType,
+    changed: !textEq(proposedType, approved.noticeType),
+  });
+  return rows;
 }
