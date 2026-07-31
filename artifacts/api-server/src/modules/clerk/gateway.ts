@@ -110,6 +110,7 @@ export type ClerkPurpose =
   | "eval_phrasing_vat_note"
   | "eval_phrasing_reply"
   | "eval_phrasing_explain"
+  | "eval_phrasing_response"
   // Scanned-bundle segmentation (batch-async): one vision call proposing
   // page ranges; the app validates coverage before anything else runs.
   | "segment_scan"
@@ -159,7 +160,11 @@ export type ClerkPurpose =
   | "draft_chaser"
   // Compliance-pack cover note (pack-note.ts): phrases the deterministic
   // monthly client pack's computed facts; template fallback, nothing stored.
-  | "draft_pack_note";
+  | "draft_pack_note"
+  // Response Desk: draft the body of a reply to a tax-authority notice from
+  // the obligation's own facts and the period figures — template fallback,
+  // grounded, the partner owns and edits the letter; never sent or filed.
+  | "draft_response_letter";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;

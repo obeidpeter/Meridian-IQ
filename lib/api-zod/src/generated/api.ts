@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.58.0
+ * OpenAPI spec version: 0.59.0
  */
 import * as zod from 'zod';
 
@@ -6917,12 +6917,12 @@ export const runPhrasingEvalBodyCandidateSystemMax = 20000;
 
 export const RunPhrasingEvalBody = zod.object({
   "candidateSystem": zod.string().max(runPhrasingEvalBodyCandidateSystemMax).optional(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']).optional()
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']).optional()
 })
 
 export const RunPhrasingEvalResponse = zod.object({
   "canary": zod.object({
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
   "incumbent": zod.object({
   "fixtureCount": zod.number(),
   "correctCount": zod.number(),
@@ -6931,7 +6931,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -6951,7 +6951,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -6974,7 +6974,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -7003,7 +7003,7 @@ export const ListPhrasingEvalRunsResponseItem = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -8678,6 +8678,43 @@ export const GetObligationResponse = zod.object({
   "createdBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Deterministic response bundle PDF for one obligation — cover sheet keyed to the authority's reference plus the period's compliance figures and document register; firm work product, zero model calls
+ */
+export const getObligationResponsePackQueryMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const GetObligationResponsePackQueryParams = zod.object({
+  "obligationId": zod.coerce.string().uuid(),
+  "month": zod.coerce.string().regex(getObligationResponsePackQueryMonthRegExp).optional().describe('Period the figures cover (defaults to the notice\'s issue month when on the live 12-month list, else the current Lagos month).')
+})
+
+export const GetObligationResponsePackResponse = zod.unknown()
+
+
+/**
+ * @summary Draft the body of a reply to the authority — facts computed in SQL, Clerk only phrases, a deterministic template always answers, and the partner owns and edits the letter (never sent or filed by the platform)
+ */
+export const DraftObligationResponseParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const draftObligationResponseBodyMonthRegExp = new RegExp('^\\d{4}-\\d{2}-01$');
+
+
+export const DraftObligationResponseBody = zod.object({
+  "month": zod.string().regex(draftObligationResponseBodyMonthRegExp).optional()
+})
+
+export const DraftObligationResponseResponse = zod.object({
+  "obligationId": zod.string(),
+  "letter": zod.string(),
+  "source": zod.enum(['clerk', 'template']),
+  "monthStart": zod.string(),
+  "monthLabel": zod.string()
 })
 
 

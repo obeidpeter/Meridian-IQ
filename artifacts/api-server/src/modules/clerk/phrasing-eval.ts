@@ -18,6 +18,7 @@ import {
 import { VAT_NOTE_PHRASING } from "./vat-note";
 import type { VatPack } from "./vat-pack";
 import { EXPLAIN_PHRASING, type ExplainPhrasingInput } from "./explain";
+import { RESPONSE_PHRASING, type ResponseLetterFacts } from "./response-letter";
 import {
   REPLY_PHRASING,
   type ReplyPhrasingInput,
@@ -50,7 +51,8 @@ export type PhrasingSurface =
   | "statement"
   | "vat_note"
   | "escalation_reply"
-  | "failure_explanation";
+  | "failure_explanation"
+  | "obligation_response";
 
 export interface PhrasingFixture {
   key: string;
@@ -63,7 +65,8 @@ export interface PhrasingFixture {
     | StatementPhrasingInput
     | VatPack
     | ReplyPhrasingInput
-    | ExplainPhrasingInput;
+    | ExplainPhrasingInput
+    | ResponseLetterFacts;
   // Canonical numeral values that must appear in the output.
   mustMentionNumerals?: string[];
   // At least ONE of these canonical numerals must appear — for surfaces
@@ -681,6 +684,8 @@ function phrasingFor(surface: PhrasingSurface) {
       return REPLY_PHRASING;
     case "failure_explanation":
       return EXPLAIN_PHRASING;
+    case "obligation_response":
+      return RESPONSE_PHRASING;
   }
 }
 
@@ -693,6 +698,7 @@ const SURFACE_PURPOSE = {
   vat_note: "eval_phrasing_vat_note",
   escalation_reply: "eval_phrasing_reply",
   failure_explanation: "eval_phrasing_explain",
+  obligation_response: "eval_phrasing_response",
 } as const;
 
 // Deterministic scoring, exported for tests. `failures` names every rule the
@@ -834,6 +840,7 @@ export async function runPhrasingEval(
         vat_note: VAT_NOTE_PHRASING.promptVersion,
         escalation_reply: REPLY_PHRASING.promptVersion,
         failure_explanation: EXPLAIN_PHRASING.promptVersion,
+        obligation_response: RESPONSE_PHRASING.promptVersion,
       },
       fixtureCount: report.fixtureCount,
       correctCount: report.correctCount,

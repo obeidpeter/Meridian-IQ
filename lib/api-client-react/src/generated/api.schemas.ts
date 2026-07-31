@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.58.0
+ * OpenAPI spec version: 0.59.0
  */
 export interface HealthStatus {
   status: string;
@@ -3852,6 +3852,27 @@ export interface CreateObligationInput {
   notes?: string;
 }
 
+export interface DraftObligationResponseInput {
+  /** @pattern ^\d{4}-\d{2}-01$ */
+  month?: string;
+}
+
+export type ObligationResponseDraftSource = typeof ObligationResponseDraftSource[keyof typeof ObligationResponseDraftSource];
+
+
+export const ObligationResponseDraftSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface ObligationResponseDraft {
+  obligationId: string;
+  letter: string;
+  source: ObligationResponseDraftSource;
+  monthStart: string;
+  monthLabel: string;
+}
+
 export type UpdateObligationStatusInputStatus = typeof UpdateObligationStatusInputStatus[keyof typeof UpdateObligationStatusInputStatus];
 
 
@@ -4714,6 +4735,7 @@ export const PhrasingEvalFixtureResultSurface = {
   vat_note: 'vat_note',
   escalation_reply: 'escalation_reply',
   failure_explanation: 'failure_explanation',
+  obligation_response: 'obligation_response',
 } as const;
 
 export type PhrasingEvalFixtureResultRiskLabel = typeof PhrasingEvalFixtureResultRiskLabel[keyof typeof PhrasingEvalFixtureResultRiskLabel];
@@ -4782,6 +4804,7 @@ export const RunPhrasingEvalInputSurface = {
   vat_note: 'vat_note',
   escalation_reply: 'escalation_reply',
   failure_explanation: 'failure_explanation',
+  obligation_response: 'obligation_response',
 } as const;
 
 export interface RunPhrasingEvalInput {
@@ -4800,6 +4823,7 @@ export const PhrasingEvalOutcomeCanarySurface = {
   vat_note: 'vat_note',
   escalation_reply: 'escalation_reply',
   failure_explanation: 'failure_explanation',
+  obligation_response: 'obligation_response',
 } as const;
 
 export type PhrasingEvalOutcomeCanaryIncumbent = PhrasingEvalReport & {
@@ -6394,4 +6418,13 @@ export const ListObligationsStatus = {
   responded: 'responded',
   closed: 'closed',
 } as const;
+
+export type GetObligationResponsePackParams = {
+obligationId: string;
+/**
+ * Period the figures cover (defaults to the notice's issue month when on the live 12-month list, else the current Lagos month).
+ * @pattern ^\d{4}-\d{2}-01$
+ */
+month?: string;
+};
 

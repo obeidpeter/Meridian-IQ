@@ -13,6 +13,7 @@ import { CHASER_PHRASING } from "./draft-chaser.ts";
 import { STATEMENT_PHRASING } from "./client-statement.ts";
 import { VAT_NOTE_PHRASING } from "./vat-note.ts";
 import { EXPLAIN_PHRASING } from "./explain.ts";
+import { RESPONSE_PHRASING } from "./response-letter.ts";
 import { REPLY_PHRASING } from "../desk/draft-reply.ts";
 import { DomainError } from "../errors.ts";
 import {
@@ -270,6 +271,7 @@ test("a clean run scores full marks and stores the run", async () => {
     vat_note: VAT_NOTE_PHRASING.promptVersion,
     escalation_reply: REPLY_PHRASING.promptVersion,
     failure_explanation: EXPLAIN_PHRASING.promptVersion,
+    obligation_response: RESPONSE_PHRASING.promptVersion,
   });
 
   // Every prompt is the production assembly for its surface.

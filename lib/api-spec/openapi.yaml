@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.58.0
+  version: 0.59.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5595,6 +5595,63 @@ paths:
                 $ref: "#/components/schemas/Obligation"
         "404":
           $ref: "#/components/responses/NotFound"
+  # Query-params-only (house style: a path id plus query params collides in
+  # the generated client names — the compliance-pack precedent).
+  /obligation-response-pack:
+    get:
+      operationId: getObligationResponsePack
+      tags: [obligations]
+      summary: Deterministic response bundle PDF for one obligation — cover sheet keyed to the authority's reference plus the period's compliance figures and document register; firm work product, zero model calls
+      parameters:
+        - name: obligationId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: month
+          in: query
+          required: false
+          description: Period the figures cover (defaults to the notice's issue month when on the live 12-month list, else the current Lagos month).
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-01$'
+      responses:
+        "200":
+          description: PDF document (Content-Disposition attachment)
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /obligations/{id}/response-draft:
+    post:
+      operationId: draftObligationResponse
+      tags: [obligations]
+      summary: Draft the body of a reply to the authority — facts computed in SQL, Clerk only phrases, a deterministic template always answers, and the partner owns and edits the letter (never sent or filed by the platform)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftObligationResponseInput"
+      responses:
+        "200":
+          description: The letter body draft with its provenance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObligationResponseDraft"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /obligations/{id}/status:
     post:
       operationId: updateObligationStatus
@@ -11049,6 +11106,30 @@ components:
           type: string
         notes:
           type: string
+    DraftObligationResponseInput:
+      type: object
+      properties:
+        # Period the letter's figures cover; same default as the response pack.
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}-01$'
+    ObligationResponseDraft:
+      type: object
+      required: [obligationId, letter, source, monthStart, monthLabel]
+      properties:
+        obligationId:
+          type: string
+        # Body text only — no letterhead, greeting or sign-off; the firm adds
+        # those. "template" = the deterministic fallback answered.
+        letter:
+          type: string
+        source:
+          type: string
+          enum: [clerk, template]
+        monthStart:
+          type: string
+        monthLabel:
+          type: string
     UpdateObligationStatusInput:
       type: object
       required: [status]
@@ -12399,7 +12480,7 @@ components:
           type: string
         surface:
           type: string
-          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation]
+          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response]
         label:
           type: string
         riskLabel:
@@ -12501,7 +12582,7 @@ components:
           maxLength: 20000
         surface:
           type: string
-          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation]
+          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response]
     PhrasingEvalOutcome:
       type: object
       required: [canary, run]
@@ -12513,7 +12594,7 @@ components:
           properties:
             surface:
               type: string
-              enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation]
+              enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response]
             incumbent:
               allOf:
                 - $ref: "#/components/schemas/PhrasingEvalReport"

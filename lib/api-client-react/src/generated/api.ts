@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.58.0
+ * OpenAPI spec version: 0.59.0
  */
 import {
   useMutation,
@@ -133,6 +133,7 @@ import type {
   DraftClaimWithClerkInput,
   DraftClientImportInput,
   DraftInvoiceWithClerkInput,
+  DraftObligationResponseInput,
   DraftPaymentChaserInput,
   DraftQuarterlyNoteInput,
   DraftStatementFormatInput,
@@ -202,6 +203,7 @@ import type {
   GetMergeImpactParams,
   GetMonthEndCloseParams,
   GetNetCashPositionParams,
+  GetObligationResponsePackParams,
   GetPayablesSummaryParams,
   GetPenaltyExposureParams,
   GetProjectionAccuracyParams,
@@ -277,6 +279,7 @@ import type {
   NotificationFeed,
   Obligation,
   ObligationList,
+  ObligationResponseDraft,
   OffboardClientInput,
   OffboardClientResult,
   OnboardingProspect,
@@ -22298,6 +22301,161 @@ export function useGetObligation<TData = Awaited<ReturnType<typeof getObligation
 
 
 
+
+export const getGetObligationResponsePackUrl = (params: GetObligationResponsePackParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/obligation-response-pack?${stringifiedParams}` : `/api/obligation-response-pack`
+}
+
+/**
+ * @summary Deterministic response bundle PDF for one obligation — cover sheet keyed to the authority's reference plus the period's compliance figures and document register; firm work product, zero model calls
+ */
+export const getObligationResponsePack = async (params: GetObligationResponsePackParams, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetObligationResponsePackUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetObligationResponsePackQueryKey = (params?: GetObligationResponsePackParams,) => {
+    return [
+    `/api/obligation-response-pack`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetObligationResponsePackQueryOptions = <TData = Awaited<ReturnType<typeof getObligationResponsePack>>, TError = ErrorType<BadRequestResponse | NotFoundResponse>>(params: GetObligationResponsePackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getObligationResponsePack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetObligationResponsePackQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getObligationResponsePack>>> = ({ signal }) => getObligationResponsePack(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getObligationResponsePack>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetObligationResponsePackQueryResult = NonNullable<Awaited<ReturnType<typeof getObligationResponsePack>>>
+export type GetObligationResponsePackQueryError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+
+/**
+ * @summary Deterministic response bundle PDF for one obligation — cover sheet keyed to the authority's reference plus the period's compliance figures and document register; firm work product, zero model calls
+ */
+
+export function useGetObligationResponsePack<TData = Awaited<ReturnType<typeof getObligationResponsePack>>, TError = ErrorType<BadRequestResponse | NotFoundResponse>>(
+ params: GetObligationResponsePackParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getObligationResponsePack>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetObligationResponsePackQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDraftObligationResponseUrl = (id: string,) => {
+
+
+
+
+  return `/api/obligations/${id}/response-draft`
+}
+
+/**
+ * @summary Draft the body of a reply to the authority — facts computed in SQL, Clerk only phrases, a deterministic template always answers, and the partner owns and edits the letter (never sent or filed by the platform)
+ */
+export const draftObligationResponse = async (id: string,
+    draftObligationResponseInput: DraftObligationResponseInput, options?: RequestInit): Promise<ObligationResponseDraft> => {
+
+  return customFetch<ObligationResponseDraft>(getDraftObligationResponseUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(draftObligationResponseInput)
+  }
+);}
+
+
+
+
+export const getDraftObligationResponseMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftObligationResponse>>, TError,{id: string;data: BodyType<DraftObligationResponseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof draftObligationResponse>>, TError,{id: string;data: BodyType<DraftObligationResponseInput>}, TContext> => {
+
+const mutationKey = ['draftObligationResponse'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof draftObligationResponse>>, {id: string;data: BodyType<DraftObligationResponseInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  draftObligationResponse(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DraftObligationResponseMutationResult = NonNullable<Awaited<ReturnType<typeof draftObligationResponse>>>
+    export type DraftObligationResponseMutationBody = BodyType<DraftObligationResponseInput>
+    export type DraftObligationResponseMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Draft the body of a reply to the authority — facts computed in SQL, Clerk only phrases, a deterministic template always answers, and the partner owns and edits the letter (never sent or filed by the platform)
+ */
+export const useDraftObligationResponse = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof draftObligationResponse>>, TError,{id: string;data: BodyType<DraftObligationResponseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof draftObligationResponse>>,
+        TError,
+        {id: string;data: BodyType<DraftObligationResponseInput>},
+        TContext
+      > => {
+      return useMutation(getDraftObligationResponseMutationOptions(options));
+    }
 
 export const getUpdateObligationStatusUrl = (id: string,) => {
 
