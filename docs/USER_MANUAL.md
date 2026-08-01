@@ -43,7 +43,8 @@ MeridianIQ makes that painless, and then makes it worth more:
 - **For SMEs** — guided invoicing that catches errors *before* submission,
   automatic transmission with retries, a permanent vault of stamped invoices,
   deadline alerts, receivables tracking, and an AI assistant ("Clerk") that
-  reads supplier documents and answers questions from your own records.
+  reads supplier documents and tax-authority notices and answers questions
+  from your own records.
 - **For accounting firms** — one screen showing penalty risk across the whole
   client book, plus onboarding, billing, advisory tools, VAT filing packs,
   white-label branding, and an API for connecting the firm's own software.
@@ -185,6 +186,13 @@ you can open, and the data the server will return.
 | **Buyer user** | A finance person at a large buyer. Sees only invoices addressed to their own organisation. |
 | **Auditor** | Read-only everything. Can view every screen the numbers live on, and can verify/export the audit log — but every button that would change something is absent or refused. |
 
+A worked example of the split: **authority obligations** (tracked
+tax-authority notices — see [section 4](#4-the-compliance-app--for-smes) and
+[section 6](#6-the-accountant-console--for-firms)). Firm admins and firm
+staff record them, prepare responses and close them; a client account sees
+its own business's notices, read-only; operators can see the obligations
+their notice-review approvals create but never record or update them.
+
 If you open a page your account can't use, you get a clear card explaining
 which permission it needs — never a broken screen.
 
@@ -198,8 +206,8 @@ the firm connects. It carries only the capabilities the firm admin granted it
 
 Sign in as the SME owner or firm staff and you land at `/app/`. The sidebar:
 **Dashboard, Invoices, Bills, VAT, Recurring, Import, Send to Clerk, Ask
-Clerk, Reconciliation, B2C reports, Calendar, Alert settings, Consent** (the
-two Clerk entries appear only for accounts with Clerk access). A **notification
+Clerk, Reconciliation, B2C reports, Obligations, Calendar, Alert settings,
+Consent** (the two Clerk entries appear only for accounts with Clerk access). A **notification
 bell** in the header collects every alert the platform has sent you — see
 "Notifications" below.
 
@@ -239,8 +247,9 @@ set of cards that appear as their data becomes relevant:
   into one place when you're closing a month: overdue submissions (with the
   penalty floor), months you usually bill but haven't, money in with no
   invoice, expected supplier bills not yet captured, possible double
-  payments, unmatched collection-account payments, and (only when your firm
-  uses the approval policy) drafts waiting on a colleague. Each line is
+  payments, unmatched collection-account payments, authority notices still
+  awaiting a response (see "Your obligations" below), and (only when your
+  firm uses the approval policy) drafts waiting on a colleague. Each line is
   *clear* or *needs attention*, and each is exactly the number its own card
   shows — the checklist recomputes nothing, so it can never disagree with
   the cards it summarizes. All clear? It says so.
@@ -491,7 +500,22 @@ silently.
    per statement line in one action (click twice — it asks you to confirm).
    For a low-confidence match, **Why this match?** has Clerk explain the
    candidate comparison — accepting stays your decision.
-4. **Debits match bills** — money going *out* is proposed against your
+4. **Ask Clerk to read the narrations** — for the uncertain middle: proposals
+   below the 85% band that the bulk button covers. The button appears (to
+   accounts that can accept matches — client accounts see matches read-only,
+   so they don't get it) whenever such proposals have a bank narration to
+   read. Clerk reads each line's narration against *that line's own*
+   candidates and, where the words genuinely point at one, a violet **"Clerk
+   suggests"** chip appears on that proposal with the cue it saw (e.g. *name
+   match*, *exact reference*, *part-payment hint*); where they don't, Clerk
+   abstains and the line shows nothing. A summary line reports the run
+   ("Clerk read N lines — S suggestions, A abstentions"). Purely advisory:
+   the chip never pre-selects anything — **Accept** and **Reject** stay your
+   buttons. If Clerk is switched off or your firm's monthly allowance is used
+   up, the page says so plainly and matching stays manual; and re-running
+   never re-spends on lines Clerk has already read (abstentions included) —
+   only lines that failed are retried.
+5. **Debits match bills** — money going *out* is proposed against your
    unpaid **supplier bills** (matched by supplier name). Accepting records
    payment evidence on the bill, so its payment status reads **Paid** —
    nothing else about the bill changes. Credit lines (money coming in) still
@@ -508,6 +532,30 @@ penalty for lateness. The **B2C Reports** page shows each day's batch with a
 live countdown clock (`Xh Ym left to report`), the items inside it, and its
 report status. Batches at risk of breaching alert you before the deadline,
 not after.
+
+### Your obligations (authority notices)
+
+**Obligations** lists the tax-authority notices your firm has recorded for
+your business — assessments, demand notices, information requests, audit
+letters, penalty notices, reminders — each with the authority (FIRS, a State
+IRS, Customs), its reference, the amount where the notice states one, and a
+**"Respond by"** date. Filter pills show **Open** (the default), **Responded**,
+**Closed**, or **All**; open notices whose response date has passed are
+flagged **Overdue**, and ones due within the next 7 days **Due soon**. The
+list is ordered soonest deadline first.
+
+The page is deliberately **read-only**: an obligation appears when your
+accountant approves a captured notice (or records a paper one), and marking
+it responded or closed is your firm's work — you watch the record and the
+clock. Response deadlines also feed your deadline reminders: the same alert
+channels, the same *deadline reminders* switch in **Alert settings**, and the
+same privacy rule — the message says a notice needs a response, never what it
+says or how much it demands.
+
+How a notice gets here: send it through **Send to Clerk** in **Tax notice**
+mode (see [section 5](#5-clerk--the-ai-assistant)), forward it by email or
+WhatsApp where those rails are on, or hand the paper to your firm to record
+directly.
 
 ### Calendar and alerts
 
@@ -556,7 +604,8 @@ shortened, and the download itself is recorded on the audit trail.
 
 Clerk is MeridianIQ's built-in assistant. One principle governs everything it
 does: **Clerk never files anything.** It reads documents and proposes; a
-human reviews and decides; approval creates a *draft* invoice only. Numbers
+human reviews and decides; approval creates a *draft* invoice — or, for a
+tax-authority notice, a tracked *obligation* — and nothing more. Numbers
 in its answers are computed from your own records by the platform — the AI
 only classifies and phrases. Every Clerk surface sits behind a platform-wide
 kill switch the operator can flip, and every call it makes is metered against
@@ -565,7 +614,9 @@ your firm's monthly allowance.
 ### Sending documents to Clerk
 
 **Send to Clerk** (in the SME app, the mobile app, and the operator console)
-accepts a supplier invoice as:
+now takes two kinds of document — the form opens with an
+**Invoice / Tax notice** choice (Invoice is the default). An invoice can
+arrive as:
 
 - a **PDF or photo** (PNG/JPEG/WebP, up to 5 MB) — including **scanned**
   PDFs with no text layer;
@@ -577,9 +628,22 @@ accepts a supplier invoice as:
   to 24 pages) split into individual invoices and queued, up to 50 at a
   time, with a live progress card.
 
+Pick **Tax notice** for a letter from FIRS, a State IRS or Customs — an
+assessment, demand note, information request, audit letter, penalty letter
+or reminder. Notice mode takes a PDF, a photo, or pasted text; voice notes
+aren't accepted for notices (the page says to photograph or upload the
+notice instead), and the multi-invoice bundle option disappears — a notice
+is captured one at a time. Clerk reads out the notice type, authority,
+reference, dates and amount, and your accountant confirms everything —
+including the response deadline — before an **obligation** is recorded
+([section 4](#4-the-compliance-app--for-smes) → Your obligations). A notice
+never becomes an invoice. One honesty note: the submissions list below the
+form tracks invoice submissions; a sent notice shows its outcome on the
+**Obligations** page once your firm has reviewed and approved it.
+
 A duplicate guard recognises documents Clerk has already seen ("Already sent
 this one?") so a re-forwarded email never creates two cases. Your
-**submissions list** shows each item's status — *Clerk is reading… →
+**submissions list** shows each *invoice* item's status — *Clerk is reading… →
 extracted (your accountant reviews everything before anything is created) →
 approved ("Draft invoice created") or failed (with the reason)* — including
 a "What Clerk read" table of every extracted field.
@@ -589,7 +653,7 @@ a "What Clerk read" table of every extracted field.
 Deployments can switch on two hands-free intake rails (each is dark until
 its administrator configures it — [section 14](#14-for-administrators)):
 
-- **Email** — forward a supplier invoice (PDF/image attachments) from the
+- **Email** — forward a supplier document (PDF/image attachments) from the
   email address you sign in with; each attachment walks the ordinary capture
   path above.
 - **WhatsApp** — send the document (or a text message of the invoice) from
@@ -598,13 +662,25 @@ its administrator configures it — [section 14](#14-for-administrators)):
   by firm staff is never used as an identity. If a number matches more than
   one business, the message is refused rather than guessed.
 
+Forwarded attachments are no longer assumed to be invoices. Clerk glances at
+the cheap signals — the filename, the email subject or WhatsApp caption, and
+the start of a PDF's own text — and routes a tax-authority letter down the
+notice lane instead. Anything it isn't sure about goes down the invoice lane
+exactly as before, and nothing is ever dropped by this routing: a misfiled
+notice still lands in the review queue where a human sorts it out. A
+practical tip: a clear subject or caption ("FIRS assessment notice") helps
+the routing land right first time.
+
 Both rails have per-firm daily caps, and everything they ingest still waits
 for human review — nothing files itself.
 
 ### Review and approval (accountants & operators)
 
 Captured documents queue for human review (in the console's **Clerk → Intake
-queue**). The review pane shows the **captured document itself** — the photo
+queue**). The queue has two tabs — **Invoices** and **Notices** — one for
+each kind of document Clerk reads; notice cases wear a violet **Notice**
+marker in the list so a statutory letter never blends into the invoice
+queue. The review pane shows the **captured document itself** — the photo
 or the scanned pages Clerk read — beside what was extracted, so approving is
 always a comparison against the source. On older cases whose content the
 retention window has already cleared, the pane says **"cleared by
@@ -616,13 +692,26 @@ tends to get wrong for you, a **pre-flight** check (duplicate invoice
 numbers, VAT-rate deviations, suspicious dates or amounts against that
 supplier's own history), and party suggestions from the register (a
 "Remembered" chip means the match comes from a previously confirmed
-pairing). Approval **always creates a draft invoice** — submission to the
-rails stays a separate human action.
+pairing). Approving an invoice case **always creates a draft invoice** —
+submission to the rails stays a separate human action.
+
+A **notice case** reads differently. The pane leads with a violet **"Tax
+authority notice"** card naming what Clerk thinks the letter is, then the
+proposed reading — notice type, authority, reference, dates and amount, each
+with its confidence — and its own decision form. Clerk's reading only
+prefills a choice when it lands exactly on a catalogued option; anything
+fuzzy is left blank for the reviewer to pick deliberately. **Approve —
+record obligation** is held until the reviewer has confirmed the client, the
+notice type, the authority and the response deadline, and approval creates
+an **obligation** — never an invoice. **Reject** and **Escalate** are the
+alternatives, each with an optional reason kept with the decision.
 
 Cases that pass pre-flight cleanly with high confidence form the **fast
 lane**: *Approve fast lane (N)* approves them in bulk — the server
 re-verifies every case before touching it, and anything not genuinely
-fast-lane is skipped with its reason.
+fast-lane is skipped with its reason. The fast lane is for invoice cases
+only: a notice records a statutory response deadline, so it never qualifies
+for fast-lane or bulk approval — every notice gets its own pair of eyes.
 
 ### Ask Clerk
 
@@ -636,7 +725,9 @@ rather than improvising:
   it). The answer names the claim and version it came from.
 - **Your own numbers** — "What's overdue?", "What did we submit this
   month?", "Who owes us?", "What's expected this week?", "Who's worth
-  chasing?", "What bills are due?", "How much do we owe?", "How does this
+  chasing?", "What bills are due?", "How much do we owe?", "Which notices
+  still await a response?" (open authority obligations — the counts and the
+  nearest response deadline), "How does this
   month compare to last month?" The platform runs
   a fixed query over your own records and Clerk
   phrases the result; the source line says exactly what was computed and for
@@ -785,7 +876,8 @@ but you shouldn't have to open it to learn your autopilot stopped.
   worth chasing (including invoices already chased twice), unbilled
   habits, expected supplier bills not yet captured, unmatched bank
   credits, supplier bills due or overdue this week, unmatched
-  collection-account payments, drafts waiting on a colleague's approval
+  collection-account payments, authority-notice responses due soon or
+  overdue, drafts waiting on a colleague's approval
   (only when the firm uses the policy — "0 waiting" and "no policy" never
   read the same), and a VAT-return countdown once the monthly deadline is
   within a week. Every fact is computed from your records; Clerk only
@@ -799,7 +891,9 @@ but you shouldn't have to open it to learn your autopilot stopped.
 - **Drafting helpers** throughout the product follow the same pattern —
   facts computed by the platform, Clerk phrases, you own the text, a plain
   template answers even when Clerk is off: the payment-reminder draft, the
-  failure explainer, advisory client letters, VAT-pack and quarterly cover
+  failure explainer, advisory client letters, notice response letters
+  ([section 6](#6-the-accountant-console--for-firms) → Authority notices),
+  VAT-pack and quarterly cover
   notes, error-catalogue entries, custom statement-format mappings,
   client-import column mappings, and the Desk's escalation replies.
 
@@ -881,10 +975,45 @@ invoice list — a partner can reach any failing invoice in three clicks.
   the trailing 90 days (first/last seen included). Amounts were
   deliberately never recorded — reconcile the details against your payment
   provider's own statement. The weekly digest carries the same count.
+- **Authority notices** — the client drill-down's Notice Desk: every
+  tax-authority notice recorded for this client that still needs work, one
+  row per obligation, soonest response deadline first, with overdue rows
+  flagged in red. Rows arrive two ways — approving a notice case in the
+  Clerk intake queue ([section 5](#5-clerk--the-ai-assistant)), or the
+  card's own **Record notice** form for a paper notice that never went
+  through Clerk (notice type, authority, response deadline; reference, tax
+  type, amount and issue date optional — no AI involved). Each open row has
+  **Mark responded**; every row has **Close**; closed notices drop off the
+  card (it is a worklist, not an archive — the history stays on the record,
+  and the client's own Obligations page can still filter to closed).
+
+  Each **open** row also has **Prepare response**, which opens the response
+  panel:
+
+  - **Download response bundle (PDF)** — the paper a firm encloses with its
+    reply: a cover sheet keyed to the authority's own reference, then that
+    period's compliance figures — the document register, receivables,
+    payables and VAT position — drawn by the exact same engine as the
+    monthly compliance pack, so the bundle and the pack can never disagree
+    about a month. No AI is involved anywhere in this document.
+  - **Draft response letter** — the reply's *body text*, drafted by Clerk
+    from the period's records; when Clerk is off or the allowance is spent,
+    a complete letter is assembled from a plain template instead. The panel
+    always says which happened — *"Drafted by Clerk from the period's
+    records…"* or *"Assembled from the period's records (Clerk
+    unavailable)…"* — and either way you review and edit before sending.
+    **Copy letter** puts it on your clipboard.
+
+  The panel's standing caption is the point: the platform never sends or
+  files the response — the letter is a draft for the firm to own, and
+  submitting it to the authority is the firm's own act.
 - **Monthly compliance pack** — also on the drill-down: pick a month and
   **download the pack (PDF)** — a branded, client-ready summary of that
   client's month: a cover note, the document register, receivables,
-  payables, the VAT position and the next deadlines, all computed from the
+  payables, the VAT position, an **Open obligations** section (authority
+  notices still awaiting a response — as of the day you download, whichever
+  month the pack describes: a live deadline belongs in every pack until it
+  is answered) and the next deadlines, all computed from the
   same numbers the dashboards show. **Notify client** offers the client a
   "your pack is ready" alert over their chosen channels — sent only with
   the client's consent, and the message itself carries no numbers (it's a
@@ -1323,8 +1452,8 @@ Settings** — plus screens reached from Home:
   receivables aging as the web dashboard, a **bills tile** (what you owe,
   opening the bills screen), next deadline, recent activity,
   and quick actions (create/browse invoices, reconcile, estimator,
-  month-end close, Automation, and — when your account has them — Send to
-  Clerk, Ask Clerk, Digests & statements). While any standing automation is
+  month-end close, Automation, Obligations, and — when your account has
+  them — Send to Clerk, Ask Clerk, Digests & statements). While any standing automation is
   paused, Home shows an amber **"Automation is paused"** banner pointing at
   the Automation screen.
 - **Invoices** — search, infinite scrolling, **Submit all drafts** with the
@@ -1352,16 +1481,24 @@ Settings** — plus screens reached from Home:
   approved on the web only — their drafts are shown once for copying, which
   the phone can't do yet. Accounts without submit rights see everything
   read-only.
+- **Obligations** — the same read-only list as the web app
+  ([section 4](#4-the-compliance-app--for-smes) → Your obligations): each
+  authority notice with its type, authority, reference, "respond by" date
+  and status, overdue and due-soon flagged. Recording and updating notices
+  stays firm work, on the web console.
 - **Month-end close** — the same composed checklist as the web dashboard
   card: each advisory line with its count, and rows whose work lives on a
-  mobile screen (invoices, bills, reconciliation, new invoice) link
-  straight there; web-only items show without a link.
+  mobile screen (invoices, bills, reconciliation, new invoice, obligations)
+  link straight there; web-only items show without a link.
 - **New Invoice** — the guided form, plus **"Speak it"**: record a voice
   note and Clerk drafts the invoice ("Heard: … — check every field before
   saving"). **Create & submit invoice** runs create → validate → submit in
   one safe, retry-proof flow.
-- **Send to Clerk** — **Take a photo** of a paper invoice (or pick a
-  document / paste text) and track your submissions, exactly as on the web.
+- **Send to Clerk** — **Take a photo** of a paper document (or pick a
+  document / paste text) and track your submissions, exactly as on the web —
+  including the same **Invoice / Tax notice** choice: in Tax-notice mode the
+  screen becomes "Capture a tax notice", and what you capture is confirmed
+  by your accountant before an obligation is recorded.
 - **Ask Clerk** and **Digests & statements** — the same surfaces as the web
   ([section 5](#5-clerk--the-ai-assistant)), multi-part answers, the
   follow-up chip and the month-comparison suggestion included.
@@ -1428,6 +1565,31 @@ The public **stamp verification** service reflects this: verifying a
 cancelled or credited invoice's stamp reports it as valid-but-**not
 eligible**, so a dead invoice can never be passed off as a live one.
 
+### The life of a notice
+
+Tax-authority notices walk a shorter road of the same shape — every step a
+human decision, every state only ever added:
+
+1. **Captured** — the notice arrives: photographed or uploaded through
+   **Send to Clerk** in Tax-notice mode, forwarded by email or WhatsApp (the
+   intake routing spots authority letters), or handed over on paper.
+2. **Reviewed** — a firm reviewer compares Clerk's proposed reading against
+   the document and confirms the client, notice type, authority and response
+   deadline (a paper notice skips straight here via **Record notice**).
+3. **Obligation** — approval records an open obligation with its "respond
+   by" date. It now shows on the client's Obligations page, the console's
+   Authority notices card, the month-end close checklist, the weekly digest
+   and the monthly compliance pack.
+4. **Reminded** — as the deadline nears (and if it passes), the client is
+   nudged over their chosen alert channels — consent-gated and pointer-only,
+   like every alert.
+5. **Response prepared** — the firm downloads the response bundle and drafts
+   the reply letter from the period's records. Sending it to the authority
+   is the firm's own act, outside the platform.
+6. **Responded → Closed** — the firm marks the obligation responded, then
+   closes it when the matter ends. A responded notice stops counting as
+   overdue; a closed one leaves the worklists but keeps its history.
+
 ---
 
 ## 12. Feature flags: why some pages say "not yet enabled"
@@ -1467,6 +1629,17 @@ client statements), `clerk_auto_eval` (nightly eval run — spends tokens),
 `clerk_auto_phrasing_eval` (nightly phrasing eval — spends tokens),
 `clerk_triage` (escalation routing suggestions), and `clerk_red_team`
 (adversarial eval-fixture generation — spends tokens).
+
+Two notes on where the newer features sit in this table. The **Notice Desk**
+pages themselves (Obligations, the Authority notices card, the Tax-notice
+capture choice) carry no flag of their own — but every Clerk lane that feeds
+them rides `clerk_ai`: with the kill switch off, notice *reading* pauses
+(recording a paper notice by hand, tracking deadlines, and the response
+bundle all keep working — they involve no AI), and the response letter is
+assembled from the plain template instead of drafted. **Narration
+suggestions** on the reconciliation page ride the `reconciliation` flag
+(they are part of that surface) *and* `clerk_ai` — either being dark means
+the button's work is refused and matching stays manual.
 
 ---
 
@@ -1556,7 +1729,7 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **84 headless user-journey checks** on the
+  path-router and drives **91 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month). The journeys live as ordered groups
   in `scripts/src/e2e/journeys/` (roles, money, controls, lifecycle,
@@ -1574,7 +1747,9 @@ if the running server's version differs, every app shows a dismissible
   action flags, a live proposal picks up a backdated overdue draft,
   approval submits it and records the decision, and a standing approval
   grants with its chosen daily limit, pauses, resumes and revokes — flags
-  restored to dark as their own check), the
+  restored to dark as their own check), the Notice Desk obligation spine
+  (record a paper notice → the open list → the month-end close item → the
+  response letter and bundle → responded → closed), the
   credit-note lifecycle, the SME dashboard/search/bulk-submit/recurring
   flows, and the integration layer
   end-to-end (API-key mint / bearer auth / revocation, a webhook delivery
@@ -1731,8 +1906,13 @@ on the invoice itself.
 | **APP / rail** | Access Point Provider — the accredited channel that transmits invoices to the authority. MeridianIQ uses two, with automatic failover. |
 | **Vault** | Permanent, write-once storage of stamped invoice artifacts. |
 | **Clerk** | MeridianIQ's AI assistant: reads documents, answers register-grounded questions, phrases drafts. Proposes only — a human always decides. |
-| **Extraction case** | One document Clerk has read, waiting for (or through) human review. Approval creates a draft invoice only. |
-| **Fast lane** | Extraction cases that passed pre-flight cleanly with high confidence — eligible for one-click bulk approval, re-verified server-side. |
+| **Extraction case** | One invoice document Clerk has read, waiting for (or through) human review. Approval creates a draft invoice only. |
+| **Notice case** | One tax-authority notice Clerk has read, waiting for firm review in the intake queue's Notices tab. Approval records an **obligation** — never an invoice — and notice cases never ride the fast lane. |
+| **Fast lane** | Invoice extraction cases that passed pre-flight cleanly with high confidence — eligible for one-click bulk approval, re-verified server-side. Invoices only; never notices. |
+| **Obligation** | A tracked tax-authority notice with a response deadline — recorded when a firm approves a notice case or records a paper notice. Open → responded → closed, updated by the firm; it drives deadline reminders and appears in the digest, month-end close checklist and compliance pack until answered. |
+| **Authority notice** | Official correspondence from a tax authority (FIRS, a State IRS, Customs): an assessment, demand notice, information request, audit letter, penalty notice or reminder. Captured as a notice case; confirmed into an obligation. |
+| **Response bundle** | The deterministic PDF a firm encloses with its reply to an authority notice: a cover sheet keyed to the authority's reference plus the period's document register, receivables, payables and VAT position — drawn by the same engine as the compliance pack, with no AI involved. |
+| **Narration suggestion** | Clerk's advisory read of a bank line's narration against that line's own match candidates — a violet "Clerk suggests" chip with the cue it saw, or nothing when Clerk abstains. Never a decision: accepting a match stays the human's buttons. |
 | **Claims register** | The store of approved rule statements Ask Clerk answers from, maintained under maker-checker (draft → review → active). |
 | **Maker-checker** | Two-person control: whoever proposes can never be the one who approves. Applies to register claims (draft vs approve) and — when a firm switches the policy on — invoice submission (approver vs submitter). |
 | **Digest** | Clerk's weekly firm briefing (opt-in) — every fact computed from records, Clerk only phrases. |
