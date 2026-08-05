@@ -918,6 +918,8 @@ function MonthlyAutomationStrip({ clientPartyId }: { clientPartyId: string }) {
             <DialogTitle>Run month-end close monthly</DialogTitle>
             <DialogDescription>
               Each month, Clerk will run this close plan for your business:
+              raise draft invoices for regular customers you have not billed
+              this cycle (drafts stay for your review — nothing is sent),
               submit invoices past the reporting window, then retry failed
               submissions. Every step re-checks eligibility at run time and
               every action is recorded. If a run halts, or anything about the

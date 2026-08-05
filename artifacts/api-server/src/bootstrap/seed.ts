@@ -70,7 +70,7 @@ const FLAGS: {
   // matches is the riskiest deterministic step, so it rides its OWN opt-in
   // beside clerk_actions — dark means the reconcile step simply never
   // assembles.
-  { key: "clerk_auto_reconcile", enabled: false, releaseTag: "R3", description: "Clerk auto-reconcile: plan runs may accept high-confidence statement matches (threshold 0.9, capped) through the ordinary acceptProposal path" },
+  { key: "clerk_auto_reconcile", enabled: false, releaseTag: "R3", description: "Clerk auto-reconcile: HUMAN-APPROVED plan runs may accept high-confidence RECEIVABLE statement matches (threshold 0.9, capped 20, layered on the reconciliation flag) through the ordinary acceptProposal path; never rides recurring policies" },
 ];
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [

@@ -376,8 +376,30 @@ async function loadProposal(
 export async function acceptProposal(
   proposalId: string,
   actor: { userId: string; role: string },
+  // Caller-asserted invariants, re-checked where the write happens
+  // (round-35 review m7): the autopilot justifies an id in one
+  // transaction and accepts it in another — the client binding and
+  // confidence floor that justified it must hold HERE, not only there.
+  // Human routes pass nothing and behave exactly as before.
+  expected?: { expectedClientPartyId?: string; minConfidence?: number },
 ): Promise<DecisionResult> {
   const { proposal, line, statement } = await loadProposal(proposalId);
+  if (
+    expected?.expectedClientPartyId &&
+    statement.clientPartyId !== expected.expectedClientPartyId
+  ) {
+    throw new DomainError("NOT_FOUND", "Proposal not found", 404);
+  }
+  if (
+    expected?.minConfidence !== undefined &&
+    Number(proposal.confidence) < expected.minConfidence
+  ) {
+    throw new DomainError(
+      "PROPOSAL_DECIDED",
+      "Proposal no longer meets the caller's confidence floor",
+      409,
+    );
+  }
   if (proposal.status !== "proposed") {
     throw new DomainError(
       "PROPOSAL_DECIDED",

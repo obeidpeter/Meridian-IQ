@@ -668,25 +668,38 @@ catalogue-shaped.
 **Close with Clerk Phases 2–3 (round 35)** (contract 0.64.0). Phase 2 —
 **`reconcile_matches`**, the riskiest deterministic kind: it settles
 invoices on payment evidence, so it rides its OWN opt-in flag
-(`clerk_auto_reconcile`, layered beside `clerk_actions`; dark = the step
-never assembles, no template change needed), a threshold STRICTER than
-the human-initiated bulk-accept default (0.9 vs 0.85), and a hard
-per-run cap (20). Assembly freezes the best high-confidence proposal per
-statement line over the client's committed statements; execution
-re-derives eligibility over the frozen ids (still proposed, still above
-the bar, still this client's statement) and accepts through the ORDINARY
-`acceptProposal` path — one settlement event, one lifecycle transition,
-one audit row per proposal, identical to a manual click, plus a
-`clerk.plan_step.reconciled` audit naming the run. Everything below the
-threshold stays a suggestion for a human. The kind is an
+(`clerk_auto_reconcile`, LAYERED ON the base `reconciliation` flag —
+both must be lit, so a firm whose reconciliation surfaces are rolled
+back can never keep auto-accepting through pages nobody can open; dark
+= the step never assembles, no template change needed), a threshold
+STRICTER than the human-initiated bulk-accept default (0.9 vs 0.85),
+and a hard per-run cap (20). Assembly freezes the best high-confidence
+proposal per statement line AND per invoice — a duplicated bank credit
+(a retried NIP transfer, overlapping uploads) yields ONE acceptance and
+leaves its twin a human suggestion — over the client's committed
+statements, **receivables only** (the client as supplier): a bill
+proposal would flip a payable's evidence-only payStatus to "paid"
+unattended, so the debit lane stays human. Execution re-derives
+eligibility over the frozen ids (still proposed, still above the bar,
+still this client's statement, invoice not already settled/dead) and
+accepts through the ORDINARY `acceptProposal` path — which re-asserts
+the client binding and confidence floor where the write happens — one
+settlement event, one lifecycle transition, one audit row per proposal,
+identical to a manual click, plus a `clerk.plan_step.reconciled` audit
+naming the run. Race losses (a manual accept, an invoice another line
+just settled) count as SKIPS, never half-rule failures. The kind is an
 **optional plan kind** (`OPTIONAL_PLAN_KINDS`): `reconciliation.act` is
 firm-staff work, so a client_user approver simply gets the plan without
-it (never a 403 on the month-end button), and the recurring-policy
-grantor check derives from REQUIRED kinds only — a client-granted
-recurring close does not auto-pause because the template grew a
-staff-only step. `month_end_close` is now [reconcile_matches →
-draft_recurring → submit_overdue → retry_failed]: settle receipts,
-raise missing paper, repair submissions. Phase 3 — **the close pack**:
+it (never a 403 on the month-end button); an approver who loses the
+optional capability mid-run has the step SKIPPED, not the plan halted;
+the recurring-policy grantor check derives from REQUIRED kinds only;
+and — the authority-basis rule — **optional kinds never ride
+POLICY-MINTED runs at all**: a recurring grant was consented against
+the template as it stood at grant time, so auto-reconcile executes only
+in runs a human approved after seeing the step and its target count.
+`month_end_close` is now [reconcile_matches → draft_recurring →
+submit_overdue → retry_failed]: settle receipts, raise missing paper,
+repair submissions. Phase 3 — **the close pack**:
 a TEMPLATE run reaching a terminal state (done or halted) signals its
 approver through the shared grantor router (`notifyGrantorSignal`, the
 auto-pause rails generalized: client approvers via the consent-gated

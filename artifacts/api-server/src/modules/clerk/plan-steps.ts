@@ -10,6 +10,7 @@ import {
   matchProposalsTable,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
+import { DomainError } from "../errors";
 import { lagosDateString } from "../../lib/lagos-time";
 import { isFeatureEnabled } from "../flags/flags";
 import { buyerBillingHistories } from "../invoice/recurring-suggest";
@@ -314,11 +315,34 @@ export const AUTO_RECONCILE_CAP = 20;
 interface ReconcileCandidate {
   id: string;
   statementLineId: string;
+  invoiceId: string;
 }
 
-// Best proposal per statement line at or above the autopilot threshold,
-// over the client's committed statements, capped. Confidence-descending so
-// the per-line dedup keeps the strongest.
+// Both flags must be lit (round-35 review m4): the base reconciliation
+// flag gates every HUMAN surface — including merely viewing proposals —
+// so the autopilot must never keep accepting through pages a rolled-back
+// firm cannot even open. clerk_auto_reconcile then layers the autopilot
+// opt-in on top (the clerk_action_policies-on-clerk_actions pattern).
+async function autoReconcileEnabled(firmId: string): Promise<boolean> {
+  return (
+    (await isFeatureEnabled("reconciliation", firmId)) &&
+    (await isFeatureEnabled(AUTO_RECONCILE_FLAG_KEY, firmId))
+  );
+}
+
+// Best proposal per statement line AND per invoice at or above the
+// autopilot threshold, over the client's committed statements,
+// RECEIVABLES ONLY, capped. Confidence-descending so the dedup keeps the
+// strongest. The two dedups (round-35 review M1): one line settles one
+// invoice (acceptProposal's own supersede rule), and one invoice takes
+// one line per run — a duplicated bank credit (retried NIP transfer,
+// overlapping uploads) must yield ONE acceptance and leave its twin a
+// human suggestion, not manufacture a deterministic INVOICE_NOT_ELIGIBLE
+// failure that halts the plan. The orientation join (round-35 review M3):
+// the step's mandate is settling RECEIPTS — a bill proposal (the client
+// as buyer) would flip a payable's evidence-only payStatus to "paid"
+// unattended, suppressing the firm's own chase of a real debt; debit-lane
+// matches stay human suggestions.
 async function reconcileCandidates(
   firmId: string,
   clientPartyId: string,
@@ -328,6 +352,7 @@ async function reconcileCandidates(
     .select({
       id: matchProposalsTable.id,
       statementLineId: matchProposalsTable.statementLineId,
+      invoiceId: matchProposalsTable.invoiceId,
     })
     .from(matchProposalsTable)
     .innerJoin(
@@ -338,11 +363,22 @@ async function reconcileCandidates(
       bankStatementsTable,
       eq(bankStatementLinesTable.statementId, bankStatementsTable.id),
     )
+    .innerJoin(
+      invoicesTable,
+      eq(matchProposalsTable.invoiceId, invoicesTable.id),
+    )
     .where(
       and(
         eq(matchProposalsTable.firmId, firmId),
         eq(bankStatementsTable.firmId, firmId),
         eq(bankStatementsTable.clientPartyId, clientPartyId),
+        // Receivable orientation, the candidate-set precedence rule: the
+        // client as SUPPLIER (a self-trade counts as a receivable).
+        eq(invoicesTable.supplierPartyId, clientPartyId),
+        // A proposal whose invoice already settled (another line's accept,
+        // a manual click) or died cannot settle again — freezing it would
+        // only manufacture INVOICE_NOT_ELIGIBLE noise at execution.
+        sql`${invoicesTable.status} NOT IN ('settled', 'cancelled', 'credited')`,
         eq(matchProposalsTable.status, "proposed"),
         sql`${matchProposalsTable.confidence} >= ${AUTO_RECONCILE_THRESHOLD}`,
         ...(ids && ids.length > 0
@@ -353,10 +389,13 @@ async function reconcileCandidates(
     .orderBy(desc(matchProposalsTable.confidence))
     .limit(AUTO_RECONCILE_CAP * 3);
   const seenLines = new Set<string>();
+  const seenInvoices = new Set<string>();
   const best: ReconcileCandidate[] = [];
   for (const r of rows) {
     if (seenLines.has(r.statementLineId)) continue;
+    if (seenInvoices.has(r.invoiceId)) continue;
     seenLines.add(r.statementLineId);
+    seenInvoices.add(r.invoiceId);
     best.push(r);
     if (best.length >= AUTO_RECONCILE_CAP) break;
   }
@@ -370,7 +409,7 @@ export async function assembleReconcileMatches(
   firmId: string,
   clientPartyId: string,
 ): Promise<string[]> {
-  if (!(await isFeatureEnabled(AUTO_RECONCILE_FLAG_KEY, firmId))) return [];
+  if (!(await autoReconcileEnabled(firmId))) return [];
   return (await reconcileCandidates(firmId, clientPartyId)).map((c) => c.id);
 }
 
@@ -394,7 +433,7 @@ export async function executeReconcileMatches(
   if (approvedIds.length === 0) return result;
   // Flag re-check (the dark-flag TOCTOU discipline): a firm that opted out
   // between approval and execution gets NO acceptances — all targets skip.
-  if (!(await isFeatureEnabled(AUTO_RECONCILE_FLAG_KEY, firmId))) {
+  if (!(await autoReconcileEnabled(firmId))) {
     result.skipped = approvedIds.length;
     return result;
   }
@@ -405,7 +444,12 @@ export async function executeReconcileMatches(
   for (const c of eligible) {
     try {
       const decision = await runRequestContext({ bypass: false, firmId }, () =>
-        acceptProposal(c.id, actor),
+        acceptProposal(c.id, actor, {
+          // Defense-in-depth (round-35 review m7): the predicates that
+          // justified this id are re-asserted where the write happens.
+          expectedClientPartyId: clientPartyId,
+          minConfidence: AUTO_RECONCILE_THRESHOLD,
+        }),
       );
       result.executed += 1;
       // Durable per-acceptance evidence naming the run (the drafted-audit
@@ -424,8 +468,18 @@ export async function executeReconcileMatches(
         },
       });
     } catch (err) {
-      // A proposal that fails mid-batch (e.g. its invoice was settled by an
-      // earlier line in this same batch) is a failure row, not a retry.
+      // The-world-moved DomainErrors are SKIPS, not failures (round-35
+      // review M1): a race with a manual accept (PROPOSAL_DECIDED) or an
+      // invoice another line just settled (INVOICE_NOT_ELIGIBLE) is the
+      // executeAction skipped_not_eligible discipline — it must not feed
+      // the half-rule and halt the plan over ordinary book movement.
+      if (
+        err instanceof DomainError &&
+        (err.code === "PROPOSAL_DECIDED" || err.code === "INVOICE_NOT_ELIGIBLE")
+      ) {
+        result.skipped += 1;
+        continue;
+      }
       logger.warn(
         { err, firmId, proposalId: c.id },
         "reconcile_matches: accept failed for proposal",
