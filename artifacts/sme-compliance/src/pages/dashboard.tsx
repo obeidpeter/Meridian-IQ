@@ -1,5 +1,7 @@
+import { useState } from "react";
 import {
   useGetMe,
+  useCreatePlanRun,
   useGetClerkDigest,
   getGetClerkDigestQueryKey,
   useListClientStatements,
@@ -45,6 +47,9 @@ import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
+import { useToast } from "@/hooks/use-toast";
+import { errorStatus } from "@workspace/api-errors";
+import { PlanRunProgress } from "./clerk-ask";
 import {
   AlertTriangle,
   CheckCircle,
@@ -615,6 +620,14 @@ function MonthEndCloseCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
+  // Run with Clerk (round 32): the checklist made executable — one approval
+  // queues the month_end_close template (submit overdue → retry failed →
+  // draft chasers), assembled server-side for THIS client and executed by
+  // the worker with per-step re-validation and decision-ledger rows. A 409
+  // means nothing is currently eligible — an honest no-op, not an error.
+  const { toast } = useToast();
+  const createRun = useCreatePlanRun();
+  const [runId, setRunId] = useState<string | null>(null);
   if (!isSuccess || !close) return null;
   return (
     <Card data-testid="month-end-close">
@@ -678,6 +691,46 @@ function MonthEndCloseCard({ clientPartyId }: { clientPartyId: string }) {
             </li>
           ))}
         </ul>
+        {runId ? (
+          <PlanRunProgress runId={runId} />
+        ) : (
+          close.attentionCount > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={createRun.isPending}
+              data-testid="button-run-month-end"
+              onClick={() =>
+                createRun.mutate(
+                  {
+                    data: { templateKey: "month_end_close", clientPartyId },
+                  },
+                  {
+                    onSuccess: (run) => setRunId(run.id),
+                    onError: (e) =>
+                      // 409 = the honest empty (NOTHING_TO_RUN); anything
+                      // else is a real failure and must not read as one.
+                      toast(
+                        errorStatus(e) === 409
+                          ? {
+                              title: "Nothing to run right now",
+                              description:
+                                "No invoices are currently eligible for the close actions — the remaining checklist items need hands-on attention.",
+                            }
+                          : {
+                              title: "Couldn't start the close run",
+                              description:
+                                "Nothing was changed. Try again shortly, or use the actions card.",
+                            },
+                      ),
+                  },
+                )
+              }
+            >
+              {createRun.isPending ? "Starting…" : "Run with Clerk"}
+            </Button>
+          )
+        )}
         <p className="text-xs text-muted-foreground pt-3 border-t">
           {close.note}
         </p>

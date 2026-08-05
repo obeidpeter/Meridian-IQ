@@ -826,6 +826,11 @@ export const clerkActionDecisionsTable = pgTable(
     // authorized this run — decidedBy then names the policy's GRANTOR.
     // Null for every hand-approved batch.
     policyId: uuid("policy_id").references(() => clerkActionPoliciesTable.id),
+    // Round 32: set when a plan run's step executed this batch — the run's
+    // whole-plan approval is the authorization, decidedBy its approver.
+    // Null for hand and policy batches. (Lazy reference: the plan-runs
+    // table is declared later in this file.)
+    planRunId: uuid("plan_run_id").references(() => clerkPlanRunsTable.id),
     // The facts the approval surface showed at decision time.
     evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
     targets: jsonb("targets").$type<ActionTargetOutcome[]>().notNull(),
@@ -846,3 +851,81 @@ export const clerkActionDecisionsTable = pgTable(
 
 export type ClerkActionDecision =
   typeof clerkActionDecisionsTable.$inferSelect;
+
+// ============ Do with Clerk Phase 2 — plan runs (round 32) ============
+// One row per approved multi-step action plan: the whole-plan approval
+// freezes the steps SERVER-SIDE (from an Ask case's action sections, or a
+// deterministic template) and the pipeline worker executes them in order,
+// one step per slice, through the ordinary executeAction path — every step
+// lands its own decision-ledger row, and the run records which. The batch
+// processor's claim/fence discipline applies verbatim: status CAS +
+// claimedAt heartbeat, stale claims reclaimed by the sweep. A step whose
+// failures cross the autopilot's half-rule HALTS the run (remaining steps
+// skipped, reason recorded) — a plan is a sequence, not a scattergun.
+
+export const clerkPlanRunStatusEnum = pgEnum("clerk_plan_run_status", [
+  "queued",
+  "running",
+  "done",
+  "halted",
+  "failed",
+]);
+
+export interface PlanRunStep {
+  kind: string;
+  clientPartyId: string;
+  clientName: string;
+  // The approved target ids, frozen at approval; executeAction re-validates
+  // every one at execution time (already-submitted paper skips honestly).
+  invoiceIds: string[];
+  status: "pending" | "executed" | "halted_here" | "skipped";
+  // The decision-ledger row this step's execution wrote (null until run,
+  // and for skipped steps).
+  decisionId: string | null;
+  executedCount: number;
+  failedCount: number;
+  skippedCount: number;
+}
+
+export const clerkPlanRunsTable = pgTable(
+  "clerk_plan_runs",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    // The Ask case whose action sections were approved (null for template
+    // runs — they have no conversational origin).
+    caseId: uuid("case_id").references(() => clerkCasesTable.id),
+    // The deterministic template that assembled this run (null for ask
+    // runs). Text, not an enum: the registry grows in code.
+    templateKey: text("template_key"),
+    status: clerkPlanRunStatusEnum("status").notNull().default("queued"),
+    steps: jsonb("steps").$type<PlanRunStep[]>().notNull(),
+    // The cursor: steps[0..processedSteps) are settled.
+    processedSteps: integer("processed_steps").notNull().default(0),
+    // Why the run stopped early (tripwire text), null otherwise.
+    haltReason: text("halt_reason"),
+    // Who approved the whole plan — the actor every step's decision row
+    // names, re-validated (current membership still carries each kind's
+    // capability) just before each step executes.
+    approvedBy: uuid("approved_by")
+      .notNull()
+      .references(() => usersTable.id),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("clerk_plan_runs_status_idx").on(t.status),
+    index("clerk_plan_runs_firm_idx").on(t.firmId, t.createdAt),
+    // One LIVE run per case (round-32 review m7): a double-click or two
+    // approvers minting concurrent runs over the same frozen steps resolve
+    // on this instead of double-executing; terminal runs free the slot.
+    uniqueIndex("clerk_plan_runs_live_case_uq")
+      .on(t.caseId)
+      .where(sql`status IN ('queued', 'running') AND case_id IS NOT NULL`),
+  ],
+);
+
+export type ClerkPlanRun = typeof clerkPlanRunsTable.$inferSelect;

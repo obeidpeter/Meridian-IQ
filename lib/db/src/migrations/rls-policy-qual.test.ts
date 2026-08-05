@@ -48,6 +48,7 @@ const PINNED: Record<string, PinnedPolicy> = {
   "clerk_action_policies/meridian_clerk_tenant": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "clerk_batches/meridian_clerk_tenant": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "clerk_cases/meridian_clerk_tenant": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
+  "clerk_plan_runs/meridian_clerk_tenant": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "clerk_client_statements/meridian_clerk_tenant": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "clerk_digests/meridian_clerk_tenant": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "clerk_eval_fixtures/meridian_bypass_only": { cmd: "ALL", roles: "public", qual: "f4fc01217632ad30", withCheck: "f4fc01217632ad30" },

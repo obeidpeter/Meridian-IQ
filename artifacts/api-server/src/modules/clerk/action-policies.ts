@@ -554,7 +554,9 @@ const SWEEP_ACTOR = "action-policy-sweep";
 // Half or more of a run's targets failing outright means something is
 // structurally wrong (an approval policy the grantor can't satisfy, a rail
 // misconfiguration) — a human must look before the policy runs again.
-function tooManyFailures(requested: number, failed: number): boolean {
+// Exported (round 32): the plan-run processor halts on the same half-rule —
+// one spelling of "this batch went badly" across every automation surface.
+export function tooManyFailures(requested: number, failed: number): boolean {
   return requested > 0 && failed >= Math.ceil(requested / 2);
 }
 

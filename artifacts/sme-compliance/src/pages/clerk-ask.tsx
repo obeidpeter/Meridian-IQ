@@ -2,8 +2,11 @@ import { useState } from "react";
 import { Link } from "wouter";
 import {
   useAskClerk,
+  useCreatePlanRun,
   useExecuteAction,
+  useGetPlanRun,
   useSubmitClerkFeedback,
+  getGetPlanRunQueryKey,
 } from "@workspace/api-client-react";
 import type {
   AskSectionAction,
@@ -32,6 +35,7 @@ import {
   type AskFeedback,
 } from "@/lib/clerk";
 import { ShieldCheck, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { errorStatus } from "@workspace/api-errors";
 
 // Register-grounded Q&A behind clerk.ask. Firm principals ask across their
 // portfolio; since contract 0.36.0 a client_user can ask too, pinned
@@ -63,6 +67,90 @@ const SUGGESTED_QUESTIONS = [
   // The month-over-month delta intent added with Ask 2.0 (contract 0.56.0).
   "How does this month compare to last month?",
 ];
+
+// Do with Clerk Phase 2 (round 32): live progress for a queued plan run.
+// The worker executes the approved steps one slice at a time; this polls
+// the run row exactly like batch progress (status-driven refetchInterval).
+export function PlanRunProgress({ runId }: { runId: string }) {
+  const { data: run } = useGetPlanRun(runId, {
+    query: {
+      queryKey: getGetPlanRunQueryKey(runId),
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        return status === "queued" || status === "running" ? 2000 : false;
+      },
+    },
+  });
+  if (!run) return null;
+  return (
+    <div className="border rounded-md p-3 space-y-1" data-testid="card-plan-run">
+      <p className="text-sm font-medium">
+        {run.status === "done"
+          ? "Plan complete — every decision is recorded."
+          : run.status === "halted"
+            ? `Plan halted (${run.haltReason ?? "stopped"}) — remaining steps were skipped.`
+            : "Running the plan…"}
+      </p>
+      {run.steps.map((s, i) => (
+        <p
+          key={i}
+          className="text-xs text-muted-foreground"
+          data-testid={`text-plan-step-${i}`}
+        >
+          {s.kind} · {s.clientName}:{" "}
+          {s.status === "pending"
+            ? "waiting"
+            : s.status === "executed"
+              ? `${s.executedCount} ran${s.failedCount > 0 ? `, ${s.failedCount} failed` : ""}${s.skippedCount > 0 ? `, ${s.skippedCount} skipped` : ""}`
+              : s.status === "halted_here"
+                ? "halted here"
+                : "skipped"}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// Whole-plan approval (round 32): one click approves EVERY action section —
+// the server re-reads the stored answer, freezes the steps, and the worker
+// executes them with per-step re-validation and its own decision rows.
+function WholePlanApproval({ caseId }: { caseId: string }) {
+  const { toast } = useToast();
+  const create = useCreatePlanRun();
+  const [runId, setRunId] = useState<string | null>(null);
+  if (runId) return <PlanRunProgress runId={runId} />;
+  return (
+    <Button
+      size="sm"
+      disabled={create.isPending}
+      data-testid="button-approve-plan"
+      onClick={() =>
+        create.mutate(
+          { data: { caseId } },
+          {
+            onSuccess: (run) => setRunId(run.id),
+            onError: (e) =>
+              toast(
+                errorStatus(e) === 409
+                  ? {
+                      title: "Already running",
+                      description:
+                        "A plan run for this answer is already queued or running.",
+                    }
+                  : {
+                      title: "Couldn't start the plan",
+                      description:
+                        "Nothing was changed. You can still approve each part individually below.",
+                    },
+              ),
+          },
+        )
+      }
+    >
+      {create.isPending ? "Starting…" : "Approve whole plan"}
+    </Button>
+  );
+}
 
 // Do with Clerk (round 31): the approval block under an action-proposal
 // section. Approval drives the EXISTING execute route — the server
@@ -188,6 +276,16 @@ function AnswerCard({
             {plan}
           </p>
         )}
+        {/* Two or more PLAN-RUNNABLE action sections — and none that are
+            not (a chaser section must be approved individually so the
+            drafts land in front of the approver; the server refuses whole
+            plans containing one). Per-section buttons below still work
+            for pruning. */}
+        {caseId &&
+          sections.filter((s) => s.action).length >= 2 &&
+          sections.every(
+            (s) => !s.action || s.action.kind !== "draft_chasers",
+          ) && <WholePlanApproval caseId={caseId} />}
         {hasSections &&
           sections.map((s, i) => {
             const sectionLinks = invoiceLinks(s.links);
