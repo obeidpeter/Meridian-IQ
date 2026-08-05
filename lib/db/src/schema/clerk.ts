@@ -879,11 +879,13 @@ export interface PlanRunStep {
   // every one at execution time (already-submitted paper skips honestly).
   // Empty for deterministic step kinds, whose targets are not invoices.
   invoiceIds: string[];
-  // Deterministic-step targets (round 34, Close with Clerk): the buyer
-  // parties a draft_recurring step was approved for, frozen at approval;
-  // execution re-mines and only drafts for buyers still unbilled. Absent
-  // on action steps and on rows written before round 34.
-  buyerPartyIds?: string[];
+  // Deterministic-step targets (round 34, Close with Clerk): the
+  // "buyerPartyId:currency" pairs a draft_recurring step was approved for
+  // — the miner's own grouping, so a buyer billed in two currencies is two
+  // distinct targets — frozen at approval; execution re-mines and only
+  // drafts pairs still unbilled. Absent on action steps and on rows
+  // written before round 34.
+  buyerTargets?: string[];
   // Evidence of a deterministic step's writes: the draft invoices it
   // created (pointers only). Absent on action steps and pre-34 rows.
   draftIds?: string[];

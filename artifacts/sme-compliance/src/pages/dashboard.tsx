@@ -636,11 +636,13 @@ function MonthEndCloseCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
-  // Run with Clerk (round 32): the checklist made executable — one approval
-  // queues the month_end_close template (submit overdue → retry failed →
-  // draft chasers), assembled server-side for THIS client and executed by
-  // the worker with per-step re-validation and decision-ledger rows. A 409
-  // means nothing is currently eligible — an honest no-op, not an error.
+  // Run with Clerk (rounds 32/34): the checklist made executable — one
+  // approval queues the month_end_close template (draft missing recurring
+  // invoices → submit overdue → retry failed), assembled server-side for
+  // THIS client and executed by the worker with per-step re-validation.
+  // Any drafts the run raises stay DRAFTS behind the machine-draft
+  // submission wall until a human reviews and renumbers them. A 409 means
+  // nothing is currently eligible — an honest no-op, not an error.
   const { toast } = useToast();
   const createRun = useCreatePlanRun();
   const [runId, setRunId] = useState<string | null>(null);

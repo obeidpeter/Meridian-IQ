@@ -124,6 +124,18 @@ function capabilityFor(
   return intent?.capability ?? "invoice.submit";
 }
 
+// Every capability a template's steps demand — the plan-policy sweep's
+// fail-fast grantor re-validation derives from THIS (round-34 review m4),
+// so a template gaining a new step class can never silently outrun the
+// stored grant's check.
+export function templateCapabilities(
+  templateKey: string,
+): Array<"invoice.submit" | "clerk.capture" | "invoice.write"> {
+  const template = PLAN_TEMPLATES[templateKey];
+  if (!template) return [];
+  return [...new Set(template.kinds.map(capabilityFor))];
+}
+
 async function assertKindCapabilities(
   principal: Principal,
   kinds: PlanStepKind[],
@@ -167,7 +179,7 @@ async function insertRun(
       templateKey: run.templateKey,
       steps: run.steps.map((s) => ({
         kind: s.kind,
-        targets: s.invoiceIds.length + (s.buyerPartyIds?.length ?? 0),
+        targets: s.invoiceIds.length + (s.buyerTargets?.length ?? 0),
       })),
     },
   });
@@ -335,19 +347,19 @@ export async function createPlanRunFromTemplate(
   const steps: PlanRunStep[] = [];
   for (const kind of template.kinds) {
     if (isDeterministicKind(kind)) {
-      // Deterministic assembly: the buyers whose recurring pattern is
-      // unbilled RIGHT NOW, frozen as the step's targets. Execution
-      // re-mines and only drafts for buyers still alerting.
-      const buyers = await inClerkScope(firmId, () =>
+      // Deterministic assembly: the (buyer, currency) pairs whose
+      // recurring pattern is unbilled RIGHT NOW, frozen as the step's
+      // targets. Execution re-mines and only drafts pairs still alerting.
+      const targets = await inClerkScope(firmId, () =>
         assembleDraftRecurring(firmId, clientPartyId),
       );
-      if (buyers.length === 0) continue;
+      if (targets.length === 0) continue;
       steps.push({
         kind,
         clientPartyId,
         clientName: party?.name ?? "",
         invoiceIds: [],
-        buyerPartyIds: buyers,
+        buyerTargets: targets,
         status: "pending",
         decisionId: null,
         executedCount: 0,
@@ -545,31 +557,35 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
     clientPartyId: role === "client_user" ? step.clientPartyId : null,
     buyerPartyId: null,
   };
-  // The half-rule inputs, filled by the action branch only: a deterministic
-  // step has no per-target failure mode (a throw halts via the catch), so
-  // its zeros keep tooManyFailures vacuously false.
+  // The half-rule inputs, filled by BOTH branches (round-34 review M2: the
+  // deterministic executor catches per-target failures too, and a step
+  // whose drafts all fail must halt the plan exactly like a submit batch
+  // whose targets all fail).
   let requestedCount = 0;
   let failedCount = 0;
   try {
     if (isDeterministicKind(step.kind)) {
       // Deterministic step (round 34): platform SQL + the platform's own
-      // safe writes under the approver's authority — no decision row (the
-      // created rows and the run's audits are the ledger), no failure
-      // half-rule (a throw halts via the catch below like any step).
+      // safe writes under the approver's authority — no decision row; the
+      // created rows (each audited against this run) and the run's audits
+      // are the ledger.
       const outcome = await executeDraftRecurring(
         run.firmId,
         step.clientPartyId,
-        step.buyerPartyIds ?? [],
+        step.buyerTargets ?? [],
         run.approvedBy,
+        run.id,
       );
       steps[cursor] = {
         ...step,
         status: "executed",
         draftIds: outcome.draftIds,
         executedCount: outcome.created,
-        failedCount: 0,
+        failedCount: outcome.failed,
         skippedCount: outcome.skipped,
       };
+      requestedCount = step.buyerTargets?.length ?? 0;
+      failedCount = outcome.failed;
     } else {
       const { decision } = await executeAction(
         run.firmId,
