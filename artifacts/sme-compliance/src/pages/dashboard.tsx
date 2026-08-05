@@ -772,6 +772,9 @@ const PLAN_PAUSE_LABELS: Record<string, string> = {
   run_error: "Paused — the last run hit an error",
 };
 
+// "Up to date for", not "last ran": a month is also consumed by the honest
+// closing-window empty (nothing was eligible all month), and the hourly
+// sweep — not a month-end event — picks up the first eligible paper.
 export function planPolicyStatusLine(p: {
   pausedAt?: string | null;
   pausedReason?: string | null;
@@ -779,8 +782,8 @@ export function planPolicyStatusLine(p: {
 }): string {
   if (p.pausedAt) return PLAN_PAUSE_LABELS[p.pausedReason ?? ""] ?? "Paused";
   return p.lastRunMonth
-    ? `Runs monthly · last ran ${p.lastRunMonth}`
-    : "Runs monthly · first run at the next month-end sweep";
+    ? `Runs monthly · up to date for ${p.lastRunMonth}`
+    : "Runs monthly · runs when there is eligible paper";
 }
 
 function MonthlyAutomationStrip({ clientPartyId }: { clientPartyId: string }) {

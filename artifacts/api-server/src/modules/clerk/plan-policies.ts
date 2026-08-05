@@ -1,8 +1,9 @@
-import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
   runRequestContext,
+  auditEventsTable,
   clerkPlanPoliciesTable,
   clerkPlanRunsTable,
   engagementsTable,
@@ -21,7 +22,7 @@ import {
 import { isFeatureEnabled } from "../flags/flags";
 import { isPurposePermitted } from "../consent/consent";
 import { registerSweep } from "../pipeline/pipeline";
-import { atMostHourly } from "./watch-shared";
+import { alertOnceViaAuditLedger, atMostHourly } from "./watch-shared";
 import { ACTIONS_FLAG_KEY } from "./actions";
 import {
   POLICIES_FLAG_KEY,
@@ -67,23 +68,25 @@ async function planPoliciesEnabled(firmId: string): Promise<boolean> {
   );
 }
 
+// Reads via the ambient getDb() (the action-policies discipline): the grant
+// path already runs in the caller's request context — wrapping again would
+// hold a SECOND pool connection per grant — and the sweep, which has no
+// ambient context, wraps this at ITS call site firm-bound.
 async function hasLiveEngagement(
   firmId: string,
   clientPartyId: string,
 ): Promise<boolean> {
-  const rows = await runRequestContext({ bypass: false, firmId }, () =>
-    getDb()
-      .select({ id: engagementsTable.id })
-      .from(engagementsTable)
-      .where(
-        and(
-          eq(engagementsTable.firmId, firmId),
-          eq(engagementsTable.clientPartyId, clientPartyId),
-          sql`${engagementsTable.status} IN ('open', 'in_progress')`,
-        ),
-      )
-      .limit(1),
-  );
+  const rows = await getDb()
+    .select({ id: engagementsTable.id })
+    .from(engagementsTable)
+    .where(
+      and(
+        eq(engagementsTable.firmId, firmId),
+        eq(engagementsTable.clientPartyId, clientPartyId),
+        sql`${engagementsTable.status} IN ('open', 'in_progress')`,
+      ),
+    )
+    .limit(1);
   return rows.length > 0;
 }
 
@@ -431,11 +434,51 @@ export type PlanPolicyRunOutcome =
   | "ran_empty"
   | "auto_paused"
   | "skipped_dark"
+  | "skipped_empty"
   | "skipped_raced";
 
-async function runOnePlanPolicy(
+// The last Lagos day of the month — the closing window in which an empty
+// book finally consumes the month (see the NOTHING_TO_RUN branch below).
+export function isLagosMonthClosing(dateStr: string = lagosDateString()): boolean {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return d === new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+function prevMonthKey(monthKey: string): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// Give the month back (CAS-guarded: only while WE hold the claim). Used
+// when the claim turned out to have nothing durable behind it — an empty
+// book outside the closing window, a flag that went dark mid-claim, a run
+// that errored (the pause dominates; un-claiming lets a human RESUME the
+// policy and still get this month's run).
+async function unclaimMonth(
   policy: ClerkPlanPolicy,
   monthKey: string,
+  restoreTo: string | null,
+): Promise<void> {
+  await runInBypassContext(() =>
+    getDb()
+      .update(clerkPlanPoliciesTable)
+      .set({ lastRunMonth: restoreTo })
+      .where(
+        and(
+          eq(clerkPlanPoliciesTable.id, policy.id),
+          eq(clerkPlanPoliciesTable.lastRunMonth, monthKey),
+        ),
+      ),
+  );
+}
+
+// Exported for the closing-window tests: the sweep computes `closing` from
+// the Lagos calendar; a test drives both branches deterministically.
+export async function runOnePlanPolicy(
+  policy: ClerkPlanPolicy,
+  monthKey: string,
+  closing: boolean,
 ): Promise<PlanPolicyRunOutcome> {
   // Kill switches beat grants — and a dark flag must NOT consume the month.
   if (!(await planPoliciesEnabled(policy.firmId))) return "skipped_dark";
@@ -470,18 +513,34 @@ async function runOnePlanPolicy(
       ? "auto_paused"
       : "skipped_raced";
   }
-  if (!(await hasLiveEngagement(policy.firmId, policy.clientPartyId))) {
+  // Firm-bound contexts (the daily sweep's exact posture): both tables are
+  // RLS-forced, and the sweep must never lean on a BYPASSRLS pool role for
+  // reads the request paths do firm-scoped.
+  const engaged = await runRequestContext(
+    { bypass: false, firmId: policy.firmId },
+    () => hasLiveEngagement(policy.firmId, policy.clientPartyId),
+  );
+  if (!engaged) {
     return (await autoPausePlanPolicy(policy, "engagement_closed"))
       ? "auto_paused"
       : "skipped_raced";
   }
-  if (!(await isPurposePermitted(policy.clientPartyId, "compliance_submission"))) {
+  const consented = await runRequestContext(
+    { bypass: false, firmId: policy.firmId },
+    () => isPurposePermitted(policy.clientPartyId, "compliance_submission"),
+  );
+  if (!consented) {
     return (await autoPausePlanPolicy(policy, "consent_missing"))
       ? "auto_paused"
       : "skipped_raced";
   }
 
   // Claim the month (CAS): the loser of a concurrent race mints nothing.
+  // The claim is provisional until something durable backs it — a minted
+  // run or the closing-window empty audit; every other exit below gives
+  // the month back, and the sweep's recovery scan gives back claims a
+  // crash orphaned between here and the create.
+  const priorMonth = policy.lastRunMonth;
   const claimed = await runInBypassContext(() =>
     getDb()
       .update(clerkPlanPoliciesTable)
@@ -508,32 +567,25 @@ async function runOnePlanPolicy(
     clientPartyId: role === "client_user" ? policy.clientPartyId : null,
     buyerPartyId: null,
   };
+  let run;
   try {
-    const run = await createPlanRunFromTemplate(
+    run = await createPlanRunFromTemplate(
       policy.templateKey,
       policy.clientPartyId,
       principal,
     );
-    await runInBypassContext(() =>
-      getDb()
-        .update(clerkPlanPoliciesTable)
-        .set({ lastRunId: run.id })
-        .where(eq(clerkPlanPoliciesTable.id, policy.id)),
-    );
-    await appendAudit({
-      actorId: null,
-      firmId: policy.firmId,
-      action: "clerk.plan_policy_ran",
-      entityType: "clerk_plan_policy",
-      entityId: policy.id,
-      after: { templateKey: policy.templateKey, month: monthKey, runId: run.id },
-    });
-    return "ran";
   } catch (err) {
     if (err instanceof DomainError && err.code === "NOTHING_TO_RUN") {
-      // An honest empty month: nothing eligible for any step. The month
-      // stays consumed (assembling again tomorrow would find the same
-      // book) and the ledger says so; no run row exists.
+      // Nothing eligible RIGHT NOW — but eligibility changes daily as
+      // submission windows lapse and rails reject, so an early empty pass
+      // must not write off the month (the daily sweep's own
+      // leave-the-day-unclaimed rule, at month granularity): give the
+      // month back and let the first non-empty pass run. Only the CLOSING
+      // window consumes an empty month, with the honest ledger row.
+      if (!closing) {
+        await unclaimMonth(policy, monthKey, priorMonth);
+        return "skipped_empty";
+      }
       await appendAudit({
         actorId: null,
         firmId: policy.firmId,
@@ -549,25 +601,143 @@ async function runOnePlanPolicy(
       });
       return "ran_empty";
     }
-    // Fail closed: the month is already claimed, so "log and leave live"
-    // would retry-hammer next month with the same defect. Pause + signal.
+    if (err instanceof DomainError && err.code === "ACTIONS_DISABLED") {
+      // The flag went dark between our gate and the create (TOCTOU): dark
+      // is a skip, never a consumed month or a tripwire.
+      await unclaimMonth(policy, monthKey, priorMonth);
+      return "skipped_dark";
+    }
+    // Fail closed: pause + signal — "log and leave live" would retry-hammer
+    // with the same defect. The month is given back so that a human who
+    // fixes the cause and RESUMES the policy still gets this month's run.
     logger.error({ err, policyId: policy.id }, "plan policy sweep: run failed");
+    await unclaimMonth(policy, monthKey, priorMonth);
     return (await autoPausePlanPolicy(policy, "run_error"))
       ? "auto_paused"
       : "skipped_raced";
   }
+  // Bookkeeping stays OUTSIDE the catch: the run exists and is executing —
+  // a failure here must not read as run_error and pause the policy. A throw
+  // lands in the sweep's per-policy isolation; the recovery scan sees a
+  // claim without a marker next pass and re-runs, where the already-run
+  // targets re-validate as ineligible.
+  await runInBypassContext(() =>
+    getDb()
+      .update(clerkPlanPoliciesTable)
+      .set({ lastRunId: run.id })
+      .where(eq(clerkPlanPoliciesTable.id, policy.id)),
+  );
+  await appendAudit({
+    actorId: null,
+    firmId: policy.firmId,
+    action: "clerk.plan_policy_ran",
+    entityType: "clerk_plan_policy",
+    entityId: policy.id,
+    after: { templateKey: policy.templateKey, month: monthKey, runId: run.id },
+  });
+  return "ran";
+}
+
+// Every legitimate month claim leaves a durable marker: the ran path minted
+// a plan run this Lagos month, the closing-window empty path wrote its
+// audit. A claim with neither is a crash leak (death between the CAS and
+// the create) — without recovery the policy silently sits out the WHOLE
+// month while the UI says it ran.
+async function monthClaimHasMarker(
+  policy: ClerkPlanPolicy,
+  monthKey: string,
+): Promise<boolean> {
+  if (policy.lastRunId) {
+    const [run] = await runInBypassContext(() =>
+      getDb()
+        .select({ createdAt: clerkPlanRunsTable.createdAt })
+        .from(clerkPlanRunsTable)
+        .where(eq(clerkPlanRunsTable.id, policy.lastRunId!))
+        .limit(1),
+    );
+    if (run && lagosDateString(run.createdAt).slice(0, 7) === monthKey) {
+      return true;
+    }
+  }
+  const audits = await runInBypassContext(() =>
+    getDb()
+      .select({ after: auditEventsTable.after })
+      .from(auditEventsTable)
+      .where(
+        and(
+          eq(auditEventsTable.action, "clerk.plan_policy_ran"),
+          eq(auditEventsTable.entityId, policy.id),
+        ),
+      )
+      .orderBy(desc(auditEventsTable.createdAt))
+      .limit(12),
+  );
+  return audits.some(
+    (a) => (a.after as { month?: string } | null)?.month === monthKey,
+  );
 }
 
 export interface PlanPolicySweepResult {
   policiesDue: number;
   policiesRun: number;
+  policiesEmpty: number;
   policiesAutoPaused: number;
 }
+
+const SWEEP_ACTOR = "plan-policy-sweep";
+
+// The operator signal that the sweep auto-paused SOMETHING (the daily
+// sweep's round-30 discipline): the append-only audit ledger is the
+// cross-instance dedup key; counts only — per-policy detail lives on each
+// policy's own clerk.plan_policy_auto_paused row.
+export const PLAN_POLICY_AUTO_PAUSE_ALERT = "ops.plan_policy.auto_paused";
+
+const alertAutoPaused = alertOnceViaAuditLedger({
+  action: PLAN_POLICY_AUTO_PAUSE_ALERT,
+  entityType: "plan_policy_sweep",
+  actorId: SWEEP_ACTOR,
+});
 
 export async function runPlanPolicySweep(): Promise<PlanPolicySweepResult> {
   // The Lagos month key ("YYYY-MM"): a new month makes every live policy
   // due; the CAS above makes each run at most once for it.
-  const monthKey = lagosDateString().slice(0, 7);
+  const today = lagosDateString();
+  const monthKey = today.slice(0, 7);
+  const closing = isLagosMonthClosing(today);
+
+  // Crash-leak recovery first: give orphaned claims back so THIS pass
+  // re-runs them through the ordinary walls. A claim another instance made
+  // seconds ago (mid-create) has no marker yet either — un-claiming it
+  // risks one duplicate run, which per-step re-validation makes a no-op;
+  // the safe direction against losing a whole month of submissions.
+  const claimedNow = await runInBypassContext(() =>
+    getDb()
+      .select()
+      .from(clerkPlanPoliciesTable)
+      .where(
+        and(
+          isNull(clerkPlanPoliciesTable.pausedAt),
+          isNull(clerkPlanPoliciesTable.revokedAt),
+          eq(clerkPlanPoliciesTable.lastRunMonth, monthKey),
+        ),
+      ),
+  );
+  for (const policy of claimedNow) {
+    try {
+      if (await monthClaimHasMarker(policy, monthKey)) continue;
+      logger.warn(
+        { policyId: policy.id, month: monthKey },
+        "plan policy sweep: recovering an orphaned month claim",
+      );
+      await unclaimMonth(policy, monthKey, prevMonthKey(monthKey));
+    } catch (err) {
+      logger.error(
+        { err, policyId: policy.id },
+        "plan policy sweep: claim recovery failed",
+      );
+    }
+  }
+
   const due = await runInBypassContext(() =>
     getDb()
       .select()
@@ -587,16 +757,40 @@ export async function runPlanPolicySweep(): Promise<PlanPolicySweepResult> {
   const result: PlanPolicySweepResult = {
     policiesDue: due.length,
     policiesRun: 0,
+    policiesEmpty: 0,
     policiesAutoPaused: 0,
   };
   for (const policy of due) {
     try {
-      const outcome = await runOnePlanPolicy(policy, monthKey);
+      const outcome = await runOnePlanPolicy(policy, monthKey, closing);
       if (outcome === "ran" || outcome === "ran_empty") result.policiesRun += 1;
+      if (outcome === "skipped_empty") result.policiesEmpty += 1;
       if (outcome === "auto_paused") result.policiesAutoPaused += 1;
     } catch (err) {
       // Per-policy isolation: one broken firm cannot stall the fleet.
       logger.error({ err, policyId: policy.id }, "plan policy sweep failed");
+    }
+  }
+  // Fleet visibility (the daily sweep's round-30 discipline): one info line
+  // per pass; NEW auto-pauses additionally raise the durable once-per-day
+  // ledger alert. Best-effort — a failed alert never fails the sweep.
+  logger.info(result, "plan-policy sweep: pass complete");
+  if (result.policiesAutoPaused > 0) {
+    try {
+      await runInBypassContext(() =>
+        alertAutoPaused(
+          `auto-paused:${today}`,
+          {
+            ...result,
+            day: today,
+            reason:
+              "The plan-policy sweep auto-paused recurring plans: tripwires fired and the affected automations are stopped until a human reviews and resumes them.",
+          },
+          "Recurring plan policies were auto-paused by the sweep; review the policy audit trail and the clients' monthly-automation strips.",
+        ),
+      );
+    } catch (err) {
+      logger.error({ err }, "plan-policy sweep: auto-pause alert failed");
     }
   }
   return result;

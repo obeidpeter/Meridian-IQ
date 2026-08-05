@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import {
   getDb,
+  auditEventsTable,
   clerkPlanPoliciesTable,
   clerkPlanRunsTable,
   engagementsTable,
@@ -20,9 +21,11 @@ import { ACTIONS_FLAG_KEY } from "./actions.ts";
 import { POLICIES_FLAG_KEY } from "./action-policies.ts";
 import {
   grantPlanPolicy,
+  isLagosMonthClosing,
   listPlanPolicies,
   revokePlanPoliciesForParty,
   revokePlanPolicy,
+  runOnePlanPolicy,
   runPlanPolicySweep,
 } from "./plan-policies.ts";
 import { lagosDateString } from "../../lib/lagos-time.ts";
@@ -40,7 +43,11 @@ import { grantComplianceConsent } from "../../test-helpers/seeders.ts";
 //  - the monthly sweep mints ONE plan run per policy per Lagos month (the
 //    lastRunMonth CAS), records it, and an already-claimed month runs
 //    nothing again;
-//  - an empty month consumes the month HONESTLY (no run row, audited);
+//  - an empty pass gives the month BACK (the first non-empty pass runs);
+//    only the closing window consumes a still-empty month (audited, no
+//    run row);
+//  - an orphaned claim (crash between the CAS and the create) is
+//    recovered by the sweep's opening scan;
 //  - tripwires pause: a halted previous run, a demoted grantor;
 //  - a dark flag skips without consuming the month;
 //  - offboarding revokes the party's plan policies.
@@ -162,10 +169,12 @@ test("grant walls: engagement, duplicates, unknown templates", async () => {
   await revokePlanPolicy(firmId, again.id, principal);
 });
 
-test("the sweep mints one run per month (CAS); an empty month consumes honestly", async () => {
+test("the sweep mints one run per month (CAS); an empty pass gives the month back until closing", async () => {
   const withPaper = await grantPlanPolicy(firmId, clientA, principal, "month_end_close");
   const empty = await grantPlanPolicy(firmId, clientB, principal, "month_end_close");
   try {
+    // clientA has an overdue draft: whatever the calendar day, the sweep
+    // mints exactly one run for it this month.
     await runPlanPolicySweep();
     const ranA = await loadPolicy(withPaper.id);
     assert.equal(ranA.lastRunMonth, monthKey);
@@ -177,19 +186,116 @@ test("the sweep mints one run per month (CAS); an empty month consumes honestly"
     assert.equal(run.templateKey, "month_end_close");
     assert.equal(run.approvedBy, userId);
 
-    const ranB = await loadPolicy(empty.id);
-    assert.equal(ranB.lastRunMonth, monthKey, "the empty month is consumed");
-    assert.equal(ranB.lastRunId, null, "no run row for an empty month");
+    // clientB's book is empty. Driven directly so both closing branches are
+    // deterministic whatever today's date: outside the closing window the
+    // month is GIVEN BACK (eligibility changes daily — the first non-empty
+    // pass must still be able to run)...
+    const bRow = await loadPolicy(empty.id);
+    assert.equal(
+      await runOnePlanPolicy(bRow, monthKey, false),
+      "skipped_empty",
+    );
+    const unclaimed = await loadPolicy(empty.id);
+    assert.equal(unclaimed.lastRunMonth, null, "the month is NOT consumed early");
+    assert.equal(unclaimed.pausedAt, null);
 
-    // Same month again: nothing new mints.
+    // ...and the CLOSING window consumes a still-empty month honestly:
+    // audited, no run row.
+    assert.equal(
+      await runOnePlanPolicy(unclaimed, monthKey, true),
+      "ran_empty",
+    );
+    const ranB = await loadPolicy(empty.id);
+    assert.equal(ranB.lastRunMonth, monthKey, "the closing empty consumes");
+    assert.equal(ranB.lastRunId, null, "no run row for an empty month");
+    const audits = await getDb()
+      .select({ after: auditEventsTable.after })
+      .from(auditEventsTable)
+      .where(
+        and(
+          eq(auditEventsTable.action, "clerk.plan_policy_ran"),
+          eq(auditEventsTable.entityId, empty.id),
+        ),
+      );
+    assert.ok(
+      audits.some(
+        (a) =>
+          (a.after as { month?: string; empty?: boolean }).month === monthKey &&
+          (a.after as { empty?: boolean }).empty === true,
+      ),
+      "the empty month left its honest ledger row",
+    );
+
+    // A claimed month never mints again (CAS): direct call races out, and a
+    // full sweep leaves both policies untouched — including the recovery
+    // scan, which must recognize BOTH markers (A's this-month run, B's
+    // empty audit) and un-claim neither.
+    assert.equal(
+      await runOnePlanPolicy(await loadPolicy(empty.id), monthKey, false),
+      "skipped_raced",
+    );
     await runPlanPolicySweep();
     const still = await loadPolicy(withPaper.id);
     assert.equal(still.lastRunId, ranA.lastRunId);
     assert.equal(still.pausedAt, null);
+    const stillB = await loadPolicy(empty.id);
+    assert.equal(stillB.lastRunMonth, monthKey, "recovery honours the empty audit");
   } finally {
     await revokePlanPolicy(firmId, withPaper.id, principal);
     await revokePlanPolicy(firmId, empty.id, principal);
   }
+});
+
+test("an orphaned month claim (crash between CAS and create) is recovered by the sweep", async () => {
+  const policy = await grantPlanPolicy(firmId, clientB, principal, "month_end_close");
+  try {
+    // Simulate the death between the CAS and the create: the month is
+    // claimed, but no run and no audit exist to back it.
+    await getDb()
+      .update(clerkPlanPoliciesTable)
+      .set({ lastRunMonth: monthKey })
+      .where(eq(clerkPlanPoliciesTable.id, policy.id));
+    await runPlanPolicySweep();
+    const after = await loadPolicy(policy.id);
+    assert.equal(after.pausedAt, null, "recovery is not a tripwire");
+    if (isLagosMonthClosing()) {
+      // The same pass re-ran the recovered policy straight into the
+      // closing-window empty: consumed WITH the ledger row this time.
+      assert.equal(after.lastRunMonth, monthKey);
+      const audits = await getDb()
+        .select({ after: auditEventsTable.after })
+        .from(auditEventsTable)
+        .where(
+          and(
+            eq(auditEventsTable.action, "clerk.plan_policy_ran"),
+            eq(auditEventsTable.entityId, policy.id),
+          ),
+        );
+      assert.ok(
+        audits.some(
+          (a) => (a.after as { month?: string }).month === monthKey,
+        ),
+        "a recovered closing-day claim is backed by its audit",
+      );
+    } else {
+      assert.notEqual(
+        after.lastRunMonth,
+        monthKey,
+        "the orphaned claim was given back — the policy can still run this month",
+      );
+    }
+  } finally {
+    await revokePlanPolicy(firmId, policy.id, principal);
+  }
+});
+
+test("isLagosMonthClosing pins the closing window to the last Lagos day", () => {
+  assert.equal(isLagosMonthClosing("2026-08-05"), false);
+  assert.equal(isLagosMonthClosing("2026-08-31"), true);
+  assert.equal(isLagosMonthClosing("2026-02-28"), true);
+  assert.equal(isLagosMonthClosing("2024-02-28"), false);
+  assert.equal(isLagosMonthClosing("2024-02-29"), true);
+  assert.equal(isLagosMonthClosing("2026-12-31"), true);
 });
 
 test("a halted previous run pauses the policy instead of repeating it", async () => {

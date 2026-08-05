@@ -384,10 +384,14 @@ test("plan-policy routes: read gate, grant walls, firm-scoped lifecycle, rollup"
     );
   }
 
+  // The rollup is a FIRM-INTERNAL aggregate (sibling pause reasons, fleet
+  // failure counts): invoice.read would admit client_users (the digest
+  // refusal class), so it carries the portfolio capability its consuming
+  // surface (the firm-staff portfolio page) already requires.
   const rollupBlock = routeBlock(source, "/clerk/automation-rollup");
   assert.ok(
-    rollupBlock.includes('assertCan(req.principal, "invoice.read")'),
-    "the firm rollup is a read surface",
+    rollupBlock.includes('assertCan(req.principal, "console.portfolio.read")'),
+    "the firm rollup must gate on console.portfolio.read — invoice.read would leak the firm's cross-client automation posture to client_users",
   );
   assert.ok(
     rollupBlock.includes("requireFirmScope(req.principal)"),

@@ -11112,6 +11112,7 @@ components:
           type: string
         grantedBy:
           type: string
+          format: uuid
         grantedByRole:
           type: string
         pausedAt:

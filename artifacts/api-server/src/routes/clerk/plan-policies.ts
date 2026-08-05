@@ -108,8 +108,13 @@ router.post(
 
 // The firm-wide automation posture in one read: live/paused policy counts
 // (both kinds, pauses by reason), plan runs and decisions over 30 days.
+// Gated on console.portfolio.read, NOT invoice.read: client_users hold
+// invoice.read but must never see the firm's cross-client automation
+// footprint (the GET /clerk/digest refusal rule), and the consuming
+// surface is the firm-staff portfolio page, which carries this exact
+// capability.
 router.get("/clerk/automation-rollup", async (req, res): Promise<void> => {
-  assertCan(req.principal, "invoice.read");
+  assertCan(req.principal, "console.portfolio.read");
   const rollup = await computeAutomationRollup(
     requireFirmScope(req.principal),
   );

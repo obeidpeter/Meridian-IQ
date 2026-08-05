@@ -589,23 +589,37 @@ partial unique index backstops the pre-check. The hourly-gated sweep
 `lastRunMonth` (exactly one run per month, however many workers race),
 re-validates the grantor AS THEY STAND TODAY, then mints an ordinary
 template plan run under the grantor's principal — from there Phase 2 owns
-it (per-step re-validation, decision ledger, halts). An empty month
-(NOTHING_TO_RUN) consumes the month HONESTLY — audited `empty: true`, no
-run row — while a dark flag skips WITHOUT consuming it, so a re-lit firm
-still gets its run. Tripwires PAUSE rather than run wrong: the previous
-run halting or erroring (`run_halted`/`run_error` — a halted run means
-something needs a human before automation repeats it), the grantor losing
-the capability (`grantor_inactive`), the engagement closing, consent
-disappearing, the template key vanishing; every auto-pause is audited and
-notified to the grantor, and resume is a human act. Offboarding a party
-revokes its plan policies alongside its action policies (the offboard
-audit carries `planPoliciesRevoked`). The console's Clerk-health overview
-carries the firm-wide **automation rollup**
-(`modules/clerk/automation-rollup.ts`, pure ledger SQL): live/paused
-counts for both policy kinds (pauses by reason), 30-day plan runs
-(done/halted) and 30-day decision totals (automated share,
-executed/failed) — the operator's one-read answer to "how much standing
-automation is in force and is it healthy". **Deliberately deferred:
+it (per-step re-validation, decision ledger, halts). The claim is
+PROVISIONAL until something durable backs it: an empty pass
+(NOTHING_TO_RUN) gives the month back — eligibility changes daily as
+submission windows lapse and rails reject, so the first NON-EMPTY pass of
+the month runs (the daily sweep's leave-the-day-unclaimed rule at month
+granularity) and only the closing window (the last Lagos day) consumes a
+month that stayed empty throughout, audited `empty: true` with no run
+row. A dark flag — checked up front AND on the create's own re-check —
+skips without consuming, so a re-lit firm still gets its run; and the
+sweep opens with a crash-leak recovery scan (a claim with neither a
+this-month run nor the empty audit is an orphan from a death between the
+CAS and the create — it is un-claimed and re-run the same pass, per-step
+re-validation making the rare duplicate a no-op). Tripwires PAUSE rather
+than run wrong: the previous run halting or erroring
+(`run_halted`/`run_error` — a halted run means something needs a human
+before automation repeats it; the errored month is given back so a
+resumed policy still runs it), the grantor losing the capability
+(`grantor_inactive`), the engagement closing, consent disappearing, the
+template key vanishing; every auto-pause is audited, notified to the
+grantor, and raised to operators through the once-per-day
+`ops.plan_policy.auto_paused` ledger alert (the daily sweep's fleet
+discipline). Offboarding a party revokes its plan policies alongside its
+action policies (the offboard audit carries `planPoliciesRevoked`). The
+firm-staff **portfolio page** carries the firm-wide **automation rollup**
+(`modules/clerk/automation-rollup.ts`, pure ledger SQL, gated
+`console.portfolio.read` — a firm-internal aggregate that client_users
+must never read, the GET /clerk/digest refusal class): live/paused counts
+for both policy kinds (pauses by reason), 30-day plan runs (done/halted)
+and 30-day decision totals (automated share, executed/failed) — the
+firm's one-read answer to "how much standing automation is in force and
+is it healthy". **Deliberately deferred:
 in-chat (WhatsApp/email) YES-reply approval of plans.** Approval is a
 consent-grade act tied to an authenticated principal and a frozen,
 server-read plan; an inbound "YES" over the machine rails is neither — the
