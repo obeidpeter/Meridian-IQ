@@ -443,6 +443,11 @@ export const clerkEvalFixturesTable = pgTable("clerk_eval_fixtures", {
     .notNull()
     .unique()
     .references(() => clerkCasesTable.id),
+  // Which extraction lane the fixture exercises: 'invoice' (the historic
+  // corpus) or 'notice' (round 30 — grown from approved authority-notice
+  // cases; scored against NOTICE_FIELDS by the runner's notice branch).
+  // Text, not an enum: the document domains grow.
+  kind: text("kind").notNull().default("invoice"),
   label: text("label").notNull(),
   sourceText: text("source_text").notNull(),
   expected: jsonb("expected").$type<Record<string, string | null>>().notNull(),

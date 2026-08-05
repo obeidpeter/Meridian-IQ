@@ -301,14 +301,18 @@ export function selectCanaryCorpus(
 // Same corpus the nightly eval measures — static, corrections-grown and
 // red-team — capped because every fixture runs TWICE, and stratified so
 // the cap can never evict the adversarial evidence the verdict's first
-// rule depends on. Shared with the model canary.
+// rule depends on. Shared with the model canary. INVOICE lane only: both
+// canaries replay the invoice extraction prompt/schema on every fixture, so
+// notice-kind grown fixtures (round 30) are excluded here — scoring a tax
+// notice against the invoice prompt would pollute the verdict with
+// guaranteed mismatches that say nothing about the candidate.
 export async function loadCanaryCorpus(): Promise<{
   fixtures: EvalFixture[];
   truncated: boolean;
 }> {
   const full = [
     ...EVAL_FIXTURES,
-    ...(await loadGrownFixtures()),
+    ...(await loadGrownFixtures()).filter((f) => f.kind !== "notice"),
     ...(await loadRedTeamFixtures()),
   ];
   return selectCanaryCorpus(full, MAX_CANARY_FIXTURES);

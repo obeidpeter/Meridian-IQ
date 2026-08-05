@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, isNotNull, sql } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -88,22 +88,32 @@ export async function loadGrownFixtures(
     key: `correction.${r.caseId.slice(0, 8)}`,
     label: r.label,
     riskLabel: "correction" as const,
+    // The stored kind routes the fixture to its lane in the runner: notice
+    // fixtures replay the extract_notice prompt and score over the notice
+    // catalogue; everything else stays on the historic invoice path.
+    kind: r.kind === "notice" ? ("notice" as const) : ("invoice" as const),
     sourceText: r.sourceText,
     expected: r.expected as EvalFixture["expected"],
   }));
 }
 
 // Turn newly corrected approvals into fixtures (one per case, capped per
-// pass). Insert races resolve on the caseId unique constraint. The approved
+// pass). Both document lanes grow the same way — an approved invoice
+// extraction and an approved notice reading each leave corrections — and the
+// case's kind rides onto the fixture so the runner replays it on the right
+// prompt. Insert races resolve on the caseId unique constraint. The approved
 // invoice's supplier party identity (register name/TIN, never extracted
 // strings — corrections exclude party identity by design) rides onto the
-// fixture so supplier memory (exemplar.ts) can match future documents.
+// fixture so supplier memory (exemplar.ts) can match future documents;
+// notice cases create no invoice, so their identity columns stay null and
+// supplier memory never serves them.
 export async function growEvalFixtures(
   limit = GROWTH_BATCH,
 ): Promise<number> {
   const candidates = await getDb()
     .select({
       id: clerkCasesTable.id,
+      kind: clerkCasesTable.kind,
       sourceName: clerkCasesTable.sourceName,
       sourceText: clerkCasesTable.sourceText,
       corrections: clerkCasesTable.corrections,
@@ -123,7 +133,7 @@ export async function growEvalFixtures(
     .leftJoin(partiesTable, eq(partiesTable.id, invoicesTable.supplierPartyId))
     .where(
       and(
-        eq(clerkCasesTable.kind, "extraction"),
+        inArray(clerkCasesTable.kind, ["extraction", "notice"]),
         eq(clerkCasesTable.status, "approved"),
         isNotNull(clerkCasesTable.sourceText),
         isNotNull(clerkCasesTable.corrections),
@@ -140,6 +150,7 @@ export async function growEvalFixtures(
       .insert(clerkEvalFixturesTable)
       .values({
         ...fixture,
+        kind: candidate.kind === "notice" ? "notice" : "invoice",
         supplierName: candidate.supplierName ?? null,
         supplierTin: candidate.supplierTin ?? null,
       })

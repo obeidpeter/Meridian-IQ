@@ -44,8 +44,10 @@ none overlap):
 The production provider supports per-purpose model tiers (opt-in
 `CLERK_MODEL_TIERS` env, e.g. `segment_batch=<cheap-model>`; unset = one
 model for everything): the ledger records the model that ACTUALLY served each
-call, and eval purposes follow the `extract_invoice` tier unless explicitly
-overridden so evals measure what production runs. The **tier-suggestion
+call, and eval purposes follow their production tier unless explicitly
+overridden (`eval_extract`/`eval_canary` → `extract_invoice`,
+`eval_extract_notice` → `extract_notice`, and so on) so evals measure what
+production runs. The **tier-suggestion
 report** (`modules/clerk/tier-report.ts`, `GET /clerk/tier-report`,
 `clerk.use`, console health card, pure ledger SQL) is the evidence for using
 it — per purpose over a trailing 90 days: volume, token share, the validity
@@ -1358,13 +1360,17 @@ shared computation as the corresponding chart.
   pin the static corpus via `includeGrown: false`. Grown intent fixtures
   never serve memory.
 - **Learning loop** (`modules/clerk/eval-growth.ts`) turns corrected
-  approvals into eval fixtures on the sweep loop; the nightly auto-eval is
+  approvals — both document kinds since round 30: invoice extractions and
+  notice readings, the case's kind riding onto the fixture — into eval
+  fixtures on the sweep loop; the nightly auto-eval is
   opt-in behind `clerk_auto_eval` (spends tokens). Grown fixtures are
   deliberately NOT scrubbed at mint — they double as the supplier-memory
   exemplar store for active clients (see Memories) — so their lifecycle is
   tied to the client's: **offboarding retires them**. Grown fixtures traced
-  to the departing client (via the approved invoice's supplier party, or
-  the creator's client membership) are retired with document text and
+  to the departing client (via the approved invoice's supplier party, the
+  creator's client membership, or — notice cases, which create no invoice
+  and are usually staff-captured — the obligation approved from the case)
+  are retired with document text and
   supplier identity nulled; the count rides the offboard result
   (`fixturesRetired`) and its audit event.
 - **Vision injection fixtures** — the corpus carries 8 deterministic vision
@@ -1375,6 +1381,32 @@ shared computation as the corresponding chart.
   folds their injection outcomes into the same resistance buckets, so the
   health page's resistance trend measures the image channel, not just
   pasted text.
+- **Notice-extraction eval lane** (round 30, inside `eval.ts` — same run,
+  same stored row): the corpus carries a second document domain. Two
+  hand-written notice statics (`NOTICE_EVAL_FIXTURES`: a clean FIRS
+  assessment and a demand note carrying planted amount/deadline/
+  reclassification instructions) plus every fixture grown from corrected
+  NOTICE approvals (`clerk_eval_fixtures.kind`, default `invoice`) ride
+  the full-corpus path only — `includeGrown: false` still pins the
+  historic invoice statics. Notice fixtures replay the PRODUCTION notice
+  prompt/schema (`notice.v1`, closed catalogues) under the lane's own
+  ledger purpose `eval_extract_notice` — which follows the
+  `extract_notice` model tier, and both are stakes purposes in the tier
+  report — and score deterministically over noticeType + the notice
+  catalogue with the shared comparator (numeric tolerance on
+  amountDemanded); resistance is judged on NOTICE_CRITICAL_FIELDS **plus
+  noticeType** — obeying a planted "classify this as a reminder" is
+  non-resistance, because a flipped type misroutes the obligation. The
+  invoice-prompt canaries (prompt and model) exclude notice fixtures
+  (scoring a tax notice against the invoice prompt says nothing about the
+  candidate), and notice fixtures never serve supplier memory — no
+  invoice means no identity columns, and the exemplar scan filters on
+  kind so they cannot consume window slots. **Triage
+  (`triage_document`) deliberately has no eval lane**: it is fail-open
+  routing into the invoice lane — a wrong guess costs one operator
+  re-route, never money or a statutory clock — so it does not clear the
+  bar that earned extraction/intent/phrasing their lanes; revisit if
+  triage ever gates anything.
 - **Curation** (`modules/clerk/eval-curation.ts`, `GET /clerk/eval/fixtures`
   + retire/restore, `clerk.use`, console corpus card): nullable `retired_at`
   on grown and red-team fixtures; loaders exclude retired rows BEFORE the
