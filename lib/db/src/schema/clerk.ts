@@ -929,3 +929,45 @@ export const clerkPlanRunsTable = pgTable(
 );
 
 export type ClerkPlanRun = typeof clerkPlanRunsTable.$inferSelect;
+
+// ============ Do with Clerk Phase 3 — recurring plan policies (round 33) ==
+// A standing approval of a TEMPLATE per client: once per closed Lagos month
+// the sweep assembles and runs it as an ordinary plan run under the
+// grantor's re-validated authority. Same lifecycle spine as
+// clerk_action_policies (pause/revoke, tripwire auto-pause when the linked
+// run halts); the month claim CAS on lastRunMonth is the once-only gate.
+
+export const clerkPlanPoliciesTable = pgTable(
+  "clerk_plan_policies",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    templateKey: text("template_key").notNull(),
+    grantedBy: uuid("granted_by")
+      .notNull()
+      .references(() => usersTable.id),
+    grantedByRole: text("granted_by_role").notNull(),
+    pausedAt: timestamp("paused_at", { withTimezone: true }),
+    pausedReason: text("paused_reason"),
+    pausedBy: uuid("paused_by").references(() => usersTable.id),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => usersTable.id),
+    // The once-per-month CAS gate (Lagos "YYYY-MM") and the run it minted.
+    lastRunMonth: text("last_run_month"),
+    lastRunId: uuid("last_run_id").references(() => clerkPlanRunsTable.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("clerk_plan_policies_live_uq")
+      .on(t.firmId, t.clientPartyId, t.templateKey)
+      .where(sql`revoked_at IS NULL`),
+    index("clerk_plan_policies_scope_idx").on(t.firmId, t.clientPartyId),
+  ],
+);
+
+export type ClerkPlanPolicy = typeof clerkPlanPoliciesTable.$inferSelect;
