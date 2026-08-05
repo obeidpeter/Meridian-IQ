@@ -52,6 +52,11 @@ export function modelForPurpose(
   if (purpose === "eval_extract" || purpose === "eval_canary") {
     return tiers.get("extract_invoice") ?? base;
   }
+  // The notice-eval lane must measure the model that actually reads
+  // production notices (same rule as every eval purpose below).
+  if (purpose === "eval_extract_notice") {
+    return tiers.get("extract_notice") ?? base;
+  }
   // The intent eval must measure the model that actually classifies
   // production Ask traffic (round-15 review M1).
   if (purpose === "eval_intent") {

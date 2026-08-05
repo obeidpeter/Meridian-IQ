@@ -8,6 +8,7 @@ import {
   partiesTable,
   usersTable,
   invoicesTable,
+  engagementsTable,
   messagesTable,
   alertPreferencesTable,
   consentRecordsTable,
@@ -46,6 +47,17 @@ const supplierDark = randomUUID();
 const supplierStale = randomUUID();
 const supplierRevoked = randomUUID();
 const supplierFailing = randomUUID();
+const supplierDormant = randomUUID();
+
+const ALL_SUPPLIERS = [
+  supplierDueSoon,
+  supplierOverdue,
+  supplierOptedOut,
+  supplierDark,
+  supplierStale,
+  supplierRevoked,
+  supplierFailing,
+];
 
 // The fan-out's own recipient derivation, imported so the assertion key tying
 // message rows back to a fixture party can never drift (the recipient-ref.ts
@@ -121,15 +133,7 @@ before(async () => {
     .onConflictDoNothing();
   await db.insert(firmsTable).values({ id: firmId, name: `Reminder Firm ${SALT}` });
   await db.insert(partiesTable).values(
-    [
-      supplierDueSoon,
-      supplierOverdue,
-      supplierOptedOut,
-      supplierDark,
-      supplierStale,
-      supplierRevoked,
-      supplierFailing,
-    ].map(
+    [...ALL_SUPPLIERS, supplierDormant].map(
       (id, i) => ({
         id,
         type: "client_business" as const,
@@ -143,21 +147,25 @@ before(async () => {
   // Alert fan-out is gated on layer-1 consent (CORE-03): grant it for every
   // fixture party; the revocation test layers a revoke on top for its party.
   await db.insert(consentRecordsTable).values(
-    [
-      supplierDueSoon,
-      supplierOverdue,
-      supplierOptedOut,
-      supplierDark,
-      supplierStale,
-      supplierRevoked,
-      supplierFailing,
-    ].map((partyId) => ({
+    [...ALL_SUPPLIERS, supplierDormant].map((partyId) => ({
       partyId,
       layer: 1,
       action: "grant" as const,
       scope: "compliance",
       basis: "contract",
       channel: "test",
+    })),
+  );
+  // The sweep only serves live relationships (the round-30 engagement wall):
+  // every fixture supplier except the dormancy test's gets an open
+  // engagement.
+  await db.insert(engagementsTable).values(
+    ALL_SUPPLIERS.map((clientPartyId, i) => ({
+      firmId,
+      clientPartyId,
+      type: "readiness_assessment" as const,
+      status: "open" as const,
+      title: `Reminder Engagement ${i} ${SALT}`,
     })),
   );
 });
@@ -307,4 +315,29 @@ test("ancient overdue invoices claim silently — no day-one blast", async () =>
   assert.equal(ledger.length, 1);
   assert.equal(ledger[0].kind, "overdue");
   assert.equal((await messagesFor(supplierStale)).length, 0);
+});
+
+test("a dormant relationship stops the sends — the live-engagement wall", async () => {
+  // No engagement at all (the dormancy shapes — completed, archived — are
+  // equivalent to the wall's EXISTS): the invoice is due-soon but claims
+  // nothing and sends nothing.
+  const invoice = await draftFor(supplierDormant, DUE_SOON_ISSUE);
+  await drainReminders();
+  assert.equal((await remindersFor(invoice.id)).length, 0);
+  assert.equal((await messagesFor(supplierDormant)).length, 0);
+
+  // Re-opening the relationship resumes the ladder: no slot was consumed
+  // while walled.
+  await getDb().insert(engagementsTable).values({
+    firmId,
+    clientPartyId: supplierDormant,
+    type: "readiness_assessment",
+    status: "open",
+    title: `Reminder Engagement dormant ${SALT}`,
+  });
+  await drainReminders();
+  const ledger = await remindersFor(invoice.id);
+  assert.equal(ledger.length, 1);
+  assert.equal(ledger[0].kind, "due_soon");
+  assert.ok((await messagesFor(supplierDormant)).length > 0);
 });

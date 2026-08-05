@@ -8,13 +8,14 @@ import {
   clerkRedTeamFixturesTable,
   invoicesTable,
   membershipsTable,
+  obligationsTable,
   partiesTable,
   type ClerkEvalFixtureResult,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
 import { creatorClientParty } from "./cases";
-import { EVAL_FIXTURES } from "./eval-fixtures";
+import { EVAL_FIXTURES, NOTICE_EVAL_FIXTURES } from "./eval-fixtures";
 import { GROWN_CORPUS_CAP } from "./eval-growth";
 import { RED_TEAM_CORPUS_CAP } from "./red-team";
 import { createScrubber } from "./scrub";
@@ -181,7 +182,9 @@ export async function listEvalFixtures(): Promise<EvalFixtureReport> {
   });
 
   const fixtures: EvalFixtureSummary[] = [
-    ...EVAL_FIXTURES.map((f) =>
+    // Both static lanes: the invoice corpus and the notice corpus (round 30)
+    // — the inventory must show exactly what the full-corpus run measures.
+    ...[...EVAL_FIXTURES, ...NOTICE_EVAL_FIXTURES].map((f) =>
       withHistory({
         key: f.key,
         source: "static",
@@ -214,7 +217,11 @@ function grownSummaryBase(
   return {
     key: `${GROWN_KEY_PREFIX}${row.caseId.slice(0, 8)}`,
     source: "grown",
-    label: row.label,
+    // The summary shape carries no kind field (kept contract-stable), so the
+    // label names the lane — grown notice and invoice fixtures would
+    // otherwise be indistinguishable exactly where an operator triages a
+    // failing fixture.
+    label: row.kind === "notice" ? `${row.label} (notice)` : row.label,
     riskLabel: "correction",
     retired: row.retiredAt !== null,
     retiredAt: row.retiredAt?.toISOString() ?? null,
@@ -261,7 +268,10 @@ async function findRedTeamRow(idPrefix: string): Promise<RedTeamRow | null> {
 }
 
 function assertNotStatic(key: string): void {
-  if (EVAL_FIXTURES.some((f) => f.key === key)) {
+  if (
+    EVAL_FIXTURES.some((f) => f.key === key) ||
+    NOTICE_EVAL_FIXTURES.some((f) => f.key === key)
+  ) {
     throw new DomainError(
       "STATIC_FIXTURE",
       "Static fixtures are the hand-written regression floor and cannot be retired",
@@ -557,8 +567,9 @@ export async function mintFixtureFromCase(
 // ---- Offboarding lifecycle (round 7) ---------------------------------------
 // Grown fixtures ARE client document text (minted verbatim by the growth
 // sweep). When a client party is offboarded (modules/party/offboard.ts), the
-// fixtures traced to it — via the approved invoice's supplier party, or a
-// case created by one of the party's client_user members — are retired AND
+// fixtures traced to it — via the approved invoice's supplier party, a case
+// created by one of the party's client_user members, or the obligation
+// approved from a notice case (round 30) — are retired AND
 // emptied: retired_at frees the corpus slot, source_text = '' (empty string,
 // keeping the NOT NULL constraint while removing the content) and the
 // supplier identity columns go NULL so supplier memory can never serve the
@@ -589,6 +600,13 @@ export async function retireFixturesForClientParty(
       );
     const memberIds = members.map((m) => m.userId);
 
+    // Three trace paths, one per way a case binds to the party: the approved
+    // invoice's supplier (invoice lane), a client_user creator (client-facing
+    // capture), and — round 30, for grown NOTICE fixtures — the obligation
+    // approved from the case, which carries the client party even when firm
+    // staff did the capture (notice cases create no invoice, so the first
+    // two paths never see them).
+    const obligationTrace = eq(obligationsTable.clientPartyId, partyId);
     const tracedCases = getDb()
       .select({ id: clerkCasesTable.id })
       .from(clerkCasesTable)
@@ -596,13 +614,18 @@ export async function retireFixturesForClientParty(
         invoicesTable,
         eq(invoicesTable.id, clerkCasesTable.createdInvoiceId),
       )
+      .leftJoin(
+        obligationsTable,
+        eq(obligationsTable.sourceCaseId, clerkCasesTable.id),
+      )
       .where(
         memberIds.length > 0
           ? or(
               eq(invoicesTable.supplierPartyId, partyId),
               inArray(clerkCasesTable.createdBy, memberIds),
+              obligationTrace,
             )
-          : eq(invoicesTable.supplierPartyId, partyId),
+          : or(eq(invoicesTable.supplierPartyId, partyId), obligationTrace),
       );
 
     const retired = await getDb()

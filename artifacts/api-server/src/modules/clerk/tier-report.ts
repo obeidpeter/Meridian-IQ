@@ -19,11 +19,15 @@ export const TIER_MIN_CALLS = 50;
 // default model.
 const TIER_VALID_THRESHOLD = 0.99;
 
-// Extraction is where corrections carry real money, and evals must measure
-// what production extraction runs — never tier these on validity alone.
+// Extraction is where corrections carry real money — invoice amounts on one
+// lane, statutory deadlines and demanded sums on the notice lane — and evals
+// must measure what production extraction runs; never tier these on validity
+// alone.
 const STAKES_PURPOSES = new Set([
   "extract_invoice",
+  "extract_notice",
   "eval_extract",
+  "eval_extract_notice",
   "eval_canary",
 ]);
 

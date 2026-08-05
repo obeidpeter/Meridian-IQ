@@ -73,6 +73,18 @@ export async function sweepDeadlineReminders(
               AT TIME ZONE 'Africa/Lagos') < ${now}
         THEN 'overdue' ELSE 'due_soon' END
   )`;
+  // The live-engagement wall, same enumeration and rationale as the
+  // obligation reminder sweep (modules/obligations/reminders.ts) and the
+  // client-statement sweep: a dormant book — every engagement completed or
+  // archived, client not offboarded — must not keep receiving deadline
+  // nudges. No claim slot is consumed while walled, so re-opening the
+  // engagement resumes exactly where the ladder left off.
+  const liveEngagement = sql`EXISTS (
+    SELECT 1 FROM engagements e
+    WHERE e.firm_id = ${invoicesTable.firmId}
+      AND e.client_party_id = ${invoicesTable.supplierPartyId}
+      AND e.status IN ('open', 'in_progress')
+  )`;
   const candidates = await getDb()
     .select()
     .from(invoicesTable)
@@ -81,6 +93,7 @@ export async function sweepDeadlineReminders(
         inArray(invoicesTable.status, ["draft", "validated"]),
         lte(invoicesTable.issueDate, cutoff),
         unclaimedAtThreshold,
+        liveEngagement,
       ),
     )
     .orderBy(invoicesTable.issueDate)

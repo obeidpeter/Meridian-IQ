@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import {
   db as baseDb,
   getDb,
@@ -7,6 +7,7 @@ import {
   engagementsTable,
   invitationsTable,
   membershipsTable,
+  obligationsTable,
   partyNameAliasesTable,
   pushDevicesTable,
 } from "@workspace/db";
@@ -266,6 +267,26 @@ export async function offboardClient(
   // direction for a data-lifecycle step.
   const fixturesRetired = await retireFixturesForClientParty(partyId);
 
+  // (g) Unresolved authority obligations, COUNTED not closed: the matter
+  // belongs to the client and the authority, so a firm's exit must not mark
+  // it resolved — the rows stay open as evidence for the handover, their
+  // reminder sends stop by themselves (the sweep's live-engagement wall;
+  // (a) just archived every engagement), and staff may close them manually
+  // with the status routes. The ledger records how many were left
+  // unresolved (open OR responded — anything short of closed) at teardown
+  // so the offboard event names the loose ends.
+  const [obligationsRow] = await getDb()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(obligationsTable)
+    .where(
+      and(
+        eq(obligationsTable.firmId, firmId),
+        eq(obligationsTable.clientPartyId, partyId),
+        ne(obligationsTable.status, "closed"),
+      ),
+    );
+  const unresolvedObligationsAtOffboard = Number(obligationsRow?.n ?? 0);
+
   // ONE ledger event for the whole teardown, pointer-only (counts, never
   // contact values or names beyond the statutory identity the row keeps).
   await appendAudit({
@@ -281,6 +302,7 @@ export async function offboardClient(
       aliasesDeleted: deletedAliases.length,
       invitationsRevoked: revokedInvitations.length,
       standingApprovalsRevoked: revokedPolicies.length,
+      unresolvedObligationsAtOffboard,
       alertPreferencesCleared: clearedPreferences,
       pushDevicesRemoved: removedDevices,
       contactCleared,

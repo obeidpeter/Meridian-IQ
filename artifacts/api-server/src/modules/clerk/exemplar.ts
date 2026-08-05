@@ -193,6 +193,10 @@ export async function findExtractionExemplar(
         .where(
           and(
             eq(clerkCasesTable.firmId, firmId),
+            // Invoice fixtures only: notice-kind fixtures (round 30) carry no
+            // supplier identity so they could never match, but left in the
+            // scan they would silently consume newest-N window slots.
+            eq(clerkEvalFixturesTable.kind, "invoice"),
             ...(restrictToCreator
               ? [eq(clerkCasesTable.createdBy, restrictToCreator)]
               : []),

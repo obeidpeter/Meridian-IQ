@@ -10,6 +10,7 @@ import {
   messagesTable,
   alertPreferencesTable,
   consentRecordsTable,
+  engagementsTable,
   obligationReminderSendsTable,
 } from "@workspace/db";
 import { setFlag } from "../flags/flags.ts";
@@ -142,6 +143,19 @@ before(async () => {
       scope: "compliance",
       basis: "contract",
       channel: "test",
+    })),
+  );
+  // The sweep only nudges clients the firm ACTIVELY serves (the
+  // live-engagement wall): every fixture client holds an open engagement,
+  // as a real obligation's client would. The wall's own test below runs a
+  // party WITHOUT one.
+  await db.insert(engagementsTable).values(
+    ALL_CLIENTS.map((clientPartyId, i) => ({
+      firmId,
+      clientPartyId,
+      type: "readiness_assessment" as const,
+      status: "open" as const,
+      title: `obl rem ${i} ${SALT}`,
     })),
   );
 });
@@ -283,4 +297,54 @@ test("responded and closed obligations never remind", async () => {
   await drainReminders();
   assert.equal((await remindersFor(obligation.id)).length, 0);
   assert.equal((await messagesFor(clientAnswered)).length, 0);
+});
+
+test("a dormant relationship stops the sends — the live-engagement wall", async () => {
+  // A party the firm holds NO open/in_progress engagement for: offboarding
+  // archives every engagement (and deletes the client logins that could
+  // have silenced alerts), and a dormant book must not keep nudging either.
+  // The obligation stays open — evidence of an unresolved matter — and no
+  // claim slot is consumed, so re-opening the engagement RESUMES the
+  // reminders instead of finding the threshold already burned.
+  const clientDormant = randomUUID();
+  const db = getDb();
+  await db.insert(partiesTable).values({
+    id: clientDormant,
+    type: "client_business",
+    legalName: `Obligation Reminder Dormant ${SALT}`,
+    tin: "20000900-0009",
+    street: "9 Broad St",
+    city: "Lagos",
+  });
+  await db.insert(consentRecordsTable).values({
+    partyId: clientDormant,
+    layer: 1,
+    action: "grant",
+    scope: "compliance",
+    basis: "contract",
+    channel: "test",
+  });
+  const obligation = await obligationFor(clientDormant, lagosDaysFromNow(2));
+
+  await drainReminders();
+  assert.equal(
+    (await remindersFor(obligation.id)).length,
+    0,
+    "no engagement, no claim — the slot is not burned",
+  );
+  assert.equal((await messagesFor(clientDormant)).length, 0);
+
+  // The relationship resumes: the same threshold now claims and sends.
+  await db.insert(engagementsTable).values({
+    firmId,
+    clientPartyId: clientDormant,
+    type: "readiness_assessment",
+    status: "open",
+    title: `obl rem dormant ${SALT}`,
+  });
+  await drainReminders();
+  const claims = await remindersFor(obligation.id);
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0].kind, "due_soon");
+  assert.ok((await messagesFor(clientDormant)).length > 0, "the nudge landed");
 });

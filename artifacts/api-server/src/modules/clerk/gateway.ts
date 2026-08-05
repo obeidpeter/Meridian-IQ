@@ -92,6 +92,11 @@ export type ClerkPurpose =
   // §13.1 evaluation traffic: same prompt and schema as extract_invoice, but
   // its own purpose so metrics cohorts separate eval runs from production.
   | "eval_extract"
+  // Notice-extraction eval lane (round 30): the notice fixtures in the same
+  // corpus run, on the extract_notice prompt/schema; its own purpose so
+  // notice-eval spend cohorts apart from both production notices and the
+  // invoice eval lane.
+  | "eval_extract_notice"
   // Prompt canary (prompt-canary.ts): candidate-vs-incumbent corpus passes;
   // its own purpose so canary spend never blends into the eval cohort.
   | "eval_canary"
