@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useAskClerk, useSubmitClerkFeedback } from "@workspace/api-client-react";
-import type { ClerkAnswer } from "@workspace/api-client-react";
+import {
+  useAskClerk,
+  useExecuteAction,
+  useSubmitClerkFeedback,
+} from "@workspace/api-client-react";
+import type {
+  AskSectionAction,
+  ClerkAnswer,
+  ExecuteActionResult,
+} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,6 +63,65 @@ const SUGGESTED_QUESTIONS = [
   // The month-over-month delta intent added with Ask 2.0 (contract 0.56.0).
   "How does this month compare to last month?",
 ];
+
+// Do with Clerk (round 31): the approval block under an action-proposal
+// section. Approval drives the EXISTING execute route — the server
+// re-asserts capability, the rollout flag, consent and every target at that
+// moment, and the decision lands in the append-only ledger. One approval
+// per block: the button retires itself into the outcome summary.
+function SectionActionApproval({
+  action,
+  index,
+}: {
+  action: AskSectionAction;
+  index: number;
+}) {
+  const { toast } = useToast();
+  const execute = useExecuteAction();
+  const [outcome, setOutcome] = useState<ExecuteActionResult | null>(null);
+  if (outcome) {
+    const d = outcome.decision;
+    return (
+      <p className="text-sm" data-testid={`text-action-outcome-${index}`}>
+        Approved: {d.executedCount} of {d.requestedCount} ran
+        {d.skippedCount > 0 ? `, ${d.skippedCount} no longer eligible` : ""}
+        {d.failedCount > 0 ? `, ${d.failedCount} failed` : ""}. The decision
+        has been recorded.
+      </p>
+    );
+  }
+  return (
+    <Button
+      size="sm"
+      disabled={execute.isPending}
+      data-testid={`button-approve-action-${index}`}
+      onClick={() =>
+        execute.mutate(
+          {
+            data: {
+              kind: action.kind,
+              invoiceIds: action.invoiceIds,
+              clientPartyId: action.clientPartyId,
+            },
+          },
+          {
+            onSuccess: (result) => setOutcome(result),
+            onError: () =>
+              toast({
+                title: "Couldn't run this action",
+                description:
+                  "Nothing was changed. Review it on the dashboard's actions card, or try again.",
+              }),
+          },
+        )
+      }
+    >
+      {execute.isPending
+        ? "Running…"
+        : `Approve & run (${action.invoiceIds.length})`}
+    </Button>
+  );
+}
 
 function AnswerCard({
   answer,
@@ -166,6 +233,9 @@ function AnswerCard({
                       </Button>
                     ))}
                   </div>
+                )}
+                {s.action && (
+                  <SectionActionApproval action={s.action} index={i} />
                 )}
                 {scope && (
                   <p

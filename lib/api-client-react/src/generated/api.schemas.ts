@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.59.0
+ * OpenAPI spec version: 0.60.0
  */
 export interface HealthStatus {
   status: string;
@@ -3522,6 +3522,29 @@ export interface ClerkAnswerLink {
   id?: string | null;
 }
 
+export type AskSectionActionKind = typeof AskSectionActionKind[keyof typeof AskSectionActionKind];
+
+
+export const AskSectionActionKind = {
+  submit_overdue: 'submit_overdue',
+  retry_failed: 'retry_failed',
+  draft_chasers: 'draft_chasers',
+} as const;
+
+/**
+ * Do with Clerk (round 31) — an action PROPOSAL assembled from an act.* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.
+ */
+export interface AskSectionAction {
+  kind: AskSectionActionKind;
+  clientPartyId: string;
+  clientName: string;
+  why: string;
+  targetCount: number;
+  truncated: boolean;
+  /** @maxItems 50 */
+  invoiceIds: string[];
+}
+
 export type AskAnswerSectionDataParams = {[key: string]: string};
 
 export interface AskAnswerSection {
@@ -3531,6 +3554,7 @@ export interface AskAnswerSection {
   dataParams?: AskAnswerSectionDataParams;
   facts: ProtectedFact[];
   links?: ClerkAnswerLink[];
+  action?: AskSectionAction;
 }
 
 export interface ClerkAnswer {

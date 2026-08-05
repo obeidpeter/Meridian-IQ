@@ -322,6 +322,20 @@ function AnswerCard({
               >
                 <AppText variant="label">{s.title}</AppText>
                 <AppText variant="body">{s.text}</AppText>
+                {/* Do with Clerk (round 31): mobile has no approval control
+                    for action-proposal sections — say so instead of letting
+                    the section text's "approve it below" dangle. Approval
+                    lives on the web app (and the dashboard's actions card),
+                    where the execute route re-checks everything. */}
+                {s.action ? (
+                  <View testID={`text-action-web-only-${i}`}>
+                    <AppText variant="caption" color={colors.mutedForeground}>
+                      To approve and run this proposal, open MeridianIQ on
+                      the web — approvals are not available in the mobile
+                      app yet.
+                    </AppText>
+                  </View>
+                ) : null}
                 {s.facts.length > 0 ? (
                   <View style={{ gap: 8 }}>
                     {s.facts.map((f) => (

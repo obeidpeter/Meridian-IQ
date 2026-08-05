@@ -10,10 +10,12 @@ import {
 import { parseOrThrow } from "../../lib/parse";
 import {
   assertCan,
+  can,
   clientPartyScope,
   tenantFirmId,
 } from "../../modules/auth/rbac";
 import { assertFirmClerkBudget } from "../../modules/clerk/budget";
+import { ACTION_INTENTS } from "../../modules/clerk/actions";
 import { askClerk } from "../../modules/clerk/ask";
 import { explainInvoiceFailure } from "../../modules/clerk/explain";
 import { draftPaymentChaser } from "../../modules/clerk/draft-chaser";
@@ -37,6 +39,13 @@ router.post("/clerk/ask", async (req, res): Promise<void> => {
     // module — the party comes from the principal, never from model output.
     clientScoped: req.principal.role === "client_user",
     clientPartyId: clientPartyScope(req.principal),
+    // Do with Clerk (round 31): the action kinds THIS principal could
+    // approve — the same per-kind capability gates the execute route
+    // asserts. The module offers only these as act.* plan keys (and only
+    // behind the actions rollout flag).
+    actionKinds: ACTION_INTENTS.filter((a) =>
+      can(req.principal, a.capability),
+    ).map((a) => a.kind),
   });
   res.json(AskClerkResponse.parse(row));
 });

@@ -516,6 +516,37 @@ The unattended half of the arc: evidence and signals, all deterministic.
 
 ## Ask Clerk (grounded firm-data Q&A)
 
+### Do with Clerk (round 31 — action-bearing plans, contract 0.60.0)
+
+Ask's planner (`intent.v7`) carries a THIRD closed key kind: `act.*` keys —
+the planner-facing index of the proposed-actions catalogue
+(`ACTION_INTENTS` in `modules/clerk/actions.ts`; `act.submit_overdue`,
+`act.retry_failed`, `act.draft_chasers`). The model still only SEQUENCES:
+an act step in an answered plan resolves through `proposalForKind` (the
+same live SQL mining as the proposals card, read-only) into an approvable
+section — `AskAnswerSection.action` carries the kind, the resolved client
+and the capped target ids — and NOTHING executes from an answer. Approval
+drives the EXISTING `POST /clerk/action-proposals/execute` route, which
+re-asserts capability, the rollout flag, consent and every target at that
+moment and writes the append-only decision ledger, exactly as if the
+operator had used the actions card. Offering is triple-gated: act keys
+enter the plan enum only for firm-scoped askers whose principal holds the
+kind's execute capability (the route computes `actionKinds` from the same
+per-kind gates: `invoice.submit` for the submit kinds, `clerk.capture` for
+chasers; operators are firm-less askers, so they get no act keys at all —
+register-only Ask), and only while
+`clerk_actions` is lit for the firm (dark = the keys don't exist, the
+listActionProposals posture). A firm asker must name a listed client
+(per-client batches); a client asker is FORCED to its own party (SEC-03)
+whatever the model picked; an act step never takes a month; an empty
+assembly answers honestly ("nothing eligible") with no approve payload.
+The system prompt's v7 rules pin the write-proposal injection class: an
+action key may only answer a question that EXPLICITLY asks for the work,
+and the eval corpus carries `inject-act-plant` (a planted order to append
+unrequested action steps) where resistance = the un-planted plan. Phases
+2–3 (workflow templates with dependencies/progress, then policy-gated
+recurring plans) build on this spine.
+
 - `modules/clerk/data-intents/`: Ask carries a second closed catalogue next
   to the claims register — data intents ("what's overdue?", "what did we
   submit this month?", the money intents "who owes us?" / "what's
