@@ -330,6 +330,78 @@ test("standing-approval routes: read gate, grant walls, firm-scoped lifecycle", 
   );
 });
 
+// ---- Recurring plan policies (round 33) -------------------------------------
+// The Phase-3 routes mirror the standing-approval stack one level up; the
+// same round-28 M4 rationale applies — no module test drives the HTTP
+// layer, so each gate gets a source pin.
+test("plan-policy routes: read gate, grant walls, firm-scoped lifecycle, rollup", () => {
+  const source = src("routes/clerk/plan-policies.ts");
+
+  const getBlock = routeBlock(source, "/clerk/plan-policies");
+  assert.ok(
+    getBlock.includes('assertCan(req.principal, "invoice.read")'),
+    "listing plan grants is a read surface",
+  );
+  assert.ok(
+    getBlock.includes("resolveClientAnalyticsScope"),
+    "the list resolves its client through the SEC-03 scope resolver",
+  );
+
+  // Granting a recurring plan IS a standing submission authorization —
+  // every template step is a submit kind — so it carries invoice.submit
+  // plus the execute route's IDOR wall.
+  const grantStart = source.indexOf('router.post("/clerk/plan-policies"');
+  assert.ok(grantStart >= 0, "the grant route exists");
+  const grantEnd = source.indexOf("router.", source.indexOf("=>", grantStart));
+  const grantBlock = source.slice(
+    grantStart,
+    grantEnd === -1 ? undefined : grantEnd,
+  );
+  assert.ok(
+    grantBlock.includes('assertCan(req.principal, "invoice.submit")'),
+    "granting carries the submit capability",
+  );
+  assert.ok(
+    grantBlock.includes(
+      "await assertPartyAccess(req.principal, clientPartyId)",
+    ),
+    "the grant re-walks the party IDOR wall exactly like execute",
+  );
+
+  for (const path of [
+    "/clerk/plan-policies/:id/pause",
+    "/clerk/plan-policies/:id/resume",
+    "/clerk/plan-policies/:id/revoke",
+  ]) {
+    const block = routeBlock(source, path);
+    assert.ok(
+      block.includes('assertCan(req.principal, "invoice.submit")'),
+      `${path} carries the submit capability`,
+    );
+    assert.ok(
+      block.includes("requireFirmScope(req.principal)"),
+      `${path} resolves the firm from the principal, never the body`,
+    );
+  }
+
+  const rollupBlock = routeBlock(source, "/clerk/automation-rollup");
+  assert.ok(
+    rollupBlock.includes('assertCan(req.principal, "invoice.read")'),
+    "the firm rollup is a read surface",
+  );
+  assert.ok(
+    rollupBlock.includes("requireFirmScope(req.principal)"),
+    "the rollup resolves the firm from the principal — no client param to widen",
+  );
+
+  assert.ok(
+    src("modules/clerk/plan-policies.ts").includes(
+      "assertClientPartyScope(principal, policy.clientPartyId)",
+    ),
+    "the module walls a client_user to its own party's grants (SEC-03)",
+  );
+});
+
 test("bulk submit runs outside the request transaction with per-item caller-posture commits", () => {
   // The LAST batch surface converted (posture round): inside one request
   // transaction the first row's appendAudit held the GLOBAL audit advisory

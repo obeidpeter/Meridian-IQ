@@ -316,7 +316,13 @@ export async function grantActionPolicy(
 // Exported ONLY for the consent-gate test (a policy replayed after consent
 // lapsed must send nothing); production's one caller is grantActionPolicy.
 export async function notifyPolicyGranted(
-  policy: ClerkActionPolicy,
+  // Structural on purpose (round 33): plan policies carry the same grant
+  // fields and share this signal verbatim — one home for the routing rules.
+  policy: Pick<
+    ClerkActionPolicy,
+    "id" | "firmId" | "clientPartyId" | "grantedByRole"
+  >,
+  entityType: "clerk_action_policy" | "clerk_plan_policy" = "clerk_action_policy",
 ): Promise<void> {
   if (!(await isFeatureEnabled("messaging_notifications", null))) return;
   const entityId = pointerEntityRef("pol", policy.id);
@@ -337,7 +343,7 @@ export async function notifyPolicyGranted(
       clientPartyId: policy.clientPartyId,
       firmId: policy.firmId,
       templateKey: "automation_granted",
-      entityType: "clerk_action_policy",
+      entityType,
       entityId,
       // Deadline-reminder default: with no prefs row, SMS stays off.
       smsDefaultWhenNoPrefs: false,
@@ -380,7 +386,7 @@ export async function notifyPolicyGranted(
           recipientRef: pointerEntityRef("usr", prefs.userId),
           recipientUserId: prefs.userId,
           templateKey: "automation_granted",
-          entityType: "clerk_action_policy",
+          entityType,
           entityId,
         });
       } catch {
@@ -392,7 +398,7 @@ export async function notifyPolicyGranted(
         await sendPushToUser({
           userId: prefs.userId,
           templateKey: "automation_granted",
-          entityType: "clerk_action_policy",
+          entityType,
           entityId,
         });
       } catch {
@@ -619,7 +625,15 @@ async function autoPause(
 // Best-effort by design: sends run autocommit AFTER the pause committed,
 // and any failure lands in the messages ledger (or is absorbed) — never in
 // the sweep's control flow.
-async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
+export async function notifyAutoPause(
+  // Structural on purpose (round 33): the plan-policy sweep pauses with the
+  // same grantor signal — one home for the routing rules.
+  policy: Pick<
+    ClerkActionPolicy,
+    "id" | "firmId" | "clientPartyId" | "grantedBy" | "grantedByRole"
+  >,
+  entityType: "clerk_action_policy" | "clerk_plan_policy" = "clerk_action_policy",
+): Promise<void> {
   // PL-02 (round-29 review MAJOR): the platform-wide messaging kill switch
   // gates every sweep-side send — the digest/reminder/statement rails'
   // shared posture — and a dark rail means NO ledger rows and no provider
@@ -648,7 +662,7 @@ async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
       clientPartyId: policy.clientPartyId,
       firmId: policy.firmId,
       templateKey: "automation_paused",
-      entityType: "clerk_action_policy",
+      entityType,
       entityId,
       smsDefaultWhenNoPrefs: false,
     });
@@ -697,7 +711,7 @@ async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
         recipientRef: pointerEntityRef("usr", policy.grantedBy),
         recipientUserId: policy.grantedBy,
         templateKey: "automation_paused",
-        entityType: "clerk_action_policy",
+        entityType,
         entityId,
       });
     } catch {
@@ -709,7 +723,7 @@ async function notifyAutoPause(policy: ClerkActionPolicy): Promise<void> {
       await sendPushToUser({
         userId: policy.grantedBy,
         templateKey: "automation_paused",
-        entityType: "clerk_action_policy",
+        entityType,
         entityId,
       });
     } catch {

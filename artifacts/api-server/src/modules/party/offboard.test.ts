@@ -476,6 +476,10 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
   assert.equal(afterPayload.lastEngagement, false);
   assert.equal(afterPayload.fixturesRetired, 1);
   assert.equal(afterPayload.standingApprovalsRevoked, 1);
+  // Round 33: recurring plan policies die with the relationship too — the
+  // suite grants none, so the counter pins at 0 (field present, not
+  // last-engagement-gated).
+  assert.equal(afterPayload.planPoliciesRevoked, 0);
   // Counted as a loose end, NOT closed: the row must survive offboard as
   // evidence of the unresolved matter.
   assert.equal(afterPayload.unresolvedObligationsAtOffboard, 1);

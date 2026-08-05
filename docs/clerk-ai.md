@@ -573,8 +573,47 @@ creation AND re-validated before every step (the approver as they stand
 TODAY, the policy sweep's grantorRole discipline — losing it halts with
 `approver_inactive`); a step whose failures cross the autopilot's
 half-rule (`tooManyFailures`, now exported) HALTS the run with remaining
-steps skipped; a dark `clerk_actions` flag PARKS the run intact. Phase 3
-(policy-gated recurring plans) builds on this.
+steps skipped; a dark `clerk_actions` flag PARKS the run intact.
+
+**Phase 3 (round 33) — recurrence** (`modules/clerk/plan-policies.ts`,
+`clerk_plan_policies` firm-keyed RLS migration 0033, contract 0.62.0): a
+standing approval for a TEMPLATE — "run month-end close for this client
+every month" — mirroring the action-policy autopilot's spine one level up.
+Granting (`POST /clerk/plan-policies`, the SME card's "Run monthly")
+requires the grantor to hold `invoice.submit`, a live engagement, granted
+compliance consent, both flags lit (`clerk_actions` AND
+`clerk_action_policies` — recurrence rides the same rollout switch as the
+daily autopilot), and one live grant per (firm, client, template) — a
+partial unique index backstops the pre-check. The hourly-gated sweep
+(`runPlanPolicySweep`) claims each policy's Lagos month by CAS on
+`lastRunMonth` (exactly one run per month, however many workers race),
+re-validates the grantor AS THEY STAND TODAY, then mints an ordinary
+template plan run under the grantor's principal — from there Phase 2 owns
+it (per-step re-validation, decision ledger, halts). An empty month
+(NOTHING_TO_RUN) consumes the month HONESTLY — audited `empty: true`, no
+run row — while a dark flag skips WITHOUT consuming it, so a re-lit firm
+still gets its run. Tripwires PAUSE rather than run wrong: the previous
+run halting or erroring (`run_halted`/`run_error` — a halted run means
+something needs a human before automation repeats it), the grantor losing
+the capability (`grantor_inactive`), the engagement closing, consent
+disappearing, the template key vanishing; every auto-pause is audited and
+notified to the grantor, and resume is a human act. Offboarding a party
+revokes its plan policies alongside its action policies (the offboard
+audit carries `planPoliciesRevoked`). The console's Clerk-health overview
+carries the firm-wide **automation rollup**
+(`modules/clerk/automation-rollup.ts`, pure ledger SQL): live/paused
+counts for both policy kinds (pauses by reason), 30-day plan runs
+(done/halted) and 30-day decision totals (automated share,
+executed/failed) — the operator's one-read answer to "how much standing
+automation is in force and is it healthy". **Deliberately deferred:
+in-chat (WhatsApp/email) YES-reply approval of plans.** Approval is a
+consent-grade act tied to an authenticated principal and a frozen,
+server-read plan; an inbound "YES" over the machine rails is neither — the
+rails are pointer-only (SEC-12) and fail-closed, and a reply cannot prove
+who is holding the phone, so recurrence keeps approval inside the
+authenticated apps and lets the RESULTS ride the existing consent-gated
+notification fan-out (which already reaches WhatsApp where the client
+opted in).
 
 - `modules/clerk/data-intents/`: Ask carries a second closed catalogue next
   to the claims register — data intents ("what's overdue?", "what did we

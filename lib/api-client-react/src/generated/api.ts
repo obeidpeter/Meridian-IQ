@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.61.0
+ * OpenAPI spec version: 0.62.0
  */
 import {
   useMutation,
@@ -35,6 +35,7 @@ import type {
   AssistMatchProposalsInput,
   AuditBundle,
   AuditVerification,
+  AutomationRollup,
   B2cReportBatch,
   B2cReportItem,
   BadRequestResponse,
@@ -88,6 +89,7 @@ import type {
   ClerkFeedbackInput,
   ClerkMetrics,
   ClerkPartySuggestions,
+  ClerkPlanPolicy,
   ClerkTierReport,
   ClerkUsage,
   ClientExportBundle,
@@ -207,6 +209,7 @@ import type {
   GetObligationResponsePackParams,
   GetPayablesSummaryParams,
   GetPenaltyExposureParams,
+  GetPlanPoliciesParams,
   GetProjectionAccuracyParams,
   GetPublicThemeParams,
   GetQuarterlyReviewParams,
@@ -216,6 +219,7 @@ import type {
   GetVatPositionParams,
   GetVatSettlementCheckParams,
   GrantActionPolicyInput,
+  GrantPlanPolicyInput,
   HealthAlert,
   HealthStatus,
   IdentifierCheck,
@@ -300,6 +304,7 @@ import type {
   PenaltyExposure,
   PhrasingEvalOutcome,
   PhrasingEvalRun,
+  PlanPolicyList,
   PlanRunList,
   PlanRunView,
   PortfolioSummary,
@@ -22292,6 +22297,447 @@ export function useGetPlanRun<TData = Awaited<ReturnType<typeof getPlanRun>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetPlanRunQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPlanPoliciesUrl = (params?: GetPlanPoliciesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/plan-policies?${stringifiedParams}` : `/api/clerk/plan-policies`
+}
+
+/**
+ * @summary The live recurring-plan approvals for one client
+ */
+export const getPlanPolicies = async (params?: GetPlanPoliciesParams, options?: RequestInit): Promise<PlanPolicyList> => {
+
+  return customFetch<PlanPolicyList>(getGetPlanPoliciesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlanPoliciesQueryKey = (params?: GetPlanPoliciesParams,) => {
+    return [
+    `/api/clerk/plan-policies`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPlanPoliciesQueryOptions = <TData = Awaited<ReturnType<typeof getPlanPolicies>>, TError = ErrorType<unknown>>(params?: GetPlanPoliciesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlanPolicies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlanPoliciesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlanPolicies>>> = ({ signal }) => getPlanPolicies(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlanPolicies>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlanPoliciesQueryResult = NonNullable<Awaited<ReturnType<typeof getPlanPolicies>>>
+export type GetPlanPoliciesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The live recurring-plan approvals for one client
+ */
+
+export function useGetPlanPolicies<TData = Awaited<ReturnType<typeof getPlanPolicies>>, TError = ErrorType<unknown>>(
+ params?: GetPlanPoliciesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlanPolicies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlanPoliciesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGrantPlanPolicyUrl = () => {
+
+
+
+
+  return `/api/clerk/plan-policies`
+}
+
+/**
+ * @summary Grant a standing approval to run a plan template monthly for one client
+ */
+export const grantPlanPolicy = async (grantPlanPolicyInput: GrantPlanPolicyInput, options?: RequestInit): Promise<ClerkPlanPolicy> => {
+
+  return customFetch<ClerkPlanPolicy>(getGrantPlanPolicyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(grantPlanPolicyInput)
+  }
+);}
+
+
+
+
+export const getGrantPlanPolicyMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof grantPlanPolicy>>, TError,{data: BodyType<GrantPlanPolicyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof grantPlanPolicy>>, TError,{data: BodyType<GrantPlanPolicyInput>}, TContext> => {
+
+const mutationKey = ['grantPlanPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof grantPlanPolicy>>, {data: BodyType<GrantPlanPolicyInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  grantPlanPolicy(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GrantPlanPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof grantPlanPolicy>>>
+    export type GrantPlanPolicyMutationBody = BodyType<GrantPlanPolicyInput>
+    export type GrantPlanPolicyMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Grant a standing approval to run a plan template monthly for one client
+ */
+export const useGrantPlanPolicy = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof grantPlanPolicy>>, TError,{data: BodyType<GrantPlanPolicyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof grantPlanPolicy>>,
+        TError,
+        {data: BodyType<GrantPlanPolicyInput>},
+        TContext
+      > => {
+      return useMutation(getGrantPlanPolicyMutationOptions(options));
+    }
+
+export const getPausePlanPolicyUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/plan-policies/${id}/pause`
+}
+
+/**
+ * @summary Pause a recurring-plan approval
+ */
+export const pausePlanPolicy = async (id: string, options?: RequestInit): Promise<ClerkPlanPolicy> => {
+
+  return customFetch<ClerkPlanPolicy>(getPausePlanPolicyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getPausePlanPolicyMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pausePlanPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof pausePlanPolicy>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['pausePlanPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pausePlanPolicy>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  pausePlanPolicy(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PausePlanPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof pausePlanPolicy>>>
+
+    export type PausePlanPolicyMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Pause a recurring-plan approval
+ */
+export const usePausePlanPolicy = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pausePlanPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof pausePlanPolicy>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getPausePlanPolicyMutationOptions(options));
+    }
+
+export const getResumePlanPolicyUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/plan-policies/${id}/resume`
+}
+
+/**
+ * @summary Resume a paused recurring-plan approval
+ */
+export const resumePlanPolicy = async (id: string, options?: RequestInit): Promise<ClerkPlanPolicy> => {
+
+  return customFetch<ClerkPlanPolicy>(getResumePlanPolicyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getResumePlanPolicyMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumePlanPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resumePlanPolicy>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['resumePlanPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resumePlanPolicy>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  resumePlanPolicy(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResumePlanPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof resumePlanPolicy>>>
+
+    export type ResumePlanPolicyMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Resume a paused recurring-plan approval
+ */
+export const useResumePlanPolicy = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumePlanPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resumePlanPolicy>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getResumePlanPolicyMutationOptions(options));
+    }
+
+export const getRevokePlanPolicyUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/plan-policies/${id}/revoke`
+}
+
+/**
+ * @summary Revoke a recurring-plan approval
+ */
+export const revokePlanPolicy = async (id: string, options?: RequestInit): Promise<ClerkPlanPolicy> => {
+
+  return customFetch<ClerkPlanPolicy>(getRevokePlanPolicyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRevokePlanPolicyMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokePlanPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokePlanPolicy>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['revokePlanPolicy'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokePlanPolicy>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  revokePlanPolicy(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokePlanPolicyMutationResult = NonNullable<Awaited<ReturnType<typeof revokePlanPolicy>>>
+
+    export type RevokePlanPolicyMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Revoke a recurring-plan approval
+ */
+export const useRevokePlanPolicy = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokePlanPolicy>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokePlanPolicy>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRevokePlanPolicyMutationOptions(options));
+    }
+
+export const getGetAutomationRollupUrl = () => {
+
+
+
+
+  return `/api/clerk/automation-rollup`
+}
+
+/**
+ * @summary The firm-wide automation posture (policies, runs, decisions)
+ */
+export const getAutomationRollup = async ( options?: RequestInit): Promise<AutomationRollup> => {
+
+  return customFetch<AutomationRollup>(getGetAutomationRollupUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAutomationRollupQueryKey = () => {
+    return [
+    `/api/clerk/automation-rollup`
+    ] as const;
+    }
+
+
+export const getGetAutomationRollupQueryOptions = <TData = Awaited<ReturnType<typeof getAutomationRollup>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAutomationRollup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAutomationRollupQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutomationRollup>>> = ({ signal }) => getAutomationRollup({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAutomationRollup>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAutomationRollupQueryResult = NonNullable<Awaited<ReturnType<typeof getAutomationRollup>>>
+export type GetAutomationRollupQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm-wide automation posture (policies, runs, decisions)
+ */
+
+export function useGetAutomationRollup<TData = Awaited<ReturnType<typeof getAutomationRollup>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAutomationRollup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAutomationRollupQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
