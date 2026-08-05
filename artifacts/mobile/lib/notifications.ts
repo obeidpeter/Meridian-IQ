@@ -24,6 +24,9 @@ const TEMPLATE_ROUTES: Record<string, Href> = {
   // as ever — the payload names the template, never the client or policy.
   automation_paused: "/automation",
   automation_granted: "/automation",
+  // A finished month-end close run (round 35): the run's step-by-step
+  // record lives beside the automation grants it usually rode in on.
+  close_pack_ready: "/automation",
 };
 
 /**

@@ -28,11 +28,13 @@ import {
   proposalForKind,
   type ActionKind,
 } from "./actions";
-import { tooManyFailures } from "./action-policies";
+import { notifyGrantorSignal, tooManyFailures } from "./action-policies";
 import {
   assembleDraftRecurring,
+  assembleReconcileMatches,
   deterministicCapability,
   executeDraftRecurring,
+  executeReconcileMatches,
   isDeterministicKind,
   type DeterministicStepKind,
 } from "./plan-steps";
@@ -99,9 +101,26 @@ export const PLAN_TEMPLATES: Record<
 > = {
   month_end_close: {
     title: "Month-end close",
-    kinds: ["draft_recurring", "submit_overdue", "retry_failed"],
+    kinds: [
+      "reconcile_matches",
+      "draft_recurring",
+      "submit_overdue",
+      "retry_failed",
+    ],
   },
 };
+
+// OPTIONAL kinds (round 35): offered only to approvers who hold their
+// capability — reconciliation.act is firm-staff work, and the month-end
+// button must keep working for a client_user with the steps they CAN run.
+// The plan-policy grantor re-validation (templateCapabilities) excludes
+// these for the same reason: a client-granted recurring close must not
+// auto-pause grantor_inactive just because the template grew a staff-only
+// optional step. The reconcile kind also self-gates on its own flag at
+// assembly, so dark firms never see it either way.
+export const OPTIONAL_PLAN_KINDS: ReadonlySet<PlanStepKind> = new Set([
+  "reconcile_matches",
+]);
 
 // Postgres unique-violation detection (the action-policies cause-chain
 // walk): the live-case unique index turns concurrent whole-plan approvals
@@ -115,7 +134,7 @@ function isUniqueViolation(err: unknown): boolean {
 
 function capabilityFor(
   kind: PlanStepKind,
-): "invoice.submit" | "clerk.capture" | "invoice.write" {
+): "invoice.submit" | "clerk.capture" | "invoice.write" | "reconciliation.act" {
   if (isDeterministicKind(kind)) return deterministicCapability(kind);
   const intent = ACTION_INTENTS.find((a) => a.kind === kind);
   // The catalogue is closed; an unknown kind cannot reach here through
@@ -130,10 +149,18 @@ function capabilityFor(
 // stored grant's check.
 export function templateCapabilities(
   templateKey: string,
-): Array<"invoice.submit" | "clerk.capture" | "invoice.write"> {
+): Array<"invoice.submit" | "clerk.capture" | "invoice.write" | "reconciliation.act"> {
   const template = PLAN_TEMPLATES[templateKey];
   if (!template) return [];
-  return [...new Set(template.kinds.map(capabilityFor))];
+  // REQUIRED kinds only: an optional kind is skipped for approvers who
+  // lack its capability, so it must not fail the grantor fail-fast check.
+  return [
+    ...new Set(
+      template.kinds
+        .filter((k) => !OPTIONAL_PLAN_KINDS.has(k))
+        .map(capabilityFor),
+    ),
+  ];
 }
 
 async function assertKindCapabilities(
@@ -157,7 +184,7 @@ async function insertRun(
   firmId: string,
   values: Pick<
     typeof clerkPlanRunsTable.$inferInsert,
-    "caseId" | "templateKey" | "steps" | "approvedBy"
+    "caseId" | "templateKey" | "steps" | "approvedBy" | "approvedByRole"
   >,
   actorId: string,
 ): Promise<ClerkPlanRun> {
@@ -179,7 +206,10 @@ async function insertRun(
       templateKey: run.templateKey,
       steps: run.steps.map((s) => ({
         kind: s.kind,
-        targets: s.invoiceIds.length + (s.buyerTargets?.length ?? 0),
+        targets:
+          s.invoiceIds.length +
+          (s.buyerTargets?.length ?? 0) +
+          (s.proposalTargets?.length ?? 0),
       })),
     },
   });
@@ -287,7 +317,13 @@ export async function createPlanRunFromCase(
   try {
     run = await insertRun(
       firmId,
-      { caseId, templateKey: null, steps, approvedBy: principal.userId },
+      {
+        caseId,
+        templateKey: null,
+        steps,
+        approvedBy: principal.userId,
+        approvedByRole: principal.role,
+      },
       principal.userId,
     );
   } catch (err) {
@@ -314,6 +350,7 @@ export async function createPlanRunFromTemplate(
   templateKey: string,
   clientPartyId: string,
   principal: Principal,
+  opts: { policyMinted?: boolean } = {},
 ): Promise<ClerkPlanRun> {
   const firmId = principal.firmId;
   if (!firmId) {
@@ -330,7 +367,21 @@ export async function createPlanRunFromTemplate(
       503,
     );
   }
-  await assertKindCapabilities(principal, template.kinds);
+  // Optional kinds an approver cannot execute drop out of THEIR plan
+  // (round 35): what remains is asserted in full — required kinds still
+  // 403 an under-capable approver.
+  // Optional kinds never ride POLICY-MINTED runs (round-35 review M2): a
+  // recurring grant was consented against the template as it stood at
+  // grant time, and template growth plus an operator-lit flag must not
+  // quietly expand a standing authorization into unattended settlement no
+  // consent copy ever described. A HUMAN-approved run may carry them —
+  // the approver sees the step and its target count before approving.
+  const offeredKinds = template.kinds.filter(
+    (k) =>
+      !OPTIONAL_PLAN_KINDS.has(k) ||
+      (!opts.policyMinted && can(principal, capabilityFor(k))),
+  );
+  await assertKindCapabilities(principal, offeredKinds);
   await runRequestContext({ bypass: false, firmId }, () =>
     assertPartyAccess(principal, clientPartyId),
   );
@@ -344,12 +395,36 @@ export async function createPlanRunFromTemplate(
       .where(eq(partiesTable.id, clientPartyId))
       .limit(1),
   );
+  const blankCounts = {
+    status: "pending" as const,
+    decisionId: null,
+    executedCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+  };
   const steps: PlanRunStep[] = [];
-  for (const kind of template.kinds) {
+  for (const kind of offeredKinds) {
     if (isDeterministicKind(kind)) {
-      // Deterministic assembly: the (buyer, currency) pairs whose
-      // recurring pattern is unbilled RIGHT NOW, frozen as the step's
-      // targets. Execution re-mines and only drafts pairs still alerting.
+      // Deterministic assembly, frozen as the step's targets — execution
+      // re-derives and only acts on targets still eligible. Reconcile: the
+      // best high-confidence proposal per statement line (self-gated on
+      // its own flag — dark assembles nothing). Draft: the (buyer,
+      // currency) pairs whose recurring pattern is unbilled RIGHT NOW.
+      if (kind === "reconcile_matches") {
+        const targets = await inClerkScope(firmId, () =>
+          assembleReconcileMatches(firmId, clientPartyId),
+        );
+        if (targets.length === 0) continue;
+        steps.push({
+          kind,
+          clientPartyId,
+          clientName: party?.name ?? "",
+          invoiceIds: [],
+          proposalTargets: targets,
+          ...blankCounts,
+        });
+        continue;
+      }
       const targets = await inClerkScope(firmId, () =>
         assembleDraftRecurring(firmId, clientPartyId),
       );
@@ -360,11 +435,7 @@ export async function createPlanRunFromTemplate(
         clientName: party?.name ?? "",
         invoiceIds: [],
         buyerTargets: targets,
-        status: "pending",
-        decisionId: null,
-        executedCount: 0,
-        failedCount: 0,
-        skippedCount: 0,
+        ...blankCounts,
       });
       continue;
     }
@@ -393,7 +464,13 @@ export async function createPlanRunFromTemplate(
   }
   const run = await insertRun(
     firmId,
-    { caseId: null, templateKey, steps, approvedBy: principal.userId },
+    {
+      caseId: null,
+      templateKey,
+      steps,
+      approvedBy: principal.userId,
+      approvedByRole: principal.role,
+    },
     principal.userId,
   );
   kickPlanRunProcessing(run.id);
@@ -483,6 +560,73 @@ async function fencedPatch(
   return rows.length > 0;
 }
 
+// The close pack's delivery half (round 35, Close with Clerk Phase 3): a
+// TEMPLATE run reaching a terminal state — done or halted — signals its
+// approver through the shared grantor router, because a policy-minted run
+// executes with nobody watching and its results (created drafts awaiting
+// review, a halt needing a human) must not wait for a dashboard visit.
+// Case-origin runs stay quiet: their approver is watching the progress
+// card that second. Pointer-only (SEC-12): the run row in the app carries
+// what ran, what moved and what needs review. Best-effort by design.
+async function notifyClosePack(run: ClerkPlanRun): Promise<void> {
+  if (!run.templateKey) return;
+  const clientPartyId = run.steps[0]?.clientPartyId;
+  if (!clientPartyId) return;
+  // Route from the role RECORDED AT APPROVAL (round-35 review m8): a
+  // delivery-time membership heuristic would send a staff approver who
+  // also holds a client login for this party down the PARTY rails, where
+  // the pack lands in every client_user's inbox while getPlanRun hides
+  // the run from all of them. Pre-35 rows (null role) fall back to the
+  // heuristic; misrouting to "firm_staff" is harmless — the staff branch
+  // re-verifies membership itself and sends nothing to non-staff.
+  let role = run.approvedByRole;
+  if (!role) {
+    const memberships = await runInBypassContext(() =>
+      getDb()
+        .select({
+          role: membershipsTable.role,
+          clientPartyId: membershipsTable.clientPartyId,
+        })
+        .from(membershipsTable)
+        .where(
+          and(
+            eq(membershipsTable.userId, run.approvedBy),
+            eq(membershipsTable.firmId, run.firmId),
+          ),
+        ),
+    );
+    role = memberships.some(
+      (m) => m.role === "client_user" && m.clientPartyId === clientPartyId,
+    )
+      ? "client_user"
+      : "firm_staff";
+  }
+  await notifyGrantorSignal(
+    {
+      id: run.id,
+      firmId: run.firmId,
+      clientPartyId,
+      grantedBy: run.approvedBy,
+      grantedByRole: role,
+    },
+    "clerk_plan_run",
+    "close_pack_ready",
+    "run",
+  );
+}
+
+// Awaited at every terminal site (round-35 review note): the promise is
+// failure-absorbed, and leaving it dangling would let a scale-to-zero
+// right after the terminal slice drop the one signal a policy-minted run
+// ever sends.
+async function notifyClosePackBestEffort(run: ClerkPlanRun): Promise<void> {
+  try {
+    await notifyClosePack(run);
+  } catch (err) {
+    logger.warn({ err, runId: run.id }, "plan run: close-pack signal failed");
+  }
+}
+
 // One step per call. The claim is taken fresh each slice; the run's own
 // steps jsonb is the ledger of what happened. Every terminal write is
 // fence-checked BEFORE its audit (round-32 review m6): a stale instance
@@ -496,7 +640,8 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
   const steps = [...run.steps];
   const cursor = run.processedSteps;
   if (cursor >= steps.length) {
-    await fencedPatch(runId, stamp, { status: "done", claimedAt: null });
+    const held = await fencedPatch(runId, stamp, { status: "done", claimedAt: null });
+    if (held) await notifyClosePackBestEffort(run);
     return "terminal";
   }
   const step = steps[cursor];
@@ -522,6 +667,7 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
       entityId: run.id,
       after: { step: cursor, kind: step.kind, reason },
     });
+    await notifyClosePackBestEffort(run);
     return "terminal";
   };
 
@@ -540,7 +686,30 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
   }
 
   const role = await approverRole(run, step);
-  if (!role) return finishHalt("approver_inactive");
+  if (!role) {
+    // An OPTIONAL step the approver can no longer run is SKIPPED, not a
+    // halt (round-35 review m6): creation would simply have omitted it
+    // for that principal, so losing the optional capability mid-run must
+    // not kill the statutory steps behind it — or next month's recurring
+    // policy. A required step's approver going inactive still halts.
+    if (OPTIONAL_PLAN_KINDS.has(step.kind as PlanStepKind)) {
+      steps[cursor] = { ...step, status: "skipped" };
+      const nextCursor = cursor + 1;
+      const held = await fencedPatch(runId, stamp, {
+        status: nextCursor >= steps.length ? "done" : "queued",
+        steps,
+        processedSteps: nextCursor,
+        claimedAt: null,
+      });
+      if (!held) return "noop";
+      if (nextCursor >= steps.length) {
+        await notifyClosePackBestEffort(run);
+        return "terminal";
+      }
+      return "more";
+    }
+    return finishHalt("approver_inactive");
+  }
 
   // Heartbeat (round-32 review m5): refresh the claim RIGHT BEFORE the
   // step — a slow batch must not let the stale-reclaim window open behind
@@ -565,26 +734,36 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
   let failedCount = 0;
   try {
     if (isDeterministicKind(step.kind)) {
-      // Deterministic step (round 34): platform SQL + the platform's own
-      // safe writes under the approver's authority — no decision row; the
-      // created rows (each audited against this run) and the run's audits
-      // are the ledger.
-      const outcome = await executeDraftRecurring(
-        run.firmId,
-        step.clientPartyId,
-        step.buyerTargets ?? [],
-        run.approvedBy,
-        run.id,
-      );
+      // Deterministic step (rounds 34-35): platform SQL + the platform's
+      // own safe writes under the approver's authority — no decision row;
+      // the rows it creates/decides (each audited against this run) and
+      // the run's audits are the ledger.
+      const outcome =
+        step.kind === "reconcile_matches"
+          ? await executeReconcileMatches(
+              run.firmId,
+              step.clientPartyId,
+              step.proposalTargets ?? [],
+              { userId: run.approvedBy, role },
+              run.id,
+            )
+          : await executeDraftRecurring(
+              run.firmId,
+              step.clientPartyId,
+              step.buyerTargets ?? [],
+              run.approvedBy,
+              run.id,
+            );
       steps[cursor] = {
         ...step,
         status: "executed",
         draftIds: outcome.draftIds,
-        executedCount: outcome.created,
+        executedCount: outcome.executed,
         failedCount: outcome.failed,
         skippedCount: outcome.skipped,
       };
-      requestedCount = step.buyerTargets?.length ?? 0;
+      requestedCount =
+        (step.buyerTargets?.length ?? 0) + (step.proposalTargets?.length ?? 0);
       failedCount = outcome.failed;
     } else {
       const { decision } = await executeAction(
@@ -631,6 +810,7 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
         entityId: run.id,
         after: { step: cursor, kind: step.kind, reason: "failed_targets" },
       });
+      await notifyClosePackBestEffort(run);
       return "terminal";
     }
   } catch (err) {
@@ -662,6 +842,7 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
         })),
       },
     });
+    await notifyClosePackBestEffort(run);
     return "terminal";
   }
   // More steps remain: persist progress and release the claim so the next

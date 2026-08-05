@@ -1,15 +1,18 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { and, eq, like } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import {
   getDb,
+  bankStatementLinesTable,
+  bankStatementsTable,
   clerkPlanRunsTable,
   engagementsTable,
   featureFlagsTable,
   firmsTable,
   invoicesTable,
   invoiceLinesTable,
+  matchProposalsTable,
   membershipsTable,
   partiesTable,
   usersTable,
@@ -23,19 +26,29 @@ import {
   proposalForKind,
 } from "./actions.ts";
 import {
+  AUTO_RECONCILE_FLAG_KEY,
   MACHINE_DRAFT_PREFIX,
   assembleDraftRecurring,
+  assembleReconcileMatches,
   executeDraftRecurring,
   stepTargetKey,
 } from "./plan-steps.ts";
-import { createPlanRunFromTemplate, processPlanRun } from "./plan-runs.ts";
+import {
+  MAX_PLAN_STEPS,
+  PLAN_TEMPLATES,
+  createPlanRunFromTemplate,
+  processPlanRun,
+} from "./plan-runs.ts";
 import {
   restoreClerkFlag,
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import { daysAgo, makeRunSalt } from "../../test-helpers/fixtures.ts";
-import { firmPrincipal as makeFirmPrincipal } from "../../test-helpers/principals.ts";
+import {
+  clientPrincipal,
+  firmPrincipal as makeFirmPrincipal,
+} from "../../test-helpers/principals.ts";
 import { grantComplianceConsent } from "../../test-helpers/seeders.ts";
 import { src } from "../../test-helpers/source-pins.ts";
 import { lagosDateString } from "../../lib/lagos-time.ts";
@@ -227,7 +240,7 @@ test("execution drafts only APPROVED pairs whose pattern still alerts", async ()
     userId,
     randomUUID(),
   );
-  assert.deepEqual(outcome, { draftIds: [], created: 0, skipped: 1, failed: 0 });
+  assert.deepEqual(outcome, { draftIds: [], executed: 0, skipped: 1, failed: 0 });
   assert.equal((await openMachineDrafts()).length, 0);
 });
 
@@ -333,4 +346,304 @@ test("the wall holds at both proposal and execution; an ordinary draft passes it
   const byId = new Map(decision.targets.map((t) => [t.invoiceId, t.outcome]));
   assert.equal(byId.get(machineDraft.id), "skipped_not_eligible");
   assert.equal(byId.get(ordinary.id), "submitted");
+});
+
+// ---- reconcile_matches (round 35) ------------------------------------------
+// Pinned: the step assembles NOTHING while EITHER flag is dark (its own
+// clerk_auto_reconcile, layered on the base reconciliation flag); only
+// best-per-line AND best-per-invoice receivable proposals at/above the
+// autopilot threshold are frozen (a duplicated bank credit yields ONE
+// acceptance, a bill proposal never rides); execution accepts through the
+// ORDINARY acceptProposal path; a client_user approver and a POLICY-MINTED
+// run both get the plan WITHOUT the step; an approver who loses the
+// optional capability mid-run SKIPS the step instead of halting the plan.
+
+const stmtId = randomUUID();
+const lineA = randomUUID();
+const lineB = randomUUID();
+const lineC = randomUUID(); // duplicated credit: same invoice as lineA's best
+let reconInvoice1: string;
+let reconInvoice2: string;
+let billInvoice: string; // clientX as BUYER — debit lane, never auto-accepted
+let pStrong: string; // lineA → reconInvoice1, 0.95
+let pSibling: string; // lineA → reconInvoice2, 0.92 (same line, weaker)
+let pDupLine: string; // lineC → reconInvoice1, 0.91 (same INVOICE, second line)
+let pBill: string; // lineB → billInvoice, 0.93 (bill orientation)
+let pWeak: string; // lineB → reconInvoice2, 0.5 (below the bar)
+
+async function seedReconcileWorld() {
+  const db = getDb();
+  for (const key of ["reconciliation", AUTO_RECONCILE_FLAG_KEY]) {
+    await db
+      .insert(featureFlagsTable)
+      .values({ key, enabled: false, releaseTag: "R3", description: "seed" })
+      .onConflictDoNothing({ target: featureFlagsTable.key });
+  }
+  // The base surface flag is lit (a firm that can SEE reconciliation);
+  // the autopilot flag stays dark until the first assertion flips it.
+  await setFirmOverride("reconciliation", firmId, true);
+  const stamped = async (invoiceNumber: string, unitPrice: string) => {
+    const { invoice } = await createDraft(
+      {
+        firmId,
+        supplierPartyId: clientX,
+        buyerPartyId: buyerQ,
+        invoiceNumber,
+        issueDate: daysAgo(15),
+        dueDate: null,
+        lines: [
+          { description: "Services", quantity: "1", unitPrice, vatRate: "0.075" },
+        ],
+      },
+      userId,
+    );
+    await db
+      .update(invoicesTable)
+      .set({ status: "stamped" })
+      .where(eq(invoicesTable.id, invoice.id));
+    return invoice.id;
+  };
+  reconInvoice1 = await stamped(`RECON-${SALT}-1`, "500");
+  reconInvoice2 = await stamped(`RECON-${SALT}-2`, "800");
+  // A BILL for clientX: the vendor as supplier, the client as buyer.
+  const { invoice: bill } = await createDraft(
+    {
+      firmId,
+      supplierPartyId: buyerQ,
+      buyerPartyId: clientX,
+      invoiceNumber: `RECON-${SALT}-BILL`,
+      issueDate: daysAgo(15),
+      dueDate: null,
+      lines: [
+        { description: "Vendor svc", quantity: "1", unitPrice: "500", vatRate: "0.075" },
+      ],
+    },
+    userId,
+  );
+  billInvoice = bill.id;
+  await db.insert(bankStatementsTable).values({
+    id: stmtId,
+    firmId,
+    clientPartyId: clientX,
+    formatKey: "gtb_csv",
+    status: "committed",
+    lineCount: 3,
+    parsedCount: 3,
+  });
+  await db.insert(bankStatementLinesTable).values([
+    {
+      id: lineA,
+      statementId: stmtId,
+      lineNo: 1,
+      valueDate: daysAgo(3),
+      amount: "537.50",
+      direction: "credit",
+      narration: `TRF RECON ${SALT}`,
+      parseStatus: "parsed",
+      rawLine: "raw-a",
+    },
+    {
+      id: lineB,
+      statementId: stmtId,
+      lineNo: 2,
+      valueDate: daysAgo(3),
+      amount: "537.50",
+      direction: "credit",
+      narration: "TRF ODD",
+      parseStatus: "parsed",
+      rawLine: "raw-b",
+    },
+    {
+      id: lineC,
+      statementId: stmtId,
+      lineNo: 3,
+      valueDate: daysAgo(2),
+      amount: "537.50",
+      direction: "credit",
+      narration: `TRF RECON RETRY ${SALT}`,
+      parseStatus: "parsed",
+      rawLine: "raw-c",
+    },
+  ]);
+  const proposal = async (statementLineId: string, invoiceId: string, confidence: string) => {
+    const [row] = await db
+      .insert(matchProposalsTable)
+      .values({ firmId, statementLineId, invoiceId, confidence })
+      .returning({ id: matchProposalsTable.id });
+    return row.id;
+  };
+  pStrong = await proposal(lineA, reconInvoice1, "0.9500");
+  pSibling = await proposal(lineA, reconInvoice2, "0.9200");
+  pDupLine = await proposal(lineC, reconInvoice1, "0.9100");
+  pBill = await proposal(lineB, billInvoice, "0.9300");
+  pWeak = await proposal(lineB, reconInvoice2, "0.5000");
+}
+
+test("reconcile assembly: both flags gate it; best per line AND per invoice, receivables only", async () => {
+  await seedReconcileWorld();
+  assert.deepEqual(
+    await assembleReconcileMatches(firmId, clientX),
+    [],
+    "a dark clerk_auto_reconcile assembles nothing",
+  );
+  await setFirmOverride(AUTO_RECONCILE_FLAG_KEY, firmId, true);
+  await setFirmOverride("reconciliation", firmId, false);
+  assert.deepEqual(
+    await assembleReconcileMatches(firmId, clientX),
+    [],
+    "a rolled-back base reconciliation flag darkens the autopilot too",
+  );
+  await setFirmOverride("reconciliation", firmId, true);
+  assert.deepEqual(
+    await assembleReconcileMatches(firmId, clientX),
+    [pStrong],
+    "one target: the line-sibling dedups, the same-invoice second line dedups, the bill never rides, the weak one stays below the bar",
+  );
+});
+
+test("a client_user approver gets the plan WITHOUT the staff-only reconcile step", async () => {
+  const client = clientPrincipal(firmId, clientX, { userId });
+  await assert.rejects(
+    createPlanRunFromTemplate("month_end_close", clientX, client),
+    isDomainError("NOTHING_TO_RUN"),
+  );
+});
+
+test("a POLICY-MINTED run gets the plan WITHOUT the reconcile step (round-35 review M2)", async () => {
+  // Same book, same firm principal — the ONLY difference is policyMinted:
+  // a recurring grant was consented against the template as it stood at
+  // grant time, so template growth must not expand it.
+  await assert.rejects(
+    createPlanRunFromTemplate("month_end_close", clientX, principal, {
+      policyMinted: true,
+    }),
+    isDomainError("NOTHING_TO_RUN"),
+  );
+});
+
+test("the reconcile step settles through the ordinary accept path (end-to-end)", async () => {
+  const run = await createPlanRunFromTemplate("month_end_close", clientX, principal);
+  assert.equal(run.steps.length, 1, "only the reconcile step assembles");
+  assert.equal(run.steps[0].kind, "reconcile_matches");
+  assert.deepEqual(run.steps[0].proposalTargets, [pStrong]);
+
+  await driveToTerminal(run.id);
+  const done = await loadRun(run.id);
+  assert.equal(done.status, "done");
+  const step = done.steps[0];
+  assert.equal(step.status, "executed");
+  assert.equal(step.executedCount, 1);
+  assert.equal(step.failedCount, 0);
+  assert.equal(step.decisionId, null);
+
+  const [settled] = await getDb()
+    .select({ status: invoicesTable.status })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.id, reconInvoice1));
+  assert.equal(settled.status, "settled", "the ordinary accept path ran");
+  const statuses = new Map(
+    (
+      await getDb()
+        .select({ id: matchProposalsTable.id, status: matchProposalsTable.status })
+        .from(matchProposalsTable)
+        .where(
+          inArray(matchProposalsTable.id, [pStrong, pSibling, pDupLine, pBill, pWeak]),
+        )
+    ).map((r) => [r.id, r.status]),
+  );
+  assert.equal(statuses.get(pStrong), "accepted");
+  assert.equal(statuses.get(pSibling), "superseded", "one line settles one invoice");
+  assert.equal(
+    statuses.get(pDupLine),
+    "proposed",
+    "the duplicated credit stays a HUMAN suggestion — never a second acceptance, never a failure",
+  );
+  assert.equal(statuses.get(pBill), "proposed", "the debit lane stays human");
+  assert.equal(statuses.get(pWeak), "proposed", "below the bar stays human");
+  // And nothing is left for a second run: the settled-invoice filter keeps
+  // the leftover duplicate from re-assembling — the honest empty again.
+  await assert.rejects(
+    createPlanRunFromTemplate("month_end_close", clientX, principal),
+    isDomainError("NOTHING_TO_RUN"),
+  );
+});
+
+test("an approver who loses the OPTIONAL capability mid-run skips the step, never halts", async () => {
+  // Fresh eligible paper so the reconcile step assembles again.
+  const { invoice } = await createDraft(
+    {
+      firmId,
+      supplierPartyId: clientX,
+      buyerPartyId: buyerQ,
+      invoiceNumber: `RECON-${SALT}-3`,
+      issueDate: daysAgo(15),
+      dueDate: null,
+      lines: [
+        { description: "Services", quantity: "1", unitPrice: "500", vatRate: "0.075" },
+      ],
+    },
+    userId,
+  );
+  await getDb()
+    .update(invoicesTable)
+    .set({ status: "stamped" })
+    .where(eq(invoicesTable.id, invoice.id));
+  const [pLate] = await getDb()
+    .insert(matchProposalsTable)
+    .values({
+      firmId,
+      statementLineId: lineB,
+      invoiceId: invoice.id,
+      confidence: "0.9400",
+    })
+    .returning({ id: matchProposalsTable.id });
+  const run = await createPlanRunFromTemplate("month_end_close", clientX, principal);
+  assert.deepEqual(run.steps[0].proposalTargets, [pLate.id]);
+  // Demote the approver to a client login: invoice.write survives,
+  // reconciliation.act does not — creation would simply have omitted the
+  // step for this principal.
+  await getDb()
+    .update(membershipsTable)
+    .set({ role: "client_user", clientPartyId: clientX })
+    .where(
+      and(eq(membershipsTable.userId, userId), eq(membershipsTable.firmId, firmId)),
+    );
+  try {
+    await driveToTerminal(run.id);
+    const done = await loadRun(run.id);
+    assert.equal(done.status, "done", "an optional step never halts the plan");
+    assert.equal(done.steps[0].status, "skipped");
+    assert.equal(done.steps[0].executedCount, 0);
+    const [late] = await getDb()
+      .select({ status: matchProposalsTable.status })
+      .from(matchProposalsTable)
+      .where(eq(matchProposalsTable.id, pLate.id));
+    assert.equal(late.status, "proposed", "nothing was accepted");
+  } finally {
+    await getDb()
+      .update(membershipsTable)
+      .set({ role: "firm_admin", clientPartyId: null })
+      .where(
+        and(eq(membershipsTable.userId, userId), eq(membershipsTable.firmId, firmId)),
+      );
+  }
+});
+
+test("every terminal template-run path signals the close pack (round 35)", () => {
+  const source = src("modules/clerk/plan-runs.ts");
+  assert.equal(
+    source.match(/await notifyClosePackBestEffort\(run\)/g)?.length,
+    5,
+    "halt, failed_targets, done, the optional-skip completion and the defensive re-terminalize all deliver the close pack, awaited",
+  );
+  assert.ok(
+    source.includes("if (!run.templateKey) return;"),
+    "case-origin runs stay quiet — their approver is watching",
+  );
+});
+
+test("templates never outgrow the plan-step cap", () => {
+  for (const t of Object.values(PLAN_TEMPLATES)) {
+    assert.ok(t.kinds.length <= MAX_PLAN_STEPS, `${t.title} exceeds MAX_PLAN_STEPS`);
+  }
 });

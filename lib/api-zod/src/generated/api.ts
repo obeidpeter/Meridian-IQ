@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.63.0
+ * OpenAPI spec version: 0.64.0
  */
 import * as zod from 'zod';
 
@@ -8722,7 +8722,7 @@ export const CreatePlanRunResponse = zod.object({
   "templateKey": zod.string().nullish(),
   "status": zod.enum(['queued', 'running', 'done', 'halted', 'failed']),
   "steps": zod.array(zod.object({
-  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers', 'draft_recurring']),
+  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers', 'draft_recurring', 'reconcile_matches']),
   "clientPartyId": zod.string().uuid(),
   "clientName": zod.string(),
   "targetCount": zod.number(),
@@ -8752,7 +8752,7 @@ export const ListPlanRunsResponse = zod.object({
   "templateKey": zod.string().nullish(),
   "status": zod.enum(['queued', 'running', 'done', 'halted', 'failed']),
   "steps": zod.array(zod.object({
-  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers', 'draft_recurring']),
+  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers', 'draft_recurring', 'reconcile_matches']),
   "clientPartyId": zod.string().uuid(),
   "clientName": zod.string(),
   "targetCount": zod.number(),
@@ -8786,7 +8786,7 @@ export const GetPlanRunResponse = zod.object({
   "templateKey": zod.string().nullish(),
   "status": zod.enum(['queued', 'running', 'done', 'halted', 'failed']),
   "steps": zod.array(zod.object({
-  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers', 'draft_recurring']),
+  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers', 'draft_recurring', 'reconcile_matches']),
   "clientPartyId": zod.string().uuid(),
   "clientName": zod.string(),
   "targetCount": zod.number(),

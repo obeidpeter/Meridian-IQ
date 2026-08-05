@@ -581,10 +581,14 @@ export async function runOnePlanPolicy(
   };
   let run;
   try {
+    // policyMinted: optional (staff-only, separately-flagged) kinds never
+    // ride a recurring run — the grant was consented against the template
+    // as it stood at grant time (round-35 review M2).
     run = await createPlanRunFromTemplate(
       policy.templateKey,
       policy.clientPartyId,
       principal,
+      { policyMinted: true },
     );
   } catch (err) {
     if (err instanceof DomainError && err.code === "NOTHING_TO_RUN") {

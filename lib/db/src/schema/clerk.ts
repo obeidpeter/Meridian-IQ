@@ -886,6 +886,10 @@ export interface PlanRunStep {
   // drafts pairs still unbilled. Absent on action steps and on rows
   // written before round 34.
   buyerTargets?: string[];
+  // reconcile_matches targets (round 35): the frozen high-confidence
+  // match-proposal ids; execution re-validates each is still proposed and
+  // above the autopilot threshold before accepting. Absent elsewhere.
+  proposalTargets?: string[];
   // Evidence of a deterministic step's writes: the draft invoices it
   // created (pointers only). Absent on action steps and pre-34 rows.
   draftIds?: string[];
@@ -924,6 +928,12 @@ export const clerkPlanRunsTable = pgTable(
     approvedBy: uuid("approved_by")
       .notNull()
       .references(() => usersTable.id),
+    // The approver's role AT APPROVAL (round 35): the close-pack signal
+    // routes from this — a heuristic re-derivation at delivery time would
+    // misroute an approver who holds both staff and client memberships.
+    // Nullable: rows from before round 35 fall back to the membership
+    // heuristic.
+    approvedByRole: text("approved_by_role"),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
