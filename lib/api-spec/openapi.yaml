@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.61.0
+  version: 0.62.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5569,6 +5569,111 @@ paths:
                 $ref: "#/components/schemas/PlanRunView"
         "404":
           $ref: "#/components/responses/NotFound"
+  /clerk/plan-policies:
+    get:
+      operationId: getPlanPolicies
+      summary: The live recurring-plan approvals for one client
+      tags: [clerk]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Live plan policies plus whether the surface is enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanPolicyList"
+    post:
+      operationId: grantPlanPolicy
+      summary: Grant a standing approval to run a plan template monthly for one client
+      tags: [clerk]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrantPlanPolicyInput"
+      responses:
+        "200":
+          description: The granted policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkPlanPolicy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/plan-policies/{id}/pause:
+    post:
+      operationId: pausePlanPolicy
+      summary: Pause a recurring-plan approval
+      tags: [clerk]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The paused policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkPlanPolicy"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/plan-policies/{id}/resume:
+    post:
+      operationId: resumePlanPolicy
+      summary: Resume a paused recurring-plan approval
+      tags: [clerk]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The resumed policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkPlanPolicy"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /clerk/plan-policies/{id}/revoke:
+    post:
+      operationId: revokePlanPolicy
+      summary: Revoke a recurring-plan approval
+      tags: [clerk]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The revoked policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClerkPlanPolicy"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clerk/automation-rollup:
+    get:
+      operationId: getAutomationRollup
+      summary: The firm-wide automation posture (policies, runs, decisions)
+      tags: [clerk]
+      responses:
+        "200":
+          description: Live/paused policy counts and 30-day run/decision tallies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRollup"
   /obligations:
     get:
       operationId: listObligations
@@ -10979,6 +11084,103 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PlanRunView"
+    GrantPlanPolicyInput:
+      type: object
+      required: [templateKey]
+      properties:
+        templateKey:
+          type: string
+        clientPartyId:
+          type: string
+          format: uuid
+          description: Required for firm principals; a client_user is pinned to its own party.
+    ClerkPlanPolicy:
+      type: object
+      required:
+        [id, firmId, clientPartyId, templateKey, grantedBy, grantedByRole, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firmId:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+        templateKey:
+          type: string
+        grantedBy:
+          type: string
+          format: uuid
+        grantedByRole:
+          type: string
+        pausedAt:
+          type: ["string", "null"]
+          format: date-time
+        pausedReason:
+          type: ["string", "null"]
+          description: manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.
+        revokedAt:
+          type: ["string", "null"]
+          format: date-time
+        lastRunMonth:
+          type: ["string", "null"]
+        lastRunId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    PlanPolicyList:
+      type: object
+      required: [policies, enabled]
+      properties:
+        policies:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClerkPlanPolicy"
+        enabled:
+          type: boolean
+    AutomationRollupPolicies:
+      type: object
+      required: [live, paused]
+      properties:
+        live:
+          type: integer
+        paused:
+          type: object
+          additionalProperties:
+            type: integer
+    AutomationRollup:
+      type: object
+      required: [actionPolicies, planPolicies, runs30d, decisions30d]
+      properties:
+        actionPolicies:
+          $ref: "#/components/schemas/AutomationRollupPolicies"
+        planPolicies:
+          $ref: "#/components/schemas/AutomationRollupPolicies"
+        runs30d:
+          type: object
+          required: [total, done, halted]
+          properties:
+            total:
+              type: integer
+            done:
+              type: integer
+            halted:
+              type: integer
+        decisions30d:
+          type: object
+          required: [total, auto, executed, failed]
+          properties:
+            total:
+              type: integer
+            auto:
+              type: integer
+            executed:
+              type: integer
+            failed:
+              type: integer
     ClerkCase:
       type: object
       required: [id, kind, status, createdBy, createdAt, updatedAt]

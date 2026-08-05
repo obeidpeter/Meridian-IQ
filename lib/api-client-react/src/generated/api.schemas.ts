@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.61.0
+ * OpenAPI spec version: 0.62.0
  */
 export interface HealthStatus {
   status: string;
@@ -3647,6 +3647,67 @@ export interface PlanRunList {
   runs: PlanRunView[];
 }
 
+export interface GrantPlanPolicyInput {
+  templateKey: string;
+  /** Required for firm principals; a client_user is pinned to its own party. */
+  clientPartyId?: string;
+}
+
+export interface ClerkPlanPolicy {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  templateKey: string;
+  grantedBy: string;
+  grantedByRole: string;
+  /** @nullable */
+  pausedAt?: string | null;
+  /**
+     * manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.
+     * @nullable
+     */
+  pausedReason?: string | null;
+  /** @nullable */
+  revokedAt?: string | null;
+  /** @nullable */
+  lastRunMonth?: string | null;
+  /** @nullable */
+  lastRunId?: string | null;
+  createdAt: string;
+}
+
+export interface PlanPolicyList {
+  policies: ClerkPlanPolicy[];
+  enabled: boolean;
+}
+
+export type AutomationRollupPoliciesPaused = {[key: string]: number};
+
+export interface AutomationRollupPolicies {
+  live: number;
+  paused: AutomationRollupPoliciesPaused;
+}
+
+export type AutomationRollupRuns30d = {
+  total: number;
+  done: number;
+  halted: number;
+};
+
+export type AutomationRollupDecisions30d = {
+  total: number;
+  auto: number;
+  executed: number;
+  failed: number;
+};
+
+export interface AutomationRollup {
+  actionPolicies: AutomationRollupPolicies;
+  planPolicies: AutomationRollupPolicies;
+  runs30d: AutomationRollupRuns30d;
+  decisions30d: AutomationRollupDecisions30d;
+}
+
 export type ClerkCaseKind = typeof ClerkCaseKind[keyof typeof ClerkCaseKind];
 
 
@@ -6488,6 +6549,13 @@ clientPartyId?: string;
  * @maximum 365
  */
 windowDays?: number;
+};
+
+export type GetPlanPoliciesParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
 };
 
 export type ListObligationsParams = {

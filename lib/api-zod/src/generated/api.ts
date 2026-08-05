@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.61.0
+ * OpenAPI spec version: 0.62.0
  */
 import * as zod from 'zod';
 
@@ -8799,6 +8799,151 @@ export const GetPlanRunResponse = zod.object({
   "approvedBy": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary The live recurring-plan approvals for one client
+ */
+export const GetPlanPoliciesQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GetPlanPoliciesResponse = zod.object({
+  "policies": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "templateKey": zod.string(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullish(),
+  "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
+  "revokedAt": zod.coerce.date().nullish(),
+  "lastRunMonth": zod.string().nullish(),
+  "lastRunId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "enabled": zod.boolean()
+})
+
+
+/**
+ * @summary Grant a standing approval to run a plan template monthly for one client
+ */
+export const GrantPlanPolicyBody = zod.object({
+  "templateKey": zod.string(),
+  "clientPartyId": zod.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const GrantPlanPolicyResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "templateKey": zod.string(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullish(),
+  "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
+  "revokedAt": zod.coerce.date().nullish(),
+  "lastRunMonth": zod.string().nullish(),
+  "lastRunId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Pause a recurring-plan approval
+ */
+export const PausePlanPolicyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const PausePlanPolicyResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "templateKey": zod.string(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullish(),
+  "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
+  "revokedAt": zod.coerce.date().nullish(),
+  "lastRunMonth": zod.string().nullish(),
+  "lastRunId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Resume a paused recurring-plan approval
+ */
+export const ResumePlanPolicyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ResumePlanPolicyResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "templateKey": zod.string(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullish(),
+  "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
+  "revokedAt": zod.coerce.date().nullish(),
+  "lastRunMonth": zod.string().nullish(),
+  "lastRunId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Revoke a recurring-plan approval
+ */
+export const RevokePlanPolicyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RevokePlanPolicyResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "templateKey": zod.string(),
+  "grantedBy": zod.string().uuid(),
+  "grantedByRole": zod.string(),
+  "pausedAt": zod.coerce.date().nullish(),
+  "pausedReason": zod.string().nullish().describe('manual, or a tripwire — run_halted, grantor_inactive, engagement_closed, consent_missing, unknown_template, run_error.'),
+  "revokedAt": zod.coerce.date().nullish(),
+  "lastRunMonth": zod.string().nullish(),
+  "lastRunId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary The firm-wide automation posture (policies, runs, decisions)
+ */
+export const GetAutomationRollupResponse = zod.object({
+  "actionPolicies": zod.object({
+  "live": zod.number(),
+  "paused": zod.record(zod.string(), zod.number())
+}),
+  "planPolicies": zod.object({
+  "live": zod.number(),
+  "paused": zod.record(zod.string(), zod.number())
+}),
+  "runs30d": zod.object({
+  "total": zod.number(),
+  "done": zod.number(),
+  "halted": zod.number()
+}),
+  "decisions30d": zod.object({
+  "total": zod.number(),
+  "auto": zod.number(),
+  "executed": zod.number(),
+  "failed": zod.number()
+})
 })
 
 

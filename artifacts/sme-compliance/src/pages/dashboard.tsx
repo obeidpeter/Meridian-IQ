@@ -1,7 +1,14 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetMe,
   useCreatePlanRun,
+  useGetPlanPolicies,
+  getGetPlanPoliciesQueryKey,
+  useGrantPlanPolicy,
+  usePausePlanPolicy,
+  useResumePlanPolicy,
+  useRevokePlanPolicy,
   useGetClerkDigest,
   getGetClerkDigestQueryKey,
   useListClientStatements,
@@ -41,6 +48,14 @@ import type {
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClerkActionsCard } from "@/components/clerk-actions-card";
 import { PageHeader } from "@/components/page-header";
@@ -49,6 +64,7 @@ import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { errorStatus } from "@workspace/api-errors";
+import { serverErrorMessage } from "@/lib/errors";
 import { PlanRunProgress } from "./clerk-ask";
 import {
   AlertTriangle,
@@ -731,11 +747,206 @@ function MonthEndCloseCard({ clientPartyId }: { clientPartyId: string }) {
             </Button>
           )
         )}
+        <MonthlyAutomationStrip clientPartyId={clientPartyId} />
         <p className="text-xs text-muted-foreground pt-3 border-t">
           {close.note}
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+// Run monthly (round 33, Do with Clerk Phase 3): a standing approval for
+// the month_end_close plan. The sweep mints ONE run per Lagos month per
+// grant — the exact machinery the "Run with Clerk" button above drives by
+// hand, per-step re-validation and decision-ledger rows included. Tripwires
+// (a halted run, the approver losing access, a closed engagement, missing
+// consent) pause the grant rather than let it keep running.
+const PLAN_PAUSE_LABELS: Record<string, string> = {
+  manual: "Paused",
+  run_halted: "Paused — the last run halted",
+  grantor_inactive: "Paused — the approver's access changed",
+  engagement_closed: "Paused — the engagement closed",
+  consent_missing: "Paused — compliance consent is missing",
+  unknown_template: "Paused — the plan template changed",
+  run_error: "Paused — the last run hit an error",
+};
+
+// "Up to date for", not "last ran": a month is also consumed by the honest
+// closing-window empty (nothing was eligible all month), and the hourly
+// sweep — not a month-end event — picks up the first eligible paper.
+export function planPolicyStatusLine(p: {
+  pausedAt?: string | null;
+  pausedReason?: string | null;
+  lastRunMonth?: string | null;
+}): string {
+  if (p.pausedAt) return PLAN_PAUSE_LABELS[p.pausedReason ?? ""] ?? "Paused";
+  return p.lastRunMonth
+    ? `Runs monthly · up to date for ${p.lastRunMonth}`
+    : "Runs monthly · runs when there is eligible paper";
+}
+
+function MonthlyAutomationStrip({ clientPartyId }: { clientPartyId: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const { data } = useGetPlanPolicies(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetPlanPoliciesQueryKey({ clientPartyId }),
+        staleTime: 60_000,
+        retry: false,
+      },
+    },
+  );
+  const onChanged = () =>
+    queryClient.invalidateQueries({ queryKey: getGetPlanPoliciesQueryKey() });
+  const onError = (e: unknown) =>
+    toast({
+      title: "Automation change failed",
+      description: serverErrorMessage(e),
+      variant: "destructive",
+    });
+  const grant = useGrantPlanPolicy({
+    mutation: {
+      onSuccess: () => {
+        setConfirming(false);
+        onChanged();
+      },
+      onError,
+    },
+  });
+  const pause = usePausePlanPolicy({
+    mutation: { onSuccess: onChanged, onError },
+  });
+  const resume = useResumePlanPolicy({
+    mutation: { onSuccess: onChanged, onError },
+  });
+  const revoke = useRevokePlanPolicy({
+    mutation: { onSuccess: onChanged, onError },
+  });
+  if (!data) return null;
+  const policy = data.policies.find(
+    (p) => p.templateKey === "month_end_close",
+  );
+  // No grant and no way to make one: the strip has nothing to say.
+  if (!policy && !data.enabled) return null;
+  const busy =
+    grant.isPending || pause.isPending || resume.isPending || revoke.isPending;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3 text-xs"
+      data-testid="monthly-automation"
+    >
+      {policy ? (
+        <>
+          <span className="font-medium text-foreground">
+            Monthly automation
+          </span>
+          <span
+            className={
+              policy.pausedAt
+                ? "text-amber-700 dark:text-amber-400"
+                : "text-muted-foreground"
+            }
+            data-testid="text-plan-policy-status"
+          >
+            {planPolicyStatusLine(policy)}
+          </span>
+          <span className="ml-auto flex gap-1">
+            {policy.pausedAt ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => resume.mutate({ id: policy.id })}
+                disabled={busy}
+                data-testid="button-plan-policy-resume"
+              >
+                Resume
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => pause.mutate({ id: policy.id })}
+                disabled={busy}
+                data-testid="button-plan-policy-pause"
+              >
+                Pause
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => revoke.mutate({ id: policy.id })}
+              disabled={busy}
+              data-testid="button-plan-policy-revoke"
+            >
+              Revoke
+            </Button>
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="text-muted-foreground">
+            Let Clerk run this close every month, with your standing approval.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            onClick={() => setConfirming(true)}
+            disabled={busy}
+            data-testid="button-plan-policy-grant"
+          >
+            Run monthly
+          </Button>
+        </>
+      )}
+      {/* Consent-grade confirm: granting runs no batch — it stands until
+          revoked, so the copy says exactly what will happen each month. */}
+      <Dialog
+        open={confirming}
+        onOpenChange={(open) => !open && setConfirming(false)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Run month-end close monthly</DialogTitle>
+            <DialogDescription>
+              Each month, Clerk will run this close plan for your business:
+              submit invoices past the reporting window, then retry failed
+              submissions. Every step re-checks eligibility at run time and
+              every action is recorded. If a run halts, or anything about the
+              engagement, consent or the approver changes, the automation
+              pauses itself and waits for you. You can pause or revoke it at
+              any time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirming(false)}
+              disabled={grant.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                grant.mutate({
+                  data: { templateKey: "month_end_close", clientPartyId },
+                })
+              }
+              disabled={grant.isPending}
+              data-testid="button-confirm-plan-policy"
+            >
+              {grant.isPending ? "Working…" : "Turn on monthly run"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 

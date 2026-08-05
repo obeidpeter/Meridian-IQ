@@ -14,6 +14,7 @@ import {
 import { DomainError } from "../errors";
 import { appendAudit } from "../audit/audit";
 import { retireFixturesForClientParty } from "../clerk/eval-curation";
+import { revokePlanPoliciesForParty } from "../clerk/plan-policies";
 import { getParty } from "./party";
 
 // Firm-scoped client offboarding (NDPA data lifecycle, POST
@@ -208,6 +209,15 @@ export async function offboardClient(
     });
   }
 
+  // (d3) Same rule for recurring PLAN policies (round 33): the monthly
+  // template autopilot ends with the relationship, for exactly (d2)'s
+  // reasons — no tripwire catches a staff grant whose membership survives.
+  const revokedPlanPolicies = await revokePlanPoliciesForParty(
+    firmId,
+    partyId,
+    actor.userId,
+  );
+
   // (e) Last-engagement probe — see the module header for why this single
   // existence read runs on the base client rather than the request tx.
   const [otherFirmEngagement] = await baseDb
@@ -302,6 +312,7 @@ export async function offboardClient(
       aliasesDeleted: deletedAliases.length,
       invitationsRevoked: revokedInvitations.length,
       standingApprovalsRevoked: revokedPolicies.length,
+      planPoliciesRevoked: revokedPlanPolicies,
       unresolvedObligationsAtOffboard,
       alertPreferencesCleared: clearedPreferences,
       pushDevicesRemoved: removedDevices,

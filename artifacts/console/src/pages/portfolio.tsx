@@ -45,6 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AutomationRollupCard } from "@/components/automation-rollup-card";
 import { BillingStatementCard } from "@/components/billing-statement-card";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
 import { GovernanceCard, isFirmAdminRole } from "@/components/governance-card";
@@ -1995,6 +1996,10 @@ export function Portfolio() {
 
       <ComplianceScorecardCard />
       <ClerkAdoptionCard />
+      {/* The firm's standing-automation posture (round 33) sits with the
+          adoption card — both answer "what is Clerk doing across our
+          clients". Self-gating: renders only with an automation footprint. */}
+      <AutomationRollupCard />
       </PortfolioSection>
 
       <PortfolioSection id="money" label="Money">

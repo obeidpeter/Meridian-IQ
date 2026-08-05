@@ -573,8 +573,61 @@ creation AND re-validated before every step (the approver as they stand
 TODAY, the policy sweep's grantorRole discipline — losing it halts with
 `approver_inactive`); a step whose failures cross the autopilot's
 half-rule (`tooManyFailures`, now exported) HALTS the run with remaining
-steps skipped; a dark `clerk_actions` flag PARKS the run intact. Phase 3
-(policy-gated recurring plans) builds on this.
+steps skipped; a dark `clerk_actions` flag PARKS the run intact.
+
+**Phase 3 (round 33) — recurrence** (`modules/clerk/plan-policies.ts`,
+`clerk_plan_policies` firm-keyed RLS migration 0033, contract 0.62.0): a
+standing approval for a TEMPLATE — "run month-end close for this client
+every month" — mirroring the action-policy autopilot's spine one level up.
+Granting (`POST /clerk/plan-policies`, the SME card's "Run monthly")
+requires the grantor to hold `invoice.submit`, a live engagement, granted
+compliance consent, both flags lit (`clerk_actions` AND
+`clerk_action_policies` — recurrence rides the same rollout switch as the
+daily autopilot), and one live grant per (firm, client, template) — a
+partial unique index backstops the pre-check. The hourly-gated sweep
+(`runPlanPolicySweep`) claims each policy's Lagos month by CAS on
+`lastRunMonth` (exactly one run per month, however many workers race),
+re-validates the grantor AS THEY STAND TODAY, then mints an ordinary
+template plan run under the grantor's principal — from there Phase 2 owns
+it (per-step re-validation, decision ledger, halts). The claim is
+PROVISIONAL until something durable backs it: an empty pass
+(NOTHING_TO_RUN) gives the month back — eligibility changes daily as
+submission windows lapse and rails reject, so the first NON-EMPTY pass of
+the month runs (the daily sweep's leave-the-day-unclaimed rule at month
+granularity) and only the closing window (the last Lagos day) consumes a
+month that stayed empty throughout, audited `empty: true` with no run
+row. A dark flag — checked up front AND on the create's own re-check —
+skips without consuming, so a re-lit firm still gets its run; and the
+sweep opens with a crash-leak recovery scan (a claim with neither a
+this-month run nor the empty audit is an orphan from a death between the
+CAS and the create — it is un-claimed and re-run the same pass, per-step
+re-validation making the rare duplicate a no-op). Tripwires PAUSE rather
+than run wrong: the previous run halting or erroring
+(`run_halted`/`run_error` — a halted run means something needs a human
+before automation repeats it; the errored month is given back so a
+resumed policy still runs it), the grantor losing the capability
+(`grantor_inactive`), the engagement closing, consent disappearing, the
+template key vanishing; every auto-pause is audited, notified to the
+grantor, and raised to operators through the once-per-day
+`ops.plan_policy.auto_paused` ledger alert (the daily sweep's fleet
+discipline). Offboarding a party revokes its plan policies alongside its
+action policies (the offboard audit carries `planPoliciesRevoked`). The
+firm-staff **portfolio page** carries the firm-wide **automation rollup**
+(`modules/clerk/automation-rollup.ts`, pure ledger SQL, gated
+`console.portfolio.read` — a firm-internal aggregate that client_users
+must never read, the GET /clerk/digest refusal class): live/paused counts
+for both policy kinds (pauses by reason), 30-day plan runs (done/halted)
+and 30-day decision totals (automated share, executed/failed) — the
+firm's one-read answer to "how much standing automation is in force and
+is it healthy". **Deliberately deferred:
+in-chat (WhatsApp/email) YES-reply approval of plans.** Approval is a
+consent-grade act tied to an authenticated principal and a frozen,
+server-read plan; an inbound "YES" over the machine rails is neither — the
+rails are pointer-only (SEC-12) and fail-closed, and a reply cannot prove
+who is holding the phone, so recurrence keeps approval inside the
+authenticated apps and lets the RESULTS ride the existing consent-gated
+notification fan-out (which already reaches WhatsApp where the client
+opted in).
 
 - `modules/clerk/data-intents/`: Ask carries a second closed catalogue next
   to the claims register — data intents ("what's overdue?", "what did we

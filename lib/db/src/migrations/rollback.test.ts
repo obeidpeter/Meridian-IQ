@@ -349,6 +349,11 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("clerk_plan_runs")],
     afterRollback: [not(clerkTenant("clerk_plan_runs"))],
   },
+  {
+    version: 33, // Do with Clerk Phase 3: plan-policy guardrails
+    atTop: [clerkTenant("clerk_plan_policies")],
+    afterRollback: [not(clerkTenant("clerk_plan_policies"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

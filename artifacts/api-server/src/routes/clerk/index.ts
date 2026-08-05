@@ -7,6 +7,7 @@ import reportsRouter from "./reports";
 import draftsRouter from "./drafts";
 import actionsRouter from "./actions";
 import planRunsRouter from "./plan-runs";
+import planPoliciesRouter from "./plan-policies";
 
 // Clerk copilot surface (Task #40 + expansion A). Shadow-mode throughout:
 // extraction proposes, a human disposes, and approval can only create a DRAFT
@@ -39,5 +40,6 @@ router.use(reportsRouter);
 router.use(draftsRouter);
 router.use(actionsRouter);
 router.use(planRunsRouter);
+router.use(planPoliciesRouter);
 
 export default router;

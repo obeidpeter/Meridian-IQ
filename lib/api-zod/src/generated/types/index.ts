@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.61.0
+ * OpenAPI spec version: 0.62.0
  */
 
 export * from './acceptInvitationInput';
@@ -43,6 +43,11 @@ export * from './assistMatchProposalsInput';
 export * from './auditBundle';
 export * from './auditEvent';
 export * from './auditVerification';
+export * from './automationRollup';
+export * from './automationRollupDecisions30d';
+export * from './automationRollupPolicies';
+export * from './automationRollupPoliciesPaused';
+export * from './automationRollupRuns30d';
 export * from './b2cReportBatch';
 export * from './b2cReportBatchStatus';
 export * from './b2cReportItem';
@@ -198,6 +203,7 @@ export * from './clerkMetricsSupplierAccuracyItem';
 export * from './clerkNoticeExtraction';
 export * from './clerkPartySuggestion';
 export * from './clerkPartySuggestions';
+export * from './clerkPlanPolicy';
 export * from './clerkTierReport';
 export * from './clerkTierReportRowsItem';
 export * from './clerkTierReportRowsItemRecommendation';
@@ -394,6 +400,7 @@ export * from './getNetCashPositionParams';
 export * from './getObligationResponsePackParams';
 export * from './getPayablesSummaryParams';
 export * from './getPenaltyExposureParams';
+export * from './getPlanPoliciesParams';
 export * from './getProjectionAccuracyParams';
 export * from './getPublicThemeParams';
 export * from './getQuarterlyReviewParams';
@@ -404,6 +411,7 @@ export * from './getVatPositionParams';
 export * from './getVatSettlementCheckParams';
 export * from './grantActionPolicyInput';
 export * from './grantActionPolicyInputKind';
+export * from './grantPlanPolicyInput';
 export * from './graphEdge';
 export * from './graphNode';
 export * from './graphNodeKind';
@@ -586,6 +594,7 @@ export * from './phrasingEvalOutcomeCanaryVerdict';
 export * from './phrasingEvalReport';
 export * from './phrasingEvalRun';
 export * from './phrasingEvalRunPromptVersions';
+export * from './planPolicyList';
 export * from './planRunList';
 export * from './planRunStepView';
 export * from './planRunStepViewKind';
