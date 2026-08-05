@@ -663,9 +663,42 @@ approval, so a draft this run just created can never ride the same run's
 submit batch either. Capability: `invoice.write` (asserted at approval
 and re-validated per step like every kind). Deterministic kinds enter
 through TEMPLATES only — Ask's act keys and case-origin plans stay
-catalogue-shaped. Phase 2 (threshold-gated `reconcile_matches`) and
-Phase 3 (the assembled close pack, which will also carry the
-created-drafts review prompt to the owner's notification rails) follow. **Deliberately deferred:
+catalogue-shaped.
+
+**Close with Clerk Phases 2–3 (round 35)** (contract 0.64.0). Phase 2 —
+**`reconcile_matches`**, the riskiest deterministic kind: it settles
+invoices on payment evidence, so it rides its OWN opt-in flag
+(`clerk_auto_reconcile`, layered beside `clerk_actions`; dark = the step
+never assembles, no template change needed), a threshold STRICTER than
+the human-initiated bulk-accept default (0.9 vs 0.85), and a hard
+per-run cap (20). Assembly freezes the best high-confidence proposal per
+statement line over the client's committed statements; execution
+re-derives eligibility over the frozen ids (still proposed, still above
+the bar, still this client's statement) and accepts through the ORDINARY
+`acceptProposal` path — one settlement event, one lifecycle transition,
+one audit row per proposal, identical to a manual click, plus a
+`clerk.plan_step.reconciled` audit naming the run. Everything below the
+threshold stays a suggestion for a human. The kind is an
+**optional plan kind** (`OPTIONAL_PLAN_KINDS`): `reconciliation.act` is
+firm-staff work, so a client_user approver simply gets the plan without
+it (never a 403 on the month-end button), and the recurring-policy
+grantor check derives from REQUIRED kinds only — a client-granted
+recurring close does not auto-pause because the template grew a
+staff-only step. `month_end_close` is now [reconcile_matches →
+draft_recurring → submit_overdue → retry_failed]: settle receipts,
+raise missing paper, repair submissions. Phase 3 — **the close pack**:
+a TEMPLATE run reaching a terminal state (done or halted) signals its
+approver through the shared grantor router (`notifyGrantorSignal`, the
+auto-pause rails generalized: client approvers via the consent-gated
+party channels, staff approvers via their opt-in channels) with the
+`close_pack_ready` template — because a policy-minted run executes with
+nobody watching, and its results (created drafts awaiting review, a
+halt needing a human) must not wait for a dashboard visit. Case-origin
+runs stay quiet (their approver is watching the progress card), the
+message is pointer-only (SEC-12 — the run row in the app carries what
+ran, what moved and what needs review), and the platform-wide
+`messaging_notifications` kill switch gates it like every sweep-side
+send. **Deliberately deferred:
 in-chat (WhatsApp/email) YES-reply approval of plans.** Approval is a
 consent-grade act tied to an authenticated principal and a frozen,
 server-read plan; an inbound "YES" over the machine rails is neither — the

@@ -92,6 +92,17 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email", "push"],
     description: "A Clerk standing approval (automation) was created.",
   },
+  // Close with Clerk Phase 3 (round 35): a TEMPLATE plan run reached a
+  // terminal state — done or halted — and the approver (who may never
+  // watch a policy-minted run) learns it in one pointer-only line. What
+  // ran, what moved and what needs review (machine drafts, a halt reason)
+  // all live on the run row in the app; nothing rides the message
+  // (SEC-12). Channels mirror the automation lifecycle twins.
+  close_pack_ready: {
+    key: "close_pack_ready",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "A Clerk month-end close run finished — results are ready to review.",
+  },
   // Notice Desk: an authority notice's response deadline is approaching /
   // has passed. Channels mirror deadline_reminder, the invoice twin. Pointer
   // only (SEC-12): no authority, reference, amount or client rides the

@@ -23,6 +23,7 @@ export type PushTemplateKey =
   | "firm_digest_ready"
   | "automation_paused"
   | "automation_granted"
+  | "close_pack_ready"
   | "obligation_due_soon"
   | "obligation_overdue";
 
@@ -54,6 +55,10 @@ const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   automation_granted: {
     title: "MeridianIQ",
     body: "A standing approval was created for your account. Open the app for details.",
+  },
+  close_pack_ready: {
+    title: "MeridianIQ",
+    body: "A month-end close run finished. Review the results in the app.",
   },
   obligation_due_soon: {
     title: "MeridianIQ",

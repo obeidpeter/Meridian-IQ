@@ -39,9 +39,12 @@ const stripRun = (r: ClerkPlanRun) => ({
     clientPartyId: s.clientPartyId,
     clientName: s.clientName,
     // Action steps target invoices; deterministic steps target
-    // (buyer, currency) pairs (round 34) — either way, the count the
-    // approver saw.
-    targetCount: s.invoiceIds.length + (s.buyerTargets?.length ?? 0),
+    // (buyer, currency) pairs or match-proposal ids (rounds 34-35) —
+    // either way, the count the approver saw.
+    targetCount:
+      s.invoiceIds.length +
+      (s.buyerTargets?.length ?? 0) +
+      (s.proposalTargets?.length ?? 0),
     status: s.status,
     decisionId: s.decisionId,
     executedCount: s.executedCount,

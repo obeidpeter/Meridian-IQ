@@ -626,21 +626,36 @@ async function autoPause(
 // and any failure lands in the messages ledger (or is absorbed) — never in
 // the sweep's control flow.
 export async function notifyAutoPause(
-  // Structural on purpose (round 33): the plan-policy sweep pauses with the
-  // same grantor signal — one home for the routing rules.
   policy: Pick<
     ClerkActionPolicy,
     "id" | "firmId" | "clientPartyId" | "grantedBy" | "grantedByRole"
   >,
   entityType: "clerk_action_policy" | "clerk_plan_policy" = "clerk_action_policy",
 ): Promise<void> {
+  return notifyGrantorSignal(policy, entityType, "automation_paused", "pol");
+}
+
+// The one grantor-signal router (rounds 29/33/35): auto-pauses, and now the
+// close pack — a terminal template plan run the approver may never watch
+// (plan-runs.ts) — ride the same two branches with a different template.
+export async function notifyGrantorSignal(
+  // Structural on purpose (round 33): every caller shapes its target like a
+  // policy — one home for the routing rules.
+  policy: Pick<
+    ClerkActionPolicy,
+    "id" | "firmId" | "clientPartyId" | "grantedBy" | "grantedByRole"
+  >,
+  entityType: "clerk_action_policy" | "clerk_plan_policy" | "clerk_plan_run",
+  templateKey: "automation_paused" | "close_pack_ready",
+  refPrefix: string,
+): Promise<void> {
   // PL-02 (round-29 review MAJOR): the platform-wide messaging kill switch
   // gates every sweep-side send — the digest/reminder/statement rails'
   // shared posture — and a dark rail means NO ledger rows and no provider
-  // traffic. The pause itself (and its audit) has already committed; only
-  // the signal goes quiet.
+  // traffic. The triggering write (and its audit) has already committed;
+  // only the signal goes quiet.
   if (!(await isFeatureEnabled("messaging_notifications", null))) return;
-  const entityId = pointerEntityRef("pol", policy.id);
+  const entityId = pointerEntityRef(refPrefix, policy.id);
   if (policy.grantedByRole === "client_user") {
     // PRIVILEGE (round-30 review): this read runs under an EXPLICIT bypass
     // context — before, it hit the raw pool only because the caller's bypass
@@ -661,7 +676,7 @@ export async function notifyAutoPause(
       prefs,
       clientPartyId: policy.clientPartyId,
       firmId: policy.firmId,
-      templateKey: "automation_paused",
+      templateKey,
       entityType,
       entityId,
       smsDefaultWhenNoPrefs: false,
@@ -710,7 +725,7 @@ export async function notifyAutoPause(
         channel: "email",
         recipientRef: pointerEntityRef("usr", policy.grantedBy),
         recipientUserId: policy.grantedBy,
-        templateKey: "automation_paused",
+        templateKey,
         entityType,
         entityId,
       });
@@ -722,7 +737,7 @@ export async function notifyAutoPause(
     try {
       await sendPushToUser({
         userId: policy.grantedBy,
-        templateKey: "automation_paused",
+        templateKey,
         entityType,
         entityId,
       });

@@ -886,6 +886,10 @@ export interface PlanRunStep {
   // drafts pairs still unbilled. Absent on action steps and on rows
   // written before round 34.
   buyerTargets?: string[];
+  // reconcile_matches targets (round 35): the frozen high-confidence
+  // match-proposal ids; execution re-validates each is still proposed and
+  // above the autopilot threshold before accepting. Absent elsewhere.
+  proposalTargets?: string[];
   // Evidence of a deterministic step's writes: the draft invoices it
   // created (pointers only). Absent on action steps and pre-34 rows.
   draftIds?: string[];

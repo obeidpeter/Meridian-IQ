@@ -66,6 +66,11 @@ const FLAGS: {
   // re-validated on every run. Layered ON clerk_actions — both must be lit.
   // Shipped dark (PL-02); enable per firm via override alongside a pilot.
   { key: "clerk_action_policies", enabled: false, releaseTag: "R3", description: "Clerk standing approvals: policy-driven daily execution of approved action kinds (layered on clerk_actions)" },
+  // Round 35 (Close with Clerk Phase 2): auto-accepting reconciliation
+  // matches is the riskiest deterministic step, so it rides its OWN opt-in
+  // beside clerk_actions — dark means the reconcile step simply never
+  // assembles.
+  { key: "clerk_auto_reconcile", enabled: false, releaseTag: "R3", description: "Clerk auto-reconcile: plan runs may accept high-confidence statement matches (threshold 0.9, capped) through the ordinary acceptProposal path" },
 ];
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [
