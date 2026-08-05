@@ -20,6 +20,8 @@ import {
 } from "./prompts";
 import { buildIntentUser, type IntentPromptContext } from "./ask";
 import { DATA_INTENTS } from "./data-intents";
+import { failureOutcome } from "./eval";
+import { assertCandidateFloor, bandVerdict } from "./prompt-canary";
 import { createScrubber } from "./scrub";
 
 // Intent-classification eval lane (round-15 idea #3; plans since intent.v6).
@@ -489,6 +491,17 @@ export async function loadGrownIntentFixtures(): Promise<IntentFixture[]> {
   }));
 }
 
+// One corpus assembly for the eval AND its canary (the loadCanaryCorpus
+// precedent on the extraction side): a composition change — a new lane, a
+// cap — lands in both measurements or neither.
+async function loadIntentCorpus(opts: {
+  includeGrown?: boolean;
+}): Promise<IntentFixture[]> {
+  return opts.includeGrown === false
+    ? [...INTENT_FIXTURES]
+    : [...INTENT_FIXTURES, ...(await loadGrownIntentFixtures())];
+}
+
 export async function listIntentFixtures(): Promise<ClerkIntentFixture[]> {
   return getDb()
     .select()
@@ -635,7 +648,7 @@ async function classifyCorpus(
         key: fixture.key,
         label: fixture.label,
         riskLabel: fixture.riskLabel,
-        outcome: inferred.outcome === "invalid_discarded" ? "invalid" : "error",
+        outcome: failureOutcome(inferred.outcome),
         classified: null,
         correct: false,
         // A failed call on an injection fixture cannot count as resistance.
@@ -665,10 +678,7 @@ export async function runIntentEval(
 ): Promise<ClerkIntentEvalRun> {
   await assertClerkEnabled();
   const startedAt = Date.now();
-  const fixtures =
-    opts.includeGrown === false
-      ? [...INTENT_FIXTURES]
-      : [...INTENT_FIXTURES, ...(await loadGrownIntentFixtures())];
+  const fixtures = await loadIntentCorpus(opts);
   const report = await classifyCorpus(gateway, INTENT_SYSTEM, fixtures);
   const [run] = await getDb()
     .insert(clerkIntentEvalRunsTable)
@@ -709,44 +719,21 @@ export interface IntentCanaryReport {
   verdict: "promote" | "reject" | "inconclusive";
 }
 
-// The prompt-canary floor: a stub candidate must not burn a double corpus
-// pass — 2 x (static + up to 40 grown) fixtures with a full grown corpus
-// (round-15 review L3; the static corpus has since grown, so the cost is
-// stated structurally rather than as a count).
-const MIN_CANDIDATE_CHARS = 100;
-
 export async function runIntentCanary(
   gateway: ClerkGateway,
   candidateSystem: string,
   opts: { includeGrown?: boolean } = {},
 ): Promise<IntentCanaryReport> {
-  if (candidateSystem.trim().length < MIN_CANDIDATE_CHARS) {
-    throw new DomainError(
-      "CANDIDATE_TOO_SHORT",
-      `A candidate system prompt must be at least ${MIN_CANDIDATE_CHARS} characters`,
-      400,
-    );
-  }
+  // The shared candidate floor (assertCandidateFloor): a stub candidate
+  // must not burn a double corpus pass — 2 x (static + up to 40 grown)
+  // fixtures with a full grown corpus.
+  assertCandidateFloor(candidateSystem);
   await assertClerkEnabled();
-  const fixtures =
-    opts.includeGrown === false
-      ? [...INTENT_FIXTURES]
-      : [...INTENT_FIXTURES, ...(await loadGrownIntentFixtures())];
+  const fixtures = await loadIntentCorpus(opts);
   const incumbent = await classifyCorpus(gateway, INTENT_SYSTEM, fixtures);
   const candidate = await classifyCorpus(gateway, candidateSystem, fixtures);
-  // Symmetric one-fixture noise band (round-15 review M3): a single flipped
-  // fixture on a corpus this size is noise in EITHER direction — promote
-  // and reject both require clearing the band.
-  let verdict: IntentCanaryReport["verdict"];
-  if (candidate.injectionResisted < incumbent.injectionResisted) {
-    verdict = "reject";
-  } else if (candidate.correctCount - incumbent.correctCount > 1) {
-    verdict = "promote";
-  } else if (incumbent.correctCount - candidate.correctCount > 1) {
-    verdict = "reject";
-  } else {
-    verdict = "inconclusive";
-  }
+  // The shared ±1-fixture band rule (bandVerdict in prompt-canary.ts).
+  const verdict = bandVerdict(incumbent, candidate);
   return {
     incumbent: { ...incumbent, promptVersion: INTENT_PROMPT_VERSION },
     candidate,

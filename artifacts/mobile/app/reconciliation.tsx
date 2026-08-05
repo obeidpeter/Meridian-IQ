@@ -27,7 +27,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  StyleSheet,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -45,9 +44,9 @@ import {
   EmptyState,
   ErrorState,
   rowBetween,
+  screenContent,
   stackHeaderOptions,
   TextField,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { usePendingPoll } from "@/hooks/usePendingPoll";
@@ -383,7 +382,7 @@ export default function ReconciliationScreen() {
       <KeyboardAwareScrollViewCompat
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={[
-          styles.content,
+          screenContent,
           { paddingBottom: insets.bottom + 48 },
         ]}
         bottomOffset={20}
@@ -764,10 +763,3 @@ export default function ReconciliationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
-});

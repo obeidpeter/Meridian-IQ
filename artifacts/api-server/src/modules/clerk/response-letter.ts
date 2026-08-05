@@ -61,20 +61,48 @@ export interface ResponseLetterFacts {
 const line = (label: string, value: string | null | undefined): string | null =>
   value ? `${label}: ${value}` : null;
 
-export function buildResponseLetterUser(facts: ResponseLetterFacts): string {
-  const o = facts.obligation;
-  const noticeLines = [
-    line("Authority", o.authority),
-    line("Notice type", o.noticeType),
-    line("Reference", o.reference),
-    line("Tax type", o.taxType),
-    line("Period on the notice", o.period),
-    line(
+export interface ObligationNoticeRow {
+  label: string;
+  value: string;
+}
+
+// The notice fields both authority-facing renderings share — the letter's
+// fenced NOTICE block below and the response bundle cover's kv rows
+// (response-pack-pdf.ts) — with presence logic and the amount composition in
+// ONE home, so a renamed label or changed format can never drift the letter
+// from the paper it is enclosed with. Absent optional fields are dropped
+// (authority/noticeType/responseDueDate are notNull in the schema, so they
+// always survive). PROMPT BYTES: the letter renders these rows verbatim
+// inside its fence — editing labels, order or composition changes prompt
+// bytes and requires a RESPONSE_LETTER_PROMPT_VERSION bump. Firm notes stays
+// OUT of this list deliberately: the letter fences it for the model while
+// the bundle never prints firm-internal notes on authority-facing paper.
+export function obligationNoticeRows(
+  o: ResponseLetterFacts["obligation"],
+): ObligationNoticeRow[] {
+  const row = (
+    label: string,
+    value: string | null | undefined,
+  ): ObligationNoticeRow | null => (value ? { label, value } : null);
+  return [
+    row("Authority", o.authority),
+    row("Notice type", o.noticeType),
+    row("Reference", o.reference),
+    row("Tax type", o.taxType),
+    row("Period on the notice", o.period),
+    row(
       "Amount on the notice",
       o.amount ? `${o.amount}${o.currency ? ` ${o.currency}` : ""}` : null,
     ),
-    line("Notice date", o.issueDate),
-    line("Response due", o.responseDueDate),
+    row("Notice date", o.issueDate),
+    row("Response due", o.responseDueDate),
+  ].filter((r): r is ObligationNoticeRow => r !== null);
+}
+
+export function buildResponseLetterUser(facts: ResponseLetterFacts): string {
+  const o = facts.obligation;
+  const noticeLines = [
+    ...obligationNoticeRows(o).map((r) => `${r.label}: ${r.value}`),
     line("Firm notes", o.notes),
   ].filter((l): l is string => l !== null);
   return [

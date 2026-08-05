@@ -16,8 +16,6 @@ import type {
 import { Stack } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
-  Alert,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -37,12 +35,13 @@ import {
   EmptyState,
   ErrorState,
   rowBetween,
+  screenContent,
   stackHeaderOptions,
   TextField,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage } from "@/lib/api-error";
+import { confirmThen } from "@/lib/confirm";
 import {
   billStatusLabel,
   billStatusTone,
@@ -355,25 +354,13 @@ export default function BillsScreen() {
   );
 
   const confirmFlag = useCallback(
-    (bill: BillSummary, target: BillFlagTarget) => {
-      // Alert.alert is a no-op on react-native-web, so fall back to the
-      // browser's native confirm there (same pattern as bulk submit).
-      if (Platform.OS === "web") {
-        if (
-          window.confirm(`${flagConfirmTitle(target)}\n\n${FLAG_CONFIRM_MESSAGE}`)
-        ) {
-          void runFlag(bill, target);
-        }
-        return;
-      }
-      Alert.alert(flagConfirmTitle(target), FLAG_CONFIRM_MESSAGE, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: target === "paid" ? "Mark paid" : "Mark scheduled",
-          onPress: () => void runFlag(bill, target),
-        },
-      ]);
-    },
+    (bill: BillSummary, target: BillFlagTarget) =>
+      confirmThen(
+        flagConfirmTitle(target),
+        FLAG_CONFIRM_MESSAGE,
+        target === "paid" ? "Mark paid" : "Mark scheduled",
+        () => void runFlag(bill, target),
+      ),
     [runFlag],
   );
 
@@ -400,7 +387,7 @@ export default function BillsScreen() {
       <KeyboardAwareScrollViewCompat
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={[
-          styles.content,
+          screenContent,
           { paddingBottom: insets.bottom + 48 },
         ]}
         bottomOffset={20}
@@ -478,11 +465,6 @@ export default function BillsScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
   inlineRow: {
     flexDirection: "row",
     alignItems: "center",

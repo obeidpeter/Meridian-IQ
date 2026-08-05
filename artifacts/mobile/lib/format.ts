@@ -31,7 +31,8 @@ const MONTHS = [
   "Dec",
 ];
 
-const FULL_MONTHS = [
+/** Full month names, indexed 0-11 (shared with clerk-updates' month labels). */
+export const FULL_MONTHS = [
   "January",
   "February",
   "March",

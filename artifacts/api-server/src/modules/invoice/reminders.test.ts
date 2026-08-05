@@ -12,13 +12,13 @@ import {
   alertPreferencesTable,
   consentRecordsTable,
   deadlineReminderSendsTable,
-  featureFlagsTable,
 } from "@workspace/db";
 import { setFlag } from "../flags/flags.ts";
 import {
   setMessageTransport,
   resetMessageTransport,
 } from "../messaging/messaging.ts";
+import { recipientRefFor } from "../messaging/recipient-ref.ts";
 import { createDraft } from "./service.ts";
 import {
   sweepDeadlineReminders,
@@ -26,6 +26,7 @@ import {
   STALE_OVERDUE_DAYS,
 } from "./reminders.ts";
 import { SUBMISSION_WINDOW_DAYS } from "./compliance-window.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // The deadline-reminder sweep: once per (invoice, threshold), through the
@@ -46,10 +47,10 @@ const supplierStale = randomUUID();
 const supplierRevoked = randomUUID();
 const supplierFailing = randomUUID();
 
-// Matches the module's internal recipient derivation (letters of the uuid):
-// the assertion key tying message rows back to a fixture party.
-const refFor = (partyId: string) =>
-  `ref-${partyId.replace(/[^a-z]/gi, "").slice(0, 16) || "client"}`;
+// The fan-out's own recipient derivation, imported so the assertion key tying
+// message rows back to a fixture party can never drift (the recipient-ref.ts
+// covenant).
+const refFor = recipientRefFor;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const isoDaysAgo = (days: number) =>
@@ -61,7 +62,7 @@ const OVERDUE_ISSUE = isoDaysAgo(SUBMISSION_WINDOW_DAYS + 3); // ~3 days past
 
 // Flag save/restore: the sweep tests flip messaging_notifications, so put it
 // back exactly as found (delete when it did not pre-exist).
-let flagWasEnabled: boolean | null = null;
+const flagGuard = makeFlagGuard(FLAG);
 
 let n = 0;
 async function draftFor(supplierPartyId: string, issueDate: string) {
@@ -112,21 +113,8 @@ async function drainReminders(now?: Date) {
 }
 
 before(async () => {
+  await flagGuard.saveAndSet(true);
   const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, FLAG))
-    .limit(1);
-  flagWasEnabled = existing ? existing.enabled : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: FLAG, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
-
   await db
     .insert(usersTable)
     .values({ id: userId, email: `rem-${SALT}@test.local` })
@@ -175,12 +163,7 @@ before(async () => {
 });
 
 after(async () => {
-  const db = getDb();
-  if (flagWasEnabled === null) {
-    await db.delete(featureFlagsTable).where(eq(featureFlagsTable.key, FLAG));
-  } else {
-    await setFlag(FLAG, flagWasEnabled);
-  }
+  await flagGuard.restore();
 });
 
 test("due-soon invoice reminds once through default channels", async () => {

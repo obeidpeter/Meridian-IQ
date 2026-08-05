@@ -19,7 +19,7 @@ import {
   ensureClerkFixtures,
   fakeGateway,
 } from "./test-support.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { isDomainError } from "../../test-helpers/assertions.ts";
 import {
   claimCase,
@@ -67,12 +67,6 @@ const otherFirmId = "0b119a06-0000-4000-8000-0000000000b2";
 // A party linked to NOTHING in the firm (no engagement/invoice/provenance).
 const strangerPartyId = "0b119a07-0000-4000-8000-0000000000c3";
 
-// Lagos-safe date offsets (WAT is fixed UTC+1).
-function lagosDateOffset(days: number): string {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 const ISSUE_DATE = lagosDateOffset(-5);
 const DUE_DATE = lagosDateOffset(21);
 

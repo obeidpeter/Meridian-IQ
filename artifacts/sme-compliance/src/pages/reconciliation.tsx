@@ -54,6 +54,7 @@ import {
 import {
   formatNaira,
   formatDate,
+  formatPct,
   humanize,
   pillClasses,
   statusLabel,
@@ -63,12 +64,6 @@ import {
   proposalBadgeClasses,
   confidenceBadgeClasses,
 } from "@/lib/format";
-
-function percent(rate: number | string): string {
-  const n = Number(rate);
-  if (Number.isNaN(n)) return "—";
-  return `${Math.round(n * 100)}%`;
-}
 
 // ---- Narration match lane ---------------------------------------------------
 // Clerk reads the statement's middle-band narrations and records, per line,
@@ -186,6 +181,265 @@ export function statementImportBody(args: {
     commit: args.commit,
     ...(args.filename ? { filename: args.filename } : {}),
   };
+}
+
+/**
+ * Section 1's outcome card ("Parse report" / "Statement committed") — render
+ * only. The import STATE stays in Reconciliation: the commit flow's held
+ * proposedCsv/report coupling (see statementImportBody) is deliberate.
+ */
+function ParseReportCard({
+  report,
+  reportSource,
+}: {
+  report: StatementImportResult;
+  reportSource: "csv" | "pdf";
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          {report.committed ? "Statement committed" : "Parse report"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {reportSource === "pdf" && !report.committed && (
+          <Alert data-testid="banner-scanned-preview">
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            <AlertTitle>
+              Clerk read this scanned statement
+            </AlertTitle>
+            <AlertDescription>
+              The rows below are what Clerk proposed from the PDF —
+              and exactly what will be committed. Check the dates,
+              amounts and directions against your statement; nothing
+              is saved until you press “Commit statement”.
+            </AlertDescription>
+          </Alert>
+        )}
+        {/* role=status: the report lands asynchronously after "Check
+            parsing" / "Commit statement", so announce the headline
+            numbers instead of leaving screen readers to hunt. */}
+        <div
+          className="flex flex-wrap items-center gap-4 text-sm"
+          role="status"
+        >
+          <span>
+            Format:{" "}
+            <span className="font-mono text-xs bg-muted rounded px-1.5 py-0.5">
+              {report.formatKey || "unknown"}
+            </span>
+          </span>
+          <span>Lines: {report.lineCount}</span>
+          <span className="text-emerald-700 dark:text-emerald-400">
+            Parsed: {report.parsedCount}
+          </span>
+          <span
+            className={
+              report.parseRate < 1
+                ? "text-destructive"
+                : "text-emerald-700 dark:text-emerald-400"
+            }
+          >
+            Parse rate: {formatPct(report.parseRate, 0)}
+          </span>
+        </div>
+        {!report.committed && (
+          <p className="text-xs text-muted-foreground">
+            Nothing has been saved yet — review the rows below, then press “Commit
+            statement”. Invalid rows are skipped on commit.
+          </p>
+        )}
+        <div className="space-y-2">
+          {report.rows.map((r) => (
+            <div
+              key={r.lineNo}
+              className={`flex items-start gap-2 text-sm border rounded-md px-3 py-2 ${
+                r.parseStatus === "invalid"
+                  ? "border-destructive/40 bg-destructive/5"
+                  : ""
+              }`}
+            >
+              <RowStatusIcon invalid={r.parseStatus === "invalid"} />
+              <div className="min-w-0">
+                <p className="font-medium">
+                  Line {r.lineNo}
+                  {r.parseStatus === "parsed" ? (
+                    <span className="font-normal">
+                      {" "}
+                      · {formatDate(r.valueDate)} ·{" "}
+                      {humanize(r.direction || "—")}{" "}
+                      {formatNaira(r.amount)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground font-normal">
+                      {" "}
+                      (invalid)
+                    </span>
+                  )}
+                </p>
+                {r.narration && (
+                  <p className="text-xs text-muted-foreground truncate">{r.narration}</p>
+                )}
+                {r.error && <p className="text-xs text-destructive mt-1">{r.error}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * One match proposal's card in section 3 — render + per-row callbacks only;
+ * every hook (decisions, assist, narration join) stays in Reconciliation.
+ * The assist button is disabled while ANY row's assist is in flight
+ * (assistingId non-null) but labelled only on its own row, so the component
+ * takes the full assistingId rather than a boolean.
+ */
+function ProposalCard({
+  proposal: p,
+  narrationChip,
+  decidingId,
+  assistingId,
+  assist,
+  onDecide,
+  onExplain,
+}: {
+  proposal: MatchProposalView;
+  narrationChip: string | null;
+  decidingId: string | null;
+  assistingId: string | null;
+  assist: MatchAssist | undefined;
+  onDecide: (proposal: MatchProposalView, action: "accept" | "reject") => void;
+  onExplain: (proposal: MatchProposalView) => void;
+}) {
+  return (
+    <div className="border rounded-md px-3 py-2 text-sm space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <Link
+            href={`/invoices/${p.invoiceId}`}
+            className="font-semibold truncate hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+            data-testid={`link-proposal-invoice-${p.id}`}
+          >
+            {p.invoiceNumber}
+          </Link>
+          <span className={confidenceBadgeClasses(p.confidence)}>
+            {formatPct(p.confidence, 0)} match
+          </span>
+          <span className={proposalBadgeClasses(p.status)}>
+            {proposalStatusLabel(p.status)}
+          </span>
+          {narrationChip && (
+            <span
+              className={pillClasses("violet")}
+              data-testid={`narration-chip-${p.id}`}
+            >
+              <Sparkles
+                className="w-3 h-3"
+                aria-hidden="true"
+              />
+              {narrationChip}
+            </span>
+          )}
+        </div>
+        {p.status === "proposed" && (
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => onDecide(p, "accept")}
+              disabled={decidingId === p.id}
+            >
+              <Check className="w-4 h-4 mr-1" aria-hidden="true" />
+              {decidingId === p.id ? "Saving…" : "Accept"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onDecide(p, "reject")}
+              disabled={decidingId === p.id}
+            >
+              <X className="w-4 h-4 mr-1" aria-hidden="true" /> Reject
+            </Button>
+          </div>
+        )}
+      </div>
+      <p className="text-muted-foreground">
+        {p.buyerName} · statement line {p.lineNo ?? "—"} of{" "}
+        {formatDate(p.lineDate)}
+      </p>
+      {p.narration && (
+        <p className="text-xs font-mono text-muted-foreground truncate">
+          {p.narration}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-4 text-xs">
+        <span>
+          Line amount:{" "}
+          <span className="font-medium tabular-nums">
+            {formatNaira(p.lineAmount)}
+          </span>
+        </span>
+        <span>
+          Invoice total:{" "}
+          <span className="font-medium tabular-nums">
+            {formatNaira(p.invoiceTotal)}
+          </span>
+        </span>
+        <span className="text-muted-foreground">
+          Invoice status: {statusLabel(p.invoiceStatus)}
+        </span>
+      </div>
+      {p.status === "proposed" &&
+        Number(p.confidence) < 0.85 &&
+        !assist && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => onExplain(p)}
+            disabled={assistingId !== null}
+            data-testid={`button-assist-${p.id}`}
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+            {assistingId === p.id
+              ? "Asking Clerk…"
+              : "Why this match?"}
+          </Button>
+        )}
+      {assist && (
+        <div
+          className="rounded-md border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 space-y-1"
+          data-testid={`assist-${p.id}`}
+        >
+          <p className="text-xs font-medium text-violet-800 dark:text-violet-300 flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+            {assist.source === "clerk"
+              ? "Clerk's read on this line"
+              : "Match evidence"}
+          </p>
+          <p className="text-sm">{assist.explanation}</p>
+          {(assist.ranked.find(
+            (r) => r.proposalId === p.id,
+          )?.highlights.length ?? 0) > 0 && (
+            <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+              {assist.ranked
+                .find((r) => r.proposalId === p.id)!
+                .highlights.map((h, i) => (
+                  <li key={i}>{h}</li>
+                ))}
+            </ul>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Ranked by the deterministic matcher — accepting
+            stays your decision.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Reconciliation() {
@@ -356,6 +610,18 @@ export function Reconciliation() {
     }
   };
 
+  // Post-decision refresh, shared by the single accept/reject and bulk accept
+  // paths. Not awaited: the decision(s) are already recorded server-side, so
+  // a background refetch rejection must not surface as a false error toast.
+  const invalidateMatchState = () => {
+    queryClient.invalidateQueries({
+      queryKey: getListBankStatementsQueryKey({ clientPartyId }),
+    });
+    queryClient.invalidateQueries({
+      queryKey: getListBankStatementProposalsQueryKey(selectedId || ""),
+    });
+  };
+
   // Statement lines with a pending proposal at/above the server's default 0.85
   // threshold. Bulk accept takes at most the best proposal per line, so the
   // count is per line — not per proposal — to keep the button label honest.
@@ -488,14 +754,7 @@ export function Reconciliation() {
       } else {
         await reject.mutateAsync({ id: proposal.id });
       }
-      // Not awaited: a background refetch rejection must not surface as a false
-      // "could not save decision" error after the decision already recorded.
-      queryClient.invalidateQueries({
-        queryKey: getListBankStatementsQueryKey({ clientPartyId }),
-      });
-      queryClient.invalidateQueries({
-        queryKey: getListBankStatementProposalsQueryKey(selectedId || ""),
-      });
+      invalidateMatchState();
       toast({
         title: action === "accept" ? "Match accepted" : "Match rejected",
         description:
@@ -527,14 +786,7 @@ export function Reconciliation() {
     setBulkArmedId(null);
     try {
       const res = await bulkAccept.mutateAsync({ id: selectedId });
-      // Not awaited: a background refetch rejection must not surface as a false
-      // "could not accept" error after the decisions already recorded.
-      queryClient.invalidateQueries({
-        queryKey: getListBankStatementsQueryKey({ clientPartyId }),
-      });
-      queryClient.invalidateQueries({
-        queryKey: getListBankStatementProposalsQueryKey(selectedId || ""),
-      });
+      invalidateMatchState();
       toast({
         title: `Accepted ${res.acceptedCount} of ${res.total} matches`,
         description:
@@ -671,98 +923,7 @@ export function Reconciliation() {
           </div>
 
           {report && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {report.committed ? "Statement committed" : "Parse report"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {reportSource === "pdf" && !report.committed && (
-                  <Alert data-testid="banner-scanned-preview">
-                    <Sparkles className="h-4 w-4" aria-hidden="true" />
-                    <AlertTitle>
-                      Clerk read this scanned statement
-                    </AlertTitle>
-                    <AlertDescription>
-                      The rows below are what Clerk proposed from the PDF —
-                      and exactly what will be committed. Check the dates,
-                      amounts and directions against your statement; nothing
-                      is saved until you press “Commit statement”.
-                    </AlertDescription>
-                  </Alert>
-                )}
-                {/* role=status: the report lands asynchronously after "Check
-                    parsing" / "Commit statement", so announce the headline
-                    numbers instead of leaving screen readers to hunt. */}
-                <div
-                  className="flex flex-wrap items-center gap-4 text-sm"
-                  role="status"
-                >
-                  <span>
-                    Format:{" "}
-                    <span className="font-mono text-xs bg-muted rounded px-1.5 py-0.5">
-                      {report.formatKey || "unknown"}
-                    </span>
-                  </span>
-                  <span>Lines: {report.lineCount}</span>
-                  <span className="text-emerald-700 dark:text-emerald-400">
-                    Parsed: {report.parsedCount}
-                  </span>
-                  <span
-                    className={
-                      report.parseRate < 1
-                        ? "text-destructive"
-                        : "text-emerald-700 dark:text-emerald-400"
-                    }
-                  >
-                    Parse rate: {percent(report.parseRate)}
-                  </span>
-                </div>
-                {!report.committed && (
-                  <p className="text-xs text-muted-foreground">
-                    Nothing has been saved yet — review the rows below, then press “Commit
-                    statement”. Invalid rows are skipped on commit.
-                  </p>
-                )}
-                <div className="space-y-2">
-                  {report.rows.map((r) => (
-                    <div
-                      key={r.lineNo}
-                      className={`flex items-start gap-2 text-sm border rounded-md px-3 py-2 ${
-                        r.parseStatus === "invalid"
-                          ? "border-destructive/40 bg-destructive/5"
-                          : ""
-                      }`}
-                    >
-                      <RowStatusIcon invalid={r.parseStatus === "invalid"} />
-                      <div className="min-w-0">
-                        <p className="font-medium">
-                          Line {r.lineNo}
-                          {r.parseStatus === "parsed" ? (
-                            <span className="font-normal">
-                              {" "}
-                              · {formatDate(r.valueDate)} ·{" "}
-                              {humanize(r.direction || "—")}{" "}
-                              {formatNaira(r.amount)}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground font-normal">
-                              {" "}
-                              (invalid)
-                            </span>
-                          )}
-                        </p>
-                        {r.narration && (
-                          <p className="text-xs text-muted-foreground truncate">{r.narration}</p>
-                        )}
-                        {r.error && <p className="text-xs text-destructive mt-1">{r.error}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <ParseReportCard report={report} reportSource={reportSource} />
           )}
 
           <Card>
@@ -806,7 +967,7 @@ export function Reconciliation() {
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {s.parsedCount} of {s.lineCount} line(s) parsed · Parse rate{" "}
-                          {s.lineCount > 0 ? percent(s.parsedCount / s.lineCount) : "—"} · Uploaded{" "}
+                          {s.lineCount > 0 ? formatPct(s.parsedCount / s.lineCount, 0) : "—"} · Uploaded{" "}
                           {formatDate(s.createdAt)}
                         </p>
                       </div>
@@ -907,139 +1068,24 @@ export function Reconciliation() {
                     )}
                   </EmptyState>
                 ) : (
-                  (proposals || []).map((p) => {
-                    // Advisory only: the chip marks the proposal Clerk's
-                    // narration read points at — it never pre-selects Accept.
-                    const narrationChip = narrationChipFor(
-                      linesById.get(p.statementLineId),
-                      p.id,
-                    );
-                    return (
-                    <div key={p.id} className="border rounded-md px-3 py-2 text-sm space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                          <Link
-                            href={`/invoices/${p.invoiceId}`}
-                            className="font-semibold truncate hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-                            data-testid={`link-proposal-invoice-${p.id}`}
-                          >
-                            {p.invoiceNumber}
-                          </Link>
-                          <span className={confidenceBadgeClasses(p.confidence)}>
-                            {percent(p.confidence)} match
-                          </span>
-                          <span className={proposalBadgeClasses(p.status)}>
-                            {proposalStatusLabel(p.status)}
-                          </span>
-                          {narrationChip && (
-                            <span
-                              className={pillClasses("violet")}
-                              data-testid={`narration-chip-${p.id}`}
-                            >
-                              <Sparkles
-                                className="w-3 h-3"
-                                aria-hidden="true"
-                              />
-                              {narrationChip}
-                            </span>
-                          )}
-                        </div>
-                        {p.status === "proposed" && (
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => decide(p, "accept")}
-                              disabled={decidingId === p.id}
-                            >
-                              <Check className="w-4 h-4 mr-1" aria-hidden="true" />
-                              {decidingId === p.id ? "Saving…" : "Accept"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => decide(p, "reject")}
-                              disabled={decidingId === p.id}
-                            >
-                              <X className="w-4 h-4 mr-1" aria-hidden="true" /> Reject
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-muted-foreground">
-                        {p.buyerName} · statement line {p.lineNo ?? "—"} of{" "}
-                        {formatDate(p.lineDate)}
-                      </p>
-                      {p.narration && (
-                        <p className="text-xs font-mono text-muted-foreground truncate">
-                          {p.narration}
-                        </p>
+                  (proposals || []).map((p) => (
+                    <ProposalCard
+                      key={p.id}
+                      proposal={p}
+                      // Advisory only: the chip marks the proposal Clerk's
+                      // narration read points at — it never pre-selects
+                      // Accept.
+                      narrationChip={narrationChipFor(
+                        linesById.get(p.statementLineId),
+                        p.id,
                       )}
-                      <div className="flex flex-wrap gap-4 text-xs">
-                        <span>
-                          Line amount:{" "}
-                          <span className="font-medium tabular-nums">
-                            {formatNaira(p.lineAmount)}
-                          </span>
-                        </span>
-                        <span>
-                          Invoice total:{" "}
-                          <span className="font-medium tabular-nums">
-                            {formatNaira(p.invoiceTotal)}
-                          </span>
-                        </span>
-                        <span className="text-muted-foreground">
-                          Invoice status: {statusLabel(p.invoiceStatus)}
-                        </span>
-                      </div>
-                      {p.status === "proposed" &&
-                        Number(p.confidence) < 0.85 &&
-                        !assistById[p.id] && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => explainMatch(p)}
-                            disabled={assistingId !== null}
-                            data-testid={`button-assist-${p.id}`}
-                          >
-                            <Sparkles className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
-                            {assistingId === p.id
-                              ? "Asking Clerk…"
-                              : "Why this match?"}
-                          </Button>
-                        )}
-                      {assistById[p.id] && (
-                        <div
-                          className="rounded-md border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 px-3 py-2 space-y-1"
-                          data-testid={`assist-${p.id}`}
-                        >
-                          <p className="text-xs font-medium text-violet-800 dark:text-violet-300 flex items-center gap-1">
-                            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-                            {assistById[p.id].source === "clerk"
-                              ? "Clerk's read on this line"
-                              : "Match evidence"}
-                          </p>
-                          <p className="text-sm">{assistById[p.id].explanation}</p>
-                          {(assistById[p.id].ranked.find(
-                            (r) => r.proposalId === p.id,
-                          )?.highlights.length ?? 0) > 0 && (
-                            <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
-                              {assistById[p.id].ranked
-                                .find((r) => r.proposalId === p.id)!
-                                .highlights.map((h, i) => (
-                                  <li key={i}>{h}</li>
-                                ))}
-                            </ul>
-                          )}
-                          <p className="text-xs text-muted-foreground">
-                            Ranked by the deterministic matcher — accepting
-                            stays your decision.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    );
-                  })
+                      decidingId={decidingId}
+                      assistingId={assistingId}
+                      assist={assistById[p.id]}
+                      onDecide={decide}
+                      onExplain={explainMatch}
+                    />
+                  ))
                 )}
               </CardContent>
             </Card>

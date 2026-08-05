@@ -420,6 +420,41 @@ export function computeCorrectionShapes(
     .slice(0, SHAPE_ROW_CAP);
 }
 
+// The calibration sample: recent approved extractions with a corrections
+// diff, newest CALIBRATION_SAMPLE_LIMIT so the folds stay cheap as history
+// grows. The ONE spelling of the query BOTH consumers read — getClerkMetrics'
+// console calibration table (platform-wide) and firmFastLaneThreshold
+// (narrowed to one firm's exhaust) — so the fast-lane evidence and the
+// calibration table can never read different predicates. The window is a
+// parameter: getClerkMetrics passes the caller's windowDays, the fast lane
+// pins FAST_LANE_WINDOW_DAYS.
+const CALIBRATION_SAMPLE_LIMIT = 500;
+
+async function calibrationSample(
+  windowDays: number,
+  firmId?: string,
+): Promise<
+  { extraction: ClerkExtraction | null; corrections: ClerkCorrection[] | null }[]
+> {
+  return (
+    await getDb().execute(sql`
+      SELECT extraction, corrections
+      FROM clerk_cases
+      WHERE created_at >= now() - make_interval(days => ${windowDays})
+        ${firmId ? sql`AND firm_id = ${firmId}` : sql``}
+        AND kind = 'extraction'
+        AND status = 'approved'
+        AND extraction IS NOT NULL
+        AND corrections IS NOT NULL
+      ORDER BY created_at DESC
+      LIMIT ${CALIBRATION_SAMPLE_LIMIT}
+    `)
+  ).rows as {
+    extraction: ClerkExtraction | null;
+    corrections: ClerkCorrection[] | null;
+  }[];
+}
+
 export async function getClerkMetrics(
   windowDays = 30,
 ): Promise<ClerkMetrics> {
@@ -599,18 +634,20 @@ export async function getClerkMetrics(
 
   // USD estimate only when the operator has configured both per-million-token
   // rates; a half-configured or unconfigured environment reports null rather
-  // than a misleading partial figure.
+  // than a misleading partial figure. ONE spelling of the pricing rule — the
+  // headline cost, platform spend and per-purpose economics all price through
+  // this closure, so a rounding or rate-handling tweak lands everywhere.
   const inputRate = Number(process.env.CLERK_COST_PER_1M_INPUT_USD);
   const outputRate = Number(process.env.CLERK_COST_PER_1M_OUTPUT_USD);
-  const estimatedUsd =
+  const usdEstimate = (pt: number, ct: number): number | null =>
     Number.isFinite(inputRate) && Number.isFinite(outputRate)
       ? Number(
-          (
-            (promptTokens / 1_000_000) * inputRate +
-            (completionTokens / 1_000_000) * outputRate
-          ).toFixed(4),
+          ((pt / 1_000_000) * inputRate + (ct / 1_000_000) * outputRate).toFixed(
+            4,
+          ),
         )
       : null;
+  const estimatedUsd = usdEstimate(promptTokens, completionTokens);
 
   // Per-supplier accuracy: one row per supplier party whose approved cases
   // carry a corrections diff in the window, worst offenders (most overridden
@@ -712,24 +749,9 @@ export async function getClerkMetrics(
   const askTotal = askRows[0]?.total ?? 0;
   const answered = askRows[0]?.answered ?? 0;
 
-  // Calibration input: recent approved extractions with a corrections diff.
-  // Bounded (newest 500) so the fold stays cheap as history grows.
-  const calibrationRows = (
-    await db.execute(sql`
-      SELECT extraction, corrections
-      FROM clerk_cases
-      WHERE created_at >= ${since}
-        AND kind = 'extraction'
-        AND status = 'approved'
-        AND extraction IS NOT NULL
-        AND corrections IS NOT NULL
-      ORDER BY created_at DESC
-      LIMIT 500
-    `)
-  ).rows as {
-    extraction: ClerkExtraction | null;
-    corrections: ClerkCorrection[] | null;
-  }[];
+  // Calibration input: the shared bounded sample (calibrationSample above),
+  // platform-wide over the caller's window.
+  const calibrationRows = await calibrationSample(windowDays);
   const calibration = computeCalibration(calibrationRows);
   // Shape mining reads the SAME sample as calibration — one bounded query,
   // two deterministic folds over the corrections exhaust.
@@ -778,15 +800,7 @@ export async function getClerkMetrics(
   );
   const projectedTokens =
     monthElapsed > 0 ? Math.round(spendTotal / monthElapsed) : spendTotal;
-  const spendUsd =
-    Number.isFinite(inputRate) && Number.isFinite(outputRate)
-      ? Number(
-          (
-            (spendPrompt / 1_000_000) * inputRate +
-            (spendCompletion / 1_000_000) * outputRate
-          ).toFixed(4),
-        )
-      : null;
+  const spendUsd = usdEstimate(spendPrompt, spendCompletion);
   const projectedUsd =
     spendUsd !== null && monthElapsed > 0
       ? Number((spendUsd / monthElapsed).toFixed(4))
@@ -901,15 +915,7 @@ export async function getClerkMetrics(
           promptTokens: pt,
           completionTokens: ct,
           errorCount: p.error_count,
-          estimatedUsd:
-            Number.isFinite(inputRate) && Number.isFinite(outputRate)
-              ? Number(
-                  (
-                    (pt / 1_000_000) * inputRate +
-                    (ct / 1_000_000) * outputRate
-                  ).toFixed(4),
-                )
-              : null,
+          estimatedUsd: usdEstimate(pt, ct),
         };
       }),
       months: monthRows.map((m) => ({
@@ -1007,9 +1013,10 @@ export const FAST_LANE_FLOOR = 0.8;
 const FAST_LANE_BAND = "0.8-1.0";
 const FAST_LANE_MIN_FIELDS = 200;
 const FAST_LANE_MIN_KEPT_RATE = 0.97;
-// Same window and sample cap as getClerkMetrics' default calibration input,
-// so the console's calibration table and the derived threshold read the same
-// evidence shape.
+// Same window as getClerkMetrics' default calibration input; the query
+// itself (predicates and sample cap) is calibrationSample, shared with the
+// console's calibration table, so the two read the same evidence shape by
+// construction.
 const FAST_LANE_WINDOW_DAYS = 30;
 
 export async function firmFastLaneThreshold(
@@ -1017,27 +1024,11 @@ export async function firmFastLaneThreshold(
 ): Promise<number> {
   // Operator captures carry no firm — no exhaust to justify relaxing.
   if (!firmId) return FAST_LANE_DEFAULT;
-  // The calibration input query (getClerkMetrics) narrowed to ONE firm's
+  // The SHARED calibration sample (calibrationSample) narrowed to ONE firm's
   // approved, corrected extractions. clerk_cases is bypass-only RLS: callers
   // run under an operator/bypass context (bulk-approve's per-item bypass
   // transaction, the operator-facing case reads).
-  const rows = (
-    await getDb().execute(sql`
-      SELECT extraction, corrections
-      FROM clerk_cases
-      WHERE created_at >= now() - make_interval(days => ${FAST_LANE_WINDOW_DAYS})
-        AND firm_id = ${firmId}
-        AND kind = 'extraction'
-        AND status = 'approved'
-        AND extraction IS NOT NULL
-        AND corrections IS NOT NULL
-      ORDER BY created_at DESC
-      LIMIT 500
-    `)
-  ).rows as {
-    extraction: ClerkExtraction | null;
-    corrections: ClerkCorrection[] | null;
-  }[];
+  const rows = await calibrationSample(FAST_LANE_WINDOW_DAYS, firmId);
   const calibration = computeCalibration(rows);
   const band = calibration?.buckets.find((b) => b.range === FAST_LANE_BAND);
   if (

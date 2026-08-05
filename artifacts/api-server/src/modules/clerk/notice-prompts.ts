@@ -1,5 +1,15 @@
 import { z } from "zod/v4";
+import {
+  CreateObligationInputAuthority,
+  CreateObligationInputNoticeType,
+  CreateObligationInputTaxType,
+} from "@workspace/api-zod";
 import type { ClerkNoticeExtraction, PreflightIssue } from "@workspace/db";
+// Statutory clocks run on the Lagos calendar; WAT is fixed UTC+1, so today's
+// Lagos date is a constant offset — lagosDateString is the one shared home
+// for that rule (lib/lagos-time.ts), and it is plain JS, so this module's
+// pure/no-DB posture holds.
+import { lagosDateString } from "../../lib/lagos-time";
 import { FLAG_CONFIDENCE_THRESHOLD } from "./prompts";
 
 // Notice Desk (Task #199) — the closed catalogues and versioned prompt for
@@ -10,35 +20,32 @@ import { FLAG_CONFIDENCE_THRESHOLD } from "./prompts";
 // human approve step — never this module — creates the obligation.
 
 // ---------------------------------------------------------------------------
-// Closed catalogues — these MUST match the contract enums in
-// lib/api-spec/openapi.yaml (DecideNoticeCaseBody / CreateObligationBody)
-// verbatim: the operator confirms the model's proposal into these keys.
+// Closed catalogues — derived from the contract enums in
+// lib/api-spec/openapi.yaml via the GENERATED @workspace/api-zod types, so
+// the match is mechanical, not by discipline: the operator confirms the
+// model's proposal into these keys. CreateObligationInput* is the chosen
+// source (its NoticeDecisionInput twins are spec-identical); Object.values
+// preserves orval's spec-order emission, so the arrays keep contract order.
 // ---------------------------------------------------------------------------
 
-export const NOTICE_TYPES = [
-  "assessment",
-  "demand",
-  "information_request",
-  "audit",
-  "penalty",
-  "reminder",
-  "other",
-] as const;
+export const NOTICE_TYPES = Object.values(CreateObligationInputNoticeType) as [
+  CreateObligationInputNoticeType,
+  ...CreateObligationInputNoticeType[],
+];
 
 export type NoticeType = (typeof NOTICE_TYPES)[number];
 
-export const AUTHORITIES = ["firs", "state_irs", "customs", "other"] as const;
+export const AUTHORITIES = Object.values(CreateObligationInputAuthority) as [
+  CreateObligationInputAuthority,
+  ...CreateObligationInputAuthority[],
+];
 
 export type NoticeAuthority = (typeof AUTHORITIES)[number];
 
-export const TAX_TYPES = [
-  "vat",
-  "cit",
-  "wht",
-  "paye",
-  "stamp_duty",
-  "other",
-] as const;
+export const TAX_TYPES = Object.values(CreateObligationInputTaxType) as [
+  CreateObligationInputTaxType,
+  ...CreateObligationInputTaxType[],
+];
 
 export type NoticeTaxType = (typeof TAX_TYPES)[number];
 
@@ -147,12 +154,6 @@ function num(value: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Statutory clocks run on the Lagos calendar; WAT is fixed UTC+1, so today's
-// Lagos date is a constant offset — the same rule the sweeps use.
-function lagosToday(): string {
-  return new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
 const FIELD_LABELS: Record<NoticeField, string> = {
   referenceNumber: "reference number",
   authority: "issuing authority",
@@ -200,7 +201,7 @@ export function noticePreflightChecks(
         field: "responseDueDate",
         message: `Response due date "${due}" is not an unambiguous YYYY-MM-DD date`,
       });
-    } else if (due < lagosToday()) {
+    } else if (due < lagosDateString()) {
       issues.push({
         field: "responseDueDate",
         message: `Response due date ${due} has already passed — this notice is overdue on arrival`,

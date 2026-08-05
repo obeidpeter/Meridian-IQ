@@ -4,8 +4,6 @@ import { randomUUID } from "node:crypto";
 import { desc, eq, inArray } from "drizzle-orm";
 import {
   getDb,
-  firmsTable,
-  partiesTable,
   usersTable,
   membershipsTable,
   clerkCasesTable,
@@ -27,9 +25,12 @@ import type { CompletionRequest } from "../clerk/gateway.ts";
 import {
   eventually,
   inboundApp,
+  makeCsvAttachment,
   makePdfAttachment,
   okExtraction,
+  seedInboundClient,
   textPdf,
+  withEnv,
 } from "./test-support.ts";
 import {
   maskInboundSender,
@@ -52,16 +53,11 @@ const SALT = makeRunSalt();
 const TOKEN = `inbound-secret-${SALT}`;
 const DOMAIN = `${SALT}.inbound-test.local`;
 
-const firm1 = randomUUID();
-const firmBroke = randomUUID();
-const firmCapped = randomUUID();
-const clientParty = randomUUID();
-const brokePartyId = randomUUID();
-const cappedPartyId = randomUUID();
-const clientUserId = randomUUID();
-const staffUserId = randomUUID();
-const brokeUserId = randomUUID();
-const cappedUserId = randomUUID();
+// Fixture ids minted by seedInboundClient in before(); only the ones the
+// tests themselves assert on live at module scope.
+let firm1: string;
+let clientParty: string;
+let clientUserId: string;
 
 const CLIENT_EMAIL = `client@${DOMAIN}`;
 const STAFF_EMAIL = `staff@${DOMAIN}`;
@@ -75,48 +71,36 @@ const savedToken = process.env.INBOUND_EMAIL_TOKEN;
 before(async () => {
   await saveAndEnableClerkFlag();
   const db = getDb();
-  await db.insert(firmsTable).values([
-    { id: firm1, name: `Inbound Firm ${SALT}` },
-    { id: firmBroke, name: `Inbound Broke Firm ${SALT}` },
-    { id: firmCapped, name: `Inbound Capped Firm ${SALT}` },
-  ]);
-  await db.insert(partiesTable).values([
-    { id: clientParty, type: "client_business", legalName: `Inbound Client ${SALT}` },
-    { id: brokePartyId, type: "client_business", legalName: `Inbound Broke ${SALT}` },
-    { id: cappedPartyId, type: "client_business", legalName: `Inbound Capped ${SALT}` },
-  ]);
-  await db.insert(usersTable).values([
-    { id: clientUserId, email: CLIENT_EMAIL },
-    { id: staffUserId, email: STAFF_EMAIL },
-    { id: brokeUserId, email: BROKE_EMAIL },
-    { id: cappedUserId, email: CAPPED_EMAIL },
-  ]);
-  await db.insert(membershipsTable).values([
-    {
-      userId: clientUserId,
-      firmId: firm1,
-      role: "client_user",
-      clientPartyId: clientParty,
-    },
-    { userId: staffUserId, firmId: firm1, role: "firm_admin" },
-    {
-      userId: brokeUserId,
-      firmId: firmBroke,
-      role: "client_user",
-      clientPartyId: brokePartyId,
-    },
-    {
-      userId: cappedUserId,
-      firmId: firmCapped,
-      role: "client_user",
-      clientPartyId: cappedPartyId,
-    },
-  ]);
+  // The three fixture clients ride the shared seeder (test-support.ts): one
+  // canonical firm/party/user/client_user-membership write per client.
+  ({ firmId: firm1, partyId: clientParty, userId: clientUserId } =
+    await seedInboundClient(db, {
+      firmName: `Inbound Firm ${SALT}`,
+      partyName: `Inbound Client ${SALT}`,
+      email: CLIENT_EMAIL,
+    }));
+  const broke = await seedInboundClient(db, {
+    firmName: `Inbound Broke Firm ${SALT}`,
+    partyName: `Inbound Broke ${SALT}`,
+    email: BROKE_EMAIL,
+  });
+  await seedInboundClient(db, {
+    firmName: `Inbound Capped Firm ${SALT}`,
+    partyName: `Inbound Capped ${SALT}`,
+    email: CAPPED_EMAIL,
+  });
+  // A staff address in the resolved client's firm: resolves to nothing (the
+  // rail only ever captures on behalf of a client).
+  const staffUserId = randomUUID();
+  await db.insert(usersTable).values({ id: staffUserId, email: STAFF_EMAIL });
+  await db
+    .insert(membershipsTable)
+    .values({ userId: staffUserId, firmId: firm1, role: "firm_admin" });
   // Spend the broke firm's entire default allowance (2,000,000 tokens) so its
   // client's inbound attachments must budget-skip. Append-only ledger — the
   // random firm id keeps runs independent.
   await db.insert(clerkInferenceCallsTable).values({
-    firmId: firmBroke,
+    firmId: broke.firmId,
     purpose: "extract_invoice",
     model: "fake-model-test",
     promptVersion: "test",
@@ -361,14 +345,8 @@ test("resolved sender: PDF walks the text path, PNG the vision path, cases stamp
 });
 
 test("daily attachment cap: over-cap attachments audit-skip, counted from the durable receipts", async () => {
-  const savedCap = process.env.INBOUND_EMAIL_DAILY_CAP;
-  process.env.INBOUND_EMAIL_DAILY_CAP = "2";
-  try {
-    const csv = (tag: string) => ({
-      filename: `${tag}-${SALT}.csv`,
-      contentType: "text/csv",
-      contentBase64: PNG_B64,
-    });
+  await withEnv("INBOUND_EMAIL_DAILY_CAP", "2", async () => {
+    const csv = makeCsvAttachment(SALT, PNG_B64);
     // Fresh firm, cap 2, three attachments: the first two consume the day's
     // allowance (and then skip as unsupported — no provider needed), the
     // third is refused by the cap itself.
@@ -394,10 +372,7 @@ test("daily attachment cap: over-cap attachments audit-skip, counted from the du
       second.skipped.map((s) => s.reason),
       ["INBOUND_DAILY_CAP"],
     );
-  } finally {
-    if (savedCap === undefined) delete process.env.INBOUND_EMAIL_DAILY_CAP;
-    else process.env.INBOUND_EMAIL_DAILY_CAP = savedCap;
-  }
+  });
 });
 
 test("exhausted budget: audit-skip before any provider work, nothing thrown", async () => {

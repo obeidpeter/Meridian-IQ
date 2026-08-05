@@ -16,17 +16,20 @@ import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { Download, FileText } from "lucide-react";
+import { localDayIso } from "@workspace/format/notice-copy";
 import { formatNaira, formatDate, formatPct, humanize } from "@/lib/format";
 import { downloadBlob } from "@/lib/download";
 
 const PERIOD_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-// Statements cover closed periods — default to the previous month.
+// Statements cover closed periods — default to the previous (BROWSER-local)
+// month. The constructor pins the day to 1 BEFORE stepping the month back,
+// so a day-31 "now" can never skip a short month.
 function previousMonth(): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const now = new Date();
+  return localDayIso(
+    new Date(now.getFullYear(), now.getMonth() - 1, 1),
+  ).slice(0, 7);
 }
 
 /**

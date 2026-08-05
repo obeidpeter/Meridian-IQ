@@ -44,6 +44,16 @@ function blank(v: string | null): boolean {
   return v === null || v.trim() === "";
 }
 
+// The one rule for how a failed gateway call is bucketed in an eval result
+// row — shared by every lane that stores per-fixture outcomes (extraction
+// here, intent-eval.ts, phrasing-eval.ts, prompt-canary.ts). The parameter
+// union mirrors gateway.ts InferResult's failure outcomes.
+export function failureOutcome(
+  outcome: "invalid_discarded" | "error",
+): "invalid" | "error" {
+  return outcome === "invalid_discarded" ? "invalid" : "error";
+}
+
 // Field equality mirrors the correction-exhaust semantics: numeric fields
 // tolerate formatting ("215,000.00" vs "215000"), text compares
 // case-insensitively after trimming (OCR case noise is not an extraction
@@ -161,7 +171,7 @@ export async function runEvalCorpus(
         key: fixture.key,
         label: fixture.label,
         riskLabel: fixture.riskLabel,
-        outcome: inferred.outcome === "invalid_discarded" ? "invalid" : "error",
+        outcome: failureOutcome(inferred.outcome),
         fieldsCompared: 0,
         fieldsCorrect: 0,
         mismatches: [],

@@ -76,17 +76,22 @@ export async function computeMonthEndClose(
   const capped = (n: number, cap: number, detail: string): string =>
     n >= cap ? `${detail} Showing the detector's top ${cap} — more may exist.` : detail;
 
+  // The checklist's ONE predicate (count > 0) picks both the status and
+  // which detail sentence shows, spelled once here so the two can never
+  // disagree. Both strings are built eagerly at every call site — they are
+  // pure interpolations, so the unused one renders harmlessly.
   const item = (
     key: string,
     label: string,
     count: number,
-    detail: string,
+    attention: string,
+    clear: string,
   ): CloseItem => ({
     key,
     label,
     status: count > 0 ? "attention" : "clear",
     count,
-    detail,
+    detail: count > 0 ? attention : clear,
   });
 
   const items: CloseItem[] = [
@@ -94,65 +99,59 @@ export async function computeMonthEndClose(
       "overdue_submissions",
       "Overdue e-invoice submissions",
       exposure.overdueCount,
-      exposure.overdueCount > 0
-        ? `${exposure.overdueCount} invoice(s) are past the statutory window — at least NGN ${exposure.exposure.small} of estimated s.104 exposure (lowest band). ${approvals !== null ? "Approving and submitting" : "Submitting"} them removes it.`
-        : "Every invoice is inside the statutory submission window.",
+      `${exposure.overdueCount} invoice(s) are past the statutory window — at least NGN ${exposure.exposure.small} of estimated s.104 exposure (lowest band). ${approvals !== null ? "Approving and submitting" : "Submitting"} them removes it.`,
+      "Every invoice is inside the statutory submission window.",
     ),
     item(
       "unbilled_income",
       "Regular invoices not yet raised",
       unbilled.length,
-      unbilled.length > 0
-        ? capped(
-            unbilled.length,
-            5,
-            "Buyers you bill on a monthly rhythm with nothing raised this cycle — income going unbilled.",
-          )
-        : "Every monthly billing habit is up to date.",
+      capped(
+        unbilled.length,
+        5,
+        "Buyers you bill on a monthly rhythm with nothing raised this cycle — income going unbilled.",
+      ),
+      "Every monthly billing habit is up to date.",
     ),
     item(
       "unmatched_credits",
       "Bank credits with no invoice",
       credits.count,
-      credits.count > 0
-        ? `NGN ${credits.totalAmount} arrived over ${credits.windowDays} days with no invoice behind it — if any of it is a sale, an e-invoice should exist.`
-        : "Every reconciled bank credit traces to an invoice.",
+      `NGN ${credits.totalAmount} arrived over ${credits.windowDays} days with no invoice behind it — if any of it is a sale, an e-invoice should exist.`,
+      "Every reconciled bank credit traces to an invoice.",
     ),
     item(
       "missing_bills",
       "Expected vendor bills not captured",
       missingBills.length,
-      missingBills.length > 0
-        ? capped(
-            missingBills.length,
-            5,
-            "Vendors that bill you monthly with nothing captured this cycle — input VAT going unclaimed.",
-          )
-        : "Every monthly vendor habit has this cycle's bill captured.",
+      capped(
+        missingBills.length,
+        5,
+        "Vendors that bill you monthly with nothing captured this cycle — input VAT going unclaimed.",
+      ),
+      "Every monthly vendor habit has this cycle's bill captured.",
     ),
     item(
       "double_payments",
       "Possible double payments",
       doublePayCount,
-      doublePayCount > 0
-        ? // The detector caps each LANE at 20 — saturation is per lane, so
-          // the combined count triggers the hedge only when a lane is full
-          // ("(30)" from 15+15 lists everything and must not hedge).
-          `Bills the payment evidence says were settled twice, or unpaid near-duplicates — review before paying anything else.${
-            doublePay.multiPaid.length >= 20 ||
-            doublePay.duplicateCandidates.length >= 20
-              ? " Showing the detector's top 20 per check — more may exist."
-              : ""
-          }`
-        : "No double-payment signals in the payment evidence.",
+      // The detector caps each LANE at 20 — saturation is per lane, so
+      // the combined count triggers the hedge only when a lane is full
+      // ("(30)" from 15+15 lists everything and must not hedge).
+      `Bills the payment evidence says were settled twice, or unpaid near-duplicates — review before paying anything else.${
+        doublePay.multiPaid.length >= 20 ||
+        doublePay.duplicateCandidates.length >= 20
+          ? " Showing the detector's top 20 per check — more may exist."
+          : ""
+      }`,
+      "No double-payment signals in the payment evidence.",
     ),
     item(
       "unmatched_collections",
       "Collection-account payments matching no invoice",
       clientCollections,
-      clientCollections > 0
-        ? `Payments arrived on your collection accounts (trailing ${UNMATCHED_COLLECTIONS_WINDOW_DAYS} days) that could not be bound to any invoice — reconcile against the provider statement.`
-        : "Every collection-account payment bound to an invoice.",
+      `Payments arrived on your collection accounts (trailing ${UNMATCHED_COLLECTIONS_WINDOW_DAYS} days) that could not be bound to any invoice — reconcile against the provider statement.`,
+      "Every collection-account payment bound to an invoice.",
     ),
     // Authority obligations (Notice Desk): the deadlines here are the
     // AUTHORITY's, not the platform's, so a month must not close with one
@@ -162,9 +161,8 @@ export async function computeMonthEndClose(
       "open_obligations",
       "Authority obligations",
       obligations.open,
-      obligations.open > 0
-        ? `${obligations.open} authority notice(s) await a response — ${obligations.dueSoon} due within ${OBLIGATION_DUE_SOON_DAYS} days, ${obligations.overdue} overdue${obligations.nearestDue ? `; the nearest response is due ${obligations.nearestDue}` : ""}.`
-        : "No authority notices are awaiting a response.",
+      `${obligations.open} authority notice(s) await a response — ${obligations.dueSoon} due within ${OBLIGATION_DUE_SOON_DAYS} days, ${obligations.overdue} overdue${obligations.nearestDue ? `; the nearest response is due ${obligations.nearestDue}` : ""}.`,
+      "No authority notices are awaiting a response.",
     ),
     // Approval item only when the maker-checker policy is ON for the firm
     // (null means off — a checklist line for a policy the firm never
@@ -175,9 +173,8 @@ export async function computeMonthEndClose(
             "pending_approvals",
             "Invoices awaiting a colleague's approval",
             approvals.count,
-            approvals.count > 0
-              ? `${approvals.count} invoice(s) cannot be submitted until a colleague approves${approvals.oldestDays !== null ? ` — the oldest has waited ${approvals.oldestDays} day(s)` : ""}.`
-              : "Nothing is waiting on an approval.",
+            `${approvals.count} invoice(s) cannot be submitted until a colleague approves${approvals.oldestDays !== null ? ` — the oldest has waited ${approvals.oldestDays} day(s)` : ""}.`,
+            "Nothing is waiting on an approval.",
           ),
         ]
       : []),

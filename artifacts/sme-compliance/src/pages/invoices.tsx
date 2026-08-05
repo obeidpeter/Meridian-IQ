@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { PillToggle } from "@/components/pill-toggle";
 import { QueryError } from "@/components/query-error";
 import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
@@ -604,24 +605,16 @@ export function Invoices() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {FILTERS.map((f) => {
-          const isActive = filter === f.key;
-          return (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              aria-pressed={isActive}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full border min-h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                isActive
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card text-foreground hover:bg-muted"
-              }`}
-            >
-              {f.label}
-              {hasLoaded ? ` · ${countFor(f.key)}` : ""}
-            </button>
-          );
-        })}
+        {FILTERS.map((f) => (
+          <PillToggle
+            key={f.key}
+            active={filter === f.key}
+            onClick={() => setFilter(f.key)}
+          >
+            {f.label}
+            {hasLoaded ? ` · ${countFor(f.key)}` : ""}
+          </PillToggle>
+        ))}
         <Button
           variant={hasAdvanced ? "default" : "outline"}
           size="sm"

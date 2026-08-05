@@ -12,3 +12,12 @@ export function daysAgo(n: number): string {
     .toISOString()
     .slice(0, 10);
 }
+
+// Exact Lagos calendar date N days from now (WAT is fixed UTC+1, no DST), so
+// day-boundary predicates are tested without flakiness. One home — this was
+// copy-pasted across seven test files before refactor round 7.
+export function lagosDateOffset(days: number): string {
+  const d = new Date(Date.now() + 60 * 60 * 1000);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}

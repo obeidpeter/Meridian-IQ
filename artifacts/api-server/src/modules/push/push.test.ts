@@ -16,6 +16,7 @@ import {
   setPushReceiptTransport,
   resetPushReceiptTransport,
 } from "./push.ts";
+import { recipientRefFor } from "../messaging/recipient-ref.ts";
 
 // Dead-token pruning (SME-05/08 hygiene): when Expo reports a token as
 // DeviceNotRegistered — either immediately in the send ticket or later in the
@@ -25,7 +26,7 @@ import {
 
 const partyId = randomUUID();
 const userId = randomUUID();
-const recipientRef = `ref-${partyId.replace(/[^a-z]/gi, "").slice(0, 16)}`;
+const recipientRef = recipientRefFor(partyId);
 
 // Tokens are globally unique; suffix with a UUID so reruns never collide.
 const run = randomUUID().slice(0, 8);

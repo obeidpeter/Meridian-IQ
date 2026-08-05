@@ -38,8 +38,8 @@ import {
   Banner,
   Card,
   rowBetween,
+  screenContent,
   TextField,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { hasStatus, serverMessage } from "@/lib/api-error";
@@ -435,7 +435,7 @@ export default function InvoiceScreen() {
       ref={scrollRef}
       style={{ backgroundColor: colors.background }}
       contentContainerStyle={[
-        styles.content,
+        screenContent,
         { paddingBottom: insets.bottom + 120 },
       ]}
       bottomOffset={20}
@@ -635,11 +635,6 @@ export default function InvoiceScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",

@@ -18,9 +18,9 @@ import {
   EmptyState,
   ErrorState,
   rowBetween,
+  screenContent,
   ScreenScroll,
   stackHeaderOptions,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { formatDate } from "@/lib/format";
@@ -135,7 +135,7 @@ export default function MonthEndScreen() {
       <Stack.Screen options={stackHeaderOptions(colors, "Month-end close")} />
       <ScreenScroll
         contentContainerStyle={[
-          styles.content,
+          screenContent,
           { paddingBottom: insets.bottom + 48 },
         ]}
         refreshControl={
@@ -214,11 +214,6 @@ export default function MonthEndScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
   itemRow: {
     flexDirection: "row",
     gap: 10,

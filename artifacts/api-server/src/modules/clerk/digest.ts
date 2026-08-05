@@ -282,34 +282,189 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   };
 }
 
+// The ordered fact-line registry: ONE entry per digest fact, rendering BOTH
+// the model path (its line in the buildDigestUser prompt, always emitted) and
+// the template path (its conditional buildTemplateDigest bullet, null when
+// the fact is zero/off). The v2–v7 history above records five rounds of
+// re-synchronizing those two paths by hand; the registry makes the lockstep
+// structural — a new fact is one entry here and necessarily reaches both
+// renderers. The prompt lines are BYTE-SENSITIVE (DIGEST_PROMPT_VERSION pins
+// them; the phrasing eval replays production's exact assembly), so editing a
+// promptLine is a prompt change and carries the usual version-bump
+// discipline. The headline, the empty-bullets fallback and the statutory-
+// window footer stay bespoke in their builders below.
+interface DigestFactLine {
+  promptLine: (facts: DigestFacts) => string;
+  bullet: (facts: DigestFacts) => string | null;
+}
+
+const DIGEST_FACT_LINES: readonly DigestFactLine[] = [
+  {
+    promptLine: (facts) =>
+      `- Invoices past the submission window (overdue): ${facts.overdueCount}`,
+    bullet: (facts) =>
+      facts.overdueCount > 0
+        ? `${plural(facts.overdueCount, "invoice")} ${isAre(facts.overdueCount)} past the ${SUBMISSION_WINDOW_DAYS}-day submission window — submit these first to limit penalty exposure.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Invoices whose submission deadline falls in the next 7 days: ${facts.dueSoonCount}`,
+    bullet: (facts) =>
+      facts.dueSoonCount > 0
+        ? `${plural(facts.dueSoonCount, "invoice")} due for submission within the next 7 days.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Invoices that failed submission: ${facts.failedCount}`,
+    bullet: (facts) =>
+      facts.failedCount > 0
+        ? `${plural(facts.failedCount, "invoice")} failed submission — open the invoice for the specific fix.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Unsubmitted invoices in total (draft or validated): ${facts.unsubmittedCount}`,
+    bullet: (facts) =>
+      facts.unsubmittedCount > 0
+        ? `${plural(facts.unsubmittedCount, "invoice")} in total ${isAre(facts.unsubmittedCount)} still unsubmitted (draft or validated).`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Receivables older than ${RECEIVABLE_AGE_DAYS} days: ${facts.receivablesOver60Count}`,
+    bullet: (facts) =>
+      facts.receivablesOver60Count > 0
+        ? `${plural(facts.receivablesOver60Count, "receivable")} ${isAre(facts.receivablesOver60Count)} more than ${RECEIVABLE_AGE_DAYS} days old — consider chasing payment.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Regular monthly invoices that look unraised this cycle: ${facts.unbilledCount} (across ${facts.unbilledClients} client(s))`,
+    bullet: (facts) =>
+      facts.unbilledCount > 0
+        ? `${plural(facts.unbilledCount, "regular invoice")} ${facts.unbilledCount === 1 ? "looks" : "look"} unraised across ${plural(facts.unbilledClients, "client")} — ${facts.unbilledCount === 1 ? "a monthly billing habit" : "monthly billing habits"} with nothing issued this cycle.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Payments expected in the coming week (customers' own rhythms): ${facts.expectedWeekCount} invoice(s), NGN ${facts.expectedWeekTotalNgn}`,
+    bullet: (facts) =>
+      facts.expectedWeekCount > 0
+        ? `${plural(facts.expectedWeekCount, "invoice")} (NGN ${facts.expectedWeekTotalNgn}) ${isAre(facts.expectedWeekCount)} expected to be paid in the coming week, based on each customer's own payment rhythm.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Receivables worth chasing (past due date AND the customer's usual rhythm): ${facts.chaseWorthyCount}`,
+    bullet: (facts) =>
+      facts.chaseWorthyCount > 0
+        ? `${plural(facts.chaseWorthyCount, "receivable")} ${facts.chaseWorthyCount === 1 ? "looks" : "look"} worth chasing — past both the due date and the customer's usual payment rhythm.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Bank credits matching no invoice on the platform: ${facts.unmatchedCreditCount} (across ${facts.unmatchedCreditClients} client(s))`,
+    bullet: (facts) =>
+      facts.unmatchedCreditCount > 0
+        ? `${plural(facts.unmatchedCreditCount, "bank credit")} across ${plural(facts.unmatchedCreditClients, "client")} match${facts.unmatchedCreditCount === 1 ? "es" : ""} no invoice on the platform — if any is a sale, an e-invoice should exist for it.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Invoices with 2+ payment reminders sent and still unpaid: ${facts.chasedTwiceCount}`,
+    bullet: (facts) =>
+      facts.chasedTwiceCount > 0
+        ? `${plural(facts.chasedTwiceCount, "invoice")} ${facts.chasedTwiceCount === 1 ? "has" : "have"} taken 2 or more payment reminders and ${isAre(facts.chasedTwiceCount)} still unpaid.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Unpaid supplier bills due within the next 7 days or overdue: ${facts.payablesDueCount}`,
+    bullet: (facts) =>
+      facts.payablesDueCount > 0
+        ? `${plural(facts.payablesDueCount, "supplier bill")} ${isAre(facts.payablesDueCount)} due within the next 7 days or already overdue — worth scheduling the payments.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Days until the monthly VAT return deadline (the 21st): ${facts.vatReturnInDays ?? "more than 7 — do not mention"}`,
+    bullet: (facts) =>
+      facts.vatReturnInDays !== null
+        ? `Monthly VAT return due ${facts.vatReturnInDays === 0 ? "today" : `in ${plural(facts.vatReturnInDays, "day")}`} — VAT returns fall due on the 21st.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Invoices waiting for a colleague's approval before submission: ${facts.approvalsPendingCount ?? "approval policy off — do not mention"}${
+        facts.approvalsPendingCount !== null && facts.approvalsPendingOldestDays !== null
+          ? ` (oldest waiting ${facts.approvalsPendingOldestDays} day(s))`
+          : ""
+      }`,
+    bullet: (facts) =>
+      facts.approvalsPendingCount !== null && facts.approvalsPendingCount > 0
+        ? `${plural(facts.approvalsPendingCount, "invoice")} ${isAre(facts.approvalsPendingCount)} waiting for a colleague's approval before submission${
+            facts.approvalsPendingOldestDays !== null &&
+            facts.approvalsPendingOldestDays > 0
+              ? ` — the oldest has waited ${plural(facts.approvalsPendingOldestDays, "day")}`
+              : ""
+          }.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Collection-account payments this week matching no invoice: ${facts.unmatchedCollectionsCount}`,
+    bullet: (facts) =>
+      facts.unmatchedCollectionsCount > 0
+        ? `${plural(facts.unmatchedCollectionsCount, "payment")} arrived on your collection accounts this week that matched no invoice — reconcile against the provider statement.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Estimated s.104 penalty exposure for the overdue paper (small-band floor): ${facts.penaltyExposureFloorNgn !== null ? `NGN ${facts.penaltyExposureFloorNgn}` : "none — do not mention"}`,
+    bullet: (facts) =>
+      facts.penaltyExposureFloorNgn !== null
+        ? `Overdue submissions carry at least NGN ${facts.penaltyExposureFloorNgn} of s.104 penalty exposure (lowest turnover band) — an estimate, not advice.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Regular vendor bills that look uncaptured this cycle: ${facts.missingBillsCount} (across ${facts.missingBillsClients} client(s))`,
+    bullet: (facts) =>
+      facts.missingBillsCount > 0
+        ? `${plural(facts.missingBillsCount, "regular vendor bill")} ${facts.missingBillsCount === 1 ? "looks" : "look"} uncaptured this cycle across ${plural(facts.missingBillsClients, "client")} — input VAT may be going unclaimed.`
+        : null,
+  },
+  {
+    promptLine: (facts) =>
+      `- Authority notices needing a response within ${OBLIGATION_DUE_SOON_DAYS} days: ${facts.obligationsDueSoon ?? 0}`,
+    bullet: (facts) => {
+      const obligationsDueSoon = facts.obligationsDueSoon ?? 0;
+      return obligationsDueSoon > 0
+        ? `${plural(obligationsDueSoon, "authority notice")} ${obligationsDueSoon === 1 ? "needs" : "need"} a response within ${OBLIGATION_DUE_SOON_DAYS} days.`
+        : null;
+    },
+  },
+  {
+    promptLine: (facts) =>
+      `- Authority notice responses already overdue: ${facts.obligationsOverdue ?? 0}`,
+    bullet: (facts) => {
+      const obligationsOverdue = facts.obligationsOverdue ?? 0;
+      return obligationsOverdue > 0
+        ? `${plural(obligationsOverdue, "authority notice response")} ${isAre(obligationsOverdue)} overdue — these deadlines are the authority's, so respond or escalate first.`
+        : null;
+    },
+  },
+];
+
 // The user prompt the model phrases — extracted so the phrasing eval
 // (modules/clerk/phrasing-eval.ts) replays the BYTE-IDENTICAL assembly
 // production sends (the buildIntentUser precedent). Pure.
 export function buildDigestUser(facts: DigestFacts): string {
   return [
     "Weekly compliance facts for the firm:",
-    `- Invoices past the submission window (overdue): ${facts.overdueCount}`,
-    `- Invoices whose submission deadline falls in the next 7 days: ${facts.dueSoonCount}`,
-    `- Invoices that failed submission: ${facts.failedCount}`,
-    `- Unsubmitted invoices in total (draft or validated): ${facts.unsubmittedCount}`,
-    `- Receivables older than ${RECEIVABLE_AGE_DAYS} days: ${facts.receivablesOver60Count}`,
-    `- Regular monthly invoices that look unraised this cycle: ${facts.unbilledCount} (across ${facts.unbilledClients} client(s))`,
-    `- Payments expected in the coming week (customers' own rhythms): ${facts.expectedWeekCount} invoice(s), NGN ${facts.expectedWeekTotalNgn}`,
-    `- Receivables worth chasing (past due date AND the customer's usual rhythm): ${facts.chaseWorthyCount}`,
-    `- Bank credits matching no invoice on the platform: ${facts.unmatchedCreditCount} (across ${facts.unmatchedCreditClients} client(s))`,
-    `- Invoices with 2+ payment reminders sent and still unpaid: ${facts.chasedTwiceCount}`,
-    `- Unpaid supplier bills due within the next 7 days or overdue: ${facts.payablesDueCount}`,
-    `- Days until the monthly VAT return deadline (the 21st): ${facts.vatReturnInDays ?? "more than 7 — do not mention"}`,
-    `- Invoices waiting for a colleague's approval before submission: ${facts.approvalsPendingCount ?? "approval policy off — do not mention"}${
-      facts.approvalsPendingCount !== null && facts.approvalsPendingOldestDays !== null
-        ? ` (oldest waiting ${facts.approvalsPendingOldestDays} day(s))`
-        : ""
-    }`,
-    `- Collection-account payments this week matching no invoice: ${facts.unmatchedCollectionsCount}`,
-    `- Estimated s.104 penalty exposure for the overdue paper (small-band floor): ${facts.penaltyExposureFloorNgn !== null ? `NGN ${facts.penaltyExposureFloorNgn}` : "none — do not mention"}`,
-    `- Regular vendor bills that look uncaptured this cycle: ${facts.missingBillsCount} (across ${facts.missingBillsClients} client(s))`,
-    `- Authority notices needing a response within ${OBLIGATION_DUE_SOON_DAYS} days: ${facts.obligationsDueSoon ?? 0}`,
-    `- Authority notice responses already overdue: ${facts.obligationsOverdue ?? 0}`,
+    ...DIGEST_FACT_LINES.map((line) => line.promptLine(facts)),
     `- The statutory submission window is ${SUBMISSION_WINDOW_DAYS} days from the issue date.`,
   ].join("\n");
 }
@@ -334,104 +489,11 @@ export function buildTemplateDigest(facts: DigestFacts): {
   headline: string;
   bullets: string[];
 } {
-  const bullets: string[] = [];
-  if (facts.overdueCount > 0) {
-    bullets.push(
-      `${plural(facts.overdueCount, "invoice")} ${isAre(facts.overdueCount)} past the ${SUBMISSION_WINDOW_DAYS}-day submission window — submit these first to limit penalty exposure.`,
-    );
-  }
-  if (facts.dueSoonCount > 0) {
-    bullets.push(
-      `${plural(facts.dueSoonCount, "invoice")} due for submission within the next 7 days.`,
-    );
-  }
-  if (facts.failedCount > 0) {
-    bullets.push(
-      `${plural(facts.failedCount, "invoice")} failed submission — open the invoice for the specific fix.`,
-    );
-  }
-  if (facts.unsubmittedCount > 0) {
-    bullets.push(
-      `${plural(facts.unsubmittedCount, "invoice")} in total ${isAre(facts.unsubmittedCount)} still unsubmitted (draft or validated).`,
-    );
-  }
-  if (facts.receivablesOver60Count > 0) {
-    bullets.push(
-      `${plural(facts.receivablesOver60Count, "receivable")} ${isAre(facts.receivablesOver60Count)} more than ${RECEIVABLE_AGE_DAYS} days old — consider chasing payment.`,
-    );
-  }
-  if (facts.unbilledCount > 0) {
-    bullets.push(
-      `${plural(facts.unbilledCount, "regular invoice")} ${facts.unbilledCount === 1 ? "looks" : "look"} unraised across ${plural(facts.unbilledClients, "client")} — ${facts.unbilledCount === 1 ? "a monthly billing habit" : "monthly billing habits"} with nothing issued this cycle.`,
-    );
-  }
-  if (facts.expectedWeekCount > 0) {
-    bullets.push(
-      `${plural(facts.expectedWeekCount, "invoice")} (NGN ${facts.expectedWeekTotalNgn}) ${isAre(facts.expectedWeekCount)} expected to be paid in the coming week, based on each customer's own payment rhythm.`,
-    );
-  }
-  if (facts.chaseWorthyCount > 0) {
-    bullets.push(
-      `${plural(facts.chaseWorthyCount, "receivable")} ${facts.chaseWorthyCount === 1 ? "looks" : "look"} worth chasing — past both the due date and the customer's usual payment rhythm.`,
-    );
-  }
-  if (facts.unmatchedCreditCount > 0) {
-    bullets.push(
-      `${plural(facts.unmatchedCreditCount, "bank credit")} across ${plural(facts.unmatchedCreditClients, "client")} match${facts.unmatchedCreditCount === 1 ? "es" : ""} no invoice on the platform — if any is a sale, an e-invoice should exist for it.`,
-    );
-  }
-  if (facts.chasedTwiceCount > 0) {
-    bullets.push(
-      `${plural(facts.chasedTwiceCount, "invoice")} ${facts.chasedTwiceCount === 1 ? "has" : "have"} taken 2 or more payment reminders and ${isAre(facts.chasedTwiceCount)} still unpaid.`,
-    );
-  }
-  if (facts.payablesDueCount > 0) {
-    bullets.push(
-      `${plural(facts.payablesDueCount, "supplier bill")} ${isAre(facts.payablesDueCount)} due within the next 7 days or already overdue — worth scheduling the payments.`,
-    );
-  }
-  if (facts.vatReturnInDays !== null) {
-    bullets.push(
-      `Monthly VAT return due ${facts.vatReturnInDays === 0 ? "today" : `in ${plural(facts.vatReturnInDays, "day")}`} — VAT returns fall due on the 21st.`,
-    );
-  }
-  if (facts.approvalsPendingCount !== null && facts.approvalsPendingCount > 0) {
-    bullets.push(
-      `${plural(facts.approvalsPendingCount, "invoice")} ${isAre(facts.approvalsPendingCount)} waiting for a colleague's approval before submission${
-        facts.approvalsPendingOldestDays !== null &&
-        facts.approvalsPendingOldestDays > 0
-          ? ` — the oldest has waited ${plural(facts.approvalsPendingOldestDays, "day")}`
-          : ""
-      }.`,
-    );
-  }
-  if (facts.unmatchedCollectionsCount > 0) {
-    bullets.push(
-      `${plural(facts.unmatchedCollectionsCount, "payment")} arrived on your collection accounts this week that matched no invoice — reconcile against the provider statement.`,
-    );
-  }
-  if (facts.penaltyExposureFloorNgn !== null) {
-    bullets.push(
-      `Overdue submissions carry at least NGN ${facts.penaltyExposureFloorNgn} of s.104 penalty exposure (lowest turnover band) — an estimate, not advice.`,
-    );
-  }
-  if (facts.missingBillsCount > 0) {
-    bullets.push(
-      `${plural(facts.missingBillsCount, "regular vendor bill")} ${facts.missingBillsCount === 1 ? "looks" : "look"} uncaptured this cycle across ${plural(facts.missingBillsClients, "client")} — input VAT may be going unclaimed.`,
-    );
-  }
-  const obligationsDueSoon = facts.obligationsDueSoon ?? 0;
-  if (obligationsDueSoon > 0) {
-    bullets.push(
-      `${plural(obligationsDueSoon, "authority notice")} ${obligationsDueSoon === 1 ? "needs" : "need"} a response within ${OBLIGATION_DUE_SOON_DAYS} days.`,
-    );
-  }
-  const obligationsOverdue = facts.obligationsOverdue ?? 0;
-  if (obligationsOverdue > 0) {
-    bullets.push(
-      `${plural(obligationsOverdue, "authority notice response")} ${isAre(obligationsOverdue)} overdue — these deadlines are the authority's, so respond or escalate first.`,
-    );
-  }
+  // One bullet per non-zero/on fact, in registry order — the SAME order the
+  // prompt lines render, by construction.
+  const bullets: string[] = DIGEST_FACT_LINES.map((line) =>
+    line.bullet(facts),
+  ).filter((bullet): bullet is string => bullet !== null);
   const urgent = facts.overdueCount + facts.failedCount;
   const headline =
     urgent > 0
@@ -508,13 +570,15 @@ export async function generateFirmDigest(
       });
       // Number grounding: a numeral the facts never stated means the template
       // answers instead (grounding.ts) — the phrased digest may only re-say
-      // the computed numbers.
+      // the computed numbers. The grounded text is assembled by the SAME
+      // joinOutput the phrasing eval scores, so the eval grades exactly what
+      // production grounds.
       if (
         data &&
         (await ensureGrounded(
           "digest",
           firmId,
-          [data.headline, ...data.bullets].join("\n"),
+          DIGEST_PHRASING.joinOutput(data),
           user,
         ))
       ) {

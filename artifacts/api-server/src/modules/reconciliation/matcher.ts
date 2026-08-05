@@ -64,7 +64,10 @@ const WEIGHTS = {
 // [PROPOSAL_THRESHOLD, DEFAULT_BULK_ACCEPT_THRESHOLD) — each bound owned by
 // the module that enforces it.
 export const PROPOSAL_THRESHOLD = 0.35;
-const MAX_PROPOSALS_PER_LINE = 3;
+// Also exported as this module's shortlist bound: the narration-match lane
+// offers the model at most this many candidates per line, and importing the
+// bound (instead of mirroring the number) keeps the two in lockstep.
+export const MAX_PROPOSALS_PER_LINE = 3;
 
 function normalizeToken(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, "");

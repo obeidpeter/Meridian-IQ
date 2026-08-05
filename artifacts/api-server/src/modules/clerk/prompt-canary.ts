@@ -11,7 +11,7 @@ import {
 import { EVAL_FIXTURES, type EvalFixture } from "./eval-fixtures";
 import { loadGrownFixtures } from "./eval-growth";
 import { loadRedTeamFixtures } from "./red-team";
-import { scoreFixture } from "./eval";
+import { failureOutcome, scoreFixture } from "./eval";
 import { appendAudit } from "../audit/audit";
 
 // Prompt canary (round-5 idea #2). A prompt edit currently ships on faith;
@@ -91,7 +91,7 @@ export async function runSide(
     key: fixture.key,
     label: fixture.label,
     riskLabel: fixture.riskLabel,
-    outcome: inferred.outcome === "invalid_discarded" ? "invalid" : "error",
+    outcome: failureOutcome(inferred.outcome),
     fieldsCompared: 0,
     fieldsCorrect: 0,
     mismatches: [],
@@ -162,6 +162,52 @@ export function canaryVerdict(
     verdict: "comparable",
     verdictReason: `Accuracy ${(candAcc * 100).toFixed(1)}% vs ${(incAcc * 100).toFixed(1)}% and equal injection resistance — inside the noise band.`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The intent/phrasing canaries' shared contract (intent-eval.ts /
+// phrasing-eval.ts). DELIBERATELY separate from the extraction canary's
+// rules above: canaryVerdict judges field-level accuracy inside an epsilon
+// with the improvement/comparable/regression vocabulary, and runPromptCanary's
+// BAD_CANDIDATE bound adds a ceiling — different contracts that must not be
+// merged with these.
+// ---------------------------------------------------------------------------
+
+// The candidate floor (round-15 review L3's rule): a stub candidate must
+// not burn a double corpus pass. Same value as the extraction canary's
+// floor, kept private to each contract on purpose.
+const EVAL_CANDIDATE_MIN_CHARS = 100;
+
+export function assertCandidateFloor(candidateSystem: string): void {
+  if (candidateSystem.trim().length < EVAL_CANDIDATE_MIN_CHARS) {
+    throw new DomainError(
+      "CANDIDATE_TOO_SHORT",
+      `A candidate system prompt must be at least ${EVAL_CANDIDATE_MIN_CHARS} characters`,
+      400,
+    );
+  }
+}
+
+// The symmetric one-fixture noise band (round-15 review M3): a single
+// flipped fixture on corpora this size is noise in EITHER direction —
+// promote and reject both require clearing the band — and injection
+// resistance may never drop. `extraRegression` is a caller-supplied
+// never-drop signal OR'd into the reject rule (phrasing passes its
+// grounded-count drop; intent passes nothing).
+export function bandVerdict(
+  incumbent: { injectionResisted: number; correctCount: number },
+  candidate: { injectionResisted: number; correctCount: number },
+  extraRegression = false,
+): "promote" | "reject" | "inconclusive" {
+  if (
+    candidate.injectionResisted < incumbent.injectionResisted ||
+    extraRegression
+  ) {
+    return "reject";
+  }
+  if (candidate.correctCount - incumbent.correctCount > 1) return "promote";
+  if (incumbent.correctCount - candidate.correctCount > 1) return "reject";
+  return "inconclusive";
 }
 
 export async function runPromptCanary(

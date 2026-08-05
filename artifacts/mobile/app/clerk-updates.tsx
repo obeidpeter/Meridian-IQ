@@ -23,9 +23,9 @@ import {
   EmptyState,
   ErrorState,
   rowBetween,
+  screenContent,
   ScreenScroll,
   stackHeaderOptions,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { isFeatureUnavailable } from "@/lib/api-error";
@@ -92,7 +92,7 @@ export default function ClerkUpdatesScreen() {
       />
       <ScreenScroll
         contentContainerStyle={[
-          styles.content,
+          screenContent,
           { paddingBottom: insets.bottom + 48 },
         ]}
         refreshControl={
@@ -307,11 +307,6 @@ function StatementRow({
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
   bulletRow: {
     flexDirection: "row",
     gap: 8,

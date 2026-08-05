@@ -19,14 +19,15 @@
 // are pinned by the compliance-pack tests and the e2e journeys.
 import PDFDocument from "pdfkit";
 import { lagosMidnight } from "../../lib/lagos-time";
-import { hslTripleToHex } from "./pdf";
+import { formatMoney, hslTripleToHex } from "./pdf";
 import { OBLIGATION_DUE_SOON_DAYS } from "../obligations/obligations";
 import type { CompliancePackFacts } from "./compliance-pack";
 
 // --- Theme resolution --------------------------------------------------------
-// Mirrors pdf.ts (its DEFAULT_* constants and helpers are module-private by
-// design); hslTripleToHex is the shared, exported piece so a malformed theme
-// falls back identically on both papers.
+// Mirrors pdf.ts (its DEFAULT_* theme constants and resolution helpers are
+// module-private by design); hslTripleToHex and formatMoney are the shared,
+// exported pieces so a malformed theme falls back — and money formats —
+// identically on both papers.
 const DEFAULT_PRIMARY_HSL = "152 60% 30%";
 const DEFAULT_BRAND = "MeridianIQ";
 
@@ -64,29 +65,23 @@ export function resolvePackTheme(
   return { brandName, primary, logoInitials };
 }
 
-// --- Formatting --------------------------------------------------------------
-export function formatMoney(v: string | number): string {
-  const n = Number(v);
-  return (Number.isFinite(n) ? n : 0).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
 const KIND_LABELS: Record<string, string> = {
   invoice: "Invoice",
   credit_note: "Credit note",
 };
 
 // --- Layout constants (A4, pdf.ts's grid) ------------------------------------
+// Only the pieces the response bundle seam actually consumes are exported
+// (refactor round 7: the export list documents the seam — re-export when a
+// third paper needs more).
 export const MARGIN = 48;
-export const PAGE_WIDTH = 595.28;
+const PAGE_WIDTH = 595.28;
 export const PAGE_HEIGHT = 841.89;
 export const CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN;
-export const PAGE_BOTTOM = PAGE_HEIGHT - MARGIN - 20;
+const PAGE_BOTTOM = PAGE_HEIGHT - MARGIN - 20;
 
 // Register columns: number | kind | status | counterparty | ccy | amount.
-export const COL = {
+const COL = {
   no: { x: MARGIN, w: 100 },
   kind: { x: MARGIN + 106, w: 52 },
   status: { x: MARGIN + 162, w: 58 },
@@ -104,6 +99,19 @@ export interface CompliancePackPdfInput {
   theme: Record<string, unknown> | null;
 }
 
+// Collect a pdfkit document into a single buffer. MUST be called before any
+// drawing (the data listener has to see every chunk); the caller ends the
+// document and awaits the promise. Shared by both pack-family renderers so
+// the buffer plumbing cannot drift.
+export function collectPdf(doc: PDFKit.PDFDocument): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  doc.on("data", (c: Buffer) => chunks.push(c));
+  return new Promise<Buffer>((resolve, reject) => {
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+  });
+}
+
 // Start a new page when fewer than `needed` points remain under the cursor.
 export function ensureRoom(
   doc: PDFKit.PDFDocument,
@@ -117,7 +125,7 @@ export function ensureRoom(
   return y;
 }
 
-export function drawRegisterHeader(doc: PDFKit.PDFDocument, y: number): number {
+function drawRegisterHeader(doc: PDFKit.PDFDocument, y: number): number {
   doc.font("Helvetica-Bold").fontSize(8).fillColor("#666666");
   doc.text("NUMBER", COL.no.x, y, { width: COL.no.w });
   doc.text("KIND", COL.kind.x, y, { width: COL.kind.w });
@@ -252,6 +260,30 @@ export function drawBrandHeader(
     .strokeColor(theme.primary)
     .stroke();
   return headerY + 64;
+}
+
+// --- Cover intro -------------------------------------------------------------
+// The client-name + subline block both pack-family covers open with (13pt
+// bold name, 9pt grey subline). Ends right after the subline text — each
+// caller keeps its own trailing cursor advance (they deliberately differ:
+// the pack draws its cover note next, the response bundle its notice rows).
+export function drawCoverIntro(
+  doc: PDFKit.PDFDocument,
+  cursor: { y: number },
+  name: string,
+  subline: string,
+): void {
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(13)
+    .fillColor("#222222")
+    .text(name, MARGIN, cursor.y, { width: CONTENT_WIDTH });
+  cursor.y = doc.y + 2;
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor("#666666")
+    .text(subline, MARGIN, cursor.y, { width: CONTENT_WIDTH });
 }
 
 // --- Section drawers ---------------------------------------------------------
@@ -450,12 +482,7 @@ export async function renderCompliancePackPdf(
       CreationDate: lagosMidnight(facts.monthStart),
     },
   });
-  const chunks: Buffer[] = [];
-  doc.on("data", (c: Buffer) => chunks.push(c));
-  const done = new Promise<Buffer>((resolve, reject) => {
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-  });
+  const done = collectPdf(doc);
 
   // --- Brand header (pdf.ts's block, pack-titled) ----------------------------
   const layout = packLayout(doc, packTheme.primary);
@@ -463,22 +490,12 @@ export async function renderCompliancePackPdf(
   cursor.y = drawBrandHeader(doc, packTheme, "COMPLIANCE PACK", facts.monthLabel);
 
   // --- Cover block: who, which month, and the note ---------------------------
-  doc
-    .font("Helvetica-Bold")
-    .fontSize(13)
-    .fillColor("#222222")
-    .text(facts.clientName, MARGIN, cursor.y, { width: CONTENT_WIDTH });
-  cursor.y = doc.y + 2;
-  doc
-    .font("Helvetica")
-    .fontSize(9)
-    .fillColor("#666666")
-    .text(
-      `Monthly compliance pack for ${facts.monthLabel} · Prepared by ${facts.firmName}`,
-      MARGIN,
-      cursor.y,
-      { width: CONTENT_WIDTH },
-    );
+  drawCoverIntro(
+    doc,
+    cursor,
+    facts.clientName,
+    `Monthly compliance pack for ${facts.monthLabel} · Prepared by ${facts.firmName}`,
+  );
   cursor.y = doc.y + 10;
   doc
     .font("Helvetica")

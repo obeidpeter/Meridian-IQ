@@ -306,7 +306,8 @@ async function dispatchPush(
   // Prune tokens Expo reports as dead (uninstalled app / expired token), so
   // future fan-outs skip them instead of accumulating failed ledger rows.
   // Ticket order mirrors the notifications array, so tickets[i] belongs to
-  // devices[i]. Receipts are checked best-effort right after the send; any
+  // devices[i]. Receipts are checked best-effort right after the send
+  // (resolveReceiptBatch — the same algorithm the periodic sweep runs); any
   // DeviceNotRegistered surfaced there is pruned too. Expo materialises
   // receipts asynchronously (often ~15 minutes later), so tickets whose
   // receipt is not available yet are persisted to push_tickets and re-checked
@@ -337,29 +338,11 @@ async function dispatchPush(
           })),
         )
         .onConflictDoNothing({ target: pushTicketsTable.ticketId });
-      const receipts = await receiptTransport([...ticketIdToToken.keys()]);
-      const resolvedIds = Object.keys(receipts).filter((id) =>
-        ticketIdToToken.has(id),
-      );
-      for (const id of resolvedIds) {
-        if (receipts[id]?.error === "DeviceNotRegistered") {
-          const token = ticketIdToToken.get(id);
-          if (token) deadTokens.add(token);
-        }
-      }
-      // A receipt that already materialised (any status) is final; drop its
-      // pending row so the sweep does not re-check it.
-      if (resolvedIds.length > 0) {
-        await getDb()
-          .delete(pushTicketsTable)
-          .where(inArray(pushTicketsTable.ticketId, resolvedIds));
-      }
     }
-    if (deadTokens.size > 0) {
-      await getDb()
-        .delete(pushDevicesTable)
-        .where(inArray(pushDevicesTable.expoPushToken, [...deadTokens]));
-    }
+    // Ticket-level deaths ride along as extraDead so they are pruned in the
+    // same single devices delete — even when no ticket id materialised and
+    // there are no receipts to look up.
+    await resolveReceiptBatch(ticketIdToToken, deadTokens);
   } catch {
     // Best-effort cleanup; the sweep (or the next send) retries it.
   }
@@ -385,6 +368,52 @@ async function dispatchPush(
     messageId: providerMessageId ?? null,
     detail,
   };
+}
+
+// Resolve one batch of push receipts — the ONE spelling of the
+// receipt-resolution algorithm, shared by dispatchPush's immediate post-send
+// check and sweepPushReceipts' periodic re-check. Looks up receipts for the
+// batch's ticket ids (skipped when the batch is empty: Expo must never see a
+// POST for zero ids), collects DeviceNotRegistered tokens — unioned with
+// `extraDead`, dispatch's ticket-level deaths, so dead devices go in ONE
+// delete — prunes those push_devices rows, and drops the resolved
+// push_tickets rows: a receipt that materialised (any status) is final, while
+// tickets with no receipt yet stay pending for the sweep's next pass. Returns
+// the number of device rows pruned. Deliberately does NOT catch: dispatchPush
+// swallows failures via its best-effort try, the sweep throws to the worker
+// loop.
+async function resolveReceiptBatch(
+  tokenByTicket: Map<string, string>,
+  extraDead?: Set<string>,
+): Promise<number> {
+  const receipts =
+    tokenByTicket.size > 0
+      ? await receiptTransport([...tokenByTicket.keys()])
+      : {};
+  const resolvedIds = Object.keys(receipts).filter((id) =>
+    tokenByTicket.has(id),
+  );
+  const deadTokens = new Set<string>(extraDead ?? []);
+  for (const id of resolvedIds) {
+    if (receipts[id]?.error === "DeviceNotRegistered") {
+      const token = tokenByTicket.get(id);
+      if (token) deadTokens.add(token);
+    }
+  }
+  let pruned = 0;
+  if (deadTokens.size > 0) {
+    const deleted = await getDb()
+      .delete(pushDevicesTable)
+      .where(inArray(pushDevicesTable.expoPushToken, [...deadTokens]))
+      .returning({ id: pushDevicesTable.id });
+    pruned = deleted.length;
+  }
+  if (resolvedIds.length > 0) {
+    await getDb()
+      .delete(pushTicketsTable)
+      .where(inArray(pushTicketsTable.ticketId, resolvedIds));
+  }
+  return pruned;
 }
 
 // Expo receipts typically materialise ~15 minutes after the send; only tickets
@@ -438,31 +467,7 @@ export async function sweepPushReceipts(
       );
       // A transport failure throws out of the sweep (logged by the worker
       // loop); unprocessed tickets stay pending and are retried next pass.
-      const receipts = await receiptTransport([...tokenByTicket.keys()]);
-      const resolvedIds = Object.keys(receipts).filter((id) =>
-        tokenByTicket.has(id),
-      );
-      const deadTokens = new Set<string>();
-      for (const id of resolvedIds) {
-        if (receipts[id]?.error === "DeviceNotRegistered") {
-          const token = tokenByTicket.get(id);
-          if (token) deadTokens.add(token);
-        }
-      }
-      if (deadTokens.size > 0) {
-        const deleted = await getDb()
-          .delete(pushDevicesTable)
-          .where(inArray(pushDevicesTable.expoPushToken, [...deadTokens]))
-          .returning({ id: pushDevicesTable.id });
-        pruned += deleted.length;
-      }
-      // Materialised receipts are final regardless of status; drop their
-      // pending rows. Tickets with no receipt yet stay for the next pass.
-      if (resolvedIds.length > 0) {
-        await getDb()
-          .delete(pushTicketsTable)
-          .where(inArray(pushTicketsTable.ticketId, resolvedIds));
-      }
+      pruned += await resolveReceiptBatch(tokenByTicket);
     }
     return pruned;
   });

@@ -1,13 +1,16 @@
-import { type ProtectedFact } from "@workspace/db";
 import {
   computeFirmVatPositions,
   computeVatPosition,
-  vatPositionMonths,
 } from "../../invoice/vat-position";
 import { computePenaltyExposure } from "../../invoice/penalty-exposure";
-import { monthLabel } from "../client-statement";
 import { isAre, plural } from "../text";
-import { type DataIntent, countFact, forClient } from "./shared";
+import {
+  type DataIntent,
+  amountFact,
+  countFact,
+  forClient,
+  resolveMonth,
+} from "./shared";
 
 // The filing lookups — the month's VAT position and the s.104 penalty
 // exposure estimate, each delegating to the module that powers its own
@@ -19,17 +22,10 @@ export const FILING_INTENTS: readonly DataIntent[] = [
       "the month's VAT position — output VAT from issued documents versus input VAT from supplier bills, with the verified (defensible) split (this month unless another listed month is named)",
     accepts: { month: true, client: true },
     async run(firmId, params) {
-      // Month resolution mirrors data.submitted_this_month: the app-resolved
-      // first-of-month key, defaulting to the current Lagos month — the same
-      // default the /vat-position route applies, so Ask and the dashboard
-      // can never disagree about "this month".
-      const monthStart = params?.monthStart ?? vatPositionMonths()[0];
-      const period = `in ${params?.monthLabel ?? monthLabel(monthStart)}`;
-      const amountFact = (
-        key: string,
-        label: string,
-        value: string,
-      ): ProtectedFact => ({ key, label, kind: "amount", value, unit: "NGN" });
+      // Month resolution: the shared "this month unless pinned" rule
+      // (resolveMonth in shared.ts — the /vat-position route's own default).
+      const { monthStart, label } = resolveMonth(params);
+      const period = `in ${label}`;
       // Deliberately NO answer links, per client or firm-wide (billAggregate's
       // posture and reason): the position's input side is bills, which are
       // not invoice-detail linkable for a client asker (the SEC-03 invoice
@@ -120,20 +116,16 @@ export const FILING_INTENTS: readonly DataIntent[] = [
             "Past the window",
             exposure.overdueCount,
           ),
-          {
-            key: "exposure_floor",
-            label: "Exposure floor (small band)",
-            kind: "amount",
-            value: exposure.exposure.small,
-            unit: "NGN",
-          },
-          {
-            key: "exposure_ceiling",
-            label: "Exposure ceiling (large band)",
-            kind: "amount",
-            value: exposure.exposure.large,
-            unit: "NGN",
-          },
+          amountFact(
+            "exposure_floor",
+            "Exposure floor (small band)",
+            exposure.exposure.small,
+          ),
+          amountFact(
+            "exposure_ceiling",
+            "Exposure ceiling (large band)",
+            exposure.exposure.large,
+          ),
         ],
         links: exposure.sampleInvoices.map((r) => ({
           label: r.invoiceNumber,

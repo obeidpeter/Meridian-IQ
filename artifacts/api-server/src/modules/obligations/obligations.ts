@@ -1,6 +1,11 @@
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { getDb, obligationsTable, type Obligation } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
+import {
+  assertClientPartyScope,
+  assertSameTenant,
+  type Principal,
+} from "../auth/rbac";
 import { DomainError } from "../errors";
 import { lagosTodaySql } from "../../lib/lagos-time";
 
@@ -181,6 +186,30 @@ export async function getObligation(id: string): Promise<Obligation | null> {
     .where(eq(obligationsTable.id, id))
     .limit(1);
   return row ?? null;
+}
+
+// Load one obligation under the 404 non-disclosure posture (the
+// loadBillForScope shape) — ONE home shared by the GET /obligations/:id
+// detail route and the Response Desk facts assembly: a foreign tenant's
+// obligation and a sibling client's obligation (SEC-03) are both
+// indistinguishable from an id that does not exist.
+export async function loadObligationForScope(
+  id: string,
+  principal: Principal,
+): Promise<Obligation> {
+  const row = await getObligation(id);
+  const notFound = () =>
+    new DomainError("NOT_FOUND", "Obligation not found", 404);
+  if (!row) throw notFound();
+  // CROSS_TENANT and CROSS_CLIENT both collapse to the same not-found the
+  // missing id produces.
+  try {
+    assertSameTenant(principal, row.firmId);
+    assertClientPartyScope(principal, row.clientPartyId);
+  } catch {
+    throw notFound();
+  }
+  return row;
 }
 
 // Compare-and-set style: the UPDATE carries the firm predicate, so a foreign

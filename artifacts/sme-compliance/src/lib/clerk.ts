@@ -242,11 +242,12 @@ export function formatTokens(tokens: number): string {
 
 // ---- Extraction display ----------------------------------------------------
 
-/** "invoiceNumber" -> "Invoice number" for the extracted key-value rows. */
-export function fieldLabel(field: string): string {
-  const spaced = field.replace(/([A-Z])/g, " $1").toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
+/**
+ * "invoiceNumber" -> "Invoice number" for the extracted key-value rows — the
+ * shared @workspace/format/notice-copy helper (one home with console and
+ * mobile), re-exported so callers keep this import site.
+ */
+export { fieldLabel } from "@workspace/format/notice-copy";
 
 // ---- Batch intake ----------------------------------------------------------
 

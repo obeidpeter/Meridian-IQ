@@ -1,14 +1,8 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   getDb,
-  firmsTable,
-  partiesTable,
-  usersTable,
-  membershipsTable,
-  alertPreferencesTable,
   clerkCasesTable,
   clerkInferenceCallsTable,
 } from "@workspace/db";
@@ -24,7 +18,13 @@ import {
   type CompletionRequest,
 } from "../clerk/gateway.ts";
 import { setFlag } from "../flags/flags.ts";
-import { okExtraction, textPdf } from "./test-support.ts";
+import {
+  okExtraction,
+  pdfWithText,
+  seedInboundClient,
+  testPhone,
+  textPdf,
+} from "./test-support.ts";
 import { processInboundEmail } from "./email.ts";
 import { processInboundWhatsApp } from "./whatsapp.ts";
 import {
@@ -51,47 +51,21 @@ import {
 const SALT = makeRunSalt();
 const DOMAIN = `${SALT}.triage-test.local`;
 
-const firmEmail = randomUUID();
-const firmCounts = randomUUID();
-const firmWa = randomUUID();
-const partyEmail = randomUUID();
-const partyCounts = randomUUID();
-const partyWa = randomUUID();
-const emailUserId = randomUUID();
-const countsUserId = randomUUID();
-const waUserId = randomUUID();
+// Fixture ids minted by seedInboundClient in before(); only the ones the
+// tests themselves assert on live at module scope.
+let firmEmail: string;
+let firmCounts: string;
+let firmWa: string;
+let emailUserId: string;
+let waUserId: string;
 
 const EMAIL_SENDER = `triage-client@${DOMAIN}`;
 const COUNTS_SENDER = `triage-counts@${DOMAIN}`;
 
-// Per-run unique phone, prefix 76 so it can never collide with the
-// whatsapp.test.ts fixtures (70–75) inside one run against the shared DB.
-const runDigits = `${Date.now()}${process.pid}`.slice(-8);
-const PHONE_WA = `+23476${runDigits}`;
-
-// A one-page PDF drawing arbitrary text (the test-support textPdf shape, with
-// the body text parameterized so notice fixtures exist too). pdfjs only
-// extracts glyphs actually laid out on the page, so the text is wrapped into
-// short lines on a letter-sized page — a single long run would clip to the
-// page width and truncate the extracted text.
-function pdfWithText(text: string): string {
-  const lines = text.match(/.{1,40}/g) ?? [""];
-  const body = lines
-    .map((line, i) => `${i === 0 ? "20 770 Td" : "0 -14 Td"} (${line}) Tj`)
-    .join(" ");
-  const streamBody = `BT /F1 12 Tf ${body} ET`;
-  const pdf = `%PDF-1.4
-1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
-2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
-3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj
-4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
-5 0 obj << /Length ${streamBody.length} >> stream
-${streamBody}
-endstream endobj
-trailer << /Size 6 /Root 1 0 R >>
-%%EOF`;
-  return Buffer.from(pdf).toString("base64");
-}
+// Per-run unique phone from the shared generator (test-support.ts); this
+// file claims prefix 76 in the testPhone registry, so it can never collide
+// with the whatsapp.test.ts fixtures inside one run against the shared DB.
+const PHONE_WA = testPhone(76);
 
 const noticeOutput = () =>
   JSON.stringify({ noticeType: "assessment", fields: [] });
@@ -113,46 +87,25 @@ function scriptedResponder(
 before(async () => {
   await saveAndEnableClerkFlag();
   const db = getDb();
-  await db.insert(firmsTable).values([
-    { id: firmEmail, name: `Triage Email Firm ${SALT}` },
-    { id: firmCounts, name: `Triage Counts Firm ${SALT}` },
-    { id: firmWa, name: `Triage WA Firm ${SALT}` },
-  ]);
-  await db.insert(partiesTable).values([
-    { id: partyEmail, type: "client_business", legalName: `Triage Email Client ${SALT}` },
-    { id: partyCounts, type: "client_business", legalName: `Triage Counts Client ${SALT}` },
-    { id: partyWa, type: "client_business", legalName: `Triage WA Client ${SALT}` },
-  ]);
-  await db.insert(usersTable).values([
-    { id: emailUserId, email: EMAIL_SENDER },
-    { id: countsUserId, email: COUNTS_SENDER },
-    { id: waUserId, email: `triage-wa@${DOMAIN}` },
-  ]);
-  await db.insert(membershipsTable).values([
-    {
-      userId: emailUserId,
-      firmId: firmEmail,
-      role: "client_user",
-      clientPartyId: partyEmail,
-    },
-    {
-      userId: countsUserId,
-      firmId: firmCounts,
-      role: "client_user",
-      clientPartyId: partyCounts,
-    },
-    {
-      userId: waUserId,
-      firmId: firmWa,
-      role: "client_user",
-      clientPartyId: partyWa,
-    },
-  ]);
-  await db.insert(alertPreferencesTable).values({
-    clientPartyId: partyWa,
-    whatsappTo: PHONE_WA,
-    contactSetByRole: "client_user",
-  });
+  // All three fixture clients ride the shared seeder (test-support.ts): one
+  // canonical firm/party/user/client_user-membership write per client, plus
+  // the WA client's client-set routing number.
+  ({ firmId: firmEmail, userId: emailUserId } = await seedInboundClient(db, {
+    firmName: `Triage Email Firm ${SALT}`,
+    partyName: `Triage Email Client ${SALT}`,
+    email: EMAIL_SENDER,
+  }));
+  ({ firmId: firmCounts } = await seedInboundClient(db, {
+    firmName: `Triage Counts Firm ${SALT}`,
+    partyName: `Triage Counts Client ${SALT}`,
+    email: COUNTS_SENDER,
+  }));
+  ({ firmId: firmWa, userId: waUserId } = await seedInboundClient(db, {
+    firmName: `Triage WA Firm ${SALT}`,
+    partyName: `Triage WA Client ${SALT}`,
+    email: `triage-wa@${DOMAIN}`,
+    whatsapp: { number: PHONE_WA, setByRole: "client_user" },
+  }));
 });
 
 after(async () => {

@@ -372,7 +372,11 @@ describe("ObligationsCard", () => {
     expect(screen.getByTestId("row-obligation-soon").textContent).toContain(
       "Ref LIRS/7",
     );
-    expect(screen.getByTestId("pill-obligation-soon").textContent).toBe("Open");
+    // The status words come from the shared notice-copy vocabulary — an open
+    // obligation reads "Awaiting response" in every app.
+    expect(screen.getByTestId("pill-obligation-soon").textContent).toBe(
+      "Awaiting response",
+    );
   });
 
   test("an open row past its deadline is flagged overdue; a responded one is not", () => {

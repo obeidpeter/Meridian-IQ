@@ -725,6 +725,20 @@ export const webContentMax: ViewStyle =
     ? { maxWidth: 640, alignSelf: "center", width: "100%" }
     : {};
 
+/**
+ * The screens' common content-container style (previously an identical
+ * StyleSheet block in eleven files): comfortable phone padding plus the web
+ * width cap. Screens compose it with their own extras, e.g.
+ * `[screenContent, { paddingBottom: insets.bottom + 48 }]` — plain-object
+ * and StyleSheet.create-registered styles are behaviorally equivalent.
+ * Screens that deliberately use a different paddingTop keep their own block.
+ */
+export const screenContent: ViewStyle = {
+  paddingHorizontal: 20,
+  paddingTop: 16,
+  ...webContentMax,
+};
+
 /** A row with its children pushed to opposite edges, vertically centered. */
 export const rowBetween: ViewStyle = {
   flexDirection: "row",

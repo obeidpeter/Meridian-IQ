@@ -25,6 +25,7 @@ import {
   getDataIntent,
   lagosMonthOptions,
   runDataIntent,
+  stripCurrentMonth,
 } from "./data-intents/index.ts";
 import type { CompletionRequest } from "./gateway.ts";
 import { inClerkScope } from "./scope.ts";
@@ -33,7 +34,7 @@ import {
   restoreClerkFlag,
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Grounded firm-data Q&A (idea #6). The invariants pinned here:
 //  - every lookup's numbers come from SQL over the asker's own firm — another
@@ -58,14 +59,6 @@ const askerId = randomUUID();
 // staff user for the cross-user multi-turn assertions.
 const clientAskerId = randomUUID();
 const secondStaffId = randomUUID();
-
-// Exact Lagos calendar dates (WAT is fixed UTC+1, no DST), so the statutory
-// window predicates are tested without day-boundary flakiness.
-function lagosDateOffset(days: number): string {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 const OVERDUE_NUM = `OVD-${SALT}`;
 const BOUNDARY_NUM = `BND-${SALT}`;
@@ -558,7 +551,7 @@ test("askClerk resolves month and client keys through its own option lists", asy
   // The label the user sees names the resolved scope (current-month marker
   // stripped), and the answer counts only that client's acceptances.
   assert.deepEqual(kase.answer?.dataParams, {
-    month: MONTHS[0].label.replace(" (current month)", ""),
+    month: stripCurrentMonth(MONTHS[0].label),
     client: `DI Party A ${SALT}`,
   });
   assert.ok(kase.answer?.proposition?.includes(ACCEPTED_NUM));

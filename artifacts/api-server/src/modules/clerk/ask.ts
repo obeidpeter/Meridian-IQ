@@ -19,6 +19,7 @@ import { getActiveClaims } from "./claims";
 import {
   lagosMonthOptions,
   extractInvoiceNumbers,
+  stripCurrentMonth,
   CLIENT_SAFE_DATA_INTENTS,
   DATA_INTENTS,
   type DataIntent,
@@ -378,15 +379,14 @@ export async function askClerk(
         // pins. The stored dataParams carry the resolved display LABELS
         // (month label, client legal name) — map them back to THIS request's
         // option keys; a label no longer in the offered lists contributes
-        // nothing. Stored month labels are stripped of the
-        // " (current month)" suffix at answer time, so strip the offered
-        // labels the same way before comparing — otherwise a same-month
-        // follow-up silently loses its month scope.
+        // nothing. Stored month labels are stripped of CURRENT_MONTH_SUFFIX
+        // at answer time, so strip the offered labels the same way
+        // (stripCurrentMonth — the shared spelling) before comparing —
+        // otherwise a same-month follow-up silently loses its month scope.
         const prevParams = prevAnswer?.dataParams;
         prevMonthKey = prevParams?.month
           ? (months.find(
-              (m) =>
-                m.label.replace(" (current month)", "") === prevParams.month,
+              (m) => stripCurrentMonth(m.label) === prevParams.month,
             )?.key ?? null)
           : null;
         prevClientKey = prevParams?.client
@@ -525,7 +525,7 @@ export async function askClerk(
           };
         }
         params.monthStart = month.monthStart;
-        params.monthLabel = month.label.replace(" (current month)", "");
+        params.monthLabel = stripCurrentMonth(month.label);
       }
       if (step.client !== "none") {
         const client = clientByKey.get(step.client);

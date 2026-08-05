@@ -41,7 +41,7 @@ import {
   closeAllServers,
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import {
   clientPrincipal,
   firmPrincipal,
@@ -83,13 +83,6 @@ const REFERENCE = `FIRS/ASMT/${SALT}`;
 const admin: Principal = firmPrincipal(firmA, { userId: adminId });
 const brokeAdmin: Principal = firmPrincipal(brokeFirmId, { userId: adminId });
 const clientUser: Principal = clientPrincipal(firmA, clientParty);
-
-// Exact Lagos calendar dates (WAT is fixed UTC+1, no DST).
-function lagosDateOffset(days: number): string {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 let obMainId = "";
 let brokeObId = "";

@@ -13,7 +13,7 @@ import {
   ensureClerkFixtures,
   fakeGateway,
 } from "./test-support.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import type { ExtractionOutput } from "./prompts.ts";
 import {
   createExtractionCase,
@@ -49,11 +49,6 @@ const buyerId = "ba1b0004-0000-4000-8000-0000000000b4";
 // A recent Lagos-safe issue date (WAT is fixed UTC+1): two days ago is never
 // "overdue on arrival" and never future-dated, so the date-sanity advisory
 // stays silent and the pre-flight list can be empty.
-function lagosDateOffset(days: number): string {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 const ISSUE_DATE = lagosDateOffset(-2);
 
 // A fully clean, fully confident extraction: every critical field present at

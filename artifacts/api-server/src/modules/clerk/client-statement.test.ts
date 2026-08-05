@@ -34,6 +34,7 @@ import {
 } from "./test-support.ts";
 import { setFlag } from "../flags/flags.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { recipientRefFor } from "../messaging/recipient-ref.ts";
 
 // Per-client monthly statement (idea #5). The digest covenant, per client and
 // per closed Lagos month: every number is SQL over the client's own invoices;
@@ -58,10 +59,10 @@ const MESSAGING_FLAG = "messaging_notifications";
 // back exactly as found (delete when it did not pre-exist).
 let messagingFlagWasEnabled: boolean | null = null;
 
-// Matches the fan-out's recipient derivation (letters of the uuid): the
-// assertion key tying message rows back to a fixture party.
-const refFor = (partyId: string) =>
-  `ref-${partyId.replace(/[^a-z]/gi, "").slice(0, 16) || "client"}`;
+// The fan-out's own recipient derivation (recipientRefFor — the one helper
+// whose doc comment forbids drifted copies): the assertion key tying message
+// rows back to a fixture party.
+const refFor = recipientRefFor;
 
 async function statementMessagesFor(partyId: string) {
   return getDb()
