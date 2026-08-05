@@ -619,7 +619,36 @@ must never read, the GET /clerk/digest refusal class): live/paused counts
 for both policy kinds (pauses by reason), 30-day plan runs (done/halted)
 and 30-day decision totals (automated share, executed/failed) — the
 firm's one-read answer to "how much standing automation is in force and
-is it healthy". **Deliberately deferred:
+is it healthy".
+
+**Close with Clerk Phase 1 (round 34) — deterministic step kinds**
+(`modules/clerk/plan-steps.ts`, contract 0.63.0): plan steps split into
+two classes. An ACTION step drives `executeAction` and writes a
+decision-ledger row per batch (the round 31–33 machinery, unchanged); a
+DETERMINISTIC step is platform SQL plus the platform's own safe writes —
+zero model tokens, no decision row, its ledger the rows it creates plus
+the run's audits. The plan approval covers it (the approver saw the step
+and its target count), and execution RE-DERIVES eligibility so a stale
+approval shrinks instead of acting on dead evidence. First kind:
+**`draft_recurring`** — the month-end checklist's `unbilled_income`
+detections made actionable. The shared miner finds buyers billed on a
+monthly rhythm with nothing raised this cycle (template-covered buyers
+excluded — the recurring-template sweep owns those); the step raises the
+missing paper as DRAFTS under the approver's authority: lines copied from
+the buyer's newest invoice in the pattern (never an invented amount), a
+placeholder `DRAFT-…` number the client replaces at review (their
+numbering scheme is theirs), foreign-currency patterns drafted in their
+own currency with NO rate (the reviewer captures today's rate — a stale
+mined one would be silently wrong). The created draft joins the mined
+history, so the pattern stops alerting: the step is NATURALLY idempotent
+across runs and recurring monthly policies. `month_end_close` is now
+[draft_recurring → submit_overdue → retry_failed] — the submit step's
+targets were frozen at approval, so a draft this run just created can
+never ride the same run's submit batch. Capability: `invoice.write`
+(asserted at approval and re-validated per step like every kind).
+Deterministic kinds enter through TEMPLATES only — Ask's act keys and
+case-origin plans stay catalogue-shaped. Phase 2 (threshold-gated
+`reconcile_matches`) and Phase 3 (the assembled close pack) follow. **Deliberately deferred:
 in-chat (WhatsApp/email) YES-reply approval of plans.** Approval is a
 consent-grade act tied to an authenticated principal and a frozen,
 server-read plan; an inbound "YES" over the machine rails is neither — the

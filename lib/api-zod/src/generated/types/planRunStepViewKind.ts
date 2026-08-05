@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.62.0
+ * OpenAPI spec version: 0.63.0
  */
 
 export type PlanRunStepViewKind = typeof PlanRunStepViewKind[keyof typeof PlanRunStepViewKind];
@@ -13,4 +13,5 @@ export const PlanRunStepViewKind = {
   submit_overdue: 'submit_overdue',
   retry_failed: 'retry_failed',
   draft_chasers: 'draft_chasers',
+  draft_recurring: 'draft_recurring',
 } as const;

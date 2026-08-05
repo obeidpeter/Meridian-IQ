@@ -51,7 +51,7 @@ function PlanRunProgress({ runId }: { runId: string }) {
           {s.status === "pending"
             ? "waiting"
             : s.status === "executed"
-              ? `${s.executedCount} ran${s.failedCount > 0 ? `, ${s.failedCount} failed` : ""}${s.skippedCount > 0 ? `, ${s.skippedCount} skipped` : ""}`
+              ? `${s.executedCount} ${(s.draftCount ?? 0) > 0 ? "drafted — review before sending" : "ran"}${s.failedCount > 0 ? `, ${s.failedCount} failed` : ""}${s.skippedCount > 0 ? `, ${s.skippedCount} skipped` : ""}`
               : s.status === "halted_here"
                 ? "halted here"
                 : "skipped"}

@@ -877,10 +877,20 @@ export interface PlanRunStep {
   clientName: string;
   // The approved target ids, frozen at approval; executeAction re-validates
   // every one at execution time (already-submitted paper skips honestly).
+  // Empty for deterministic step kinds, whose targets are not invoices.
   invoiceIds: string[];
+  // Deterministic-step targets (round 34, Close with Clerk): the buyer
+  // parties a draft_recurring step was approved for, frozen at approval;
+  // execution re-mines and only drafts for buyers still unbilled. Absent
+  // on action steps and on rows written before round 34.
+  buyerPartyIds?: string[];
+  // Evidence of a deterministic step's writes: the draft invoices it
+  // created (pointers only). Absent on action steps and pre-34 rows.
+  draftIds?: string[];
   status: "pending" | "executed" | "halted_here" | "skipped";
   // The decision-ledger row this step's execution wrote (null until run,
-  // and for skipped steps).
+  // for skipped steps, and always for deterministic steps — their ledger
+  // is the created rows themselves plus the run's own audit).
   decisionId: string | null;
   executedCount: number;
   failedCount: number;

@@ -29,6 +29,13 @@ import {
   type ActionKind,
 } from "./actions";
 import { tooManyFailures } from "./action-policies";
+import {
+  assembleDraftRecurring,
+  deterministicCapability,
+  executeDraftRecurring,
+  isDeterministicKind,
+  type DeterministicStepKind,
+} from "./plan-steps";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
 import type { AskAnswer } from "./ask";
@@ -74,16 +81,25 @@ export const PLAN_RUNNABLE_KINDS: ReadonlySet<ActionKind> = new Set([
   "retry_failed",
 ]);
 
+// A template step is an action-catalogue kind OR a deterministic kind
+// (round 34, Close with Clerk — see plan-steps.ts). Case-origin plans can
+// only carry catalogue kinds (Ask's sections are catalogue-shaped);
+// deterministic kinds enter through templates alone.
+export type PlanStepKind = ActionKind | DeterministicStepKind;
+
 // The deterministic template registry. Kinds run in order; each step is
 // assembled per the run's client at CREATION time (approval approves what
 // was shown — executeAction re-checks at execution regardless).
+// month_end_close raises the missing recurring paper FIRST, then repairs
+// submissions: the submit step's targets were frozen at approval, so a
+// draft this run just created can never ride the same run's submit batch.
 export const PLAN_TEMPLATES: Record<
   string,
-  { title: string; kinds: ActionKind[] }
+  { title: string; kinds: PlanStepKind[] }
 > = {
   month_end_close: {
     title: "Month-end close",
-    kinds: ["submit_overdue", "retry_failed"],
+    kinds: ["draft_recurring", "submit_overdue", "retry_failed"],
   },
 };
 
@@ -97,7 +113,10 @@ function isUniqueViolation(err: unknown): boolean {
   return false;
 }
 
-function capabilityFor(kind: ActionKind): "invoice.submit" | "clerk.capture" {
+function capabilityFor(
+  kind: PlanStepKind,
+): "invoice.submit" | "clerk.capture" | "invoice.write" {
+  if (isDeterministicKind(kind)) return deterministicCapability(kind);
   const intent = ACTION_INTENTS.find((a) => a.kind === kind);
   // The catalogue is closed; an unknown kind cannot reach here through
   // either origin (case sections carry catalogue kinds; templates are
@@ -107,7 +126,7 @@ function capabilityFor(kind: ActionKind): "invoice.submit" | "clerk.capture" {
 
 async function assertKindCapabilities(
   principal: Principal,
-  kinds: ActionKind[],
+  kinds: PlanStepKind[],
 ): Promise<void> {
   for (const kind of kinds) {
     if (!can(principal, capabilityFor(kind))) {
@@ -148,7 +167,7 @@ async function insertRun(
       templateKey: run.templateKey,
       steps: run.steps.map((s) => ({
         kind: s.kind,
-        targets: s.invoiceIds.length,
+        targets: s.invoiceIds.length + (s.buyerPartyIds?.length ?? 0),
       })),
     },
   });
@@ -315,6 +334,28 @@ export async function createPlanRunFromTemplate(
   );
   const steps: PlanRunStep[] = [];
   for (const kind of template.kinds) {
+    if (isDeterministicKind(kind)) {
+      // Deterministic assembly: the buyers whose recurring pattern is
+      // unbilled RIGHT NOW, frozen as the step's targets. Execution
+      // re-mines and only drafts for buyers still alerting.
+      const buyers = await inClerkScope(firmId, () =>
+        assembleDraftRecurring(firmId, clientPartyId),
+      );
+      if (buyers.length === 0) continue;
+      steps.push({
+        kind,
+        clientPartyId,
+        clientName: party?.name ?? "",
+        invoiceIds: [],
+        buyerPartyIds: buyers,
+        status: "pending",
+        decisionId: null,
+        executedCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+      });
+      continue;
+    }
     const proposal = await inClerkScope(firmId, () =>
       proposalForKind(kind, firmId, clientPartyId),
     );
@@ -370,7 +411,7 @@ async function approverRole(
         ),
       ),
   );
-  const capability = capabilityFor(step.kind as ActionKind);
+  const capability = capabilityFor(step.kind as PlanStepKind);
   const valid = memberships.find(
     (m) =>
       ROLE_CAPABILITIES[m.role]?.includes(capability) &&
@@ -504,28 +545,56 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
     clientPartyId: role === "client_user" ? step.clientPartyId : null,
     buyerPartyId: null,
   };
+  // The half-rule inputs, filled by the action branch only: a deterministic
+  // step has no per-target failure mode (a throw halts via the catch), so
+  // its zeros keep tooManyFailures vacuously false.
+  let requestedCount = 0;
+  let failedCount = 0;
   try {
-    const { decision } = await executeAction(
-      run.firmId,
-      step.clientPartyId,
-      run.approvedBy,
-      step.kind,
-      step.invoiceIds,
-      principal,
-      { planRunId: run.id },
-    );
-    steps[cursor] = {
-      ...step,
-      status: "executed",
-      decisionId: decision.id,
-      executedCount: decision.executedCount,
-      failedCount: decision.failedCount,
-      skippedCount: decision.skippedCount,
-    };
+    if (isDeterministicKind(step.kind)) {
+      // Deterministic step (round 34): platform SQL + the platform's own
+      // safe writes under the approver's authority — no decision row (the
+      // created rows and the run's audits are the ledger), no failure
+      // half-rule (a throw halts via the catch below like any step).
+      const outcome = await executeDraftRecurring(
+        run.firmId,
+        step.clientPartyId,
+        step.buyerPartyIds ?? [],
+        run.approvedBy,
+      );
+      steps[cursor] = {
+        ...step,
+        status: "executed",
+        draftIds: outcome.draftIds,
+        executedCount: outcome.created,
+        failedCount: 0,
+        skippedCount: outcome.skipped,
+      };
+    } else {
+      const { decision } = await executeAction(
+        run.firmId,
+        step.clientPartyId,
+        run.approvedBy,
+        step.kind,
+        step.invoiceIds,
+        principal,
+        { planRunId: run.id },
+      );
+      steps[cursor] = {
+        ...step,
+        status: "executed",
+        decisionId: decision.id,
+        executedCount: decision.executedCount,
+        failedCount: decision.failedCount,
+        skippedCount: decision.skippedCount,
+      };
+      requestedCount = decision.requestedCount;
+      failedCount = decision.failedCount;
+    }
     // The per-step tripwire: the autopilot's half-rule over what THIS step
     // requested. A plan is a sequence — a badly failing step must not let
     // the next one pile on.
-    if (tooManyFailures(decision.requestedCount, decision.failedCount)) {
+    if (tooManyFailures(requestedCount, failedCount)) {
       steps[cursor] = { ...steps[cursor], status: "halted_here" };
       for (let i = cursor + 1; i < steps.length; i++) {
         steps[i] = { ...steps[i], status: "skipped" };
