@@ -142,6 +142,51 @@ export interface ActionProposals {
   note: string;
 }
 
+// ---------------------------------------------------------------------------
+// Do with Clerk (round 31): the planner-facing index of this catalogue. Ask's
+// plan schema offers these keys (per asker capability) exactly like the
+// data.* keys, and an act.* step in an answered plan resolves to a live
+// proposalForKind() assembly rendered as an approvable section. The model
+// only ever SEQUENCES: nothing in an answer executes — approval drives the
+// existing execute route, which re-checks capability, flag, consent and
+// every target at that moment. Titles are model-facing trusted platform
+// text AND the section title the plan line displays.
+// ---------------------------------------------------------------------------
+
+export interface ActionIntent {
+  key: string;
+  kind: ActionKind;
+  title: string;
+  // The capability the EXISTING execute route demands for this kind — the
+  // offer is gated on it so Ask never proposes work the asker could not
+  // approve (the route re-asserts it at execution regardless).
+  capability: "invoice.submit" | "clerk.capture";
+}
+
+export const ACTION_INTENTS: readonly ActionIntent[] = [
+  {
+    key: "act.submit_overdue",
+    kind: "submit_overdue",
+    title:
+      "assemble this client's overdue unsubmitted invoices into a submission batch the asker approves before anything runs",
+    capability: "invoice.submit",
+  },
+  {
+    key: "act.retry_failed",
+    kind: "retry_failed",
+    title:
+      "assemble this client's failed rail submissions into a retry batch the asker approves before anything runs",
+    capability: "invoice.submit",
+  },
+  {
+    key: "act.draft_chasers",
+    kind: "draft_chasers",
+    title:
+      "assemble this client's most chase-worthy receivables into a payment-reminder drafting batch the asker approves before anything runs",
+    capability: "clerk.capture",
+  },
+];
+
 // The submit_overdue predicate — the SHARED overdue pieces (the digest,
 // penalty card and scorecard compose the same compliance-window fragments):
 // receivable paper, still draft/validated, past Lagos midnight starting day

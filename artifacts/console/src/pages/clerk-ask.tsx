@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { useAskClerk } from "@workspace/api-client-react";
-import type { ClerkAnswer } from "@workspace/api-client-react";
+import { useAskClerk, useExecuteAction } from "@workspace/api-client-react";
+import type {
+  AskSectionAction,
+  ClerkAnswer,
+  ExecuteActionResult,
+} from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +12,68 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ShieldCheck } from "lucide-react";
 import { ClerkPageHeader } from "@/components/clerk-shell";
 import { usePageTitle } from "@/hooks/use-page-title";
+
+// Do with Clerk (round 31): the approval block under an action-proposal
+// section. Approval drives the EXISTING execute route — the server
+// re-asserts capability, the rollout flag, consent and every target at that
+// moment, and the decision lands in the append-only ledger.
+function SectionActionApproval({
+  action,
+  index,
+}: {
+  action: AskSectionAction;
+  index: number;
+}) {
+  const execute = useExecuteAction();
+  const [outcome, setOutcome] = useState<ExecuteActionResult | null>(null);
+  const [failed, setFailed] = useState(false);
+  if (outcome) {
+    const d = outcome.decision;
+    return (
+      <p className="text-sm" data-testid={`text-action-outcome-${index}`}>
+        Approved: {d.executedCount} of {d.requestedCount} ran
+        {d.skippedCount > 0 ? `, ${d.skippedCount} no longer eligible` : ""}
+        {d.failedCount > 0 ? `, ${d.failedCount} failed` : ""}. The decision
+        has been recorded.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <Button
+        size="sm"
+        disabled={execute.isPending}
+        data-testid={`button-approve-action-${index}`}
+        onClick={() => {
+          setFailed(false);
+          execute.mutate(
+            {
+              data: {
+                kind: action.kind,
+                invoiceIds: action.invoiceIds,
+                clientPartyId: action.clientPartyId,
+              },
+            },
+            {
+              onSuccess: (result) => setOutcome(result),
+              onError: () => setFailed(true),
+            },
+          );
+        }}
+      >
+        {execute.isPending
+          ? "Running…"
+          : `Approve & run (${action.invoiceIds.length})`}
+      </Button>
+      {failed && (
+        <p className="text-xs text-destructive">
+          Couldn't run this action — nothing was changed. Try again, or use
+          the client's actions card.
+        </p>
+      )}
+    </div>
+  );
+}
 
 // Exported for the unit tests (rendered via AskPanel in the page itself).
 export function AnswerCard({ answer }: { answer: ClerkAnswer }) {
@@ -71,6 +137,9 @@ export function AnswerCard({ answer }: { answer: ClerkAnswer }) {
                       </div>
                     ))}
                   </div>
+                )}
+                {s.action && (
+                  <SectionActionApproval action={s.action} index={i} />
                 )}
                 {scope && (
                   <p
