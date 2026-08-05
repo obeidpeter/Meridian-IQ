@@ -328,14 +328,13 @@ function AnswerCard({
                     lives on the web app (and the dashboard's actions card),
                     where the execute route re-checks everything. */}
                 {s.action ? (
-                  <AppText
-                    variant="caption"
-                    color={colors.mutedForeground}
-                    testID={`text-action-web-only-${i}`}
-                  >
-                    To approve and run this proposal, open MeridianIQ on the
-                    web — approvals are not available in the mobile app yet.
-                  </AppText>
+                  <View testID={`text-action-web-only-${i}`}>
+                    <AppText variant="caption" color={colors.mutedForeground}>
+                      To approve and run this proposal, open MeridianIQ on
+                      the web — approvals are not available in the mobile
+                      app yet.
+                    </AppText>
+                  </View>
                 ) : null}
                 {s.facts.length > 0 ? (
                   <View style={{ gap: 8 }}>
