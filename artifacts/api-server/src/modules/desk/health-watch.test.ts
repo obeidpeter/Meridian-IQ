@@ -4,12 +4,12 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   getDb,
-  featureFlagsTable,
   membershipsTable,
   messagesTable,
   usersTable,
 } from "@workspace/db";
 import { setFlag } from "../flags/flags.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import {
   setMessageTransport,
   resetMessageTransport,
@@ -76,22 +76,13 @@ async function operatorHealthMessages() {
 }
 
 // Flag save/restore: these tests flip messaging_notifications, so put it back
-// exactly as found (delete when it did not pre-exist).
-let flagWasEnabled: boolean | null = null;
+// exactly as found (makeFlagGuard — delete when it did not pre-exist).
+const flagGuard = makeFlagGuard(FLAG);
 
 before(async () => {
   const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, FLAG))
-    .limit(1);
-  flagWasEnabled = existing ? existing.enabled : null;
   // Dark to start: the dedup tests double as the dark-flag ones.
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: FLAG, enabled: false, description: "test" })
-    .onConflictDoUpdate({ target: featureFlagsTable.key, set: { enabled: false } });
+  await flagGuard.saveAndSet(false);
 
   await db
     .insert(usersTable)
@@ -106,12 +97,7 @@ before(async () => {
 
 after(async () => {
   resetMessageTransport();
-  const db = getDb();
-  if (flagWasEnabled === null) {
-    await db.delete(featureFlagsTable).where(eq(featureFlagsTable.key, FLAG));
-  } else {
-    await setFlag(FLAG, flagWasEnabled);
-  }
+  await flagGuard.restore();
 });
 
 test("an open rail circuit alerts once per outage instance, not per pass", async () => {

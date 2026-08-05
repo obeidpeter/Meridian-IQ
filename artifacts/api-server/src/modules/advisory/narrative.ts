@@ -2,21 +2,15 @@ import { z } from "zod/v4";
 import { eq } from "drizzle-orm";
 import { getDb, engagementsTable } from "@workspace/db";
 import { DomainError } from "../errors";
-import { ensureGrounded } from "../clerk/grounding";
 import {
   assertClientPartyScope,
   assertSameTenant,
   tenantFirmId,
   type Principal,
 } from "../auth/rbac";
-import { assertFirmClerkBudget } from "../clerk/budget";
-import {
-  CLERK_FLAG_KEY,
-  inferPhrasing,
-  type ClerkGateway,
-} from "../clerk/gateway";
+import { type ClerkGateway } from "../clerk/gateway";
+import { phraseGroundedDraft } from "../clerk/phrase-grounded";
 import { fenceUntrusted } from "../clerk/prompts";
-import { isFeatureEnabled } from "../flags/flags";
 
 // Advisory narrative drafting (Clerk idea #10). Readiness assessments and
 // VAT-risk checks compute their findings deterministically (ADV-01/02); the
@@ -249,49 +243,29 @@ export async function draftEngagementNarrative(
   };
 
   // Clerk phrasing is best-effort (digest posture): kill switch off, budget
-  // spent or no provider → the grounded template text is the answer.
-  if (!gateway) return fallback;
-  if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
-  const tenant = tenantFirmId(principal);
-  if (tenant) {
-    try {
-      await assertFirmClerkBudget(tenant);
-    } catch {
-      return fallback;
-    }
-  }
-
+  // spent or no provider → the grounded template text is the answer. The
+  // FULL gate ladder — no gateway / kill switch / budget pre-check, then one
+  // phrasing call + number grounding inside a try (the #93 kill-switch
+  // TOCTOU history lives with it) — is clerk/phrase-grounded.ts, one home
+  // with the obligation response letter.
   const user = `Advisory facts computed by the platform:\n${facts}`;
-  // One phrasing call under the digest posture (fix round, after #93): the
-  // bare gateway.infer here was a kill-switch TOCTOU — a clerk_ai flip
-  // between the flag check above and the call made the gateway's own assert
-  // throw CLERK_DISABLED 503 out of a route that promises it never errors
-  // for AI-availability reasons. inferPhrasing re-checks the flag and folds
-  // every typed gateway failure (kill switch, budget backstop, discarded
-  // output) to null; the outer try keeps the stronger draft-reply.ts
-  // guarantee that ANYTHING failing past that — a ledger-insert failure
-  // inside the gateway after the provider answered, even a grounding-check
-  // crash — still answers with the template, source tagged honestly.
-  try {
-    const data = await inferPhrasing<z.infer<typeof narrativeOutput>>(gateway, {
+  const narrative = await phraseGroundedDraft<z.infer<typeof narrativeOutput>>(
+    gateway,
+    tenantFirmId(principal),
+    {
       purpose: "draft_narrative",
-      firmId: tenant,
       promptVersion: NARRATIVE_PROMPT_VERSION,
       system: NARRATIVE_SYSTEM,
       user,
       schemaName: "engagement_narrative",
       jsonSchema: NARRATIVE_JSON_SCHEMA,
       validator: narrativeOutput,
+      groundingSurface: "narrative",
       inputForHash: `${engagementId}:${facts}`,
-    });
-    if (!data) return fallback;
-    // Number grounding: a numeral the facts never stated → template answers
-    // (grounding.ts). The allowed source is the exact composed user prompt.
-    if (!(await ensureGrounded("narrative", tenant, data.narrative, user))) {
-      return fallback;
-    }
-    return { engagementId, narrative: data.narrative, source: "clerk" };
-  } catch {
-    return fallback;
-  }
+      text: (data) => data.narrative,
+    },
+  );
+  return narrative === null
+    ? fallback
+    : { engagementId, narrative, source: "clerk" };
 }

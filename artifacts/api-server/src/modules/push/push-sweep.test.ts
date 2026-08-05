@@ -18,6 +18,7 @@ import {
   setPushReceiptTransport,
   resetPushReceiptTransport,
 } from "./push.ts";
+import { recipientRefFor } from "../messaging/recipient-ref.ts";
 
 // Late-receipt straggler pruning (SME-05/08 hygiene): Expo materialises push
 // receipts asynchronously (often ~15 minutes after the send), so a token whose
@@ -28,7 +29,7 @@ import {
 
 const partyId = randomUUID();
 const userId = randomUUID();
-const recipientRef = `ref-${partyId.replace(/[^a-z]/gi, "").slice(0, 16)}`;
+const recipientRef = recipientRefFor(partyId);
 
 const run = randomUUID().slice(0, 8);
 const lateDeadToken = `ExponentPushToken[sweep-dead-${run}]`;

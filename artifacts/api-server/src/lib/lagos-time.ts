@@ -50,6 +50,20 @@ export function lagosMidnight(dateString: string): Date {
 }
 
 /**
+ * The absolute instant of Lagos midnight `days` after a YYYY-MM-DD calendar
+ * date — the "deadline instant" primitive behind the statutory clocks
+ * (submissionDeadline, responseDeadline). Pure UTC calendar arithmetic, so
+ * month/year overflow carries like Date.UTC. Domain wrappers keep their own
+ * names, window constants and SQL-spelling notes; only the arithmetic is
+ * one-homed here.
+ */
+export function lagosMidnightPlusDays(dateString: string, days: number): Date {
+  const d = lagosMidnight(dateString);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+/**
  * The absolute instant of Lagos midnight on a (year, monthIndex, day)
  * calendar date; month overflow carries into the year like Date.UTC.
  */

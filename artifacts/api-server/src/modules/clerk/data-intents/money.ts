@@ -12,6 +12,7 @@ import { isAre, plural } from "../text";
 import {
   RECEIVABLE_AGE_DAYS,
   type DataIntent,
+  amountFact,
   chaseLinks,
   countFact,
   forClient,
@@ -131,13 +132,11 @@ export const MONEY_INTENTS: readonly DataIntent[] = [
               : `${plural(count, "invoice")}${forClient(params)} totalling NGN ${total.toFixed(2)} ${isAre(count)} expected to be paid in the coming week, based on each customer's own payment rhythm${late > 0 ? `; ${plural(late, "invoice")} ${isAre(late)} already past the expected date` : ""}.`,
           facts: [
             countFact("expected_week", "Expected in the coming week", count),
-            {
-              key: "expected_week_total",
-              label: "Expected value (coming week)",
-              kind: "amount",
-              value: total.toFixed(2),
-              unit: "NGN",
-            },
+            amountFact(
+              "expected_week_total",
+              "Expected value (coming week)",
+              total.toFixed(2),
+            ),
             countFact("past_expected", "Already past expected date", late),
           ],
         };
@@ -157,13 +156,11 @@ export const MONEY_INTENTS: readonly DataIntent[] = [
             "Expected in the coming week",
             summary.expectedWeekCount,
           ),
-          {
-            key: "expected_week_total",
-            label: "Expected value (coming week)",
-            kind: "amount",
-            value: summary.expectedWeekTotalNgn,
-            unit: "NGN",
-          },
+          amountFact(
+            "expected_week_total",
+            "Expected value (coming week)",
+            summary.expectedWeekTotalNgn,
+          ),
           countFact(
             "past_expected",
             "Already past expected date",

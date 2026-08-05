@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { Invoice } from "@workspace/db";
-import { lagosMidnight } from "../../lib/lagos-time";
+import { lagosMidnightPlusDays } from "../../lib/lagos-time";
 
 // The statutory submission-window / penalty-risk cluster shared by the partner
 // console (CON-02) and the SME dashboard (SME-05), so the two surfaces cannot
@@ -62,9 +62,7 @@ export function isStamped(s: Invoice["status"]): boolean {
 // prefilter on this deadline must use the matching
 // `(issue_date + N)::timestamp AT TIME ZONE 'Africa/Lagos'` expression.
 export function submissionDeadline(issueDate: string): Date {
-  const d = lagosMidnight(issueDate);
-  d.setUTCDate(d.getUTCDate() + SUBMISSION_WINDOW_DAYS);
-  return d;
+  return lagosMidnightPlusDays(issueDate, SUBMISSION_WINDOW_DAYS);
 }
 
 export function penaltyRisk(

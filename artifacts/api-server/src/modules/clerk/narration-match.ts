@@ -4,20 +4,18 @@ import { alias } from "drizzle-orm/pg-core";
 import {
   getDb,
   bankStatementLinesTable,
-  bankStatementsTable,
   invoicesTable,
   matchProposalsTable,
   partiesTable,
   type NarrationSuggestion,
 } from "@workspace/db";
-import { DomainError } from "../errors";
-import {
-  assertClientPartyScope,
-  assertSameTenant,
-  type Principal,
-} from "../auth/rbac";
+import { type Principal } from "../auth/rbac";
 import { DEFAULT_BULK_ACCEPT_THRESHOLD } from "../statements/bulk-accept";
-import { PROPOSAL_THRESHOLD } from "../reconciliation/matcher";
+import { loadStatementScoped } from "../statements/load-scoped";
+import {
+  MAX_PROPOSALS_PER_LINE,
+  PROPOSAL_THRESHOLD,
+} from "../reconciliation/matcher";
 import { appendAudit } from "../audit/audit";
 import type { ClerkGateway } from "./gateway";
 import { fenceUntrusted } from "./prompts";
@@ -65,8 +63,10 @@ export const NARRATION_CUES = [
 
 export type NarrationCue = (typeof NARRATION_CUES)[number];
 
-// Mirrors the matcher's own shortlist cap (MAX_PROPOSALS_PER_LINE).
-const MAX_NARRATION_CANDIDATES = 3;
+// The matcher's own shortlist cap, imported (one home) so the candidate list
+// offered to the model can never drift from the stored shortlist; aliased in
+// case this lane ever wants a deliberately smaller prompt-size cap.
+const MAX_NARRATION_CANDIDATES = MAX_PROPOSALS_PER_LINE;
 
 // The middle band, ONE home: at/above the matcher's proposal floor, below
 // the bulk-accept default. A line whose BEST proposal already clears
@@ -179,22 +179,10 @@ export async function suggestNarrationMatches(
   principal: Principal,
   gateway: ClerkGateway,
 ): Promise<NarrationSuggestionsResult> {
-  const [statement] = await getDb()
-    .select({
-      id: bankStatementsTable.id,
-      firmId: bankStatementsTable.firmId,
-      clientPartyId: bankStatementsTable.clientPartyId,
-    })
-    .from(bankStatementsTable)
-    .where(eq(bankStatementsTable.id, statementId))
-    .limit(1);
-  if (!statement) {
-    throw new DomainError("NOT_FOUND", "Statement not found", 404);
-  }
   // Same tenancy posture as the statements routes: firm match plus the
-  // SEC-03 client narrowing to the statement's own client party.
-  assertSameTenant(principal, statement.firmId);
-  assertClientPartyScope(principal, statement.clientPartyId);
+  // SEC-03 client narrowing to the statement's own client party — one home,
+  // statements/load-scoped.ts.
+  const statement = await loadStatementScoped(principal, statementId);
   const firmId = statement.firmId;
 
   // Both parties are joined so the candidate can name the counterparty for

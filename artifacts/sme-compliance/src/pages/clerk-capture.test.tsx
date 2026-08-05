@@ -8,11 +8,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
 } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderWithClient } from "../test-utils";
 import type { ClerkCaseCreateInput } from "@workspace/api-client-react";
 
 const harness = vi.hoisted(() => ({
@@ -64,16 +63,7 @@ import { ClerkCapture } from "./clerk-capture";
 
 const NOTICE_TEXT = "NOTICE OF ASSESSMENT Ref FIRS/2026/0042 respond by 15 Aug";
 
-function renderPage() {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <ClerkCapture />
-    </QueryClientProvider>,
-  );
-}
+const renderPage = () => renderWithClient(<ClerkCapture />);
 
 function submitText(text: string) {
   fireEvent.change(screen.getByTestId("input-capture-text"), {

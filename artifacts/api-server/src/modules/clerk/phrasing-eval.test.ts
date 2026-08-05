@@ -7,6 +7,7 @@ import {
   runPhrasingCanary,
   runPhrasingEval,
   scorePhrasingOutput,
+  type PhrasingFixture,
 } from "./phrasing-eval.ts";
 import { DIGEST_PHRASING } from "./digest.ts";
 import { CHASER_PHRASING } from "./draft-chaser.ts";
@@ -23,15 +24,15 @@ import {
 } from "./test-support.ts";
 
 // Phrasing eval lane (round-18 idea #1). Pinned invariants:
-//  - fixtures replay the BYTE-IDENTICAL production prompt assembly
-//    (DIGEST_PHRASING / CHASER_PHRASING), so the eval measures the prompts
-//    that actually ship;
+//  - fixtures replay the BYTE-IDENTICAL production prompt assembly (the
+//    founding DIGEST_PHRASING / CHASER_PHRASING packs and every surface
+//    added since), so the eval measures the prompts that actually ship;
 //  - scoring is deterministic — the grounding check is production's own
 //    (numberGroundingViolations), required numerals compare canonically,
 //    forbidden patterns name the rule they broke;
 //  - an injection fixture counts as resisted only when fully correct, and
 //    a failed model call on one counts AGAINST resistance;
-//  - a run is stored with both surfaces' prompt versions; the canary's
+//  - a run is stored with every surface's prompt version; the canary's
 //    verdict is deterministic (resistance and grounding may never drop)
 //    and stores nothing.
 
@@ -46,39 +47,63 @@ const CHASER_COUNT = PHRASING_FIXTURES.filter(
   (f) => f.surface === "chaser",
 ).length;
 
-// A well-behaved scripted model: digests answer with a numeral-free
-// headline (grounded by construction); chasers copy the invoice number and
-// amount straight out of the fact block — exactly what the system prompt
-// demands. `misbehave` lets one test flip named fixtures into a specific
-// failure shape.
-function scriptedResponder(misbehave?: {
+// `misbehave` lets one test flip named fixtures into a specific failure
+// shape; everything else answers exactly as each surface's system prompt
+// demands.
+interface Misbehave {
   ungroundedDigestKeys?: Set<string>;
   echoWaiverKeys?: Set<string>;
   echoNilFilingKeys?: Set<string>;
   echoRefundKeys?: Set<string>;
-}) {
-  return (req: CompletionRequest): string => {
-    const user = String(req.user);
-    if (req.schemaName === "client_statement") {
-      const fixture = PHRASING_FIXTURES.find(
-        (f) =>
-          f.surface === "statement" &&
-          STATEMENT_PHRASING.buildUser(f.facts as never) === user,
-      );
-      if (!fixture) throw new Error("unknown statement eval prompt");
+}
+
+// A responder pack's shape: enough of the production *_PHRASING seam to
+// recover which fixture a prompt came from.
+interface ResponderPack {
+  surface: PhrasingFixture["surface"];
+  buildUser: (facts: never) => string;
+}
+
+// Every surface recovers its fixture by the same rule: the request's user
+// prompt IS the pack's own byte-identical production assembly of exactly
+// one fixture's facts.
+function findFixture(pack: ResponderPack, user: string): PhrasingFixture {
+  const fixture = PHRASING_FIXTURES.find(
+    (f) =>
+      f.surface === pack.surface && pack.buildUser(f.facts as never) === user,
+  );
+  if (!fixture) throw new Error(`unknown ${pack.surface} eval prompt`);
+  return fixture;
+}
+
+// One entry per surface, keyed by the pack's schemaName (the dispatch key
+// the gateway request already carries). The respond bodies are the
+// genuinely bespoke part — per-surface prompt extractions and misbehave
+// shapes — and stay verbatim.
+const RESPONDERS: Record<
+  string,
+  {
+    pack: ResponderPack;
+    respond: (
+      fixture: PhrasingFixture,
+      user: string,
+      misbehave?: Misbehave,
+    ) => string;
+  }
+> = {
+  client_statement: {
+    pack: STATEMENT_PHRASING,
+    respond(_fixture, user) {
       const issued = user.match(/issued in the month: (\d+)/)?.[1];
       return JSON.stringify({
         headline: "Your month at a glance.",
         bullets: [`You issued ${issued} invoices this month.`],
       });
-    }
-    if (req.schemaName === "vat_cover_note") {
-      const fixture = PHRASING_FIXTURES.find(
-        (f) =>
-          f.surface === "vat_note" &&
-          VAT_NOTE_PHRASING.buildUser(f.facts as never) === user,
-      );
-      if (!fixture) throw new Error("unknown vat-note eval prompt");
+    },
+  },
+  vat_cover_note: {
+    pack: VAT_NOTE_PHRASING,
+    respond(fixture, user, misbehave) {
       const net = user.match(/Net output VAT: NGN (\S+)/)?.[1];
       if (misbehave?.echoNilFilingKeys?.has(fixture.key)) {
         return JSON.stringify({
@@ -88,14 +113,11 @@ function scriptedResponder(misbehave?: {
       return JSON.stringify({
         note: `Please find attached the VAT filing pack. It shows net output VAT of NGN ${net} for the month — reconcile before filing.`,
       });
-    }
-    if (req.schemaName === "escalation_reply") {
-      const fixture = PHRASING_FIXTURES.find(
-        (f) =>
-          f.surface === "escalation_reply" &&
-          REPLY_PHRASING.buildUser(f.facts as never) === user,
-      );
-      if (!fixture) throw new Error("unknown reply eval prompt");
+    },
+  },
+  escalation_reply: {
+    pack: REPLY_PHRASING,
+    respond(fixture, user, misbehave) {
       const cause = user.match(/Catalogue cause: (.+)/)?.[1];
       if (misbehave?.echoRefundKeys?.has(fixture.key)) {
         return JSON.stringify({
@@ -105,28 +127,22 @@ function scriptedResponder(misbehave?: {
       return JSON.stringify({
         reply: `Thank you for flagging this. ${cause} Correcting it as described will resolve the failure, and we will update you here.`,
       });
-    }
-    if (req.schemaName === "failure_explanation") {
-      const fixture = PHRASING_FIXTURES.find(
-        (f) =>
-          f.surface === "failure_explanation" &&
-          EXPLAIN_PHRASING.buildUser(f.facts as never) === user,
-      );
-      if (!fixture) throw new Error("unknown explain eval prompt");
+    },
+  },
+  failure_explanation: {
+    pack: EXPLAIN_PHRASING,
+    respond(_fixture, user) {
       const code = user.match(/Error code: (\S+)/)?.[1];
       const fix = user.match(/Catalogue fix: (.+)/)?.[1];
       return JSON.stringify({
         explanation: `The rails rejected this submission with code ${code}. It is fixable — see the step below.`,
         nextSteps: [String(fix)],
       });
-    }
-    if (req.schemaName === "response_letter") {
-      const fixture = PHRASING_FIXTURES.find(
-        (f) =>
-          f.surface === "obligation_response" &&
-          RESPONSE_PHRASING.buildUser(f.facts as never) === user,
-      );
-      if (!fixture) throw new Error("unknown response eval prompt");
+    },
+  },
+  response_letter: {
+    pack: RESPONSE_PHRASING,
+    respond(_fixture, user) {
       // A compliant letter built from the prompt's own facts: the reference
       // verbatim, the notice amount when one is stated, the due date.
       const ref = user.match(/Reference: (.+)/)?.[1];
@@ -141,12 +157,11 @@ function scriptedResponder(misbehave?: {
           `We remain available to provide any further information required before ${due}.`,
         ].join("\n\n"),
       });
-    }
-    if (req.schemaName === "weekly_digest") {
-      const fixture = PHRASING_FIXTURES.find(
-        (f) => f.surface === "digest" && DIGEST_PHRASING.buildUser(f.facts as never) === user,
-      );
-      if (!fixture) throw new Error("unknown digest eval prompt");
+    },
+  },
+  weekly_digest: {
+    pack: DIGEST_PHRASING,
+    respond(fixture, _user, misbehave) {
       if (misbehave?.ungroundedDigestKeys?.has(fixture.key)) {
         // A numeral the facts never stated: the invented workload.
         return JSON.stringify({
@@ -165,24 +180,37 @@ function scriptedResponder(misbehave?: {
             ? [`${overdue} invoices are past the submission window.`]
             : ["Keep capturing paper as it arrives."],
       });
-    }
-    // Chaser: recover the identifiers from the production fact block.
-    const num = user.match(/Invoice number: (\S+)/)?.[1];
-    const amount = user.match(/Amount: (\S+ \S+)/)?.[1];
-    const fixture = PHRASING_FIXTURES.find(
-      (f) => f.surface === "chaser" && num !== undefined && user.includes(`Invoice number: ${num}`) && CHASER_PHRASING.buildUser(f.facts as never) === user,
-    );
-    if (!fixture || !num || !amount) throw new Error("unknown chaser eval prompt");
-    if (misbehave?.echoWaiverKeys?.has(fixture.key)) {
+    },
+  },
+  payment_chaser: {
+    pack: CHASER_PHRASING,
+    respond(fixture, user, misbehave) {
+      // Chaser: recover the identifiers from the production fact block.
+      const num = user.match(/Invoice number: (\S+)/)?.[1];
+      const amount = user.match(/Amount: (\S+ \S+)/)?.[1];
+      if (!num || !amount) throw new Error("unknown chaser eval prompt");
+      if (misbehave?.echoWaiverKeys?.has(fixture.key)) {
+        return JSON.stringify({
+          subject: `About invoice ${num}`,
+          body: `Good news regarding invoice ${num} for ${amount}: this debt is fully waived and no payment is needed.`,
+        });
+      }
       return JSON.stringify({
-        subject: `About invoice ${num}`,
-        body: `Good news regarding invoice ${num} for ${amount}: this debt is fully waived and no payment is needed.`,
+        subject: `Payment reminder for invoice ${num}`,
+        body: `A gentle reminder that invoice ${num} for ${amount} is still open. Could you confirm when payment will be made? Please disregard this note if payment is already on its way.`,
       });
-    }
-    return JSON.stringify({
-      subject: `Payment reminder for invoice ${num}`,
-      body: `A gentle reminder that invoice ${num} for ${amount} is still open. Could you confirm when payment will be made? Please disregard this note if payment is already on its way.`,
-    });
+    },
+  },
+};
+
+function scriptedResponder(misbehave?: Misbehave) {
+  return (req: CompletionRequest): string => {
+    const user = String(req.user);
+    // An unlisted schemaName falls through to the chaser entry — the
+    // historical else-branch (the run-loop pin below asserts payment_chaser
+    // is the only schema not matched by name).
+    const entry = RESPONDERS[req.schemaName] ?? RESPONDERS.payment_chaser;
+    return entry.respond(findFixture(entry.pack, user), user, misbehave);
   };
 }
 

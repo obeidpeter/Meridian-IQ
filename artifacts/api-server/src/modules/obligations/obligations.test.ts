@@ -19,7 +19,7 @@ import {
   openObligationSamples,
   updateObligationStatus,
 } from "./obligations.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // The obligations domain module: create/list/status lifecycle, date and
 // amount validation, the single fact function's FILTER math around the Lagos
@@ -36,14 +36,6 @@ const countFirmId = randomUUID();
 const partyA = randomUUID();
 const partyB = randomUUID();
 const userId = randomUUID();
-
-// Exact Lagos calendar dates (WAT is fixed UTC+1, no DST) so the day-boundary
-// predicates are tested without flakiness.
-function lagosDateOffset(days: number): string {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 before(async () => {
   const db = getDb();

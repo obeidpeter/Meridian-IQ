@@ -3,18 +3,13 @@ import { and, desc, eq } from "drizzle-orm";
 import {
   getDb,
   bankStatementLinesTable,
-  bankStatementsTable,
   matchProposalsTable,
   invoicesTable,
   partiesTable,
 } from "@workspace/db";
 import { DomainError } from "../errors";
-import {
-  assertClientPartyScope,
-  assertSameTenant,
-  tenantFirmId,
-  type Principal,
-} from "../auth/rbac";
+import { tenantFirmId, type Principal } from "../auth/rbac";
+import { loadStatementScoped } from "../statements/load-scoped";
 import { inferPhrasing, type ClerkGateway } from "./gateway";
 import { ensureGrounded } from "./grounding";
 import { fenceUntrusted } from "./prompts";
@@ -171,21 +166,10 @@ export async function assistMatch(
   if (!line) {
     throw new DomainError("NOT_FOUND", "Statement line not found", 404);
   }
-  const [statement] = await getDb()
-    .select({
-      firmId: bankStatementsTable.firmId,
-      clientPartyId: bankStatementsTable.clientPartyId,
-    })
-    .from(bankStatementsTable)
-    .where(eq(bankStatementsTable.id, line.statementId))
-    .limit(1);
-  if (!statement) {
-    throw new DomainError("NOT_FOUND", "Statement not found", 404);
-  }
   // Same tenancy posture as the statements routes: firm match plus the SEC-03
-  // client narrowing to the statement's own client party.
-  assertSameTenant(principal, statement.firmId);
-  assertClientPartyScope(principal, statement.clientPartyId);
+  // client narrowing to the statement's own client party — one home,
+  // statements/load-scoped.ts (the row itself is not needed here).
+  await loadStatementScoped(principal, line.statementId);
 
   const proposals = await getDb()
     .select({

@@ -20,6 +20,7 @@ import {
   DATA_INTENTS,
   lagosMonthOptions,
   runDataIntent,
+  stripCurrentMonth,
 } from "./data-intents/index.ts";
 import { priorMonthStart } from "./data-intents/deltas.ts";
 import type { CompletionRequest } from "./gateway.ts";
@@ -29,7 +30,7 @@ import {
   restoreClerkFlag,
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Ask 2.0 (contract 0.56.0): the ordered plan, per-step execution and the
 // pins-by-id follow-up thread. The invariants pinned here:
@@ -66,13 +67,6 @@ const SAME_NAME = `PL Same Name ${SALT}`;
 const ZULU_NAME = `PL Zulu Z ${SALT}`;
 
 const MONTHS = lagosMonthOptions();
-const stripped = (label: string) => label.replace(" (current month)", "");
-
-function lagosDateOffset(days: number): string {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 const ALPHA_CUR_NUM = `PLA-CUR-${SALT}`; // accepted in MONTHS[0], 800.00
 const ALPHA_PRV_NUM = `PLA-PRV-${SALT}`; // accepted in MONTHS[1], 300.00
@@ -305,8 +299,8 @@ test("month_delta compares the pinned month with its predecessor, signs included
   assert.equal(result.facts.length, 9);
   assert.ok(result.text.includes("+200.00"), "growth phrased with its sign");
   assert.ok(result.text.includes("-300.00"), "a drop phrased with its sign");
-  assert.ok(result.text.includes(stripped(MONTHS[0].label)));
-  assert.ok(result.text.includes(stripped(MONTHS[1].label)));
+  assert.ok(result.text.includes(stripCurrentMonth(MONTHS[0].label)));
+  assert.ok(result.text.includes(stripCurrentMonth(MONTHS[1].label)));
   assert.equal(result.links, undefined, "delta answers are linkless");
 
   // A pinned month compares against ITS predecessor (the window proof):
@@ -443,12 +437,12 @@ test("a scoped single step records ids AND labels in pins", async () => {
   assert.equal(answer.sections, undefined);
   assert.equal(answer.plan, undefined);
   assert.deepEqual(answer.dataParams, {
-    month: stripped(MONTHS[0].label),
+    month: stripCurrentMonth(MONTHS[0].label),
     client: ALPHA_NAME,
   });
   assert.deepEqual(answer.pins, {
     monthStart: MONTHS[0].monthStart,
-    monthLabel: stripped(MONTHS[0].label),
+    monthLabel: stripCurrentMonth(MONTHS[0].label),
     clientPartyId: alphaParty,
     clientName: ALPHA_NAME,
   });
@@ -496,8 +490,8 @@ test("a two-step plan answers in sections with a FRESH parameter set per step", 
   const [s0, s1] = answer.sections!;
   // Step isolation (the shared-params hazard fix): each section's month is
   // its OWN — the first month never leaks into the second lookup.
-  assert.equal(s0.dataParams?.month, stripped(MONTHS[0].label));
-  assert.equal(s1.dataParams?.month, stripped(MONTHS[1].label));
+  assert.equal(s0.dataParams?.month, stripCurrentMonth(MONTHS[0].label));
+  assert.equal(s1.dataParams?.month, stripCurrentMonth(MONTHS[1].label));
   assert.ok(s0.text.includes(ALPHA_CUR_NUM));
   assert.ok(s0.text.includes(ZULU_CUR_NUM));
   assert.ok(!s0.text.includes(ALPHA_PRV_NUM));
@@ -508,7 +502,7 @@ test("a two-step plan answers in sections with a FRESH parameter set per step", 
   // Pins carry the LAST answered step's scope (the documented choice).
   assert.deepEqual(answer.pins, {
     monthStart: MONTHS[1].monthStart,
-    monthLabel: stripped(MONTHS[1].label),
+    monthLabel: stripCurrentMonth(MONTHS[1].label),
   });
 });
 
@@ -879,7 +873,7 @@ test("a multi-part previous answer threads its LAST plan step with its pins", as
     ],
     pins: {
       monthStart: MONTHS[1].monthStart,
-      monthLabel: stripped(MONTHS[1].label),
+      monthLabel: stripCurrentMonth(MONTHS[1].label),
     },
     sections: [],
   });

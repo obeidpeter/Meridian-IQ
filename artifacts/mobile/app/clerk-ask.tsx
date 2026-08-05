@@ -15,9 +15,9 @@ import {
   Divider,
   EmptyState,
   rowBetween,
+  screenContent,
   stackHeaderOptions,
   TextField,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage, hasStatus } from "@/lib/api-error";
@@ -133,7 +133,7 @@ export default function ClerkAskScreen() {
       <KeyboardAwareScrollViewCompat
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={[
-          styles.content,
+          screenContent,
           { paddingBottom: insets.bottom + 48 },
         ]}
         bottomOffset={20}
@@ -487,11 +487,6 @@ function AnswerCard({
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",

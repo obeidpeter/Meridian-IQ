@@ -35,9 +35,9 @@ import {
   CardSkeleton,
   ErrorState,
   rowBetween,
+  screenContent,
   stackHeaderOptions,
   TextField,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage, errorStatus } from "@/lib/api-error";
@@ -562,7 +562,7 @@ export default function FixInvoiceScreen() {
         ref={scrollRef}
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={[
-          styles.content,
+          screenContent,
           { paddingBottom: insets.bottom + 120 },
         ]}
         bottomOffset={20}
@@ -766,11 +766,6 @@ export default function FixInvoiceScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",

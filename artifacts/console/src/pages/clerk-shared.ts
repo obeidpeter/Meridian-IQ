@@ -17,10 +17,10 @@ import {
   NoticeDecisionInputNoticeType,
   NoticeDecisionInputTaxType,
 } from "@workspace/api-client-react";
+import { fieldLabel } from "@workspace/format/notice-copy";
 import type { LucideIcon } from "lucide-react";
 import { FileText, MessageSquareText, Mic, ScanLine } from "lucide-react";
 import type { useToast } from "@/hooks/use-toast";
-import { serverErrorMessage } from "@/lib/errors";
 import type { BadgeTone } from "@/lib/format";
 
 // Clerk case status tones, shared by the capture queue (clerk.tsx) and the
@@ -127,19 +127,9 @@ export function clerkDisabledToast(
   });
 }
 
-// The generic gateway-error toast: relay the server's own words when it sent
-// any, otherwise the caller's fallback.
-export function serverErrorToast(
-  toast: ReturnType<typeof useToast>["toast"],
-  err: unknown,
-  fallback: string,
-): void {
-  toast({
-    title: "Something went wrong",
-    description: serverErrorMessage(err) ?? fallback,
-    variant: "destructive",
-  });
-}
+// The generic gateway-error toast now lives in @/lib/errors (it was never
+// Clerk-specific); re-exported so the Clerk pages keep their one import site.
+export { serverErrorToast } from "@/lib/errors";
 
 function fieldValue(kase: ClerkCase, field: string): string {
   return (
@@ -391,7 +381,7 @@ const INTAKE_KIND: Record<
   text: { label: "Message", eyebrow: "Text intake", icon: MessageSquareText },
 };
 
-export function intakeKind(sourceType: string | null | undefined) {
+function intakeKind(sourceType: string | null | undefined) {
   return (
     INTAKE_KIND[sourceType ?? ""] ?? {
       label: "Document",
@@ -401,64 +391,28 @@ export function intakeKind(sourceType: string | null | undefined) {
   );
 }
 
-// "invoiceNumber" -> "Invoice number" for the extracted key-value rows.
-export function fieldLabel(field: string): string {
-  const spaced = field.replace(/([A-Z])/g, " $1").toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
+// "invoiceNumber" -> "Invoice number" for the extracted key-value rows — the
+// shared @workspace/format/notice-copy helper (one home with the SME app and
+// mobile), imported above because noticeFieldLabel falls through to it and
+// re-exported so callers keep this import site.
+export { fieldLabel };
 
 // ---- Notice cases (Notice Desk) --------------------------------------------
 // A notice case is a photographed/uploaded tax-authority notice. Approval
 // never creates an invoice: it records a response OBLIGATION (client,
-// authority, response deadline). The three closed catalogues below are the
-// contract's own enums; every select in the notice decision form and the
-// obligations card is bound to them.
-
-export const NOTICE_TYPE_LABELS: Record<string, string> = {
-  assessment: "Assessment",
-  demand: "Demand notice",
-  information_request: "Information request",
-  audit: "Audit notice",
-  penalty: "Penalty notice",
-  reminder: "Reminder",
-  other: "Other notice",
-};
-
-export const AUTHORITY_LABELS: Record<string, string> = {
-  firs: "FIRS",
-  state_irs: "State IRS",
-  customs: "Customs",
-  other: "Other authority",
-};
-
-export const TAX_TYPE_LABELS: Record<string, string> = {
-  vat: "VAT",
-  cit: "CIT",
-  wht: "WHT",
-  paye: "PAYE",
-  stamp_duty: "Stamp duty",
-  other: "Other",
-};
-
-// Humanized labels with a fallback for values outside the maps (the CASE's
-// noticeType is a free string from extraction; only the decision's is closed).
-export function noticeTypeLabel(raw: string | null | undefined): string {
-  return NOTICE_TYPE_LABELS[raw ?? ""] ?? humanizeLoose(raw);
-}
-
-export function authorityLabel(raw: string | null | undefined): string {
-  return AUTHORITY_LABELS[raw ?? ""] ?? humanizeLoose(raw);
-}
-
-export function taxTypeLabel(raw: string | null | undefined): string {
-  return TAX_TYPE_LABELS[raw ?? ""] ?? humanizeLoose(raw);
-}
-
-function humanizeLoose(raw: string | null | undefined): string {
-  const s = (raw ?? "").replace(/[_-]+/g, " ").trim();
-  if (!s) return "Unknown";
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
+// authority, response deadline). The closed catalogues' display vocabulary
+// (label maps + humanize-fallback helpers, the maps every select in the
+// notice decision form and the obligations card renders from) lives in
+// @workspace/format/notice-copy — the ONE home shared with the SME app and
+// mobile — re-exported here so the console keeps its import site.
+export {
+  AUTHORITY_LABELS,
+  authorityLabel,
+  NOTICE_TYPE_LABELS,
+  noticeTypeLabel,
+  TAX_TYPE_LABELS,
+  taxTypeLabel,
+} from "@workspace/format/notice-copy";
 
 // Notice extraction fields carry a few labels the generic camelCase spacing
 // gets wrong (acronyms); everything else falls through to fieldLabel.

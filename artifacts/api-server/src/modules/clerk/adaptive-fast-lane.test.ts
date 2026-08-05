@@ -14,7 +14,7 @@ import {
   ensureClerkFixtures,
   fakeGateway,
 } from "./test-support.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import type { ExtractionOutput } from "./prompts.ts";
 import {
   FAST_LANE_DEFAULT,
@@ -107,12 +107,7 @@ function calibrationCase(
   };
 }
 
-// Lagos-safe recent issue date (bulk-approve.test's helper).
-function lagosDateOffset(days: number): string {
-  const d = new Date(Date.now() + 60 * 60 * 1000);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
+// Lagos-safe recent issue date (test-helpers/fixtures' shared helper).
 const ISSUE_DATE = lagosDateOffset(-2);
 
 // A clean, internally consistent extraction whose supplierTin sits at 0.85 —

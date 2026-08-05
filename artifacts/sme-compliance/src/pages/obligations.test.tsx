@@ -6,8 +6,8 @@
 // logic only (labels, status badges, and the client-side overdue/due-soon
 // deadline flags).
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { renderWithClient } from "../test-utils";
 import type {
   ListObligationsParams,
   Obligation,
@@ -84,16 +84,7 @@ function obligation(over: Partial<Obligation> = {}): Obligation {
   };
 }
 
-function renderPage() {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <Obligations />
-    </QueryClientProvider>,
-  );
-}
+const renderPage = () => renderWithClient(<Obligations />);
 
 afterEach(cleanup);
 beforeEach(() => {

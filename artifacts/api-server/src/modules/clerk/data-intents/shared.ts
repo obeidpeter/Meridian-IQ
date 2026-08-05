@@ -4,6 +4,8 @@ import {
   BILL_ORIENTATION,
   RECEIVABLE_ORIENTATION,
 } from "../../invoice/receivables";
+import { vatPositionMonths } from "../../invoice/vat-position";
+import { monthLabel } from "../client-statement";
 
 // The data-intent catalogue's shared spine: the closed-catalogue types, the
 // deterministic invoice-number extractor, and the parameterized aggregate
@@ -136,6 +138,22 @@ export function forClient(params?: DataIntentParams): string {
   return params?.clientName ? ` for ${params.clientName}` : "";
 }
 
+// "This month unless pinned" — the one spelling of the default-month rule
+// for the month-capable lookups (data.vat_position, the delta intents): the
+// app-resolved first-of-month key when the classifier pinned one, else the
+// current Lagos month — the same default the /vat-position route applies,
+// so Ask and the dashboard can never disagree about "this month". The label
+// falls back through monthLabel the same way. data.submitted_this_month is
+// deliberately NOT a caller: it defaults via SQL now() with its own "so far
+// this month" label (submissions.ts).
+export function resolveMonth(params?: DataIntentParams): {
+  monthStart: string;
+  label: string;
+} {
+  const monthStart = params?.monthStart ?? vatPositionMonths()[0];
+  return { monthStart, label: params?.monthLabel ?? monthLabel(monthStart) };
+}
+
 export interface InvoiceAggregate {
   count: number;
   totalNgn: string;
@@ -143,6 +161,63 @@ export interface InvoiceAggregate {
   // The SAME sample rows with their invoice ids, for answer links. Kept
   // separate from `sample` so the existing sample fact stays byte-identical.
   sampleRows: { id: string; invoiceNumber: string }[];
+}
+
+// The one CTE/count/total/sample shell both aggregates compose. `filter` is
+// the wrapper-owned tail of the WHERE clause (orientation + client pin +
+// predicate — every fragment a catalogue literal or an app-resolved id,
+// never model output), and `withSampleRows` controls whether the
+// link-feeding sample_rows subquery is emitted at all (bills deliberately
+// omit it — the linkless posture lives in the flag, so the absent subquery
+// can never be re-added by accident on the bill side alone).
+async function aggregateInvoices(
+  firmId: string,
+  filter: SQL,
+  withSampleRows: boolean,
+): Promise<InvoiceAggregate> {
+  const sampleRowsSelect = withSampleRows
+    ? sql`,
+        (SELECT COALESCE(
+          jsonb_agg(
+            jsonb_build_object('id', s.id, 'invoiceNumber', s.invoice_number)
+            ORDER BY s.issue_date, s.invoice_number
+          ),
+          '[]'::jsonb
+        ) FROM (
+          SELECT id, invoice_number, issue_date FROM hits
+          ORDER BY issue_date, invoice_number
+          LIMIT ${SAMPLE_LIMIT}
+        ) s) AS sample_rows`
+    : sql``;
+  const rows = (
+    await getDb().execute<{
+      n: number;
+      total: string;
+      sample: string[] | null;
+      sample_rows?: { id: string; invoiceNumber: string }[] | null;
+    }>(sql`
+      WITH hits AS (
+        SELECT i.id, i.invoice_number, i.issue_date, i.grand_total
+        FROM invoices i
+        WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}${filter}
+      )
+      SELECT
+        (SELECT COUNT(*) FROM hits)::int AS n,
+        (SELECT COALESCE(SUM(grand_total), 0) FROM hits)::text AS total,
+        (SELECT COALESCE(array_agg(invoice_number), ARRAY[]::text[]) FROM (
+          SELECT invoice_number FROM hits
+          ORDER BY issue_date, invoice_number
+          LIMIT ${SAMPLE_LIMIT}
+        ) s) AS sample${sampleRowsSelect}
+    `)
+  ).rows;
+  const r = rows[0];
+  return {
+    count: Number(r?.n ?? 0),
+    totalNgn: String(r?.total ?? "0"),
+    sample: r?.sample ?? [],
+    sampleRows: r?.sample_rows ?? [],
+  };
 }
 
 // One round trip per lookup: count + value total + up to SAMPLE_LIMIT invoice
@@ -162,46 +237,11 @@ export async function invoiceAggregate(
   const clientFilter = params?.clientPartyId
     ? sql` AND i.supplier_party_id = ${params.clientPartyId}`
     : sql` AND ${RECEIVABLE_ORIENTATION}`;
-  const rows = (
-    await getDb().execute<{
-      n: number;
-      total: string;
-      sample: string[] | null;
-      sample_rows: { id: string; invoiceNumber: string }[] | null;
-    }>(sql`
-      WITH hits AS (
-        SELECT i.id, i.invoice_number, i.issue_date, i.grand_total
-        FROM invoices i
-        WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}${clientFilter} AND (${predicate})
-      )
-      SELECT
-        (SELECT COUNT(*) FROM hits)::int AS n,
-        (SELECT COALESCE(SUM(grand_total), 0) FROM hits)::text AS total,
-        (SELECT COALESCE(array_agg(invoice_number), ARRAY[]::text[]) FROM (
-          SELECT invoice_number FROM hits
-          ORDER BY issue_date, invoice_number
-          LIMIT ${SAMPLE_LIMIT}
-        ) s) AS sample,
-        (SELECT COALESCE(
-          jsonb_agg(
-            jsonb_build_object('id', s.id, 'invoiceNumber', s.invoice_number)
-            ORDER BY s.issue_date, s.invoice_number
-          ),
-          '[]'::jsonb
-        ) FROM (
-          SELECT id, invoice_number, issue_date FROM hits
-          ORDER BY issue_date, invoice_number
-          LIMIT ${SAMPLE_LIMIT}
-        ) s) AS sample_rows
-    `)
-  ).rows;
-  const r = rows[0];
-  return {
-    count: Number(r?.n ?? 0),
-    totalNgn: String(r?.total ?? "0"),
-    sample: r?.sample ?? [],
-    sampleRows: r?.sample_rows ?? [],
-  };
+  return aggregateInvoices(
+    firmId,
+    sql`${clientFilter} AND (${predicate})`,
+    true,
+  );
 }
 
 // The buyer-side mirror of invoiceAggregate (payables round): count + value
@@ -209,9 +249,10 @@ export async function invoiceAggregate(
 // filter pins the BUYER side (a bill belongs to the client that must pay
 // it); the bill-orientation fragment scopes the firm-wide branch. Same
 // closed-catalogue posture: `predicate` is always a literal fragment from
-// the catalogue below, never model output. Deliberately NO answer links:
-// bills are not invoice-detail linkable for a client asker (the SEC-03
-// invoice detail routes are supplier-pinned), so these intents emit none.
+// the catalogue below, never model output. Deliberately NO answer links
+// (withSampleRows=false, so sampleRows is always []): bills are not
+// invoice-detail linkable for a client asker (the SEC-03 invoice detail
+// routes are supplier-pinned), so these intents emit none.
 export async function billAggregate(
   firmId: string,
   predicate: SQL,
@@ -220,35 +261,11 @@ export async function billAggregate(
   const clientFilter = params?.clientPartyId
     ? sql` AND i.buyer_party_id = ${params.clientPartyId}`
     : sql``;
-  const rows = (
-    await getDb().execute<{
-      n: number;
-      total: string;
-      sample: string[] | null;
-    }>(sql`
-      WITH hits AS (
-        SELECT i.id, i.invoice_number, i.issue_date, i.grand_total
-        FROM invoices i
-        WHERE i.kind = 'invoice' AND i.firm_id = ${firmId}
-          AND ${BILL_ORIENTATION}${clientFilter} AND (${predicate})
-      )
-      SELECT
-        (SELECT COUNT(*) FROM hits)::int AS n,
-        (SELECT COALESCE(SUM(grand_total), 0) FROM hits)::text AS total,
-        (SELECT COALESCE(array_agg(invoice_number), ARRAY[]::text[]) FROM (
-          SELECT invoice_number FROM hits
-          ORDER BY issue_date, invoice_number
-          LIMIT ${SAMPLE_LIMIT}
-        ) s) AS sample
-    `)
-  ).rows;
-  const r = rows[0];
-  return {
-    count: Number(r?.n ?? 0),
-    totalNgn: String(r?.total ?? "0"),
-    sample: r?.sample ?? [],
-    sampleRows: [],
-  };
+  return aggregateInvoices(
+    firmId,
+    sql` AND ${BILL_ORIENTATION}${clientFilter} AND (${predicate})`,
+    false,
+  );
 }
 
 // Open-the-invoice links built from the aggregate's own sample rows (round
@@ -295,6 +312,17 @@ export function countFact(key: string, label: string, n: number): ProtectedFact 
   return { key, label, kind: "count", value: String(n) };
 }
 
+// The NGN-amount sibling of countFact. Facts in another currency (e.g.
+// data.invoice_status's document amount) build their literal by hand with
+// the row's own unit — this helper is the naira spelling only.
+export function amountFact(
+  key: string,
+  label: string,
+  value: string,
+): ProtectedFact {
+  return { key, label, kind: "amount", value, unit: "NGN" };
+}
+
 export function invoiceFacts(
   agg: InvoiceAggregate,
   countLabel: string,
@@ -302,13 +330,7 @@ export function invoiceFacts(
 ): ProtectedFact[] {
   const facts: ProtectedFact[] = [countFact("count", countLabel, agg.count)];
   if (withTotal && agg.count > 0) {
-    facts.push({
-      key: "total_value",
-      label: "Total value",
-      kind: "amount",
-      value: agg.totalNgn,
-      unit: "NGN",
-    });
+    facts.push(amountFact("total_value", "Total value", agg.totalNgn));
   }
   if (agg.sample.length > 0) {
     facts.push({

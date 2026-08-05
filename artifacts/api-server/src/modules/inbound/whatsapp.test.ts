@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { desc, eq, inArray } from "drizzle-orm";
 import {
   getDb,
-  firmsTable,
   partiesTable,
   usersTable,
   membershipsTable,
@@ -27,8 +26,13 @@ import type { CompletionRequest } from "../clerk/gateway.ts";
 import {
   eventually,
   inboundApp,
+  makeCsvAttachment,
   makePdfAttachment,
   okExtraction,
+  runPhoneDigits,
+  seedInboundClient,
+  testPhone,
+  withEnv,
 } from "./test-support.ts";
 import {
   MIN_TEXT_CHARS,
@@ -52,33 +56,27 @@ import {
 const SALT = makeRunSalt();
 const TOKEN = `wa-secret-${SALT}`;
 
-// Per-run unique phone numbers: the shared DB accumulates alert_preferences
-// rows from every run, and a reused number would make this run's matches
-// ambiguous. 8 unique digits, distinct prefix per fixture.
-const runDigits = `${Date.now()}${process.pid}`.slice(-8);
-const PHONE_RESOLVED = `+23470${runDigits}`;
-const PHONE_AMBIG = `+23471${runDigits}`;
-const PHONE_NO_MEMBER = `+23472${runDigits}`;
-const PHONE_CAPPED = `+23473${runDigits}`;
-const PHONE_UNKNOWN = `+23474${runDigits}`;
-const PHONE_STAFF_SET = `+23475${runDigits}`;
+// Per-run unique phone numbers via the shared generator (test-support.ts):
+// the shared DB accumulates alert_preferences rows from every run, and a
+// reused number would make this run's matches ambiguous. This file claims
+// prefixes 70–75 in the testPhone registry.
+const PHONE_RESOLVED = testPhone(70);
+const PHONE_AMBIG = testPhone(71);
+const PHONE_NO_MEMBER = testPhone(72);
+const PHONE_CAPPED = testPhone(73);
+const PHONE_UNKNOWN = testPhone(74);
+const PHONE_STAFF_SET = testPhone(75);
 // The resolved party STORES its number in the bare local convention
 // (070XXXXXXXX) while the webhook presents it formatted internationally —
 // resolution must normalize BOTH sides.
-const STORED_RESOLVED = `070${runDigits}`;
-const PRESENTED_RESOLVED = `+234 70 ${runDigits.slice(0, 4)}-${runDigits.slice(4)}`;
+const STORED_RESOLVED = `070${runPhoneDigits}`;
+const PRESENTED_RESOLVED = `+234 70 ${runPhoneDigits.slice(0, 4)}-${runPhoneDigits.slice(4)}`;
 
-const firm1 = randomUUID();
-const firmCapped = randomUUID();
-const partyResolved = randomUUID();
-const partyAmbA = randomUUID();
-const partyAmbB = randomUUID();
-const partyNoMember = randomUUID();
-const partyCapped = randomUUID();
-const partyStaffSet = randomUUID();
-const clientUserId = randomUUID();
-const cappedUserId = randomUUID();
-const staffSetUserId = randomUUID();
+// Fixture ids minted by seedInboundClient in before(); only the ones the
+// tests themselves assert on live at module scope.
+let firm1: string;
+let partyResolved: string;
+let clientUserId: string;
 
 const PNG_B64 = Buffer.from(`wa-png-bytes-${SALT}`).toString("base64");
 
@@ -98,36 +96,41 @@ const savedToken = process.env.INBOUND_WHATSAPP_TOKEN;
 before(async () => {
   await saveAndEnableClerkFlag();
   const db = getDb();
-  await db.insert(firmsTable).values([
-    { id: firm1, name: `WA Firm ${SALT}` },
-    { id: firmCapped, name: `WA Capped Firm ${SALT}` },
-  ]);
+  // The resolved and capped clients ride the shared seeder (test-support.ts).
+  // The resolved party STORES its number in the bare local convention — see
+  // the STORED_RESOLVED comment above.
+  ({ firmId: firm1, partyId: partyResolved, userId: clientUserId } =
+    await seedInboundClient(db, {
+      firmName: `WA Firm ${SALT}`,
+      partyName: `WA Client ${SALT}`,
+      email: `wa-client-${SALT}@inbound-test.local`,
+      whatsapp: { number: STORED_RESOLVED, setByRole: "client_user" },
+    }));
+  await seedInboundClient(db, {
+    firmName: `WA Capped Firm ${SALT}`,
+    partyName: `WA Capped ${SALT}`,
+    email: `wa-capped-${SALT}@inbound-test.local`,
+    whatsapp: { number: PHONE_CAPPED, setByRole: "client_user" },
+  });
+  // The remaining fixtures stay inline — the seeder cannot express them:
+  // party-only rows (no user/membership), a shared number across two
+  // parties, and a staff-set number whose membership binds into the SAME
+  // firm as the resolved client.
+  const partyAmbA = randomUUID();
+  const partyAmbB = randomUUID();
+  const partyNoMember = randomUUID();
+  const partyStaffSet = randomUUID();
+  const staffSetUserId = randomUUID();
   await db.insert(partiesTable).values([
-    { id: partyResolved, type: "client_business", legalName: `WA Client ${SALT}` },
     { id: partyAmbA, type: "client_business", legalName: `WA Amb A ${SALT}` },
     { id: partyAmbB, type: "client_business", legalName: `WA Amb B ${SALT}` },
     { id: partyNoMember, type: "client_business", legalName: `WA Orphan ${SALT}` },
-    { id: partyCapped, type: "client_business", legalName: `WA Capped ${SALT}` },
     { id: partyStaffSet, type: "client_business", legalName: `WA StaffSet ${SALT}` },
   ]);
   await db.insert(usersTable).values([
-    { id: clientUserId, email: `wa-client-${SALT}@inbound-test.local` },
-    { id: cappedUserId, email: `wa-capped-${SALT}@inbound-test.local` },
     { id: staffSetUserId, email: `wa-staffset-${SALT}@inbound-test.local` },
   ]);
   await db.insert(membershipsTable).values([
-    {
-      userId: clientUserId,
-      firmId: firm1,
-      role: "client_user",
-      clientPartyId: partyResolved,
-    },
-    {
-      userId: cappedUserId,
-      firmId: firmCapped,
-      role: "client_user",
-      clientPartyId: partyCapped,
-    },
     {
       userId: staffSetUserId,
       firmId: firm1,
@@ -135,19 +138,17 @@ before(async () => {
       clientPartyId: partyStaffSet,
     },
   ]);
-  // Stored numbers are free text: the resolved party keeps the bare local
-  // convention, one ambiguous party stores whatsappTo and its twin stores the
-  // same number under phone — either field matching counts, and two parties
-  // sharing a number must refuse. Provenance gate: only rows whose contact
-  // fields the CLIENT set themselves (contact_set_by_role='client_user') are
-  // routing keys — the staff-set fixture and any legacy null-provenance row
-  // must refuse even with an otherwise-perfect match.
+  // Stored numbers are free text: one ambiguous party stores whatsappTo and
+  // its twin stores the same number under phone — either field matching
+  // counts, and two parties sharing a number must refuse. Provenance gate:
+  // only rows whose contact fields the CLIENT set themselves
+  // (contact_set_by_role='client_user') are routing keys — the staff-set
+  // fixture and any legacy null-provenance row must refuse even with an
+  // otherwise-perfect match.
   await db.insert(alertPreferencesTable).values([
-    { clientPartyId: partyResolved, whatsappTo: STORED_RESOLVED, contactSetByRole: "client_user" },
-    { clientPartyId: partyAmbA, whatsappTo: `071${runDigits}`, contactSetByRole: "client_user" },
+    { clientPartyId: partyAmbA, whatsappTo: `071${runPhoneDigits}`, contactSetByRole: "client_user" },
     { clientPartyId: partyAmbB, phone: PHONE_AMBIG, contactSetByRole: "client_user" },
     { clientPartyId: partyNoMember, phone: PHONE_NO_MEMBER, contactSetByRole: "client_user" },
-    { clientPartyId: partyCapped, whatsappTo: PHONE_CAPPED, contactSetByRole: "client_user" },
     // Staff typed this number in for the client: never a routing key.
     { clientPartyId: partyStaffSet, whatsappTo: PHONE_STAFF_SET, contactSetByRole: "firm_staff" },
   ]);
@@ -238,7 +239,7 @@ test("unknown and ambiguous numbers: 202 identical to success, zero cases, maske
     const rows = await ignoredAudits();
     return rows.find(
       (r) =>
-        (r.after as { sender?: string })?.sender === `***${runDigits.slice(-4)}` &&
+        (r.after as { sender?: string })?.sender === `***${runPhoneDigits.slice(-4)}` &&
         (r.after as { reason?: string })?.reason === "no_match",
     );
   }, "unknown-number ignored audit row");
@@ -403,7 +404,7 @@ test("resolved sender: media walks the capture path stamped for the client; rede
   assert.equal(receipt.firmId, firm1);
   assert.equal(
     (receipt.after as { sender?: string }).sender,
-    `***${runDigits.slice(-4)}`,
+    `***${runPhoneDigits.slice(-4)}`,
   );
 
   // BSP redelivery of the SAME message: the duplicate guard audit-skips both
@@ -462,14 +463,8 @@ test("text-only messages: long enough walks the text path, short audit-skips wit
 });
 
 test("daily cap: over-cap items audit-skip, counted from this rail's own receipts", async () => {
-  const savedCap = process.env.INBOUND_WHATSAPP_DAILY_CAP;
-  process.env.INBOUND_WHATSAPP_DAILY_CAP = "2";
-  try {
-    const csv = (tag: string) => ({
-      filename: `${tag}-${SALT}.csv`,
-      contentType: "text/csv",
-      contentBase64: PNG_B64,
-    });
+  await withEnv("INBOUND_WHATSAPP_DAILY_CAP", "2", async () => {
+    const csv = makeCsvAttachment(SALT, PNG_B64);
     // Fresh firm, cap 2, three attachments: the first two consume the day's
     // allowance (then skip as unsupported — no provider needed), the third
     // is refused by the cap itself.
@@ -484,7 +479,8 @@ test("daily cap: over-cap items audit-skip, counted from this rail's own receipt
     );
     // The first receipt (3 items) now exceeds the cap, so even a text-only
     // message is refused — the count comes from the audit trail, not
-    // process memory.
+    // process memory. Deliberately NOT the email rail's second send: this
+    // pins that text-only messages are cap-refused too.
     const second = await processInboundWhatsApp({
       sender: PHONE_CAPPED,
       text: LONG_TEXT,
@@ -495,8 +491,5 @@ test("daily cap: over-cap items audit-skip, counted from this rail's own receipt
       second.skipped.map((s) => s.reason),
       ["INBOUND_DAILY_CAP"],
     );
-  } finally {
-    if (savedCap === undefined) delete process.env.INBOUND_WHATSAPP_DAILY_CAP;
-    else process.env.INBOUND_WHATSAPP_DAILY_CAP = savedCap;
-  }
+  });
 });

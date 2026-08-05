@@ -155,6 +155,15 @@ export interface MonthOption {
   monthStart: string; // YYYY-MM-01
 }
 
+// The current-month marker's one home: minted onto the leading option's
+// label below, stripped at answer time (ask.ts stores dataParams labels in
+// the stripped form) — stripCurrentMonth is the one spelling of that strip.
+export const CURRENT_MONTH_SUFFIX = " (current month)";
+
+export function stripCurrentMonth(label: string): string {
+  return label.replace(CURRENT_MONTH_SUFFIX, "");
+}
+
 export function lagosMonthOptions(count = 12, now = new Date()): MonthOption[] {
   const { year, monthIndex } = lagosParts(now);
   return Array.from({ length: count }, (_, i) => {
@@ -165,7 +174,7 @@ export function lagosMonthOptions(count = 12, now = new Date()): MonthOption[] {
     const mm = String(m + 1).padStart(2, "0");
     return {
       key: `${y}-${mm}`,
-      label: `${MONTH_NAMES[m]} ${y}${i === 0 ? " (current month)" : ""}`,
+      label: `${MONTH_NAMES[m]} ${y}${i === 0 ? CURRENT_MONTH_SUFFIX : ""}`,
       monthStart: `${y}-${mm}-01`,
     };
   });

@@ -7,6 +7,7 @@ import {
   TAX_TYPE_LABELS,
   authorityLabel,
   deadlineDaysUntil,
+  fieldLabel,
   localDayIso,
   noticeTypeLabel,
   obligationStatusLabel,
@@ -45,6 +46,12 @@ describe("notice-copy vocabulary", () => {
     expect(noticeTypeLabel("levy_review")).toBe("Levy review");
     expect(authorityLabel(null)).toBe("Unknown");
     expect(taxTypeLabel("")).toBe("Unknown");
+  });
+
+  test("fieldLabel spaces camelCase into sentence case", () => {
+    expect(fieldLabel("invoiceNumber")).toBe("Invoice number");
+    expect(fieldLabel("supplierTaxId")).toBe("Supplier tax id");
+    expect(fieldLabel("currency")).toBe("Currency");
   });
 });
 

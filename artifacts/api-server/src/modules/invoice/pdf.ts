@@ -99,7 +99,9 @@ export function hslTripleToHex(triple: string): string {
 }
 
 // --- Formatting --------------------------------------------------------------
-function formatMoney(v: string | number): string {
+// Exported (like hslTripleToHex) so the pack-family papers format money
+// identically to the invoice paper — one home, refactor round 7.
+export function formatMoney(v: string | number): string {
   const n = Number(v);
   return (Number.isFinite(n) ? n : 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,

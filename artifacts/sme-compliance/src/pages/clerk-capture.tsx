@@ -30,6 +30,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CapabilityGate } from "@/components/capability-gate";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { PillToggle } from "@/components/pill-toggle";
 import { QueryError } from "@/components/query-error";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
@@ -293,6 +294,15 @@ function CaptureContent() {
     setDisabledBanner(false);
   };
 
+  // Editing any input drops the previous submission's residue: a held
+  // duplicate payload was offered against the OLD content, and a finished
+  // batch's progress panel describes the OLD bundle — both would mislead
+  // against what is now being composed.
+  const clearInputResidue = () => {
+    setPendingDuplicate(null);
+    setActiveBatchId(null);
+  };
+
   const createCase = useCreateClerkCase({
     mutation: {
       onSuccess: (kase: ClerkCase) => {
@@ -377,13 +387,12 @@ function CaptureContent() {
   // option is hidden in notice mode.
   const kindFields = isNotice ? { documentKind: "notice" as const } : {};
 
-  // Switching kinds drops per-source residue: a held duplicate payload
-  // belongs to the other kind, and a picked voice note has no notice path.
+  // Switching kinds drops per-source residue too — and a picked voice note
+  // has no notice path, so notice mode clears it as well.
   const switchKind = (kind: ClerkCaseCreateInputDocumentKind) => {
     if (kind === documentKind) return;
     setDocumentKind(kind);
-    setPendingDuplicate(null);
-    setActiveBatchId(null);
+    clearInputResidue();
     if (kind === "notice") setCaptureVoice(null);
   };
 
@@ -472,26 +481,17 @@ function CaptureContent() {
                 { kind: "invoice", label: "Invoice" },
                 { kind: "notice", label: "Tax notice" },
               ] as const
-            ).map(({ kind, label }) => {
-              const isActive = documentKind === kind;
-              return (
-                <button
-                  key={kind}
-                  type="button"
-                  role="radio"
-                  aria-checked={isActive}
-                  onClick={() => switchKind(kind)}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-full border min-h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                    isActive
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-card text-foreground hover:bg-muted"
-                  }`}
-                  data-testid={`toggle-kind-${kind}`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+            ).map(({ kind, label }) => (
+              <PillToggle
+                key={kind}
+                role="radio"
+                active={documentKind === kind}
+                onClick={() => switchKind(kind)}
+                data-testid={`toggle-kind-${kind}`}
+              >
+                {label}
+              </PillToggle>
+            ))}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="capture-file">
@@ -505,8 +505,7 @@ function CaptureContent() {
               accept=".pdf,image/png,image/jpeg,image/webp"
               onChange={(e) => {
                 setCaptureFile(e.target.files?.[0] ?? null);
-                setPendingDuplicate(null);
-                setActiveBatchId(null);
+                clearInputResidue();
               }}
               disabled={captureVoice != null}
               data-testid="input-capture-file"
@@ -531,8 +530,7 @@ function CaptureContent() {
                 accept="audio/*"
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null;
-                  setPendingDuplicate(null);
-                  setActiveBatchId(null);
+                  clearInputResidue();
                   if (f && f.size > MAX_VOICE_BYTES) {
                     toast({
                       title: "Voice note too large",
@@ -566,8 +564,7 @@ function CaptureContent() {
               value={captureText}
               onChange={(e) => {
                 setCaptureText(e.target.value);
-                setPendingDuplicate(null);
-                setActiveBatchId(null);
+                clearInputResidue();
               }}
               placeholder={isNotice ? "NOTICE OF ASSESSMENT ..." : "INVOICE No: ..."}
               rows={5}

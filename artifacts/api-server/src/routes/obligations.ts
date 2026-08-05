@@ -19,9 +19,7 @@ import {
 import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
-  assertClientPartyScope,
   assertPartyAccess,
-  assertSameTenant,
   narrowToClientPartyScope,
   requireFirmScope,
 } from "../modules/auth/rbac";
@@ -33,8 +31,8 @@ import {
 } from "../modules/invoice/pdf";
 import {
   createObligation,
-  getObligation,
   listObligations,
+  loadObligationForScope,
   updateObligationStatus,
 } from "../modules/obligations/obligations";
 import {
@@ -92,18 +90,9 @@ router.post("/obligations", async (req, res): Promise<void> => {
 router.get("/obligations/:id", async (req, res): Promise<void> => {
   assertCan(req.principal, "obligation.read");
   const params = parseOrThrow(GetObligationParams, req.params);
-  const row = await getObligation(params.id);
-  const notFound = () =>
-    new DomainError("NOT_FOUND", "Obligation not found", 404);
-  if (!row) throw notFound();
-  // 404 non-disclosure: CROSS_TENANT and CROSS_CLIENT both collapse to the
-  // same not-found the missing id produces (the loadBillForScope posture).
-  try {
-    assertSameTenant(req.principal, row.firmId);
-    assertClientPartyScope(req.principal, row.clientPartyId);
-  } catch {
-    throw notFound();
-  }
+  // 404 non-disclosure (the loadBillForScope posture), one-homed with the
+  // Response Desk facts assembly in the obligations module.
+  const row = await loadObligationForScope(params.id, req.principal);
   res.json(GetObligationResponse.parse(row));
 });
 

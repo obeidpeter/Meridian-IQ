@@ -36,10 +36,10 @@ import {
   EmptyState,
   ErrorState,
   rowBetween,
+  screenContent,
   ScreenScroll,
   Skeleton,
   stackHeaderOptions,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage, errorStatus } from "@/lib/api-error";
@@ -225,7 +225,7 @@ export default function InvoiceDetailScreen() {
       />
       <ScreenScroll
         contentContainerStyle={[
-          styles.content,
+          screenContent,
           { paddingBottom: insets.bottom + 40 },
         ]}
         refreshControl={
@@ -584,11 +584,6 @@ export default function InvoiceDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
   bannerRow: {
     flexDirection: "row",
     gap: 10,

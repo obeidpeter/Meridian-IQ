@@ -10,7 +10,8 @@ import { appendAudit } from "../audit/audit";
 import { normalizeEmail } from "../auth/session";
 import type { ClerkGateway } from "../clerk/gateway";
 import {
-  attachmentSource,
+  appendInboundReceipt,
+  captureInboundAttachments,
   makeInboundCapture,
   remainingInboundAllowance,
   withInboundSlot,
@@ -142,7 +143,7 @@ async function processInboundEmailNow(
   // allowance audit-skip like any other per-attachment refusal — the sender
   // never sees a different response (anti-probe), and the skip reason lands
   // in the durable receipt.
-  let remaining = await remainingInboundAllowance(
+  const remaining = await remainingInboundAllowance(
     "inbound.email.received",
     "INBOUND_EMAIL_DAILY_CAP",
     resolved.firmId,
@@ -155,37 +156,24 @@ async function processInboundEmailNow(
     gateway,
     "Inbound email attachment",
   );
-  for (const att of input.attachments) {
-    if (remaining <= 0) {
-      skipped.push({ filename: att.filename, reason: "INBOUND_DAILY_CAP" });
-      continue;
-    }
-    // Every attachment the rail even LOOKS at consumes allowance (matching
-    // the receipt-based count above, which sums caseIds + skipped) — a flood
-    // of unsupported or duplicate files is still a flood.
-    remaining -= 1;
-    const source = attachmentSource(att);
-    if (!source) {
-      skipped.push({ filename: att.filename, reason: "UNSUPPORTED_TYPE" });
-      continue;
-    }
-    // The subject line rides along as the triage message signal — it can
-    // switch the attachment onto the notice lane, never anything more.
-    await capture(att.filename, source, input.subject?.trim() || null);
-  }
+  // Shared per-attachment loop (./shared.ts): cap-check, allowance burn, type
+  // map, capture. The subject line rides along as the triage message signal —
+  // it can switch an attachment onto the notice lane, never anything more.
+  await captureInboundAttachments(
+    input.attachments,
+    input.subject?.trim() || null,
+    remaining,
+    capture,
+    skipped,
+  );
 
   // Pointer-only receipt: case ids and skip reasons, never attachment content.
-  await appendAudit({
-    actorId: resolved.userId,
-    firmId: resolved.firmId,
-    action: "inbound.email.received",
-    entityType: "inbound_email",
-    entityId: randomUUID(),
-    after: {
-      sender: maskInboundSender(input.sender),
-      caseIds,
-      skipped,
-    },
-  });
+  await appendInboundReceipt(
+    { action: "inbound.email.received", entityType: "inbound_email" },
+    resolved,
+    maskInboundSender(input.sender),
+    caseIds,
+    skipped,
+  );
   return { resolved: true, caseIds, skipped };
 }

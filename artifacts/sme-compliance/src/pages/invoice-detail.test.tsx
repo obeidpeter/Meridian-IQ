@@ -8,7 +8,7 @@
 // client users, actionable for firm roles, and the status-keyed submit title.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderWithClient } from "../test-utils";
 import type {
   Invoice,
   InvoiceApproval,
@@ -218,13 +218,8 @@ function approval(over: Partial<InvoiceApproval> = {}): InvoiceApproval {
 }
 
 function renderApprovals(role: string | undefined, status = "draft") {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <ApprovalsCard invoiceId="inv-1" role={role} status={status} />
-    </QueryClientProvider>,
+  return renderWithClient(
+    <ApprovalsCard invoiceId="inv-1" role={role} status={status} />,
   );
 }
 

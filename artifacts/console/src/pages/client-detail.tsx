@@ -53,8 +53,13 @@ import {
   humanize,
   pillClasses,
 } from "@/lib/format";
+import { localDayIso } from "@workspace/format/notice-copy";
 import { downloadBlob, triggerDownload } from "@/lib/download";
-import { errorStatus, serverErrorMessage } from "@/lib/errors";
+import {
+  errorStatus,
+  serverErrorMessage,
+  serverErrorToast,
+} from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/use-page-title";
 
@@ -126,11 +131,13 @@ export function packPdfFilename(monthStart: string): string {
   return month ? `compliance-pack-${month}.pdf` : "compliance-pack.pdf";
 }
 
-/** The current month's first day (YYYY-MM-01) — the pack picker's default. */
+/**
+ * The current month's first day (YYYY-MM-01) — the pack picker's default.
+ * Deliberately BROWSER-local (a picker default, not a statutory clock);
+ * the formatting kernel is the shared localDayIso.
+ */
 export function currentMonthStart(now: Date = new Date()): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}-01`;
+  return `${localDayIso(now).slice(0, 7)}-01`;
 }
 
 function CompliancePackCard({ clientPartyId }: { clientPartyId: string }) {
@@ -148,10 +155,9 @@ function CompliancePackCard({ clientPartyId }: { clientPartyId: string }) {
               "Client notified — delivery respects their consent and channel preferences.",
           }),
         onError: (e) =>
-          toast({
+          serverErrorToast(toast, e, {
             title: "Could not notify the client",
-            description: serverErrorMessage(e) ?? "Try again.",
-            variant: "destructive",
+            fallback: "Try again.",
           }),
       },
     );
@@ -263,10 +269,9 @@ function CollectionAccountsCard({ clientPartyId }: { clientPartyId: string }) {
           });
         },
         onError: (e) =>
-          toast({
+          serverErrorToast(toast, e, {
             title: "Could not provision a collection account",
-            description: serverErrorMessage(e) ?? "Try again.",
-            variant: "destructive",
+            fallback: "Try again.",
           }),
       },
     );
@@ -285,10 +290,9 @@ function CollectionAccountsCard({ clientPartyId }: { clientPartyId: string }) {
           });
         },
         onError: (e) =>
-          toast({
+          serverErrorToast(toast, e, {
             title: "Could not deactivate the account",
-            description: serverErrorMessage(e) ?? "Try again.",
-            variant: "destructive",
+            fallback: "Try again.",
           }),
       },
     );

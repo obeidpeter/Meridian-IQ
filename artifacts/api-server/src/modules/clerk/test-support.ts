@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import {
   getDb,
-  featureFlagsTable,
   usersTable,
   firmsTable,
   partiesTable,
@@ -13,42 +12,24 @@ import {
   type ClerkGateway,
   type ClerkProvider,
 } from "./gateway.ts";
-import { setFlag } from "../flags/flags.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // Shared support for the clerk test files: save/force-on the kill switch in
-// before(), restore it in after(); module state is per-file because node:test
-// runs one process per file.
+// before(), restore it in after(). The save/set/restore dance itself lives in
+// test-helpers/flags.ts (makeFlagGuard — one home for every flag-flipping
+// suite); these wrappers keep the clerk suites' historical names.
 
-let flagWasEnabled: boolean | null = null;
+const clerkFlagGuard = makeFlagGuard(CLERK_FLAG_KEY);
 
 // Remember + force the kill switch ON so tests exercise real code paths.
 export async function saveAndEnableClerkFlag(): Promise<void> {
-  const db = getDb();
-  const [flag] = await db
-    .select()
-    .from(featureFlagsTable)
-    .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY))
-    .limit(1);
-  flagWasEnabled = flag ? flag.enabled : null;
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: CLERK_FLAG_KEY, enabled: true, description: "test" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
+  await clerkFlagGuard.saveAndSet(true);
 }
 
 // Restore the pre-run state: delete the flag if it did not exist before,
 // otherwise set it back to the saved value.
 export async function restoreClerkFlag(): Promise<void> {
-  if (flagWasEnabled === null) {
-    await getDb()
-      .delete(featureFlagsTable)
-      .where(eq(featureFlagsTable.key, CLERK_FLAG_KEY));
-  } else {
-    await setFlag(CLERK_FLAG_KEY, flagWasEnabled);
-  }
+  await clerkFlagGuard.restore();
 }
 
 // Fixed firm/supplier/buyer/engagement fixtures shared by the clerk test

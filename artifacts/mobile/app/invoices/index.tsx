@@ -17,9 +17,7 @@ import { Stack, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -44,6 +42,7 @@ import {
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage } from "@/lib/api-error";
+import { confirmThen } from "@/lib/confirm";
 import { formatCurrency, formatDate, humanize } from "@/lib/format";
 import { INVOICE_STATUS_TONE } from "@/lib/invoice-status";
 import { useSession } from "@/lib/session";
@@ -230,20 +229,16 @@ export default function InvoiceListScreen() {
     }
   }, [clientPartyId, bulkSubmit, queryClient]);
 
-  const confirmBulkSubmit = useCallback(() => {
-    // Alert.alert is a no-op on react-native-web, so fall back to the
-    // browser's native confirm there (same pattern as settings' sign-out).
-    if (Platform.OS === "web") {
-      if (window.confirm(`${BULK_CONFIRM_TITLE}\n\n${BULK_CONFIRM_MESSAGE}`)) {
-        void runBulkSubmit();
-      }
-      return;
-    }
-    Alert.alert(BULK_CONFIRM_TITLE, BULK_CONFIRM_MESSAGE, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Validate & submit", onPress: () => void runBulkSubmit() },
-    ]);
-  }, [runBulkSubmit]);
+  const confirmBulkSubmit = useCallback(
+    () =>
+      confirmThen(
+        BULK_CONFIRM_TITLE,
+        BULK_CONFIRM_MESSAGE,
+        "Validate & submit",
+        () => void runBulkSubmit(),
+      ),
+    [runBulkSubmit],
+  );
 
   const bulkRows = bulkReport?.rows ?? [];
   const bulkSubmitted = bulkRows.filter(

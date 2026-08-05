@@ -54,6 +54,16 @@ function fallbackLabel(raw: string | null | undefined): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/**
+ * "invoiceNumber" -> "Invoice number" for the extracted key-value rows —
+ * shared by all three Clerk review surfaces (console keeps its acronym
+ * overrides local and falls through to this).
+ */
+export function fieldLabel(field: string): string {
+  const spaced = field.replace(/([A-Z])/g, " $1").toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 export function noticeTypeLabel(raw: string | null | undefined): string {
   return NOTICE_TYPE_LABELS[raw ?? ""] ?? fallbackLabel(raw);
 }

@@ -7,6 +7,8 @@
  * suite can exercise them directly.
  */
 
+import { FULL_MONTHS } from "./format";
+
 export type UpdatesAudience = "firm" | "client";
 
 /**
@@ -38,21 +40,6 @@ export function updatesAudience(
   return null;
 }
 
-const STATEMENT_MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
 /**
  * "2026-06-01" → "June 2026". String-split rather than Date parsing so the
  * Lagos month boundary the server computed can't shift a day in a device
@@ -63,7 +50,7 @@ const STATEMENT_MONTHS = [
 export function statementMonthLabel(monthStart: string): string {
   const [y, m] = monthStart.split("-");
   if (!y || !m) return "—";
-  return `${STATEMENT_MONTHS[Number(m) - 1] ?? m} ${y}`;
+  return `${FULL_MONTHS[Number(m) - 1] ?? m} ${y}`;
 }
 
 /**

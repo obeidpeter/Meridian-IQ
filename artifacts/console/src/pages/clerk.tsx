@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   useListClerkCases,
   useListClerkBatches,
@@ -37,9 +37,11 @@ import type {
   ClerkCaseCreateInput,
   ClerkCaseDecisionInputCategory,
   ClerkPartySuggestions,
+  Firm,
   InvoiceLineInput,
   ListClerkCasesParams,
   Obligation,
+  Party,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,6 +67,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CatalogueSelect } from "@/components/catalogue-select";
 import { EmptyState } from "@/components/empty-state";
 import { QueryError } from "@/components/query-error";
 import { ClerkDisabledBanner, ClerkPageHeader } from "@/components/clerk-shell";
@@ -77,7 +80,11 @@ import {
 } from "@/lib/errors";
 import { formatDateTime, pillClasses } from "@/lib/format";
 import { PartySuggestionChips } from "@/pages/clerk-party-suggestions";
-import type { ApproveForm, NoticeApproveForm } from "@/pages/clerk-shared";
+import type {
+  ApproveForm,
+  BulkDialogPhase,
+  NoticeApproveForm,
+} from "@/pages/clerk-shared";
 import {
   approveDecisionFromForm,
   approveFormFromCase,
@@ -185,6 +192,806 @@ function greeting(): string {
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
+}
+
+// ---- Shared select blocks ---------------------------------------------------
+// The firm select renders twice (invoice + notice decision forms) and the
+// parties select three times (supplier/buyer/client); one component each so
+// a display change never needs synchronized edits. Module-level on purpose —
+// defining these inside ClerkWorkspace would remount the Radix selects every
+// render.
+
+function FirmSelect({
+  firms,
+  value,
+  onChange,
+  testId,
+}: {
+  firms: Firm[] | undefined;
+  value: string;
+  onChange: (firmId: string) => void;
+  testId: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label>Firm</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger data-testid={testId}>
+          <SelectValue placeholder="Choose firm" />
+        </SelectTrigger>
+        <SelectContent>
+          {(firms ?? []).map((f) => (
+            <SelectItem key={f.id} value={f.id}>
+              {f.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function PartySelect({
+  label,
+  placeholder,
+  parties,
+  value,
+  onChange,
+  testId,
+  children,
+}: {
+  label: string;
+  placeholder: string;
+  parties: Party[] | undefined;
+  value: string;
+  onChange: (partyId: string) => void;
+  testId: string;
+  // The invoice slots render PartySuggestionChips under the select; the
+  // notice form's client slot renders none.
+  children?: ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger data-testid={testId}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {(parties ?? []).map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.legalName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {children}
+    </div>
+  );
+}
+
+// ---- The invoice decision form ----------------------------------------------
+// Review-and-approve for an extraction case: creates a DRAFT invoice only.
+// Pure presentation — all state stays in ClerkWorkspace and the payload
+// builders stay in clerk-shared (approveDecisionFromForm is the ONE builder
+// the fast-lane bulk items share). Deliberately a separate component from
+// NoticeDecisionForm: the two forms are mutually exclusive and their reason
+// semantics differ (required to reject/escalate here, optional there).
+
+function InvoiceDecisionForm({
+  form,
+  setForm,
+  reason,
+  setReason,
+  firms,
+  parties,
+  partySuggestions,
+  claimControls,
+  caseId,
+  decideCase,
+  approveDisabled,
+  linesPreflightHit,
+}: {
+  form: ApproveForm;
+  setForm: (form: ApproveForm) => void;
+  reason: string;
+  setReason: (reason: string) => void;
+  firms: Firm[] | undefined;
+  parties: Party[] | undefined;
+  partySuggestions: ClerkPartySuggestions | undefined;
+  claimControls: ReactNode;
+  caseId: string;
+  decideCase: ReturnType<typeof useDecideClerkCase>;
+  approveDisabled: boolean;
+  linesPreflightHit: boolean;
+}) {
+  const setLine = (i: number, patch: Partial<InvoiceLineInput>) => {
+    setForm({
+      ...form,
+      lines: form.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)),
+    });
+  };
+
+  return (
+    <div className="border-t pt-4 space-y-3">
+      <p className="text-sm font-medium">
+        Review and approve — creates a draft invoice only
+      </p>
+      {claimControls}
+      <div className="grid sm:grid-cols-3 gap-3">
+        <FirmSelect
+          firms={firms}
+          value={form.firmId}
+          onChange={(v) => setForm({ ...form, firmId: v })}
+          testId="select-firm"
+        />
+        <PartySelect
+          label="Supplier party"
+          placeholder="Choose supplier"
+          parties={parties}
+          value={form.supplierPartyId}
+          onChange={(v) => setForm({ ...form, supplierPartyId: v })}
+          testId="select-supplier"
+        >
+          <PartySuggestionChips
+            suggestions={partySuggestions?.supplier ?? []}
+            value={form.supplierPartyId}
+            onPick={(partyId) =>
+              setForm({ ...form, supplierPartyId: partyId })
+            }
+            testId="suggestions-supplier"
+          />
+        </PartySelect>
+        <PartySelect
+          label="Buyer party"
+          placeholder="Choose buyer"
+          parties={parties}
+          value={form.buyerPartyId}
+          onChange={(v) => setForm({ ...form, buyerPartyId: v })}
+          testId="select-buyer"
+        >
+          <PartySuggestionChips
+            suggestions={partySuggestions?.buyer ?? []}
+            value={form.buyerPartyId}
+            onPick={(partyId) => setForm({ ...form, buyerPartyId: partyId })}
+            testId="suggestions-buyer"
+          />
+        </PartySelect>
+      </div>
+      <div className="grid sm:grid-cols-4 gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="apr-number">Invoice number</Label>
+          <Input
+            id="apr-number"
+            value={form.invoiceNumber}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                invoiceNumber: e.target.value,
+              })
+            }
+            data-testid="input-approve-number"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="apr-issue">Issue date</Label>
+          <Input
+            id="apr-issue"
+            type="date"
+            value={form.issueDate}
+            onChange={(e) =>
+              setForm({ ...form, issueDate: e.target.value })
+            }
+            data-testid="input-approve-issue-date"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="apr-due">Due date</Label>
+          <Input
+            id="apr-due"
+            type="date"
+            value={form.dueDate}
+            onChange={(e) =>
+              setForm({ ...form, dueDate: e.target.value })
+            }
+            data-testid="input-approve-due-date"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Category</Label>
+          <Select
+            value={form.category}
+            onValueChange={(v) =>
+              setForm({
+                ...form,
+                category: v as ClerkCaseDecisionInputCategory,
+              })
+            }
+          >
+            <SelectTrigger data-testid="select-category">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORIES.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c.toUpperCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div
+        className={`space-y-2${
+          linesPreflightHit
+            ? " rounded-md border border-amber-300 bg-amber-50/50 p-2 dark:border-amber-800 dark:bg-amber-950/20"
+            : ""
+        }`}
+      >
+        <Label>Lines</Label>
+        {form.lines.map((line, i) => (
+          <div
+            key={i}
+            className="grid grid-cols-12 gap-2"
+            data-testid={`row-line-${i}`}
+          >
+            <Input
+              className="col-span-6"
+              placeholder="Description"
+              value={line.description}
+              onChange={(e) =>
+                setLine(i, { description: e.target.value })
+              }
+            />
+            <Input
+              className="col-span-2"
+              placeholder="Qty"
+              value={line.quantity}
+              onChange={(e) =>
+                setLine(i, { quantity: e.target.value })
+              }
+            />
+            <Input
+              className="col-span-2"
+              placeholder="Unit price"
+              value={line.unitPrice}
+              onChange={(e) =>
+                setLine(i, { unitPrice: e.target.value })
+              }
+            />
+            <Input
+              className="col-span-2"
+              placeholder="VAT %"
+              value={line.vatRate}
+              onChange={(e) =>
+                setLine(i, { vatRate: e.target.value })
+              }
+            />
+          </div>
+        ))}
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="apr-reason">
+          Reason (required to reject or escalate)
+        </Label>
+        <Textarea
+          id="apr-reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          data-testid="input-decision-reason"
+        />
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        <Button
+          onClick={() =>
+            decideCase.mutate({
+              id: caseId,
+              // The shared builder — the fast-lane bulk
+              // items are built by this same function.
+              data: approveDecisionFromForm(form, reason),
+            })
+          }
+          disabled={approveDisabled || decideCase.isPending}
+          data-testid="button-approve-case"
+        >
+          Approve as draft invoice
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={() =>
+            decideCase.mutate({
+              id: caseId,
+              data: { action: "reject", reason },
+            })
+          }
+          disabled={!reason.trim() || decideCase.isPending}
+          data-testid="button-reject-case"
+        >
+          Reject
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() =>
+            decideCase.mutate({
+              id: caseId,
+              data: { action: "escalate", reason },
+            })
+          }
+          disabled={!reason.trim() || decideCase.isPending}
+          data-testid="button-escalate-case"
+        >
+          Escalate
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---- The notice decision form -----------------------------------------------
+// The invoice form's twin for notice cases. Approval records a response
+// OBLIGATION (client, authority, deadline), never an invoice; the selects
+// are bound to the contract's closed catalogues; reject/escalate take an
+// optional reason. Kept as its own component — see InvoiceDecisionForm's
+// note on why the twins are never merged.
+
+function NoticeDecisionForm({
+  noticeForm,
+  setNoticeForm,
+  reason,
+  setReason,
+  firms,
+  parties,
+  claimControls,
+  caseId,
+  decideNotice,
+}: {
+  noticeForm: NoticeApproveForm;
+  setNoticeForm: (form: NoticeApproveForm) => void;
+  reason: string;
+  setReason: (reason: string) => void;
+  firms: Firm[] | undefined;
+  parties: Party[] | undefined;
+  claimControls: ReactNode;
+  caseId: string;
+  decideNotice: ReturnType<typeof useDecideNoticeCase>;
+}) {
+  return (
+    <div className="border-t pt-4 space-y-3">
+      <p className="text-sm font-medium">
+        Review and approve — records a response obligation only
+      </p>
+      {claimControls}
+      <div className="grid sm:grid-cols-2 gap-3">
+        <FirmSelect
+          firms={firms}
+          value={noticeForm.firmId}
+          onChange={(v) => setNoticeForm({ ...noticeForm, firmId: v })}
+          testId="select-notice-firm"
+        />
+        <PartySelect
+          label="Client party"
+          placeholder="Choose client"
+          parties={parties}
+          value={noticeForm.clientPartyId}
+          onChange={(v) =>
+            setNoticeForm({
+              ...noticeForm,
+              clientPartyId: v,
+            })
+          }
+          testId="select-notice-client"
+        />
+      </div>
+      <div className="grid sm:grid-cols-3 gap-3">
+        <CatalogueSelect
+          label="Notice type"
+          value={noticeForm.noticeType}
+          onValueChange={(v) =>
+            setNoticeForm({
+              ...noticeForm,
+              noticeType: v as NoticeApproveForm["noticeType"],
+            })
+          }
+          options={NOTICE_TYPES}
+          labelFn={noticeTypeLabel}
+          placeholder="Choose type"
+          testId="select-notice-type"
+        />
+        <CatalogueSelect
+          label="Authority"
+          value={noticeForm.authority}
+          onValueChange={(v) =>
+            setNoticeForm({
+              ...noticeForm,
+              authority: v as NoticeApproveForm["authority"],
+            })
+          }
+          options={AUTHORITIES}
+          labelFn={authorityLabel}
+          placeholder="Choose authority"
+          testId="select-notice-authority"
+        />
+        <CatalogueSelect
+          label="Tax type (optional)"
+          value={noticeForm.taxType}
+          onValueChange={(v) =>
+            setNoticeForm({
+              ...noticeForm,
+              taxType: v as NoticeApproveForm["taxType"],
+            })
+          }
+          options={TAX_TYPES}
+          labelFn={taxTypeLabel}
+          placeholder="Optional"
+          testId="select-notice-tax-type"
+        />
+      </div>
+      <div className="grid sm:grid-cols-4 gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="ntc-reference">Reference</Label>
+          <Input
+            id="ntc-reference"
+            value={noticeForm.reference}
+            onChange={(e) =>
+              setNoticeForm({
+                ...noticeForm,
+                reference: e.target.value,
+              })
+            }
+            data-testid="input-notice-reference"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="ntc-period">Period</Label>
+          <Input
+            id="ntc-period"
+            value={noticeForm.period}
+            placeholder="e.g. 2026-Q1"
+            onChange={(e) =>
+              setNoticeForm({
+                ...noticeForm,
+                period: e.target.value,
+              })
+            }
+            data-testid="input-notice-period"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="ntc-amount">Amount</Label>
+          <Input
+            id="ntc-amount"
+            value={noticeForm.amount}
+            onChange={(e) =>
+              setNoticeForm({
+                ...noticeForm,
+                amount: e.target.value,
+              })
+            }
+            data-testid="input-notice-amount"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="ntc-currency">Currency</Label>
+          <Input
+            id="ntc-currency"
+            value={noticeForm.currency}
+            placeholder="NGN"
+            onChange={(e) =>
+              setNoticeForm({
+                ...noticeForm,
+                currency: e.target.value,
+              })
+            }
+            data-testid="input-notice-currency"
+          />
+        </div>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="ntc-issue">Issue date</Label>
+          <Input
+            id="ntc-issue"
+            type="date"
+            value={noticeForm.issueDate}
+            onChange={(e) =>
+              setNoticeForm({
+                ...noticeForm,
+                issueDate: e.target.value,
+              })
+            }
+            data-testid="input-notice-issue-date"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="ntc-due">Response due date</Label>
+          <Input
+            id="ntc-due"
+            type="date"
+            value={noticeForm.responseDueDate}
+            onChange={(e) =>
+              setNoticeForm({
+                ...noticeForm,
+                responseDueDate: e.target.value,
+              })
+            }
+            data-testid="input-notice-due-date"
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="ntc-notes">Notes</Label>
+        <Textarea
+          id="ntc-notes"
+          value={noticeForm.notes}
+          onChange={(e) =>
+            setNoticeForm({
+              ...noticeForm,
+              notes: e.target.value,
+            })
+          }
+          rows={2}
+          data-testid="input-notice-notes"
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="ntc-reason">
+          Reason (optional, kept with the decision)
+        </Label>
+        <Textarea
+          id="ntc-reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={2}
+          data-testid="input-notice-reason"
+        />
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        <Button
+          onClick={() =>
+            decideNotice.mutate({
+              id: caseId,
+              data: noticeDecisionFromForm(noticeForm, reason),
+            })
+          }
+          disabled={
+            noticeApproveDisabled(noticeForm) || decideNotice.isPending
+          }
+          data-testid="button-approve-notice"
+        >
+          Approve — record obligation
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={() =>
+            decideNotice.mutate({
+              id: caseId,
+              data: {
+                action: "reject",
+                ...(reason.trim() ? { reason: reason.trim() } : {}),
+              },
+            })
+          }
+          disabled={decideNotice.isPending}
+          data-testid="button-reject-notice"
+        >
+          Reject
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() =>
+            decideNotice.mutate({
+              id: caseId,
+              data: {
+                action: "escalate",
+                ...(reason.trim() ? { reason: reason.trim() } : {}),
+              },
+            })
+          }
+          disabled={decideNotice.isPending}
+          data-testid="button-escalate-notice"
+        >
+          Escalate
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---- The fast-lane bulk-approve dialog --------------------------------------
+// The dialog is explicit about scope: only fast-lane cases (clean extraction,
+// clear pre-flight, confident critical fields) are touched, every approval
+// creates a DRAFT invoice only, and the server re-checks each case —
+// anything that no longer qualifies is skipped and left exactly as it was.
+// All state (open/report/labels/candidates) stays in ClerkWorkspace, where
+// the live queue drives it.
+
+function BulkApproveDialog({
+  open,
+  onOpenChange,
+  onClose,
+  report,
+  phase,
+  candidates,
+  labels,
+  suggestions,
+  suggestionsLoading,
+  onConfirm,
+  approvePending,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onClose: () => void;
+  report: ClerkBulkApproveReport | null;
+  phase: BulkDialogPhase;
+  candidates: ClerkCase[];
+  labels: Map<string, string>;
+  suggestions: Map<string, ClerkPartySuggestions | undefined> | undefined;
+  suggestionsLoading: boolean;
+  onConfirm: () => void;
+  approvePending: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {/* Once the report is in, the queue has refetched and the
+                candidate list may be empty — pin the count to the batch
+                that actually ran. */}
+            Approve the fast lane (
+            {report ? report.results.length : candidates.length})
+          </DialogTitle>
+          <DialogDescription>
+            This only touches fast-lane cases — extraction succeeded,
+            pre-flight found nothing blocking and every critical field is
+            confident. Each approval creates a DRAFT invoice only; nothing
+            is submitted. The server re-checks every case and skips any
+            that no longer qualify, leaving them exactly as they were.
+          </DialogDescription>
+        </DialogHeader>
+        {report ? (
+          (() => {
+            const summary = bulkApproveSummary(report);
+            return (
+              <div className="space-y-3" data-testid="bulk-approve-report">
+                <p
+                  className="text-sm font-medium text-emerald-700 dark:text-emerald-400"
+                  role="status"
+                  data-testid="text-bulk-approved-count"
+                >
+                  {summary.approved} case
+                  {summary.approved === 1 ? "" : "s"} approved as draft
+                  invoices.
+                </p>
+                {summary.skipped.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">
+                      Skipped — left exactly as they were:
+                    </p>
+                    <ul
+                      className="space-y-1 text-xs text-muted-foreground"
+                      data-testid="bulk-skipped-list"
+                    >
+                      {summary.skipped.map((r) => (
+                        <li
+                          key={r.caseId}
+                          data-testid={`row-bulk-skipped-${r.caseId}`}
+                        >
+                          <span className="font-medium text-foreground">
+                            {labels.get(r.caseId) ?? r.caseId}
+                          </span>
+                          : {r.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button
+                    onClick={onClose}
+                    data-testid="button-close-bulk-approve"
+                  >
+                    Close
+                  </Button>
+                </DialogFooter>
+              </div>
+            );
+          })()
+        ) : phase === "drained" ? (
+          <>
+            {/* The live queue drained the candidate list while the dialog
+                was open (a refetch, or another operator decided the cases).
+                Confirm stays disabled — an empty batch is a contract 400 —
+                and the dialog says why instead of offering a dead button. */}
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="text-bulk-drained"
+            >
+              The queue changed — nothing left to approve. The fast-lane
+              cases were decided or updated while this dialog was open.
+            </p>
+            <DialogFooter>
+              <Button
+                variant="secondary"
+                onClick={onClose}
+                data-testid="button-cancel-bulk-approve"
+              >
+                Close
+              </Button>
+              <Button
+                disabled
+                data-testid="button-confirm-bulk-approve"
+              >
+                Approve as drafts
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <div
+              className="border rounded-md divide-y text-sm"
+              data-testid="bulk-approve-rows"
+            >
+              {candidates.map((c) => {
+                const s = fastLaneCaseSummary(c);
+                const prefill = bulkApproveFormFromCase(
+                  c,
+                  suggestions?.get(c.id),
+                );
+                const unresolved =
+                  !prefill.firmId ||
+                  !prefill.supplierPartyId ||
+                  !prefill.buyerPartyId;
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-3 px-3 py-2"
+                    data-testid={`row-bulk-case-${c.id}`}
+                  >
+                    <span className="flex-1 min-w-0 truncate font-medium">
+                      {s.supplier}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {s.invoiceNumber}
+                    </span>
+                    <span className="tabular-nums">{s.amount}</span>
+                    {!suggestionsLoading && unresolved && (
+                      <span
+                        className={pillClasses("amber")}
+                        title="No firm or register match resolved — the server will skip this case; approve it from the single-case review instead."
+                        data-testid={`pill-bulk-unresolved-${c.id}`}
+                      >
+                        will be skipped
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="secondary"
+                onClick={onClose}
+                data-testid="button-cancel-bulk-approve"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={onConfirm}
+                disabled={approvePending || suggestionsLoading}
+                data-testid="button-confirm-bulk-approve"
+              >
+                {approvePending
+                  ? "Approving…"
+                  : `Approve ${candidates.length} as drafts`}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export function ClerkWorkspace() {
@@ -868,14 +1675,6 @@ export function ClerkWorkspace() {
     );
   }
   if (error) return <QueryError thing="Clerk cases" onRetry={refetch} />;
-
-  const setLine = (i: number, patch: Partial<InvoiceLineInput>) => {
-    if (!form) return;
-    setForm({
-      ...form,
-      lines: form.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)),
-    });
-  };
 
   // The review pane's fields table serves both case kinds: an invoice case
   // carries `extraction`, a notice case carries `noticeExtraction` — same
@@ -1834,566 +2633,34 @@ export function ClerkWorkspace() {
                       )}
 
                     {form && (
-                      <div className="border-t pt-4 space-y-3">
-                        <p className="text-sm font-medium">
-                          Review and approve — creates a draft invoice only
-                        </p>
-                        {claimControls}
-                        <div className="grid sm:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <Label>Firm</Label>
-                            <Select
-                              value={form.firmId}
-                              onValueChange={(v) =>
-                                setForm({ ...form, firmId: v })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-firm">
-                                <SelectValue placeholder="Choose firm" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(firms ?? []).map((f) => (
-                                  <SelectItem key={f.id} value={f.id}>
-                                    {f.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Supplier party</Label>
-                            <Select
-                              value={form.supplierPartyId}
-                              onValueChange={(v) =>
-                                setForm({ ...form, supplierPartyId: v })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-supplier">
-                                <SelectValue placeholder="Choose supplier" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(parties ?? []).map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.legalName}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <PartySuggestionChips
-                              suggestions={partySuggestions?.supplier ?? []}
-                              value={form.supplierPartyId}
-                              onPick={(partyId) =>
-                                setForm({ ...form, supplierPartyId: partyId })
-                              }
-                              testId="suggestions-supplier"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Buyer party</Label>
-                            <Select
-                              value={form.buyerPartyId}
-                              onValueChange={(v) =>
-                                setForm({ ...form, buyerPartyId: v })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-buyer">
-                                <SelectValue placeholder="Choose buyer" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(parties ?? []).map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.legalName}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <PartySuggestionChips
-                              suggestions={partySuggestions?.buyer ?? []}
-                              value={form.buyerPartyId}
-                              onPick={(partyId) =>
-                                setForm({ ...form, buyerPartyId: partyId })
-                              }
-                              testId="suggestions-buyer"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid sm:grid-cols-4 gap-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="apr-number">Invoice number</Label>
-                            <Input
-                              id="apr-number"
-                              value={form.invoiceNumber}
-                              onChange={(e) =>
-                                setForm({
-                                  ...form,
-                                  invoiceNumber: e.target.value,
-                                })
-                              }
-                              data-testid="input-approve-number"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="apr-issue">Issue date</Label>
-                            <Input
-                              id="apr-issue"
-                              type="date"
-                              value={form.issueDate}
-                              onChange={(e) =>
-                                setForm({ ...form, issueDate: e.target.value })
-                              }
-                              data-testid="input-approve-issue-date"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="apr-due">Due date</Label>
-                            <Input
-                              id="apr-due"
-                              type="date"
-                              value={form.dueDate}
-                              onChange={(e) =>
-                                setForm({ ...form, dueDate: e.target.value })
-                              }
-                              data-testid="input-approve-due-date"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Category</Label>
-                            <Select
-                              value={form.category}
-                              onValueChange={(v) =>
-                                setForm({
-                                  ...form,
-                                  category:
-                                    v as ClerkCaseDecisionInputCategory,
-                                })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-category">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {CATEGORIES.map((c) => (
-                                  <SelectItem key={c} value={c}>
-                                    {c.toUpperCase()}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div
-                          className={`space-y-2${
-                            linesPreflightHit
-                              ? " rounded-md border border-amber-300 bg-amber-50/50 p-2 dark:border-amber-800 dark:bg-amber-950/20"
-                              : ""
-                          }`}
-                        >
-                          <Label>Lines</Label>
-                          {form.lines.map((line, i) => (
-                            <div
-                              key={i}
-                              className="grid grid-cols-12 gap-2"
-                              data-testid={`row-line-${i}`}
-                            >
-                              <Input
-                                className="col-span-6"
-                                placeholder="Description"
-                                value={line.description}
-                                onChange={(e) =>
-                                  setLine(i, { description: e.target.value })
-                                }
-                              />
-                              <Input
-                                className="col-span-2"
-                                placeholder="Qty"
-                                value={line.quantity}
-                                onChange={(e) =>
-                                  setLine(i, { quantity: e.target.value })
-                                }
-                              />
-                              <Input
-                                className="col-span-2"
-                                placeholder="Unit price"
-                                value={line.unitPrice}
-                                onChange={(e) =>
-                                  setLine(i, { unitPrice: e.target.value })
-                                }
-                              />
-                              <Input
-                                className="col-span-2"
-                                placeholder="VAT %"
-                                value={line.vatRate}
-                                onChange={(e) =>
-                                  setLine(i, { vatRate: e.target.value })
-                                }
-                              />
-                            </div>
-                          ))}
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="apr-reason">
-                            Reason (required to reject or escalate)
-                          </Label>
-                          <Textarea
-                            id="apr-reason"
-                            value={reason}
-                            onChange={(e) => setReason(e.target.value)}
-                            rows={2}
-                            data-testid="input-decision-reason"
-                          />
-                        </div>
-                        <div className="flex gap-2 flex-wrap">
-                          <Button
-                            onClick={() =>
-                              decideCase.mutate({
-                                id: selected.id,
-                                // The shared builder — the fast-lane bulk
-                                // items are built by this same function.
-                                data: approveDecisionFromForm(form, reason),
-                              })
-                            }
-                            disabled={approveDisabled || decideCase.isPending}
-                            data-testid="button-approve-case"
-                          >
-                            Approve as draft invoice
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() =>
-                              decideCase.mutate({
-                                id: selected.id,
-                                data: { action: "reject", reason },
-                              })
-                            }
-                            disabled={!reason.trim() || decideCase.isPending}
-                            data-testid="button-reject-case"
-                          >
-                            Reject
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            onClick={() =>
-                              decideCase.mutate({
-                                id: selected.id,
-                                data: { action: "escalate", reason },
-                              })
-                            }
-                            disabled={!reason.trim() || decideCase.isPending}
-                            data-testid="button-escalate-case"
-                          >
-                            Escalate
-                          </Button>
-                        </div>
-                      </div>
+                      <InvoiceDecisionForm
+                        form={form}
+                        setForm={setForm}
+                        reason={reason}
+                        setReason={setReason}
+                        firms={firms}
+                        parties={parties}
+                        partySuggestions={partySuggestions}
+                        claimControls={claimControls}
+                        caseId={selected.id}
+                        decideCase={decideCase}
+                        approveDisabled={approveDisabled}
+                        linesPreflightHit={linesPreflightHit}
+                      />
                     )}
 
-                    {/* The NOTICE decision form — the invoice form's twin
-                        for notice cases. Approval records a response
-                        OBLIGATION (client, authority, deadline), never an
-                        invoice; the selects are bound to the contract's
-                        closed catalogues; reject/escalate take an optional
-                        reason. */}
                     {noticeForm && (
-                      <div className="border-t pt-4 space-y-3">
-                        <p className="text-sm font-medium">
-                          Review and approve — records a response obligation
-                          only
-                        </p>
-                        {claimControls}
-                        <div className="grid sm:grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label>Firm</Label>
-                            <Select
-                              value={noticeForm.firmId}
-                              onValueChange={(v) =>
-                                setNoticeForm({ ...noticeForm, firmId: v })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-notice-firm">
-                                <SelectValue placeholder="Choose firm" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(firms ?? []).map((f) => (
-                                  <SelectItem key={f.id} value={f.id}>
-                                    {f.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Client party</Label>
-                            <Select
-                              value={noticeForm.clientPartyId}
-                              onValueChange={(v) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  clientPartyId: v,
-                                })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-notice-client">
-                                <SelectValue placeholder="Choose client" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(parties ?? []).map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.legalName}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div className="grid sm:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <Label>Notice type</Label>
-                            <Select
-                              value={noticeForm.noticeType}
-                              onValueChange={(v) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  noticeType:
-                                    v as NoticeApproveForm["noticeType"],
-                                })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-notice-type">
-                                <SelectValue placeholder="Choose type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {NOTICE_TYPES.map((t) => (
-                                  <SelectItem key={t} value={t}>
-                                    {noticeTypeLabel(t)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Authority</Label>
-                            <Select
-                              value={noticeForm.authority}
-                              onValueChange={(v) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  authority:
-                                    v as NoticeApproveForm["authority"],
-                                })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-notice-authority">
-                                <SelectValue placeholder="Choose authority" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {AUTHORITIES.map((a) => (
-                                  <SelectItem key={a} value={a}>
-                                    {authorityLabel(a)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Tax type (optional)</Label>
-                            <Select
-                              value={noticeForm.taxType}
-                              onValueChange={(v) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  taxType: v as NoticeApproveForm["taxType"],
-                                })
-                              }
-                            >
-                              <SelectTrigger data-testid="select-notice-tax-type">
-                                <SelectValue placeholder="Optional" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {TAX_TYPES.map((t) => (
-                                  <SelectItem key={t} value={t}>
-                                    {taxTypeLabel(t)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div className="grid sm:grid-cols-4 gap-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="ntc-reference">Reference</Label>
-                            <Input
-                              id="ntc-reference"
-                              value={noticeForm.reference}
-                              onChange={(e) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  reference: e.target.value,
-                                })
-                              }
-                              data-testid="input-notice-reference"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="ntc-period">Period</Label>
-                            <Input
-                              id="ntc-period"
-                              value={noticeForm.period}
-                              placeholder="e.g. 2026-Q1"
-                              onChange={(e) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  period: e.target.value,
-                                })
-                              }
-                              data-testid="input-notice-period"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="ntc-amount">Amount</Label>
-                            <Input
-                              id="ntc-amount"
-                              value={noticeForm.amount}
-                              onChange={(e) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  amount: e.target.value,
-                                })
-                              }
-                              data-testid="input-notice-amount"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="ntc-currency">Currency</Label>
-                            <Input
-                              id="ntc-currency"
-                              value={noticeForm.currency}
-                              placeholder="NGN"
-                              onChange={(e) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  currency: e.target.value,
-                                })
-                              }
-                              data-testid="input-notice-currency"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid sm:grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label htmlFor="ntc-issue">Issue date</Label>
-                            <Input
-                              id="ntc-issue"
-                              type="date"
-                              value={noticeForm.issueDate}
-                              onChange={(e) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  issueDate: e.target.value,
-                                })
-                              }
-                              data-testid="input-notice-issue-date"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="ntc-due">Response due date</Label>
-                            <Input
-                              id="ntc-due"
-                              type="date"
-                              value={noticeForm.responseDueDate}
-                              onChange={(e) =>
-                                setNoticeForm({
-                                  ...noticeForm,
-                                  responseDueDate: e.target.value,
-                                })
-                              }
-                              data-testid="input-notice-due-date"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="ntc-notes">Notes</Label>
-                          <Textarea
-                            id="ntc-notes"
-                            value={noticeForm.notes}
-                            onChange={(e) =>
-                              setNoticeForm({
-                                ...noticeForm,
-                                notes: e.target.value,
-                              })
-                            }
-                            rows={2}
-                            data-testid="input-notice-notes"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="ntc-reason">
-                            Reason (optional, kept with the decision)
-                          </Label>
-                          <Textarea
-                            id="ntc-reason"
-                            value={reason}
-                            onChange={(e) => setReason(e.target.value)}
-                            rows={2}
-                            data-testid="input-notice-reason"
-                          />
-                        </div>
-                        <div className="flex gap-2 flex-wrap">
-                          <Button
-                            onClick={() =>
-                              decideNotice.mutate({
-                                id: selected.id,
-                                data: noticeDecisionFromForm(
-                                  noticeForm,
-                                  reason,
-                                ),
-                              })
-                            }
-                            disabled={
-                              noticeApproveDisabled(noticeForm) ||
-                              decideNotice.isPending
-                            }
-                            data-testid="button-approve-notice"
-                          >
-                            Approve — record obligation
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={() =>
-                              decideNotice.mutate({
-                                id: selected.id,
-                                data: {
-                                  action: "reject",
-                                  ...(reason.trim()
-                                    ? { reason: reason.trim() }
-                                    : {}),
-                                },
-                              })
-                            }
-                            disabled={decideNotice.isPending}
-                            data-testid="button-reject-notice"
-                          >
-                            Reject
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            onClick={() =>
-                              decideNotice.mutate({
-                                id: selected.id,
-                                data: {
-                                  action: "escalate",
-                                  ...(reason.trim()
-                                    ? { reason: reason.trim() }
-                                    : {}),
-                                },
-                              })
-                            }
-                            disabled={decideNotice.isPending}
-                            data-testid="button-escalate-notice"
-                          >
-                            Escalate
-                          </Button>
-                        </div>
-                      </div>
+                      <NoticeDecisionForm
+                        noticeForm={noticeForm}
+                        setNoticeForm={setNoticeForm}
+                        reason={reason}
+                        setReason={setReason}
+                        firms={firms}
+                        parties={parties}
+                        claimControls={claimControls}
+                        caseId={selected.id}
+                        decideNotice={decideNotice}
+                      />
                     )}
                   </>
                 )}
@@ -2401,176 +2668,22 @@ export function ClerkWorkspace() {
             </Card>
           </div>
 
-      {/* Fast-lane bulk approval. The dialog is explicit about scope: only
-          fast-lane cases (clean extraction, clear pre-flight, confident
-          critical fields) are touched, every approval creates a DRAFT
-          invoice only, and the server re-checks each case — anything that no
-          longer qualifies is skipped and left exactly as it was. */}
-      <Dialog
+      <BulkApproveDialog
         open={bulkOpen}
         onOpenChange={(o) => {
           if (!o) closeBulkDialog();
           else setBulkOpen(true);
         }}
-      >
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {/* Once the report is in, the queue has refetched and the
-                  candidate list may be empty — pin the count to the batch
-                  that actually ran. */}
-              Approve the fast lane (
-              {bulkReport ? bulkReport.results.length : bulkCandidates.length})
-            </DialogTitle>
-            <DialogDescription>
-              This only touches fast-lane cases — extraction succeeded,
-              pre-flight found nothing blocking and every critical field is
-              confident. Each approval creates a DRAFT invoice only; nothing
-              is submitted. The server re-checks every case and skips any
-              that no longer qualify, leaving them exactly as they were.
-            </DialogDescription>
-          </DialogHeader>
-          {bulkReport ? (
-            (() => {
-              const summary = bulkApproveSummary(bulkReport);
-              return (
-                <div className="space-y-3" data-testid="bulk-approve-report">
-                  <p
-                    className="text-sm font-medium text-emerald-700 dark:text-emerald-400"
-                    role="status"
-                    data-testid="text-bulk-approved-count"
-                  >
-                    {summary.approved} case
-                    {summary.approved === 1 ? "" : "s"} approved as draft
-                    invoices.
-                  </p>
-                  {summary.skipped.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">
-                        Skipped — left exactly as they were:
-                      </p>
-                      <ul
-                        className="space-y-1 text-xs text-muted-foreground"
-                        data-testid="bulk-skipped-list"
-                      >
-                        {summary.skipped.map((r) => (
-                          <li
-                            key={r.caseId}
-                            data-testid={`row-bulk-skipped-${r.caseId}`}
-                          >
-                            <span className="font-medium text-foreground">
-                              {bulkLabels.get(r.caseId) ?? r.caseId}
-                            </span>
-                            : {r.reason}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <DialogFooter>
-                    <Button
-                      onClick={closeBulkDialog}
-                      data-testid="button-close-bulk-approve"
-                    >
-                      Close
-                    </Button>
-                  </DialogFooter>
-                </div>
-              );
-            })()
-          ) : bulkPhase === "drained" ? (
-            <>
-              {/* The live queue drained the candidate list while the dialog
-                  was open (a refetch, or another operator decided the cases).
-                  Confirm stays disabled — an empty batch is a contract 400 —
-                  and the dialog says why instead of offering a dead button. */}
-              <p
-                className="text-sm text-muted-foreground"
-                data-testid="text-bulk-drained"
-              >
-                The queue changed — nothing left to approve. The fast-lane
-                cases were decided or updated while this dialog was open.
-              </p>
-              <DialogFooter>
-                <Button
-                  variant="secondary"
-                  onClick={closeBulkDialog}
-                  data-testid="button-cancel-bulk-approve"
-                >
-                  Close
-                </Button>
-                <Button
-                  disabled
-                  data-testid="button-confirm-bulk-approve"
-                >
-                  Approve as drafts
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <>
-              <div
-                className="border rounded-md divide-y text-sm"
-                data-testid="bulk-approve-rows"
-              >
-                {bulkCandidates.map((c) => {
-                  const s = fastLaneCaseSummary(c);
-                  const prefill = bulkApproveFormFromCase(
-                    c,
-                    bulkSuggestions?.get(c.id),
-                  );
-                  const unresolved =
-                    !prefill.firmId ||
-                    !prefill.supplierPartyId ||
-                    !prefill.buyerPartyId;
-                  return (
-                    <div
-                      key={c.id}
-                      className="flex items-center gap-3 px-3 py-2"
-                      data-testid={`row-bulk-case-${c.id}`}
-                    >
-                      <span className="flex-1 min-w-0 truncate font-medium">
-                        {s.supplier}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {s.invoiceNumber}
-                      </span>
-                      <span className="tabular-nums">{s.amount}</span>
-                      {!bulkSuggestionsLoading && unresolved && (
-                        <span
-                          className={pillClasses("amber")}
-                          title="No firm or register match resolved — the server will skip this case; approve it from the single-case review instead."
-                          data-testid={`pill-bulk-unresolved-${c.id}`}
-                        >
-                          will be skipped
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="secondary"
-                  onClick={closeBulkDialog}
-                  data-testid="button-cancel-bulk-approve"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={confirmBulkApprove}
-                  disabled={bulkApprove.isPending || bulkSuggestionsLoading}
-                  data-testid="button-confirm-bulk-approve"
-                >
-                  {bulkApprove.isPending
-                    ? "Approving…"
-                    : `Approve ${bulkCandidates.length} as drafts`}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+        onClose={closeBulkDialog}
+        report={bulkReport}
+        phase={bulkPhase}
+        candidates={bulkCandidates}
+        labels={bulkLabels}
+        suggestions={bulkSuggestions}
+        suggestionsLoading={bulkSuggestionsLoading}
+        onConfirm={confirmBulkApprove}
+        approvePending={bulkApprove.isPending}
+      />
     </div>
   );
 }

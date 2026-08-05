@@ -36,8 +36,19 @@ export interface CompliancePackCoverNote {
   disclosure: string;
 }
 
-// The facts the model may phrase — nothing else reaches the prompt.
-export function packNoteFacts(facts: CompliancePackFacts): string {
+// The period's figure lines, pre-rendered "Label: value" — ONE home for
+// every surface that states the pack's figures: the pack cover note below,
+// and the obligation response letter/bundle (responsePackLines in
+// modules/obligations/response-pack.ts delegates here), so no two papers can
+// state different figures for the same month. `container` names the PDF the
+// truncation note points at ("pack" vs "bundle") — the only deliberate
+// wording difference between the surfaces. PROMPT BYTES: these lines are
+// model grounding and ledger inputForHash on both surfaces — edits change
+// prompt bytes and require the surfaces' prompt-version bumps.
+export function packFigureLines(
+  facts: CompliancePackFacts,
+  container: "pack" | "bundle",
+): string[] {
   const receivables = facts.receivables.groups.map(
     (g) => `${g.currency} ${g.outstandingTotal} across ${g.invoiceCount} invoice(s)`,
   );
@@ -45,10 +56,10 @@ export function packNoteFacts(facts: CompliancePackFacts): string {
     (g) => `${g.currency} ${g.total.amount} across ${g.total.count} bill(s)`,
   );
   return [
-    `Month: ${facts.monthLabel}`,
-    `Client: ${facts.clientName}`,
     `Documents issued in the month: ${facts.register.rows.length}${
-      facts.register.truncated ? " or more (register truncated in the pack)" : ""
+      facts.register.truncated
+        ? ` or more (register truncated in the ${container})`
+        : ""
     }`,
     `Outstanding receivables: ${receivables.length > 0 ? receivables.join("; ") : "none"}`,
     `Unpaid supplier bills: ${payables.length > 0 ? payables.join("; ") : "none"}`,
@@ -57,6 +68,15 @@ export function packNoteFacts(facts: CompliancePackFacts): string {
     `Net VAT position: NGN ${facts.vat.netVat} (defensible NGN ${facts.vat.defensibleNetVat})`,
     `Documents awaiting submission: ${facts.deadlines.unsubmittedReceivables}`,
     `Next VAT return due: ${facts.deadlines.nextVatReturnDue}`,
+  ];
+}
+
+// The facts the model may phrase — nothing else reaches the prompt.
+export function packNoteFacts(facts: CompliancePackFacts): string {
+  return [
+    `Month: ${facts.monthLabel}`,
+    `Client: ${facts.clientName}`,
+    ...packFigureLines(facts, "pack"),
     `Basis note: ${facts.vat.note}`,
   ].join("\n");
 }

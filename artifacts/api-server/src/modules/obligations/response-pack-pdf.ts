@@ -4,6 +4,8 @@ import {
   CONTENT_WIDTH,
   MARGIN,
   PAGE_HEIGHT,
+  collectPdf,
+  drawCoverIntro,
   ensureRoom,
   drawBrandHeader,
   drawPayablesSection,
@@ -14,6 +16,7 @@ import {
   resolvePackTheme,
 } from "../invoice/pack-pdf";
 import type { CompliancePackFacts } from "../invoice/compliance-pack";
+import { obligationNoticeRows } from "../clerk/response-letter";
 import { responsePackLines } from "./response-pack";
 import type { Obligation } from "@workspace/db";
 
@@ -55,12 +58,7 @@ export async function renderObligationResponsePdf(
       CreationDate: lagosMidnight(obligation.responseDueDate),
     },
   });
-  const chunks: Buffer[] = [];
-  doc.on("data", (c: Buffer) => chunks.push(c));
-  const done = new Promise<Buffer>((resolve, reject) => {
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-  });
+  const done = collectPdf(doc);
 
   // --- Brand header (the pack's block, response-titled) ----------------------
   const layout = packLayout(doc, packTheme.primary);
@@ -68,39 +66,24 @@ export async function renderObligationResponsePdf(
   cursor.y = drawBrandHeader(doc, packTheme, "RESPONSE BUNDLE", pack.monthLabel);
 
   // --- Cover block: who, and what this paper answers -------------------------
-  doc
-    .font("Helvetica-Bold")
-    .fontSize(13)
-    .fillColor("#222222")
-    .text(pack.clientName, MARGIN, cursor.y, { width: CONTENT_WIDTH });
-  cursor.y = doc.y + 2;
-  doc
-    .font("Helvetica")
-    .fontSize(9)
-    .fillColor("#666666")
-    .text(
-      `Response bundle for an authority notice · Prepared by ${pack.firmName}`,
-      MARGIN,
-      cursor.y,
-      { width: CONTENT_WIDTH },
-    );
+  drawCoverIntro(
+    doc,
+    cursor,
+    pack.clientName,
+    `Response bundle for an authority notice · Prepared by ${pack.firmName}`,
+  );
   cursor.y = doc.y + 12;
 
-  // --- The notice, row by row (values verbatim off the obligation record) ----
+  // --- The notice, row by row (values verbatim off the obligation record,
+  // via obligationNoticeRows — the letter's own field list, one home, so the
+  // enclosed letter and this cover can never disagree about the notice;
+  // firm-internal notes are deliberately NOT in that list and never print
+  // here). Response due carries the emphasis; Status/Client/Period rows are
+  // bundle-only.
   section("Response to authority notice");
-  kvRow("Authority", obligation.authority);
-  kvRow("Notice type", obligation.noticeType);
-  if (obligation.reference) kvRow("Reference", obligation.reference);
-  if (obligation.taxType) kvRow("Tax type", obligation.taxType);
-  if (obligation.period) kvRow("Period on the notice", obligation.period);
-  if (obligation.amount) {
-    kvRow(
-      "Amount on the notice",
-      `${obligation.amount}${obligation.currency ? ` ${obligation.currency}` : ""}`,
-    );
+  for (const row of obligationNoticeRows(obligation)) {
+    kvRow(row.label, row.value, row.label === "Response due");
   }
-  if (obligation.issueDate) kvRow("Notice date", obligation.issueDate);
-  kvRow("Response due", obligation.responseDueDate, true);
   kvRow("Status", obligation.status);
   kvRow("Client", pack.clientName);
   kvRow("Period covered by the enclosed figures", pack.monthLabel);

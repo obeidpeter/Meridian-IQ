@@ -16,24 +16,27 @@ import type {
   Obligation,
   ObligationResponseDraft,
 } from "@workspace/api-client-react";
+import {
+  localDayIso,
+  obligationStatusLabel,
+} from "@workspace/format/notice-copy";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { CatalogueSelect } from "@/components/catalogue-select";
 import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
-import { serverErrorMessage } from "@/lib/errors";
+import { serverErrorToast } from "@/lib/errors";
 import { triggerDownload } from "@/lib/download";
-import { formatAmount, formatDate, pillClasses } from "@/lib/format";
+import {
+  formatAmount,
+  formatDate,
+  pillClasses,
+  type BadgeTone,
+} from "@/lib/format";
 import {
   authorityLabel,
   noticeTypeLabel,
@@ -63,12 +66,14 @@ const TAX_TYPES = Object.values(CreateObligationInputTaxType);
 
 // ---- Pure helpers (unit-tested directly) -----------------------------------
 
-/** Local calendar day as YYYY-MM-DD — the comparison floor for "overdue". */
+/**
+ * Local calendar day as YYYY-MM-DD — the comparison floor for "overdue".
+ * Deliberately BROWSER-local (a display-side floor; statutory clocks are
+ * server-side Lagos-calendar SQL) — the formatting kernel is the shared
+ * localDayIso, never toISOString()'s UTC day.
+ */
 export function todayIso(now = new Date()): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return localDayIso(now);
 }
 
 /**
@@ -80,6 +85,26 @@ export function obligationOverdue(
   today: string,
 ): boolean {
   return o.status === "open" && o.responseDueDate < today;
+}
+
+/**
+ * The status pill's words and tone. The WORDS come from the shared
+ * notice-copy vocabulary (open → "Awaiting response", responded →
+ * "Responded" — the same words the SME app and mobile use), with "Overdue"
+ * overriding for an open row past its deadline. The TONES are deliberately
+ * console-local: blue marks responded as intermediate (only closure is
+ * pending — the console's non-terminal colour, cf. sent:blue vs
+ * delivered:emerald in lib/format), amber an awaiting row, red overdue.
+ */
+export function obligationPill(
+  o: Pick<Obligation, "status">,
+  overdue: boolean,
+): { tone: BadgeTone; label: string } {
+  if (overdue) return { tone: "red", label: "Overdue" };
+  return {
+    tone: o.status === "responded" ? "blue" : "amber",
+    label: obligationStatusLabel(o.status),
+  };
 }
 
 /**
@@ -158,6 +183,241 @@ export function obligationInputFromDraft(
   };
 }
 
+// ---- The recorder form ------------------------------------------------------
+// Inline recorder for notices that never went through Clerk: a paper notice
+// handed over at the counter still needs its response deadline tracked.
+// Stateless — the draft lives in the card so folding the form away and
+// reopening it keeps the operator's input.
+
+function ObligationRecordForm({
+  clientPartyId,
+  draft,
+  setDraft,
+  onCreate,
+  pending,
+}: {
+  clientPartyId: string;
+  draft: ObligationDraft;
+  setDraft: (draft: ObligationDraft) => void;
+  onCreate: (input: CreateObligationInput) => void;
+  pending: boolean;
+}) {
+  return (
+    <div className="border rounded-md p-3 space-y-3">
+      <div className="grid sm:grid-cols-3 gap-3">
+        <CatalogueSelect
+          label="Notice type"
+          value={draft.noticeType}
+          onValueChange={(v) =>
+            setDraft({
+              ...draft,
+              noticeType: v as ObligationDraft["noticeType"],
+            })
+          }
+          options={NOTICE_TYPES}
+          labelFn={noticeTypeLabel}
+          placeholder="Choose type"
+          testId="select-obligation-notice-type"
+        />
+        <CatalogueSelect
+          label="Authority"
+          value={draft.authority}
+          onValueChange={(v) =>
+            setDraft({
+              ...draft,
+              authority: v as ObligationDraft["authority"],
+            })
+          }
+          options={AUTHORITIES}
+          labelFn={authorityLabel}
+          placeholder="Choose authority"
+          testId="select-obligation-authority"
+        />
+        <CatalogueSelect
+          label="Tax type (optional)"
+          value={draft.taxType}
+          onValueChange={(v) =>
+            setDraft({
+              ...draft,
+              taxType: v as ObligationDraft["taxType"],
+            })
+          }
+          options={TAX_TYPES}
+          labelFn={taxTypeLabel}
+          placeholder="Optional"
+          testId="select-obligation-tax-type"
+        />
+      </div>
+      <div className="grid sm:grid-cols-4 gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="obl-reference">Reference</Label>
+          <Input
+            id="obl-reference"
+            value={draft.reference}
+            onChange={(e) =>
+              setDraft({ ...draft, reference: e.target.value })
+            }
+            data-testid="input-obligation-reference"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="obl-amount">Amount (optional)</Label>
+          <Input
+            id="obl-amount"
+            value={draft.amount}
+            onChange={(e) =>
+              setDraft({ ...draft, amount: e.target.value })
+            }
+            data-testid="input-obligation-amount"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="obl-issue">Issue date</Label>
+          <Input
+            id="obl-issue"
+            type="date"
+            value={draft.issueDate}
+            onChange={(e) =>
+              setDraft({ ...draft, issueDate: e.target.value })
+            }
+            data-testid="input-obligation-issue-date"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="obl-due">Response due date</Label>
+          <Input
+            id="obl-due"
+            type="date"
+            value={draft.responseDueDate}
+            onChange={(e) =>
+              setDraft({ ...draft, responseDueDate: e.target.value })
+            }
+            data-testid="input-obligation-due-date"
+          />
+        </div>
+      </div>
+      <Button
+        size="sm"
+        onClick={() => onCreate(obligationInputFromDraft(clientPartyId, draft))}
+        disabled={obligationDraftIncomplete(draft) || pending}
+        data-testid="button-create-obligation"
+      >
+        {pending ? "Recording…" : "Record obligation"}
+      </Button>
+    </div>
+  );
+}
+
+// ---- The Response Desk panel ------------------------------------------------
+// One OPEN row's expanded response tools. Which row is expanded and the last
+// drafted letter stay lifted in the card (one panel at a time; the letter is
+// keyed by obligationId so it only ever renders under its own row).
+
+function ObligationResponsePanel({
+  obligation: o,
+  letter,
+  draftResponse,
+  toast,
+}: {
+  obligation: Obligation;
+  letter: ObligationResponseDraft | null;
+  draftResponse: ReturnType<typeof useDraftObligationResponse>;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  return (
+    <div
+      className="mt-2 rounded-md border p-3 space-y-2"
+      data-testid={`panel-obligation-respond-${o.id}`}
+    >
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            triggerDownload(
+              getGetObligationResponsePackUrl({
+                obligationId: o.id,
+              }),
+              responsePackFilename(o),
+            )
+          }
+          data-testid={`button-response-pack-${o.id}`}
+        >
+          <Download
+            className="w-3.5 h-3.5 mr-1.5"
+            aria-hidden="true"
+          />
+          Download response bundle (PDF)
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            // Empty body: the server defaults the month to
+            // the notice's issue month.
+            draftResponse.mutate({ id: o.id, data: {} })
+          }
+          disabled={draftResponse.isPending}
+          data-testid={`button-response-draft-${o.id}`}
+        >
+          {draftResponse.isPending
+            ? "Drafting…"
+            : "Draft response letter"}
+        </Button>
+      </div>
+      {letter && letter.obligationId === o.id && (
+        <div className="space-y-2">
+          <p
+            className="text-xs font-medium text-muted-foreground"
+            data-testid={`text-response-provenance-${o.id}`}
+          >
+            {letter.monthLabel ? `${letter.monthLabel} — ` : ""}
+            {letter.source === "clerk"
+              ? "Drafted by Clerk from the period's records — review and edit before sending."
+              : "Assembled from the period's records (Clerk unavailable) — review and edit before sending."}
+          </p>
+          <Textarea
+            readOnly
+            value={letter.letter}
+            className="min-h-[140px] text-sm"
+            data-testid={`text-response-letter-${o.id}`}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(
+                  letter.letter,
+                );
+                toast({ title: "Letter copied" });
+              } catch {
+                toast({
+                  title: "Could not copy",
+                  description:
+                    "Select the text and copy it manually.",
+                  variant: "destructive",
+                });
+              }
+            }}
+            data-testid={`button-copy-letter-${o.id}`}
+          >
+            <Copy
+              className="w-3.5 h-3.5 mr-1.5"
+              aria-hidden="true"
+            />
+            Copy letter
+          </Button>
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">
+        The platform never sends or files the response — this
+        is a draft for the firm to own.
+      </p>
+    </div>
+  );
+}
+
 // ---- The card ---------------------------------------------------------------
 
 export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
@@ -199,10 +459,9 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
     mutation: {
       onSuccess: (d) => setLetter(d),
       onError: (e) =>
-        toast({
+        serverErrorToast(toast, e, {
           title: "Could not draft the letter",
-          description: serverErrorMessage(e) ?? "Try again.",
-          variant: "destructive",
+          fallback: "Try again.",
         }),
     },
   });
@@ -219,10 +478,9 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
         });
       },
       onError: (e) =>
-        toast({
+        serverErrorToast(toast, e, {
           title: "Could not record the notice",
-          description: serverErrorMessage(e) ?? "Try again.",
-          variant: "destructive",
+          fallback: "Try again.",
         }),
     },
   });
@@ -239,10 +497,9 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
         });
       },
       onError: (e) =>
-        toast({
+        serverErrorToast(toast, e, {
           title: "Could not update the obligation",
-          description: serverErrorMessage(e) ?? "Try again.",
-          variant: "destructive",
+          fallback: "Try again.",
         }),
     },
   });
@@ -266,147 +523,14 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Inline recorder for notices that never went through Clerk: a
-            paper notice handed over at the counter still needs its response
-            deadline tracked. */}
         {formOpen && (
-          <div className="border rounded-md p-3 space-y-3">
-            <div className="grid sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label>Notice type</Label>
-                <Select
-                  value={draft.noticeType}
-                  onValueChange={(v) =>
-                    setDraft({
-                      ...draft,
-                      noticeType: v as ObligationDraft["noticeType"],
-                    })
-                  }
-                >
-                  <SelectTrigger data-testid="select-obligation-notice-type">
-                    <SelectValue placeholder="Choose type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {NOTICE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {noticeTypeLabel(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Authority</Label>
-                <Select
-                  value={draft.authority}
-                  onValueChange={(v) =>
-                    setDraft({
-                      ...draft,
-                      authority: v as ObligationDraft["authority"],
-                    })
-                  }
-                >
-                  <SelectTrigger data-testid="select-obligation-authority">
-                    <SelectValue placeholder="Choose authority" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AUTHORITIES.map((a) => (
-                      <SelectItem key={a} value={a}>
-                        {authorityLabel(a)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Tax type (optional)</Label>
-                <Select
-                  value={draft.taxType}
-                  onValueChange={(v) =>
-                    setDraft({
-                      ...draft,
-                      taxType: v as ObligationDraft["taxType"],
-                    })
-                  }
-                >
-                  <SelectTrigger data-testid="select-obligation-tax-type">
-                    <SelectValue placeholder="Optional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TAX_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {taxTypeLabel(t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid sm:grid-cols-4 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="obl-reference">Reference</Label>
-                <Input
-                  id="obl-reference"
-                  value={draft.reference}
-                  onChange={(e) =>
-                    setDraft({ ...draft, reference: e.target.value })
-                  }
-                  data-testid="input-obligation-reference"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="obl-amount">Amount (optional)</Label>
-                <Input
-                  id="obl-amount"
-                  value={draft.amount}
-                  onChange={(e) =>
-                    setDraft({ ...draft, amount: e.target.value })
-                  }
-                  data-testid="input-obligation-amount"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="obl-issue">Issue date</Label>
-                <Input
-                  id="obl-issue"
-                  type="date"
-                  value={draft.issueDate}
-                  onChange={(e) =>
-                    setDraft({ ...draft, issueDate: e.target.value })
-                  }
-                  data-testid="input-obligation-issue-date"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="obl-due">Response due date</Label>
-                <Input
-                  id="obl-due"
-                  type="date"
-                  value={draft.responseDueDate}
-                  onChange={(e) =>
-                    setDraft({ ...draft, responseDueDate: e.target.value })
-                  }
-                  data-testid="input-obligation-due-date"
-                />
-              </div>
-            </div>
-            <Button
-              size="sm"
-              onClick={() =>
-                createObligation.mutate({
-                  data: obligationInputFromDraft(clientPartyId, draft),
-                })
-              }
-              disabled={
-                obligationDraftIncomplete(draft) || createObligation.isPending
-              }
-              data-testid="button-create-obligation"
-            >
-              {createObligation.isPending
-                ? "Recording…"
-                : "Record obligation"}
-            </Button>
-          </div>
+          <ObligationRecordForm
+            clientPartyId={clientPartyId}
+            draft={draft}
+            setDraft={setDraft}
+            onCreate={(input) => createObligation.mutate({ data: input })}
+            pending={createObligation.isPending}
+          />
         )}
 
         {isLoading ? (
@@ -429,6 +553,7 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
           <div className="space-y-2">
             {rows.map((o) => {
               const overdue = obligationOverdue(o, today);
+              const pill = obligationPill(o, overdue);
               return (
                 <div
                   key={o.id}
@@ -445,20 +570,10 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
                       {authorityLabel(o.authority)}
                     </p>
                     <span
-                      className={pillClasses(
-                        overdue
-                          ? "red"
-                          : o.status === "responded"
-                            ? "blue"
-                            : "amber",
-                      )}
+                      className={pillClasses(pill.tone)}
                       data-testid={`pill-obligation-${o.id}`}
                     >
-                      {overdue
-                        ? "Overdue"
-                        : o.status === "responded"
-                          ? "Responded"
-                          : "Open"}
+                      {pill.label}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -517,96 +632,12 @@ export function ObligationsCard({ clientPartyId }: { clientPartyId: string }) {
                     </Button>
                   </div>
                   {o.status === "open" && respondingId === o.id && (
-                    <div
-                      className="mt-2 rounded-md border p-3 space-y-2"
-                      data-testid={`panel-obligation-respond-${o.id}`}
-                    >
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            triggerDownload(
-                              getGetObligationResponsePackUrl({
-                                obligationId: o.id,
-                              }),
-                              responsePackFilename(o),
-                            )
-                          }
-                          data-testid={`button-response-pack-${o.id}`}
-                        >
-                          <Download
-                            className="w-3.5 h-3.5 mr-1.5"
-                            aria-hidden="true"
-                          />
-                          Download response bundle (PDF)
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            // Empty body: the server defaults the month to
-                            // the notice's issue month.
-                            draftResponse.mutate({ id: o.id, data: {} })
-                          }
-                          disabled={draftResponse.isPending}
-                          data-testid={`button-response-draft-${o.id}`}
-                        >
-                          {draftResponse.isPending
-                            ? "Drafting…"
-                            : "Draft response letter"}
-                        </Button>
-                      </div>
-                      {letter && letter.obligationId === o.id && (
-                        <div className="space-y-2">
-                          <p
-                            className="text-xs font-medium text-muted-foreground"
-                            data-testid={`text-response-provenance-${o.id}`}
-                          >
-                            {letter.monthLabel ? `${letter.monthLabel} — ` : ""}
-                            {letter.source === "clerk"
-                              ? "Drafted by Clerk from the period's records — review and edit before sending."
-                              : "Assembled from the period's records (Clerk unavailable) — review and edit before sending."}
-                          </p>
-                          <Textarea
-                            readOnly
-                            value={letter.letter}
-                            className="min-h-[140px] text-sm"
-                            data-testid={`text-response-letter-${o.id}`}
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(
-                                  letter.letter,
-                                );
-                                toast({ title: "Letter copied" });
-                              } catch {
-                                toast({
-                                  title: "Could not copy",
-                                  description:
-                                    "Select the text and copy it manually.",
-                                  variant: "destructive",
-                                });
-                              }
-                            }}
-                            data-testid={`button-copy-letter-${o.id}`}
-                          >
-                            <Copy
-                              className="w-3.5 h-3.5 mr-1.5"
-                              aria-hidden="true"
-                            />
-                            Copy letter
-                          </Button>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        The platform never sends or files the response — this
-                        is a draft for the firm to own.
-                      </p>
-                    </div>
+                    <ObligationResponsePanel
+                      obligation={o}
+                      letter={letter}
+                      draftResponse={draftResponse}
+                      toast={toast}
+                    />
                   )}
                 </div>
               );

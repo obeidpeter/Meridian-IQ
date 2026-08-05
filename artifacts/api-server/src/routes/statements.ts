@@ -36,13 +36,13 @@ import {
 import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
-  assertClientPartyScope,
   assertPartyAccess,
   assertSameTenant,
   narrowToClientPartyScope,
   requireFirmScope,
   tenantFirmId,
 } from "../modules/auth/rbac";
+import { loadStatementScoped } from "../modules/statements/load-scoped";
 import { requireFlag } from "../modules/flags/flags";
 import { DomainError } from "../modules/errors";
 import {
@@ -199,33 +199,21 @@ router.get("/statements", requireFlag("reconciliation"), async (req, res): Promi
   res.json(ListBankStatementsResponse.parse(rows));
 });
 
-async function loadStatementForTenant(
-  req: { principal: import("../modules/auth/rbac").Principal },
-  id: string,
-) {
-  const [statement] = await getDb()
-    .select()
-    .from(bankStatementsTable)
-    .where(eq(bankStatementsTable.id, id))
-    .limit(1);
-  if (!statement) throw new DomainError("NOT_FOUND", "Statement not found", 404);
-  assertSameTenant(req.principal, statement.firmId);
-  // A client_user only reaches its own client party's statements (SEC-03).
-  assertClientPartyScope(req.principal, statement.clientPartyId);
-  return statement;
-}
+// Statement detail loads ride loadStatementScoped (statements/load-scoped.ts)
+// — NOT_FOUND, firm match, then the SEC-03 client narrowing — the ONE home
+// shared with the clerk reconciliation lanes.
 
 router.get("/statements/:id", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.read");
   const params = parseOrThrow(GetBankStatementParams, req.params);
-  const statement = await loadStatementForTenant(req, params.id);
+  const statement = await loadStatementScoped(req.principal, params.id);
   res.json(GetBankStatementResponse.parse(statement));
 });
 
 router.get("/statements/:id/lines", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "statement.read");
   const params = parseOrThrow(ListBankStatementLinesParams, req.params);
-  await loadStatementForTenant(req, params.id);
+  await loadStatementScoped(req.principal, params.id);
   const rows = await getDb()
     .select()
     .from(bankStatementLinesTable)
@@ -237,7 +225,7 @@ router.get("/statements/:id/lines", requireFlag("reconciliation"), async (req, r
 router.get("/statements/:id/proposals", requireFlag("reconciliation"), async (req, res): Promise<void> => {
   assertCan(req.principal, "reconciliation.read");
   const params = parseOrThrow(ListBankStatementProposalsParams, req.params);
-  const statement = await loadStatementForTenant(req, params.id);
+  const statement = await loadStatementScoped(req.principal, params.id);
   const lines = await getDb()
     .select({
       id: bankStatementLinesTable.id,
@@ -404,19 +392,7 @@ router.post(
     assertCan(req.principal, "reconciliation.act");
     const params = parseOrThrow(BulkAcceptMatchProposalsParams, req.params);
     const body = parseOrThrow(BulkAcceptMatchProposalsBody, req.body ?? {});
-    const [statement] = await getDb()
-      .select({
-        firmId: bankStatementsTable.firmId,
-        clientPartyId: bankStatementsTable.clientPartyId,
-      })
-      .from(bankStatementsTable)
-      .where(eq(bankStatementsTable.id, params.id))
-      .limit(1);
-    if (!statement) {
-      throw new DomainError("NOT_FOUND", "Statement not found", 404);
-    }
-    assertSameTenant(req.principal, statement.firmId);
-    assertClientPartyScope(req.principal, statement.clientPartyId);
+    await loadStatementScoped(req.principal, params.id);
     const result = await bulkAcceptProposals(
       params.id,
       { userId: req.principal.userId, role: req.principal.role },

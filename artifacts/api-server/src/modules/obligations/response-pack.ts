@@ -1,18 +1,9 @@
-import { z } from "zod/v4";
-import {
-  assertClientPartyScope,
-  assertSameTenant,
-  tenantFirmId,
-  type Principal,
-} from "../auth/rbac";
+import type { z } from "zod/v4";
+import { tenantFirmId, type Principal } from "../auth/rbac";
 import { appendAudit } from "../audit/audit";
-import { assertFirmClerkBudget } from "../clerk/budget";
-import {
-  CLERK_FLAG_KEY,
-  inferPhrasing,
-  type ClerkGateway,
-} from "../clerk/gateway";
-import { ensureGrounded } from "../clerk/grounding";
+import { type ClerkGateway } from "../clerk/gateway";
+import { packFigureLines } from "../clerk/pack-note";
+import { phraseGroundedDraft } from "../clerk/phrase-grounded";
 import {
   buildResponseLetterUser,
   buildTemplateResponseLetter,
@@ -23,8 +14,6 @@ import {
   RESPONSE_PHRASING,
   type ResponseLetterFacts,
 } from "../clerk/response-letter";
-import { isFeatureEnabled } from "../flags/flags";
-import { DomainError } from "../errors";
 import {
   computeCompliancePack,
   type CompliancePackFacts,
@@ -33,7 +22,7 @@ import {
   resolveVatPositionMonth,
   vatPositionMonths,
 } from "../invoice/vat-position";
-import { getObligation } from "./obligations";
+import { loadObligationForScope } from "./obligations";
 import type { Obligation } from "@workspace/db";
 
 // Response Desk (Task #207): the facts half of an obligation response — one
@@ -69,27 +58,17 @@ export interface ObligationResponseFacts {
   monthLabel: string;
 }
 
-// Load one obligation under the routes' 404 non-disclosure dance (the
-// GET /obligations/:id posture, verbatim): a foreign tenant's obligation and
-// a sibling client's obligation are both indistinguishable from an id that
-// does not exist. Only then is the month resolved and the pack computed.
+// Load one obligation under the routes' 404 non-disclosure dance
+// (loadObligationForScope — the GET /obligations/:id posture, one home in
+// the obligations module): a foreign tenant's obligation and a sibling
+// client's obligation are both indistinguishable from an id that does not
+// exist. Only then is the month resolved and the pack computed.
 export async function computeObligationResponseFacts(
   obligationId: string,
   principal: Principal,
   month?: string,
 ): Promise<ObligationResponseFacts> {
-  const row = await getObligation(obligationId);
-  const notFound = () =>
-    new DomainError("NOT_FOUND", "Obligation not found", 404);
-  if (!row) throw notFound();
-  // 404 non-disclosure: CROSS_TENANT and CROSS_CLIENT both collapse to the
-  // same not-found the missing id produces (the loadBillForScope posture).
-  try {
-    assertSameTenant(principal, row.firmId);
-    assertClientPartyScope(principal, row.clientPartyId);
-  } catch {
-    throw notFound();
-  }
+  const row = await loadObligationForScope(obligationId, principal);
   const monthStart = resolveResponseMonth(row, month);
   const pack = await computeCompliancePack(
     row.firmId,
@@ -99,30 +78,15 @@ export async function computeObligationResponseFacts(
   return { obligation: row, pack, monthStart, monthLabel: pack.monthLabel };
 }
 
-// The period's figure lines, pre-rendered "Label: value" (the packNoteFacts
-// shape) — ONE home shared by the letter facts (ResponseLetterFacts.packLines)
-// and the bundle PDF's cover, so the letter and the paper it rides with can
-// never state different figures for the same month.
+// The period's figure lines, pre-rendered "Label: value" — ONE home shared
+// by the letter facts (ResponseLetterFacts.packLines) and the bundle PDF's
+// cover, so the letter and the paper it rides with can never state different
+// figures for the same month. Delegates to packFigureLines (pack-note.ts,
+// the pack cover note's own rendering) so the response surfaces and the
+// monthly pack note also agree line for line — "bundle" names the enclosing
+// PDF in the truncation note.
 export function responsePackLines(pack: CompliancePackFacts): string[] {
-  const receivables = pack.receivables.groups.map(
-    (g) =>
-      `${g.currency} ${g.outstandingTotal} across ${g.invoiceCount} invoice(s)`,
-  );
-  const payables = pack.payables.groups.map(
-    (g) => `${g.currency} ${g.total.amount} across ${g.total.count} bill(s)`,
-  );
-  return [
-    `Documents issued in the month: ${pack.register.rows.length}${
-      pack.register.truncated ? " or more (register truncated in the bundle)" : ""
-    }`,
-    `Outstanding receivables: ${receivables.length > 0 ? receivables.join("; ") : "none"}`,
-    `Unpaid supplier bills: ${payables.length > 0 ? payables.join("; ") : "none"}`,
-    `Output VAT: NGN ${pack.vat.outputVat}`,
-    `Input VAT: NGN ${pack.vat.inputVat} (verified NGN ${pack.vat.inputVatVerified})`,
-    `Net VAT position: NGN ${pack.vat.netVat} (defensible NGN ${pack.vat.defensibleNetVat})`,
-    `Documents awaiting submission: ${pack.deadlines.unsubmittedReceivables}`,
-    `Next VAT return due: ${pack.deadlines.nextVatReturnDue}`,
-  ];
+  return packFigureLines(pack, "bundle");
 }
 
 export interface ObligationResponseDraft {
@@ -199,6 +163,10 @@ export async function draftObligationResponse(
 }
 
 // The Clerk half, folded to the fallback on every failure (digest posture).
+// The FULL gate ladder — no gateway / kill switch / budget pre-check, then
+// one phrasing call + number grounding inside a try — lives in
+// clerk/phrase-grounded.ts (one home with advisory/narrative.ts; the
+// cover-note.ts rule applied to the letter surfaces).
 async function phraseResponseLetter(
   obligationId: string,
   principal: Principal,
@@ -206,41 +174,24 @@ async function phraseResponseLetter(
   facts: ResponseLetterFacts,
   fallback: ObligationResponseDraft,
 ): Promise<ObligationResponseDraft> {
-  if (!gateway) return fallback;
-  if (!(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
-  const tenant = tenantFirmId(principal);
-  if (tenant) {
-    try {
-      await assertFirmClerkBudget(tenant);
-    } catch {
-      return fallback;
-    }
-  }
   const user = buildResponseLetterUser(facts);
-  // One phrasing call under the digest posture: inferPhrasing re-checks the
-  // kill switch and folds every typed gateway failure to null (the
-  // narrative.ts TOCTOU note); the outer try keeps the stronger guarantee
-  // that even a grounding-check crash still answers with the template.
-  try {
-    const data = await inferPhrasing<z.infer<typeof letterOutput>>(gateway, {
+  const letter = await phraseGroundedDraft<z.infer<typeof letterOutput>>(
+    gateway,
+    tenantFirmId(principal),
+    {
       purpose: "draft_response_letter",
-      firmId: tenant,
       promptVersion: RESPONSE_LETTER_PROMPT_VERSION,
       system: RESPONSE_LETTER_SYSTEM,
       user,
       schemaName: RESPONSE_PHRASING.schemaName,
       jsonSchema: RESPONSE_LETTER_JSON_SCHEMA,
       validator: letterOutput,
+      groundingSurface: "response_letter",
       inputForHash: `${obligationId}:${user}`,
-    });
-    if (!data) return fallback;
-    // Number grounding: a numeral the facts never stated → template answers
-    // (grounding.ts). The allowed source is the exact composed user prompt.
-    if (!(await ensureGrounded("response_letter", tenant, data.letter, user))) {
-      return fallback;
-    }
-    return { ...fallback, letter: data.letter, source: "clerk" };
-  } catch {
-    return fallback;
-  }
+      text: RESPONSE_PHRASING.joinOutput,
+    },
+  );
+  return letter === null
+    ? fallback
+    : { ...fallback, letter, source: "clerk" };
 }

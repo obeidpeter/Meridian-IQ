@@ -7,11 +7,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
 } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderWithClient } from "../test-utils";
 import type {
   BankStatement,
   BankStatementLine,
@@ -121,16 +120,7 @@ function pdfPreview(
   };
 }
 
-function renderPage() {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <Reconciliation />
-    </QueryClientProvider>,
-  );
-}
+const renderPage = () => renderWithClient(<Reconciliation />);
 
 async function loadPdf(container: HTMLElement) {
   const input = container.querySelector<HTMLInputElement>(

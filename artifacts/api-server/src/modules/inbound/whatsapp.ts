@@ -10,12 +10,16 @@ import { normalizePhone } from "../../lib/phone";
 import { appendAudit } from "../audit/audit";
 import type { ClerkGateway } from "../clerk/gateway";
 import {
-  attachmentSource,
+  EXTENSION_BY_TYPE,
+  appendInboundReceipt,
+  captureInboundAttachments,
   makeInboundCapture,
+  normalizeContentType,
   remainingInboundAllowance,
   withInboundSlot,
   type InboundAttachment,
   type InboundProcessResult,
+  type ResolvedInboundClient,
 } from "./shared";
 
 // Inbound WhatsApp intake (provider-agnostic): a client sends an invoice
@@ -40,18 +44,13 @@ import {
 export const MIN_TEXT_CHARS = 40;
 
 // WhatsApp media often arrives without a filename; the capture path wants
-// one for the case's sourceName.
+// one for the case's sourceName. The extension comes from the shared
+// accepted-type map (./shared.ts), so it can never drift from the allowlist;
+// the "jpg" fallback keeps today's name for an unmapped type, which then
+// skips as UNSUPPORTED_TYPE with the same filename in the receipt.
 function mediaFilename(att: InboundWhatsAppAttachment, index: number): string {
   if (att.filename) return att.filename;
-  const contentType = att.contentType.split(";")[0].trim().toLowerCase();
-  const ext =
-    contentType === "application/pdf"
-      ? "pdf"
-      : contentType === "image/png"
-        ? "png"
-        : contentType === "image/webp"
-          ? "webp"
-          : "jpg";
+  const ext = EXTENSION_BY_TYPE[normalizeContentType(att.contentType)] ?? "jpg";
   return `whatsapp-media-${index + 1}.${ext}`;
 }
 
@@ -67,11 +66,13 @@ export interface InboundWhatsAppInput {
   attachments: InboundWhatsAppAttachment[];
 }
 
-export interface ResolvedInboundWhatsAppSender {
-  userId: string; // oldest client_user membership — same rule as email.ts
-  firmId: string;
+// The shared capture identity (./shared.ts) with a deliberately STRICTER
+// clientPartyId: resolution keys on the alert_preferences primary key, so it
+// is never null here. userId is the party's oldest client_user membership —
+// same rule as email.ts.
+export type ResolvedInboundWhatsAppSender = ResolvedInboundClient & {
   clientPartyId: string;
-}
+};
 
 export type WhatsAppSenderResolution =
   | { ok: true; resolved: ResolvedInboundWhatsAppSender }
@@ -228,31 +229,27 @@ async function processInboundWhatsAppNow(
     "Inbound WhatsApp item",
   );
 
-  for (const [index, att] of input.attachments.entries()) {
-    const filename = mediaFilename(att, index);
-    if (remaining <= 0) {
-      skipped.push({ filename, reason: "INBOUND_DAILY_CAP" });
-      continue;
-    }
-    // Every item the rail even LOOKS at consumes allowance (matching the
-    // receipt-based count above) — a flood of unsupported or duplicate media
-    // is still a flood.
-    remaining -= 1;
-    const source = attachmentSource({
-      filename,
-      contentType: att.contentType,
-      contentBase64: att.contentBase64,
-    } satisfies InboundAttachment);
-    if (!source) {
-      skipped.push({ filename, reason: "UNSUPPORTED_TYPE" });
-      continue;
-    }
-    // The caption rides along as the triage message signal — it can switch
-    // this media item onto the notice lane (shared.ts → triage.ts), same as
-    // the email rail's subject line; it is still never captured as a
-    // document of its own.
-    await capture(filename, source, input.text?.trim() || null);
-  }
+  // Derive each media item's default filename FIRST, so even a cap-skipped
+  // item's receipt entry carries its name, then run the shared per-item loop
+  // (./shared.ts): cap-check, allowance burn, type map, capture. The caption
+  // rides along as the triage message signal — it can switch a media item
+  // onto the notice lane (shared.ts → triage.ts), same as the email rail's
+  // subject line; it is still never captured as a document of its own.
+  const attachments = input.attachments.map(
+    (att, index) =>
+      ({
+        filename: mediaFilename(att, index),
+        contentType: att.contentType,
+        contentBase64: att.contentBase64,
+      }) satisfies InboundAttachment,
+  );
+  remaining = await captureInboundAttachments(
+    attachments,
+    input.text?.trim() || null,
+    remaining,
+    capture,
+    skipped,
+  );
 
   // A text-only message (no media) walks the TEXT capture path — but only
   // when it plausibly carries invoice details. Text alongside media is a
@@ -275,17 +272,12 @@ async function processInboundWhatsAppNow(
   }
 
   // Pointer-only receipt: case ids and skip reasons, never message content.
-  await appendAudit({
-    actorId: resolved.userId,
-    firmId: resolved.firmId,
-    action: "inbound.whatsapp.received",
-    entityType: "inbound_whatsapp",
-    entityId: randomUUID(),
-    after: {
-      sender: maskInboundPhone(input.sender),
-      caseIds,
-      skipped,
-    },
-  });
+  await appendInboundReceipt(
+    { action: "inbound.whatsapp.received", entityType: "inbound_whatsapp" },
+    resolved,
+    maskInboundPhone(input.sender),
+    caseIds,
+    skipped,
+  );
   return { resolved: true, caseIds, skipped };
 }

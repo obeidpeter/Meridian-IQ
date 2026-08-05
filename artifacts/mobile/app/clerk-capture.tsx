@@ -35,9 +35,9 @@ import {
   EmptyState,
   ErrorState,
   rowBetween,
+  screenContent,
   stackHeaderOptions,
   TextField,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { usePendingPoll } from "@/hooks/usePendingPoll";
@@ -47,6 +47,7 @@ import {
   buildDocumentCaseInput,
   clerkStatusMeta,
   DOCUMENT_TOO_LARGE_MESSAGE,
+  DOCUMENT_UNREADABLE_MESSAGE,
   fieldLabel,
   MAX_FILE_BYTES,
 } from "@/lib/clerk-capture";
@@ -277,11 +278,7 @@ export default function ClerkCaptureScreen() {
       }
       await submit(built.input);
     } catch {
-      setBanner({
-        tone: "error",
-        message:
-          "We couldn't read that file. Pick a PDF or a photo of the document, or paste its text below.",
-      });
+      setBanner({ tone: "error", message: DOCUMENT_UNREADABLE_MESSAGE });
     } finally {
       setWorking(null);
     }
@@ -313,7 +310,7 @@ export default function ClerkCaptureScreen() {
       <KeyboardAwareScrollViewCompat
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={[
-          styles.content,
+          screenContent,
           { paddingBottom: insets.bottom + 48 },
         ]}
         bottomOffset={20}
@@ -624,11 +621,6 @@ function CaseRow({
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
   caseRow: {
     flexDirection: "row",
     alignItems: "center",

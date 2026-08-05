@@ -12,10 +12,21 @@ import { Button } from "@/components/ui/button";
 import { CapabilityGate } from "@/components/capability-gate";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { PillToggle } from "@/components/pill-toggle";
 import { QueryError } from "@/components/query-error";
 import { SkeletonList } from "@/components/skeleton-list";
 import { usePageTitle } from "@/hooks/use-page-title";
-import { formatAmount, formatDate, humanize, pillClasses } from "@/lib/format";
+import { formatAmount, formatDate, pillClasses } from "@/lib/format";
+import {
+  AUTHORITY_LABELS,
+  NOTICE_TYPE_LABELS,
+  OBLIGATION_DUE_SOON_DAYS,
+  authorityLabel,
+  deadlineDaysUntil,
+  localDayIso,
+  noticeTypeLabel,
+  obligationStatusLabel,
+} from "@workspace/format/notice-copy";
 import { Scale } from "lucide-react";
 
 // Read-only by design: obligations are recorded when the firm approves a
@@ -25,46 +36,19 @@ import { Scale } from "lucide-react";
 // list soonest deadline first, so there is no client-side sort.
 
 // ---- Display vocabulary (exported for tests) -------------------------------
-// The server's closed catalogues (CreateObligationInput); off-catalogue
-// tokens from a newer server degrade to humanize(), never a crash.
+// The words come from @workspace/format/notice-copy — the one home for the
+// notice/authority/status vocabulary shared with the console and mobile.
+// Only the pill CLASSES stay per-app (tones are this app's design language).
 
-export const NOTICE_TYPE_LABELS: Record<string, string> = {
-  assessment: "Assessment",
-  demand: "Demand notice",
-  information_request: "Information request",
-  audit: "Audit notice",
-  penalty: "Penalty notice",
-  reminder: "Reminder",
-  other: "Notice",
+export {
+  AUTHORITY_LABELS,
+  NOTICE_TYPE_LABELS,
+  authorityLabel,
+  noticeTypeLabel,
+  obligationStatusLabel,
 };
 
-export const AUTHORITY_LABELS: Record<string, string> = {
-  firs: "FIRS",
-  state_irs: "State IRS",
-  customs: "Customs",
-  other: "Other authority",
-};
-
-export function noticeTypeLabel(noticeType: string): string {
-  return NOTICE_TYPE_LABELS[noticeType] ?? humanize(noticeType);
-}
-
-export function authorityLabel(authority: string): string {
-  return AUTHORITY_LABELS[authority] ?? humanize(authority);
-}
-
-export function obligationStatusLabel(status: string): string {
-  switch (status) {
-    case "open":
-      return "Awaiting response";
-    case "responded":
-      return "Responded";
-    case "closed":
-      return "Closed";
-    default:
-      return humanize(status);
-  }
-}
+export const DUE_SOON_WINDOW_DAYS = OBLIGATION_DUE_SOON_DAYS;
 
 export function obligationBadgeClasses(status: string): string {
   switch (status) {
@@ -79,41 +63,23 @@ export function obligationBadgeClasses(status: string): string {
   }
 }
 
-export const DUE_SOON_WINDOW_DAYS = 7;
-
 /**
  * Deadline urgency for the row's visual flag — display logic only, computed
  * client-side: overdue = due date before today, due-soon = due today or
  * within the next 7 days. Takes todayIso explicitly so it is a pure function
  * of its inputs; the page applies it only to OPEN obligations (a responded
  * or closed one has been dealt with and never reads as overdue). Null for
- * far-off deadlines or unparseable dates.
+ * far-off deadlines or unparseable dates (the shared day-math returns NaN).
  */
 export function deadlineFlag(
   responseDueDate: string,
   todayIso: string,
 ): "overdue" | "due-soon" | null {
-  const due = new Date(responseDueDate);
-  const today = new Date(todayIso);
-  if (Number.isNaN(due.getTime()) || Number.isNaN(today.getTime())) return null;
-  const dueDay = Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
-  const todayDay = Date.UTC(
-    today.getUTCFullYear(),
-    today.getUTCMonth(),
-    today.getUTCDate(),
-  );
-  const days = Math.round((dueDay - todayDay) / 86_400_000);
+  const days = deadlineDaysUntil(todayIso, responseDueDate);
+  if (Number.isNaN(days)) return null;
   if (days < 0) return "overdue";
-  if (days <= DUE_SOON_WINDOW_DAYS) return "due-soon";
+  if (days <= OBLIGATION_DUE_SOON_DAYS) return "due-soon";
   return null;
-}
-
-/** Local calendar day as YYYY-MM-DD — what deadlineFlag compares against. */
-function localTodayIso(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-    now.getDate(),
-  ).padStart(2, "0")}`;
 }
 
 // ---- Page ------------------------------------------------------------------
@@ -200,7 +166,7 @@ function ObligationRow({
 
 function ObligationsContent() {
   const [filter, setFilter] = useState<FilterKey>("open");
-  const todayIso = localTodayIso();
+  const todayIso = localDayIso(new Date());
 
   // The server pins a client_user to its own party — no clientPartyId — and
   // returns the list soonest response deadline first.
@@ -219,24 +185,16 @@ function ObligationsContent() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        {FILTERS.map((f) => {
-          const isActive = filter === f.key;
-          return (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              aria-pressed={isActive}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full border min-h-9 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                isActive
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card text-foreground hover:bg-muted"
-              }`}
-              data-testid={`filter-obligations-${f.key}`}
-            >
-              {f.label}
-            </button>
-          );
-        })}
+        {FILTERS.map((f) => (
+          <PillToggle
+            key={f.key}
+            active={filter === f.key}
+            onClick={() => setFilter(f.key)}
+            data-testid={`filter-obligations-${f.key}`}
+          >
+            {f.label}
+          </PillToggle>
+        ))}
       </div>
 
       {isLoading ? (

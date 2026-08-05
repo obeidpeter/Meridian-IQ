@@ -5,7 +5,7 @@ import {
 import type { Obligation } from "@workspace/api-client-react";
 import { Stack } from "expo-router";
 import React, { useCallback } from "react";
-import { RefreshControl, StyleSheet, View } from "react-native";
+import { RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -16,9 +16,9 @@ import {
   EmptyState,
   ErrorState,
   rowBetween,
+  screenContent,
   ScreenScroll,
   stackHeaderOptions,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { formatDate } from "@/lib/format";
@@ -120,7 +120,7 @@ export default function ObligationsScreen() {
       <Stack.Screen options={stackHeaderOptions(colors, "Obligations")} />
       <ScreenScroll
         contentContainerStyle={[
-          styles.content,
+          screenContent,
           { paddingBottom: insets.bottom + 48 },
         ]}
         refreshControl={
@@ -175,10 +175,3 @@ export default function ObligationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
-});

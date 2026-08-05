@@ -22,7 +22,7 @@ import type {
 } from "@workspace/api-client-react";
 import { Stack } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Alert, Platform, RefreshControl, StyleSheet, View } from "react-native";
+import { RefreshControl, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -35,9 +35,9 @@ import {
   Divider,
   EmptyState,
   ErrorState,
+  screenContent,
   ScreenScroll,
   stackHeaderOptions,
-  webContentMax,
 } from "@/components/ui";
 import { useColors } from "@/hooks/useColors";
 import { apiErrorMessage } from "@/lib/api-error";
@@ -58,37 +58,12 @@ import {
   proposalCountLine,
   proposalMobileGateNote,
 } from "@/lib/automation";
+import { confirmThen } from "@/lib/confirm";
 import { useSession } from "@/lib/session";
 
 // How many run-record lines the screen shows — the evidence trail, not an
 // archive (the web card shows 5; a phone screen affords a few more).
 const DECISION_DISPLAY_CAP = 10;
-
-/**
- * Platform-aware confirm, exactly bills.tsx's confirmFlag shape: Alert.alert
- * is a no-op on react-native-web, so fall back to the browser's native
- * confirm there.
- */
-function confirmThen(
-  title: string,
-  message: string,
-  confirmLabel: string,
-  onConfirm: () => void,
-  destructive = false,
-) {
-  if (Platform.OS === "web") {
-    if (window.confirm(`${title}\n\n${message}`)) onConfirm();
-    return;
-  }
-  Alert.alert(title, message, [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: confirmLabel,
-      style: destructive ? "destructive" : "default",
-      onPress: onConfirm,
-    },
-  ]);
-}
 
 function ProposalCard({
   action,
@@ -497,7 +472,7 @@ export default function AutomationScreen() {
     proposals.length === 0 && policies.length === 0 && decisions.length === 0;
 
   const contentContainerStyle = [
-    styles.content,
+    screenContent,
     { paddingBottom: insets.bottom + 48 },
   ];
 
@@ -628,11 +603,6 @@ export default function AutomationScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    ...webContentMax,
-  },
   inlineRow: {
     flexDirection: "row",
     alignItems: "center",

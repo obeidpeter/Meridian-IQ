@@ -5,17 +5,18 @@ import { BILL_UNPAID } from "../../invoice/payables";
 import {
   computeFirmVatPositions,
   computeVatPosition,
-  vatPositionMonths,
 } from "../../invoice/vat-position";
 import { packMonthDocsSql } from "../vat-pack";
 import { monthLabel } from "../client-statement";
 import { plural } from "../text";
 import {
   type DataIntent,
+  amountFact,
   billAggregate,
   countFact,
   forClient,
   invoiceAggregate,
+  resolveMonth,
 } from "./shared";
 
 // The comparison lookups (Ask 2.0). Both are pure composition over the
@@ -73,14 +74,6 @@ function signedCount(n: number): string {
   return `${n < 0 ? "-" : "+"}${Math.abs(n)}`;
 }
 
-function amountFact(
-  key: string,
-  label: string,
-  value: string,
-): ProtectedFact {
-  return { key, label, kind: "amount", value, unit: "NGN" };
-}
-
 export const DELTA_INTENTS: readonly DataIntent[] = [
   {
     key: "data.month_delta",
@@ -88,12 +81,11 @@ export const DELTA_INTENTS: readonly DataIntent[] = [
       "how a calendar month compares with the month before it — rails-accepted submissions, net VAT position and supplier bills due, each with its change (this month vs last unless another listed month is named)",
     accepts: { month: true, client: true },
     async run(firmId, params) {
-      // Month resolution mirrors data.vat_position: the app-resolved
-      // first-of-month key, defaulting to the current Lagos month; the
-      // predecessor is derived from it, never guessed by the model.
-      const monthStart = params?.monthStart ?? vatPositionMonths()[0];
+      // Month resolution: the shared "this month unless pinned" rule
+      // (resolveMonth — data.vat_position's own default); the predecessor is
+      // derived from it, never guessed by the model.
+      const { monthStart, label } = resolveMonth(params);
       const prevStart = priorMonthStart(monthStart);
-      const label = params?.monthLabel ?? monthLabel(monthStart);
       const prevLabel = monthLabel(prevStart);
 
       // Submissions: the accepted-in-month aggregate for both months —
@@ -198,9 +190,10 @@ export const DELTA_INTENTS: readonly DataIntent[] = [
           facts: [],
         };
       }
-      const monthStart = params?.monthStart ?? vatPositionMonths()[0];
+      // The shared "this month unless pinned" rule (resolveMonth), the
+      // month_delta idiom.
+      const { monthStart, label } = resolveMonth(params);
       const prevStart = priorMonthStart(monthStart);
-      const label = params?.monthLabel ?? monthLabel(monthStart);
       const prevLabel = monthLabel(prevStart);
       // ONE grouped pass over BOTH months' accepted documents, membership by
       // packMonthDocsSql — the VAT pack's own accepted-in-month fragment

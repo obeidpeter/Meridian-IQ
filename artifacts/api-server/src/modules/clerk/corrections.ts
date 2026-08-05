@@ -46,6 +46,30 @@ function textEq(a: string | null, b: string | null): boolean {
   return (a ?? "").trim() === (b ?? "").trim();
 }
 
+// One compare-table row: which extraction field, the operator-approved final
+// value, and the equality dialect that decides "changed".
+interface CompareRow {
+  field: string;
+  final: string | null;
+  eq: (a: string | null, b: string | null) => boolean;
+}
+
+// The shared header-field diff mechanics (invoice and notice lanes): index
+// the proposal's fields once, then emit one stored row per compare-table
+// entry. Only the mechanics live here — each lane keeps its own compare
+// table (which fields, which eq dialect) — so the stored ClerkCorrection
+// exhaust is field-for-field what each lane declares.
+function diffExtractedFields(
+  fields: { field: string; value: string | null }[] | undefined,
+  compare: CompareRow[],
+): ClerkCorrection[] {
+  const extracted = new Map((fields ?? []).map((f) => [f.field, f.value]));
+  return compare.map(({ field, final, eq }) => {
+    const raw = extracted.get(field) ?? null;
+    return { field, extracted: raw, final, changed: !eq(raw, final) };
+  });
+}
+
 // Line-level exhaust: most operator re-keying happens in the lines, so the
 // header-field diff alone under-reports extraction quality. Lines are matched
 // by position — the model is instructed to emit lines in document order and
@@ -112,14 +136,7 @@ export function computeCorrections(
     grandTotal: string;
   },
 ): ClerkCorrection[] {
-  const extracted = new Map(
-    (extraction?.fields ?? []).map((f) => [f.field, f.value]),
-  );
-  const compare: {
-    field: string;
-    final: string | null;
-    eq: (a: string | null, b: string | null) => boolean;
-  }[] = [
+  const compare: CompareRow[] = [
     { field: "invoiceNumber", final: approved.invoiceNumber, eq: textEq },
     { field: "issueDate", final: approved.issueDate, eq: textEq },
     { field: "dueDate", final: approved.dueDate, eq: textEq },
@@ -128,10 +145,7 @@ export function computeCorrections(
     { field: "vatTotal", final: approved.vatTotal, eq: numericEq },
     { field: "grandTotal", final: approved.grandTotal, eq: numericEq },
   ];
-  return compare.map(({ field, final, eq }) => {
-    const raw = extracted.get(field) ?? null;
-    return { field, extracted: raw, final, changed: !eq(raw, final) };
-  });
+  return diffExtractedFields(extraction?.fields, compare);
 }
 
 // Notice Desk: the corrections diff for a notice approval — the model's
@@ -159,14 +173,7 @@ export function computeNoticeCorrections(
     responseDueDate?: string | null;
   },
 ): ClerkCorrection[] {
-  const extracted = new Map(
-    (extraction?.fields ?? []).map((f) => [f.field, f.value]),
-  );
-  const compare: {
-    field: string;
-    final: string | null;
-    eq: (a: string | null, b: string | null) => boolean;
-  }[] = [
+  const compare: CompareRow[] = [
     { field: "referenceNumber", final: approved.reference ?? null, eq: textEq },
     { field: "authority", final: approved.authority, eq: textEq },
     { field: "taxType", final: approved.taxType ?? null, eq: textEq },
@@ -180,10 +187,7 @@ export function computeNoticeCorrections(
       eq: textEq,
     },
   ];
-  const rows: ClerkCorrection[] = compare.map(({ field, final, eq }) => {
-    const raw = extracted.get(field) ?? null;
-    return { field, extracted: raw, final, changed: !eq(raw, final) };
-  });
+  const rows = diffExtractedFields(extraction?.fields, compare);
   const proposedType = extraction?.noticeType ?? null;
   rows.push({
     field: "noticeType",

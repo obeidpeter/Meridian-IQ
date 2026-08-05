@@ -5,8 +5,8 @@
 // page renders the server's payload verbatim; the month picker refetches and
 // the CSV export is a plain same-origin navigation.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { renderWithClient } from "../test-utils";
 import type { ClientVatPosition } from "@workspace/api-client-react";
 
 const harness = vi.hoisted(() => ({
@@ -64,16 +64,7 @@ function position(over: Partial<ClientVatPosition> = {}): ClientVatPosition {
   };
 }
 
-function renderPage() {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={qc}>
-      <Vat />
-    </QueryClientProvider>,
-  );
-}
+const renderPage = () => renderWithClient(<Vat />);
 
 afterEach(cleanup);
 beforeEach(() => {
