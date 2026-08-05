@@ -551,15 +551,24 @@ approved multi-step plan executed by the pipeline worker, one step per
 slice, through the ordinary `executeAction` path — each step writes its
 own decision-ledger row (`clerk_action_decisions.plan_run_id` links it
 back) and the run row is the progress the UIs poll (the batch processor's
-claim/fence discipline verbatim: status CAS + claimedAt heartbeat, stale
-reclaim by the sweep, every write fenced). Two deterministic origins:
+claim/fence discipline: status CAS, a claimedAt refresh right before each
+step so a slow batch cannot be reclaimed mid-flight, stale reclaim by the
+sweep at 30 minutes, every terminal write fence-checked BEFORE its audit,
+one live run per case via a partial unique index, expiry of runs nobody
+could execute for 72h, and a flag-peeking sweep so a dark firm's parked
+run neither churns writes nor blocks the queue). Two deterministic origins:
 whole-plan approval of an Ask case (`POST /clerk/plan-runs {caseId}` —
 the server RE-READS the stored answer under the previousCaseId guard set
 and freezes its action sections; nothing client-supplied reaches
 execution) and TEMPLATES (`PLAN_TEMPLATES`; `month_end_close` = submit
-overdue → retry failed → draft chasers, assembled by `proposalForKind`
-at approval — the month-end close checklist made executable, the SME
-card's "Run with Clerk"). Safety spine: per-kind capability asserted at
+overdue → retry failed, assembled by `proposalForKind` at approval — the
+month-end close checklist made executable, the SME card's "Run with
+Clerk"). **`draft_chasers` is deliberately NOT plan-runnable**
+(`PLAN_RUNNABLE_KINDS`): chaser drafts exist only on the execute response
+by design (SEC-12, nothing stored), so a background worker would burn
+firm tokens and hand the text to nobody — chaser sections are approved
+individually, where the drafts land in front of the approver, and a
+whole-plan approval containing one refuses (PLAN_UNRUNNABLE). Safety spine: per-kind capability asserted at
 creation AND re-validated before every step (the approver as they stand
 TODAY, the policy sweep's grantorRole discipline — losing it halts with
 `approver_inactive`); a step whose failures cross the autopilot's

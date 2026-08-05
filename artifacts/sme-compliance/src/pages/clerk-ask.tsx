@@ -35,6 +35,7 @@ import {
   type AskFeedback,
 } from "@/lib/clerk";
 import { ShieldCheck, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { errorStatus } from "@workspace/api-errors";
 
 // Register-grounded Q&A behind clerk.ask. Firm principals ask across their
 // portfolio; since contract 0.36.0 a client_user can ask too, pinned
@@ -128,12 +129,20 @@ function WholePlanApproval({ caseId }: { caseId: string }) {
           { data: { caseId } },
           {
             onSuccess: (run) => setRunId(run.id),
-            onError: () =>
-              toast({
-                title: "Couldn't start the plan",
-                description:
-                  "Nothing was changed. You can still approve each part individually below.",
-              }),
+            onError: (e) =>
+              toast(
+                errorStatus(e) === 409
+                  ? {
+                      title: "Already running",
+                      description:
+                        "A plan run for this answer is already queued or running.",
+                    }
+                  : {
+                      title: "Couldn't start the plan",
+                      description:
+                        "Nothing was changed. You can still approve each part individually below.",
+                    },
+              ),
           },
         )
       }
@@ -267,12 +276,16 @@ function AnswerCard({
             {plan}
           </p>
         )}
-        {/* Two or more action sections: offer one whole-plan approval (the
-            per-section buttons below still work for pruning). */}
+        {/* Two or more PLAN-RUNNABLE action sections — and none that are
+            not (a chaser section must be approved individually so the
+            drafts land in front of the approver; the server refuses whole
+            plans containing one). Per-section buttons below still work
+            for pruning. */}
         {caseId &&
-          sections.filter((s) => s.action).length >= 2 && (
-            <WholePlanApproval caseId={caseId} />
-          )}
+          sections.filter((s) => s.action).length >= 2 &&
+          sections.every(
+            (s) => !s.action || s.action.kind !== "draft_chasers",
+          ) && <WholePlanApproval caseId={caseId} />}
         {hasSections &&
           sections.map((s, i) => {
             const sectionLinks = invoiceLinks(s.links);

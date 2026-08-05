@@ -8735,8 +8735,8 @@ export const CreatePlanRunResponse = zod.object({
   "processedSteps": zod.number(),
   "haltReason": zod.string().nullish(),
   "approvedBy": zod.string(),
-  "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
 })
 
 
@@ -8764,8 +8764,8 @@ export const ListPlanRunsResponse = zod.object({
   "processedSteps": zod.number(),
   "haltReason": zod.string().nullish(),
   "approvedBy": zod.string(),
-  "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
 }))
 })
 
@@ -8797,8 +8797,8 @@ export const GetPlanRunResponse = zod.object({
   "processedSteps": zod.number(),
   "haltReason": zod.string().nullish(),
   "approvedBy": zod.string(),
-  "createdAt": zod.string(),
-  "updatedAt": zod.string()
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
 })
 
 

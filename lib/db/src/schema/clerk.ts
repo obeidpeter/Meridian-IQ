@@ -919,6 +919,12 @@ export const clerkPlanRunsTable = pgTable(
   (t) => [
     index("clerk_plan_runs_status_idx").on(t.status),
     index("clerk_plan_runs_firm_idx").on(t.firmId, t.createdAt),
+    // One LIVE run per case (round-32 review m7): a double-click or two
+    // approvers minting concurrent runs over the same frozen steps resolve
+    // on this instead of double-executing; terminal runs free the slot.
+    uniqueIndex("clerk_plan_runs_live_case_uq")
+      .on(t.caseId)
+      .where(sql`status IN ('queued', 'running') AND case_id IS NOT NULL`),
   ],
 );
 

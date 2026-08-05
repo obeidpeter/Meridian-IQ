@@ -53,7 +53,26 @@ import type { AskAnswer } from "./ask";
 // the run — remaining steps are skipped and say so.
 
 export const MAX_PLAN_STEPS = 5;
-const RECLAIM_AFTER_MS = 10 * 60_000;
+// Well above worst-case step time (a 50-target submit batch or a
+// degraded-provider window) — a reclaim mid-step would run it twice on two
+// instances (round-32 review m5); the heartbeat below refreshes the claim
+// before each step regardless.
+const RECLAIM_AFTER_MS = 30 * 60_000;
+// A queued run nobody could execute (dark flag, dead kick) must not sit as
+// a standing instruction forever — the sweep halts it honestly (round-32
+// review M4).
+const PLAN_RUN_EXPIRY_MS = 72 * 60 * 60_000;
+
+// Only these kinds may ride a plan run (round-32 review M3): draft_chasers
+// is deliberately EXCLUDED — chaser drafts exist only on the execute
+// response by design (nothing is stored, SEC-12), so a background worker
+// would burn the firm's model tokens and hand the text to nobody. Chaser
+// sections are approved individually, where the drafts land in front of
+// the approver.
+export const PLAN_RUNNABLE_KINDS: ReadonlySet<ActionKind> = new Set([
+  "submit_overdue",
+  "retry_failed",
+]);
 
 // The deterministic template registry. Kinds run in order; each step is
 // assembled per the run's client at CREATION time (approval approves what
@@ -64,9 +83,19 @@ export const PLAN_TEMPLATES: Record<
 > = {
   month_end_close: {
     title: "Month-end close",
-    kinds: ["submit_overdue", "retry_failed", "draft_chasers"],
+    kinds: ["submit_overdue", "retry_failed"],
   },
 };
+
+// Postgres unique-violation detection (the action-policies cause-chain
+// walk): the live-case unique index turns concurrent whole-plan approvals
+// of one case into a clean 409 instead of duplicate runs.
+function isUniqueViolation(err: unknown): boolean {
+  for (let e = err; e; e = (e as { cause?: unknown }).cause) {
+    if ((e as { code?: string }).code === "23505") return true;
+  }
+  return false;
+}
 
 function capabilityFor(kind: ActionKind): "invoice.submit" | "clerk.capture" {
   const intent = ACTION_INTENTS.find((a) => a.kind === kind);
@@ -181,6 +210,26 @@ export async function createPlanRunFromCase(
       400,
     );
   }
+  // No silent truncation (round-32 review note): an answer carrying more
+  // action sections than a run may hold refuses whole — approval must mean
+  // ALL of what was shown. Unreachable today (Ask's plan cap is 3), but a
+  // cap change must not quietly change what "approve whole plan" means.
+  if (actions.length > MAX_PLAN_STEPS) {
+    throw new DomainError(
+      "TOO_MANY_STEPS",
+      `A plan run holds at most ${MAX_PLAN_STEPS} steps`,
+      400,
+    );
+  }
+  // Chaser sections are approved individually (see PLAN_RUNNABLE_KINDS):
+  // refuse, never silently subset — the approver clicked "whole plan".
+  if (actions.some((a) => !PLAN_RUNNABLE_KINDS.has(a.kind))) {
+    throw new DomainError(
+      "PLAN_UNRUNNABLE",
+      "Payment-reminder drafts must be approved individually so the drafts land in front of you — approve the other sections as a plan and the reminder section on its own",
+      400,
+    );
+  }
   const kinds = actions.map((a) => a.kind);
   await assertKindCapabilities(principal, kinds);
   // SEC-03/IDOR wall per distinct client the plan touches (the execute
@@ -192,7 +241,7 @@ export async function createPlanRunFromCase(
     );
     if (clientScoped) assertClientPartyScope(principal, clientPartyId);
   }
-  const steps: PlanRunStep[] = actions.slice(0, MAX_PLAN_STEPS).map((a) => ({
+  const steps: PlanRunStep[] = actions.map((a) => ({
     kind: a.kind,
     clientPartyId: a.clientPartyId,
     clientName: a.clientName,
@@ -203,11 +252,25 @@ export async function createPlanRunFromCase(
     failedCount: 0,
     skippedCount: 0,
   }));
-  const run = await insertRun(
-    firmId,
-    { caseId, templateKey: null, steps, approvedBy: principal.userId },
-    principal.userId,
-  );
+  let run: ClerkPlanRun;
+  try {
+    run = await insertRun(
+      firmId,
+      { caseId, templateKey: null, steps, approvedBy: principal.userId },
+      principal.userId,
+    );
+  } catch (err) {
+    // The live-case unique index: a concurrent whole-plan approval of the
+    // same case already minted a run — answer 409, never a duplicate.
+    if (isUniqueViolation(err)) {
+      throw new DomainError(
+        "ALREADY_RUNNING",
+        "A plan run for this answer is already queued or running",
+        409,
+      );
+    }
+    throw err;
+  }
   kickPlanRunProcessing(run.id);
   return run;
 }
@@ -368,11 +431,14 @@ async function fencedPatch(
 }
 
 // One step per call. The claim is taken fresh each slice; the run's own
-// steps jsonb is the ledger of what happened.
+// steps jsonb is the ledger of what happened. Every terminal write is
+// fence-checked BEFORE its audit (round-32 review m6): a stale instance
+// that lost its claim must neither audit nor overwrite the winner.
 export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
   const claimed = await claimRun(runId);
   if (!claimed) return "noop";
-  const { run, stamp } = claimed;
+  const { run } = claimed;
+  let stamp = claimed.stamp;
 
   const steps = [...run.steps];
   const cursor = run.processedSteps;
@@ -387,13 +453,14 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
     for (let i = cursor + 1; i < steps.length; i++) {
       steps[i] = { ...steps[i], status: "skipped" };
     }
-    await fencedPatch(runId, stamp, {
+    const held = await fencedPatch(runId, stamp, {
       status: "halted",
       haltReason: reason,
       steps,
       processedSteps: steps.length,
       claimedAt: null,
     });
+    if (!held) return "noop";
     await appendAudit({
       actorId: null,
       firmId: run.firmId,
@@ -405,6 +472,13 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
     return "terminal";
   };
 
+  // Expiry (round-32 review M4): a run nobody could execute for days — a
+  // firm whose flag stayed dark, a kick that died with no live sweep — is
+  // a stale standing instruction, not a queue entry. Halt it honestly.
+  if (run.createdAt.getTime() < Date.now() - PLAN_RUN_EXPIRY_MS) {
+    return finishHalt("expired");
+  }
+
   // Kill switch: a dark flag PARKS the run back in the queue with content
   // intact — flipping it back on resumes where it left off.
   if (!(await isFeatureEnabled(ACTIONS_FLAG_KEY, run.firmId))) {
@@ -414,6 +488,14 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
 
   const role = await approverRole(run, step);
   if (!role) return finishHalt("approver_inactive");
+
+  // Heartbeat (round-32 review m5): refresh the claim RIGHT BEFORE the
+  // step — a slow batch must not let the stale-reclaim window open behind
+  // an old stamp while executeAction is mid-flight.
+  const freshStamp = new Date();
+  const heartbeat = await fencedPatch(runId, stamp, { claimedAt: freshStamp });
+  if (!heartbeat) return "noop";
+  stamp = freshStamp;
 
   const principal: Principal = {
     userId: run.approvedBy,
@@ -448,13 +530,14 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
       for (let i = cursor + 1; i < steps.length; i++) {
         steps[i] = { ...steps[i], status: "skipped" };
       }
-      await fencedPatch(runId, stamp, {
+      const held = await fencedPatch(runId, stamp, {
         status: "halted",
         haltReason: "failed_targets",
         steps,
         processedSteps: steps.length,
         claimedAt: null,
       });
+      if (!held) return "noop";
       await appendAudit({
         actorId: null,
         firmId: run.firmId,
@@ -472,12 +555,13 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
 
   const nextCursor = cursor + 1;
   if (nextCursor >= steps.length) {
-    await fencedPatch(runId, stamp, {
+    const held = await fencedPatch(runId, stamp, {
       status: "done",
       steps,
       processedSteps: nextCursor,
       claimedAt: null,
     });
+    if (!held) return "noop";
     await appendAudit({
       actorId: null,
       firmId: run.firmId,
@@ -496,14 +580,16 @@ export async function processPlanRun(runId: string): Promise<PlanSliceOutcome> {
     return "terminal";
   }
   // More steps remain: persist progress and release the claim so the next
-  // slice (kick loop or sweep) picks it up fresh.
-  await fencedPatch(runId, stamp, {
+  // slice (kick loop or sweep) picks it up fresh. A lost fence here means a
+  // reclaimer owns the run — its decision row exists and will be re-linked
+  // when the reclaimer re-runs the step (targets skip via re-validation).
+  const held = await fencedPatch(runId, stamp, {
     status: "queued",
     steps,
     processedSteps: nextCursor,
     claimedAt: null,
   });
-  return "more";
+  return held ? "more" : "noop";
 }
 
 // Fire-and-forget drive-to-terminal; the sweep is the retry.
@@ -518,13 +604,23 @@ export function kickPlanRunProcessing(runId: string): void {
   });
 }
 
-// One slice of the oldest claimable run per pass (the sweep loop is every
-// minute; a run advances step by step even if every kick dies).
+// One slice of the oldest RUNNABLE claimable run per pass (the sweep loop
+// is every minute; a run advances step by step even if every kick dies).
+// Flag peek BEFORE claiming (round-32 review M4, the batch sweep's
+// budget-peek precedent): a dark firm's queued run must not be claimed and
+// re-parked every minute forever — two writes a pass — nor block every
+// other firm's runs behind it at the head of the line. Expired runs are
+// processed regardless of the flag so their expiry halt can terminalize
+// them.
 export async function sweepPlanRuns(): Promise<void> {
   const staleBefore = new Date(Date.now() - RECLAIM_AFTER_MS);
-  const [next] = await runInBypassContext(() =>
+  const candidates = await runInBypassContext(() =>
     getDb()
-      .select({ id: clerkPlanRunsTable.id })
+      .select({
+        id: clerkPlanRunsTable.id,
+        firmId: clerkPlanRunsTable.firmId,
+        createdAt: clerkPlanRunsTable.createdAt,
+      })
       .from(clerkPlanRunsTable)
       .where(
         or(
@@ -536,9 +632,17 @@ export async function sweepPlanRuns(): Promise<void> {
         ),
       )
       .orderBy(asc(clerkPlanRunsTable.createdAt))
-      .limit(1),
+      .limit(10),
   );
-  if (next) await processPlanRun(next.id);
+  const expiryBefore = Date.now() - PLAN_RUN_EXPIRY_MS;
+  for (const c of candidates) {
+    const expired = c.createdAt.getTime() < expiryBefore;
+    if (!expired && !(await isFeatureEnabled(ACTIONS_FLAG_KEY, c.firmId))) {
+      continue;
+    }
+    await processPlanRun(c.id);
+    return;
+  }
 }
 
 registerSweep(sweepPlanRuns);

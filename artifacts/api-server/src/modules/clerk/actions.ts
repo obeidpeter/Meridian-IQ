@@ -721,6 +721,7 @@ export async function executeAction(
         failedCount,
         submitApprovalRequired: staged.approvalRequired,
         ...(opts?.policyId ? { policyId: opts.policyId } : {}),
+        ...(opts?.planRunId ? { planRunId: opts.planRunId } : {}),
       },
     });
     return row;

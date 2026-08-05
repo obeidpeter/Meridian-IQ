@@ -48,6 +48,7 @@ import { QueryError } from "@/components/query-error";
 import { RequireClientScope } from "@/components/require-client-scope";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
+import { errorStatus } from "@workspace/api-errors";
 import { PlanRunProgress } from "./clerk-ask";
 import {
   AlertTriangle,
@@ -706,12 +707,22 @@ function MonthEndCloseCard({ clientPartyId }: { clientPartyId: string }) {
                   },
                   {
                     onSuccess: (run) => setRunId(run.id),
-                    onError: () =>
-                      toast({
-                        title: "Nothing to run right now",
-                        description:
-                          "No invoices are currently eligible for the close actions — the remaining checklist items need hands-on attention.",
-                      }),
+                    onError: (e) =>
+                      // 409 = the honest empty (NOTHING_TO_RUN); anything
+                      // else is a real failure and must not read as one.
+                      toast(
+                        errorStatus(e) === 409
+                          ? {
+                              title: "Nothing to run right now",
+                              description:
+                                "No invoices are currently eligible for the close actions — the remaining checklist items need hands-on attention.",
+                            }
+                          : {
+                              title: "Couldn't start the close run",
+                              description:
+                                "Nothing was changed. Try again shortly, or use the actions card.",
+                            },
+                      ),
                   },
                 )
               }

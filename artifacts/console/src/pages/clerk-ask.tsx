@@ -197,9 +197,11 @@ export function AnswerCard({
             {plan}
           </p>
         )}
-        {caseId && sections.filter((s) => s.action).length >= 2 && (
-          <WholePlanApproval caseId={caseId} />
-        )}
+        {caseId &&
+          sections.filter((s) => s.action).length >= 2 &&
+          sections.every(
+            (s) => !s.action || s.action.kind !== "draft_chasers",
+          ) && <WholePlanApproval caseId={caseId} />}
         {hasSections &&
           sections.map((s, i) => {
             const scope = Object.values(s.dataParams ?? {})

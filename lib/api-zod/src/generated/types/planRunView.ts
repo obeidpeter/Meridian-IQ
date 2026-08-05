@@ -21,6 +21,6 @@ export interface PlanRunView {
   /** @nullable */
   haltReason?: string | null;
   approvedBy: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
