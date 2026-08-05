@@ -408,8 +408,11 @@ export async function mintIntentFixture(
   },
   actorId: string,
 ): Promise<ClerkIntentFixture> {
-  // Expected values must live inside the frozen offered context — the
-  // corpus can only pin keys the eval prompt actually offers (fail-closed).
+  // Expected values must live inside the frozen offered context's CLAIM and
+  // DATA keys. Act keys (round 31) are in the eval prompt but deliberately
+  // NOT mintable: grown fixtures are clean read-lane questions promoted from
+  // real asks, and pinning a write-proposal expectation from operator input
+  // is a policy decision the static corpus makes by hand instead.
   const offeredKeys = new Set([
     "none",
     ...INTENT_EVAL_CONTEXT.claims.map((c) => c.claimKey),

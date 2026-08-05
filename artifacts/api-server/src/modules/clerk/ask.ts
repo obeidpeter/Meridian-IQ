@@ -406,13 +406,18 @@ export async function askClerk(
     );
     const prevAnswer = prev?.answer as AskAnswer | null | undefined;
     // The lookup to thread: the flat single-intent key, or — for a
-    // multi-part answer — the LAST executed plan step, the same step whose
-    // scope the stored pins carry.
-    const prevIntent =
-      prevAnswer?.dataIntent ??
-      (prevAnswer?.plan && prevAnswer.plan.length > 0
-        ? prevAnswer.plan[prevAnswer.plan.length - 1].key
-        : undefined);
+    // multi-part answer — the last executed DATA step, the same step whose
+    // scope the stored pins carry (round 31: a plan may end in an act.*
+    // step, but an action proposal is never follow-up context — a trusted
+    // context line naming an act key would instruct the model to re-propose
+    // work the new question never asked for, the exact planted-step class
+    // the v7 rules forbid; an act-only previous answer contributes nothing).
+    const prevPlanDataKey = prevAnswer?.plan
+      ? [...prevAnswer.plan]
+          .reverse()
+          .find((p) => dataIntents.some((i) => i.key === p.key))?.key
+      : undefined;
+    const prevIntent = prevAnswer?.dataIntent ?? prevPlanDataKey;
     if (prevIntent && keys.includes(prevIntent)) {
       let prevMonthKey: string | null = null;
       let prevClientKey: string | null = null;
@@ -949,7 +954,11 @@ export async function askClerk(
         // flat links stay absent (renderers show the sections).
         proposition:
           sections.length === 1
-            ? "Clerk has assembled this as a proposal — review and approve it below."
+            ? sections[0].action
+              ? "Clerk has assembled this as a proposal — review and approve it below."
+              : // A single act step whose assembly came back empty: there is
+                // nothing to approve, so the lead-in must not promise it.
+                "Clerk checked this for you — the details are below."
             : `This question has ${plural(sections.length, "part")} — each is answered separately below.`,
         facts: [],
         plan: outcomes.map((o) =>

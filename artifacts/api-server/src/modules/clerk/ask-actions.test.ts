@@ -292,4 +292,51 @@ test("a mixed data+act plan answers both parts; an empty assembly answers honest
   // approve payload — an empty batch is an answer, not a refusal.
   assert.ok(!answer.sections![1].action);
   assert.match(answer.sections![1].text, /nothing is currently eligible/i);
+
+  // Multi-turn (round-31 review M1): the follow-up context threads the last
+  // answered DATA step, never the act step — a trusted context line naming
+  // an act key would instruct the model to re-propose work the follow-up
+  // never asked for (the planted-step class the v7 rules forbid).
+  const followPrompts: CompletionRequest[] = [];
+  await askClerk("And for last month?", userId, planGateway([], followPrompts), {
+    firmId,
+    previousCaseId: row.id,
+    actionKinds: ALL_KINDS,
+  });
+  const followUser = String(followPrompts[0].user);
+  assert.match(followUser, /used data key data\.overdue_submissions/);
+  assert.ok(
+    !followUser.includes("used data key act."),
+    "an act step is never follow-up context",
+  );
+});
+
+test("a single empty-assembly act step: honest lead-in, no approval promise, no context thread", async () => {
+  const row = await askClerk(
+    "Submit Beta's overdue invoices.",
+    userId,
+    planGateway([{ key: "act.submit_overdue", client: "c2" }]),
+    { firmId, actionKinds: ALL_KINDS },
+  );
+  assert.equal(row.status, "approved");
+  const answer = row.answer as AskAnswer;
+  assert.equal(answer.sections?.length, 1);
+  assert.ok(!answer.sections![0].action);
+  assert.match(answer.proposition ?? "", /Clerk checked this for you/);
+  assert.ok(
+    !(answer.proposition ?? "").includes("approve"),
+    "the lead-in must not promise an approval that does not exist",
+  );
+
+  // An act-only previous answer contributes NO follow-up context at all.
+  const followPrompts: CompletionRequest[] = [];
+  await askClerk("What about Alpha?", userId, planGateway([], followPrompts), {
+    firmId,
+    previousCaseId: row.id,
+    actionKinds: ALL_KINDS,
+  });
+  assert.ok(
+    !String(followPrompts[0].user).includes("Previous question context"),
+    "act-only answers thread nothing",
+  );
 });

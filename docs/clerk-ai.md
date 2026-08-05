@@ -533,7 +533,8 @@ operator had used the actions card. Offering is triple-gated: act keys
 enter the plan enum only for firm-scoped askers whose principal holds the
 kind's execute capability (the route computes `actionKinds` from the same
 per-kind gates: `invoice.submit` for the submit kinds, `clerk.capture` for
-chasers — so operators see chaser proposals only), and only while
+chasers; operators are firm-less askers, so they get no act keys at all —
+register-only Ask), and only while
 `clerk_actions` is lit for the firm (dark = the keys don't exist, the
 listActionProposals posture). A firm asker must name a listed client
 (per-client batches); a client asker is FORCED to its own party (SEC-03)
