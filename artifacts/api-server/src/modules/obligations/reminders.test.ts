@@ -153,7 +153,7 @@ before(async () => {
     ALL_CLIENTS.map((clientPartyId, i) => ({
       firmId,
       clientPartyId,
-      type: "readiness_assessment",
+      type: "readiness_assessment" as const,
       status: "open" as const,
       title: `obl rem ${i} ${SALT}`,
     })),
