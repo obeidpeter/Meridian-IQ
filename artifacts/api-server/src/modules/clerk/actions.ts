@@ -190,11 +190,23 @@ export const ACTION_INTENTS: readonly ActionIntent[] = [
 // The submit_overdue predicate — the SHARED overdue pieces (the digest,
 // penalty card and scorecard compose the same compliance-window fragments):
 // receivable paper, still draft/validated, past Lagos midnight starting day
-// issue+window.
+// issue+window. Machine-raised placeholder drafts (the DRAFT-… numbers a
+// draft_recurring plan step mints — plan-steps.ts MACHINE_DRAFT_PREFIX) are
+// EXCLUDED (round-34 review BLOCKER): this predicate is both the proposal
+// assembly and executeAction's per-target re-validation, so without the
+// wall a recurring month-end policy would draft in month M and auto-submit
+// the unreviewed placeholder through the rails in month M+1 — fabricated
+// statutory paper no human ever looked at. A human review naturally clears
+// the wall: replacing the placeholder with the client's real number (which
+// review requires anyway) makes the draft ordinary overdue paper. The
+// month-end checklist still COUNTS these drafts as overdue attention items
+// (the penalty predicate carries no such wall) — the standing nag that
+// sends a human to review them.
 function overdueCond(firmId: string, clientPartyId: string) {
   return sql`i.firm_id = ${firmId}
     AND i.kind = 'invoice'
     AND i.supplier_party_id = ${clientPartyId}
+    AND i.invoice_number NOT LIKE 'DRAFT-%'
     AND ${UNSUBMITTED_STATE}
     AND ${RECEIVABLE_ORIENTATION}
     AND ${pastSubmissionDeadline(lagosTodaySql())}`;

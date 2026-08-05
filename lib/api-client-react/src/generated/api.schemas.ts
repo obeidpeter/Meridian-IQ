@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.62.0
+ * OpenAPI spec version: 0.63.0
  */
 export interface HealthStatus {
   status: string;
@@ -3590,6 +3590,7 @@ export const PlanRunStepViewKind = {
   submit_overdue: 'submit_overdue',
   retry_failed: 'retry_failed',
   draft_chasers: 'draft_chasers',
+  draft_recurring: 'draft_recurring',
 } as const;
 
 export type PlanRunStepViewStatus = typeof PlanRunStepViewStatus[keyof typeof PlanRunStepViewStatus];
@@ -3613,6 +3614,8 @@ export interface PlanRunStepView {
   executedCount: number;
   failedCount: number;
   skippedCount: number;
+  /** Draft invoices a deterministic step created (0 for action steps). */
+  draftCount?: number;
 }
 
 export type PlanRunViewStatus = typeof PlanRunViewStatus[keyof typeof PlanRunViewStatus];

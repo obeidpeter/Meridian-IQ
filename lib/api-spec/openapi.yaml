@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.62.0
+  version: 0.63.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -11024,7 +11024,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [submit_overdue, retry_failed, draft_chasers]
+          enum: [submit_overdue, retry_failed, draft_chasers, draft_recurring]
         clientPartyId:
           type: string
           format: uuid
@@ -11043,6 +11043,9 @@ components:
           type: integer
         skippedCount:
           type: integer
+        draftCount:
+          type: integer
+          description: Draft invoices a deterministic step created (0 for action steps).
     PlanRunView:
       type: object
       required: [id, status, steps, processedSteps, approvedBy, createdAt, updatedAt]

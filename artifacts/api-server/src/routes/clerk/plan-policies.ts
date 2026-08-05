@@ -32,7 +32,8 @@ const router: IRouter = Router();
 
 // ---- Do with Clerk Phase 3 (round 33): recurring plan policies ----
 // The action-policy routes' exact posture: reads on invoice.read, grants and
-// lifecycle mutations on invoice.submit (templates only hold submit kinds),
+// lifecycle mutations on invoice.submit (granting a template that also
+// drafts is still, at its heart, a standing SUBMISSION authorization),
 // client resolution via resolveClientAnalyticsScope, the IDOR wall
 // in-transaction on the grant, and the SEC-03 wall in the module.
 

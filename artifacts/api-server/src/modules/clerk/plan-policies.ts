@@ -29,7 +29,11 @@ import {
   notifyAutoPause,
   notifyPolicyGranted,
 } from "./action-policies";
-import { PLAN_TEMPLATES, createPlanRunFromTemplate } from "./plan-runs";
+import {
+  PLAN_TEMPLATES,
+  createPlanRunFromTemplate,
+  templateCapabilities,
+} from "./plan-runs";
 
 // Do with Clerk Phase 3 (round 33): recurring plan policies — a standing
 // approval of a TEMPLATE per client. Once per Lagos month the sweep
@@ -49,8 +53,9 @@ import { PLAN_TEMPLATES, createPlanRunFromTemplate } from "./plan-runs";
 //    carries the capability, a closed engagement, lapsed consent, an
 //    unknown template, or a sweep error (fail closed — the month may
 //    already be claimed, so "log and retry" would hammer forever).
-// Templates only ever hold PLAN_RUNNABLE_KINDS (submit kinds), so the
-// grantor capability in question is always invoice.submit.
+// The grantor capabilities in question are DERIVED from the template's
+// step kinds (invoice.submit for the action kinds, invoice.write for the
+// round-34 draft step) — see grantorStillValid.
 
 export type PlanPolicyPauseReason =
   | "manual"
@@ -403,9 +408,9 @@ async function autoPausePlanPolicy(
   return true;
 }
 
-// The grantor's CURRENT standing (the grantorRole discipline): membership in
-// this firm still carrying invoice.submit — templates only hold submit
-// kinds — and a client_user grantor still pinned to this very party.
+// The grantor's CURRENT standing (the grantorRole discipline): membership
+// in this firm still carrying EVERY capability the template's steps demand,
+// and a client_user grantor still pinned to this very party.
 async function grantorStillValid(policy: ClerkPlanPolicy): Promise<Principal["role"] | null> {
   const memberships = await runInBypassContext(() =>
     getDb()
@@ -421,9 +426,16 @@ async function grantorStillValid(policy: ClerkPlanPolicy): Promise<Principal["ro
         ),
       ),
   );
+  // Derived from the TEMPLATE, not hard-coded (round-34 review m4): the
+  // month-end template now carries an invoice.write draft step beside the
+  // submit kinds, and a template gaining a step class must tighten this
+  // fail-fast check automatically. (Every current submit-holding role also
+  // holds invoice.write; the derivation is the guarantee, not the matrix.)
+  const required = templateCapabilities(policy.templateKey);
   const valid = memberships.find(
     (m) =>
-      ROLE_CAPABILITIES[m.role]?.includes("invoice.submit") &&
+      required.length > 0 &&
+      required.every((cap) => ROLE_CAPABILITIES[m.role]?.includes(cap)) &&
       (m.role !== "client_user" || m.clientPartyId === policy.clientPartyId),
   );
   return valid?.role ?? null;

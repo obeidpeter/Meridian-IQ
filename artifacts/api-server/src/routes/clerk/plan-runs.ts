@@ -38,12 +38,16 @@ const stripRun = (r: ClerkPlanRun) => ({
     kind: s.kind,
     clientPartyId: s.clientPartyId,
     clientName: s.clientName,
-    targetCount: s.invoiceIds.length,
+    // Action steps target invoices; deterministic steps target
+    // (buyer, currency) pairs (round 34) — either way, the count the
+    // approver saw.
+    targetCount: s.invoiceIds.length + (s.buyerTargets?.length ?? 0),
     status: s.status,
     decisionId: s.decisionId,
     executedCount: s.executedCount,
     failedCount: s.failedCount,
     skippedCount: s.skippedCount,
+    draftCount: s.draftIds?.length ?? 0,
   })),
   processedSteps: r.processedSteps,
   haltReason: r.haltReason,

@@ -619,7 +619,53 @@ must never read, the GET /clerk/digest refusal class): live/paused counts
 for both policy kinds (pauses by reason), 30-day plan runs (done/halted)
 and 30-day decision totals (automated share, executed/failed) — the
 firm's one-read answer to "how much standing automation is in force and
-is it healthy". **Deliberately deferred:
+is it healthy".
+
+**Close with Clerk Phase 1 (round 34) — deterministic step kinds**
+(`modules/clerk/plan-steps.ts`, contract 0.63.0): plan steps split into
+two classes. An ACTION step drives `executeAction` and writes a
+decision-ledger row per batch (the round 31–33 machinery, unchanged); a
+DETERMINISTIC step is platform SQL plus the platform's own safe writes —
+zero model tokens, no decision row, its ledger the rows it creates plus
+the run's audits. The plan approval covers it (the approver saw the step
+and its target count), and execution RE-DERIVES eligibility so a stale
+approval shrinks instead of acting on dead evidence. First kind:
+**`draft_recurring`** — the month-end checklist's `unbilled_income`
+detections made actionable. The shared miner finds buyers billed on a
+monthly rhythm with nothing raised this cycle (template-covered buyers
+excluded — the recurring-template sweep owns those); targets are frozen
+as (buyer, currency) PAIRS — the miner's own grouping, so approving one
+currency's pattern never licenses drafting another. The step raises the
+missing paper as DRAFTS under the approver's authority: lines copied from
+the buyer's newest invoice in the pattern (never an invented amount), a
+placeholder `DRAFT-…` number (entropy-suffixed) the client replaces at
+review (their numbering scheme is theirs), foreign-currency patterns
+drafted in their own currency with NO rate (the reviewer captures today's
+rate — a stale mined one would be silently wrong). **The placeholder
+prefix is also the submission wall**: `overdueCond` — both the proposal
+assembly AND executeAction's per-target re-validation — excludes
+`DRAFT-%` numbers, so a machine draft can never ride `submit_overdue`
+(through the card, a whole-plan approval, or a recurring policy's next
+month) until a human reviews and renumbers it; the month-end checklist
+still COUNTS it as overdue attention (the penalty predicate carries no
+wall) — the standing nag that sends the human to review. Idempotence is
+double-walled: the created draft closes the mined pattern, and an OPEN
+machine draft blocks a second one even after the pattern re-alerts (no
+monthly pile-up on a neglected book). Per-pair failures count as FAILURES
+into the run's half-rule (an all-failing draft step halts the plan), each
+created draft lands an append-only `clerk.plan_step.drafted` audit naming
+its run (fence-proof evidence), and the grantor re-validation on
+recurring policies derives its required capabilities from the TEMPLATE
+(`templateCapabilities`), so a template gaining a step class tightens the
+check automatically. `month_end_close` is now [draft_recurring →
+submit_overdue → retry_failed] — the submit step's targets were frozen at
+approval, so a draft this run just created can never ride the same run's
+submit batch either. Capability: `invoice.write` (asserted at approval
+and re-validated per step like every kind). Deterministic kinds enter
+through TEMPLATES only — Ask's act keys and case-origin plans stay
+catalogue-shaped. Phase 2 (threshold-gated `reconcile_matches`) and
+Phase 3 (the assembled close pack, which will also carry the
+created-drafts review prompt to the owner's notification rails) follow. **Deliberately deferred:
 in-chat (WhatsApp/email) YES-reply approval of plans.** Approval is a
 consent-grade act tied to an authenticated principal and a frozen,
 server-read plan; an inbound "YES" over the machine rails is neither — the
