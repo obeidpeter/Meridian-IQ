@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.60.0
+ * OpenAPI spec version: 0.61.0
  */
 import {
   useMutation,
@@ -121,6 +121,7 @@ import type {
   CreateObligationInput,
   CreatePasswordResetInput,
   CreatePaymentIntentInput,
+  CreatePlanRunInput,
   CreateStatementConnectionInput,
   CreateStatementFormatInput,
   CreateStatementFormatResult,
@@ -299,6 +300,8 @@ import type {
   PenaltyExposure,
   PhrasingEvalOutcome,
   PhrasingEvalRun,
+  PlanRunList,
+  PlanRunView,
   PortfolioSummary,
   PriceReview,
   ProjectionAccuracy,
@@ -22065,6 +22068,230 @@ export function useGetActionEffectiveness<TData = Awaited<ReturnType<typeof getA
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetActionEffectivenessQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePlanRunUrl = () => {
+
+
+
+
+  return `/api/clerk/plan-runs`
+}
+
+/**
+ * @summary Approve a whole action plan (from an Ask answer or a template) as a queued run
+ */
+export const createPlanRun = async (createPlanRunInput: CreatePlanRunInput, options?: RequestInit): Promise<PlanRunView> => {
+
+  return customFetch<PlanRunView>(getCreatePlanRunUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createPlanRunInput)
+  }
+);}
+
+
+
+
+export const getCreatePlanRunMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPlanRun>>, TError,{data: BodyType<CreatePlanRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPlanRun>>, TError,{data: BodyType<CreatePlanRunInput>}, TContext> => {
+
+const mutationKey = ['createPlanRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPlanRun>>, {data: BodyType<CreatePlanRunInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPlanRun(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePlanRunMutationResult = NonNullable<Awaited<ReturnType<typeof createPlanRun>>>
+    export type CreatePlanRunMutationBody = BodyType<CreatePlanRunInput>
+    export type CreatePlanRunMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Approve a whole action plan (from an Ask answer or a template) as a queued run
+ */
+export const useCreatePlanRun = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPlanRun>>, TError,{data: BodyType<CreatePlanRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPlanRun>>,
+        TError,
+        {data: BodyType<CreatePlanRunInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePlanRunMutationOptions(options));
+    }
+
+export const getListPlanRunsUrl = () => {
+
+
+
+
+  return `/api/clerk/plan-runs`
+}
+
+/**
+ * @summary The firm's recent plan runs (a client user sees only runs it approved)
+ */
+export const listPlanRuns = async ( options?: RequestInit): Promise<PlanRunList> => {
+
+  return customFetch<PlanRunList>(getListPlanRunsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPlanRunsQueryKey = () => {
+    return [
+    `/api/clerk/plan-runs`
+    ] as const;
+    }
+
+
+export const getListPlanRunsQueryOptions = <TData = Awaited<ReturnType<typeof listPlanRuns>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPlanRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPlanRunsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPlanRuns>>> = ({ signal }) => listPlanRuns({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPlanRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPlanRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listPlanRuns>>>
+export type ListPlanRunsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm's recent plan runs (a client user sees only runs it approved)
+ */
+
+export function useListPlanRuns<TData = Awaited<ReturnType<typeof listPlanRuns>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPlanRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPlanRunsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPlanRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/clerk/plan-runs/${id}`
+}
+
+/**
+ * @summary One plan run's live progress
+ */
+export const getPlanRun = async (id: string, options?: RequestInit): Promise<PlanRunView> => {
+
+  return customFetch<PlanRunView>(getGetPlanRunUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPlanRunQueryKey = (id: string,) => {
+    return [
+    `/api/clerk/plan-runs/${id}`
+    ] as const;
+    }
+
+
+export const getGetPlanRunQueryOptions = <TData = Awaited<ReturnType<typeof getPlanRun>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlanRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlanRunQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlanRun>>> = ({ signal }) => getPlanRun(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlanRun>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPlanRunQueryResult = NonNullable<Awaited<ReturnType<typeof getPlanRun>>>
+export type GetPlanRunQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary One plan run's live progress
+ */
+
+export function useGetPlanRun<TData = Awaited<ReturnType<typeof getPlanRun>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPlanRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPlanRunQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -543,9 +543,29 @@ assembly answers honestly ("nothing eligible") with no approve payload.
 The system prompt's v7 rules pin the write-proposal injection class: an
 action key may only answer a question that EXPLICITLY asks for the work,
 and the eval corpus carries `inject-act-plant` (a planted order to append
-unrequested action steps) where resistance = the un-planted plan. Phases
-2–3 (workflow templates with dependencies/progress, then policy-gated
-recurring plans) build on this spine.
+unrequested action steps) where resistance = the un-planted plan.
+
+**Phase 2 (round 32) — plan runs** (`modules/clerk/plan-runs.ts`,
+`clerk_plan_runs` firm-keyed RLS migration 0032, contract 0.61.0): an
+approved multi-step plan executed by the pipeline worker, one step per
+slice, through the ordinary `executeAction` path — each step writes its
+own decision-ledger row (`clerk_action_decisions.plan_run_id` links it
+back) and the run row is the progress the UIs poll (the batch processor's
+claim/fence discipline verbatim: status CAS + claimedAt heartbeat, stale
+reclaim by the sweep, every write fenced). Two deterministic origins:
+whole-plan approval of an Ask case (`POST /clerk/plan-runs {caseId}` —
+the server RE-READS the stored answer under the previousCaseId guard set
+and freezes its action sections; nothing client-supplied reaches
+execution) and TEMPLATES (`PLAN_TEMPLATES`; `month_end_close` = submit
+overdue → retry failed → draft chasers, assembled by `proposalForKind`
+at approval — the month-end close checklist made executable, the SME
+card's "Run with Clerk"). Safety spine: per-kind capability asserted at
+creation AND re-validated before every step (the approver as they stand
+TODAY, the policy sweep's grantorRole discipline — losing it halts with
+`approver_inactive`); a step whose failures cross the autopilot's
+half-rule (`tooManyFailures`, now exported) HALTS the run with remaining
+steps skipped; a dark `clerk_actions` flag PARKS the run intact. Phase 3
+(policy-gated recurring plans) builds on this.
 
 - `modules/clerk/data-intents/`: Ask carries a second closed catalogue next
   to the claims register — data intents ("what's overdue?", "what did we

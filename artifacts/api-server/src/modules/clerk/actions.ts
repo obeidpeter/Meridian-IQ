@@ -472,7 +472,9 @@ export async function executeAction(
   // Round 28: set by the standing-approval sweep — the decision row and the
   // audit then name the policy that authorized this run (actorId is the
   // GRANTOR, re-validated by the sweep just before this call).
-  opts?: { policyId?: string },
+  // planRunId (round 32): set by the plan-run processor — the decision
+  // row then names the run whose whole-plan approval authorized it.
+  opts?: { policyId?: string; planRunId?: string },
 ): Promise<ActionExecution> {
   if (
     kind !== "submit_overdue" &&
@@ -691,6 +693,7 @@ export async function executeAction(
         kind,
         decidedBy: actorId,
         policyId: opts?.policyId ?? null,
+        planRunId: opts?.planRunId ?? null,
         evidence,
         targets,
         requestedCount: ids.length,

@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.60.0
+  version: 0.61.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5518,6 +5518,57 @@ paths:
                 $ref: "#/components/schemas/ActionEffectivenessReport"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /clerk/plan-runs:
+    post:
+      operationId: createPlanRun
+      summary: Approve a whole action plan (from an Ask answer or a template) as a queued run
+      tags: [clerk]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlanRunInput"
+      responses:
+        "202":
+          description: The queued plan run; the worker executes it step by step
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanRunView"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    get:
+      operationId: listPlanRuns
+      summary: The firm's recent plan runs (a client user sees only runs it approved)
+      tags: [clerk]
+      responses:
+        "200":
+          description: Recent plan runs, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanRunList"
+  /clerk/plan-runs/{id}:
+    get:
+      operationId: getPlanRun
+      summary: One plan run's live progress
+      tags: [clerk]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The plan run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanRunView"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /obligations:
     get:
       operationId: listObligations
@@ -10845,6 +10896,87 @@ components:
           enum: [invoice]
         id:
           type: ["string", "null"]
+    CreatePlanRunInput:
+      description:
+        Exactly one origin — an Ask case whose action sections are approved
+        whole (caseId), or a deterministic template assembled for one client
+        (templateKey + clientPartyId). The server re-reads and freezes the
+        steps; nothing client-supplied reaches execution.
+      type: object
+      properties:
+        caseId:
+          type: string
+          format: uuid
+        templateKey:
+          type: string
+        clientPartyId:
+          type: string
+          format: uuid
+    PlanRunStepView:
+      type: object
+      required:
+        [kind, clientPartyId, clientName, targetCount, status, executedCount, failedCount, skippedCount]
+      properties:
+        kind:
+          type: string
+          enum: [submit_overdue, retry_failed, draft_chasers]
+        clientPartyId:
+          type: string
+          format: uuid
+        clientName:
+          type: string
+        targetCount:
+          type: integer
+        status:
+          type: string
+          enum: [pending, executed, halted_here, skipped]
+        decisionId:
+          type: ["string", "null"]
+        executedCount:
+          type: integer
+        failedCount:
+          type: integer
+        skippedCount:
+          type: integer
+    PlanRunView:
+      type: object
+      required: [id, status, steps, processedSteps, approvedBy, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firmId:
+          type: string
+          format: uuid
+        caseId:
+          type: ["string", "null"]
+        templateKey:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [queued, running, done, halted, failed]
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlanRunStepView"
+        processedSteps:
+          type: integer
+        haltReason:
+          type: ["string", "null"]
+        approvedBy:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    PlanRunList:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlanRunView"
     ClerkCase:
       type: object
       required: [id, kind, status, createdBy, createdAt, updatedAt]

@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { useAskClerk, useExecuteAction } from "@workspace/api-client-react";
+import {
+  useAskClerk,
+  useCreatePlanRun,
+  useExecuteAction,
+  useGetPlanRun,
+  getGetPlanRunQueryKey,
+} from "@workspace/api-client-react";
 import type {
   AskSectionAction,
   ClerkAnswer,
@@ -12,6 +18,85 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ShieldCheck } from "lucide-react";
 import { ClerkPageHeader } from "@/components/clerk-shell";
 import { usePageTitle } from "@/hooks/use-page-title";
+
+// Do with Clerk Phase 2 (round 32): live plan-run progress — batch-style
+// status-driven polling of the run row the worker advances.
+function PlanRunProgress({ runId }: { runId: string }) {
+  const { data: run } = useGetPlanRun(runId, {
+    query: {
+      queryKey: getGetPlanRunQueryKey(runId),
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        return status === "queued" || status === "running" ? 2000 : false;
+      },
+    },
+  });
+  if (!run) return null;
+  return (
+    <div className="border rounded-md p-3 space-y-1" data-testid="card-plan-run">
+      <p className="text-sm font-medium">
+        {run.status === "done"
+          ? "Plan complete — every decision is recorded."
+          : run.status === "halted"
+            ? `Plan halted (${run.haltReason ?? "stopped"}) — remaining steps were skipped.`
+            : "Running the plan…"}
+      </p>
+      {run.steps.map((s, i) => (
+        <p
+          key={i}
+          className="text-xs text-muted-foreground"
+          data-testid={`text-plan-step-${i}`}
+        >
+          {s.kind} · {s.clientName}:{" "}
+          {s.status === "pending"
+            ? "waiting"
+            : s.status === "executed"
+              ? `${s.executedCount} ran${s.failedCount > 0 ? `, ${s.failedCount} failed` : ""}${s.skippedCount > 0 ? `, ${s.skippedCount} skipped` : ""}`
+              : s.status === "halted_here"
+                ? "halted here"
+                : "skipped"}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// Whole-plan approval (round 32): one click approves every action section —
+// the server re-reads the stored answer, freezes the steps, and the worker
+// executes them with per-step re-validation and decision-ledger rows.
+function WholePlanApproval({ caseId }: { caseId: string }) {
+  const create = useCreatePlanRun();
+  const [runId, setRunId] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  if (runId) return <PlanRunProgress runId={runId} />;
+  return (
+    <div className="space-y-1">
+      <Button
+        size="sm"
+        disabled={create.isPending}
+        data-testid="button-approve-plan"
+        onClick={() => {
+          setFailed(false);
+          create.mutate(
+            { data: { caseId } },
+            {
+              onSuccess: (run) => setRunId(run.id),
+              onError: () => setFailed(true),
+            },
+          );
+        }}
+      >
+        {create.isPending ? "Starting…" : "Approve whole plan"}
+      </Button>
+      {failed && (
+        <p className="text-xs text-destructive">
+          Couldn't start the plan — nothing was changed. Approve each part
+          individually below.
+        </p>
+      )}
+    </div>
+  );
+}
 
 // Do with Clerk (round 31): the approval block under an action-proposal
 // section. Approval drives the EXISTING execute route — the server
@@ -76,7 +161,13 @@ function SectionActionApproval({
 }
 
 // Exported for the unit tests (rendered via AskPanel in the page itself).
-export function AnswerCard({ answer }: { answer: ClerkAnswer }) {
+export function AnswerCard({
+  answer,
+  caseId,
+}: {
+  answer: ClerkAnswer;
+  caseId?: string | null;
+}) {
   if (!answer.answered) {
     return (
       <Alert data-testid="card-clerk-refusal">
@@ -105,6 +196,9 @@ export function AnswerCard({ answer }: { answer: ClerkAnswer }) {
           >
             {plan}
           </p>
+        )}
+        {caseId && sections.filter((s) => s.action).length >= 2 && (
+          <WholePlanApproval caseId={caseId} />
         )}
         {hasSections &&
           sections.map((s, i) => {
@@ -283,6 +377,8 @@ export function ClerkAskPage() {
   // "and for June?" reuses the last lookup's platform-recorded scope. The
   // server re-verifies the id belongs to this firm before using it.
   const [previousCaseId, setPreviousCaseId] = useState<string | null>(null);
+  // The held answer's own case id — the whole-plan approval needs it.
+  const [answerCaseId, setAnswerCaseId] = useState<string | null>(null);
   return (
     <div className="space-y-6">
       <ClerkPageHeader
@@ -310,6 +406,7 @@ export function ClerkAskPage() {
                 setAnswer((prev) =>
                   heldAnswer(prev, { type: "success", answer: row.answer }),
                 );
+                setAnswerCaseId(row.id);
                 if (holdsFollowupCase(row.answer)) {
                   setPreviousCaseId(row.id);
                 }
@@ -324,6 +421,7 @@ export function ClerkAskPage() {
         }
         isPending={ask.isPending}
         answer={answer}
+        answerCaseId={answerCaseId}
         // The visible face of the multi-turn thread: when the held answer
         // pinned a display scope, say what a follow-up will keep — and offer
         // a way off the thread. Clearing drops previousCaseId only; the
@@ -342,6 +440,7 @@ export function AskPanel({
   onAsk,
   isPending,
   answer,
+  answerCaseId,
   followupPins,
   onClearFollowup,
 }: {
@@ -350,6 +449,8 @@ export function AskPanel({
   onAsk: () => void;
   isPending: boolean;
   answer: ClerkAnswer | null | undefined;
+  /** The held answer's case id — the whole-plan approval targets it. */
+  answerCaseId?: string | null;
   /** Non-empty ⇒ show what a threaded follow-up will keep (Ask 2.0 pins). */
   followupPins?: string;
   onClearFollowup?: () => void;
@@ -409,7 +510,9 @@ export function AskPanel({
       </Card>
       {/* Persistent polite live region: the answer arrives asynchronously
           after "Ask", so screen readers hear it without hunting for it. */}
-      <div aria-live="polite">{answer && <AnswerCard answer={answer} />}</div>
+      <div aria-live="polite">
+        {answer && <AnswerCard answer={answer} caseId={answerCaseId} />}
+      </div>
     </div>
   );
 }

@@ -121,6 +121,9 @@ const NO_CONTEXT_ROUTES = new Set([
   // bypass: callers are firm principals and the per-stage transactions
   // carry their firm GUC, so RLS posture matches the ordinary request.
   "POST /api/clerk/action-proposals/execute",
+  // Plan runs (round 32): creation manages its own short scopes and kicks
+  // background processing — the batches posture.
+  "POST /api/clerk/plan-runs",
   // Bulk submit (posture round): the LAST batch surface still inside the
   // request transaction. No model call — but each row's submit appends
   // audit rows under the GLOBAL audit advisory lock (the bulk-approve

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.60.0
+ * OpenAPI spec version: 0.61.0
  */
 export interface HealthStatus {
   status: string;
@@ -3572,6 +3572,79 @@ export interface ClerkAnswer {
   plan?: ClerkAnswerPlanItem[];
   pins?: ClerkAnswerPins;
   sections?: AskAnswerSection[];
+}
+
+/**
+ * Exactly one origin — an Ask case whose action sections are approved whole (caseId), or a deterministic template assembled for one client (templateKey + clientPartyId). The server re-reads and freezes the steps; nothing client-supplied reaches execution.
+ */
+export interface CreatePlanRunInput {
+  caseId?: string;
+  templateKey?: string;
+  clientPartyId?: string;
+}
+
+export type PlanRunStepViewKind = typeof PlanRunStepViewKind[keyof typeof PlanRunStepViewKind];
+
+
+export const PlanRunStepViewKind = {
+  submit_overdue: 'submit_overdue',
+  retry_failed: 'retry_failed',
+  draft_chasers: 'draft_chasers',
+} as const;
+
+export type PlanRunStepViewStatus = typeof PlanRunStepViewStatus[keyof typeof PlanRunStepViewStatus];
+
+
+export const PlanRunStepViewStatus = {
+  pending: 'pending',
+  executed: 'executed',
+  halted_here: 'halted_here',
+  skipped: 'skipped',
+} as const;
+
+export interface PlanRunStepView {
+  kind: PlanRunStepViewKind;
+  clientPartyId: string;
+  clientName: string;
+  targetCount: number;
+  status: PlanRunStepViewStatus;
+  /** @nullable */
+  decisionId?: string | null;
+  executedCount: number;
+  failedCount: number;
+  skippedCount: number;
+}
+
+export type PlanRunViewStatus = typeof PlanRunViewStatus[keyof typeof PlanRunViewStatus];
+
+
+export const PlanRunViewStatus = {
+  queued: 'queued',
+  running: 'running',
+  done: 'done',
+  halted: 'halted',
+  failed: 'failed',
+} as const;
+
+export interface PlanRunView {
+  id: string;
+  firmId?: string;
+  /** @nullable */
+  caseId?: string | null;
+  /** @nullable */
+  templateKey?: string | null;
+  status: PlanRunViewStatus;
+  steps: PlanRunStepView[];
+  processedSteps: number;
+  /** @nullable */
+  haltReason?: string | null;
+  approvedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlanRunList {
+  runs: PlanRunView[];
 }
 
 export type ClerkCaseKind = typeof ClerkCaseKind[keyof typeof ClerkCaseKind];

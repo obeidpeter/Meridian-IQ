@@ -344,6 +344,11 @@ const LADDER: LadderStep[] = [
       not(pol("obligation_reminder_sends")),
     ],
   },
+  {
+    version: 32, // Do with Clerk Phase 2: plan-run guardrails
+    atTop: [clerkTenant("clerk_plan_runs")],
+    afterRollback: [not(clerkTenant("clerk_plan_runs"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

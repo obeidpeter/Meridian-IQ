@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.60.0
+ * OpenAPI spec version: 0.61.0
  */
 import * as zod from 'zod';
 
@@ -8703,6 +8703,102 @@ export const GetActionEffectivenessResponse = zod.object({
   "nowFailedAgain": zod.number().nullable(),
   "nowOther": zod.number().nullable()
 }))
+})
+
+
+/**
+ * @summary Approve a whole action plan (from an Ask answer or a template) as a queued run
+ */
+export const CreatePlanRunBody = zod.object({
+  "caseId": zod.string().uuid().optional(),
+  "templateKey": zod.string().optional(),
+  "clientPartyId": zod.string().uuid().optional()
+}).describe('Exactly one origin — an Ask case whose action sections are approved whole (caseId), or a deterministic template assembled for one client (templateKey + clientPartyId). The server re-reads and freezes the steps; nothing client-supplied reaches execution.')
+
+export const CreatePlanRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid().optional(),
+  "caseId": zod.string().nullish(),
+  "templateKey": zod.string().nullish(),
+  "status": zod.enum(['queued', 'running', 'done', 'halted', 'failed']),
+  "steps": zod.array(zod.object({
+  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "targetCount": zod.number(),
+  "status": zod.enum(['pending', 'executed', 'halted_here', 'skipped']),
+  "decisionId": zod.string().nullish(),
+  "executedCount": zod.number(),
+  "failedCount": zod.number(),
+  "skippedCount": zod.number()
+})),
+  "processedSteps": zod.number(),
+  "haltReason": zod.string().nullish(),
+  "approvedBy": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary The firm's recent plan runs (a client user sees only runs it approved)
+ */
+export const ListPlanRunsResponse = zod.object({
+  "runs": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid().optional(),
+  "caseId": zod.string().nullish(),
+  "templateKey": zod.string().nullish(),
+  "status": zod.enum(['queued', 'running', 'done', 'halted', 'failed']),
+  "steps": zod.array(zod.object({
+  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "targetCount": zod.number(),
+  "status": zod.enum(['pending', 'executed', 'halted_here', 'skipped']),
+  "decisionId": zod.string().nullish(),
+  "executedCount": zod.number(),
+  "failedCount": zod.number(),
+  "skippedCount": zod.number()
+})),
+  "processedSteps": zod.number(),
+  "haltReason": zod.string().nullish(),
+  "approvedBy": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}))
+})
+
+
+/**
+ * @summary One plan run's live progress
+ */
+export const GetPlanRunParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetPlanRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid().optional(),
+  "caseId": zod.string().nullish(),
+  "templateKey": zod.string().nullish(),
+  "status": zod.enum(['queued', 'running', 'done', 'halted', 'failed']),
+  "steps": zod.array(zod.object({
+  "kind": zod.enum(['submit_overdue', 'retry_failed', 'draft_chasers']),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "targetCount": zod.number(),
+  "status": zod.enum(['pending', 'executed', 'halted_here', 'skipped']),
+  "decisionId": zod.string().nullish(),
+  "executedCount": zod.number(),
+  "failedCount": zod.number(),
+  "skippedCount": zod.number()
+})),
+  "processedSteps": zod.number(),
+  "haltReason": zod.string().nullish(),
+  "approvedBy": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
 })
 
 
