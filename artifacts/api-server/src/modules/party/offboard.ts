@@ -272,8 +272,9 @@ export async function offboardClient(
   // it resolved — the rows stay open as evidence for the handover, their
   // reminder sends stop by themselves (the sweep's live-engagement wall;
   // (a) just archived every engagement), and staff may close them manually
-  // with the status routes. The ledger records how many were left open at
-  // teardown so the offboard event names the loose ends.
+  // with the status routes. The ledger records how many were left
+  // unresolved (open OR responded — anything short of closed) at teardown
+  // so the offboard event names the loose ends.
   const [obligationsRow] = await getDb()
     .select({ n: sql<number>`count(*)::int` })
     .from(obligationsTable)
@@ -284,7 +285,7 @@ export async function offboardClient(
         ne(obligationsTable.status, "closed"),
       ),
     );
-  const openObligationsAtOffboard = Number(obligationsRow?.n ?? 0);
+  const unresolvedObligationsAtOffboard = Number(obligationsRow?.n ?? 0);
 
   // ONE ledger event for the whole teardown, pointer-only (counts, never
   // contact values or names beyond the statutory identity the row keeps).
@@ -301,7 +302,7 @@ export async function offboardClient(
       aliasesDeleted: deletedAliases.length,
       invitationsRevoked: revokedInvitations.length,
       standingApprovalsRevoked: revokedPolicies.length,
-      openObligationsAtOffboard,
+      unresolvedObligationsAtOffboard,
       alertPreferencesCleared: clearedPreferences,
       pushDevicesRemoved: removedDevices,
       contactCleared,

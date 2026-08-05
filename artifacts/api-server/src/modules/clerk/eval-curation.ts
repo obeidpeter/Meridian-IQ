@@ -217,7 +217,11 @@ function grownSummaryBase(
   return {
     key: `${GROWN_KEY_PREFIX}${row.caseId.slice(0, 8)}`,
     source: "grown",
-    label: row.label,
+    // The summary shape carries no kind field (kept contract-stable), so the
+    // label names the lane — grown notice and invoice fixtures would
+    // otherwise be indistinguishable exactly where an operator triages a
+    // failing fixture.
+    label: row.kind === "notice" ? `${row.label} (notice)` : row.label,
     riskLabel: "correction",
     retired: row.retiredAt !== null,
     retiredAt: row.retiredAt?.toISOString() ?? null,

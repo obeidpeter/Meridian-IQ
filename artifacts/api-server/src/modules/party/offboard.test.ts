@@ -478,7 +478,7 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
   assert.equal(afterPayload.standingApprovalsRevoked, 1);
   // Counted as a loose end, NOT closed: the row must survive offboard as
   // evidence of the unresolved matter.
-  assert.equal(afterPayload.openObligationsAtOffboard, 1);
+  assert.equal(afterPayload.unresolvedObligationsAtOffboard, 1);
   const [obligation] = await getDb()
     .select()
     .from(obligationsTable)

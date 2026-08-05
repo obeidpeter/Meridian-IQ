@@ -35,14 +35,29 @@ const GROWTH_BATCH = 20;
 // Advisory lock so concurrent instances can't grow/run twice in one pass.
 const EVAL_GROWTH_LOCK_ID = 731_842;
 
+// Notice corrections record the operator's approved OBLIGATION values, and
+// for these two fields those are contract catalogue KEYS ("firs", "vat"),
+// not what the letter prints ("Federal Inland Revenue Service", "Value
+// Added Tax") — the mapping is the operator's work, not the extractor's.
+// The eval runner replays the verbatim notice prompt, so a key-mapped
+// expectation could never match a correct extraction: a fixture carrying
+// one would fail forever, dragging blended accuracy and (authority being a
+// critical field) faking non-resistance. Drop them at growth; the scorer's
+// skip-absent-expectations rule does the rest.
+const NOTICE_KEY_MAPPED_FIELDS: ReadonlySet<string> = new Set([
+  "authority",
+  "taxType",
+]);
+
 // Pure: an approved, corrected case → a ground-truth fixture, or null when the
 // case can't serve as one (no text source, or nothing was compared). The
 // expected values are the operator's FINAL values for every compared field —
-// including the ones the model already had right (final === extracted).
+// including the ones the model already had right (final === extracted) —
+// minus, on notice cases, the catalogue-key fields above.
 export function fixtureFromCase(
   kase: Pick<
     ClerkCase,
-    "id" | "sourceName" | "sourceText" | "corrections" | "status"
+    "id" | "kind" | "sourceName" | "sourceText" | "corrections" | "status"
   >,
 ): {
   caseId: string;
@@ -53,7 +68,13 @@ export function fixtureFromCase(
   if (kase.status !== "approved") return null;
   if (!kase.sourceText || !kase.corrections?.length) return null;
   const expected: Record<string, string | null> = {};
-  for (const c of kase.corrections) expected[c.field] = c.final;
+  for (const c of kase.corrections) {
+    if (kase.kind === "notice" && NOTICE_KEY_MAPPED_FIELDS.has(c.field)) {
+      continue;
+    }
+    expected[c.field] = c.final;
+  }
+  if (Object.keys(expected).length === 0) return null;
   return {
     caseId: kase.id,
     label: kase.sourceName ?? `case ${kase.id.slice(0, 8)}`,
