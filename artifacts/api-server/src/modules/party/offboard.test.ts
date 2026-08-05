@@ -7,6 +7,7 @@ import {
   alertPreferencesTable,
   auditEventsTable,
   clerkActionPoliciesTable,
+  obligationsTable,
   clerkCasesTable,
   clerkEvalFixturesTable,
   engagementsTable,
@@ -162,6 +163,18 @@ before(async () => {
   // Standing approvals (round-28 review M1): one live grant per firm. Firm
   // A's must die with firm A's offboard; firm B's — the firm still serving
   // the client — must survive it, then die with firm B's own offboard.
+  // An unresolved authority obligation (round 30/session hygiene): offboard
+  // must COUNT it on the ledger event, never close it — the matter belongs
+  // to the client and the authority; its reminders stop by themselves via
+  // the sweep's live-engagement wall once (a) archives the engagements.
+  await db.insert(obligationsTable).values({
+    firmId: firmA,
+    clientPartyId: partyId,
+    noticeType: "assessment",
+    authority: "firs",
+    responseDueDate: "2026-09-30",
+    createdBy: userA,
+  });
   await db.insert(clerkActionPoliciesTable).values([
     {
       firmId: firmA,
@@ -463,6 +476,14 @@ test("first firm offboards: firm-scoped teardown, shared contact rails untouched
   assert.equal(afterPayload.lastEngagement, false);
   assert.equal(afterPayload.fixturesRetired, 1);
   assert.equal(afterPayload.standingApprovalsRevoked, 1);
+  // Counted as a loose end, NOT closed: the row must survive offboard as
+  // evidence of the unresolved matter.
+  assert.equal(afterPayload.openObligationsAtOffboard, 1);
+  const [obligation] = await getDb()
+    .select()
+    .from(obligationsTable)
+    .where(eq(obligationsTable.clientPartyId, partyId));
+  assert.equal(obligation.status, "open", "offboard never fakes a resolution");
   assert.ok(
     !JSON.stringify(events).includes("+2348099990001"),
     "the ledger never carries contact values",

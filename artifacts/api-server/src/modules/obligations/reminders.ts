@@ -73,6 +73,24 @@ export async function sweepObligationReminders(
               AT TIME ZONE 'Africa/Lagos') < ${now}
         THEN 'overdue' ELSE 'due_soon' END
   )`;
+  // The firm↔client relationship must still be LIVE (an open/in_progress
+  // engagement) for the platform to keep nudging the client about this
+  // firm's obligation book: offboarding archives every engagement — and
+  // deletes the client logins that could have silenced the alerts — and a
+  // dormant book must not keep sending either. Same wall, same status
+  // enumeration as the standing-approval sweep's engagement_closed
+  // tripwire and the client-statement enumeration; deliberately spelled
+  // locally like theirs (rbac's firmEngagesParty counts ARCHIVED
+  // engagements for retention-era reads and must keep doing so). The
+  // obligation row itself stays open and visible on the firm's surfaces —
+  // evidence of an unresolved matter — only the SENDS stop; re-opening an
+  // engagement resumes them, and no claim slot is consumed meanwhile.
+  const liveEngagement = sql`EXISTS (
+    SELECT 1 FROM engagements e
+    WHERE e.firm_id = ${obligationsTable.firmId}
+      AND e.client_party_id = ${obligationsTable.clientPartyId}
+      AND e.status IN ('open', 'in_progress')
+  )`;
   const candidates = await getDb()
     .select()
     .from(obligationsTable)
@@ -81,6 +99,7 @@ export async function sweepObligationReminders(
         OBLIGATION_OPEN,
         lte(obligationsTable.responseDueDate, cutoff),
         unclaimedAtThreshold,
+        liveEngagement,
       ),
     )
     .orderBy(obligationsTable.responseDueDate)
