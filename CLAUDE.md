@@ -43,7 +43,7 @@ packages.
 `info.version` in the spec is the **build handshake**: it is baked into both the
 server and the web bundles; `/api/healthz` returns the server's copy; the apps
 show a dismissible "stale server build" banner on mismatch. Bump it on every
-contract change (it is currently `0.65.0`).
+contract change (it is currently `0.66.0`).
 
 ## Clerk AI — the principles (details: docs/clerk-ai.md)
 
@@ -113,7 +113,7 @@ pnpm --filter @workspace/landing run test
 pnpm --filter @workspace/penalty-calculator run test
 pnpm --filter @workspace/format --filter @workspace/api-errors --filter @workspace/web-ui run test
 # web builds (each needs BASE_PATH + PORT), then the e2e journeys:
-pnpm --filter @workspace/scripts run e2e        # 92 checks vs real builds + DB (standard seed run)
+pnpm --filter @workspace/scripts run e2e        # 93 checks vs real builds + DB (standard seed run)
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of the above.

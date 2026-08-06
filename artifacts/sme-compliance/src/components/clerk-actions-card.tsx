@@ -7,6 +7,8 @@ import {
   getGetActionDecisionsQueryKey,
   useGetActionPolicies,
   getGetActionPoliciesQueryKey,
+  useGetClientAutomationEvidence,
+  getGetClientAutomationEvidenceQueryKey,
   useGrantActionPolicy,
   usePauseActionPolicy,
   useResumeActionPolicy,
@@ -57,6 +59,7 @@ import {
   formatAmount,
   formatDate,
   parsePolicyCap,
+  policyEvidenceLine,
   policyGrantDescription,
   policyKindLabel,
   policyStatusLine,
@@ -119,6 +122,21 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
+  // Automation evidence (Prove with Clerk phase 2): the client's OWN
+  // backtest, fetched at the card level so the grant dialog opens with it.
+  // Render-on-success and advisory only — no evidence (empty sample, failed
+  // fetch, older server) means no line, and the line never gates granting.
+  const { data: evidence } = useGetClientAutomationEvidence(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetClientAutomationEvidenceQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
   const onPolicyChanged = () =>
     queryClient.invalidateQueries({
       queryKey: getGetActionPoliciesQueryKey(),
@@ -174,6 +192,18 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
     parseCap: parsePolicyCap,
     defaultCap: POLICY_CAP_DEFAULT,
   });
+  // "Your own record" for the kind being granted: shown ABOVE the consent
+  // sentence so the decision is evidence-backed. Null (no backtest entry or
+  // an empty sample) renders nothing — no placeholder, no gating.
+  const automatingKind = automating
+    ? automatableActionKind(automating.kind)
+    : null;
+  const automatingEvidenceLine = automatingKind
+    ? policyEvidenceLine(
+        automatingKind,
+        evidence?.kinds.find((k) => k.kind === automatingKind),
+      )
+    : null;
   const dialog = useClerkActionsDialog<
     ActionProposal,
     ClerkActionDecision,
@@ -528,6 +558,16 @@ export function ClerkActionsCard({ clientPartyId }: { clientPartyId: string }) {
             <DialogTitle>
               {automating ? policyKindLabel(automating.kind) : ""}
             </DialogTitle>
+            {/* The client's own backtest, before the consent sentence —
+                absent entirely when there is no evidence to show. */}
+            {automatingEvidenceLine && (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="text-policy-evidence"
+              >
+                {automatingEvidenceLine}
+              </p>
+            )}
             <DialogDescription>
               {/* The consent copy restates the ceiling being chosen below;
                   while the box is mid-edit (invalid) it reads the default

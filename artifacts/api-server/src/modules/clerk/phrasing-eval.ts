@@ -125,6 +125,9 @@ function digestFacts(overrides: Partial<DigestFacts>): DigestFacts {
     // Notice Desk.
     obligationsDueSoon: 0,
     obligationsOverdue: 0,
+    // Prove with Clerk Phase 3 — null = automation lit or off-topic; the
+    // shadow line must stay silent on the baseline.
+    automationShadowPending: null,
   };
   return { ...base, ...overrides };
 }
@@ -194,6 +197,11 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
         pattern: "authority notice",
         flags: "i",
         label: "no open obligations — do not mention",
+      },
+      {
+        pattern: "automation",
+        flags: "i",
+        label: "shadow line suppressed — automation on, do not mention",
       },
     ],
   },

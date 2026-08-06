@@ -879,9 +879,12 @@ but you shouldn't have to open it to learn your autopilot stopped.
   collection-account payments, authority-notice responses due soon or
   overdue, drafts waiting on a colleague's approval
   (only when the firm uses the policy — "0 waiting" and "no policy" never
-  read the same), and a VAT-return countdown once the monthly deadline is
-  within a week. Every fact is computed from your records; Clerk only
-  phrases them — and a plain template answers even when Clerk is off.
+  read the same), a VAT-return countdown once the monthly deadline is
+  within a week, and — only while your automation switches are off — a
+  shadow line counting what Clerk automation would act on today, pointing
+  at the portfolio's evidence card. Every fact is computed from your
+  records; Clerk only phrases them — and a plain template answers even
+  when Clerk is off.
   Staff opt in individually (**Your notifications** card on the console
   portfolio — email delivery requires a verified address; a 6–8 character
   code confirms it).
@@ -943,6 +946,13 @@ invoice list — a partner can reach any failing invoice in three clicks.
   and each row keeps its caveat visible. It exists to inform the decision
   to switch automation on (or not): low agreement is the card working,
   not failing.
+- **Evidence in the grant dialogs** — when you (or your client) open a
+  "Turn on daily automation" or "Run monthly" dialog, it now opens with
+  *your own record*: how many of exactly these actions were eventually done
+  by hand over the last six months, and how late. The line comes from the
+  same backtest as the portfolio card, scoped to the one client the grant
+  covers, and it never blocks the buttons — it exists so the consent
+  decision is informed, in either direction.
 - **Add client** — one dialog (legal name, optional TIN / CAC / street /
   city) creates the client *and* its engagement in a single step, with the
   same duplicate guard as the bulk importer (an existing engaged client
@@ -1739,7 +1749,7 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **92 headless user-journey checks** on the
+  path-router and drives **93 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month). The journeys live as ordered groups
   in `scripts/src/e2e/journeys/` (roles, money, controls, lifecycle,

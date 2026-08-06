@@ -44,6 +44,9 @@ const harness = vi.hoisted(() => ({
   policies: {
     data: undefined as unknown,
   },
+  evidence: {
+    data: undefined as unknown,
+  },
   execute: {
     calls: [] as unknown[],
     pending: false,
@@ -61,6 +64,7 @@ const harness = vi.hoisted(() => ({
     this.proposals.isSuccess = false;
     this.decisions.data = undefined;
     this.policies.data = undefined;
+    this.evidence.data = undefined;
     this.execute.calls = [];
     this.execute.pending = false;
     this.execute.result = null;
@@ -102,6 +106,9 @@ vi.mock("@workspace/api-client-react", async (importOriginal) => {
     useGetActionPolicies: () => ({
       data: harness.policies.data,
     }),
+    useGetClientAutomationEvidence: () => ({
+      data: harness.evidence.data,
+    }),
     useGrantActionPolicy: policyMutation("grant"),
     usePauseActionPolicy: policyMutation("pause"),
     useResumeActionPolicy: policyMutation("resume"),
@@ -129,8 +136,16 @@ import {
   getGetActionProposalsQueryKey,
   getGetClientPortfolioQueryKey,
 } from "@workspace/api-client-react";
-import type { ClerkActionPolicy } from "@workspace/api-client-react";
-import { ACTION_OUTCOME_LABELS, policyGrantDescription } from "@/lib/format";
+import type {
+  AutomationEvidence,
+  AutomationEvidenceKind,
+  ClerkActionPolicy,
+} from "@workspace/api-client-react";
+import {
+  ACTION_OUTCOME_LABELS,
+  policyEvidenceLine,
+  policyGrantDescription,
+} from "@/lib/format";
 
 function target(invoiceId: string, invoiceNumber: string): ActionTarget {
   return {
@@ -208,6 +223,27 @@ function policy(over: Partial<ClerkActionPolicy> = {}): ClerkActionPolicy {
     createdAt: "2026-07-28T09:00:00Z",
     ...over,
   };
+}
+
+function evidenceKind(
+  over: Partial<AutomationEvidenceKind> = {},
+): AutomationEvidenceKind {
+  return {
+    kind: "retry_failed",
+    sample: 5,
+    agreed: 3,
+    disagreed: 1,
+    pending: 1,
+    agreementRate: 0.6,
+    medianLeadDays: 2,
+    exposureFloorNgn: null,
+    note: "Backtested against the client's own submissions.",
+    ...over,
+  };
+}
+
+function evidence(kinds: AutomationEvidenceKind[]): AutomationEvidence {
+  return { windowMonths: 6, asOf: "2026-08-06", kinds };
 }
 
 function chaserDraft(): PaymentChaserDraft {
@@ -630,6 +666,74 @@ describe("ClerkActionsCard (console)", () => {
     harness.policies.data = { policies: [policy()], enabled: true };
     renderCard();
     expect(screen.queryByTestId("pill-automation-paused")).toBeNull();
+  });
+
+  // ---- Automation evidence (Prove with Clerk phase 2) ----------------------
+
+  test("the grant dialog leads with the client's own record, above the consent copy", async () => {
+    harness.proposals.data = proposals([
+      proposal({ kind: "retry_failed", title: "Retry 2 failed submissions" }),
+    ]);
+    harness.policies.data = { policies: [], enabled: true };
+    harness.evidence.data = evidence([
+      // Only the granting kind's entry phrases the line.
+      evidenceKind({ kind: "reconcile_matches", sample: 40, agreed: 38 }),
+      evidenceKind(),
+    ]);
+    renderCard();
+    await click(screen.getByTestId("button-automate-retry_failed"));
+
+    const line = screen.getByTestId("text-policy-evidence");
+    expect(line.textContent).toBe(
+      policyEvidenceLine("retry_failed", {
+        sample: 5,
+        agreed: 3,
+        medianLeadDays: 2,
+      }),
+    );
+    // ABOVE the consent sentence, so the record is read before the grant.
+    const description = screen.getByText(
+      policyGrantDescription("retry_failed", "console", 10),
+    );
+    expect(
+      line.compareDocumentPosition(description) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Advisory only: the evidence never gates the confirm button.
+    expect(
+      (screen.getByTestId("button-confirm-automate") as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  test("no evidence or an empty sample renders no line — and never blocks granting", async () => {
+    // No evidence at all (failed fetch, older server): nothing renders and
+    // the grant still goes through.
+    harness.policies.data = { policies: [], enabled: true };
+    renderCard();
+    await click(screen.getByTestId("button-automate-submit_overdue"));
+    expect(screen.queryByTestId("text-policy-evidence")).toBeNull();
+    await click(screen.getByTestId("button-confirm-automate"));
+    expect(harness.policyCalls.grant).toHaveLength(1);
+    cleanup();
+
+    // An empty sample: no rate from nothing — no line, no placeholder.
+    harness.evidence.data = evidence([
+      evidenceKind({
+        kind: "submit_overdue",
+        sample: 0,
+        agreed: 0,
+        agreementRate: null,
+        medianLeadDays: null,
+      }),
+    ]);
+    renderCard();
+    await click(screen.getByTestId("button-automate-submit_overdue"));
+    expect(screen.queryByTestId("text-policy-evidence")).toBeNull();
+    expect(
+      (screen.getByTestId("button-confirm-automate") as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
 
   // ---- Capability gating ----------------------------------------------------

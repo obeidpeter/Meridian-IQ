@@ -283,6 +283,22 @@ test("standing-approval routes: read gate, grant walls, firm-scoped lifecycle", 
     effBlock.includes("resolveClientAnalyticsScope"),
     "the report resolves its client through the SEC-03 scope resolver",
   );
+  // The per-client evidence backtest (round 37) is the same read class —
+  // one client's ledger history for its OWN grant dialogs — and must hold
+  // the same resolver, never the firm-wide portfolio wall.
+  const clientEvidenceBlock = routeBlock(
+    source,
+    "/clerk/client-automation-evidence",
+  );
+  assert.ok(
+    clientEvidenceBlock.includes('assertCan(req.principal, "invoice.read")'),
+    "the client evidence read gates on invoice.read — the effectiveness posture",
+  );
+  assert.ok(
+    clientEvidenceBlock.includes("resolveClientAnalyticsScope"),
+    "the client evidence read walls a client_user to its own party (SEC-03)",
+  );
+
 
   // Granting IS a standing submission authorization: invoice.submit plus
   // the execute route's IDOR wall (assertPartyAccess), re-walked here.

@@ -10,6 +10,7 @@ import {
   isPolicyPaused,
   pausedPolicyCount,
   POLICY_CAP_DEFAULT,
+  policyGrantAlertMessage,
   policyGrantDescription,
   policyKindLabel,
   policyPauseReasonLabel,
@@ -187,6 +188,52 @@ test("policyGrantDescription: retry wording and the singular cap", () => {
   assert.match(
     policyGrantDescription("retry_failed", 1),
     /resubmit up to 1 invoice that failed on the rails/,
+  );
+});
+
+test("policyGrantAlertMessage: the consent copy, then the client's own record as a second paragraph", () => {
+  assert.equal(
+    policyGrantAlertMessage("retry_failed", POLICY_CAP_DEFAULT, [
+      // Only the granting kind's entry phrases the record.
+      { kind: "reconcile_matches", sample: 40, agreed: 38, medianLeadDays: null },
+      { kind: "retry_failed", sample: 5, agreed: 3, medianLeadDays: 2 },
+    ]),
+    `${policyGrantDescription("retry_failed", POLICY_CAP_DEFAULT)}\n\n` +
+      "Your own record, last 6 months: 3 of 5 failed submissions were eventually retried by hand, after a median 2 days.",
+  );
+  assert.equal(
+    policyGrantAlertMessage("submit_overdue", POLICY_CAP_DEFAULT, [
+      { kind: "submit_overdue", sample: 12, agreed: 9, medianLeadDays: 4 },
+    ]),
+    `${policyGrantDescription("submit_overdue", POLICY_CAP_DEFAULT)}\n\n` +
+      "Your own record, last 6 months: you eventually submitted 9 of 12 such invoices yourself, a median 4 days late.",
+  );
+});
+
+test("policyGrantAlertMessage: no backtest, no matching kind, or an empty sample appends nothing", () => {
+  const consent = policyGrantDescription("submit_overdue", POLICY_CAP_DEFAULT);
+  // Absent payload (failed fetch, older server) — the Alert reads as before.
+  assert.equal(
+    policyGrantAlertMessage("submit_overdue", POLICY_CAP_DEFAULT, undefined),
+    consent,
+  );
+  assert.equal(
+    policyGrantAlertMessage("submit_overdue", POLICY_CAP_DEFAULT, null),
+    consent,
+  );
+  // The payload carries other kinds only.
+  assert.equal(
+    policyGrantAlertMessage("submit_overdue", POLICY_CAP_DEFAULT, [
+      { kind: "retry_failed", sample: 5, agreed: 3, medianLeadDays: 2 },
+    ]),
+    consent,
+  );
+  // An empty sample: never a rate from nothing.
+  assert.equal(
+    policyGrantAlertMessage("submit_overdue", POLICY_CAP_DEFAULT, [
+      { kind: "submit_overdue", sample: 0, agreed: 0, medianLeadDays: null },
+    ]),
+    consent,
   );
 });
 

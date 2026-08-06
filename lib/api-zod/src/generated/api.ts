@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.65.0
+ * OpenAPI spec version: 0.66.0
  */
 import * as zod from 'zod';
 
@@ -8959,6 +8959,33 @@ export const getAutomationEvidenceResponseAsOfRegExp = new RegExp('^\\d{4}-\\d{2
 export const GetAutomationEvidenceResponse = zod.object({
   "windowMonths": zod.number(),
   "asOf": zod.string().regex(getAutomationEvidenceResponseAsOfRegExp),
+  "kinds": zod.array(zod.object({
+  "kind": zod.enum(['reconcile_matches', 'submit_overdue', 'retry_failed', 'draft_recurring']),
+  "sample": zod.number(),
+  "agreed": zod.number(),
+  "disagreed": zod.number(),
+  "pending": zod.number(),
+  "agreementRate": zod.number().nullable(),
+  "medianLeadDays": zod.number().nullable(),
+  "exposureFloorNgn": zod.string().nullable(),
+  "note": zod.string()
+}))
+})
+
+
+/**
+ * @summary One client's automation evidence backtest (for the grant surfaces)
+ */
+export const GetClientAutomationEvidenceQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional().describe('Required for firm principals; a client_user is pinned to its own party.')
+})
+
+export const getClientAutomationEvidenceResponseAsOfRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetClientAutomationEvidenceResponse = zod.object({
+  "windowMonths": zod.number(),
+  "asOf": zod.string().regex(getClientAutomationEvidenceResponseAsOfRegExp),
   "kinds": zod.array(zod.object({
   "kind": zod.enum(['reconcile_matches', 'submit_overdue', 'retry_failed', 'draft_recurring']),
   "sample": zod.number(),

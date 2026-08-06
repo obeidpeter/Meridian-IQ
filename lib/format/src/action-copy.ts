@@ -174,3 +174,94 @@ export function policyGrantDescription(
     `Every run re-checks consent, your access and each invoice; you can pause or revoke this at any time, and every run is recorded.`
   );
 }
+
+// ---- Automation evidence (Prove with Clerk phase 2) ------------------------
+// The client's OWN backtest, phrased for the grant surfaces: the consent
+// dialogs lead with what the last six months actually looked like, so the
+// standing approval is granted against evidence, not vibes. Honest-copy
+// doctrine: no line at all from an empty sample (never a rate from nothing),
+// low agreement renders as plainly as high (the numbers ARE the copy — no
+// figure is invented here), and the line never gates the grant buttons.
+
+// "N day(s)" — the median clauses' shared unit phrasing.
+function medianDaysPhrase(days: number): string {
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+/**
+ * The evidence sentence ABOVE a per-kind standing-approval consent (the
+ * "Automate daily" dialogs, both audiences — "your own record" reads as the
+ * client's whichever screen shows it). Null when there is no evidence or the
+ * sample is empty: the call site renders nothing, not a placeholder. The
+ * median clause appears only when the backtest could compute one.
+ */
+export function policyEvidenceLine(
+  kind: "submit_overdue" | "retry_failed",
+  ev?: { sample: number; agreed: number; medianLeadDays: number | null } | null,
+): string | null {
+  if (!ev || ev.sample === 0) return null;
+  if (kind === "submit_overdue") {
+    const median =
+      ev.medianLeadDays !== null
+        ? `, a median ${medianDaysPhrase(ev.medianLeadDays)} late`
+        : "";
+    return `Your own record, last 6 months: you eventually submitted ${ev.agreed} of ${ev.sample} such invoice${ev.sample === 1 ? "" : "s"} yourself${median}.`;
+  }
+  const median =
+    ev.medianLeadDays !== null
+      ? `, after a median ${medianDaysPhrase(ev.medianLeadDays)}`
+      : "";
+  return `Your own record, last 6 months: ${ev.agreed} of ${ev.sample} failed submission${ev.sample === 1 ? "" : "s"} ${ev.agreed === 1 ? "was" : "were"} eventually retried by hand${median}.`;
+}
+
+/**
+ * The evidence sentence ABOVE the monthly plan-policy consent (the "Run
+ * month-end close monthly" dialog): the plan's three steps composed into one
+ * sentence, in the fixed submit_overdue / retry_failed / draft_recurring
+ * order, keeping only the kinds with a non-empty sample. The median clauses
+ * mirror the per-kind lines' (submit/recurring read "late", retry reads
+ * "after"). Null when every listed kind has an empty sample — an evidence-free
+ * dialog shows no evidence line, not an empty one.
+ */
+export function planEvidenceLine(
+  kinds: Array<{
+    kind: string;
+    sample: number;
+    agreed: number;
+    medianLeadDays: number | null;
+  }>,
+): string | null {
+  const segments: string[] = [];
+  const submit = kinds.find((k) => k.kind === "submit_overdue");
+  if (submit && submit.sample > 0) {
+    const median =
+      submit.medianLeadDays !== null
+        ? `, a median ${medianDaysPhrase(submit.medianLeadDays)} late`
+        : "";
+    segments.push(
+      `submitted ${submit.agreed} of ${submit.sample} overdue invoice${submit.sample === 1 ? "" : "s"} by hand${median}`,
+    );
+  }
+  const retry = kinds.find((k) => k.kind === "retry_failed");
+  if (retry && retry.sample > 0) {
+    const median =
+      retry.medianLeadDays !== null
+        ? `, after a median ${medianDaysPhrase(retry.medianLeadDays)}`
+        : "";
+    segments.push(
+      `retried ${retry.agreed} of ${retry.sample} failed submission${retry.sample === 1 ? "" : "s"}${median}`,
+    );
+  }
+  const recurring = kinds.find((k) => k.kind === "draft_recurring");
+  if (recurring && recurring.sample > 0) {
+    const median =
+      recurring.medianLeadDays !== null
+        ? `, a median ${medianDaysPhrase(recurring.medianLeadDays)} late`
+        : "";
+    segments.push(
+      `raised ${recurring.agreed} of ${recurring.sample} missing recurring invoice${recurring.sample === 1 ? "" : "s"}${median}`,
+    );
+  }
+  if (segments.length === 0) return null;
+  return `Your own record, last 6 months: ${segments.join("; ")}.`;
+}

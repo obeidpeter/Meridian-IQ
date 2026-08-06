@@ -12,6 +12,8 @@ import {
   decisionLine,
   draftClipboardText,
   parsePolicyCap,
+  planEvidenceLine,
+  policyEvidenceLine,
   policyGrantDescription,
   policyKindLabel,
   policyPauseReasonLabel,
@@ -221,6 +223,158 @@ describe("policyGrantDescription", () => {
     expect(policyGrantDescription("retry_failed", "sme", 1)).toContain(
       "resubmit up to 1 invoice that failed on the rails",
     );
+  });
+});
+
+// ---- Automation evidence (Prove with Clerk phase 2) ------------------------
+
+describe("policyEvidenceLine", () => {
+  test("no evidence or an empty sample means no line — never a rate from nothing", () => {
+    expect(policyEvidenceLine("submit_overdue", null)).toBeNull();
+    expect(policyEvidenceLine("submit_overdue", undefined)).toBeNull();
+    expect(
+      policyEvidenceLine("retry_failed", {
+        sample: 0,
+        agreed: 0,
+        medianLeadDays: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("submit_overdue: the client's own record, median lateness when known", () => {
+    expect(
+      policyEvidenceLine("submit_overdue", {
+        sample: 12,
+        agreed: 9,
+        medianLeadDays: 4,
+      }),
+    ).toBe(
+      "Your own record, last 6 months: you eventually submitted 9 of 12 such invoices yourself, a median 4 days late.",
+    );
+    expect(
+      policyEvidenceLine("submit_overdue", {
+        sample: 12,
+        agreed: 9,
+        medianLeadDays: null,
+      }),
+    ).toBe(
+      "Your own record, last 6 months: you eventually submitted 9 of 12 such invoices yourself.",
+    );
+  });
+
+  test("retry_failed: the retries-by-hand record, median delay when known", () => {
+    expect(
+      policyEvidenceLine("retry_failed", {
+        sample: 5,
+        agreed: 3,
+        medianLeadDays: 2,
+      }),
+    ).toBe(
+      "Your own record, last 6 months: 3 of 5 failed submissions were eventually retried by hand, after a median 2 days.",
+    );
+    expect(
+      policyEvidenceLine("retry_failed", {
+        sample: 5,
+        agreed: 3,
+        medianLeadDays: null,
+      }),
+    ).toBe(
+      "Your own record, last 6 months: 3 of 5 failed submissions were eventually retried by hand.",
+    );
+  });
+
+  test("low agreement renders as plainly as high — the numbers are the copy", () => {
+    expect(
+      policyEvidenceLine("submit_overdue", {
+        sample: 10,
+        agreed: 1,
+        medianLeadDays: null,
+      }),
+    ).toBe(
+      "Your own record, last 6 months: you eventually submitted 1 of 10 such invoices yourself.",
+    );
+    expect(
+      policyEvidenceLine("retry_failed", {
+        sample: 8,
+        agreed: 0,
+        medianLeadDays: null,
+      }),
+    ).toBe(
+      "Your own record, last 6 months: 0 of 8 failed submissions were eventually retried by hand.",
+    );
+  });
+
+  test("singulars: 1 invoice / 1 submission (and was) / 1 day", () => {
+    expect(
+      policyEvidenceLine("submit_overdue", {
+        sample: 1,
+        agreed: 1,
+        medianLeadDays: 1,
+      }),
+    ).toBe(
+      "Your own record, last 6 months: you eventually submitted 1 of 1 such invoice yourself, a median 1 day late.",
+    );
+    expect(
+      policyEvidenceLine("retry_failed", {
+        sample: 1,
+        agreed: 1,
+        medianLeadDays: 1,
+      }),
+    ).toBe(
+      "Your own record, last 6 months: 1 of 1 failed submission was eventually retried by hand, after a median 1 day.",
+    );
+  });
+});
+
+describe("planEvidenceLine", () => {
+  test("the three plan kinds compose into one sentence in the fixed order", () => {
+    expect(
+      planEvidenceLine([
+        // Deliberately out of order — the sentence keeps the fixed
+        // submit_overdue / retry_failed / draft_recurring order.
+        { kind: "draft_recurring", sample: 3, agreed: 2, medianLeadDays: 6 },
+        { kind: "retry_failed", sample: 5, agreed: 3, medianLeadDays: 2 },
+        { kind: "submit_overdue", sample: 12, agreed: 9, medianLeadDays: 4 },
+      ]),
+    ).toBe(
+      "Your own record, last 6 months: submitted 9 of 12 overdue invoices by hand, a median 4 days late; retried 3 of 5 failed submissions, after a median 2 days; raised 2 of 3 missing recurring invoices, a median 6 days late.",
+    );
+  });
+
+  test("empty-sample kinds and non-plan kinds drop out; null medians drop their clause", () => {
+    expect(
+      planEvidenceLine([
+        // reconcile_matches is not a plan step — it never phrases a segment.
+        { kind: "reconcile_matches", sample: 40, agreed: 38, medianLeadDays: null },
+        { kind: "submit_overdue", sample: 2, agreed: 2, medianLeadDays: null },
+        { kind: "retry_failed", sample: 0, agreed: 0, medianLeadDays: null },
+        { kind: "draft_recurring", sample: 1, agreed: 1, medianLeadDays: 1 },
+      ]),
+    ).toBe(
+      "Your own record, last 6 months: submitted 2 of 2 overdue invoices by hand; raised 1 of 1 missing recurring invoice, a median 1 day late.",
+    );
+  });
+
+  test("singular counts read correctly in every segment", () => {
+    expect(
+      planEvidenceLine([
+        { kind: "submit_overdue", sample: 1, agreed: 1, medianLeadDays: 1 },
+        { kind: "retry_failed", sample: 1, agreed: 0, medianLeadDays: null },
+      ]),
+    ).toBe(
+      "Your own record, last 6 months: submitted 1 of 1 overdue invoice by hand, a median 1 day late; retried 0 of 1 failed submission.",
+    );
+  });
+
+  test("null when every listed kind has an empty sample — and for no kinds at all", () => {
+    expect(
+      planEvidenceLine([
+        { kind: "submit_overdue", sample: 0, agreed: 0, medianLeadDays: null },
+        { kind: "retry_failed", sample: 0, agreed: 0, medianLeadDays: null },
+        { kind: "draft_recurring", sample: 0, agreed: 0, medianLeadDays: null },
+      ]),
+    ).toBeNull();
+    expect(planEvidenceLine([])).toBeNull();
   });
 });
 

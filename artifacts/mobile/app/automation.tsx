@@ -3,6 +3,7 @@ import {
   getGetActionDecisionsQueryKey,
   getGetActionPoliciesQueryKey,
   getGetActionProposalsQueryKey,
+  getGetClientAutomationEvidenceQueryKey,
   getGetDashboardSummaryQueryKey,
   getGetMonthEndCloseQueryKey,
   getGetPenaltyExposureQueryKey,
@@ -11,6 +12,7 @@ import {
   useGetActionDecisions,
   useGetActionPolicies,
   useGetActionProposals,
+  useGetClientAutomationEvidence,
   useGrantActionPolicy,
   usePauseActionPolicy,
   useResumeActionPolicy,
@@ -52,7 +54,7 @@ import {
   POLICY_PAUSE_CONFIRM,
   POLICY_RESUME_CONFIRM,
   POLICY_REVOKE_CONFIRM,
-  policyGrantDescription,
+  policyGrantAlertMessage,
   policyKindLabel,
   policyStatusLine,
   proposalCountLine,
@@ -256,6 +258,22 @@ export default function AutomationScreen() {
       },
     },
   );
+  // Automation evidence (Prove with Clerk phase 2): the client's OWN
+  // backtest, fetched at screen level so the grant confirm opens with it.
+  // Advisory only — no evidence means the Alert reads exactly as before,
+  // and the evidence never gates granting.
+  const evidenceQuery = useGetClientAutomationEvidence(
+    { clientPartyId: clientPartyId ?? "" },
+    {
+      query: {
+        ...queryOpts,
+        staleTime: 5 * 60_000,
+        queryKey: getGetClientAutomationEvidenceQueryKey({
+          clientPartyId: clientPartyId ?? "",
+        }),
+      },
+    },
+  );
 
   const execute = useExecuteAction();
   const grant = useGrantActionPolicy();
@@ -375,19 +393,24 @@ export default function AutomationScreen() {
 
   // The grant confirm IS the consent moment: the copy states the fixed cap
   // of 10 being agreed to (mobile v1 has no numeric input by design — a
-  // different ceiling is chosen on the web).
+  // different ceiling is chosen on the web), with the client's own backtest
+  // appended as a second paragraph when there is one to show.
   const confirmAutomate = useCallback(
     (action: ActionProposal) => {
       const kind = automatableActionKind(action.kind);
       if (!kind) return;
       confirmThen(
         policyKindLabel(kind),
-        policyGrantDescription(kind, POLICY_CAP_DEFAULT),
+        policyGrantAlertMessage(
+          kind,
+          POLICY_CAP_DEFAULT,
+          evidenceQuery.data?.kinds,
+        ),
         "Turn on daily automation",
         () => void runGrant(kind),
       );
     },
-    [runGrant],
+    [runGrant, evidenceQuery.data],
   );
 
   const runPolicyChange = useCallback(

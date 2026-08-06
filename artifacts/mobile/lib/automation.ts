@@ -25,6 +25,7 @@
 
 import {
   actionConfirmDescription as sharedActionConfirmDescription,
+  policyEvidenceLine,
   policyGrantDescription as sharedPolicyGrantDescription,
   policyPauseReasonLabel,
 } from "@workspace/format/action-copy";
@@ -158,6 +159,35 @@ export function policyGrantDescription(
   maxTargetsPerRun: number,
 ): string {
   return sharedPolicyGrantDescription(kind, "sme", maxTargetsPerRun);
+}
+
+/**
+ * The full Alert body for the "Automate daily" consent (Prove with Clerk
+ * phase 2): the consent-grade grant description, then — when the client's
+ * own backtest has something to say for the granting kind — "your own
+ * record" appended as a second paragraph. The wording is the shared
+ * policyEvidenceLine's; the honest-copy doctrine rides with it: an absent
+ * backtest, a kind the payload doesn't carry, or an empty sample appends
+ * NOTHING (never a rate from nothing), and the evidence never gates the
+ * grant — the Alert simply reads as it did before. Takes the evidence
+ * payload's whole kinds array so the screen passes `data?.kinds` verbatim.
+ */
+export function policyGrantAlertMessage(
+  kind: AutomatableActionKind,
+  maxTargetsPerRun: number,
+  evidenceKinds?: ReadonlyArray<{
+    kind: string;
+    sample: number;
+    agreed: number;
+    medianLeadDays: number | null;
+  }> | null,
+): string {
+  const consent = policyGrantDescription(kind, maxTargetsPerRun);
+  const record = policyEvidenceLine(
+    kind,
+    evidenceKinds?.find((k) => k.kind === kind),
+  );
+  return record ? `${consent}\n\n${record}` : consent;
 }
 
 // The pause/resume/revoke confirms. Pause and resume are reversible

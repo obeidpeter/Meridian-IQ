@@ -740,9 +740,27 @@ kind carries an honest one-line caveat interpolating the LIVE thresholds
 and caps, because the consuming card is a consent surface: 60% agreement
 is as much the point as 98%. Zero model calls; nothing stored; rendered
 under the rollup on the portfolio page (same `console.portfolio.read`
-wall). Phases 2–3 (evidence inside the grant dialogs and flag surfaces;
-the continuous shadow digest and agreement-drift tripwire) build on this
-engine.
+wall). **Phases 2–3 (round 37, contract 0.66.0)** landed on the engine:
+`GET /clerk/client-automation-evidence` narrows every cohort to one client
+under the action-effectiveness posture (`invoice.read` +
+`resolveClientAnalyticsScope` — NOT the portfolio wall), and the grant
+dialogs (SME + console standing approvals, the SME "Run monthly" strip,
+mobile's confirm) open with the client's own record via the shared
+import-free phrasing in `@workspace/format/action-copy`
+(`policyEvidenceLine` / `planEvidenceLine`) — evidence informs the consent
+sentence, never gates the buttons. The weekly digest gained the SHADOW
+line (digest.v8): while a firm's automation switches are dark,
+`computeAutomationShadowPending` (the act-now counts only — never the
+full backtest inside a 20-firm sweep pass) feeds one registry line that
+suppresses via the "do not mention" idiom the moment every switch is lit.
+And the **agreement watch** (`modules/clerk/agreement-watch.ts`) closes
+the loop for LIT firms: humans keep deciding the cap overflow, so their
+monthly agreement rate on ≥threshold receipt proposals — the evidence
+engine's exact predicates — stays measurable; a month-over-month collapse
+alerts operators once per (firm, month) through the watch ledger
+(`clerk.reconcile_agreement.drop`, on the Desk's health-alert list). No
+sweep writes a flag: the alert asks for a human judgement, doctrine
+unchanged.
 
 - `modules/clerk/data-intents/`: Ask carries a second closed catalogue next
   to the claims register — data intents ("what's overdue?", "what did we
@@ -1187,7 +1205,9 @@ entries.
   travels with it so the caveats survive the paper being handed around.
 - **Automation evidence backtest** (`modules/clerk/automation-evidence.ts`,
   `GET /clerk/automation-evidence`, `console.portfolio.read`, portfolio
-  card under the rollup, pure SQL + pure replay) — per automation kind,
+  card under the rollup; per-client twin
+  `GET /clerk/client-automation-evidence` on the effectiveness posture for
+  the grant dialogs; pure SQL + pure replay) — per automation kind,
   recorded-ledger agreement with the decisions humans made by hand over
   the 6-month window, median lead time, act-now counts, and the submit
   lane's s.104 small-band would-have floor. Machine writes never count as

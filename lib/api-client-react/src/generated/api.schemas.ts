@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.65.0
+ * OpenAPI spec version: 0.66.0
  */
 export interface HealthStatus {
   status: string;
@@ -6588,6 +6588,13 @@ windowDays?: number;
 };
 
 export type GetPlanPoliciesParams = {
+/**
+ * Required for firm principals; a client_user is pinned to its own party.
+ */
+clientPartyId?: string;
+};
+
+export type GetClientAutomationEvidenceParams = {
 /**
  * Required for firm principals; a client_user is pinned to its own party.
  */
