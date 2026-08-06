@@ -47,6 +47,8 @@ import integrationsRouter from "./integrations";
 import clientsRouter from "./clients";
 // Notice Desk: tracked authority obligations (contract 0.57.0).
 import obligationsRouter from "./obligations";
+// Filing Desk: the statutory returns register (contract 0.67.0).
+import filingsRouter from "./filings";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 // Platform health watch (rails / dead letters / dead deliveries). Also
@@ -68,6 +70,8 @@ import "../modules/push/register";
 import "../modules/invoice/register";
 // Registers the obligation deadline-reminder sweep with the pipeline worker.
 import "../modules/obligations/register";
+// Registers the filing mint sweep with the pipeline worker.
+import "../modules/filings/register";
 import "../modules/messaging/retention";
 
 const router: IRouter = Router();
@@ -111,5 +115,6 @@ router.use(billingPaymentsRouter);
 router.use(integrationsRouter);
 router.use(clientsRouter);
 router.use(obligationsRouter);
+router.use(filingsRouter);
 
 export default router;
