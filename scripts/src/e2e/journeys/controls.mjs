@@ -625,6 +625,52 @@ async function journeyFilings(page, BASE, check) {
       `status ${list.status()}, ${rows.length} rows, period ${period}`,
     );
 
+    // Month-end close reads the register BEFORE the walk: the freshly-minted
+    // rows are unfiled, so open_filings flags them for attention. Against a
+    // kept database an earlier run may already have filed both demo rows —
+    // the item then honestly reads clear (the skip-or-pass posture).
+    const bothFiled =
+      vatRow?.status === "filed" && payeRow?.status === "filed";
+    const close = await page.request.get(
+      BASE + `/api/month-end-close?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const closeBody = close.ok() ? await close.json() : { items: [] };
+    const filItem = (closeBody.items ?? []).find(
+      (i) => i.key === "open_filings",
+    );
+    check(
+      "month-end close flags the unfiled returns for attention",
+      close.status() === 200 &&
+        filItem !== undefined &&
+        (bothFiled
+          ? filItem.status === "clear"
+          : filItem.status === "attention" && filItem.count >= 1),
+      filItem
+        ? bothFiled
+          ? "already filed — earlier run"
+          : `${filItem.status}, count ${filItem.count}`
+        : "item missing",
+    );
+
+    // The firm cockpit: one row per client for the current period, with the
+    // demo client among them. State-independent except totals.unfiled, which
+    // an earlier run's filed demo rows can no longer vouch for — that clause
+    // drops in the already-filed case.
+    const matrixRes = await page.request.get(
+      BASE + "/api/console/filing-matrix",
+    );
+    const matrix = matrixRes.ok()
+      ? await matrixRes.json()
+      : { rows: [], totals: {} };
+    check(
+      "the filing cockpit shows every client's period status",
+      matrixRes.status() === 200 &&
+        matrix.rows.length >= 1 &&
+        matrix.rows.some((r) => r.clientPartyId === DEMO_CLIENT_PARTY_ID) &&
+        (bothFiled || matrix.totals.unfiled >= 1),
+      `status ${matrixRes.status()}, ${matrix.rows?.length ?? 0} rows, unfiled ${matrix.totals?.unfiled ?? "-"}`,
+    );
+
     // Skip-or-pass target choice: prefer the VAT row; already filed by an
     // earlier run, the walk moves to the PAYE row; both filed leaves nothing
     // to walk — the earlier run already proved it.

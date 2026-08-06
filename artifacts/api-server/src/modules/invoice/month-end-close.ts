@@ -13,6 +13,10 @@ import {
   OBLIGATION_DUE_SOON_DAYS,
   countOpenObligations,
 } from "../obligations/obligations";
+import {
+  FILING_DUE_SOON_DAYS,
+  countOpenFilings,
+} from "../filings/filings";
 
 // Month-end close assistant (round-19 idea #2). The platform now runs seven
 // independent deterministic advisories that a client discovers one card at a
@@ -66,6 +70,7 @@ export async function computeMonthEndClose(
     clientPartyId,
   );
   const obligations = await countOpenObligations(firmId, clientPartyId);
+  const filings = await countOpenFilings(firmId, clientPartyId);
   const doublePayCount =
     doublePay.multiPaid.length + doublePay.duplicateCandidates.length;
 
@@ -163,6 +168,17 @@ export async function computeMonthEndClose(
       obligations.open,
       `${obligations.open} authority notice(s) await a response — ${obligations.dueSoon} due within ${OBLIGATION_DUE_SOON_DAYS} days, ${obligations.overdue} overdue${obligations.nearestDue ? `; the nearest response is due ${obligations.nearestDue}` : ""}.`,
       "No authority notices are awaiting a response.",
+    ),
+    // Statutory returns (Filing Desk): the register's filing dates are the
+    // authority's too, so a month must not close with a return unfiled.
+    // Computed by the filings module's single fact function — this module
+    // keeps zero predicates of its own.
+    item(
+      "open_filings",
+      "Statutory returns",
+      filings.unfiled,
+      `${filings.unfiled} unfiled return(s) for the period — ${filings.dueSoon} due within ${FILING_DUE_SOON_DAYS} days, ${filings.overdue} overdue${filings.nextDueDate ? `; the next filing is due ${filings.nextDueDate}` : ""}. Prepare and file before the statutory date.`,
+      "No unfiled returns on the register.",
     ),
     // Approval item only when the maker-checker policy is ON for the firm
     // (null means off — a checklist line for a policy the firm never

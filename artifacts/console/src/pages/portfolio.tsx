@@ -51,6 +51,7 @@ import { BillingStatementCard } from "@/components/billing-statement-card";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
 import { GovernanceCard, isFirmAdminRole } from "@/components/governance-card";
 import { VatPositionsCard } from "@/components/vat-positions-card";
+import { FilingMatrixCard } from "@/components/filing-matrix-card";
 import {
   StaffNotificationPrefsCard,
   isFirmMemberRole,
@@ -2021,6 +2022,14 @@ export function Portfolio() {
           <ComplianceCalendarCard />
           <VatPackCard />
           <VatPositionsCard />
+          {/* The filing cockpit (Filing Desk phase 3) sits with the VAT
+              positions it acts on: on the 21st of the month the partner
+              needs one grid of who has filed and who hasn't — every
+              client's VAT return and PAYE remittance for the period.
+              Self-gating render-on-success; the section's occupancy is
+              already carried by the other lifted compliance queries, so
+              this card's query is not lifted. */}
+          <FilingMatrixCard />
           <VatSettlementCard />
 
           <VatPositionCard />

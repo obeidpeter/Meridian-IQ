@@ -23,6 +23,7 @@ import {
   countOpenObligations,
   openObligationSamples,
 } from "../obligations/obligations";
+import { countOpenFilings, openFilingSamples } from "../filings/filings";
 
 // Monthly client compliance pack (contract 0.45.0): one client's Lagos month
 // as a single facts object — who they are, what they issued, who owes them,
@@ -75,6 +76,22 @@ export interface CompliancePackFacts {
       noticeType: string;
       reference: string | null;
       responseDueDate: string;
+    }[];
+  };
+  // Filing Desk: the client's unfiled statutory returns as of render time
+  // (countOpenFilings / openFilingSamples — the filings module owns every
+  // predicate; the pack only displays). `rows` is a soonest-due-first sample
+  // capped at the module's display limit.
+  filings: {
+    unfiled: number;
+    dueSoon: number;
+    overdue: number;
+    nextDueDate: string | null;
+    rows: {
+      taxType: string;
+      period: string;
+      dueDate: string;
+      status: string;
     }[];
   };
   deadlines: {
@@ -213,6 +230,8 @@ export async function computeCompliancePack(
     unsubmittedReceivables,
     obligationCounts,
     obligationRows,
+    filingCounts,
+    filingRows,
   ] = await Promise.all([
     loadRegister(firmId, clientPartyId, monthStart),
     getReceivablesSummary(clientPartyId, firmId),
@@ -221,6 +240,8 @@ export async function computeCompliancePack(
     countUnsubmittedReceivables(firmId, clientPartyId),
     countOpenObligations(firmId, clientPartyId),
     openObligationSamples(firmId, clientPartyId),
+    countOpenFilings(firmId, clientPartyId),
+    openFilingSamples(firmId, clientPartyId),
   ]);
 
   return {
@@ -245,6 +266,18 @@ export async function computeCompliancePack(
         noticeType: r.noticeType,
         reference: r.reference,
         responseDueDate: r.responseDueDate,
+      })),
+    },
+    filings: {
+      unfiled: filingCounts.unfiled,
+      dueSoon: filingCounts.dueSoon,
+      overdue: filingCounts.overdue,
+      nextDueDate: filingCounts.nextDueDate,
+      rows: filingRows.map((r) => ({
+        taxType: r.taxType,
+        period: r.period,
+        dueDate: r.dueDate,
+        status: r.status,
       })),
     },
     deadlines: {

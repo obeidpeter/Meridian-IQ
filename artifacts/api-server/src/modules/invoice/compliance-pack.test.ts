@@ -6,6 +6,7 @@ import {
   getDb,
   consentRecordsTable,
   engagementsTable,
+  filingReturnsTable,
   firmsTable,
   invoicesTable,
   messagesTable,
@@ -32,7 +33,7 @@ import {
   closeAllServers,
   JSON_HEADERS,
 } from "../../test-helpers/route-harness.ts";
-import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { clientPrincipal, firmPrincipal } from "../../test-helpers/principals.ts";
 
 // Monthly client compliance pack (contract 0.45.0). Pinned here:
@@ -203,6 +204,18 @@ before(async () => {
       status: "accepted",
     },
   ]);
+  // One unfiled statutory return on the client's register (Filing Desk): due
+  // inside the due-soon window, so the pack's filings section has a row and
+  // exact counts. The far-past period keeps the natural key clear of any
+  // sweep-minted rows.
+  await db.insert(filingReturnsTable).values({
+    firmId: firmA,
+    clientPartyId: clientParty,
+    taxType: "vat",
+    period: "2097-05",
+    dueDate: lagosDateOffset(3),
+    status: "upcoming",
+  });
 });
 
 after(async () => {
@@ -262,6 +275,21 @@ test("the pack computes register, snapshots, VAT and deadlines for one client mo
   assert.equal(facts.deadlines.unsubmittedReceivables, 1);
   assert.match(facts.deadlines.nextVatReturnDue, /^\d{4}-\d{2}-21$/);
   assert.ok(facts.deadlines.nextVatReturnDue > lagosDateString());
+
+  // Statutory returns (Filing Desk): the seeded unfiled row, counted by the
+  // filings module's single fact function and sampled soonest-due-first.
+  assert.equal(facts.filings.unfiled, 1);
+  assert.equal(facts.filings.dueSoon, 1);
+  assert.equal(facts.filings.overdue, 0);
+  assert.equal(facts.filings.nextDueDate, lagosDateOffset(3));
+  assert.deepEqual(facts.filings.rows, [
+    {
+      taxType: "vat",
+      period: "2097-05",
+      dueDate: lagosDateOffset(3),
+      status: "upcoming",
+    },
+  ]);
 });
 
 // ---------------------------------------------------------------------------
@@ -327,6 +355,11 @@ test("the renderer produces a real PDF and the route ships it as an attachment",
   assert.ok(text.includes(CLIENT_NAME), "the pack names its client");
   assert.ok(text.includes(`CP-INV-${SALT}`), "the register is in the paper");
   assert.ok(text.includes(monthLabel(MONTH)));
+  // The Filing Desk section rides the same paper: the heading plus the
+  // seeded row's hand-rolled labels.
+  assert.ok(text.includes("STATUTORY RETURNS"), "the filings section renders");
+  assert.ok(text.includes("VAT return"), "the seeded row's kind label");
+  assert.ok(text.includes("May 2097"), "the seeded row's period label");
 });
 
 test("an off-list month is refused with BAD_MONTH", async () => {

@@ -42,6 +42,10 @@ import {
   OBLIGATION_DUE_SOON_DAYS,
   countOpenObligations,
 } from "../obligations/obligations";
+import {
+  FILING_DUE_SOON_DAYS,
+  countOpenFilings,
+} from "../filings/filings";
 import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
 import { countFirmChasedTwice } from "../invoice/chase-log";
 import { assertFirmClerkBudget } from "./budget";
@@ -82,7 +86,9 @@ const DELIVERY_BATCH = 50;
 // v8 (Prove with Clerk Phase 3): + the automation shadow line — what the
 // firm's DARK automation switches would act on today
 // (computeAutomationShadowPending), same reasoning.
-const DIGEST_PROMPT_VERSION = "digest.v8";
+// v9 (Filing Desk Phase 2): + the statutory-returns deadline lines (due-soon
+// / overdue unfiled returns, countOpenFilings), same reasoning.
+const DIGEST_PROMPT_VERSION = "digest.v9";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -168,6 +174,13 @@ export interface DigestFacts {
   // OPTIONAL for the same snapshot/legacy-literal reasons as the obligation
   // facts; builders treat an absent value as null.
   automationShadowPending?: number | null;
+  // Filing Desk: unfiled statutory returns whose filing date falls within
+  // FILING_DUE_SOON_DAYS / has passed (countOpenFilings — the single filings
+  // fact function, so the digest can never disagree with the register).
+  // OPTIONAL for the same snapshot/legacy-literal reasons as the obligation
+  // facts; builders default an absent value to 0.
+  filingsDueSoon?: number;
+  filingsOverdue?: number;
 }
 
 // The monthly VAT-return countdown, PURE and Lagos-anchored (lagosParts /
@@ -260,6 +273,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const missingBills = await countFirmMissingBills(firmId);
   const obligations = await countOpenObligations(firmId);
   const automationShadowPending = await computeAutomationShadowPending(firmId);
+  const filings = await countOpenFilings(firmId);
   // The penalty floor is DERIVED from the overdue count this query already
   // computed — a second COUNT under the same predicate could straddle a
   // Lagos midnight and let one digest say "0 overdue" next to a non-zero
@@ -291,6 +305,8 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     obligationsDueSoon: obligations.dueSoon,
     obligationsOverdue: obligations.overdue,
     automationShadowPending,
+    filingsDueSoon: filings.dueSoon,
+    filingsOverdue: filings.overdue,
   };
 }
 
@@ -478,6 +494,30 @@ const DIGEST_FACT_LINES: readonly DigestFactLine[] = [
       const pending = facts.automationShadowPending ?? null;
       return pending !== null && pending > 0
         ? `Clerk automation is off; it would act on ${plural(pending, "item")} today (overdue submissions, failed retries, matched receipts, unbilled patterns) — the portfolio's evidence card shows the backtest.`
+        : null;
+    },
+  },
+  // Filing Desk Phase 2: the statutory-returns deadline pair. Vocabulary is
+  // deliberately "statutory return" — never the phrase "VAT return", which
+  // this digest reserves for the monthly countdown line above (and which the
+  // quiet-week phrasing fixture forbids outright).
+  {
+    promptLine: (facts) =>
+      `- Statutory returns due within ${FILING_DUE_SOON_DAYS} days: ${facts.filingsDueSoon ?? 0}`,
+    bullet: (facts) => {
+      const filingsDueSoon = facts.filingsDueSoon ?? 0;
+      return filingsDueSoon > 0
+        ? `${plural(filingsDueSoon, "statutory return")} ${isAre(filingsDueSoon)} due to be filed within ${FILING_DUE_SOON_DAYS} days.`
+        : null;
+    },
+  },
+  {
+    promptLine: (facts) =>
+      `- Statutory returns already overdue: ${facts.filingsOverdue ?? 0}`,
+    bullet: (facts) => {
+      const filingsOverdue = facts.filingsOverdue ?? 0;
+      return filingsOverdue > 0
+        ? `${plural(filingsOverdue, "statutory return")} ${isAre(filingsOverdue)} already past ${filingsOverdue === 1 ? "its" : "their"} filing date — prepare and file these first.`
         : null;
     },
   },

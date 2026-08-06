@@ -344,3 +344,40 @@ export async function countOpenFilings(
     nextDueDate: r?.next_due ?? null,
   };
 }
+
+export interface OpenFilingSample {
+  id: string;
+  taxType: string;
+  period: string;
+  dueDate: string;
+  status: FilingReturn["status"];
+}
+
+// Display sample for the compliance pack (the openObligationSamples mirror):
+// unfiled rows, soonest statutory date first — the register is a worklist,
+// so the next clock to beat leads — id as the stable tiebreak.
+export async function openFilingSamples(
+  firmId: string,
+  clientPartyId?: string,
+  limit = 5,
+): Promise<OpenFilingSample[]> {
+  const conditions: SQL[] = [
+    eq(filingReturnsTable.firmId, firmId),
+    FILING_UNFILED,
+  ];
+  if (clientPartyId) {
+    conditions.push(eq(filingReturnsTable.clientPartyId, clientPartyId));
+  }
+  return getDb()
+    .select({
+      id: filingReturnsTable.id,
+      taxType: filingReturnsTable.taxType,
+      period: filingReturnsTable.period,
+      dueDate: filingReturnsTable.dueDate,
+      status: filingReturnsTable.status,
+    })
+    .from(filingReturnsTable)
+    .where(and(...conditions))
+    .orderBy(asc(filingReturnsTable.dueDate), asc(filingReturnsTable.id))
+    .limit(limit);
+}

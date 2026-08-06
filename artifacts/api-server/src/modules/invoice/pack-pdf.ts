@@ -21,6 +21,8 @@ import PDFDocument from "pdfkit";
 import { lagosMidnight } from "../../lib/lagos-time";
 import { formatMoney, hslTripleToHex } from "./pdf";
 import { OBLIGATION_DUE_SOON_DAYS } from "../obligations/obligations";
+import { FILING_DUE_SOON_DAYS } from "../filings/filings";
+import { monthLabel } from "../clerk/client-statement";
 import type { CompliancePackFacts } from "./compliance-pack";
 
 // --- Theme resolution --------------------------------------------------------
@@ -68,6 +70,21 @@ export function resolvePackTheme(
 const KIND_LABELS: Record<string, string> = {
   invoice: "Invoice",
   credit_note: "Credit note",
+};
+
+// Filing-row display labels, hand-rolled server-side (lib/format's
+// filing-copy is a frontend package the api-server deliberately does not
+// depend on). "VAT return"/"PAYE remittance" is fine HERE — this is the
+// client-facing paper, not the digest's constrained vocabulary.
+const FILING_KIND_LABELS: Record<string, string> = {
+  vat: "VAT return",
+  paye: "PAYE remittance",
+};
+
+const FILING_STATUS_LABELS: Record<string, string> = {
+  upcoming: "Upcoming",
+  prepared: "Prepared",
+  filed: "Filed",
 };
 
 // --- Layout constants (A4, pdf.ts's grid) ------------------------------------
@@ -535,6 +552,36 @@ export async function renderCompliancePackPdf(
     if (facts.obligations.open > facts.obligations.rows.length) {
       emptyLine(
         `Showing ${facts.obligations.rows.length} of ${facts.obligations.open} open obligations — the full list lives in the app.`,
+      );
+    }
+  }
+  cursor.y += 8;
+
+  // --- Statutory returns (Filing Desk) ---------------------------------------
+  // As-of-render, not month-bound (the obligations rule): a statutory filing
+  // date is live whichever month the pack describes, so an unfiled return
+  // belongs in every pack until it is filed.
+  section("Statutory returns");
+  if (facts.filings.unfiled === 0) {
+    emptyLine("No statutory returns are awaiting filing.");
+  } else {
+    kvRow(
+      `Unfiled statutory returns (${facts.filings.dueSoon} due within ${FILING_DUE_SOON_DAYS} days, ${facts.filings.overdue} overdue)`,
+      String(facts.filings.unfiled),
+      true,
+    );
+    if (facts.filings.nextDueDate) {
+      kvRow("Next filing due", facts.filings.nextDueDate);
+    }
+    for (const row of facts.filings.rows) {
+      kvRow(
+        `  ${FILING_KIND_LABELS[row.taxType] ?? row.taxType} · ${monthLabel(`${row.period}-01`)} · due ${row.dueDate}`,
+        FILING_STATUS_LABELS[row.status] ?? row.status,
+      );
+    }
+    if (facts.filings.unfiled > facts.filings.rows.length) {
+      emptyLine(
+        `Showing ${facts.filings.rows.length} of ${facts.filings.unfiled} unfiled returns — the full register lives in the app.`,
       );
     }
   }
