@@ -63,6 +63,7 @@ import "../modules/clerk/resistance-watch";
 import "../modules/clerk/phrasing-watch";
 import "../modules/clerk/spend-watch";
 import "../modules/clerk/quality-watch";
+import "../modules/clerk/agreement-watch";
 import "../modules/push/register";
 import "../modules/invoice/register";
 // Registers the obligation deadline-reminder sweep with the pipeline worker.

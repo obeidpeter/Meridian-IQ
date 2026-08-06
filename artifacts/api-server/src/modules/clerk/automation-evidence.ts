@@ -15,9 +15,11 @@ import {
   type HistoryRow,
 } from "../invoice/recurring-suggest";
 import { lagosDateString } from "../../lib/lagos-time";
-import { AUTO_RETRY_ATTEMPT_CAP } from "./actions";
+import { isFeatureEnabled } from "../flags/flags";
+import { ACTIONS_FLAG_KEY, AUTO_RETRY_ATTEMPT_CAP } from "./actions";
 import {
   AUTO_RECONCILE_CAP,
+  AUTO_RECONCILE_FLAG_KEY,
   AUTO_RECONCILE_THRESHOLD,
   MACHINE_DRAFT_PREFIX,
 } from "./plan-steps";
@@ -136,11 +138,109 @@ const MACHINE_SUBMITTED = sql`EXISTS (
     AND t.el ->> 'outcome' = 'submitted'
 )`;
 
+// ---------------------------------------------------------------------------
+// Act-now cohorts, extracted (Phase 3): the digest's weekly shadow line needs
+// ONLY these counts, per firm, twenty firms per sweep pass — never the full
+// backtest with its month-end replay. Each is the corresponding kind's exact
+// act-now predicate.
+// ---------------------------------------------------------------------------
+
+// Distinct credit lines carrying a live ≥threshold proposal on a
+// still-settleable invoice — the reconcileCandidates universe, uncapped
+// (the per-run cap is a pacing device, not a ceiling on the backlog).
+export async function pendingReconcileMatches(
+  firmId: string,
+  clientPartyId?: string,
+): Promise<number> {
+  const clientCond = clientPartyId
+    ? sql`AND st.client_party_id = ${clientPartyId}`
+    : sql``;
+  const [row] = (
+    await getDb().execute<{ n: number }>(sql`
+      SELECT COUNT(DISTINCT mp.statement_line_id)::int AS n
+      FROM match_proposals mp
+      JOIN bank_statement_lines l ON l.id = mp.statement_line_id
+      JOIN bank_statements st ON st.id = l.statement_id
+      JOIN invoices i ON i.id = mp.invoice_id
+      WHERE mp.firm_id = ${firmId}
+        AND l.direction = 'credit'
+        ${clientCond}
+        AND mp.status = 'proposed'
+        AND mp.confidence >= ${AUTO_RECONCILE_THRESHOLD}
+        AND i.status NOT IN ('settled', 'cancelled', 'credited')
+    `)
+  ).rows;
+  return num(row?.n);
+}
+
+// Today's overdue unsubmitted receivables — the submit_overdue assembly
+// predicate, firm- or client-wide (the penalty-exposure spelling plus the
+// machine-draft wall).
+export async function pendingSubmitOverdue(
+  firmId: string,
+  asOf: string,
+  clientPartyId?: string,
+): Promise<number> {
+  const clientCond = clientPartyId
+    ? sql`AND i.supplier_party_id = ${clientPartyId}`
+    : sql``;
+  const [row] = (
+    await getDb().execute<{ n: number }>(sql`
+      SELECT COUNT(*)::int AS n
+      FROM invoices i
+      WHERE i.firm_id = ${firmId}
+        AND i.kind = 'invoice'
+        AND i.status IN ('draft', 'validated')
+        AND ${RECEIVABLE_ORIENTATION}
+        ${clientCond}
+        AND i.invoice_number NOT LIKE ${MACHINE_DRAFT_PREFIX + "%"}
+        AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${asOf}::date
+    `)
+  ).rows;
+  return num(row?.n);
+}
+
+// Currently-failed receivables still under the attempt cap — the exact
+// universe the autopilot's retry_failed pass would touch.
+export async function pendingRetryFailed(
+  firmId: string,
+  clientPartyId?: string,
+): Promise<number> {
+  const clientCond = clientPartyId
+    ? sql`AND i.supplier_party_id = ${clientPartyId}`
+    : sql``;
+  const [row] = (
+    await getDb().execute<{ n: number }>(sql`
+      SELECT COUNT(*)::int AS n
+      FROM invoices i
+      WHERE i.firm_id = ${firmId}
+        AND i.kind = 'invoice'
+        AND i.status = 'failed'
+        AND ${RECEIVABLE_ORIENTATION}
+        ${clientCond}
+        AND (
+          SELECT COUNT(*) FROM submission_attempts sa
+          WHERE sa.invoice_id = i.id
+        ) < ${AUTO_RETRY_ATTEMPT_CAP}
+    `)
+  ).rows;
+  return num(row?.n);
+}
+
+// Optional client narrowing (Phase 2): the per-client evidence read rides
+// the action-effectiveness posture, and every predicate here filters by
+// BOTH firm and (when given) the client — the resolver's stated safety
+// contract. Reconcile scopes by the statement's client; the invoice lanes
+// scope by supplier (receivable orientation makes the supplier the client).
 async function reconcileEvidence(
   firmId: string,
   asOf: string,
+  clientPartyId?: string,
 ): Promise<AutomationEvidenceKind> {
   const db = getDb();
+  const clientCond = clientPartyId
+    ? sql`AND st.client_party_id = ${clientPartyId}`
+    : sql``;
   // Human accept/reject verdicts on ≥threshold RECEIPT proposals (credit
   // lines only — the debit lane stays human and is not evidence for it).
   // Two precision guards: machine acceptances are excluded via the
@@ -165,8 +265,10 @@ async function reconcileEvidence(
         ) FILTER (WHERE mp.status = 'accepted') AS median_lead
       FROM match_proposals mp
       JOIN bank_statement_lines l ON l.id = mp.statement_line_id
+      JOIN bank_statements st ON st.id = l.statement_id
       WHERE mp.firm_id = ${firmId}
         AND l.direction = 'credit'
+        ${clientCond}
         AND mp.confidence >= ${AUTO_RECONCILE_THRESHOLD}
         AND mp.status IN ('accepted', 'rejected')
         AND mp.decided_at >= (${asOf}::date - interval '6 months')
@@ -200,8 +302,10 @@ async function reconcileEvidence(
        AND acc.status = 'accepted'
        AND acc.id <> mp.id
        AND acc.confidence < mp.confidence
+      JOIN bank_statements st ON st.id = l.statement_id
       WHERE mp.firm_id = ${firmId}
         AND l.direction = 'credit'
+        ${clientCond}
         AND mp.confidence >= ${AUTO_RECONCILE_THRESHOLD}
         AND mp.status = 'superseded'
         AND acc.decided_at >= (${asOf}::date - interval '6 months')
@@ -213,22 +317,7 @@ async function reconcileEvidence(
         )
     `)
   ).rows;
-  // Act-now: distinct credit lines carrying a live ≥threshold proposal on a
-  // still-settleable invoice — the reconcileCandidates universe, uncapped
-  // (the per-run cap is a pacing device, not a ceiling on the backlog).
-  const [pending] = (
-    await db.execute<{ n: number }>(sql`
-      SELECT COUNT(DISTINCT mp.statement_line_id)::int AS n
-      FROM match_proposals mp
-      JOIN bank_statement_lines l ON l.id = mp.statement_line_id
-      JOIN invoices i ON i.id = mp.invoice_id
-      WHERE mp.firm_id = ${firmId}
-        AND l.direction = 'credit'
-        AND mp.status = 'proposed'
-        AND mp.confidence >= ${AUTO_RECONCILE_THRESHOLD}
-        AND i.status NOT IN ('settled', 'cancelled', 'credited')
-    `)
-  ).rows;
+  const pending = await pendingReconcileMatches(firmId, clientPartyId);
   const agreed = num(decided?.agreed);
   const disagreed = num(decided?.disagreed) + num(outranked?.n);
   return {
@@ -236,7 +325,7 @@ async function reconcileEvidence(
     sample: agreed + disagreed,
     agreed,
     disagreed,
-    pending: num(pending?.n),
+    pending,
     agreementRate: rate(agreed, disagreed),
     medianLeadDays: nullableNum(decided?.median_lead),
     exposureFloorNgn: null,
@@ -247,8 +336,12 @@ async function reconcileEvidence(
 async function submitOverdueEvidence(
   firmId: string,
   asOf: string,
+  clientPartyId?: string,
 ): Promise<AutomationEvidenceKind> {
   const db = getDb();
+  const clientCond = clientPartyId
+    ? sql`AND i.supplier_party_id = ${clientPartyId}`
+    : sql``;
   // Receivable invoices whose submit-by deadline fell inside the window,
   // machine drafts excluded (the DRAFT-% wall). Agreed = a human eventually
   // submitted it late (first submitted-transition after the deadline, not a
@@ -293,27 +386,14 @@ async function submitOverdueEvidence(
       WHERE i.firm_id = ${firmId}
         AND i.kind = 'invoice'
         AND ${RECEIVABLE_ORIENTATION}
+        ${clientCond}
         AND i.invoice_number NOT LIKE ${MACHINE_DRAFT_PREFIX + "%"}
         AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int < ${asOf}::date
         AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int
             >= (${asOf}::date - interval '6 months')::date
     `)
   ).rows;
-  // Act-now: today's overdue unsubmitted receivables — the submit_overdue
-  // assembly predicate, firm-wide (the penalty-exposure spelling plus the
-  // machine-draft wall).
-  const [pending] = (
-    await db.execute<{ n: number }>(sql`
-      SELECT COUNT(*)::int AS n
-      FROM invoices i
-      WHERE i.firm_id = ${firmId}
-        AND i.kind = 'invoice'
-        AND i.status IN ('draft', 'validated')
-        AND ${RECEIVABLE_ORIENTATION}
-        AND i.invoice_number NOT LIKE ${MACHINE_DRAFT_PREFIX + "%"}
-        AND i.issue_date + ${SUBMISSION_WINDOW_DAYS}::int <= ${asOf}::date
-    `)
-  ).rows;
+  const pending = await pendingSubmitOverdue(firmId, asOf, clientPartyId);
   const agreed = num(row?.agreed);
   const disagreed = num(row?.disagreed);
   return {
@@ -321,7 +401,7 @@ async function submitOverdueEvidence(
     sample: agreed + disagreed,
     agreed,
     disagreed,
-    pending: num(pending?.n),
+    pending,
     agreementRate: rate(agreed, disagreed),
     medianLeadDays: nullableNum(row?.median_late),
     exposureFloorNgn: bandExposure(agreed).small,
@@ -332,8 +412,12 @@ async function submitOverdueEvidence(
 async function retryFailedEvidence(
   firmId: string,
   asOf: string,
+  clientPartyId?: string,
 ): Promise<AutomationEvidenceKind> {
   const db = getDb();
+  const clientCond = clientPartyId
+    ? sql`AND i.supplier_party_id = ${clientPartyId}`
+    : sql``;
   // Invoices that ENTERED failed inside the window (first failed-transition
   // in the window is the clock start). Agreed = a human later resubmitted
   // (a failed → submitted re-transition after that entry, not a machine
@@ -378,25 +462,10 @@ async function retryFailedEvidence(
       FROM failed_entry f
       JOIN invoices i ON i.id = f.invoice_id
       LEFT JOIN resubmit r ON r.invoice_id = f.invoice_id
-      WHERE i.kind = 'invoice' AND ${RECEIVABLE_ORIENTATION}
+      WHERE i.kind = 'invoice' AND ${RECEIVABLE_ORIENTATION} ${clientCond}
     `)
   ).rows;
-  // Act-now: currently-failed receivables still under the attempt cap — the
-  // exact universe the autopilot's retry_failed pass would touch.
-  const [pending] = (
-    await db.execute<{ n: number }>(sql`
-      SELECT COUNT(*)::int AS n
-      FROM invoices i
-      WHERE i.firm_id = ${firmId}
-        AND i.kind = 'invoice'
-        AND i.status = 'failed'
-        AND ${RECEIVABLE_ORIENTATION}
-        AND (
-          SELECT COUNT(*) FROM submission_attempts sa
-          WHERE sa.invoice_id = i.id
-        ) < ${AUTO_RETRY_ATTEMPT_CAP}
-    `)
-  ).rows;
+  const pending = await pendingRetryFailed(firmId, clientPartyId);
   const agreed = num(row?.agreed);
   const disagreed = num(row?.disagreed);
   return {
@@ -404,7 +473,7 @@ async function retryFailedEvidence(
     sample: agreed + disagreed,
     agreed,
     disagreed,
-    pending: num(pending?.n),
+    pending,
     agreementRate: rate(agreed, disagreed),
     medianLeadDays: nullableNum(row?.median_lead),
     exposureFloorNgn: null,
@@ -421,17 +490,30 @@ interface EvidenceInvoiceRow extends Record<string, unknown> {
   grand_total: string;
 }
 
-async function draftRecurringEvidence(
+interface RecurringReplayData {
+  groups: Map<string, EvidenceInvoiceRow[]>;
+  templateBirth: Map<string, string>;
+}
+
+// One fetch of the firm's (or one client's) receivable history wide enough
+// for every replay instant, grouped for the miner's pure functions — shared
+// by the full backtest and the act-now count.
+async function loadRecurringGroups(
   firmId: string,
   asOf: string,
-): Promise<AutomationEvidenceKind> {
+  clientPartyId?: string,
+): Promise<RecurringReplayData> {
   const db = getDb();
-  // One fetch of the firm's receivable history wide enough for every
-  // replay instant (window + the miner's own lookback), then the miner's
-  // PURE functions run per (supplier, buyer, currency) group at each closed
-  // month-end. This deliberately does NOT call buyerBillingHistories — that
-  // function anchors its lookback to the wall clock; the replay must anchor
-  // to each month-end.
+  const clientCond = clientPartyId
+    ? sql`AND i.supplier_party_id = ${clientPartyId}`
+    : sql``;
+  const tplClientCond = clientPartyId
+    ? sql`AND supplier_party_id = ${clientPartyId}`
+    : sql``;
+  // Window + the miner's own lookback; the miner's PURE functions run per
+  // (supplier, buyer, currency) group at each replay instant. Deliberately
+  // does NOT call buyerBillingHistories — that function anchors its
+  // lookback to the wall clock; the replay must anchor per instant.
   const rows = (
     await db.execute<EvidenceInvoiceRow>(sql`
       SELECT i.id, i.supplier_party_id, i.buyer_party_id, i.currency,
@@ -445,6 +527,7 @@ async function draftRecurringEvidence(
         AND b.merged_into_id IS NULL
         AND b.type = 'buyer'
         AND ${RECEIVABLE_ORIENTATION}
+        ${clientCond}
         AND i.issue_date >=
           (${asOf}::date - interval '6 months')::date - ${LOOKBACK_DAYS}::int
       ORDER BY i.issue_date ASC
@@ -467,6 +550,7 @@ async function draftRecurringEvidence(
              (created_at AT TIME ZONE 'Africa/Lagos')::date::text AS created_day
       FROM recurring_invoice_templates
       WHERE firm_id = ${firmId}
+        ${tplClientCond}
     `)
   ).rows;
   const templateBirth = new Map<string, string>();
@@ -483,6 +567,43 @@ async function draftRecurringEvidence(
     if (list) list.push(r);
     else groups.set(key, [r]);
   }
+  return { groups, templateBirth };
+}
+
+// Patterns alerting TODAY under the replay — the draft step's act-now count.
+export async function pendingDraftRecurring(
+  firmId: string,
+  asOf: string,
+  clientPartyId?: string,
+  data?: RecurringReplayData,
+): Promise<number> {
+  const { groups, templateBirth } =
+    data ?? (await loadRecurringGroups(firmId, asOf, clientPartyId));
+  let pendingNow = 0;
+  for (const [groupKey, list] of groups) {
+    const coveredKey = groupKey.slice(0, groupKey.lastIndexOf(":"));
+    const birth = templateBirth.get(coveredKey);
+    if (birth && birth <= asOf) continue;
+    const lookbackStart = addDays(asOf, -LOOKBACK_DAYS);
+    const history: HistoryRow[] = list
+      .filter((r) => r.issue_date <= asOf && r.issue_date >= lookbackStart)
+      .map((r) => ({
+        id: r.id,
+        issueDate: r.issue_date,
+        grandTotal: Number(r.grand_total),
+      }));
+    if (patternAlertFor(history, asOf)) pendingNow += 1;
+  }
+  return pendingNow;
+}
+
+async function draftRecurringEvidence(
+  firmId: string,
+  asOf: string,
+  clientPartyId?: string,
+): Promise<AutomationEvidenceKind> {
+  const data = await loadRecurringGroups(firmId, asOf, clientPartyId);
+  const { groups, templateBirth } = data;
 
   // Replay at each closed month-end; the same expected cycle can alert at
   // two consecutive month-ends, so events dedupe on (group, expectedBy).
@@ -542,21 +663,7 @@ async function draftRecurringEvidence(
 
   // Act-now: patterns alerting TODAY under the same replay (a superset of
   // the still-open historical cycles when a cycle first alerts this month).
-  let pendingNow = 0;
-  for (const [groupKey, list] of groups) {
-    const coveredKey = groupKey.slice(0, groupKey.lastIndexOf(":"));
-    const birth = templateBirth.get(coveredKey);
-    if (birth && birth <= asOf) continue;
-    const lookbackStart = addDays(asOf, -LOOKBACK_DAYS);
-    const history: HistoryRow[] = list
-      .filter((r) => r.issue_date <= asOf && r.issue_date >= lookbackStart)
-      .map((r) => ({
-        id: r.id,
-        issueDate: r.issue_date,
-        grandTotal: Number(r.grand_total),
-      }));
-    if (patternAlertFor(history, asOf)) pendingNow += 1;
-  }
+  const pendingNow = await pendingDraftRecurring(firmId, asOf, clientPartyId, data);
 
   return {
     kind: "draft_recurring",
@@ -575,16 +682,48 @@ async function draftRecurringEvidence(
 
 // `now` is injectable (the computeComplianceCalendar precedent) so tests
 // replay against a frozen instant; production callers take the default.
+// `clientPartyId` narrows every cohort to one client (Phase 2 — the grant
+// dialogs); omitted, the report is firm-wide (the portfolio card).
 export async function computeAutomationEvidence(
   firmId: string,
   now: Date = new Date(),
+  clientPartyId?: string,
 ): Promise<AutomationEvidence> {
   const asOf = lagosDateString(now);
   const kinds = [
-    await reconcileEvidence(firmId, asOf),
-    await submitOverdueEvidence(firmId, asOf),
-    await retryFailedEvidence(firmId, asOf),
-    await draftRecurringEvidence(firmId, asOf),
+    await reconcileEvidence(firmId, asOf, clientPartyId),
+    await submitOverdueEvidence(firmId, asOf, clientPartyId),
+    await retryFailedEvidence(firmId, asOf, clientPartyId),
+    await draftRecurringEvidence(firmId, asOf, clientPartyId),
   ];
   return { windowMonths: EVIDENCE_WINDOW_MONTHS, asOf, kinds };
+}
+
+// The digest's weekly shadow number (Phase 3): what the DARK automation
+// kinds would act on today, and nothing else — no backtest, no month-end
+// replay beyond the one act-now pass. Null when every governing switch is
+// lit (there is no shadow to report — the rollup and effectiveness surfaces
+// own the lit story). The flag pairs mirror the executors exactly:
+// clerk_actions governs the act catalogue; reconciliation AND
+// clerk_auto_reconcile govern the settle step (plan-steps' own rule).
+export async function computeAutomationShadowPending(
+  firmId: string,
+  now: Date = new Date(),
+): Promise<number | null> {
+  const asOf = lagosDateString(now);
+  const actionsLit = await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId);
+  const reconcileLit =
+    (await isFeatureEnabled("reconciliation", firmId)) &&
+    (await isFeatureEnabled(AUTO_RECONCILE_FLAG_KEY, firmId));
+  if (actionsLit && reconcileLit) return null;
+  let total = 0;
+  if (!actionsLit) {
+    total += await pendingSubmitOverdue(firmId, asOf);
+    total += await pendingRetryFailed(firmId);
+    total += await pendingDraftRecurring(firmId, asOf);
+  }
+  if (!reconcileLit) {
+    total += await pendingReconcileMatches(firmId);
+  }
+  return total;
 }

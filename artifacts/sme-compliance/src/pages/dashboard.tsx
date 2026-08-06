@@ -11,6 +11,8 @@ import {
   useRevokePlanPolicy,
   useGetClerkDigest,
   getGetClerkDigestQueryKey,
+  useGetClientAutomationEvidence,
+  getGetClientAutomationEvidenceQueryKey,
   useListClientStatements,
   getListClientStatementsQueryKey,
   useGetDashboardSummary,
@@ -83,6 +85,7 @@ import {
   formatAmount,
   formatDate,
   formatNaira,
+  planEvidenceLine,
   statusLabel,
   badgeClasses,
   severityLabel,
@@ -788,7 +791,11 @@ export function planPolicyStatusLine(p: {
     : "Runs monthly · runs when there is eligible paper";
 }
 
-function MonthlyAutomationStrip({ clientPartyId }: { clientPartyId: string }) {
+export function MonthlyAutomationStrip({
+  clientPartyId,
+}: {
+  clientPartyId: string;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
@@ -803,6 +810,24 @@ function MonthlyAutomationStrip({ clientPartyId }: { clientPartyId: string }) {
       },
     },
   );
+  // Automation evidence (Prove with Clerk phase 2): the client's OWN
+  // backtest, so the monthly consent leads with "your own record".
+  // Render-on-success and advisory only — no evidence means no line, and
+  // the line never gates the grant button.
+  const { data: automationEvidence } = useGetClientAutomationEvidence(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getGetClientAutomationEvidenceQueryKey({ clientPartyId }),
+        staleTime: 5 * 60_000,
+        retry: false,
+      },
+    },
+  );
+  const planEvidence = automationEvidence
+    ? planEvidenceLine(automationEvidence.kinds)
+    : null;
   const onChanged = () =>
     queryClient.invalidateQueries({ queryKey: getGetPlanPoliciesQueryKey() });
   const onError = (e: unknown) =>
@@ -916,6 +941,16 @@ function MonthlyAutomationStrip({ clientPartyId }: { clientPartyId: string }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Run month-end close monthly</DialogTitle>
+            {/* The client's own backtest, before the consent sentence —
+                absent entirely when there is no evidence to show. */}
+            {planEvidence && (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="text-plan-evidence"
+              >
+                {planEvidence}
+              </p>
+            )}
             <DialogDescription>
               Each month, Clerk will run this close plan for your business:
               raise draft invoices for regular customers you have not billed

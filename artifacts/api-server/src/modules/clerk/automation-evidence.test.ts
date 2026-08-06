@@ -23,10 +23,12 @@ import { appendAudit } from "../audit/audit.ts";
 import {
   closedLagosMonthEnds,
   computeAutomationEvidence,
+  computeAutomationShadowPending,
   EVIDENCE_WINDOW_MONTHS,
   type AutomationEvidenceKind,
 } from "./automation-evidence.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 
 // The backtest engine (Prove with Clerk Phase 1). Everything here replays
 // against ONE frozen instant — computeAutomationEvidence's injectable `now`
@@ -485,6 +487,102 @@ test("the evidence report replays every kind against the frozen instant", async 
   assert.equal(draft.agreementRate, 0.5);
   assert.equal(draft.medianLeadDays, 25);
   assert.match(draft.note, /as they stand today/);
+});
+
+test("clientPartyId narrows every cohort to one client (Phase 2)", async () => {
+  // A sibling client with its own overdue paper: firm-wide counts grow, the
+  // original client's scoped read does not, and the sibling's scoped read
+  // sees only its own row — the resolver's stated both-keys contract.
+  const clientY = randomUUID();
+  const buyerY = randomUUID();
+  const db = getDb();
+  await db.insert(partiesTable).values([
+    {
+      id: clientY,
+      type: "client_business",
+      legalName: `Evidence Sibling ${SALT}`,
+      tin: "52000000-0002",
+      street: "9 Marina Rd",
+      city: "Lagos",
+    },
+    {
+      id: buyerY,
+      type: "buyer",
+      legalName: `Evidence Sibling Buyer ${SALT}`,
+      tin: "62000000-0009",
+      street: "9 Broad St",
+      city: "Lagos",
+    },
+  ]);
+  await db.insert(engagementsTable).values({
+    firmId,
+    clientPartyId: clientY,
+    type: "readiness_assessment",
+    title: "evidence-sibling",
+  });
+  const { invoice } = await createDraft(
+    {
+      firmId,
+      supplierPartyId: clientY,
+      buyerPartyId: buyerY,
+      invoiceNumber: `EVID-Y-${SALT}`,
+      issueDate: "2026-07-15",
+      dueDate: null,
+      lines: [
+        {
+          description: "Sibling goods",
+          quantity: "1",
+          unitPrice: "1000",
+          vatRate: "0.075",
+        },
+      ],
+    },
+    userId,
+  );
+  assert.ok(invoice.id);
+
+  const firmWide = await computeAutomationEvidence(firmId, NOW);
+  assert.equal(
+    kindOf(firmWide.kinds, "submit_overdue").pending,
+    2,
+    "firm-wide act-now sees both clients' overdue paper",
+  );
+  const scopedX = await computeAutomationEvidence(firmId, NOW, clientX);
+  assert.equal(kindOf(scopedX.kinds, "submit_overdue").pending, 1);
+  assert.equal(kindOf(scopedX.kinds, "submit_overdue").agreed, 1);
+  assert.equal(kindOf(scopedX.kinds, "reconcile_matches").sample, 3);
+  const scopedY = await computeAutomationEvidence(firmId, NOW, clientY);
+  assert.equal(kindOf(scopedY.kinds, "submit_overdue").pending, 1);
+  assert.equal(kindOf(scopedY.kinds, "submit_overdue").sample, 0);
+  assert.equal(kindOf(scopedY.kinds, "reconcile_matches").sample, 0);
+  assert.equal(kindOf(scopedY.kinds, "draft_recurring").sample, 0);
+});
+
+test("the shadow number sums only the DARK kinds' act-now cohorts (Phase 3)", async () => {
+  // Missing flag rows read as dark (isFeatureEnabled's fail-closed default),
+  // so the unguarded state IS the all-dark state: every cohort counts.
+  // submit 2 (both clients) + retry 1 + reconcile 1 + draft 0.
+  assert.equal(await computeAutomationShadowPending(firmId, NOW), 4);
+
+  const actions = makeFlagGuard("clerk_actions");
+  const reconciliation = makeFlagGuard("reconciliation");
+  const autoReconcile = makeFlagGuard("clerk_auto_reconcile");
+  await actions.saveAndSet(true);
+  try {
+    // Actions lit, reconcile pair still dark → only the reconcile backlog.
+    assert.equal(await computeAutomationShadowPending(firmId, NOW), 1);
+    await reconciliation.saveAndSet(true);
+    await autoReconcile.saveAndSet(true);
+    try {
+      // Everything lit → no shadow to report (null, not zero).
+      assert.equal(await computeAutomationShadowPending(firmId, NOW), null);
+    } finally {
+      await reconciliation.restore();
+      await autoReconcile.restore();
+    }
+  } finally {
+    await actions.restore();
+  }
 });
 
 test("an empty firm answers zeros with null rates, never an error", async () => {

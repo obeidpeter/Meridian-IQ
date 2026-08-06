@@ -10,6 +10,7 @@ import {
   type ClerkDigestRow,
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
+import { computeAutomationShadowPending } from "./automation-evidence";
 import { ensureGrounded } from "./grounding";
 import { pendingApprovals } from "../invoice/approvals";
 import { countFirmUnmatchedCollections } from "../collections/unmatched";
@@ -78,7 +79,10 @@ const DELIVERY_BATCH = 50;
 // path in lockstep with the template path.
 // v7 (Notice Desk): + the authority-obligation deadline lines (due-soon /
 // overdue notice responses, countOpenObligations), same reasoning.
-const DIGEST_PROMPT_VERSION = "digest.v7";
+// v8 (Prove with Clerk Phase 3): + the automation shadow line — what the
+// firm's DARK automation switches would act on today
+// (computeAutomationShadowPending), same reasoning.
+const DIGEST_PROMPT_VERSION = "digest.v8";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -158,6 +162,12 @@ export interface DigestFacts {
   // them; computeDigestFacts always populates both.
   obligationsDueSoon?: number;
   obligationsOverdue?: number;
+  // Prove with Clerk Phase 3: what the firm's DARK automation kinds would
+  // act on today (computeAutomationShadowPending). NULL means every switch
+  // is lit — there is no shadow to report and the line must stay silent.
+  // OPTIONAL for the same snapshot/legacy-literal reasons as the obligation
+  // facts; builders treat an absent value as null.
+  automationShadowPending?: number | null;
 }
 
 // The monthly VAT-return countdown, PURE and Lagos-anchored (lagosParts /
@@ -249,6 +259,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const unmatchedCollections = await countFirmUnmatchedCollections(firmId, 7);
   const missingBills = await countFirmMissingBills(firmId);
   const obligations = await countOpenObligations(firmId);
+  const automationShadowPending = await computeAutomationShadowPending(firmId);
   // The penalty floor is DERIVED from the overdue count this query already
   // computed — a second COUNT under the same predicate could straddle a
   // Lagos midnight and let one digest say "0 overdue" next to a non-zero
@@ -279,6 +290,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     missingBillsClients: missingBills.clients,
     obligationsDueSoon: obligations.dueSoon,
     obligationsOverdue: obligations.overdue,
+    automationShadowPending,
   };
 }
 
@@ -453,6 +465,19 @@ const DIGEST_FACT_LINES: readonly DigestFactLine[] = [
       const obligationsOverdue = facts.obligationsOverdue ?? 0;
       return obligationsOverdue > 0
         ? `${plural(obligationsOverdue, "authority notice response")} ${isAre(obligationsOverdue)} overdue — these deadlines are the authority's, so respond or escalate first.`
+        : null;
+    },
+  },
+  // Prove with Clerk Phase 3: the weekly shadow line. Null (every switch
+  // lit) suppresses via the "do not mention" idiom — the lit story belongs
+  // to the rollup and effectiveness surfaces, never this counterfactual.
+  {
+    promptLine: (facts) =>
+      `- Items idle automation would act on today (automation is off): ${facts.automationShadowPending ?? "automation on — do not mention"}`,
+    bullet: (facts) => {
+      const pending = facts.automationShadowPending ?? null;
+      return pending !== null && pending > 0
+        ? `Clerk automation is off; it would act on ${plural(pending, "item")} today (overdue submissions, failed retries, matched receipts, unbilled patterns) — the portfolio's evidence card shows the backtest.`
         : null;
     },
   },

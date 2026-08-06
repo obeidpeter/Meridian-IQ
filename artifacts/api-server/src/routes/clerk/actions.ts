@@ -8,6 +8,8 @@ import {
   GetActionDecisionsQueryParams,
   GetActionDecisionsResponse,
   GetActionEffectivenessQueryParams,
+  GetClientAutomationEvidenceQueryParams,
+  GetClientAutomationEvidenceResponse,
   GetActionEffectivenessResponse,
   GetActionPoliciesQueryParams,
   GetActionPoliciesResponse,
@@ -40,6 +42,7 @@ import {
   revokeActionPolicy,
 } from "../../modules/clerk/action-policies";
 import { computeActionEffectiveness } from "../../modules/clerk/action-effectiveness";
+import { computeAutomationEvidence } from "../../modules/clerk/automation-evidence";
 
 // Proposed actions (rounds 21-22): Clerk assembles a batch, a HUMAN
 // approves it, and approval executes through the platform's existing
@@ -148,6 +151,31 @@ router.get(
       query.windowDays,
     );
     res.json(GetActionEffectivenessResponse.parse(report));
+  },
+);
+
+// Phase 2 (round 37): the evidence backtest narrowed to ONE client — the
+// grant dialogs' consent-quality read. Same resolver, same gate, same
+// nothing-stored posture as the effectiveness read above; the firm-wide
+// twin stays behind console.portfolio.read on the portfolio page.
+router.get(
+  "/clerk/client-automation-evidence",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "invoice.read");
+    const query = parseOrThrow(
+      GetClientAutomationEvidenceQueryParams,
+      req.query,
+    );
+    const { firmId, clientPartyId } = resolveClientAnalyticsScope(
+      req.principal,
+      query.clientPartyId,
+    );
+    const evidence = await computeAutomationEvidence(
+      firmId,
+      new Date(),
+      clientPartyId,
+    );
+    res.json(GetClientAutomationEvidenceResponse.parse(evidence));
   },
 );
 

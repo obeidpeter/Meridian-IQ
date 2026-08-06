@@ -321,6 +321,22 @@ async function journeyAutomation(page, BASE, check) {
       `status ${evidenceRes.status()}, pending ${evidence?.kinds?.[1]?.pending}`,
     );
 
+    // The per-client twin (round 37): the same backtest scoped to the demo
+    // client — the grant dialogs' read. The backdated draft above is this
+    // client's, so its act-now cohort must see it.
+    const clientEvRes = await page.request.get(
+      BASE +
+        `/api/clerk/client-automation-evidence?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const clientEv =
+      clientEvRes.status() === 200 ? await clientEvRes.json() : null;
+    check(
+      "client-scoped automation evidence sees the client's own backlog",
+      (clientEv?.kinds ?? []).length === 4 &&
+        (clientEv?.kinds?.[1]?.pending ?? 0) >= 1,
+      `status ${clientEvRes.status()}, pending ${clientEv?.kinds?.[1]?.pending}`,
+    );
+
     // Approve exactly the one target: execute validates + submits it through
     // the ordinary per-invoice path and answers the durable decision row.
     const execRes = await page.request.post(

@@ -36,6 +36,7 @@ import {
 import { SPEND_ANOMALY_ACTION } from "../modules/clerk/spend-watch";
 import { QUALITY_DROP_ACTION } from "../modules/clerk/quality-watch";
 import { RESISTANCE_DROP_ACTION } from "../modules/clerk/resistance-watch";
+import { RECONCILE_AGREEMENT_DROP_ACTION } from "../modules/clerk/agreement-watch";
 
 const router: IRouter = Router();
 
@@ -76,6 +77,7 @@ const HEALTH_ALERT_ACTIONS = [
   SPEND_ANOMALY_ACTION,
   QUALITY_DROP_ACTION,
   RESISTANCE_DROP_ACTION,
+  RECONCILE_AGREEMENT_DROP_ACTION,
 ];
 
 // Read path for the watches' durable alerts: the audit ledger IS the alert

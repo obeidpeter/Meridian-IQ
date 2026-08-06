@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.65.0
+  version: 0.66.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5686,6 +5686,29 @@ paths:
       responses:
         "200":
           description: Per-kind agreement, lead-time and act-now counts over the evidence window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationEvidence"
+  # Phase 2 (round 37): the SAME backtest narrowed to one client, for the
+  # grant dialogs — the action-effectiveness posture (invoice.read + the
+  # client analytics resolver), NOT the firm-wide portfolio wall above.
+  /clerk/client-automation-evidence:
+    get:
+      operationId: getClientAutomationEvidence
+      summary: One client's automation evidence backtest (for the grant surfaces)
+      tags: [clerk]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          description: Required for firm principals; a client_user is pinned to its own party.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Per-kind agreement, lead-time and act-now counts for one client
           content:
             application/json:
               schema:

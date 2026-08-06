@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.65.0
+ * OpenAPI spec version: 0.66.0
  */
 import {
   useMutation,
@@ -198,6 +198,7 @@ import type {
   GetChaseListParams,
   GetClerkClaimGapsParams,
   GetClerkMetricsParams,
+  GetClientAutomationEvidenceParams,
   GetClientVatPositionParams,
   GetComplianceCalendarParams,
   GetCompliancePackParams,
@@ -22816,6 +22817,90 @@ export function useGetAutomationEvidence<TData = Awaited<ReturnType<typeof getAu
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetAutomationEvidenceQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetClientAutomationEvidenceUrl = (params?: GetClientAutomationEvidenceParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/client-automation-evidence?${stringifiedParams}` : `/api/clerk/client-automation-evidence`
+}
+
+/**
+ * @summary One client's automation evidence backtest (for the grant surfaces)
+ */
+export const getClientAutomationEvidence = async (params?: GetClientAutomationEvidenceParams, options?: RequestInit): Promise<AutomationEvidence> => {
+
+  return customFetch<AutomationEvidence>(getGetClientAutomationEvidenceUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClientAutomationEvidenceQueryKey = (params?: GetClientAutomationEvidenceParams,) => {
+    return [
+    `/api/clerk/client-automation-evidence`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetClientAutomationEvidenceQueryOptions = <TData = Awaited<ReturnType<typeof getClientAutomationEvidence>>, TError = ErrorType<unknown>>(params?: GetClientAutomationEvidenceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientAutomationEvidence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClientAutomationEvidenceQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientAutomationEvidence>>> = ({ signal }) => getClientAutomationEvidence(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientAutomationEvidence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClientAutomationEvidenceQueryResult = NonNullable<Awaited<ReturnType<typeof getClientAutomationEvidence>>>
+export type GetClientAutomationEvidenceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary One client's automation evidence backtest (for the grant surfaces)
+ */
+
+export function useGetClientAutomationEvidence<TData = Awaited<ReturnType<typeof getClientAutomationEvidence>>, TError = ErrorType<unknown>>(
+ params?: GetClientAutomationEvidenceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientAutomationEvidence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClientAutomationEvidenceQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
