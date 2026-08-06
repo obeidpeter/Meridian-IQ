@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.64.0
+ * OpenAPI spec version: 0.65.0
  */
 import {
   useMutation,
@@ -35,6 +35,7 @@ import type {
   AssistMatchProposalsInput,
   AuditBundle,
   AuditVerification,
+  AutomationEvidence,
   AutomationRollup,
   B2cReportBatch,
   B2cReportItem,
@@ -22738,6 +22739,83 @@ export function useGetAutomationRollup<TData = Awaited<ReturnType<typeof getAuto
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetAutomationRollupQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAutomationEvidenceUrl = () => {
+
+
+
+
+  return `/api/clerk/automation-evidence`
+}
+
+/**
+ * @summary Backtest evidence for the automation kinds (agreement with human decisions)
+ */
+export const getAutomationEvidence = async ( options?: RequestInit): Promise<AutomationEvidence> => {
+
+  return customFetch<AutomationEvidence>(getGetAutomationEvidenceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAutomationEvidenceQueryKey = () => {
+    return [
+    `/api/clerk/automation-evidence`
+    ] as const;
+    }
+
+
+export const getGetAutomationEvidenceQueryOptions = <TData = Awaited<ReturnType<typeof getAutomationEvidence>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAutomationEvidence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAutomationEvidenceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutomationEvidence>>> = ({ signal }) => getAutomationEvidence({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAutomationEvidence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAutomationEvidenceQueryResult = NonNullable<Awaited<ReturnType<typeof getAutomationEvidence>>>
+export type GetAutomationEvidenceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Backtest evidence for the automation kinds (agreement with human decisions)
+ */
+
+export function useGetAutomationEvidence<TData = Awaited<ReturnType<typeof getAutomationEvidence>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAutomationEvidence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAutomationEvidenceQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.64.0
+ * OpenAPI spec version: 0.65.0
  */
 import type { CashflowBucket } from './cashflowBucket';
 import type { PayablesSummaryGroupsItemDueWeeksItem } from './payablesSummaryGroupsItemDueWeeksItem';

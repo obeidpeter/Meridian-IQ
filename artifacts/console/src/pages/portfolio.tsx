@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AutomationRollupCard } from "@/components/automation-rollup-card";
+import { AutomationEvidenceCard } from "@/components/automation-evidence-card";
 import { BillingStatementCard } from "@/components/billing-statement-card";
 import { ClerkWeeklyDigestCard } from "@/components/clerk-digest-card";
 import { GovernanceCard, isFirmAdminRole } from "@/components/governance-card";
@@ -2000,6 +2001,11 @@ export function Portfolio() {
           adoption card — both answer "what is Clerk doing across our
           clients". Self-gating: renders only with an automation footprint. */}
       <AutomationRollupCard />
+      {/* The backtest evidence (round 36) sits directly under the rollup:
+          the rollup says what standing automation IS doing, the evidence
+          says what the dark kinds WOULD have done — the pair a firm reads
+          before lighting a flag. Self-gating on ledger footprint. */}
+      <AutomationEvidenceCard />
       </PortfolioSection>
 
       <PortfolioSection id="money" label="Money">

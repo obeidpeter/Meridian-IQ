@@ -398,6 +398,21 @@ test("plan-policy routes: read gate, grant walls, firm-scoped lifecycle, rollup"
     "the rollup resolves the firm from the principal — no client param to widen",
   );
 
+  // The evidence backtest (round 36) is the same aggregate class — per-kind
+  // agreement rates and act-now counts across every client — and must hold
+  // the same wall.
+  const evidenceBlock = routeBlock(source, "/clerk/automation-evidence");
+  assert.ok(
+    evidenceBlock.includes(
+      'assertCan(req.principal, "console.portfolio.read")',
+    ),
+    "the evidence backtest must gate on console.portfolio.read — invoice.read would leak cross-client agreement history to client_users",
+  );
+  assert.ok(
+    evidenceBlock.includes("requireFirmScope(req.principal)"),
+    "the evidence backtest resolves the firm from the principal — no client param to widen",
+  );
+
   assert.ok(
     src("modules/clerk/plan-policies.ts").includes(
       "assertClientPartyScope(principal, policy.clientPartyId)",

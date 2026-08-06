@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.64.0
+ * OpenAPI spec version: 0.65.0
  */
 import type { PhrasingEvalFixtureResult } from './phrasingEvalFixtureResult';
 import type { PhrasingEvalRunPromptVersions } from './phrasingEvalRunPromptVersions';
