@@ -569,8 +569,12 @@ period; your accountant
 walks each one from **Upcoming** to **Prepared** to **Filed**, and a filed
 row shows the filing date and the authority's acknowledgment reference.
 Unfiled rows past their date are flagged **Overdue**, ones inside the next
-7 days **Due soon**. MeridianIQ records that a filing happened — it never
-files anything with an authority itself. When a return's statutory date is
+7 days **Due soon**. Once your firm has asserted your statutory profile
+(VAT-registered, PAYE employer, financial year end), your **annual
+returns** — the CIT return, the CAC annual return and the PAYE annual
+return — appear in the same register alongside the monthly rows, tracked
+and reminded the same way. MeridianIQ records that a filing happened — it
+never files anything with an authority itself. When a return's statutory date is
 inside the next 7 days — or has passed — the platform sends your business
 one deadline alert per threshold over your enabled channels (the same
 opt-outs as every deadline alert).
@@ -1020,11 +1024,13 @@ invoice list — a partner can reach any failing invoice in three clicks.
   client appears in the book immediately; invite its owner from **Team
   invitations** when ready.
 - **Getting started** — a new firm's portfolio opens with a short
-  checklist: *Add your first client → Invite the client's owner → Client
-  grants consent → Create the first invoice → Submit for stamping.* Steps
-  tick themselves off as the underlying data appears (consent is the
-  client's own decision, so that step is informational), and the card can
-  be dismissed once you know your way around.
+  checklist: *Add your first client → Assert each client's statutory
+  profile → Invite the client's owner → Client grants consent → Create the
+  first invoice → Submit for stamping.* Steps tick themselves off as the
+  underlying data appears (consent is the client's own decision, so that
+  step is informational; the profile step checks off once every client in
+  the book carries an asserted profile), and the card can be dismissed once
+  you know your way around.
 - **Client export & offboarding** — a client's drill-down page carries the
   data-lifecycle actions. **Export data** downloads the client's sectioned
   JSON bundle (the same data-subject export the client can pull itself —
@@ -1066,8 +1072,25 @@ invoice list — a partner can reach any failing invoice in three clicks.
   **Mark responded**; every row has **Close**; closed notices drop off the
   card (it is a worklist, not an archive — the history stays on the record,
   and the client's own Obligations page can still filter to closed).
+- **Statutory profile & annual returns** — the drill-down's **Statutory
+  profile** card, directly above the filings register it explains. Once per
+  client, someone at the firm **asserts** the statutory facts: VAT-registered
+  yes/no, PAYE employer yes/no, financial year end, incorporation date
+  (nothing is pre-selected — a human states each fact, and the platform
+  never infers them). A client with **no** profile keeps the honest default:
+  both monthly returns (VAT and PAYE) stay tracked. Asserting the profile
+  narrows the monthly minting to what actually applies **and** unlocks the
+  **annual returns**: the **CIT return** (due 6 months after the financial
+  year end), the **CAC annual return** (due 30 June) and the **PAYE annual
+  return** (the employer's declaration, due 31 January) — tracked in the
+  same register and reminded like any other return. When an annual return is
+  overdue, the card shows an **estimated late-filing exposure** figure for
+  this client (an estimate to prioritise by — never a computed penalty
+  owed). Edit the profile any time; the next register sync follows the new
+  facts.
 - **Filings card** — the same client's statutory returns register (VAT
-  return, PAYE remittance) period by period: **Sync register** fills a new
+  return, PAYE remittance, and — once the statutory profile is asserted —
+  the annual returns) period by period: **Sync register** fills a new
   client's current period, **Mark prepared** and **Mark filed** (with the
   filing date and acknowledgment reference) walk each row forward, and
   unfiled rows past their statutory date read **Overdue**. Evidence-only:
@@ -1815,7 +1838,7 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **107 headless user-journey checks** on the
+  path-router and drives **113 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month). The journeys live as ordered groups
   in `scripts/src/e2e/journeys/` (roles, money, controls, lifecycle,
@@ -1838,7 +1861,9 @@ if the running server's version differs, every app shows a dismissible
   response letter and bundle → responded → closed), the WHT Desk (a
   categorised bill minting the period's remittance row and schedule, a
   recorded deduction opening a credit whose note walks it to received, and
-  the month-end chase item), the
+  the month-end chase item), the statutory-profile spine (the firm asserts
+  the facts, the summary counts them, sync mints the annual returns, and
+  overdue annual returns surface an estimated exposure), the
   credit-note lifecycle, the SME dashboard/search/bulk-submit/recurring
   flows, and the integration layer
   end-to-end (API-key mint / bearer auth / revocation, a webhook delivery

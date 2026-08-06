@@ -20,6 +20,7 @@ import type { OffboardClientResult } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClerkActionsCard } from "@/components/clerk-actions-card";
 import { ClerkActionEffectivenessCard } from "@/components/clerk-action-effectiveness-card";
+import { ComplianceProfileCard } from "@/components/compliance-profile-card";
 import { FilingsCard } from "@/components/filings-card";
 import { WhtCard } from "@/components/wht-card";
 import { ObligationsCard } from "@/components/obligations-card";
@@ -685,6 +686,11 @@ export function ClientDetail() {
             response deadlines — obligations from approved Clerk notice
             cases plus the inline paper-notice recorder. */}
         <ObligationsCard clientPartyId={id} />
+        {/* The statutory profile explains the register below it: the facts
+            the firm asserts (VAT-registered, PAYE employer, FYE,
+            incorporation date) decide WHICH returns sync mints — monthly and
+            annual — so it sits directly above the filings card. */}
+        <ComplianceProfileCard clientPartyId={id} />
         {/* Filing Desk: the register's other half — the calendar's returns
             (the VAT return and PAYE remittance each period owes), not the
             authority's notices; minted by sync and walked to filed here. */}

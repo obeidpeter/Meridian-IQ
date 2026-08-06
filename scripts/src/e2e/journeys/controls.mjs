@@ -937,6 +937,147 @@ async function journeyWht(page, BASE, check) {
   }
 }
 
+// ---------- Compliance Profile: assert facts, mint the annual layer ----------
+// The statutory-profile spine: a HUMAN at the firm asserts the per-client
+// facts (VAT-registered, PAYE employer, financial year end, incorporation
+// date); the asserted profile narrows the monthly minting honestly and
+// unlocks the ANNUAL returns (CIT due 6 months after the FYE; CAC annual due
+// 30 June; the employer annual return due 31 January), whose overdue rows
+// produce an ESTIMATED exposure figure — never a "penalty owed".
+//
+// INTERPLAY — journeyFilings (earlier in the run, and every future run
+// against a kept database) asserts the demo client's vat+paye monthly rows
+// mint, so this journey's PUT deliberately sets vatRegistered AND
+// payeEmployer TRUE: the assertion keeps the mint-both behaviour instead of
+// narrowing a row away. fyeMonth 12 pins the December FYE whose CIT return
+// falls due mid-year.
+//
+// RESTORE NOTE — none needed, deliberately: the profile PUT is an idempotent
+// upsert (every run re-asserts the same facts) and the annual filing rows
+// are periodic evidence like the monthly ones (idempotent mint; no journey
+// ever walks them to filed). Check 1 is the one kept-DB fork: a fresh seed
+// answers {profile: null}, a kept database echoes the earlier run's
+// assertion (skip-or-pass).
+async function journeyProfile(page, BASE, check) {
+  try {
+    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+
+    // Fresh DB: no profile yet. Kept DB: the earlier run's assertion echoes
+    // back (vatRegistered true is the fact every run asserts) — skip-or-pass.
+    const before = await page.request.get(
+      BASE + `/api/clients/${DEMO_CLIENT_PARTY_ID}/compliance-profile`,
+    );
+    const beforeBody = before.ok() ? await before.json() : {};
+    check(
+      "the profile starts unasserted (or echoes a prior run's assertion)",
+      before.status() === 200 &&
+        (beforeBody.profile === null ||
+          beforeBody.profile?.vatRegistered === true),
+      `status ${before.status()}, profile ${
+        beforeBody.profile === null ? "null" : "asserted (earlier run)"
+      }`,
+    );
+
+    // The firm asserts the facts; the upsert echoes them back.
+    const put = await page.request.put(
+      BASE + `/api/clients/${DEMO_CLIENT_PARTY_ID}/compliance-profile`,
+      {
+        data: {
+          vatRegistered: true,
+          payeEmployer: true,
+          fyeMonth: 12,
+          incorporationDate: "2020-03-15",
+        },
+        headers: CSRF,
+      },
+    );
+    const profile = put.ok() ? await put.json() : {};
+    check(
+      "the firm asserts the statutory profile",
+      put.status() === 200 &&
+        profile.vatRegistered === true &&
+        profile.payeEmployer === true &&
+        profile.fyeMonth === 12 &&
+        profile.incorporationDate === "2020-03-15",
+      `status ${put.status()}, fyeMonth ${profile.fyeMonth ?? "-"}`,
+    );
+
+    // The firm-wide summary (the portfolio checklist's evidence) counts it.
+    const summaryRes = await page.request.get(
+      BASE + "/api/compliance-profiles/summary",
+    );
+    const summary = summaryRes.ok() ? await summaryRes.json() : {};
+    check(
+      "the summary counts the profiled client",
+      summaryRes.status() === 200 &&
+        summary.clients >= 1 &&
+        summary.profiled >= 1 &&
+        summary.profiled <= summary.clients,
+      `status ${summaryRes.status()}, ${summary.profiled ?? "-"}/${summary.clients ?? "-"} profiled`,
+    );
+
+    // Sync now mints the annual layer for the profiled client: the CIT
+    // return for the December FYE (period ends "-12") and the employer
+    // annual return. Idempotent like the monthly mint — a kept DB re-mints
+    // nothing but the rows are still there to list.
+    const sync = await page.request.post(BASE + "/api/filings/sync", {
+      headers: CSRF,
+    });
+    const citList = await page.request.get(
+      BASE + `/api/filings?clientPartyId=${DEMO_CLIENT_PARTY_ID}&taxType=cit`,
+    );
+    const citRows = citList.ok() ? (await citList.json()).filings : [];
+    const citRow = citRows.find((f) => f.period.endsWith("-12"));
+    const payeAnnualList = await page.request.get(
+      BASE +
+        `/api/filings?clientPartyId=${DEMO_CLIENT_PARTY_ID}&taxType=paye_annual`,
+    );
+    const payeAnnualRows = payeAnnualList.ok()
+      ? (await payeAnnualList.json()).filings
+      : [];
+    check(
+      "sync mints the annual returns from the profile",
+      sync.status() === 200 &&
+        citList.status() === 200 &&
+        citRow !== undefined &&
+        payeAnnualList.status() === 200 &&
+        payeAnnualRows.length >= 1,
+      `sync ${sync.status()}, ${citRows.length} cit rows, ${payeAnnualRows.length} paye_annual rows`,
+    );
+
+    // Structural due-date check only — the arithmetic (FYE + 6 months on the
+    // Lagos calendar) is the backend unit tests' job; here the row just has
+    // to carry a real date that falls after its period opens.
+    check(
+      "the annual returns carry real due dates",
+      citRow !== undefined &&
+        /^\d{4}-\d{2}-\d{2}$/.test(citRow.dueDate ?? "") &&
+        citRow.dueDate > `${citRow.period}-01`,
+      citRow ? `period ${citRow.period}, due ${citRow.dueDate}` : "no cit row",
+    );
+
+    // The exposure figure. Deterministic on fresh AND kept databases: no
+    // journey ever files an annual row, and with today's clock the freshly
+    // minted pair is already overdue (the December-FYE CIT fell due
+    // mid-2026, the employer annual return on 31 January 2026) — so rows
+    // exist and the estimated total parses positive, outright.
+    const expRes = await page.request.get(
+      BASE +
+        `/api/filing-penalty-exposure?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const exposure = expRes.ok() ? await expRes.json() : {};
+    check(
+      "late annual returns surface an estimated exposure",
+      expRes.status() === 200 &&
+        (exposure.rows ?? []).length >= 1 &&
+        Number(exposure.totalNgn) > 0,
+      `status ${expRes.status()}, ${exposure.rows?.length ?? "-"} rows, total ${exposure.totalNgn ?? "-"}`,
+    );
+  } finally {
+    await apiLogout(page, BASE);
+  }
+}
+
 export {
   journeyGovernance,
   journeyCollections,
@@ -944,4 +1085,5 @@ export {
   journeyObligations,
   journeyFilings,
   journeyWht,
+  journeyProfile,
 };

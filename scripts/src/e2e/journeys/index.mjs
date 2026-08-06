@@ -37,6 +37,7 @@ import {
   journeyObligations,
   journeyFilings,
   journeyWht,
+  journeyProfile,
 } from "./controls.mjs";
 import {
   journeyStaffCreditNoteAndWorkflow,
@@ -77,6 +78,12 @@ export async function runJourneys(
   // Date.now()-numbered probe documents (both stay draft), so nothing later
   // is disturbed and re-runs stay deterministic.
   await journeyWht(page, BASE, check);
+  // Compliance Profile: asserts the demo client's statutory facts — vat AND
+  // paye deliberately TRUE, so journeyFilings' mint-both expectation stays
+  // honest on kept databases — then proves the annual mint and the estimated
+  // exposure figure. The PUT is an idempotent upsert and annual rows are
+  // periodic evidence (never walked), so nothing is restored.
+  await journeyProfile(page, BASE, check);
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
   await journeyPasswordReset(page, BASE, check);

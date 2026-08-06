@@ -33,6 +33,8 @@ import {
   getListInvitationsQueryKey,
   useGetComplianceScorecard,
   getGetComplianceScorecardQueryKey,
+  useGetComplianceProfileSummary,
+  getGetComplianceProfileSummaryQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -173,7 +175,13 @@ export function visiblePortfolioGroups(occupied: {
 export const GETTING_STARTED_DISMISS_KEY = "console.gettingStarted.dismissed";
 
 export type GettingStartedStep = {
-  id: "add-client" | "invite-owner" | "consent" | "first-invoice" | "stamping";
+  id:
+    | "add-client"
+    | "compliance-profiles"
+    | "invite-owner"
+    | "consent"
+    | "first-invoice"
+    | "stamping";
   label: string;
   /** "step" rows carry a checkbox; "info" rows are explanatory only. */
   kind: "step" | "info";
@@ -210,6 +218,8 @@ export function gettingStartedSteps(input: {
   hasClientInvite: boolean;
   invoiceCount: number;
   submittedCount: number;
+  /** GET /api/compliance-profiles/summary — absent while it loads (or 403s). */
+  profileSummary?: { clients: number; profiled: number };
 }): GettingStartedStep[] {
   return [
     {
@@ -217,6 +227,18 @@ export function gettingStartedSteps(input: {
       label: "Add your first client",
       kind: "step",
       done: input.clientCount > 0,
+    },
+    {
+      // Done only when EVERY engaged client carries an asserted profile —
+      // an unprofiled client keeps the honest mint-both default, so the
+      // step stays open until the firm has stated the facts for all.
+      id: "compliance-profiles",
+      label: "Assert each client's statutory profile",
+      kind: "step",
+      done:
+        !!input.profileSummary &&
+        input.profileSummary.clients > 0 &&
+        input.profileSummary.profiled >= input.profileSummary.clients,
     },
     {
       id: "invite-owner",
@@ -368,6 +390,14 @@ function GettingStartedCard({
                   >
                     Add a client
                   </Button>
+                )}
+                {step.id === "compliance-profiles" && !step.done && (
+                  <span className="text-xs text-muted-foreground">
+                    {" "}
+                    — on each client's page: VAT-registered, PAYE employer,
+                    financial year end. Unprofiled clients keep both monthly
+                    returns tracked.
+                  </span>
                 )}
                 {step.id === "invite-owner" && !step.done && (
                   <Link
@@ -1699,6 +1729,16 @@ export function Portfolio() {
       enabled: !gettingStartedDismissed && !!data,
     },
   });
+  // The statutory-profile step's evidence (Compliance Profile round): the
+  // firm-wide {clients, profiled} summary — same fetch discipline as the
+  // invitations list above.
+  const { data: profileSummary } = useGetComplianceProfileSummary({
+    query: {
+      queryKey: getGetComplianceProfileSummaryQueryKey(),
+      retry: false,
+      enabled: !gettingStartedDismissed && !!data,
+    },
+  });
 
   // Section occupancy: observe the SAME queries the section's self-gating
   // cards gate on — identical query keys, so react-query dedupes each to a
@@ -1789,6 +1829,7 @@ export function Portfolio() {
     hasClientInvite: hasClientOwnerInvite(invitations),
     invoiceCount: portfolioInvoiceCount(data?.clients ?? []),
     submittedCount: portfolioSubmittedCount(data?.clients ?? []),
+    profileSummary,
   });
   const showGettingStarted =
     !!data &&

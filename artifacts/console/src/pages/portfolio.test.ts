@@ -94,7 +94,7 @@ describe("card-content predicates (shared by card gate and section occupancy)", 
 });
 
 // ---- Getting-started checklist ----------------------------------------------
-// Five steps computed from data the page already holds. Consent is an info
+// Six steps computed from data the page already holds. Consent is an info
 // row by design — the portfolio payload cannot see it, so the card must
 // never pretend to.
 
@@ -106,16 +106,18 @@ const FRESH_FIRM = {
 };
 
 describe("gettingStartedSteps", () => {
-  test("renders the five steps in onboarding order, consent as info", () => {
+  test("renders the six steps in onboarding order, consent as info", () => {
     const steps = gettingStartedSteps(FRESH_FIRM);
     expect(steps.map((s) => s.id)).toEqual([
       "add-client",
+      "compliance-profiles",
       "invite-owner",
       "consent",
       "first-invoice",
       "stamping",
     ]);
     expect(steps.map((s) => s.kind)).toEqual([
+      "step",
       "step",
       "step",
       "info",
@@ -132,15 +134,32 @@ describe("gettingStartedSteps", () => {
       hasClientInvite: true,
       invoiceCount: 5,
       submittedCount: 1,
+      profileSummary: { clients: 2, profiled: 2 },
     });
     const done = Object.fromEntries(steps.map((s) => [s.id, s.done]));
     expect(done).toEqual({
       "add-client": true,
+      "compliance-profiles": true,
       "invite-owner": true,
       consent: false, // info rows never check
       "first-invoice": true,
       stamping: true,
     });
+  });
+
+  test("the profile step needs EVERY client profiled — and never checks blind", () => {
+    const profileDone = (
+      profileSummary?: { clients: number; profiled: number },
+    ) =>
+      gettingStartedSteps({ ...FRESH_FIRM, profileSummary }).find(
+        (s) => s.id === "compliance-profiles",
+      )?.done;
+    // Summary still loading (or the role can't read it): not done, no guess.
+    expect(profileDone(undefined)).toBe(false);
+    // An empty book has nothing profiled — the step can't check itself off.
+    expect(profileDone({ clients: 0, profiled: 0 })).toBe(false);
+    expect(profileDone({ clients: 2, profiled: 1 })).toBe(false);
+    expect(profileDone({ clients: 2, profiled: 2 })).toBe(true);
   });
 });
 
@@ -157,6 +176,17 @@ describe("completedStepCount / shouldShowGettingStarted", () => {
         }),
       ),
     ).toBe(4);
+    expect(
+      completedStepCount(
+        gettingStartedSteps({
+          clientCount: 1,
+          hasClientInvite: true,
+          invoiceCount: 1,
+          submittedCount: 1,
+          profileSummary: { clients: 1, profiled: 1 },
+        }),
+      ),
+    ).toBe(5);
   });
 
   test("shows for an empty book and while fewer than 3 steps are done", () => {
