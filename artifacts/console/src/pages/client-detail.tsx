@@ -20,6 +20,7 @@ import type { OffboardClientResult } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ClerkActionsCard } from "@/components/clerk-actions-card";
 import { ClerkActionEffectivenessCard } from "@/components/clerk-action-effectiveness-card";
+import { FilingsCard } from "@/components/filings-card";
 import { ObligationsCard } from "@/components/obligations-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -683,6 +684,10 @@ export function ClientDetail() {
             response deadlines — obligations from approved Clerk notice
             cases plus the inline paper-notice recorder. */}
         <ObligationsCard clientPartyId={id} />
+        {/* Filing Desk: the register's other half — the calendar's returns
+            (the VAT return and PAYE remittance each period owes), not the
+            authority's notices; minted by sync and walked to filed here. */}
+        <FilingsCard clientPartyId={id} />
         {/* Proposed actions (round 22): the firm-side approval surface —
             gates itself on the clerk_actions flag via its own query. */}
         <ClerkActionsCard clientPartyId={id} />

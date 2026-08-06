@@ -573,9 +573,141 @@ async function journeyObligations(page, BASE, check) {
   }
 }
 
+// ---------- Filing Desk: mint the register, walk a return to filed -----------
+// The returns register's deterministic spine: sync mints the current
+// period's VAT + PAYE rows for every engaged client (idempotent — {minted}
+// is 0 on a same-period re-run), then one row walks upcoming → prepared →
+// filed, with "filed" carrying the filed date and the authority's receipt
+// reference as evidence. The platform records the filing; it never files.
+//
+// RESTORE NOTE — none needed, deliberately: filed rows are terminal,
+// periodic EVIDENCE (the next period mints fresh rows; no later journey
+// reads this register). But re-runs against a kept database must stay
+// green, so the walk is skip-or-pass: a VAT row already filed by an earlier
+// run hands the walk to the PAYE row, and with BOTH already filed the two
+// walk checks pass vacuously with an honest "already filed — earlier run"
+// detail (the re-list check still proves the filed state for real).
+async function journeyFilings(page, BASE, check) {
+  // The register's current period is the PREVIOUS month — July's VAT return
+  // and PAYE remittance fall due in August.
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const period = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+
+  try {
+    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+
+    const sync = await page.request.post(BASE + "/api/filings/sync", {
+      headers: CSRF,
+    });
+    const syncBody = sync.ok() ? await sync.json() : {};
+    check(
+      "filings sync mints the current period's register (idempotent)",
+      sync.status() === 200 &&
+        typeof syncBody.minted === "number" &&
+        syncBody.minted >= 0,
+      `status ${sync.status()}, minted ${syncBody.minted ?? "-"}`,
+    );
+
+    const list = await page.request.get(
+      BASE + `/api/filings?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const rows = list.ok() ? (await list.json()).filings : [];
+    const vatRow = rows.find(
+      (f) => f.taxType === "vat" && f.period === period,
+    );
+    const payeRow = rows.find(
+      (f) => f.taxType === "paye" && f.period === period,
+    );
+    check(
+      "the register lists the period's VAT return and PAYE remittance",
+      list.status() === 200 && rows.length >= 2 && vatRow !== undefined,
+      `status ${list.status()}, ${rows.length} rows, period ${period}`,
+    );
+
+    // Skip-or-pass target choice: prefer the VAT row; already filed by an
+    // earlier run, the walk moves to the PAYE row; both filed leaves nothing
+    // to walk — the earlier run already proved it.
+    const target =
+      vatRow && vatRow.status !== "filed"
+        ? vatRow
+        : payeRow && payeRow.status !== "filed"
+          ? payeRow
+          : null;
+
+    // Upcoming → prepared. A target already prepared (a crashed earlier run)
+    // skips the move the same honest way rather than re-sending it.
+    let prepared = null;
+    if (target && target.status === "upcoming") {
+      const res = await page.request.post(
+        BASE + `/api/filings/${target.id}/status`,
+        { data: { status: "prepared" }, headers: CSRF },
+      );
+      prepared = { status: res.status(), body: res.ok() ? await res.json() : {} };
+    }
+    check(
+      "the return marks prepared",
+      target === null || target.status !== "upcoming"
+        ? true
+        : prepared.status === 200 && prepared.body.status === "prepared",
+      target === null
+        ? "already filed — earlier run"
+        : target.status !== "upcoming"
+          ? "already prepared — earlier run"
+          : `status ${prepared.status}`,
+    );
+
+    // Prepared → filed, with the evidence trio the contract wants ("filed"
+    // requires filedDate; the reference is the authority's receipt number).
+    let filed = null;
+    if (target) {
+      const res = await page.request.post(
+        BASE + `/api/filings/${target.id}/status`,
+        {
+          data: {
+            status: "filed",
+            filedDate: new Date().toISOString().slice(0, 10),
+            filedReference: "E2E/FIL/" + Date.now(),
+          },
+          headers: CSRF,
+        },
+      );
+      filed = { status: res.status(), body: res.ok() ? await res.json() : {} };
+    }
+    check(
+      "the prepared return marks filed with date and reference",
+      target === null
+        ? true
+        : filed.status === 200 &&
+            filed.body.status === "filed" &&
+            Boolean(filed.body.filedReference),
+      target === null
+        ? "already filed — earlier run"
+        : `status ${filed.status}`,
+    );
+
+    // The walk survives a re-read: the row (this run's, or the earlier
+    // run's VAT row) reads filed in the filtered list.
+    const walked = target ?? vatRow;
+    const relist = await page.request.get(
+      BASE + `/api/filings?clientPartyId=${DEMO_CLIENT_PARTY_ID}&status=filed`,
+    );
+    const relistRows = relist.ok() ? (await relist.json()).filings : [];
+    check(
+      "a re-list shows the walked return filed",
+      relist.status() === 200 &&
+        relistRows.some((f) => f.id === walked?.id && f.status === "filed"),
+      `status ${relist.status()}, ${relistRows.length} filed rows`,
+    );
+  } finally {
+    await apiLogout(page, BASE);
+  }
+}
+
 export {
   journeyGovernance,
   journeyCollections,
   journeyAutomation,
   journeyObligations,
+  journeyFilings,
 };

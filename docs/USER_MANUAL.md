@@ -1767,7 +1767,7 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **93 headless user-journey checks** on the
+  path-router and drives **98 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month). The journeys live as ordered groups
   in `scripts/src/e2e/journeys/` (roles, money, controls, lifecycle,

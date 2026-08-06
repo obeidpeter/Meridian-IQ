@@ -35,6 +35,7 @@ import {
   journeyCollections,
   journeyAutomation,
   journeyObligations,
+  journeyFilings,
 } from "./controls.mjs";
 import {
   journeyStaffCreditNoteAndWorkflow,
@@ -66,6 +67,11 @@ export async function runJourneys(
   // Self-contained (creates and closes its own obligation) — placed with the
   // other deterministic control journeys; leaves no open state behind.
   await journeyObligations(page, BASE, check);
+  // Self-contained like the obligations journey (mutates only the demo
+  // client's filing rows, which no later journey reads); filed rows are
+  // terminal periodic evidence, so nothing is restored — the journey itself
+  // tolerates an earlier run's filed rows (skip-or-pass).
+  await journeyFilings(page, BASE, check);
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
   await journeyPasswordReset(page, BASE, check);

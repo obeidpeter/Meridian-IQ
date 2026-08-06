@@ -19,6 +19,7 @@ import {
   Scale,
   ShieldCheck,
   FileCheck2,
+  CalendarCheck2,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,12 @@ const LINKS: NavLink[] = [
     label: "Obligations",
     icon: Scale,
     capability: "obligation.read",
+  },
+  {
+    href: "/filings",
+    label: "Filings",
+    icon: CalendarCheck2,
+    capability: "filing.read",
   },
   { href: "/calendar", label: "Calendar", icon: CalendarIcon },
   { href: "/alerts", label: "Alert settings", icon: Bell },
