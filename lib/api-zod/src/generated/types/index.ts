@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.69.0
+ * OpenAPI spec version: 0.70.0
  */
 
 export * from './acceptInvitationInput';
@@ -240,6 +240,10 @@ export * from './complianceDeadlineKind';
 export * from './complianceDeadlineSeverity';
 export * from './complianceDeadlineStatus';
 export * from './compliancePackNotifyInput';
+export * from './complianceProfile';
+export * from './complianceProfileEnvelope';
+export * from './complianceProfileInput';
+export * from './complianceProfileSummary';
 export * from './complianceScorecard';
 export * from './complianceScorecardRowsItem';
 export * from './confirmation';
@@ -360,6 +364,8 @@ export * from './filingMatrixRowPaye';
 export * from './filingMatrixRowVat';
 export * from './filingMatrixRowWht';
 export * from './filingMatrixTotals';
+export * from './filingPenaltyExposure';
+export * from './filingPenaltyExposureRow';
 export * from './filingStatus';
 export * from './firm';
 export * from './firmApiKey';
@@ -407,6 +413,7 @@ export * from './getComplianceCalendarParams';
 export * from './getCompliancePackParams';
 export * from './getDashboardSummaryParams';
 export * from './getDoublePaymentCheckParams';
+export * from './getFilingPenaltyExposureParams';
 export * from './getFirmVatPositionsParams';
 export * from './getMergeImpactParams';
 export * from './getMonthEndCloseParams';

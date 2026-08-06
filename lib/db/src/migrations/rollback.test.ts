@@ -369,6 +369,11 @@ const LADDER: LadderStep[] = [
     atTop: [pol("wht_credits"), pol("wht_reminder_sends")],
     afterRollback: [not(pol("wht_credits")), not(pol("wht_reminder_sends"))],
   },
+  {
+    version: 37, // Client Compliance Profile guardrails
+    atTop: [pol("client_compliance_profiles")],
+    afterRollback: [not(pol("client_compliance_profiles"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

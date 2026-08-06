@@ -37,6 +37,11 @@ export const FILING_KIND_LABELS: Record<string, string> = {
   vat: "VAT return",
   paye: "PAYE remittance",
   wht: "WHT remittance",
+  // The annual layer (Compliance Profile round): minted only for clients
+  // whose profile says the duty exists.
+  cit: "CIT return",
+  cac_annual: "CAC annual return",
+  paye_annual: "PAYE annual return",
 };
 
 export function filingKindLabel(raw: string | null | undefined): string {

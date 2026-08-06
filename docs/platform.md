@@ -502,6 +502,48 @@ it never files anything with an authority itself.
   (`open_filings` item), the compliance pack ("Statutory returns"
   section), and Ask Clerk (`data.open_filings`, client-safe).
 
+## Client Compliance Profile (honest minting & the annual layer)
+
+The per-client statutory facts a HUMAN at the firm asserts (contract
+0.70.0, migration 0037): VAT-registered, PAYE-employer, financial year
+end month, incorporation date — `client_compliance_profiles`, unique per
+firm × client. Parties are shared spine entities, so these firm-asserted
+facts live in their own firm-keyed table. The platform never infers any
+of them from documents or models.
+
+- **Absence semantics (load-bearing)**: a client with NO profile row
+  keeps the original mint-both behavior (monthly VAT + PAYE rows). A
+  profile row is the firm speaking; only then do the mint gates narrow —
+  VAT rows only when `vatRegistered`, PAYE only when `payeEmployer`.
+  Adoption is per-client; nothing changes until asserted. The WHT mint
+  stays economic-evidence-driven (categorised bills), profile-independent.
+- **The annual layer**: three annual kinds join the register, minted only
+  for profiled clients that qualify — `cit` (period = the FYE month,
+  due six months after financial year end; needs `fyeMonth`),
+  `cac_annual` (period `YYYY-06`, due 30 June yearly — the CAMA 2020
+  small-company simplification, documented; needs `incorporationDate`,
+  never in the incorporation year), `paye_annual` (the employer annual
+  return: period `YYYY-12`, due 31 January; needs `payeEmployer`). All
+  periods stay `YYYY-MM`, so the register, forward-only lifecycle,
+  reminders (taxType-blind), digest/month-end/pack counts
+  (`countOpenFilings` is taxType-blind) and Ask absorb annual rows with
+  zero surface changes; the monthly cockpit matrix deliberately stays
+  VAT/PAYE/WHT. Annual due-date arithmetic lives beside the monthly
+  calendar in `modules/filings/statutory-calendar.ts` — it does not fit
+  the month-after shape and has its own functions.
+- **Profile CRUD**: `GET/PUT /clients/{id}/compliance-profile`
+  (filing.read / filing.write, SEC-03-scoped; PUT upserts);
+  `GET /compliance-profiles/summary` feeds the console getting-started
+  checklist ("assert every client's statutory profile").
+- **Late-filing exposure**: `GET /filing-penalty-exposure` derives CIT /
+  CAC / employer-annual late-filing exposure from OVERDUE register rows
+  (due date passed while unfiled) with closed constants in one module —
+  CIT ₦25,000 first month + ₦5,000 per further month (CITA s.55), CAC
+  ₦5,000 per year in default (private-company simplification), employer
+  annual return ₦500,000 flat (PITA s.81) — documented approximations,
+  evidence-grade wording ("exposure", never "penalty owed"). This joins
+  the s.104 e-invoice exposure engine as a second, register-derived lane.
+
 ## WHT Desk (withholding-tax credits & remittances)
 
 Nigerian B2B buyers withhold 2–10% of the VAT-exclusive amount when

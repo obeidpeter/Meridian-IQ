@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.69.0
+ * OpenAPI spec version: 0.70.0
  */
 import {
   useMutation,
@@ -103,6 +103,10 @@ import type {
   ComplianceCalendar,
   ComplianceDeadline,
   CompliancePackNotifyInput,
+  ComplianceProfile,
+  ComplianceProfileEnvelope,
+  ComplianceProfileInput,
+  ComplianceProfileSummary,
   ComplianceScorecard,
   ConfirmStaffEmailInput,
   Confirmation,
@@ -174,6 +178,7 @@ import type {
   Filing,
   FilingList,
   FilingMatrix,
+  FilingPenaltyExposure,
   Firm,
   FirmApiKey,
   FirmApiKeyCreated,
@@ -207,6 +212,7 @@ import type {
   GetCompliancePackParams,
   GetDashboardSummaryParams,
   GetDoublePaymentCheckParams,
+  GetFilingPenaltyExposureParams,
   GetFirmVatPositionsParams,
   GetMergeImpactParams,
   GetMonthEndCloseParams,
@@ -11528,6 +11534,154 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getUpdateAlertPreferencesMutationOptions(options));
+    }
+
+export const getGetComplianceProfileUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}/compliance-profile`
+}
+
+/**
+ * @summary The client's statutory profile (null until the firm asserts one)
+ */
+export const getComplianceProfile = async (id: string, options?: RequestInit): Promise<ComplianceProfileEnvelope> => {
+
+  return customFetch<ComplianceProfileEnvelope>(getGetComplianceProfileUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetComplianceProfileQueryKey = (id: string,) => {
+    return [
+    `/api/clients/${id}/compliance-profile`
+    ] as const;
+    }
+
+
+export const getGetComplianceProfileQueryOptions = <TData = Awaited<ReturnType<typeof getComplianceProfile>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetComplianceProfileQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComplianceProfile>>> = ({ signal }) => getComplianceProfile(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getComplianceProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetComplianceProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getComplianceProfile>>>
+export type GetComplianceProfileQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary The client's statutory profile (null until the firm asserts one)
+ */
+
+export function useGetComplianceProfile<TData = Awaited<ReturnType<typeof getComplianceProfile>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetComplianceProfileQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateComplianceProfileUrl = (id: string,) => {
+
+
+
+
+  return `/api/clients/${id}/compliance-profile`
+}
+
+/**
+ * @summary Assert the client's statutory facts (firm work; upserts the profile)
+ */
+export const updateComplianceProfile = async (id: string,
+    complianceProfileInput: ComplianceProfileInput, options?: RequestInit): Promise<ComplianceProfile> => {
+
+  return customFetch<ComplianceProfile>(getUpdateComplianceProfileUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(complianceProfileInput)
+  }
+);}
+
+
+
+
+export const getUpdateComplianceProfileMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateComplianceProfile>>, TError,{id: string;data: BodyType<ComplianceProfileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateComplianceProfile>>, TError,{id: string;data: BodyType<ComplianceProfileInput>}, TContext> => {
+
+const mutationKey = ['updateComplianceProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateComplianceProfile>>, {id: string;data: BodyType<ComplianceProfileInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateComplianceProfile(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateComplianceProfileMutationResult = NonNullable<Awaited<ReturnType<typeof updateComplianceProfile>>>
+    export type UpdateComplianceProfileMutationBody = BodyType<ComplianceProfileInput>
+    export type UpdateComplianceProfileMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Assert the client's statutory facts (firm work; upserts the profile)
+ */
+export const useUpdateComplianceProfile = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateComplianceProfile>>, TError,{id: string;data: BodyType<ComplianceProfileInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateComplianceProfile>>,
+        TError,
+        {id: string;data: BodyType<ComplianceProfileInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateComplianceProfileMutationOptions(options));
     }
 
 export const getSendTestAlertUrl = (id: string,) => {
@@ -23976,6 +24130,167 @@ export function useGetWhtRemittance<TData = Awaited<ReturnType<typeof getWhtRemi
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetWhtRemittanceQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetComplianceProfileSummaryUrl = () => {
+
+
+
+
+  return `/api/compliance-profiles/summary`
+}
+
+/**
+ * @summary How many of the firm's live clients carry a statutory profile
+ */
+export const getComplianceProfileSummary = async ( options?: RequestInit): Promise<ComplianceProfileSummary> => {
+
+  return customFetch<ComplianceProfileSummary>(getGetComplianceProfileSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetComplianceProfileSummaryQueryKey = () => {
+    return [
+    `/api/compliance-profiles/summary`
+    ] as const;
+    }
+
+
+export const getGetComplianceProfileSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getComplianceProfileSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceProfileSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetComplianceProfileSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComplianceProfileSummary>>> = ({ signal }) => getComplianceProfileSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getComplianceProfileSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetComplianceProfileSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getComplianceProfileSummary>>>
+export type GetComplianceProfileSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary How many of the firm's live clients carry a statutory profile
+ */
+
+export function useGetComplianceProfileSummary<TData = Awaited<ReturnType<typeof getComplianceProfileSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceProfileSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetComplianceProfileSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFilingPenaltyExposureUrl = (params?: GetFilingPenaltyExposureParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/filing-penalty-exposure?${stringifiedParams}` : `/api/filing-penalty-exposure`
+}
+
+/**
+ * @summary Statutory late-filing exposure derived from overdue register rows
+ */
+export const getFilingPenaltyExposure = async (params?: GetFilingPenaltyExposureParams, options?: RequestInit): Promise<FilingPenaltyExposure> => {
+
+  return customFetch<FilingPenaltyExposure>(getGetFilingPenaltyExposureUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFilingPenaltyExposureQueryKey = (params?: GetFilingPenaltyExposureParams,) => {
+    return [
+    `/api/filing-penalty-exposure`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFilingPenaltyExposureQueryOptions = <TData = Awaited<ReturnType<typeof getFilingPenaltyExposure>>, TError = ErrorType<BadRequestResponse>>(params?: GetFilingPenaltyExposureParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFilingPenaltyExposure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFilingPenaltyExposureQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFilingPenaltyExposure>>> = ({ signal }) => getFilingPenaltyExposure(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFilingPenaltyExposure>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFilingPenaltyExposureQueryResult = NonNullable<Awaited<ReturnType<typeof getFilingPenaltyExposure>>>
+export type GetFilingPenaltyExposureQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary Statutory late-filing exposure derived from overdue register rows
+ */
+
+export function useGetFilingPenaltyExposure<TData = Awaited<ReturnType<typeof getFilingPenaltyExposure>>, TError = ErrorType<BadRequestResponse>>(
+ params?: GetFilingPenaltyExposureParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFilingPenaltyExposure>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFilingPenaltyExposureQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

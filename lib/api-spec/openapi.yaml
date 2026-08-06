@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.69.0
+  version: 0.70.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2782,6 +2782,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AlertPreferences"
+
+  /clients/{id}/compliance-profile:
+    get:
+      operationId: getComplianceProfile
+      summary: The client's statutory profile (null until the firm asserts one)
+      tags: [filings]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The profile, or null when the firm has not captured one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceProfileEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateComplianceProfile
+      summary: Assert the client's statutory facts (firm work; upserts the profile)
+      tags: [filings]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceProfileInput"
+      responses:
+        "200":
+          description: The saved profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /clients/{id}/alerts/test:
     post:
@@ -5918,7 +5958,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [vat, paye, wht]
+            enum: [vat, paye, wht, cit, cac_annual, paye_annual]
         - name: limit
           in: query
           required: false
@@ -6093,6 +6133,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WhtRemittance"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /compliance-profiles/summary:
+    get:
+      operationId: getComplianceProfileSummary
+      summary: How many of the firm's live clients carry a statutory profile
+      tags: [console]
+      responses:
+        "200":
+          description: Live-client and profiled counts for the firm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceProfileSummary"
+  /filing-penalty-exposure:
+    get:
+      operationId: getFilingPenaltyExposure
+      summary: Statutory late-filing exposure derived from overdue register rows
+      tags: [filings]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Per-row late-filing exposure (CIT, CAC, employer annual), naira
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilingPenaltyExposure"
         "400":
           $ref: "#/components/responses/BadRequest"
 components:
@@ -12104,6 +12177,93 @@ components:
               type: integer
             whtAmount:
               type: string
+    ComplianceProfile:
+      type: object
+      required:
+        [clientPartyId, vatRegistered, payeEmployer, fyeMonth, incorporationDate, notes, updatedAt]
+      properties:
+        clientPartyId:
+          type: string
+          format: uuid
+        vatRegistered:
+          type: boolean
+        payeEmployer:
+          type: boolean
+        # Financial year end MONTH (1-12); null = not captured (no CIT
+        # return can be minted without it).
+        fyeMonth:
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 12
+        incorporationDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+          format: date-time
+    ComplianceProfileEnvelope:
+      type: object
+      required: [profile]
+      properties:
+        # Null = the firm has never asserted this client's statutory facts;
+        # the register keeps its original mint-both behavior.
+        profile:
+          anyOf:
+            - $ref: "#/components/schemas/ComplianceProfile"
+            - type: "null"
+    ComplianceProfileInput:
+      type: object
+      required: [vatRegistered, payeEmployer]
+      properties:
+        vatRegistered:
+          type: boolean
+        payeEmployer:
+          type: boolean
+        fyeMonth:
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 12
+        incorporationDate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+          maxLength: 2000
+    ComplianceProfileSummary:
+      type: object
+      required: [clients, profiled]
+      properties:
+        clients:
+          type: integer
+        profiled:
+          type: integer
+    FilingPenaltyExposureRow:
+      type: object
+      required: [taxType, period, dueDate, monthsLate, exposureNgn]
+      properties:
+        taxType:
+          type: string
+        period:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+        dueDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        monthsLate:
+          type: integer
+        # Naira as a decimal string (the money-column convention).
+        exposureNgn:
+          type: string
+    FilingPenaltyExposure:
+      type: object
+      required: [rows, totalNgn]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/FilingPenaltyExposureRow"
+        totalNgn:
+          type: string
     ClerkCaseDecisionInput:
       type: object
       required: [action]

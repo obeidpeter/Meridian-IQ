@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.69.0
+ * OpenAPI spec version: 0.70.0
  */
 import * as zod from 'zod';
 
@@ -3454,6 +3454,66 @@ export const UpdateAlertPreferencesResponse = zod.object({
   "deadlineAlerts": zod.boolean(),
   "failureAlerts": zod.boolean(),
   "penaltyAlerts": zod.boolean(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary The client's statutory profile (null until the firm asserts one)
+ */
+export const GetComplianceProfileParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const getComplianceProfileResponseProfileOneFyeMonthMax = 12;
+
+
+
+export const GetComplianceProfileResponse = zod.object({
+  "profile": zod.union([zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "vatRegistered": zod.boolean(),
+  "payeEmployer": zod.boolean(),
+  "fyeMonth": zod.number().min(1).max(getComplianceProfileResponseProfileOneFyeMonthMax).nullable(),
+  "incorporationDate": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "updatedAt": zod.coerce.date()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Assert the client's statutory facts (firm work; upserts the profile)
+ */
+export const UpdateComplianceProfileParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const updateComplianceProfileBodyFyeMonthMax = 12;
+
+export const updateComplianceProfileBodyNotesMax = 2000;
+
+
+
+export const UpdateComplianceProfileBody = zod.object({
+  "vatRegistered": zod.boolean(),
+  "payeEmployer": zod.boolean(),
+  "fyeMonth": zod.number().min(1).max(updateComplianceProfileBodyFyeMonthMax).nullish(),
+  "incorporationDate": zod.string().nullish(),
+  "notes": zod.string().max(updateComplianceProfileBodyNotesMax).nullish()
+})
+
+export const updateComplianceProfileResponseFyeMonthMax = 12;
+
+
+
+export const UpdateComplianceProfileResponse = zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "vatRegistered": zod.boolean(),
+  "payeEmployer": zod.boolean(),
+  "fyeMonth": zod.number().min(1).max(updateComplianceProfileResponseFyeMonthMax).nullable(),
+  "incorporationDate": zod.string().nullable(),
+  "notes": zod.string().nullable(),
   "updatedAt": zod.coerce.date()
 })
 
@@ -9230,7 +9290,7 @@ export const listFilingsQueryOffsetMin = 0;
 export const ListFilingsQueryParams = zod.object({
   "clientPartyId": zod.coerce.string().uuid().optional(),
   "status": zod.enum(['upcoming', 'prepared', 'filed']).optional(),
-  "taxType": zod.enum(['vat', 'paye', 'wht']).optional(),
+  "taxType": zod.enum(['vat', 'paye', 'wht', 'cit', 'cac_annual', 'paye_annual']).optional(),
   "limit": zod.coerce.number().min(1).max(listFilingsQueryLimitMax).optional(),
   "offset": zod.coerce.number().min(listFilingsQueryOffsetMin).optional()
 })
@@ -9459,6 +9519,38 @@ export const GetWhtRemittanceResponse = zod.object({
   "bills": zod.number(),
   "whtAmount": zod.string()
 })
+})
+
+
+/**
+ * @summary How many of the firm's live clients carry a statutory profile
+ */
+export const GetComplianceProfileSummaryResponse = zod.object({
+  "clients": zod.number(),
+  "profiled": zod.number()
+})
+
+
+/**
+ * @summary Statutory late-filing exposure derived from overdue register rows
+ */
+export const GetFilingPenaltyExposureQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional()
+})
+
+export const getFilingPenaltyExposureResponseRowsItemPeriodRegExp = new RegExp('^\\d{4}-\\d{2}$');
+export const getFilingPenaltyExposureResponseRowsItemDueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetFilingPenaltyExposureResponse = zod.object({
+  "rows": zod.array(zod.object({
+  "taxType": zod.string(),
+  "period": zod.string().regex(getFilingPenaltyExposureResponseRowsItemPeriodRegExp),
+  "dueDate": zod.string().regex(getFilingPenaltyExposureResponseRowsItemDueDateRegExp),
+  "monthsLate": zod.number(),
+  "exposureNgn": zod.string()
+})),
+  "totalNgn": zod.string()
 })
 
 

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.69.0
+ * OpenAPI spec version: 0.70.0
  */
 export interface HealthStatus {
   status: string;
@@ -4335,6 +4335,65 @@ export interface WhtRemittance {
   totals: WhtRemittanceTotals;
 }
 
+export interface ComplianceProfile {
+  clientPartyId: string;
+  vatRegistered: boolean;
+  payeEmployer: boolean;
+  /**
+     * @minimum 1
+     * @maximum 12
+     * @nullable
+     */
+  fyeMonth: number | null;
+  /** @nullable */
+  incorporationDate: string | null;
+  /** @nullable */
+  notes: string | null;
+  updatedAt: string;
+}
+
+export interface ComplianceProfileEnvelope {
+  profile: ComplianceProfile | null;
+}
+
+export interface ComplianceProfileInput {
+  vatRegistered: boolean;
+  payeEmployer: boolean;
+  /**
+     * @minimum 1
+     * @maximum 12
+     * @nullable
+     */
+  fyeMonth?: number | null;
+  /** @nullable */
+  incorporationDate?: string | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  notes?: string | null;
+}
+
+export interface ComplianceProfileSummary {
+  clients: number;
+  profiled: number;
+}
+
+export interface FilingPenaltyExposureRow {
+  taxType: string;
+  /** @pattern ^\d{4}-\d{2}$ */
+  period: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  dueDate: string;
+  monthsLate: number;
+  exposureNgn: string;
+}
+
+export interface FilingPenaltyExposure {
+  rows: FilingPenaltyExposureRow[];
+  totalNgn: string;
+}
+
 export type ClerkCaseDecisionInputAction = typeof ClerkCaseDecisionInputAction[keyof typeof ClerkCaseDecisionInputAction];
 
 
@@ -6921,6 +6980,9 @@ export const ListFilingsTaxType = {
   vat: 'vat',
   paye: 'paye',
   wht: 'wht',
+  cit: 'cit',
+  cac_annual: 'cac_annual',
+  paye_annual: 'paye_annual',
 } as const;
 
 export type ListWhtCreditsParams = {
@@ -6951,5 +7013,9 @@ clientPartyId: string;
  * @pattern ^\d{4}-\d{2}$
  */
 period?: string;
+};
+
+export type GetFilingPenaltyExposureParams = {
+clientPartyId?: string;
 };
 
