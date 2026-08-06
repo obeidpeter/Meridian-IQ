@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.67.0
+ * OpenAPI spec version: 0.68.0
  */
 export interface HealthStatus {
   status: string;
@@ -4138,6 +4138,62 @@ export interface UpdateFilingStatusInput {
   filedReference?: string;
   /** @maxLength 2000 */
   notes?: string;
+}
+
+/**
+ * @nullable
+ */
+export type FilingMatrixRowVat = typeof FilingMatrixRowVat[keyof typeof FilingMatrixRowVat] | null;
+
+
+export const FilingMatrixRowVat = {
+  upcoming: 'upcoming',
+  prepared: 'prepared',
+  filed: 'filed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type FilingMatrixRowPaye = typeof FilingMatrixRowPaye[keyof typeof FilingMatrixRowPaye] | null;
+
+
+export const FilingMatrixRowPaye = {
+  upcoming: 'upcoming',
+  prepared: 'prepared',
+  filed: 'filed',
+} as const;
+
+export interface FilingMatrixRow {
+  clientPartyId: string;
+  clientName: string;
+  /** @nullable */
+  vat: FilingMatrixRowVat;
+  /** @nullable */
+  paye: FilingMatrixRowPaye;
+}
+
+export type FilingMatrixDueDates = {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  vat: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  paye: string;
+};
+
+export type FilingMatrixTotals = {
+  clients: number;
+  filed: number;
+  unfiled: number;
+  overdue: number;
+};
+
+export interface FilingMatrix {
+  /** @pattern ^\d{4}-\d{2}$ */
+  period: string;
+  periodLabel: string;
+  dueDates: FilingMatrixDueDates;
+  rows: FilingMatrixRow[];
+  totals: FilingMatrixTotals;
 }
 
 export type ClerkCaseDecisionInputAction = typeof ClerkCaseDecisionInputAction[keyof typeof ClerkCaseDecisionInputAction];

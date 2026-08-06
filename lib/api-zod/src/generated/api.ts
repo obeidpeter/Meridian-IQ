@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.67.0
+ * OpenAPI spec version: 0.68.0
  */
 import * as zod from 'zod';
 
@@ -2921,6 +2921,36 @@ export const GetFirmVatPositionsResponse = zod.object({
   "defensibleNetVat": zod.string()
 }),
   "note": zod.string()
+})
+
+
+/**
+ * @summary The firm's current-period filing status across every client
+ */
+export const getFilingMatrixResponsePeriodRegExp = new RegExp('^\\d{4}-\\d{2}$');
+export const getFilingMatrixResponseDueDatesVatRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getFilingMatrixResponseDueDatesPayeRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetFilingMatrixResponse = zod.object({
+  "period": zod.string().regex(getFilingMatrixResponsePeriodRegExp),
+  "periodLabel": zod.string(),
+  "dueDates": zod.object({
+  "vat": zod.string().regex(getFilingMatrixResponseDueDatesVatRegExp),
+  "paye": zod.string().regex(getFilingMatrixResponseDueDatesPayeRegExp)
+}),
+  "rows": zod.array(zod.object({
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "vat": zod.union([zod.literal('upcoming'),zod.literal('prepared'),zod.literal('filed'),zod.literal(null)]).nullable(),
+  "paye": zod.union([zod.literal('upcoming'),zod.literal('prepared'),zod.literal('filed'),zod.literal(null)]).nullable()
+})),
+  "totals": zod.object({
+  "clients": zod.number(),
+  "filed": zod.number(),
+  "unfiled": zod.number(),
+  "overdue": zod.number()
+})
 })
 
 

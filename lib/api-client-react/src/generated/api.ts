@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.67.0
+ * OpenAPI spec version: 0.68.0
  */
 import {
   useMutation,
@@ -173,6 +173,7 @@ import type {
   FeatureFlagUpdate,
   Filing,
   FilingList,
+  FilingMatrix,
   Firm,
   FirmApiKey,
   FirmApiKeyCreated,
@@ -9839,6 +9840,83 @@ export function useGetFirmVatPositions<TData = Awaited<ReturnType<typeof getFirm
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetFirmVatPositionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFilingMatrixUrl = () => {
+
+
+
+
+  return `/api/console/filing-matrix`
+}
+
+/**
+ * @summary The firm's current-period filing status across every client
+ */
+export const getFilingMatrix = async ( options?: RequestInit): Promise<FilingMatrix> => {
+
+  return customFetch<FilingMatrix>(getGetFilingMatrixUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFilingMatrixQueryKey = () => {
+    return [
+    `/api/console/filing-matrix`
+    ] as const;
+    }
+
+
+export const getGetFilingMatrixQueryOptions = <TData = Awaited<ReturnType<typeof getFilingMatrix>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFilingMatrix>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFilingMatrixQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFilingMatrix>>> = ({ signal }) => getFilingMatrix({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFilingMatrix>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFilingMatrixQueryResult = NonNullable<Awaited<ReturnType<typeof getFilingMatrix>>>
+export type GetFilingMatrixQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The firm's current-period filing status across every client
+ */
+
+export function useGetFilingMatrix<TData = Awaited<ReturnType<typeof getFilingMatrix>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFilingMatrix>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFilingMatrixQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
