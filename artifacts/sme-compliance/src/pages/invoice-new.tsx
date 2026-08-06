@@ -8,6 +8,7 @@ import {
   useListErrorCatalogue,
   useListLineItemSuggestions,
   getListInvoicesQueryKey,
+  type InvoiceInputWhtCategory,
   type InvoiceLineInput,
   type LineItemSuggestion,
 } from "@workspace/api-client-react";
@@ -20,9 +21,11 @@ import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
+  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { WHT_CATEGORY_LABELS } from "@workspace/format/wht-copy";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/page-header";
@@ -64,6 +67,12 @@ export interface DraftState {
   currency: string;
   /** ₦ per unit of the foreign currency; blank = not provided. */
   fxRateToNgn: string;
+  /**
+   * WHT Desk: the withholding catalogue key a human picked, "" = No WHT
+   * (the default — a category is never pre-selected, and "" is omitted
+   * from the create payload entirely).
+   */
+  whtCategory: string;
   lines: LineDraft[];
 }
 
@@ -79,8 +88,13 @@ const emptyDraft = (): DraftState => ({
   dueDate: "",
   currency: "NGN",
   fxRateToNgn: "",
+  whtCategory: "",
   lines: [emptyLine()],
 });
+
+// The Radix select can't carry an empty-string item value, so the "No WHT"
+// option rides a sentinel that maps back to "" in the draft.
+const NO_WHT = "none";
 
 function loadDraft(): DraftState {
   try {
@@ -278,6 +292,11 @@ export function InvoiceNew() {
             : {}),
           issueDate: draft.issueDate,
           dueDate: draft.dueDate || undefined,
+          // Only a real, human-picked category travels; "" (No WHT) is
+          // omitted, never sent.
+          ...(draft.whtCategory
+            ? { whtCategory: draft.whtCategory as InvoiceInputWhtCategory }
+            : {}),
           lines,
         },
       });
@@ -548,6 +567,41 @@ export function InvoiceNew() {
                     </p>
                   </div>
                 )}
+              </div>
+              <div>
+                <Label htmlFor="wht-category-select">WHT category</Label>
+                {/* A human picks the category — nothing is ever
+                    pre-selected; "No WHT" is the default and omits the
+                    field from the payload. The % in each label is wording
+                    from the shared catalogue, not arithmetic. */}
+                <Select
+                  value={draft.whtCategory || NO_WHT}
+                  onValueChange={(v) =>
+                    setDraft((d) => ({
+                      ...d,
+                      whtCategory: v === NO_WHT ? "" : v,
+                    }))
+                  }
+                >
+                  <SelectTrigger
+                    id="wht-category-select"
+                    data-testid="select-wht-category"
+                  >
+                    <SelectValue placeholder="No WHT" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_WHT}>No WHT</SelectItem>
+                    {Object.entries(WHT_CATEGORY_LABELS).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  If your buyer withholds tax on this invoice, pick the
+                  deduction type — the buyer owes you a credit note for it.
+                </p>
               </div>
             </CardContent>
           </Card>

@@ -1,6 +1,8 @@
 // The control journeys: maker-checker submission approval (governance),
-// collection accounts with the inbound settlement rail, and the Clerk
-// proposed-actions + standing-approval (automation) round-trip.
+// collection accounts with the inbound settlement rail, the Clerk
+// proposed-actions + standing-approval (automation) round-trip, the Notice
+// Desk obligations spine, the Filing Desk register walk, and the WHT Desk
+// (category → remittance schedule → credit-note walk).
 import {
   CSRF,
   DEMO_CLIENT_PARTY_ID,
@@ -750,10 +752,196 @@ async function journeyFilings(page, BASE, check) {
   }
 }
 
+// ---------- WHT Desk: category → remittance → credit-note walk ---------------
+// The withholding spine end-to-end: a WHT-categorised BILL (supplier = the
+// seeded vendor, buyer = the demo client, issued in the previous Lagos
+// period) makes filings sync mint the period's "wht" register row and puts
+// the bill on the remittance schedule; a WHT-categorised RECEIVABLE takes a
+// recorded deduction that opens an awaiting_note credit, which the credit
+// note's reference + date walk to note_received; and month-end close carries
+// the wht_credits chase item. Every probe document uses a Date.now() number
+// (WHT-*/WHT-R-*, outside every pinned namespace), so the idempotent
+// POST /api/wht/credits can never hand back an earlier run's already-noted
+// row — the walk is deterministic per run, no kept-DB skip needed. Both
+// probes stay DRAFT forever (never submitted), so the credit-note journey's
+// oldest-STAMPED target pick and the integration journey's party patterning
+// are undisturbed.
+async function journeyWht(page, BASE, check) {
+  const BUYER = "55555555-5555-4555-8555-555555555555"; // Zenith Retail
+  // journeyFilings' period computation: the register's current period is the
+  // PREVIOUS month.
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const period = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    await apiLogin(page, BASE, "demo.staff@meridianiq.example");
+
+    // A NEW previous-period bill with a human-picked category. The seeded
+    // vendor party is discovered from the existing bills ledger rather than
+    // pinned — the seed owns that id.
+    const billsRes = await page.request.get(
+      BASE + `/api/bills?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const bills = billsRes.ok() ? await billsRes.json() : [];
+    const vendorPartyId = bills[0]?.supplierPartyId ?? null;
+    const billNumber = `WHT-${Date.now()}`;
+    const createdBill = vendorPartyId
+      ? await createDraftInvoice(page, BASE, {
+          supplierPartyId: vendorPartyId,
+          buyerPartyId: DEMO_CLIENT_PARTY_ID,
+          invoiceNumber: billNumber,
+          issueDate: `${period}-15`,
+          description: "WHT probe professional services",
+          unitPrice: "200000",
+          whtCategory: "services_5",
+        })
+      : { status: 0, invoiceId: null };
+    const billDetailRes = createdBill.invoiceId
+      ? await page.request.get(BASE + `/api/invoices/${createdBill.invoiceId}`)
+      : null;
+    const billDetail = billDetailRes?.ok() ? await billDetailRes.json() : null;
+    check(
+      "a bill carries its WHT category",
+      createdBill.status === 201 &&
+        billDetail?.invoice?.whtCategory === "services_5",
+      vendorPartyId
+        ? `create ${createdBill.status}, whtCategory ${billDetail?.invoice?.whtCategory ?? "-"}`
+        : "no seeded bill to discover the vendor from",
+    );
+
+    // Sync now that the period holds a WHT-categorised bill: the register
+    // mints the client's "wht" remittance row (idempotent like the vat/paye
+    // mint; status any — an earlier run may already have walked it).
+    const sync = await page.request.post(BASE + "/api/filings/sync", {
+      headers: CSRF,
+    });
+    const whtList = await page.request.get(
+      BASE + `/api/filings?clientPartyId=${DEMO_CLIENT_PARTY_ID}&taxType=wht`,
+    );
+    const whtRows = whtList.ok() ? (await whtList.json()).filings : [];
+    const whtRow = whtRows.find((f) => f.period === period);
+    check(
+      "filings sync mints the WHT remittance row",
+      sync.status() === 200 &&
+        whtList.status() === 200 &&
+        whtRow !== undefined,
+      `sync ${sync.status()}, list ${whtList.status()}, ${whtRows.length} wht rows, period ${period}`,
+    );
+
+    // The remittance schedule lists the bill, and the total the server
+    // computed parses positive (the frontends never do this arithmetic).
+    const remitRes = await page.request.get(
+      BASE +
+        `/api/wht/remittance?clientPartyId=${DEMO_CLIENT_PARTY_ID}&period=${period}`,
+    );
+    const remit = remitRes.ok() ? await remitRes.json() : null;
+    check(
+      "the remittance schedule lists the bill",
+      remitRes.status() === 200 &&
+        (remit?.rows ?? []).some((r) => r.invoiceNumber === billNumber) &&
+        Number(remit?.totals?.whtAmount) > 0,
+      `status ${remitRes.status()}, ${remit?.rows?.length ?? 0} rows, whtAmount ${remit?.totals?.whtAmount ?? "-"}`,
+    );
+
+    // The credit side: a categorised RECEIVABLE (supplier = the demo
+    // client) takes a recorded deduction — the credit opens awaiting its
+    // note, with the amount computed server-side from the category's rate.
+    const recvNumber = `WHT-R-${Date.now()}`;
+    const createdRecv = await createDraftInvoice(page, BASE, {
+      supplierPartyId: DEMO_CLIENT_PARTY_ID,
+      buyerPartyId: BUYER,
+      invoiceNumber: recvNumber,
+      issueDate: today,
+      description: "WHT probe consulting",
+      unitPrice: "150000",
+      whtCategory: "services_5",
+    });
+    const creditRes = createdRecv.invoiceId
+      ? await page.request.post(BASE + "/api/wht/credits", {
+          data: { invoiceId: createdRecv.invoiceId, deductedDate: today },
+          headers: CSRF,
+        })
+      : null;
+    const credit =
+      creditRes && creditRes.status() === 201 ? await creditRes.json() : null;
+    check(
+      "a recorded deduction opens a credit",
+      createdRecv.status === 201 &&
+        creditRes?.status() === 201 &&
+        credit?.status === "awaiting_note" &&
+        Number(credit?.amount) > 0,
+      `create ${createdRecv.status}, credit ${creditRes?.status() ?? "-"}, status ${credit?.status ?? "-"}, amount ${credit?.amount ?? "-"}`,
+    );
+
+    // The ledger lists it with the chase totals.
+    const ledgerRes = await page.request.get(
+      BASE + `/api/wht/credits?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const ledger = ledgerRes.ok() ? await ledgerRes.json() : null;
+    check(
+      "the credit ledger lists it with totals",
+      ledgerRes.status() === 200 &&
+        (ledger?.credits ?? []).some((c) => c.id === credit?.id) &&
+        (ledger?.totals?.awaitingNote ?? 0) >= 1,
+      `status ${ledgerRes.status()}, ${ledger?.credits?.length ?? 0} credits, awaitingNote ${ledger?.totals?.awaitingNote ?? "-"}`,
+    );
+
+    // The credit note's reference + date walk it forward (forward-only —
+    // this run's own fresh credit, so never already note_received).
+    const noteRes = credit
+      ? await page.request.post(BASE + `/api/wht/credits/${credit.id}/note`, {
+          data: { noteReference: "WHT-CN-e2e", noteDate: today },
+          headers: CSRF,
+        })
+      : null;
+    const noted = noteRes?.ok() ? await noteRes.json() : null;
+    check(
+      "the credit note evidence walks it forward",
+      noteRes?.status() === 200 && noted?.status === "note_received",
+      `status ${noteRes?.status() ?? "-"}, ${noted?.status ?? "-"}`,
+    );
+
+    // Month-end close carries the wht_credits chase item. This run just
+    // closed ITS OWN credit, but earlier runs (or the reconciliation
+    // journey's short-pay matches) may hold others open — so the item's
+    // presence is the hard assertion, and its status is checked against
+    // what the ledger honestly holds right now (the journeyFilings
+    // skip-or-pass posture).
+    const afterRes = await page.request.get(
+      BASE + `/api/wht/credits?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const after = afterRes.ok() ? await afterRes.json() : null;
+    const stillAwaiting = (after?.totals?.awaitingNote ?? 0) >= 1;
+    const close = await page.request.get(
+      BASE + `/api/month-end-close?clientPartyId=${DEMO_CLIENT_PARTY_ID}`,
+    );
+    const closeBody = close.ok() ? await close.json() : { items: [] };
+    const whtItem = (closeBody.items ?? []).find(
+      (i) => i.key === "wht_credits",
+    );
+    check(
+      "month-end close carries the WHT chase item",
+      close.status() === 200 &&
+        whtItem !== undefined &&
+        (stillAwaiting
+          ? whtItem.status === "attention" && whtItem.count >= 1
+          : whtItem.status === "clear"),
+      whtItem
+        ? `${whtItem.status}, count ${whtItem.count}, awaitingNote ${after?.totals?.awaitingNote ?? "-"}`
+        : "item missing",
+    );
+  } finally {
+    await apiLogout(page, BASE);
+  }
+}
+
 export {
   journeyGovernance,
   journeyCollections,
   journeyAutomation,
   journeyObligations,
   journeyFilings,
+  journeyWht,
 };

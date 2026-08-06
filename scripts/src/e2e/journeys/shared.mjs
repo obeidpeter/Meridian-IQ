@@ -53,7 +53,9 @@ export async function apiLogout(page, BASE) {
 // /api/invoices with a single line (vatRate defaults to the standard 7.5%),
 // CSRF marker included. Returns the response status plus the created
 // invoice's id — null unless the create answered 201 (the body is only
-// parsed on 201, so a refusal costs nothing extra).
+// parsed on 201, so a refusal costs nothing extra). whtCategory is optional
+// (WHT Desk): set, it rides the POST body; unset, the field is omitted
+// entirely — existing callers are untouched.
 export async function createDraftInvoice(
   page,
   BASE,
@@ -66,6 +68,7 @@ export async function createDraftInvoice(
     unitPrice,
     quantity = "1",
     vatRate = "0.075",
+    whtCategory,
   },
 ) {
   const res = await page.request.post(BASE + "/api/invoices", {
@@ -74,6 +77,7 @@ export async function createDraftInvoice(
       buyerPartyId,
       invoiceNumber,
       issueDate,
+      ...(whtCategory ? { whtCategory } : {}),
       lines: [{ description, quantity, unitPrice, vatRate }],
     },
     headers: CSRF,

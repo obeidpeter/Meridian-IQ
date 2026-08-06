@@ -112,6 +112,7 @@ import {
   Wrench,
   Plus,
 } from "lucide-react";
+import { whtCategoryLabel } from "@workspace/format/wht-copy";
 import {
   formatNaira,
   formatDate,
@@ -1123,6 +1124,10 @@ export function InvoiceDetail() {
       dueDate: "",
       currency: invoice.currency || "NGN",
       fxRateToNgn: invoice.fxRateToNgn ?? "",
+      // Deliberately NOT copied: the WHT category is a per-document,
+      // human-picked fact (never pre-selected), so the new draft starts at
+      // "No WHT" even when this invoice carries a category.
+      whtCategory: "",
       lines: lines.length > 0 ? lines : [emptyLine()],
     };
   };
@@ -1284,6 +1289,16 @@ export function InvoiceDetail() {
           <p className="text-muted-foreground mt-1">
             Issued {formatDate(invoice.issueDate)} · Due {formatDate(invoice.dueDate)}
           </p>
+          {/* WHT Desk: shown only when a human assigned a category — the
+              label wording comes from the shared wht-copy catalogue. */}
+          {invoice.whtCategory && (
+            <p
+              className="text-sm text-muted-foreground mt-1"
+              data-testid="text-invoice-wht-category"
+            >
+              WHT category: {whtCategoryLabel(invoice.whtCategory)}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {canSubmit && (
