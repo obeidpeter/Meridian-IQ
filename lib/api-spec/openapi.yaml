@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.66.0
+  version: 0.67.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -37,6 +37,7 @@ tags:
   - name: claims
   - name: clerk
   - name: obligations
+  - name: filings
   - name: recurring
   - name: invitation
 paths:
@@ -5871,6 +5872,97 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  # Filing Desk Phase 1 (round 38): the statutory returns register — one row
+  # per client x tax type x period, minted deterministically from the
+  # statutory calendar (VAT due the 21st of the following month, PAYE the
+  # 10th). Evidence-only posture: the platform records that a return was
+  # prepared and filed (date + acknowledgment reference); it never files
+  # anything itself. Rows are minted by the sweep or the sync endpoint,
+  # never created by hand — the register's completeness IS its value.
+  /filings:
+    get:
+      operationId: listFilings
+      summary: The firm's statutory returns register (client-scoped for client users)
+      tags: [filings]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [upcoming, prepared, filed]
+        - name: taxType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [vat, paye]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Returns register rows, soonest due first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilingList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /filings/sync:
+    post:
+      operationId: syncFilings
+      summary: Mint the current period's return rows for this firm now (idempotent)
+      tags: [filings]
+      responses:
+        "200":
+          description: How many rows this call minted (0 when already current)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncFilingsResult"
+  /filings/{id}/status:
+    post:
+      operationId: updateFilingStatus
+      summary: Walk a return forward (prepared, then filed with its evidence)
+      tags: [filings]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFilingStatusInput"
+      responses:
+        "200":
+          description: The updated register row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Filing"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 components:
   parameters:
     IdParam:
@@ -11590,6 +11682,81 @@ components:
           enum: [open, responded, closed]
         notes:
           type: string
+    Filing:
+      type: object
+      required:
+        [id, firmId, clientPartyId, taxType, period, dueDate, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firmId:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+        # Catalogue key echoed as plain text so rows outlive catalogue
+        # growth (write inputs and the minting sweep pin the closed set).
+        taxType:
+          type: string
+        period:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+        dueDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        status:
+          type: string
+          enum: [upcoming, prepared, filed]
+        filedDate:
+          type: ["string", "null"]
+        filedReference:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        preparedBy:
+          type: ["string", "null"]
+        filedBy:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    FilingList:
+      type: object
+      required: [filings]
+      properties:
+        filings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Filing"
+    SyncFilingsResult:
+      type: object
+      required: [minted]
+      properties:
+        minted:
+          type: integer
+    UpdateFilingStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [prepared, filed]
+        # Required by the server when status is "filed" (the evidence of the
+        # filing act); rejected when status is "prepared".
+        filedDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        filedReference:
+          type: string
+          maxLength: 120
+        notes:
+          type: string
+          maxLength: 2000
     ClerkCaseDecisionInput:
       type: object
       required: [action]

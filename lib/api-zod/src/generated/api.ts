@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.66.0
+ * OpenAPI spec version: 0.67.0
  */
 import * as zod from 'zod';
 
@@ -9171,6 +9171,98 @@ export const UpdateObligationStatusResponse = zod.object({
   "status": zod.enum(['open', 'responded', 'closed']),
   "notes": zod.string().nullish(),
   "createdBy": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary The firm's statutory returns register (client-scoped for client users)
+ */
+export const listFilingsQueryLimitMax = 200;
+
+export const listFilingsQueryOffsetMin = 0;
+
+
+
+export const ListFilingsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional(),
+  "status": zod.enum(['upcoming', 'prepared', 'filed']).optional(),
+  "taxType": zod.enum(['vat', 'paye']).optional(),
+  "limit": zod.coerce.number().min(1).max(listFilingsQueryLimitMax).optional(),
+  "offset": zod.coerce.number().min(listFilingsQueryOffsetMin).optional()
+})
+
+export const listFilingsResponseFilingsItemPeriodRegExp = new RegExp('^\\d{4}-\\d{2}$');
+export const listFilingsResponseFilingsItemDueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const ListFilingsResponse = zod.object({
+  "filings": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "taxType": zod.string(),
+  "period": zod.string().regex(listFilingsResponseFilingsItemPeriodRegExp),
+  "dueDate": zod.string().regex(listFilingsResponseFilingsItemDueDateRegExp),
+  "status": zod.enum(['upcoming', 'prepared', 'filed']),
+  "filedDate": zod.string().nullish(),
+  "filedReference": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "preparedBy": zod.string().nullish(),
+  "filedBy": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Mint the current period's return rows for this firm now (idempotent)
+ */
+export const SyncFilingsResponse = zod.object({
+  "minted": zod.number()
+})
+
+
+/**
+ * @summary Walk a return forward (prepared, then filed with its evidence)
+ */
+export const UpdateFilingStatusParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const updateFilingStatusBodyFiledDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const updateFilingStatusBodyFiledReferenceMax = 120;
+
+export const updateFilingStatusBodyNotesMax = 2000;
+
+
+
+export const UpdateFilingStatusBody = zod.object({
+  "status": zod.enum(['prepared', 'filed']),
+  "filedDate": zod.string().regex(updateFilingStatusBodyFiledDateRegExp).optional(),
+  "filedReference": zod.string().max(updateFilingStatusBodyFiledReferenceMax).optional(),
+  "notes": zod.string().max(updateFilingStatusBodyNotesMax).optional()
+})
+
+export const updateFilingStatusResponsePeriodRegExp = new RegExp('^\\d{4}-\\d{2}$');
+export const updateFilingStatusResponseDueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const UpdateFilingStatusResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "taxType": zod.string(),
+  "period": zod.string().regex(updateFilingStatusResponsePeriodRegExp),
+  "dueDate": zod.string().regex(updateFilingStatusResponseDueDateRegExp),
+  "status": zod.enum(['upcoming', 'prepared', 'filed']),
+  "filedDate": zod.string().nullish(),
+  "filedReference": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "preparedBy": zod.string().nullish(),
+  "filedBy": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })

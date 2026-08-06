@@ -74,6 +74,12 @@ const PINNED: Record<string, PinnedPolicy> = {
   "firm_subscriptions/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "firm_webhook_deliveries/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "firm_webhooks/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
+  "filing_returns/meridian_tenant_isolation": {
+    cmd: "ALL",
+    roles: "public",
+    qual: "5074b35259440c75",
+    withCheck: "5074b35259440c75",
+  },
   "firms/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5bb541f2dec0b54e", withCheck: "5bb541f2dec0b54e" },
   "invitations/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "invoice_approvals/meridian_clerk_tenant": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },

@@ -18,6 +18,7 @@ import { Import } from "@/pages/import";
 import { Reconciliation } from "@/pages/reconciliation";
 import { B2cReports } from "@/pages/b2c";
 import { Obligations } from "@/pages/obligations";
+import { Filings } from "@/pages/filings";
 import { Calendar } from "@/pages/calendar";
 import { Alerts } from "@/pages/alerts";
 import { Consent } from "@/pages/consent";
@@ -57,6 +58,7 @@ function Router() {
         <Route path="/reconciliation" component={Reconciliation} />
         <Route path="/b2c" component={B2cReports} />
         <Route path="/obligations" component={Obligations} />
+        <Route path="/filings" component={Filings} />
         <Route path="/calendar" component={Calendar} />
         <Route path="/alerts" component={Alerts} />
         <Route path="/consent" component={Consent} />
