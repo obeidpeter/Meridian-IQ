@@ -96,13 +96,19 @@ describe("display vocabulary", () => {
       "upcoming",
     ]);
     expect(Object.keys(FILING_KIND_LABELS).sort()).toEqual([
+      "cac_annual",
+      "cit",
       "paye",
+      "paye_annual",
       "vat",
       "wht",
     ]);
     expect(filingKindLabel("vat")).toBe("VAT return");
     expect(filingKindLabel("paye")).toBe("PAYE remittance");
     expect(filingKindLabel("wht")).toBe("WHT remittance");
+    expect(filingKindLabel("cit")).toBe("CIT return");
+    expect(filingKindLabel("cac_annual")).toBe("CAC annual return");
+    expect(filingKindLabel("paye_annual")).toBe("PAYE annual return");
     expect(taxTypeLabel("vat")).toBe("VAT");
     // Off-catalogue tokens from a newer server degrade to a title-cased word.
     expect(filingKindLabel("wht_return")).toBe("Wht return");
