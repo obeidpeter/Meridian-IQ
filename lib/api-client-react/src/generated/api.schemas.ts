@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.64.0
+ * OpenAPI spec version: 0.65.0
  */
 export interface HealthStatus {
   status: string;
@@ -3710,6 +3710,38 @@ export interface AutomationRollup {
   planPolicies: AutomationRollupPolicies;
   runs30d: AutomationRollupRuns30d;
   decisions30d: AutomationRollupDecisions30d;
+}
+
+export type AutomationEvidenceKindKind = typeof AutomationEvidenceKindKind[keyof typeof AutomationEvidenceKindKind];
+
+
+export const AutomationEvidenceKindKind = {
+  reconcile_matches: 'reconcile_matches',
+  submit_overdue: 'submit_overdue',
+  retry_failed: 'retry_failed',
+  draft_recurring: 'draft_recurring',
+} as const;
+
+export interface AutomationEvidenceKind {
+  kind: AutomationEvidenceKindKind;
+  sample: number;
+  agreed: number;
+  disagreed: number;
+  pending: number;
+  /** @nullable */
+  agreementRate: number | null;
+  /** @nullable */
+  medianLeadDays: number | null;
+  /** @nullable */
+  exposureFloorNgn: string | null;
+  note: string;
+}
+
+export interface AutomationEvidence {
+  windowMonths: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  asOf: string;
+  kinds: AutomationEvidenceKind[];
 }
 
 export type ClerkCaseKind = typeof ClerkCaseKind[keyof typeof ClerkCaseKind];

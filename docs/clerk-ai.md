@@ -721,6 +721,29 @@ authenticated apps and lets the RESULTS ride the existing consent-gated
 notification fan-out (which already reaches WhatsApp where the client
 opted in).
 
+**Prove with Clerk Phase 1 (round 36) — the automation evidence backtest**
+(`modules/clerk/automation-evidence.ts`, `GET /clerk/automation-evidence`,
+contract 0.65.0). Every powerful switch above ships dark, so the decision
+to light one is taken on faith; this endpoint computes the evidence from
+ledgers the platform already holds — per automation kind, how often the
+autopilot WOULD have agreed with what humans later did, the median days it
+would have saved, and what it would act on right now. Doctrine: recorded
+ledgers first (reconcile agreement reads `match_proposals` verbatim, with
+a top-of-line guard and machine acceptances excluded via the
+`clerk.plan_step.reconciled` audit pointer), replay only over durable
+facts (submit/retry verdicts from issue dates and the append-only
+lifecycle ledger, behind the DRAFT-% wall, with policy/plan-minted
+batches excluded — the rollup's "auto" predicate), and the miner's pure
+functions replayed at past Lagos month-ends for `draft_recurring` (its
+one approximation — today's statuses — named in the kind's note). Each
+kind carries an honest one-line caveat interpolating the LIVE thresholds
+and caps, because the consuming card is a consent surface: 60% agreement
+is as much the point as 98%. Zero model calls; nothing stored; rendered
+under the rollup on the portfolio page (same `console.portfolio.read`
+wall). Phases 2–3 (evidence inside the grant dialogs and flag surfaces;
+the continuous shadow digest and agreement-drift tripwire) build on this
+engine.
+
 - `modules/clerk/data-intents/`: Ask carries a second closed catalogue next
   to the claims register — data intents ("what's overdue?", "what did we
   submit this month?", the money intents "who owes us?" / "what's
@@ -1162,6 +1185,14 @@ entries.
   deterministic template, never an error. Nothing is stored — the note
   lives only inside the rendered PDF — and the pack's VAT basis disclosure
   travels with it so the caveats survive the paper being handed around.
+- **Automation evidence backtest** (`modules/clerk/automation-evidence.ts`,
+  `GET /clerk/automation-evidence`, `console.portfolio.read`, portfolio
+  card under the rollup, pure SQL + pure replay) — per automation kind,
+  recorded-ledger agreement with the decisions humans made by hand over
+  the 6-month window, median lead time, act-now counts, and the submit
+  lane's s.104 small-band would-have floor. Machine writes never count as
+  agreement; the per-kind caveat notes are part of the payload. See § Do
+  with Clerk (round 36) for the doctrine.
 - **Adoption & impact report** (`modules/clerk/adoption.ts`,
   `GET /console/clerk-adoption`, `console.portfolio.read`, console portfolio
   card, pure SQL) slices the firm's own cases per client — capture volume,

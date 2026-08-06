@@ -301,6 +301,26 @@ async function journeyAutomation(page, BASE, check) {
       `create ${created.status}, proposals ${propRes.status()}`,
     );
 
+    // The backtest evidence (round 36): a firm read over the same ledgers
+    // this journey is writing — four kinds in fixed order, act-now counting
+    // at least the overdue draft just created. Flag-independent by design
+    // (evidence exists precisely to justify lighting flags).
+    const evidenceRes = await page.request.get(
+      BASE + "/api/clerk/automation-evidence",
+    );
+    const evidence =
+      evidenceRes.status() === 200 ? await evidenceRes.json() : null;
+    check(
+      "automation evidence backtests the four kinds with an act-now cohort",
+      (evidence?.kinds ?? []).map((k) => k.kind).join(",") ===
+        "reconcile_matches,submit_overdue,retry_failed,draft_recurring" &&
+        (evidence?.kinds ?? []).every(
+          (k) => k.sample >= 0 && typeof k.note === "string",
+        ) &&
+        (evidence?.kinds?.[1]?.pending ?? 0) >= 1,
+      `status ${evidenceRes.status()}, pending ${evidence?.kinds?.[1]?.pending}`,
+    );
+
     // Approve exactly the one target: execute validates + submits it through
     // the ordinary per-invoice path and answers the durable decision row.
     const execRes = await page.request.post(

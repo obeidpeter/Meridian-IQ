@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import {
+  GetAutomationEvidenceResponse,
   GetAutomationRollupResponse,
   GetPlanPoliciesQueryParams,
   GetPlanPoliciesResponse,
@@ -27,6 +28,7 @@ import {
   revokePlanPolicy,
 } from "../../modules/clerk/plan-policies";
 import { computeAutomationRollup } from "../../modules/clerk/automation-rollup";
+import { computeAutomationEvidence } from "../../modules/clerk/automation-evidence";
 
 const router: IRouter = Router();
 
@@ -120,6 +122,21 @@ router.get("/clerk/automation-rollup", async (req, res): Promise<void> => {
     requireFirmScope(req.principal),
   );
   res.json(GetAutomationRollupResponse.parse(rollup));
+});
+
+// Prove with Clerk Phase 1 (round 36): the backtest evidence behind the
+// dark automation flags — per-kind agreement between what each automation
+// kind would have done and what humans later did, plus the act-now counts.
+// Same posture as the rollup above and for the same reason: a firm-internal
+// cross-client aggregate on console.portfolio.read, firm resolved from the
+// principal with no client param to widen. Deterministic ledger SQL + pure
+// replay; zero model calls; nothing stored.
+router.get("/clerk/automation-evidence", async (req, res): Promise<void> => {
+  assertCan(req.principal, "console.portfolio.read");
+  const evidence = await computeAutomationEvidence(
+    requireFirmScope(req.principal),
+  );
+  res.json(GetAutomationEvidenceResponse.parse(evidence));
 });
 
 export default router;

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.64.0
+ * OpenAPI spec version: 0.65.0
  */
 import * as zod from 'zod';
 
@@ -8947,6 +8947,29 @@ export const GetAutomationRollupResponse = zod.object({
   "executed": zod.number(),
   "failed": zod.number()
 })
+})
+
+
+/**
+ * @summary Backtest evidence for the automation kinds (agreement with human decisions)
+ */
+export const getAutomationEvidenceResponseAsOfRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetAutomationEvidenceResponse = zod.object({
+  "windowMonths": zod.number(),
+  "asOf": zod.string().regex(getAutomationEvidenceResponseAsOfRegExp),
+  "kinds": zod.array(zod.object({
+  "kind": zod.enum(['reconcile_matches', 'submit_overdue', 'retry_failed', 'draft_recurring']),
+  "sample": zod.number(),
+  "agreed": zod.number(),
+  "disagreed": zod.number(),
+  "pending": zod.number(),
+  "agreementRate": zod.number().nullable(),
+  "medianLeadDays": zod.number().nullable(),
+  "exposureFloorNgn": zod.string().nullable(),
+  "note": zod.string()
+}))
 })
 
 

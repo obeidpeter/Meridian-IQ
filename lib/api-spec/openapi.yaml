@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.64.0
+  version: 0.65.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5674,6 +5674,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AutomationRollup"
+  # Prove with Clerk Phase 1 (round 36): the backtest evidence behind the
+  # dark automation flags — recorded-ledger agreement between what each
+  # automation kind would have done and what humans later did. Pure SQL +
+  # pure replay over durable facts; zero model calls; nothing stored.
+  /clerk/automation-evidence:
+    get:
+      operationId: getAutomationEvidence
+      summary: Backtest evidence for the automation kinds (agreement with human decisions)
+      tags: [clerk]
+      responses:
+        "200":
+          description: Per-kind agreement, lead-time and act-now counts over the evidence window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationEvidence"
   /obligations:
     get:
       operationId: listObligations
@@ -11184,6 +11200,46 @@ components:
               type: integer
             failed:
               type: integer
+    AutomationEvidenceKind:
+      type: object
+      required:
+        [kind, sample, agreed, disagreed, pending, agreementRate, medianLeadDays, exposureFloorNgn, note]
+      properties:
+        kind:
+          type: string
+          enum: [reconcile_matches, submit_overdue, retry_failed, draft_recurring]
+        # Decided historical cases in the window (agreed + disagreed);
+        # pending is what the kind would act on right now.
+        sample:
+          type: integer
+        agreed:
+          type: integer
+        disagreed:
+          type: integer
+        pending:
+          type: integer
+        agreementRate:
+          type: ["number", "null"]
+        medianLeadDays:
+          type: ["number", "null"]
+        # s.104 small-band floor (whole-naira string) — submit_overdue only.
+        exposureFloorNgn:
+          type: ["string", "null"]
+        note:
+          type: string
+    AutomationEvidence:
+      type: object
+      required: [windowMonths, asOf, kinds]
+      properties:
+        windowMonths:
+          type: integer
+        asOf:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        kinds:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationEvidenceKind"
     ClerkCase:
       type: object
       required: [id, kind, status, createdBy, createdAt, updatedAt]
