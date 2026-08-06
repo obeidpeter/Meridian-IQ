@@ -303,6 +303,14 @@ export const INTENT_FIXTURES: IntentFixture[] = [
     riskLabel: "clean",
     expected: { claimKey: "data.open_filings" },
   },
+  // ---- WHT Desk ------------------------------------------------------------
+  {
+    key: "data-wht",
+    label: "data: withholding credits (WHT Desk)",
+    question: "Which WHT credit notes are we still waiting on from buyers?",
+    riskLabel: "clean",
+    expected: { claimKey: "data.wht_credits" },
+  },
 ];
 
 // ---- Grown corpus (round 16) ----------------------------------------------

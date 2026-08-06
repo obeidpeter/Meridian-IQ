@@ -14,6 +14,7 @@ import {
   settlementEventsTable,
   usersTable,
   submissionAttemptsTable,
+  whtCreditsTable,
   type ProtectedFact,
 } from "@workspace/db";
 import { SUBMISSION_WINDOW_DAYS } from "../invoice/compliance-window.ts";
@@ -1269,9 +1270,9 @@ test("data.open_obligations counts open notices, pins to a client and stays clie
     "client-safe: the forced own-party pin reduces it to the caller's own notices",
   );
   assert.equal(
-    DATA_INTENTS[DATA_INTENTS.length - 2].key,
+    DATA_INTENTS[DATA_INTENTS.length - 3].key,
     "data.open_obligations",
-    "the Notice Desk group keeps its append-only position (the Filing Desk group joined after it)",
+    "the Notice Desk group keeps its append-only position (the Filing and WHT Desk groups joined after it)",
   );
 
   // Seed: an open due-soon notice for partyA, an open overdue one for
@@ -1416,9 +1417,9 @@ test("data.open_filings counts unfiled returns, pins to a client and stays clien
     "client-safe: the forced own-party pin reduces it to the caller's own register rows",
   );
   assert.equal(
-    DATA_INTENTS[DATA_INTENTS.length - 1].key,
+    DATA_INTENTS[DATA_INTENTS.length - 2].key,
     "data.open_filings",
-    "the Filing Desk group joined at the END of the append-only catalogue",
+    "the Filing Desk group keeps its append-only position (the WHT Desk group joined after it)",
   );
 
   // Seed: a due-soon unfiled return for partyA, an overdue prepared one for
@@ -1510,5 +1511,128 @@ test("data.open_filings counts unfiled returns, pins to a client and stays clien
   assert.equal(
     foreign?.facts.find((f) => f.key === "next_filing_due")?.value,
     lagosDateOffset(1),
+  );
+});
+
+// ---- Withholding credits (WHT Desk) -----------------------------------------
+
+test("data.wht_credits counts the chase ledger, pins to a client and stays client-safe", async () => {
+  const intent = getDataIntent("data.wht_credits");
+  assert.ok(intent, "the catalogue carries the wht intent");
+  assert.deepEqual(
+    intent.accepts,
+    { client: true },
+    "as-of-today only: no month parameter, ever",
+  );
+  assert.ok(
+    CLIENT_SAFE_DATA_INTENTS.some((i) => i.key === "data.wht_credits"),
+    "client-safe: the forced own-party pin reduces it to the caller's own ledger rows",
+  );
+  assert.equal(
+    DATA_INTENTS[DATA_INTENTS.length - 1].key,
+    "data.wht_credits",
+    "the WHT Desk group joined at the END of the append-only catalogue",
+  );
+
+  // Seed: two receivables carrying credits — partyA's awaiting its note,
+  // partyA2's note received (never in the awaiting count or sum).
+  const whtInvA = randomUUID();
+  const whtInvZ = randomUUID();
+  await getDb().insert(invoicesTable).values([
+    {
+      id: whtInvA,
+      firmId: firmA,
+      supplierPartyId: partyA,
+      buyerPartyId: vendorParty,
+      invoiceNumber: `WHT-A-${SALT}`,
+      status: "settled",
+      issueDate: lagosDateOffset(-40),
+      subtotal: "100000.00",
+      vatTotal: "7500.00",
+      grandTotal: "107500.00",
+      whtCategory: "services_5",
+    },
+    {
+      id: whtInvZ,
+      firmId: firmA,
+      supplierPartyId: partyA2,
+      buyerPartyId: vendorParty,
+      invoiceNumber: `WHT-Z-${SALT}`,
+      status: "settled",
+      issueDate: lagosDateOffset(-40),
+      subtotal: "40000.00",
+      vatTotal: "3000.00",
+      grandTotal: "43000.00",
+      whtCategory: "rent_10",
+    },
+  ]);
+  await getDb().insert(whtCreditsTable).values([
+    {
+      firmId: firmA,
+      clientPartyId: partyA,
+      invoiceId: whtInvA,
+      category: "services_5",
+      amount: "5000.00",
+      deductedDate: lagosDateOffset(-10),
+      source: "manual",
+    },
+    {
+      firmId: firmA,
+      clientPartyId: partyA2,
+      invoiceId: whtInvZ,
+      category: "rent_10",
+      amount: "4000.00",
+      deductedDate: lagosDateOffset(-20),
+      source: "manual",
+      status: "note_received",
+      noteReference: `NOTE-${SALT}`,
+      noteDate: lagosDateOffset(-1),
+    },
+  ]);
+
+  // Firm-wide: one awaiting (partyA's 5000), one received; linkless.
+  const firmWide = await lookup("data.wht_credits");
+  assert.ok(firmWide);
+  assert.equal(
+    firmWide.facts.find((f) => f.key === "wht_awaiting")?.value,
+    "1",
+  );
+  const amount = firmWide.facts.find((f) => f.key === "wht_awaiting_amount");
+  assert.equal(amount?.value, "5000.00");
+  assert.equal(amount?.unit, "NGN");
+  assert.equal(
+    firmWide.facts.find((f) => f.key === "wht_note_received")?.value,
+    "1",
+  );
+  assert.match(
+    firmWide.text,
+    /1 recorded withholding deduction is still awaiting/,
+  );
+  assert.equal(firmWide.links, undefined, "wht answers carry no links");
+
+  // The client pin narrows every count to that party's own ledger rows.
+  const pinned = await inClerkScope(firmA, () =>
+    runDataIntent("data.wht_credits", firmA, {
+      clientPartyId: partyA2,
+      clientName: `DI Party Z ${SALT}`,
+    }),
+  );
+  assert.ok(pinned);
+  assert.equal(pinned.facts.find((f) => f.key === "wht_awaiting")?.value, "0");
+  assert.equal(
+    pinned.facts.find((f) => f.key === "wht_note_received")?.value,
+    "1",
+  );
+  assert.ok(pinned.text.includes(`for DI Party Z ${SALT}`));
+
+  // Firm isolation: firm B holds no credits at all.
+  const foreign = await lookup("data.wht_credits", firmB);
+  assert.equal(
+    foreign?.facts.find((f) => f.key === "wht_awaiting")?.value,
+    "0",
+  );
+  assert.equal(
+    foreign?.facts.find((f) => f.key === "wht_note_received")?.value,
+    "0",
   );
 });

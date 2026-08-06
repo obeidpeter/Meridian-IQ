@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   FILING_KINDS,
   filingDueDate,
+  periodMonthBounds,
   previousLagosPeriod,
 } from "./statutory-calendar.ts";
 
@@ -11,12 +12,14 @@ import {
 // each kind's due day in the month after the period (with the December →
 // January carry). No DB.
 
-test("FILING_KINDS is the closed Phase 1 set with the statutory due days", () => {
+test("FILING_KINDS is the closed set with the statutory due days", () => {
   assert.deepEqual(
     FILING_KINDS.map((k) => [k.taxType, k.dueDayOfFollowingMonth]),
     [
       ["vat", 21],
       ["paye", 10],
+      // WHT Desk: remit by the 21st of the following month (FIRS).
+      ["wht", 21],
     ],
   );
 });
@@ -49,9 +52,22 @@ test("previousLagosPeriod: the last closed Lagos month", () => {
 test("filingDueDate: each kind's day in the month AFTER the period", () => {
   assert.equal(filingDueDate("2026-07", "vat"), "2026-08-21");
   assert.equal(filingDueDate("2026-07", "paye"), "2026-08-10");
+  assert.equal(filingDueDate("2026-07", "wht"), "2026-08-21");
 });
 
 test("filingDueDate: a December period carries into January of the next year", () => {
   assert.equal(filingDueDate("2026-12", "vat"), "2027-01-21");
   assert.equal(filingDueDate("2026-12", "paye"), "2027-01-10");
+  assert.equal(filingDueDate("2026-12", "wht"), "2027-01-21");
+});
+
+test("periodMonthBounds: the half-open month window, December carrying the year", () => {
+  assert.deepEqual(periodMonthBounds("2026-07"), {
+    start: "2026-07-01",
+    end: "2026-08-01",
+  });
+  assert.deepEqual(periodMonthBounds("2026-12"), {
+    start: "2026-12-01",
+    end: "2027-01-01",
+  });
 });

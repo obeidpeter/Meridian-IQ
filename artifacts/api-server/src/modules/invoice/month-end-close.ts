@@ -17,6 +17,7 @@ import {
   FILING_DUE_SOON_DAYS,
   countOpenFilings,
 } from "../filings/filings";
+import { countWhtChase } from "../wht/credits";
 
 // Month-end close assistant (round-19 idea #2). The platform now runs seven
 // independent deterministic advisories that a client discovers one card at a
@@ -71,6 +72,7 @@ export async function computeMonthEndClose(
   );
   const obligations = await countOpenObligations(firmId, clientPartyId);
   const filings = await countOpenFilings(firmId, clientPartyId);
+  const whtChase = await countWhtChase(firmId, clientPartyId);
   const doublePayCount =
     doublePay.multiPaid.length + doublePay.duplicateCandidates.length;
 
@@ -179,6 +181,18 @@ export async function computeMonthEndClose(
       filings.unfiled,
       `${filings.unfiled} unfiled return(s) for the period — ${filings.dueSoon} due within ${FILING_DUE_SOON_DAYS} days, ${filings.overdue} overdue${filings.nextDueDate ? `; the next filing is due ${filings.nextDueDate}` : ""}. Prepare and file before the statutory date.`,
       "No unfiled returns on the register.",
+    ),
+    // Withholding credit notes (WHT Desk): recorded deductions whose buyer
+    // credit note is still outstanding — undocumented claimable credit a
+    // month must not close without chasing. Computed by the WHT module's
+    // single chase fact function — this module keeps zero predicates of its
+    // own.
+    item(
+      "wht_credits",
+      "WHT credit notes",
+      whtChase.awaiting,
+      `${whtChase.awaiting} recorded withholding deduction(s) still lack the buyer's credit note — NGN ${whtChase.awaitingAmount} of claimable credit is undocumented. Chase the buyers for the notes.`,
+      "Every recorded withholding deduction has its credit note.",
     ),
     // Approval item only when the maker-checker policy is ON for the firm
     // (null means off — a checklist line for a policy the firm never

@@ -68,6 +68,10 @@ export interface CreateInvoiceInput {
   dueDate?: string | null;
   kind?: "invoice" | "credit_note" | "correction";
   category?: "b2b" | "b2g" | "b2c";
+  // WHT Desk: the withholding category a HUMAN assigned (the contract's
+  // closed enum — the zod body bounds every value; a model never sets this).
+  // Null/absent = no WHT applies.
+  whtCategory?: string | null;
   relatedInvoiceId?: string | null;
   notes?: string | null;
   lines: LineInput[];
@@ -219,6 +223,7 @@ export async function createDraft(
       dueDate: input.dueDate ?? null,
       kind: input.kind ?? "invoice",
       category: input.category ?? "b2b",
+      whtCategory: input.whtCategory ?? null,
       relatedInvoiceId: input.relatedInvoiceId ?? null,
       notes: input.notes ?? null,
       subtotal: money(subtotal),
@@ -357,6 +362,9 @@ export interface UpdateInvoiceInput {
   // null clears a captured rate (e.g. the currency was corrected to NGN).
   fxRateToNgn?: string | null;
   notes?: string | null;
+  // WHT Desk: a string sets the category, null clears it, absent leaves it
+  // untouched (the fxRateToNgn tri-state).
+  whtCategory?: string | null;
   lines?: LineInput[];
 }
 
@@ -388,6 +396,9 @@ export async function updateInvoiceContent(
     invoicePatch.fxRateToNgn = patch.fxRateToNgn;
   }
   if (patch.notes !== undefined) invoicePatch.notes = patch.notes;
+  if (patch.whtCategory !== undefined) {
+    invoicePatch.whtCategory = patch.whtCategory;
+  }
 
   let newLines = bundle.lines;
   if (patch.lines) {

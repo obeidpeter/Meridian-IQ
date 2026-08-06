@@ -9,6 +9,7 @@ import { STATUS_INTENTS } from "./status";
 import { DELTA_INTENTS } from "./deltas";
 import { OBLIGATION_INTENTS } from "./obligations";
 import { RETURNS_INTENTS } from "./returns";
+import { WHT_INTENTS } from "./wht";
 
 // Grounded firm-data Q&A (Clerk idea #6). Ask Clerk gains a SECOND closed
 // catalogue next to the claims register: data intents — live lookups over the
@@ -46,6 +47,7 @@ import { RETURNS_INTENTS } from "./returns";
 //   deltas.ts       month-over-month comparison, per-client movers (Ask 2.0)
 //   obligations.ts  open authority obligations (Notice Desk)
 //   returns.ts      unfiled statutory returns (Filing Desk)
+//   wht.ts          withholding credits awaiting/received (WHT Desk)
 
 // The catalogue. Keys are namespaced "data.*" so they can never collide with
 // operator-authored claim keys; resolution in ask.ts checks this catalogue
@@ -65,6 +67,8 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   ...OBLIGATION_INTENTS,
   // APPEND ONLY, same rule: the Filing Desk group joins after it.
   ...RETURNS_INTENTS,
+  // APPEND ONLY, same rule: the WHT Desk group joins at the very end.
+  ...WHT_INTENTS,
 ];
 
 // Client-facing Ask (SEC-03). clerk.ask is open to client_users, but the
@@ -150,6 +154,10 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // as data.open_obligations — countOpenFilings reduces to the caller's OWN
   // register rows under the pin, counts and a date only, linkless.
   "data.open_filings",
+  // Withholding credits with the forced own-party pin: whtCreditTotals
+  // reduces to the caller's OWN ledger rows under the pin — counts and the
+  // caller's own naira sum only, no other client is ever named, linkless.
+  "data.wht_credits",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

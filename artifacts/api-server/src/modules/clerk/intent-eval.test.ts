@@ -180,8 +180,8 @@ test("the canary verdict is deterministic and stores nothing", async () => {
 
 // ---- Ask 2.0 plan scoring ---------------------------------------------------
 
-test("the static corpus is 23 fixtures; every plan fixture keeps its legacy expectation", () => {
-  assert.equal(INTENT_FIXTURES.length, 23);
+test("the static corpus is 24 fixtures; every plan fixture keeps its legacy expectation", () => {
+  assert.equal(INTENT_FIXTURES.length, 24);
   for (const fixture of INTENT_FIXTURES.filter(
     (f) => f.expected.plan !== undefined,
   )) {

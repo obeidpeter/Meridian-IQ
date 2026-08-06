@@ -8,6 +8,7 @@ import {
   engagementsTable,
   filingReturnsTable,
   firmsTable,
+  invoicesTable,
   partiesTable,
   usersTable,
 } from "@workspace/db";
@@ -25,7 +26,6 @@ import {
 } from "./filings.ts";
 import { sweepFilingMint } from "./sweep.ts";
 import {
-  FILING_KINDS,
   filingDueDate,
   previousLagosPeriod,
   type FilingTaxType,
@@ -160,12 +160,15 @@ test("mintFilingsForFirm: live clients × kinds, correct dates, idempotent, arch
     );
   }
   for (const client of [clientA, clientB]) {
+    // The UNCONDITIONAL kinds only: neither client holds a WHT-categorised
+    // bill this period, so no wht row mints for them (the conditional-mint
+    // test below covers a withholding client).
     assert.deepEqual(
       rows
         .filter((r) => r.clientPartyId === client)
         .map((r) => r.taxType)
         .sort(),
-      FILING_KINDS.map((k) => k.taxType).sort(),
+      ["paye", "vat"],
     );
   }
   assert.ok(
@@ -484,4 +487,82 @@ test("countOpenFilings: one SQL pass over the Lagos calendar", async () => {
   );
   assert.equal(future.overdue, 4);
   assert.equal(future.dueSoon, 0);
+});
+
+test("wht rows mint ONLY for clients with withholding bills in the period", async () => {
+  // A dedicated firm: one client that took a WHT-categorised bill inside the
+  // period, one that did not (its only withholding bill is cancelled, plus
+  // one outside the period). vat/paye stay unconditional for both.
+  const whtFirmId = randomUUID();
+  const whtClient = randomUUID();
+  const plainClient = randomUUID();
+  const whtVendor = randomUUID();
+  const db = getDb();
+  await db.insert(firmsTable).values({ id: whtFirmId, name: `Filing WHT Firm ${SALT}` });
+  await db.insert(partiesTable).values([
+    { id: whtClient, type: "client_business", legalName: `Filing WHT Client ${SALT}` },
+    { id: plainClient, type: "client_business", legalName: `Filing Plain Client ${SALT}` },
+    { id: whtVendor, type: "buyer", legalName: `Filing WHT Vendor ${SALT}` },
+  ]);
+  await db.insert(engagementsTable).values([
+    {
+      firmId: whtFirmId,
+      clientPartyId: whtClient,
+      type: "retainer" as const,
+      status: "open" as const,
+      title: `filing wht A ${SALT}`,
+    },
+    {
+      firmId: whtFirmId,
+      clientPartyId: plainClient,
+      type: "retainer" as const,
+      status: "open" as const,
+      title: `filing wht B ${SALT}`,
+    },
+  ]);
+  // Bills: supplier is the non-engaged vendor, buyer is the client (the
+  // BILL_OF_CLIENT orientation). Only the first qualifies: in-period,
+  // categorised, not cancelled.
+  const bill = (
+    buyer: string,
+    invoiceNumber: string,
+    issueDate: string,
+    status: "draft" | "cancelled" = "draft",
+  ) => ({
+    firmId: whtFirmId,
+    supplierPartyId: whtVendor,
+    buyerPartyId: buyer,
+    invoiceNumber,
+    status,
+    issueDate,
+    subtotal: "100000.00",
+    vatTotal: "7500.00",
+    grandTotal: "107500.00",
+    whtCategory: "services_5",
+  });
+  await db.insert(invoicesTable).values([
+    bill(whtClient, `FW-IN-${SALT}`, "2026-07-15"),
+    bill(plainClient, `FW-CANCEL-${SALT}`, "2026-07-10", "cancelled"),
+    bill(plainClient, `FW-OLD-${SALT}`, "2026-06-15"),
+  ]);
+
+  // 2 clients × (vat, paye) + ONE wht row for the withholding client.
+  assert.equal(await mintFilingsForFirm(whtFirmId, FROZEN_NOW), 5);
+  const rows = await rowsFor(whtFirmId);
+  const whtRows = rows.filter((r) => r.taxType === "wht");
+  assert.equal(whtRows.length, 1);
+  assert.equal(whtRows[0].clientPartyId, whtClient);
+  assert.equal(whtRows[0].period, "2026-07");
+  assert.equal(whtRows[0].dueDate, "2026-08-21", "FIRS: remit by the 21st");
+  assert.deepEqual(
+    rows
+      .filter((r) => r.clientPartyId === plainClient)
+      .map((r) => r.taxType)
+      .sort(),
+    ["paye", "vat"],
+    "a cancelled or out-of-period bill mints no wht row",
+  );
+
+  // Idempotent: the natural key already holds every row.
+  assert.equal(await mintFilingsForFirm(whtFirmId, FROZEN_NOW), 0);
 });
