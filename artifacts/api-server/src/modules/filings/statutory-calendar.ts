@@ -70,3 +70,79 @@ export function periodMonthBounds(period: string): {
   const end = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
   return { start, end };
 }
+
+// ---------------------------------------------------------------------------
+// The ANNUAL layer (Compliance Profile round). These kinds deliberately live
+// BESIDE FILING_KINDS, never inside it: FILING_KINDS is the monthly
+// month-after shape the matrix and the WHT remittance schedule rely on, and
+// an annual kind has no dueDayOfFollowingMonth. Annual rows are minted ONLY
+// for clients whose compliance profile asserts the duty exists (evidence-only:
+// a human at the firm speaks first — see modules/filings/profile.ts).
+// Periods stay "YYYY-MM" (the register's one period shape): the month that
+// closes the year the return covers.
+export const ANNUAL_KINDS = ["cit", "cac_annual", "paye_annual"] as const;
+
+export type AnnualFilingKind = (typeof ANNUAL_KINDS)[number];
+
+// Everything the register can hold — the monthly kinds plus the annual layer
+// (the listFilings taxType filter's closed vocabulary, matching the
+// contract's enum).
+export type RegisterTaxType = FilingTaxType | AnnualFilingKind;
+
+export interface AnnualPeriodAndDue {
+  // "YYYY-MM" — the closing month of the year the return covers.
+  period: string;
+  // "YYYY-MM-DD" — the statutory filing date.
+  dueDate: string;
+}
+
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+// CIT annual return (CITA s.55): due within six months of the end of the
+// accounting year. The latest CLOSED financial year is the most recent
+// (year, fyeMonth) strictly before the current Lagos month — a year still
+// running has nothing to file. Period = the FYE month itself; due = the last
+// day of the sixth month after the FYE (Date.UTC's day-0 trick hands back
+// the previous month's last day, with the year carry automatic — FYE
+// December is due June 30 of the next year; FYE August is due the end of
+// February, leap-aware).
+export function citPeriodAndDue(
+  fyeMonth: number,
+  now = new Date(),
+): AnnualPeriodAndDue {
+  const { year, monthIndex } = lagosParts(now);
+  // fyeMonth is 1-based; monthIndex 0-based. The FYE month of the current
+  // Lagos year has closed only when it lies STRICTLY before this month.
+  const fyeYear = fyeMonth - 1 < monthIndex ? year : year - 1;
+  const dueDate = new Date(Date.UTC(fyeYear, fyeMonth + 6, 0))
+    .toISOString()
+    .slice(0, 10);
+  return { period: `${fyeYear}-${pad2(fyeMonth)}`, dueDate };
+}
+
+// CAC annual return (CAMA): a company files an annual return each calendar
+// year — except the year it was incorporated (no return is owed until the
+// first full calendar year begins). Simplification for the small private
+// companies this register serves: one return per calendar year, due June 30
+// (period "Y-06") — CAMA's actual anniversary-linked timing varies per
+// company, so the register pins the conservative mid-year date. Returns null
+// when no return is owed for the current Lagos year.
+export function cacAnnualPeriodAndDue(
+  incorporationDate: string,
+  now = new Date(),
+): AnnualPeriodAndDue | null {
+  const { year } = lagosParts(now);
+  // Owed only when the company existed before January 1 of the current
+  // Lagos year (ISO date strings compare lexicographically).
+  if (incorporationDate >= `${year}-01-01`) return null;
+  return { period: `${year}-06`, dueDate: `${year}-06-30` };
+}
+
+// PAYE employer annual return (PITA s.81): every employer files a return of
+// all emoluments paid in the PRECEDING year by January 31. Period = December
+// of that preceding Lagos year; due = January 31 of the current one.
+export function payeAnnualPeriodAndDue(now = new Date()): AnnualPeriodAndDue {
+  const { year } = lagosParts(now);
+  const prevYear = year - 1;
+  return { period: `${prevYear}-12`, dueDate: `${prevYear + 1}-01-31` };
+}

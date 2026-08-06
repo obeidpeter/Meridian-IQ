@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import {
   getDb,
   auditEventsTable,
+  clientComplianceProfilesTable,
   engagementsTable,
   filingReturnsTable,
   firmsTable,
@@ -565,4 +566,159 @@ test("wht rows mint ONLY for clients with withholding bills in the period", asyn
 
   // Idempotent: the natural key already holds every row.
   assert.equal(await mintFilingsForFirm(whtFirmId, FROZEN_NOW), 0);
+});
+
+// --- Compliance Profile gates (evidence-only: a human asserted every fact
+// below by inserting the profile row; absence keeps the original behavior,
+// which the tests ABOVE pin — none of their fixtures carry a profile). ---
+
+async function seedProfiledFirm(
+  clients: {
+    id: string;
+    profile?: {
+      vatRegistered: boolean;
+      payeEmployer: boolean;
+      fyeMonth?: number;
+      incorporationDate?: string;
+    };
+  }[],
+): Promise<string> {
+  const firm = randomUUID();
+  const db = getDb();
+  await db.insert(firmsTable).values({ id: firm, name: `Filing Profile Firm ${SALT} ${firm.slice(0, 8)}` });
+  await db.insert(partiesTable).values(
+    clients.map((c, i) => ({
+      id: c.id,
+      type: "client_business" as const,
+      legalName: `Filing Profile Client ${i} ${SALT} ${firm.slice(0, 8)}`,
+    })),
+  );
+  await db.insert(engagementsTable).values(
+    clients.map((c, i) => ({
+      firmId: firm,
+      clientPartyId: c.id,
+      type: "retainer" as const,
+      status: "open" as const,
+      title: `filing profile ${i} ${SALT}`,
+    })),
+  );
+  const profiled = clients.filter((c) => c.profile);
+  if (profiled.length > 0) {
+    await db.insert(clientComplianceProfilesTable).values(
+      profiled.map((c) => ({
+        firmId: firm,
+        clientPartyId: c.id,
+        vatRegistered: c.profile!.vatRegistered,
+        payeEmployer: c.profile!.payeEmployer,
+        fyeMonth: c.profile!.fyeMonth ?? null,
+        incorporationDate: c.profile!.incorporationDate ?? null,
+      })),
+    );
+  }
+  return firm;
+}
+
+test("profile gates the MONTHLY mint: vat iff vatRegistered, paye iff payeEmployer; profileless keeps both", async () => {
+  const noVatClient = randomUUID(); // asserted NOT VAT-registered
+  const noPayeClient = randomUUID(); // asserted NOT an employer
+  const plainClient = randomUUID(); // NO profile — the original behavior
+  const firm = await seedProfiledFirm([
+    { id: noVatClient, profile: { vatRegistered: false, payeEmployer: true } },
+    { id: noPayeClient, profile: { vatRegistered: true, payeEmployer: false } },
+    { id: plainClient },
+  ]);
+
+  // noVat: monthly paye + the paye_annual its employer assertion unlocks;
+  // noPaye: monthly vat only; profileless pair = 5.
+  assert.equal(await mintFilingsForFirm(firm, FROZEN_NOW), 5);
+  const rows = await rowsFor(firm);
+  assert.equal(rows.length, 5);
+  const kindsOf = (client: string) =>
+    rows
+      .filter((r) => r.clientPartyId === client)
+      .map((r) => r.taxType)
+      .sort();
+  assert.deepEqual(
+    kindsOf(noVatClient),
+    ["paye", "paye_annual"],
+    "vatRegistered=false mints no vat row; the employer assertion also unlocks the annual return",
+  );
+  assert.deepEqual(
+    kindsOf(noPayeClient),
+    ["vat"],
+    "payeEmployer=false mints no paye row (monthly or annual)",
+  );
+  assert.deepEqual(kindsOf(plainClient), ["paye", "vat"], "no profile = today's behavior exactly");
+
+  // Idempotent under the gates too.
+  assert.equal(await mintFilingsForFirm(firm, FROZEN_NOW), 0);
+});
+
+test("a full profile mints the ANNUAL kinds with exact periods and due dates; the profileless sibling is untouched", async () => {
+  const fullClient = randomUUID(); // fye Dec, incorporated 2020, employer
+  const siblingClient = randomUUID(); // NO profile
+  const firm = await seedProfiledFirm([
+    {
+      id: fullClient,
+      profile: {
+        vatRegistered: true,
+        payeEmployer: true,
+        fyeMonth: 12,
+        incorporationDate: "2020-03-15",
+      },
+    },
+    { id: siblingClient },
+  ]);
+
+  // fullClient: vat + paye + cit + cac_annual + paye_annual = 5;
+  // sibling: vat + paye = 2.
+  assert.equal(await mintFilingsForFirm(firm, FROZEN_NOW), 7);
+  const rows = await rowsFor(firm);
+  assert.equal(rows.length, 7);
+
+  const byKind = new Map(
+    rows
+      .filter((r) => r.clientPartyId === fullClient)
+      .map((r) => [r.taxType, r]),
+  );
+  assert.deepEqual([...byKind.keys()].sort(), [
+    "cac_annual",
+    "cit",
+    "paye",
+    "paye_annual",
+    "vat",
+  ]);
+  // FROZEN_NOW is 2026-08-06 Lagos. FYE December: latest closed FY ended
+  // December 2025, CIT due six months later — June 30, 2026.
+  assert.equal(byKind.get("cit")?.period, "2025-12");
+  assert.equal(byKind.get("cit")?.dueDate, "2026-06-30");
+  // CAC annual for the current Lagos year (incorporated long before it).
+  assert.equal(byKind.get("cac_annual")?.period, "2026-06");
+  assert.equal(byKind.get("cac_annual")?.dueDate, "2026-06-30");
+  // Employer annual return for the preceding year, due January 31.
+  assert.equal(byKind.get("paye_annual")?.period, "2025-12");
+  assert.equal(byKind.get("paye_annual")?.dueDate, "2026-01-31");
+  // The monthly rows are unchanged by the profile (both facts true).
+  assert.equal(byKind.get("vat")?.period, "2026-07");
+  assert.equal(byKind.get("vat")?.dueDate, "2026-08-21");
+  assert.equal(byKind.get("paye")?.dueDate, "2026-08-10");
+  assert.ok(rows.every((r) => r.status === "upcoming"));
+
+  // The profileless sibling: EXACTLY the two monthly rows, nothing annual.
+  assert.deepEqual(
+    rows
+      .filter((r) => r.clientPartyId === siblingClient)
+      .map((r) => r.taxType)
+      .sort(),
+    ["paye", "vat"],
+  );
+
+  // Re-mint adds nothing — the annual rows share the natural-key gate.
+  assert.equal(await mintFilingsForFirm(firm, FROZEN_NOW), 0);
+
+  // Annual rows flow through listFilings' taxType filter like any other.
+  const citOnly = await listFilings(firm, { taxType: "cit" });
+  assert.equal(citOnly.length, 1);
+  assert.equal(citOnly[0].clientPartyId, fullClient);
+  assert.equal(citOnly[0].period, "2025-12");
 });

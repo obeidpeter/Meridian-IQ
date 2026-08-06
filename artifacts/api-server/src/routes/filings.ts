@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
+  GetFilingPenaltyExposureQueryParams,
+  GetFilingPenaltyExposureResponse,
   ListFilingsQueryParams,
   ListFilingsResponse,
   SyncFilingsResponse,
@@ -19,6 +21,7 @@ import {
   mintFilingsForFirm,
   updateFilingStatus,
 } from "../modules/filings/filings";
+import { computeFilingPenaltyExposure } from "../modules/filings/penalties";
 
 // Filing Desk (contract 0.67.0): the statutory returns register. Authz
 // posture:
@@ -64,6 +67,23 @@ router.post("/filings/sync", async (req, res): Promise<void> => {
   const firmId = requireFirmScope(req.principal);
   const minted = await mintFilingsForFirm(firmId);
   res.json(SyncFilingsResponse.parse({ minted }));
+});
+
+// Late-filing EXPOSURE (contract 0.70.0): what continued non-filing of the
+// ANNUAL kinds could cost, derived from overdue register rows — "exposure",
+// never "penalty owed" (only an authority assesses a penalty). Same read
+// posture as the list above: filing.read, firm-wide for firm staff, a
+// client_user pinned to its own party (SEC-03).
+router.get("/filing-penalty-exposure", async (req, res): Promise<void> => {
+  assertCan(req.principal, "filing.read");
+  const query = parseOrThrow(GetFilingPenaltyExposureQueryParams, req.query);
+  const firmId = requireFirmScope(req.principal);
+  const clientPartyId = narrowToClientPartyScope(
+    req.principal,
+    query.clientPartyId,
+  );
+  const exposure = await computeFilingPenaltyExposure(firmId, clientPartyId);
+  res.json(GetFilingPenaltyExposureResponse.parse(exposure));
 });
 
 router.post("/filings/:id/status", async (req, res): Promise<void> => {

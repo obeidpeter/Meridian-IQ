@@ -51,6 +51,9 @@ import obligationsRouter from "./obligations";
 import filingsRouter from "./filings";
 // Filing Desk Phase 3: the current-period filing matrix (contract 0.68.0).
 import filingMatrixRouter from "./filing-matrix";
+// Client Compliance Profile: firm-asserted statutory facts that gate the
+// filing mint (contract 0.70.0).
+import complianceProfileRouter from "./compliance-profile";
 // WHT Desk: the withholding credit ledger + remittance schedule (0.69.0).
 import whtRouter from "./wht";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
@@ -123,6 +126,7 @@ router.use(clientsRouter);
 router.use(obligationsRouter);
 router.use(filingsRouter);
 router.use(filingMatrixRouter);
+router.use(complianceProfileRouter);
 router.use(whtRouter);
 
 export default router;

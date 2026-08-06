@@ -5,7 +5,7 @@
 // statuses from the register rows the mint sweep created, and the overdue
 // predicate is the register's own `due_date < today` boundary — this module
 // derives, it never decides.
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb, filingReturnsTable, type FilingReturn } from "@workspace/db";
 // Reused server-side month naming (lib/format's filingPeriodLabel is a
 // FRONTEND package the api-server deliberately does not depend on): the
@@ -18,7 +18,11 @@ import { monthLabel } from "../clerk/client-statement";
 // an aliased raw join.
 import { LIVE_ENGAGEMENT } from "../invoice/receivables";
 import { lagosDateString } from "../../lib/lagos-time";
-import { filingDueDate, previousLagosPeriod } from "./statutory-calendar";
+import {
+  FILING_KINDS,
+  filingDueDate,
+  previousLagosPeriod,
+} from "./statutory-calendar";
 
 export type FilingMatrixStatus = FilingReturn["status"] | null;
 
@@ -85,6 +89,13 @@ export async function computeFilingMatrix(
       and(
         eq(filingReturnsTable.firmId, firmId),
         eq(filingReturnsTable.period, period),
+        // Monthly kinds only, structurally: an ANNUAL row (cit/cac_annual/
+        // paye_annual) shares the "YYYY-MM" period shape and must never
+        // reach the matrix cells.
+        inArray(
+          filingReturnsTable.taxType,
+          FILING_KINDS.map((k) => k.taxType),
+        ),
       ),
     );
   const byCell = new Map<string, { status: FilingReturn["status"]; dueDate: string }>();

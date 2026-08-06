@@ -15,8 +15,10 @@
 import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 import {
   getDb,
+  clientComplianceProfilesTable,
   engagementsTable,
   filingReturnsTable,
+  type ClientComplianceProfile,
   type FilingReturn,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
@@ -29,11 +31,14 @@ import { DomainError } from "../errors";
 import { lagosTodaySql } from "../../lib/lagos-time";
 import { BILL_ORIENTATION } from "../invoice/receivables";
 import {
+  cacAnnualPeriodAndDue,
+  citPeriodAndDue,
   FILING_KINDS,
   filingDueDate,
+  payeAnnualPeriodAndDue,
   periodMonthBounds,
   previousLagosPeriod,
-  type FilingTaxType,
+  type RegisterTaxType,
 } from "./statutory-calendar";
 
 // Same runway as obligations, for the same reason: assembling a return needs
@@ -94,7 +99,7 @@ function assertFilingDate(value: string, field: string): void {
 // Deliberately spelled locally like the client-statement enumeration and the
 // obligation reminder wall (rbac's firmEngagesParty counts ARCHIVED
 // engagements for retention-era reads and must keep doing so).
-const LIVE_ENGAGEMENT: SQL = sql`${engagementsTable.status} IN ('open', 'in_progress')`;
+export const LIVE_ENGAGEMENT: SQL = sql`${engagementsTable.status} IN ('open', 'in_progress')`;
 
 // Mint the last closed Lagos period's rows for one firm: every client the
 // firm actively serves × each FILING_KINDS entry, due date computed once by
@@ -104,6 +109,18 @@ const LIVE_ENGAGEMENT: SQL = sql`${engagementsTable.status} IN ('open', 'in_prog
 // materializer's discipline: exactly one winner per period, here decided by
 // onConflictDoNothing on the index rather than a CAS), so the hourly sweep,
 // a concurrent instance and a sync-now click can all race safely.
+//
+// Compliance Profile gates (evidence-only — a HUMAN at the firm asserts the
+// facts, the platform never infers them):
+//  - a client with NO profile row keeps the original behavior EXACTLY:
+//    monthly vat + paye both mint, no annual rows (adoption is per-client
+//    and nothing changes until the firm speaks);
+//  - a profiled client mints vat iff vatRegistered and paye iff payeEmployer
+//    (wht stays economic — the whtBuyers predicate — profile-independent);
+//  - a profiled client ALSO mints the annual kinds its profile unlocks:
+//    cit when fyeMonth is captured, cac_annual when the incorporation date
+//    qualifies, paye_annual when it employs — each on its own computed
+//    period/due date (statutory-calendar.ts), same natural-key idempotency.
 export async function mintFilingsForFirm(
   firmId: string,
   now = new Date(),
@@ -116,6 +133,15 @@ export async function mintFilingsForFirm(
     .from(engagementsTable)
     .where(and(eq(engagementsTable.firmId, firmId), LIVE_ENGAGEMENT));
   if (clients.length === 0) return 0;
+  // The firm's asserted profiles, once (a Map, not a query per client).
+  const profiles = new Map<string, ClientComplianceProfile>(
+    (
+      await getDb()
+        .select()
+        .from(clientComplianceProfilesTable)
+        .where(eq(clientComplianceProfilesTable.firmId, firmId))
+    ).map((p) => [p.clientPartyId, p]),
+  );
   // WHT rows mint CONDITIONALLY (unlike vat/paye, which every live client
   // owes unconditionally): only a client that actually took delivery of a
   // withholding-categorised bill in the period has anything to remit, so a
@@ -140,19 +166,45 @@ export async function mintFilingsForFirm(
       `)
     ).rows.map((r) => r.client_party_id),
   );
-  const rows = clients.flatMap((c) =>
-    FILING_KINDS.filter(
-      (kind) =>
-        kind.taxType !== "wht" || whtBuyers.has(c.clientPartyId),
-    ).map((kind) => ({
-      firmId,
-      clientPartyId: c.clientPartyId,
-      taxType: kind.taxType,
+  const rows = clients.flatMap((c) => {
+    const profile = profiles.get(c.clientPartyId);
+    // Monthly gates: absent profile = original behavior (vat + paye mint
+    // unconditionally); a profile narrows each kind to the asserted fact.
+    // wht is economic either way.
+    const monthly = FILING_KINDS.filter((kind) => {
+      if (kind.taxType === "wht") return whtBuyers.has(c.clientPartyId);
+      if (!profile) return true;
+      return kind.taxType === "vat" ? profile.vatRegistered : profile.payeEmployer;
+    }).map((kind) => ({
+      taxType: kind.taxType as string,
       period,
       dueDate: filingDueDate(period, kind.taxType),
+    }));
+    // Annual kinds — profiled clients only, each on its own period/due date.
+    const annual: { taxType: string; period: string; dueDate: string }[] = [];
+    if (profile) {
+      if (profile.fyeMonth !== null) {
+        annual.push({ taxType: "cit", ...citPeriodAndDue(profile.fyeMonth, now) });
+      }
+      const cac =
+        profile.incorporationDate !== null
+          ? cacAnnualPeriodAndDue(profile.incorporationDate, now)
+          : null;
+      if (cac) annual.push({ taxType: "cac_annual", ...cac });
+      if (profile.payeEmployer) {
+        annual.push({ taxType: "paye_annual", ...payeAnnualPeriodAndDue(now) });
+      }
+    }
+    return [...monthly, ...annual].map((kind) => ({
+      firmId,
+      clientPartyId: c.clientPartyId,
+      ...kind,
       status: "upcoming" as const,
-    })),
-  );
+    }));
+  });
+  // Every gate can close (a fully-false profile with no wht bills), so the
+  // values() list may be legitimately empty.
+  if (rows.length === 0) return 0;
   const inserted = await getDb()
     .insert(filingReturnsTable)
     .values(rows)
@@ -164,7 +216,7 @@ export async function mintFilingsForFirm(
 export interface ListFilingsFilter {
   clientPartyId?: string;
   status?: FilingReturn["status"];
-  taxType?: FilingTaxType;
+  taxType?: RegisterTaxType;
   limit?: number;
   offset?: number;
 }

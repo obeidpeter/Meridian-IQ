@@ -187,6 +187,35 @@ test("a foreign firm reads empty — rows and totals alike", async () => {
   assert.equal(matrix.period, PERIOD);
 });
 
+test("an ANNUAL register row sharing the matrix period alters no cell and no total", async () => {
+  // The annual kinds keep the register's "YYYY-MM" period shape, so a
+  // cac_annual row CAN carry the exact period string the matrix reads. The
+  // register query's structural taxType filter must keep it out of the
+  // cells — same rows, same totals as the untouched fixture.
+  await getDb().insert(filingReturnsTable).values({
+    firmId,
+    clientPartyId: alphaParty,
+    taxType: "cac_annual",
+    period: PERIOD,
+    dueDate: `${PERIOD.slice(0, 4)}-06-30`,
+    status: "upcoming",
+  });
+  const matrix = await computeFilingMatrix(firmId, EARLY);
+  assert.deepEqual(
+    matrix.rows.map((r) => [r.clientPartyId, r.vat, r.paye, r.wht]),
+    [
+      [alphaParty, "filed", "upcoming", "upcoming"],
+      [zuluParty, "prepared", null, null],
+    ],
+  );
+  assert.deepEqual(matrix.totals, {
+    clients: 2,
+    filed: 1,
+    unfiled: 3,
+    overdue: 0,
+  });
+});
+
 test("the route serves the caller's firm under the console rollup posture", async () => {
   const base = await listen(
     appFor(firmPrincipal(routeFirmId), filingMatrixRouter),
