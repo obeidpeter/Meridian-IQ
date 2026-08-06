@@ -354,6 +354,11 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("clerk_plan_policies")],
     afterRollback: [not(clerkTenant("clerk_plan_policies"))],
   },
+  {
+    version: 34, // Filing Desk returns-register guardrails
+    atTop: [pol("filing_returns")],
+    afterRollback: [not(pol("filing_returns"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

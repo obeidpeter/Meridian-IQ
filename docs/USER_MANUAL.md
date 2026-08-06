@@ -557,6 +557,18 @@ mode (see [section 5](#5-clerk--the-ai-assistant)), forward it by email or
 WhatsApp where those rails are on, or hand the paper to your firm to record
 directly.
 
+### Your filings (the returns register)
+
+**Filings** is the read-only register of your statutory returns: one row
+per period for each return your business owes — the monthly **VAT return**
+(due the 21st of the following month) and the monthly **PAYE remittance**
+(due the 10th). Rows appear automatically each period; your accountant
+walks each one from **Upcoming** to **Prepared** to **Filed**, and a filed
+row shows the filing date and the authority's acknowledgment reference.
+Unfiled rows past their date are flagged **Overdue**, ones inside the next
+7 days **Due soon**. MeridianIQ records that a filing happened — it never
+files anything with an authority itself.
+
 ### Calendar and alerts
 
 - **Calendar** — every compliance deadline for your business: invoice
@@ -1006,6 +1018,12 @@ invoice list — a partner can reach any failing invoice in three clicks.
   **Mark responded**; every row has **Close**; closed notices drop off the
   card (it is a worklist, not an archive — the history stays on the record,
   and the client's own Obligations page can still filter to closed).
+- **Filings card** — the same client's statutory returns register (VAT
+  return, PAYE remittance) period by period: **Sync register** fills a new
+  client's current period, **Mark prepared** and **Mark filed** (with the
+  filing date and acknowledgment reference) walk each row forward, and
+  unfiled rows past their statutory date read **Overdue**. Evidence-only:
+  the platform records the filing act, it never files.
 
   Each **open** row also has **Prepare response**, which opens the response
   panel:

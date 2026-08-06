@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.66.0
+ * OpenAPI spec version: 0.67.0
  */
 
 export * from './acceptInvitationInput';
@@ -351,6 +351,9 @@ export * from './featureFlag';
 export * from './featureFlagOverrideInput';
 export * from './featureFlagUpdate';
 export * from './fieldError';
+export * from './filing';
+export * from './filingList';
+export * from './filingStatus';
 export * from './firm';
 export * from './firmApiKey';
 export * from './firmApiKeyCreated';
@@ -474,6 +477,9 @@ export * from './listClerkEvalRunsParams';
 export * from './listClientStatementsParams';
 export * from './listCollectionAccountsParams';
 export * from './listErpConnectionsParams';
+export * from './listFilingsParams';
+export * from './listFilingsStatus';
+export * from './listFilingsTaxType';
 export * from './listInvoicesParams';
 export * from './listLineItemSuggestionsParams';
 export * from './listMissingRecurringBillsParams';
@@ -703,6 +709,7 @@ export * from './subscriptionUpdateStatus';
 export * from './subscriptionUpdateTierKey';
 export * from './subscriptionView';
 export * from './subscriptionViewStatus';
+export * from './syncFilingsResult';
 export * from './tierUpdate';
 export * from './tinCheckInput';
 export * from './totpActivateInput';
@@ -720,6 +727,8 @@ export * from './unmatchedCollections';
 export * from './unmatchedCollectionsAccountsItem';
 export * from './unmatchedCredits';
 export * from './unmatchedCreditsRowsItem';
+export * from './updateFilingStatusInput';
+export * from './updateFilingStatusInputStatus';
 export * from './updateFirmPoliciesInput';
 export * from './updateObligationStatusInput';
 export * from './updateObligationStatusInputStatus';

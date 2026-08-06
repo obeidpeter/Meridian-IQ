@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.66.0
+ * OpenAPI spec version: 0.67.0
  */
 import {
   useMutation,
@@ -171,6 +171,8 @@ import type {
   FeatureFlag,
   FeatureFlagOverrideInput,
   FeatureFlagUpdate,
+  Filing,
+  FilingList,
   Firm,
   FirmApiKey,
   FirmApiKeyCreated,
@@ -249,6 +251,7 @@ import type {
   ListClientStatementsParams,
   ListCollectionAccountsParams,
   ListErpConnectionsParams,
+  ListFilingsParams,
   ListInvoicesParams,
   ListLineItemSuggestionsParams,
   ListMissingRecurringBillsParams,
@@ -358,6 +361,7 @@ import type {
   SubmissionAttempt,
   SubscriptionUpdate,
   SubscriptionView,
+  SyncFilingsResult,
   TierUpdate,
   TinCheckInput,
   TotpActivateInput,
@@ -372,6 +376,7 @@ import type {
   UnmappedErrorCode,
   UnmatchedCollections,
   UnmatchedCredits,
+  UpdateFilingStatusInput,
   UpdateFirmPoliciesInput,
   UpdateObligationStatusInput,
   UpdateStaffNotificationPreferencesInput,
@@ -23362,5 +23367,230 @@ export const useUpdateObligationStatus = <TError = ErrorType<NotFoundResponse | 
         TContext
       > => {
       return useMutation(getUpdateObligationStatusMutationOptions(options));
+    }
+
+export const getListFilingsUrl = (params?: ListFilingsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/filings?${stringifiedParams}` : `/api/filings`
+}
+
+/**
+ * @summary The firm's statutory returns register (client-scoped for client users)
+ */
+export const listFilings = async (params?: ListFilingsParams, options?: RequestInit): Promise<FilingList> => {
+
+  return customFetch<FilingList>(getListFilingsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFilingsQueryKey = (params?: ListFilingsParams,) => {
+    return [
+    `/api/filings`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListFilingsQueryOptions = <TData = Awaited<ReturnType<typeof listFilings>>, TError = ErrorType<BadRequestResponse>>(params?: ListFilingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFilings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFilingsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFilings>>> = ({ signal }) => listFilings(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFilings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFilingsQueryResult = NonNullable<Awaited<ReturnType<typeof listFilings>>>
+export type ListFilingsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary The firm's statutory returns register (client-scoped for client users)
+ */
+
+export function useListFilings<TData = Awaited<ReturnType<typeof listFilings>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ListFilingsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFilings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFilingsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSyncFilingsUrl = () => {
+
+
+
+
+  return `/api/filings/sync`
+}
+
+/**
+ * @summary Mint the current period's return rows for this firm now (idempotent)
+ */
+export const syncFilings = async ( options?: RequestInit): Promise<SyncFilingsResult> => {
+
+  return customFetch<SyncFilingsResult>(getSyncFilingsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSyncFilingsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncFilings>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncFilings>>, TError,void, TContext> => {
+
+const mutationKey = ['syncFilings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncFilings>>, void> = () => {
+
+
+          return  syncFilings(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncFilingsMutationResult = NonNullable<Awaited<ReturnType<typeof syncFilings>>>
+
+    export type SyncFilingsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mint the current period's return rows for this firm now (idempotent)
+ */
+export const useSyncFilings = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncFilings>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncFilings>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSyncFilingsMutationOptions(options));
+    }
+
+export const getUpdateFilingStatusUrl = (id: string,) => {
+
+
+
+
+  return `/api/filings/${id}/status`
+}
+
+/**
+ * @summary Walk a return forward (prepared, then filed with its evidence)
+ */
+export const updateFilingStatus = async (id: string,
+    updateFilingStatusInput: UpdateFilingStatusInput, options?: RequestInit): Promise<Filing> => {
+
+  return customFetch<Filing>(getUpdateFilingStatusUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateFilingStatusInput)
+  }
+);}
+
+
+
+
+export const getUpdateFilingStatusMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFilingStatus>>, TError,{id: string;data: BodyType<UpdateFilingStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateFilingStatus>>, TError,{id: string;data: BodyType<UpdateFilingStatusInput>}, TContext> => {
+
+const mutationKey = ['updateFilingStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFilingStatus>>, {id: string;data: BodyType<UpdateFilingStatusInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateFilingStatus(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateFilingStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateFilingStatus>>>
+    export type UpdateFilingStatusMutationBody = BodyType<UpdateFilingStatusInput>
+    export type UpdateFilingStatusMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Walk a return forward (prepared, then filed with its evidence)
+ */
+export const useUpdateFilingStatus = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFilingStatus>>, TError,{id: string;data: BodyType<UpdateFilingStatusInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateFilingStatus>>,
+        TError,
+        {id: string;data: BodyType<UpdateFilingStatusInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateFilingStatusMutationOptions(options));
     }
 

@@ -22,3 +22,4 @@ export * from "./integrations.ts";
 export * from "./governance.ts";
 export * from "./collections.ts";
 export * from "./obligations.ts";
+export * from "./filings.ts";

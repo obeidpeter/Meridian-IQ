@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.66.0
+ * OpenAPI spec version: 0.67.0
  */
 export interface HealthStatus {
   status: string;
@@ -4081,6 +4081,65 @@ export interface UpdateObligationStatusInput {
   notes?: string;
 }
 
+export type FilingStatus = typeof FilingStatus[keyof typeof FilingStatus];
+
+
+export const FilingStatus = {
+  upcoming: 'upcoming',
+  prepared: 'prepared',
+  filed: 'filed',
+} as const;
+
+export interface Filing {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  taxType: string;
+  /** @pattern ^\d{4}-\d{2}$ */
+  period: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  dueDate: string;
+  status: FilingStatus;
+  /** @nullable */
+  filedDate?: string | null;
+  /** @nullable */
+  filedReference?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  preparedBy?: string | null;
+  /** @nullable */
+  filedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FilingList {
+  filings: Filing[];
+}
+
+export interface SyncFilingsResult {
+  minted: number;
+}
+
+export type UpdateFilingStatusInputStatus = typeof UpdateFilingStatusInputStatus[keyof typeof UpdateFilingStatusInputStatus];
+
+
+export const UpdateFilingStatusInputStatus = {
+  prepared: 'prepared',
+  filed: 'filed',
+} as const;
+
+export interface UpdateFilingStatusInput {
+  status: UpdateFilingStatusInputStatus;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  filedDate?: string;
+  /** @maxLength 120 */
+  filedReference?: string;
+  /** @maxLength 2000 */
+  notes?: string;
+}
+
 export type ClerkCaseDecisionInputAction = typeof ClerkCaseDecisionInputAction[keyof typeof ClerkCaseDecisionInputAction];
 
 
@@ -6635,4 +6694,36 @@ obligationId: string;
  */
 month?: string;
 };
+
+export type ListFilingsParams = {
+clientPartyId?: string;
+status?: ListFilingsStatus;
+taxType?: ListFilingsTaxType;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
+};
+
+export type ListFilingsStatus = typeof ListFilingsStatus[keyof typeof ListFilingsStatus];
+
+
+export const ListFilingsStatus = {
+  upcoming: 'upcoming',
+  prepared: 'prepared',
+  filed: 'filed',
+} as const;
+
+export type ListFilingsTaxType = typeof ListFilingsTaxType[keyof typeof ListFilingsTaxType];
+
+
+export const ListFilingsTaxType = {
+  vat: 'vat',
+  paye: 'paye',
+} as const;
 

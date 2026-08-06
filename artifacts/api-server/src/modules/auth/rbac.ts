@@ -103,6 +103,11 @@ const ALL = [
   // obligation.write.
   "obligation.read",
   "obligation.write",
+  // Filing Desk: the statutory returns register (VAT/PAYE periods minted
+  // from the calendar, walked upcoming → prepared → filed). Clients read
+  // their own rows (SEC-03 scoped); preparing and filing is firm work.
+  "filing.read",
+  "filing.write",
 ] as const;
 
 export type Capability = (typeof ALL)[number];
@@ -156,6 +161,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "clerk.ask",
     "obligation.read",
     "obligation.write",
+    "filing.read",
+    "filing.write",
   ],
   firm_staff: [
     "invoice.read",
@@ -187,6 +194,8 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "clerk.ask",
     "obligation.read",
     "obligation.write",
+    "filing.read",
+    "filing.write",
   ],
   client_user: [
     "invoice.read",
@@ -215,6 +224,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     // Own obligations only (SEC-03: routes pin the party scope). Recording
     // and updating obligations stays with the firm.
     "obligation.read",
+    "filing.read",
   ],
   operator: [
     "invoice.read",
@@ -243,6 +253,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     // Operators review notice cases (clerk.use) and support firms — read
     // visibility on the obligations those approvals create, never write.
     "obligation.read",
+    "filing.read",
   ],
   bank_user: ["buyer.verify", "audit.read"],
   // Buyer Rails role (Appendix C "Y (buyer org)"): verification, confirmation

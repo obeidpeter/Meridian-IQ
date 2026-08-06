@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.66.0
+ * OpenAPI spec version: 0.67.0
  */
 import type { PartyMergeSide } from './partyMergeSide';
 

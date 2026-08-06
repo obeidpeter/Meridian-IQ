@@ -453,6 +453,46 @@ stored).
   APPENDED `fxRateToNgn` / `ngnEquivalent` columns on the same rule — an
   honest blank for unconvertible rows, never an assumed 1.0.
 
+## Filing Desk (the statutory returns register)
+
+The register of the returns themselves (Phase 1, contract 0.67.0): one
+`filing_returns` row per client × tax type × period, minted
+DETERMINISTICALLY from the statutory calendar and walked `upcoming →
+prepared → filed` by the firm. Evidence-only posture throughout — the
+platform records that a return was prepared and filed (filed date + the
+authority's acknowledgment reference, e.g. a TaxPro-Max receipt number);
+it never files anything with an authority itself.
+
+- **The statutory calendar has ONE home**:
+  `modules/filings/statutory-calendar.ts` — VAT due the 21st of the month
+  after the period (FIRS), PAYE the 10th (introduced here; the date
+  existed nowhere in code before this round). A return covers a CLOSED
+  Lagos month: in August the register carries July's rows. The VAT 21st
+  is still open-coded in three older surfaces (sme.ts deadlines, the
+  compliance calendar, the pack's nextVatReturnDue) — folding them onto
+  this module is a noted follow-up.
+- **Minting is deterministic and idempotent**: the natural unique key
+  (firm, client, tax type, period) is the cross-instance gate (the
+  recurring materializer's discipline); the hourly sweep enumerates firms
+  with live engagements under an advisory lock, and `POST /filings/sync`
+  (filing.write) mints on demand — onboarding's "my register is empty"
+  answer and the e2e trigger. Rows are never created by hand: the
+  register's completeness is its value.
+- **Lifecycle is forward-only** (`POST /filings/{id}/status`): backward
+  transitions 409; marking `filed` requires the filed date (reference
+  optional — authority formats vary); `prepared` rejects evidence fields.
+  Pointer-only audit per transition. "Late" is a derived predicate (due
+  date passed while unfiled), never a stored status.
+- **Authz**: `filing.read` firm-wide for staff, SEC-03-narrowed for a
+  client_user (own rows only), read for operators/auditors;
+  `filing.write` is firm staff work. The detail loader carries the 404
+  non-disclosure dance (the obligations posture).
+- **Surfaces**: console client-detail carries the filings card (status
+  walk + filed-evidence capture); the SME app's `/filings` page is the
+  client's read-only view. `countOpenFilings` is THE single fact function
+  (the countOpenObligations pattern) for the digest / month-end /
+  compliance-pack integrations planned as Phase 2+.
+
 ## Monthly compliance pack
 
 One client's Lagos month as a single branded PDF
