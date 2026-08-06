@@ -81,3 +81,36 @@ export const filingReturnsTable = pgTable(
 );
 
 export type FilingReturn = typeof filingReturnsTable.$inferSelect;
+
+// Reminder ledger kinds mirror obligation_reminder_kind on the notices side.
+export const filingReminderKindEnum = pgEnum("filing_reminder_kind", [
+  "due_soon",
+  "overdue",
+]);
+
+// The at-most-once ledger for filing deadline reminders (Phase 2): one row
+// per (filing, kind) claimed BEFORE any send — the unique index IS the
+// cross-instance once-only gate (the obligation_reminder_sends pattern).
+export const filingReminderSendsTable = pgTable(
+  "filing_reminder_sends",
+  {
+    id: id(),
+    filingId: uuid("filing_id")
+      .notNull()
+      .references(() => filingReturnsTable.id),
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    kind: filingReminderKindEnum("kind").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("filing_reminder_filing_kind_uq").on(t.filingId, t.kind),
+    index("filing_reminder_firm_idx").on(t.firmId),
+  ],
+);
+
+export type FilingReminderSend = typeof filingReminderSendsTable.$inferSelect;

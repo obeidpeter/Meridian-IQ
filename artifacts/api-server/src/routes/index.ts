@@ -49,6 +49,8 @@ import clientsRouter from "./clients";
 import obligationsRouter from "./obligations";
 // Filing Desk: the statutory returns register (contract 0.67.0).
 import filingsRouter from "./filings";
+// Filing Desk Phase 3: the current-period filing matrix (contract 0.68.0).
+import filingMatrixRouter from "./filing-matrix";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 // Platform health watch (rails / dead letters / dead deliveries). Also
@@ -116,5 +118,6 @@ router.use(integrationsRouter);
 router.use(clientsRouter);
 router.use(obligationsRouter);
 router.use(filingsRouter);
+router.use(filingMatrixRouter);
 
 export default router;

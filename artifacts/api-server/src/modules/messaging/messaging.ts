@@ -117,6 +117,20 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email", "push"],
     description: "Authority notice response overdue",
   },
+  // Filing Desk: a statutory return's filing date is approaching / has
+  // passed. Channels mirror obligation_due_soon, the notices twin. Pointer
+  // only (SEC-12): no tax type, period, due date or client rides the
+  // message — the app shows the register row itself.
+  filing_due_soon: {
+    key: "filing_due_soon",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "Statutory return filing due soon",
+  },
+  filing_overdue: {
+    key: "filing_overdue",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "Statutory return filing overdue",
+  },
 };
 
 // Channel failover order when a provider fails. Push is terminal: if the Expo

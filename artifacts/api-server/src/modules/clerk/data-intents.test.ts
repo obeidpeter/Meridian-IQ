@@ -6,6 +6,7 @@ import {
   getDb,
   claimRecordsTable,
   engagementsTable,
+  filingReturnsTable,
   firmsTable,
   partiesTable,
   invoicesTable,
@@ -1268,9 +1269,9 @@ test("data.open_obligations counts open notices, pins to a client and stays clie
     "client-safe: the forced own-party pin reduces it to the caller's own notices",
   );
   assert.equal(
-    DATA_INTENTS[DATA_INTENTS.length - 1].key,
+    DATA_INTENTS[DATA_INTENTS.length - 2].key,
     "data.open_obligations",
-    "the Notice Desk group joined at the END of the append-only catalogue",
+    "the Notice Desk group keeps its append-only position (the Filing Desk group joined after it)",
   );
 
   // Seed: an open due-soon notice for partyA, an open overdue one for
@@ -1398,4 +1399,116 @@ test("a client-scoped ask answers data.open_obligations for its OWN party only (
     "a sibling client's notices never inflate the count (SEC-03)",
   );
   assert.equal(kase.answer?.links, undefined);
+});
+
+// ---- Statutory returns (Filing Desk) ----------------------------------------
+
+test("data.open_filings counts unfiled returns, pins to a client and stays client-safe", async () => {
+  const intent = getDataIntent("data.open_filings");
+  assert.ok(intent, "the catalogue carries the returns intent");
+  assert.deepEqual(
+    intent.accepts,
+    { client: true },
+    "as-of-today only: no month parameter, ever",
+  );
+  assert.ok(
+    CLIENT_SAFE_DATA_INTENTS.some((i) => i.key === "data.open_filings"),
+    "client-safe: the forced own-party pin reduces it to the caller's own register rows",
+  );
+  assert.equal(
+    DATA_INTENTS[DATA_INTENTS.length - 1].key,
+    "data.open_filings",
+    "the Filing Desk group joined at the END of the append-only catalogue",
+  );
+
+  // Seed: a due-soon unfiled return for partyA, an overdue prepared one for
+  // partyA2 (prepared still owes the authority a return), a filed one (never
+  // counted) and a foreign firm's (never visible to firm A). Far-past
+  // periods keep the natural key clear of any sweep-minted rows.
+  await getDb().insert(filingReturnsTable).values([
+    {
+      firmId: firmA,
+      clientPartyId: partyA,
+      taxType: "vat",
+      period: "2097-01",
+      dueDate: lagosDateOffset(3),
+      status: "upcoming",
+    },
+    {
+      firmId: firmA,
+      clientPartyId: partyA2,
+      taxType: "paye",
+      period: "2097-01",
+      dueDate: lagosDateOffset(-2),
+      status: "prepared",
+    },
+    {
+      firmId: firmA,
+      clientPartyId: partyA,
+      taxType: "paye",
+      period: "2097-02",
+      dueDate: lagosDateOffset(1),
+      status: "filed",
+    },
+    {
+      firmId: firmB,
+      clientPartyId: partyB,
+      taxType: "vat",
+      period: "2097-01",
+      dueDate: lagosDateOffset(1),
+      status: "upcoming",
+    },
+  ]);
+
+  // Firm-wide: two unfiled (one due soon, one overdue); the next filing date
+  // is the overdue one's; the filed and foreign rows never count.
+  const firmWide = await lookup("data.open_filings");
+  assert.ok(firmWide);
+  assert.equal(
+    firmWide.facts.find((f) => f.key === "filings_unfiled")?.value,
+    "2",
+  );
+  assert.equal(
+    firmWide.facts.find((f) => f.key === "filings_due_soon")?.value,
+    "1",
+  );
+  assert.equal(
+    firmWide.facts.find((f) => f.key === "filings_overdue")?.value,
+    "1",
+  );
+  const nextDue = firmWide.facts.find((f) => f.key === "next_filing_due");
+  assert.equal(nextDue?.kind, "date");
+  assert.equal(nextDue?.value, lagosDateOffset(-2));
+  assert.match(firmWide.text, /2 statutory returns are awaiting filing/);
+  assert.match(firmWide.text, /1 already overdue/);
+  assert.equal(firmWide.links, undefined, "filing answers carry no links");
+
+  // The client pin narrows every count to that party's own register rows.
+  const pinned = await inClerkScope(firmA, () =>
+    runDataIntent("data.open_filings", firmA, {
+      clientPartyId: partyA2,
+      clientName: `DI Party Z ${SALT}`,
+    }),
+  );
+  assert.ok(pinned);
+  assert.equal(
+    pinned.facts.find((f) => f.key === "filings_unfiled")?.value,
+    "1",
+  );
+  assert.equal(
+    pinned.facts.find((f) => f.key === "filings_overdue")?.value,
+    "1",
+  );
+  assert.ok(pinned.text.includes(`for DI Party Z ${SALT}`));
+
+  // Firm isolation: firm B sees only its own return.
+  const foreign = await lookup("data.open_filings", firmB);
+  assert.equal(
+    foreign?.facts.find((f) => f.key === "filings_unfiled")?.value,
+    "1",
+  );
+  assert.equal(
+    foreign?.facts.find((f) => f.key === "next_filing_due")?.value,
+    lagosDateOffset(1),
+  );
 });

@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.67.0
+  version: 0.68.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -2364,6 +2364,21 @@ paths:
                 $ref: "#/components/schemas/FirmVatPositions"
         "400":
           $ref: "#/components/responses/BadRequest"
+  # Filing Desk Phase 3 (round 39): the 21st-of-the-month cockpit — every
+  # client's current-period return statuses in one read. The firm-rollup
+  # posture (console.portfolio.read), the vat-positions template.
+  /console/filing-matrix:
+    get:
+      operationId: getFilingMatrix
+      summary: The firm's current-period filing status across every client
+      tags: [console]
+      responses:
+        "200":
+          description: One row per live-engagement client, VAT and PAYE statuses side by side
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilingMatrix"
   /firm/policies:
     get:
       operationId: getFirmPolicies
@@ -11757,6 +11772,60 @@ components:
         notes:
           type: string
           maxLength: 2000
+    FilingMatrixRow:
+      type: object
+      required: [clientPartyId, clientName, vat, paye]
+      properties:
+        clientPartyId:
+          type: string
+          format: uuid
+        clientName:
+          type: string
+        # Status per kind; null = no row minted for this client/period yet
+        # (a client onboarded after the mint — the sync button's case).
+        vat:
+          type: ["string", "null"]
+          enum: [upcoming, prepared, filed, null]
+        paye:
+          type: ["string", "null"]
+          enum: [upcoming, prepared, filed, null]
+    FilingMatrix:
+      type: object
+      required: [period, periodLabel, dueDates, rows, totals]
+      properties:
+        period:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+        periodLabel:
+          type: string
+        dueDates:
+          type: object
+          required: [vat, paye]
+          properties:
+            vat:
+              type: string
+              pattern: '^\d{4}-\d{2}-\d{2}$'
+            paye:
+              type: string
+              pattern: '^\d{4}-\d{2}-\d{2}$'
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/FilingMatrixRow"
+        totals:
+          type: object
+          required: [clients, filed, unfiled, overdue]
+          properties:
+            clients:
+              type: integer
+            # Filed/unfiled count FILINGS (rows x kinds), not clients;
+            # overdue counts unfiled filings past their statutory date.
+            filed:
+              type: integer
+            unfiled:
+              type: integer
+            overdue:
+              type: integer
     ClerkCaseDecisionInput:
       type: object
       required: [action]

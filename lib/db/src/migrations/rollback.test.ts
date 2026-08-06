@@ -359,6 +359,11 @@ const LADDER: LadderStep[] = [
     atTop: [pol("filing_returns")],
     afterRollback: [not(pol("filing_returns"))],
   },
+  {
+    version: 35, // Filing Desk reminder-ledger guardrails
+    atTop: [pol("filing_reminder_sends")],
+    afterRollback: [not(pol("filing_reminder_sends"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

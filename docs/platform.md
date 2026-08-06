@@ -489,9 +489,18 @@ it never files anything with an authority itself.
   non-disclosure dance (the obligations posture).
 - **Surfaces**: console client-detail carries the filings card (status
   walk + filed-evidence capture); the SME app's `/filings` page is the
-  client's read-only view. `countOpenFilings` is THE single fact function
-  (the countOpenObligations pattern) for the digest / month-end /
-  compliance-pack integrations planned as Phase 2+.
+  client's read-only view; the console portfolio carries the **filing
+  cockpit** (`GET /console/filing-matrix`, the vat-positions posture) —
+  every client's current-period VAT/PAYE statuses in one read, the
+  21st-of-the-month view.
+- **Phase 2 integrations** (round 39): filing deadline **reminders** ride
+  the shared claim-first driver (`filing_reminder_sends` ledger, migration
+  0035 — unique (filing, kind) is the at-most-once gate; consent purpose
+  `deadline_alerts`, dark-claim under the messaging kill switch, stale
+  silent claims past 60 days); `countOpenFilings` feeds the weekly digest
+  (digest.v9's two "statutory returns" lines), the month-end close
+  (`open_filings` item), the compliance pack ("Statutory returns"
+  section), and Ask Clerk (`data.open_filings`, client-safe).
 
 ## Monthly compliance pack
 

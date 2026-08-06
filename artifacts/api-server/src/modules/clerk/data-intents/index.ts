@@ -8,6 +8,7 @@ import { FILING_INTENTS } from "./filing";
 import { STATUS_INTENTS } from "./status";
 import { DELTA_INTENTS } from "./deltas";
 import { OBLIGATION_INTENTS } from "./obligations";
+import { RETURNS_INTENTS } from "./returns";
 
 // Grounded firm-data Q&A (Clerk idea #6). Ask Clerk gains a SECOND closed
 // catalogue next to the claims register: data intents — live lookups over the
@@ -44,6 +45,7 @@ import { OBLIGATION_INTENTS } from "./obligations";
 //   status.ts       one pinned invoice, approvals, allowance, proposed actions
 //   deltas.ts       month-over-month comparison, per-client movers (Ask 2.0)
 //   obligations.ts  open authority obligations (Notice Desk)
+//   returns.ts      unfiled statutory returns (Filing Desk)
 
 // The catalogue. Keys are namespaced "data.*" so they can never collide with
 // operator-authored claim keys; resolution in ask.ts checks this catalogue
@@ -61,6 +63,8 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   // APPEND ONLY: the Notice Desk group joins at the END (the key-list order
   // is model-facing and frozen by the eval corpus).
   ...OBLIGATION_INTENTS,
+  // APPEND ONLY, same rule: the Filing Desk group joins after it.
+  ...RETURNS_INTENTS,
 ];
 
 // Client-facing Ask (SEC-03). clerk.ask is open to client_users, but the
@@ -142,6 +146,10 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // pin — counts and a date only, no other client is ever named, and the
   // answer carries no links at all.
   "data.open_obligations",
+  // Unfiled statutory returns with the forced own-party pin: the same shape
+  // as data.open_obligations — countOpenFilings reduces to the caller's OWN
+  // register rows under the pin, counts and a date only, linkless.
+  "data.open_filings",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

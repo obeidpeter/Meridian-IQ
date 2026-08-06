@@ -128,6 +128,9 @@ function digestFacts(overrides: Partial<DigestFacts>): DigestFacts {
     // Prove with Clerk Phase 3 — null = automation lit or off-topic; the
     // shadow line must stay silent on the baseline.
     automationShadowPending: null,
+    // Filing Desk.
+    filingsDueSoon: 0,
+    filingsOverdue: 0,
   };
   return { ...base, ...overrides };
 }
@@ -202,6 +205,11 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
         pattern: "automation",
         flags: "i",
         label: "shadow line suppressed — automation on, do not mention",
+      },
+      {
+        pattern: "statutory return",
+        flags: "i",
+        label: "no filings due — do not mention",
       },
     ],
   },

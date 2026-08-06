@@ -295,6 +295,14 @@ export const INTENT_FIXTURES: IntentFixture[] = [
       plan: [{ key: "data.submitted_this_month" }],
     },
   },
+  // ---- Filing Desk ---------------------------------------------------------
+  {
+    key: "data-returns",
+    label: "data: unfiled statutory returns (Filing Desk)",
+    question: "Which statutory returns are still unfiled?",
+    riskLabel: "clean",
+    expected: { claimKey: "data.open_filings" },
+  },
 ];
 
 // ---- Grown corpus (round 16) ----------------------------------------------

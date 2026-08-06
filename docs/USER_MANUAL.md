@@ -567,7 +567,10 @@ walks each one from **Upcoming** to **Prepared** to **Filed**, and a filed
 row shows the filing date and the authority's acknowledgment reference.
 Unfiled rows past their date are flagged **Overdue**, ones inside the next
 7 days **Due soon**. MeridianIQ records that a filing happened — it never
-files anything with an authority itself.
+files anything with an authority itself. When a return's statutory date is
+inside the next 7 days — or has passed — the platform sends your business
+one deadline alert per threshold over your enabled channels (the same
+opt-outs as every deadline alert).
 
 ### Calendar and alerts
 
@@ -892,9 +895,10 @@ but you shouldn't have to open it to learn your autopilot stopped.
   overdue, drafts waiting on a colleague's approval
   (only when the firm uses the policy — "0 waiting" and "no policy" never
   read the same), a VAT-return countdown once the monthly deadline is
-  within a week, and — only while your automation switches are off — a
-  shadow line counting what Clerk automation would act on today, pointing
-  at the portfolio's evidence card. Every fact is computed from your
+  within a week, statutory returns due within 7 days or overdue (from the
+  filings register), and — only while your automation switches are off —
+  a shadow line counting what Clerk automation would act on today,
+  pointing at the portfolio's evidence card. Every fact is computed from your
   records; Clerk only phrases them — and a plain template answers even
   when Clerk is off.
   Staff opt in individually (**Your notifications** card on the console
@@ -965,6 +969,12 @@ invoice list — a partner can reach any failing invoice in three clicks.
   same backtest as the portfolio card, scoped to the one client the grant
   covers, and it never blocks the buttons — it exists so the consent
   decision is informed, in either direction.
+- **Filing cockpit** — during filing week this is the page to live on:
+  every client's current-period VAT return and PAYE remittance status side
+  by side (Upcoming / Prepared / Filed, with "Not minted" for clients
+  onboarded after the period opened), the two statutory dates in the
+  header, and totals with overdue in red. Drill into a client to walk its
+  rows forward.
 - **Add client** — one dialog (legal name, optional TIN / CAC / street /
   city) creates the client *and* its engagement in a single step, with the
   same duplicate guard as the bulk importer (an existing engaged client
@@ -1767,7 +1777,7 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **98 headless user-journey checks** on the
+  path-router and drives **100 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month). The journeys live as ordered groups
   in `scripts/src/e2e/journeys/` (roles, money, controls, lifecycle,
