@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.68.0
+ * OpenAPI spec version: 0.69.0
  */
 import * as zod from 'zod';
 
@@ -797,6 +797,7 @@ export const ListInvoicesResponseItem = zod.object({
   "subtotal": zod.string(),
   "vatTotal": zod.string(),
   "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
@@ -821,6 +822,7 @@ export const CreateInvoiceBody = zod.object({
   "dueDate": zod.string().optional(),
   "kind": zod.enum(['invoice', 'credit_note', 'correction']).optional(),
   "category": zod.enum(['b2b', 'b2g', 'b2c']).optional(),
+  "whtCategory": zod.enum(['goods_2', 'works_2', 'services_5', 'commission_5', 'rent_10', 'royalties_10']).optional(),
   "relatedInvoiceId": zod.string().optional(),
   "notes": zod.string().optional(),
   "lines": zod.array(zod.object({
@@ -849,6 +851,7 @@ export const CreateInvoiceResponse = zod.object({
   "subtotal": zod.string(),
   "vatTotal": zod.string(),
   "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
@@ -1610,6 +1613,7 @@ export const GetInvoiceResponse = zod.object({
   "subtotal": zod.string(),
   "vatTotal": zod.string(),
   "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
@@ -1646,6 +1650,7 @@ export const UpdateInvoiceBody = zod.object({
   "dueDate": zod.string().nullish(),
   "fxRateToNgn": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "whtCategory": zod.union([zod.literal('goods_2'),zod.literal('works_2'),zod.literal('services_5'),zod.literal('commission_5'),zod.literal('rent_10'),zod.literal('royalties_10'),zod.literal(null)]).nullish(),
   "lines": zod.array(zod.object({
   "description": zod.string().min(1),
   "quantity": zod.string(),
@@ -1672,6 +1677,7 @@ export const UpdateInvoiceResponse = zod.object({
   "subtotal": zod.string(),
   "vatTotal": zod.string(),
   "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
@@ -1727,6 +1733,7 @@ export const SubmitInvoiceResponse = zod.object({
   "subtotal": zod.string(),
   "vatTotal": zod.string(),
   "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
@@ -1850,6 +1857,7 @@ export const CancelInvoiceResponse = zod.object({
   "subtotal": zod.string(),
   "vatTotal": zod.string(),
   "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
@@ -1891,6 +1899,7 @@ export const CreditNoteInvoiceResponse = zod.object({
   "subtotal": zod.string(),
   "vatTotal": zod.string(),
   "grandTotal": zod.string(),
+  "whtCategory": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "legalHold": zod.boolean(),
   "retentionUntil": zod.string().nullish(),
@@ -2930,6 +2939,7 @@ export const GetFirmVatPositionsResponse = zod.object({
 export const getFilingMatrixResponsePeriodRegExp = new RegExp('^\\d{4}-\\d{2}$');
 export const getFilingMatrixResponseDueDatesVatRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const getFilingMatrixResponseDueDatesPayeRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getFilingMatrixResponseDueDatesWhtRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 
 
 export const GetFilingMatrixResponse = zod.object({
@@ -2937,13 +2947,15 @@ export const GetFilingMatrixResponse = zod.object({
   "periodLabel": zod.string(),
   "dueDates": zod.object({
   "vat": zod.string().regex(getFilingMatrixResponseDueDatesVatRegExp),
-  "paye": zod.string().regex(getFilingMatrixResponseDueDatesPayeRegExp)
+  "paye": zod.string().regex(getFilingMatrixResponseDueDatesPayeRegExp),
+  "wht": zod.string().regex(getFilingMatrixResponseDueDatesWhtRegExp)
 }),
   "rows": zod.array(zod.object({
   "clientPartyId": zod.string().uuid(),
   "clientName": zod.string(),
   "vat": zod.union([zod.literal('upcoming'),zod.literal('prepared'),zod.literal('filed'),zod.literal(null)]).nullable(),
-  "paye": zod.union([zod.literal('upcoming'),zod.literal('prepared'),zod.literal('filed'),zod.literal(null)]).nullable()
+  "paye": zod.union([zod.literal('upcoming'),zod.literal('prepared'),zod.literal('filed'),zod.literal(null)]).nullable(),
+  "wht": zod.union([zod.literal('upcoming'),zod.literal('prepared'),zod.literal('filed'),zod.literal(null)]).nullable()
 })),
   "totals": zod.object({
   "clients": zod.number(),
@@ -9218,7 +9230,7 @@ export const listFilingsQueryOffsetMin = 0;
 export const ListFilingsQueryParams = zod.object({
   "clientPartyId": zod.coerce.string().uuid().optional(),
   "status": zod.enum(['upcoming', 'prepared', 'filed']).optional(),
-  "taxType": zod.enum(['vat', 'paye']).optional(),
+  "taxType": zod.enum(['vat', 'paye', 'wht']).optional(),
   "limit": zod.coerce.number().min(1).max(listFilingsQueryLimitMax).optional(),
   "offset": zod.coerce.number().min(listFilingsQueryOffsetMin).optional()
 })
@@ -9295,6 +9307,158 @@ export const UpdateFilingStatusResponse = zod.object({
   "filedBy": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary The withholding-tax credit ledger (client-scoped for client users)
+ */
+export const listWhtCreditsQueryLimitMax = 200;
+
+export const listWhtCreditsQueryOffsetMin = 0;
+
+
+
+export const ListWhtCreditsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional(),
+  "status": zod.enum(['awaiting_note', 'note_received']).optional(),
+  "limit": zod.coerce.number().min(1).max(listWhtCreditsQueryLimitMax).optional(),
+  "offset": zod.coerce.number().min(listWhtCreditsQueryOffsetMin).optional()
+})
+
+export const listWhtCreditsResponseCreditsItemDeductedDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const ListWhtCreditsResponse = zod.object({
+  "credits": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "category": zod.string(),
+  "amount": zod.string(),
+  "deductedDate": zod.string().regex(listWhtCreditsResponseCreditsItemDeductedDateRegExp),
+  "source": zod.enum(['statement_match', 'manual']),
+  "status": zod.enum(['awaiting_note', 'note_received']),
+  "noteReference": zod.string().nullish(),
+  "noteDate": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "totals": zod.object({
+  "awaitingNote": zod.number(),
+  "noteReceived": zod.number(),
+  "awaitingAmount": zod.string(),
+  "totalAmount": zod.string()
+})
+})
+
+
+/**
+ * @summary Record that a buyer withheld on an invoice (deduction evidence, by hand)
+ */
+export const recordWhtCreditBodyDeductedDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const RecordWhtCreditBody = zod.object({
+  "invoiceId": zod.string().uuid(),
+  "amount": zod.string().optional(),
+  "deductedDate": zod.string().regex(recordWhtCreditBodyDeductedDateRegExp)
+})
+
+export const recordWhtCreditResponseDeductedDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const RecordWhtCreditResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "category": zod.string(),
+  "amount": zod.string(),
+  "deductedDate": zod.string().regex(recordWhtCreditResponseDeductedDateRegExp),
+  "source": zod.enum(['statement_match', 'manual']),
+  "status": zod.enum(['awaiting_note', 'note_received']),
+  "noteReference": zod.string().nullish(),
+  "noteDate": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Mark the credit note received (reference + date evidence; forward-only)
+ */
+export const MarkWhtNoteReceivedParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const markWhtNoteReceivedBodyNoteReferenceMax = 120;
+
+export const markWhtNoteReceivedBodyNoteDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const MarkWhtNoteReceivedBody = zod.object({
+  "noteReference": zod.string().min(1).max(markWhtNoteReceivedBodyNoteReferenceMax),
+  "noteDate": zod.string().regex(markWhtNoteReceivedBodyNoteDateRegExp)
+})
+
+export const markWhtNoteReceivedResponseDeductedDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const MarkWhtNoteReceivedResponse = zod.object({
+  "id": zod.string().uuid(),
+  "firmId": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "category": zod.string(),
+  "amount": zod.string(),
+  "deductedDate": zod.string().regex(markWhtNoteReceivedResponseDeductedDateRegExp),
+  "source": zod.enum(['statement_match', 'manual']),
+  "status": zod.enum(['awaiting_note', 'note_received']),
+  "noteReference": zod.string().nullish(),
+  "noteDate": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary The period's withholding remittance schedule (bills the client must remit on)
+ */
+export const getWhtRemittanceQueryPeriodRegExp = new RegExp('^\\d{4}-\\d{2}$');
+
+
+export const GetWhtRemittanceQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid(),
+  "period": zod.coerce.string().regex(getWhtRemittanceQueryPeriodRegExp).optional()
+})
+
+export const getWhtRemittanceResponsePeriodRegExp = new RegExp('^\\d{4}-\\d{2}$');
+export const getWhtRemittanceResponseDueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getWhtRemittanceResponseRowsItemIssueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetWhtRemittanceResponse = zod.object({
+  "period": zod.string().regex(getWhtRemittanceResponsePeriodRegExp),
+  "periodLabel": zod.string(),
+  "dueDate": zod.string().regex(getWhtRemittanceResponseDueDateRegExp),
+  "rows": zod.array(zod.object({
+  "invoiceId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "vendorName": zod.string(),
+  "category": zod.string(),
+  "baseAmount": zod.string(),
+  "whtAmount": zod.string(),
+  "issueDate": zod.string().regex(getWhtRemittanceResponseRowsItemIssueDateRegExp)
+})),
+  "totals": zod.object({
+  "bills": zod.number(),
+  "whtAmount": zod.string()
+})
 })
 
 

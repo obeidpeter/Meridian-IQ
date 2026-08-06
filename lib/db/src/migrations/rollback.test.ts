@@ -364,6 +364,11 @@ const LADDER: LadderStep[] = [
     atTop: [pol("filing_reminder_sends")],
     afterRollback: [not(pol("filing_reminder_sends"))],
   },
+  {
+    version: 36, // WHT Desk guardrails (credits ledger + chase sent-ledger)
+    atTop: [pol("wht_credits"), pol("wht_reminder_sends")],
+    afterRollback: [not(pol("wht_credits")), not(pol("wht_reminder_sends"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

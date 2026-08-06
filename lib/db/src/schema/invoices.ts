@@ -55,6 +55,14 @@ export const invoicesTable = pgTable("invoices", {
     .references(() => partiesTable.id),
   kind: invoiceKindEnum("kind").notNull().default("invoice"),
   category: invoiceCategoryEnum("category").notNull().default("b2b"),
+  // WHT Desk: the withholding-tax category a HUMAN assigned to this
+  // document (catalogue KEY as text, the filings taxType rule — rows
+  // outlive catalogue growth; the closed set and its rates live in
+  // modules/wht/rates.ts). Null = no WHT applies. On a receivable it sets
+  // the credit the buyer owes the supplier when paying short; on a bill
+  // (buyer orientation) it marks the client's own duty to withhold and
+  // remit. The platform never assigns a category itself.
+  whtCategory: text("wht_category"),
   // For credit notes / corrections, the stamped invoice being adjusted
   // (CORE-09). FK-constrained so an adjustment can never point at a
   // non-existent original; same-tenant + stampedness are enforced in service.

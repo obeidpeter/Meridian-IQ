@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.68.0
+ * OpenAPI spec version: 0.69.0
  */
 export interface HealthStatus {
   status: string;
@@ -534,6 +534,8 @@ export interface Invoice {
   vatTotal: string;
   grandTotal: string;
   /** @nullable */
+  whtCategory?: string | null;
+  /** @nullable */
   notes?: string | null;
   legalHold: boolean;
   /** @nullable */
@@ -586,6 +588,18 @@ export const InvoiceInputCategory = {
   b2c: 'b2c',
 } as const;
 
+export type InvoiceInputWhtCategory = typeof InvoiceInputWhtCategory[keyof typeof InvoiceInputWhtCategory];
+
+
+export const InvoiceInputWhtCategory = {
+  goods_2: 'goods_2',
+  works_2: 'works_2',
+  services_5: 'services_5',
+  commission_5: 'commission_5',
+  rent_10: 'rent_10',
+  royalties_10: 'royalties_10',
+} as const;
+
 export interface InvoiceInput {
   supplierPartyId: string;
   buyerPartyId: string;
@@ -597,10 +611,26 @@ export interface InvoiceInput {
   dueDate?: string;
   kind?: InvoiceInputKind;
   category?: InvoiceInputCategory;
+  whtCategory?: InvoiceInputWhtCategory;
   relatedInvoiceId?: string;
   notes?: string;
   lines: InvoiceLineInput[];
 }
+
+/**
+ * @nullable
+ */
+export type InvoiceUpdateInputWhtCategory = typeof InvoiceUpdateInputWhtCategory[keyof typeof InvoiceUpdateInputWhtCategory] | null;
+
+
+export const InvoiceUpdateInputWhtCategory = {
+  goods_2: 'goods_2',
+  works_2: 'works_2',
+  services_5: 'services_5',
+  commission_5: 'commission_5',
+  rent_10: 'rent_10',
+  royalties_10: 'royalties_10',
+} as const;
 
 export interface InvoiceUpdateInput {
   /** @minLength 1 */
@@ -612,6 +642,8 @@ export interface InvoiceUpdateInput {
   fxRateToNgn?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  whtCategory?: InvoiceUpdateInputWhtCategory;
   /** @minItems 1 */
   lines?: InvoiceLineInput[];
 }
@@ -4164,6 +4196,18 @@ export const FilingMatrixRowPaye = {
   filed: 'filed',
 } as const;
 
+/**
+ * @nullable
+ */
+export type FilingMatrixRowWht = typeof FilingMatrixRowWht[keyof typeof FilingMatrixRowWht] | null;
+
+
+export const FilingMatrixRowWht = {
+  upcoming: 'upcoming',
+  prepared: 'prepared',
+  filed: 'filed',
+} as const;
+
 export interface FilingMatrixRow {
   clientPartyId: string;
   clientName: string;
@@ -4171,6 +4215,8 @@ export interface FilingMatrixRow {
   vat: FilingMatrixRowVat;
   /** @nullable */
   paye: FilingMatrixRowPaye;
+  /** @nullable */
+  wht: FilingMatrixRowWht;
 }
 
 export type FilingMatrixDueDates = {
@@ -4178,6 +4224,8 @@ export type FilingMatrixDueDates = {
   vat: string;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   paye: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  wht: string;
 };
 
 export type FilingMatrixTotals = {
@@ -4194,6 +4242,97 @@ export interface FilingMatrix {
   dueDates: FilingMatrixDueDates;
   rows: FilingMatrixRow[];
   totals: FilingMatrixTotals;
+}
+
+export type WhtCreditSource = typeof WhtCreditSource[keyof typeof WhtCreditSource];
+
+
+export const WhtCreditSource = {
+  statement_match: 'statement_match',
+  manual: 'manual',
+} as const;
+
+export type WhtCreditStatus = typeof WhtCreditStatus[keyof typeof WhtCreditStatus];
+
+
+export const WhtCreditStatus = {
+  awaiting_note: 'awaiting_note',
+  note_received: 'note_received',
+} as const;
+
+export interface WhtCredit {
+  id: string;
+  firmId: string;
+  clientPartyId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  category: string;
+  amount: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  deductedDate: string;
+  source: WhtCreditSource;
+  status: WhtCreditStatus;
+  /** @nullable */
+  noteReference?: string | null;
+  /** @nullable */
+  noteDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WhtCreditListTotals = {
+  awaitingNote: number;
+  noteReceived: number;
+  awaitingAmount: string;
+  totalAmount: string;
+};
+
+export interface WhtCreditList {
+  credits: WhtCredit[];
+  totals: WhtCreditListTotals;
+}
+
+export interface WhtCreditCreateInput {
+  invoiceId: string;
+  amount?: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  deductedDate: string;
+}
+
+export interface WhtNoteInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  noteReference: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  noteDate: string;
+}
+
+export interface WhtRemittanceRow {
+  invoiceId: string;
+  invoiceNumber: string;
+  vendorName: string;
+  category: string;
+  baseAmount: string;
+  whtAmount: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  issueDate: string;
+}
+
+export type WhtRemittanceTotals = {
+  bills: number;
+  whtAmount: string;
+};
+
+export interface WhtRemittance {
+  /** @pattern ^\d{4}-\d{2}$ */
+  period: string;
+  periodLabel: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  dueDate: string;
+  rows: WhtRemittanceRow[];
+  totals: WhtRemittanceTotals;
 }
 
 export type ClerkCaseDecisionInputAction = typeof ClerkCaseDecisionInputAction[keyof typeof ClerkCaseDecisionInputAction];
@@ -6781,5 +6920,36 @@ export type ListFilingsTaxType = typeof ListFilingsTaxType[keyof typeof ListFili
 export const ListFilingsTaxType = {
   vat: 'vat',
   paye: 'paye',
+  wht: 'wht',
 } as const;
+
+export type ListWhtCreditsParams = {
+clientPartyId?: string;
+status?: ListWhtCreditsStatus;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
+};
+
+export type ListWhtCreditsStatus = typeof ListWhtCreditsStatus[keyof typeof ListWhtCreditsStatus];
+
+
+export const ListWhtCreditsStatus = {
+  awaiting_note: 'awaiting_note',
+  note_received: 'note_received',
+} as const;
+
+export type GetWhtRemittanceParams = {
+clientPartyId: string;
+/**
+ * @pattern ^\d{4}-\d{2}$
+ */
+period?: string;
+};
 

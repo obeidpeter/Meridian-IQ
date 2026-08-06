@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.68.0
+ * OpenAPI spec version: 0.69.0
  */
 
 export type ListFilingsTaxType = typeof ListFilingsTaxType[keyof typeof ListFilingsTaxType];
@@ -12,4 +12,5 @@ export type ListFilingsTaxType = typeof ListFilingsTaxType[keyof typeof ListFili
 export const ListFilingsTaxType = {
   vat: 'vat',
   paye: 'paye',
+  wht: 'wht',
 } as const;

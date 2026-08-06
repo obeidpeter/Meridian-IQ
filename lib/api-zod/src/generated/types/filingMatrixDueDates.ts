@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.68.0
+ * OpenAPI spec version: 0.69.0
  */
 
 export type FilingMatrixDueDates = {
@@ -11,4 +11,6 @@ export type FilingMatrixDueDates = {
   vat: string;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   paye: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  wht: string;
 };

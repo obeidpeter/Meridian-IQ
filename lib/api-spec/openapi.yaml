@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.68.0
+  version: 0.69.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -38,6 +38,7 @@ tags:
   - name: clerk
   - name: obligations
   - name: filings
+  - name: wht
   - name: recurring
   - name: invitation
 paths:
@@ -5917,7 +5918,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [vat, paye]
+            enum: [vat, paye, wht]
         - name: limit
           in: query
           required: false
@@ -5978,6 +5979,122 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /wht/credits:
+    get:
+      operationId: listWhtCredits
+      summary: The withholding-tax credit ledger (client-scoped for client users)
+      tags: [wht]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [awaiting_note, note_received]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Credits, most recently deducted first, with chase totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhtCreditList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      operationId: recordWhtCredit
+      summary: Record that a buyer withheld on an invoice (deduction evidence, by hand)
+      tags: [wht]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhtCreditCreateInput"
+      responses:
+        "201":
+          description: The recorded credit (or the existing row for this invoice)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhtCredit"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /wht/credits/{id}/note:
+    post:
+      operationId: markWhtNoteReceived
+      summary: Mark the credit note received (reference + date evidence; forward-only)
+      tags: [wht]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhtNoteInput"
+      responses:
+        "200":
+          description: The updated credit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhtCredit"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /wht/remittance:
+    get:
+      operationId: getWhtRemittance
+      summary: The period's withholding remittance schedule (bills the client must remit on)
+      tags: [wht]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+      responses:
+        "200":
+          description: WHT-categorised bills issued in the period, with the remit total
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhtRemittance"
+        "400":
+          $ref: "#/components/responses/BadRequest"
 components:
   parameters:
     IdParam:
@@ -6620,6 +6737,11 @@ components:
           type: string
         grandTotal:
           type: string
+        # WHT Desk: the withholding category a human assigned (catalogue
+        # key echoed as plain text — the rates live server-side). Null =
+        # no WHT applies to this document.
+        whtCategory:
+          type: ["string", "null"]
         notes:
           type: ["string", "null"]
         legalHold:
@@ -6704,6 +6826,11 @@ components:
         category:
           type: string
           enum: [b2b, b2g, b2c]
+        # WHT Desk: the closed withholding catalogue (2025 Deduction at
+        # Source regulations, corporate recipients); omitted = no WHT.
+        whtCategory:
+          type: string
+          enum: [goods_2, works_2, services_5, commission_5, rent_10, royalties_10]
         relatedInvoiceId:
           type: string
         notes:
@@ -6727,6 +6854,10 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        # Null clears the category (no WHT applies after all).
+        whtCategory:
+          type: ["string", "null"]
+          enum: [goods_2, works_2, services_5, commission_5, rent_10, royalties_10, null]
         lines:
           type: array
           minItems: 1
@@ -11774,7 +11905,7 @@ components:
           maxLength: 2000
     FilingMatrixRow:
       type: object
-      required: [clientPartyId, clientName, vat, paye]
+      required: [clientPartyId, clientName, vat, paye, wht]
       properties:
         clientPartyId:
           type: string
@@ -11789,6 +11920,12 @@ components:
         paye:
           type: ["string", "null"]
           enum: [upcoming, prepared, filed, null]
+        # WHT remittances are minted only for clients that actually
+        # withheld in the period, so null is the COMMON cell here (no
+        # withholding duty), not just the late-onboarding case.
+        wht:
+          type: ["string", "null"]
+          enum: [upcoming, prepared, filed, null]
     FilingMatrix:
       type: object
       required: [period, periodLabel, dueDates, rows, totals]
@@ -11800,12 +11937,15 @@ components:
           type: string
         dueDates:
           type: object
-          required: [vat, paye]
+          required: [vat, paye, wht]
           properties:
             vat:
               type: string
               pattern: '^\d{4}-\d{2}-\d{2}$'
             paye:
+              type: string
+              pattern: '^\d{4}-\d{2}-\d{2}$'
+            wht:
               type: string
               pattern: '^\d{4}-\d{2}-\d{2}$'
         rows:
@@ -11826,6 +11966,144 @@ components:
               type: integer
             overdue:
               type: integer
+    WhtCredit:
+      type: object
+      required:
+        [id, firmId, clientPartyId, invoiceId, invoiceNumber, category, amount, deductedDate, source, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firmId:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        # Catalogue key echoed as plain text (the filings taxType rule);
+        # the closed set and its rates live server-side.
+        category:
+          type: string
+        amount:
+          type: string
+        deductedDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        # How the deduction was recorded: an accepted short-pay
+        # reconciliation match, or by hand.
+        source:
+          type: string
+          enum: [statement_match, manual]
+        status:
+          type: string
+          enum: [awaiting_note, note_received]
+        noteReference:
+          type: ["string", "null"]
+        noteDate:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    WhtCreditList:
+      type: object
+      required: [credits, totals]
+      properties:
+        credits:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhtCredit"
+        totals:
+          type: object
+          required: [awaitingNote, noteReceived, awaitingAmount, totalAmount]
+          properties:
+            awaitingNote:
+              type: integer
+            noteReceived:
+              type: integer
+            # Naira sums as decimal strings (the money-column convention).
+            awaitingAmount:
+              type: string
+            totalAmount:
+              type: string
+    WhtCreditCreateInput:
+      type: object
+      required: [invoiceId, deductedDate]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        # Omitted = the computed expectation (subtotal × the category's
+        # rate); supplied = the buyer's real figure.
+        amount:
+          type: string
+        deductedDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+    WhtNoteInput:
+      type: object
+      required: [noteReference, noteDate]
+      properties:
+        noteReference:
+          type: string
+          minLength: 1
+          maxLength: 120
+        noteDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+    WhtRemittanceRow:
+      type: object
+      required: [invoiceId, invoiceNumber, vendorName, category, baseAmount, whtAmount, issueDate]
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        vendorName:
+          type: string
+        category:
+          type: string
+        baseAmount:
+          type: string
+        whtAmount:
+          type: string
+        issueDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+    WhtRemittance:
+      type: object
+      required: [period, periodLabel, dueDate, rows, totals]
+      properties:
+        period:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+        periodLabel:
+          type: string
+        # The statutory remit-by date (the 21st of the following month,
+        # from the shared statutory calendar).
+        dueDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhtRemittanceRow"
+        totals:
+          type: object
+          required: [bills, whtAmount]
+          properties:
+            bills:
+              type: integer
+            whtAmount:
+              type: string
     ClerkCaseDecisionInput:
       type: object
       required: [action]

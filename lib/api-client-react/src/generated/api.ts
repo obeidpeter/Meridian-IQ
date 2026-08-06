@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.68.0
+ * OpenAPI spec version: 0.69.0
  */
 import {
   useMutation,
@@ -223,6 +223,7 @@ import type {
   GetVatPackParams,
   GetVatPositionParams,
   GetVatSettlementCheckParams,
+  GetWhtRemittanceParams,
   GrantActionPolicyInput,
   GrantPlanPolicyInput,
   HealthAlert,
@@ -264,6 +265,7 @@ import type {
   ListRecurringSuggestionsParams,
   ListStatementsParams,
   ListUnbilledIncomeParams,
+  ListWhtCreditsParams,
   LoginInput,
   MarkNotificationsReadInput,
   MatchAssist,
@@ -389,7 +391,12 @@ import type {
   VatPosition,
   VatRiskInput,
   VatRiskReport,
-  VatSettlementCheck
+  VatSettlementCheck,
+  WhtCredit,
+  WhtCreditCreateInput,
+  WhtCreditList,
+  WhtNoteInput,
+  WhtRemittance
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -23671,4 +23678,313 @@ export const useUpdateFilingStatus = <TError = ErrorType<BadRequestResponse | No
       > => {
       return useMutation(getUpdateFilingStatusMutationOptions(options));
     }
+
+export const getListWhtCreditsUrl = (params?: ListWhtCreditsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/wht/credits?${stringifiedParams}` : `/api/wht/credits`
+}
+
+/**
+ * @summary The withholding-tax credit ledger (client-scoped for client users)
+ */
+export const listWhtCredits = async (params?: ListWhtCreditsParams, options?: RequestInit): Promise<WhtCreditList> => {
+
+  return customFetch<WhtCreditList>(getListWhtCreditsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWhtCreditsQueryKey = (params?: ListWhtCreditsParams,) => {
+    return [
+    `/api/wht/credits`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListWhtCreditsQueryOptions = <TData = Awaited<ReturnType<typeof listWhtCredits>>, TError = ErrorType<BadRequestResponse>>(params?: ListWhtCreditsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWhtCredits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWhtCreditsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWhtCredits>>> = ({ signal }) => listWhtCredits(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWhtCredits>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWhtCreditsQueryResult = NonNullable<Awaited<ReturnType<typeof listWhtCredits>>>
+export type ListWhtCreditsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary The withholding-tax credit ledger (client-scoped for client users)
+ */
+
+export function useListWhtCredits<TData = Awaited<ReturnType<typeof listWhtCredits>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ListWhtCreditsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWhtCredits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWhtCreditsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRecordWhtCreditUrl = () => {
+
+
+
+
+  return `/api/wht/credits`
+}
+
+/**
+ * @summary Record that a buyer withheld on an invoice (deduction evidence, by hand)
+ */
+export const recordWhtCredit = async (whtCreditCreateInput: WhtCreditCreateInput, options?: RequestInit): Promise<WhtCredit> => {
+
+  return customFetch<WhtCredit>(getRecordWhtCreditUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(whtCreditCreateInput)
+  }
+);}
+
+
+
+
+export const getRecordWhtCreditMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordWhtCredit>>, TError,{data: BodyType<WhtCreditCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordWhtCredit>>, TError,{data: BodyType<WhtCreditCreateInput>}, TContext> => {
+
+const mutationKey = ['recordWhtCredit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordWhtCredit>>, {data: BodyType<WhtCreditCreateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  recordWhtCredit(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordWhtCreditMutationResult = NonNullable<Awaited<ReturnType<typeof recordWhtCredit>>>
+    export type RecordWhtCreditMutationBody = BodyType<WhtCreditCreateInput>
+    export type RecordWhtCreditMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Record that a buyer withheld on an invoice (deduction evidence, by hand)
+ */
+export const useRecordWhtCredit = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordWhtCredit>>, TError,{data: BodyType<WhtCreditCreateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordWhtCredit>>,
+        TError,
+        {data: BodyType<WhtCreditCreateInput>},
+        TContext
+      > => {
+      return useMutation(getRecordWhtCreditMutationOptions(options));
+    }
+
+export const getMarkWhtNoteReceivedUrl = (id: string,) => {
+
+
+
+
+  return `/api/wht/credits/${id}/note`
+}
+
+/**
+ * @summary Mark the credit note received (reference + date evidence; forward-only)
+ */
+export const markWhtNoteReceived = async (id: string,
+    whtNoteInput: WhtNoteInput, options?: RequestInit): Promise<WhtCredit> => {
+
+  return customFetch<WhtCredit>(getMarkWhtNoteReceivedUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(whtNoteInput)
+  }
+);}
+
+
+
+
+export const getMarkWhtNoteReceivedMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markWhtNoteReceived>>, TError,{id: string;data: BodyType<WhtNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markWhtNoteReceived>>, TError,{id: string;data: BodyType<WhtNoteInput>}, TContext> => {
+
+const mutationKey = ['markWhtNoteReceived'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markWhtNoteReceived>>, {id: string;data: BodyType<WhtNoteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  markWhtNoteReceived(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkWhtNoteReceivedMutationResult = NonNullable<Awaited<ReturnType<typeof markWhtNoteReceived>>>
+    export type MarkWhtNoteReceivedMutationBody = BodyType<WhtNoteInput>
+    export type MarkWhtNoteReceivedMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Mark the credit note received (reference + date evidence; forward-only)
+ */
+export const useMarkWhtNoteReceived = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markWhtNoteReceived>>, TError,{id: string;data: BodyType<WhtNoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markWhtNoteReceived>>,
+        TError,
+        {id: string;data: BodyType<WhtNoteInput>},
+        TContext
+      > => {
+      return useMutation(getMarkWhtNoteReceivedMutationOptions(options));
+    }
+
+export const getGetWhtRemittanceUrl = (params: GetWhtRemittanceParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/wht/remittance?${stringifiedParams}` : `/api/wht/remittance`
+}
+
+/**
+ * @summary The period's withholding remittance schedule (bills the client must remit on)
+ */
+export const getWhtRemittance = async (params: GetWhtRemittanceParams, options?: RequestInit): Promise<WhtRemittance> => {
+
+  return customFetch<WhtRemittance>(getGetWhtRemittanceUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWhtRemittanceQueryKey = (params?: GetWhtRemittanceParams,) => {
+    return [
+    `/api/wht/remittance`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetWhtRemittanceQueryOptions = <TData = Awaited<ReturnType<typeof getWhtRemittance>>, TError = ErrorType<BadRequestResponse>>(params: GetWhtRemittanceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWhtRemittance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWhtRemittanceQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWhtRemittance>>> = ({ signal }) => getWhtRemittance(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWhtRemittance>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWhtRemittanceQueryResult = NonNullable<Awaited<ReturnType<typeof getWhtRemittance>>>
+export type GetWhtRemittanceQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary The period's withholding remittance schedule (bills the client must remit on)
+ */
+
+export function useGetWhtRemittance<TData = Awaited<ReturnType<typeof getWhtRemittance>>, TError = ErrorType<BadRequestResponse>>(
+ params: GetWhtRemittanceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWhtRemittance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWhtRemittanceQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

@@ -3,10 +3,11 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.68.0
+ * OpenAPI spec version: 0.69.0
  */
 import type { FilingMatrixRowPaye } from './filingMatrixRowPaye';
 import type { FilingMatrixRowVat } from './filingMatrixRowVat';
+import type { FilingMatrixRowWht } from './filingMatrixRowWht';
 
 export interface FilingMatrixRow {
   clientPartyId: string;
@@ -15,4 +16,6 @@ export interface FilingMatrixRow {
   vat: FilingMatrixRowVat;
   /** @nullable */
   paye: FilingMatrixRowPaye;
+  /** @nullable */
+  wht: FilingMatrixRowWht;
 }

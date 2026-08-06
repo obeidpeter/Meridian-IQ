@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.68.0
+ * OpenAPI spec version: 0.69.0
  */
 
 export * from './acceptInvitationInput';
@@ -358,6 +358,7 @@ export * from './filingMatrixDueDates';
 export * from './filingMatrixRow';
 export * from './filingMatrixRowPaye';
 export * from './filingMatrixRowVat';
+export * from './filingMatrixRowWht';
 export * from './filingMatrixTotals';
 export * from './filingStatus';
 export * from './firm';
@@ -422,6 +423,7 @@ export * from './getUnmatchedCreditsParams';
 export * from './getVatPackParams';
 export * from './getVatPositionParams';
 export * from './getVatSettlementCheckParams';
+export * from './getWhtRemittanceParams';
 export * from './grantActionPolicyInput';
 export * from './grantActionPolicyInputKind';
 export * from './grantPlanPolicyInput';
@@ -463,11 +465,13 @@ export * from './invoiceImportRowResultStatus';
 export * from './invoiceInput';
 export * from './invoiceInputCategory';
 export * from './invoiceInputKind';
+export * from './invoiceInputWhtCategory';
 export * from './invoiceKind';
 export * from './invoiceLine';
 export * from './invoiceLineInput';
 export * from './invoiceStatus';
 export * from './invoiceUpdateInput';
+export * from './invoiceUpdateInputWhtCategory';
 export * from './lineItemSuggestion';
 export * from './listB2cReportsParams';
 export * from './listB2cReportsStatus';
@@ -499,6 +503,8 @@ export * from './listPaymentBehaviourParams';
 export * from './listRecurringSuggestionsParams';
 export * from './listStatementsParams';
 export * from './listUnbilledIncomeParams';
+export * from './listWhtCreditsParams';
+export * from './listWhtCreditsStatus';
 export * from './loginInput';
 export * from './mappingValidation';
 export * from './mappingValidationRow';
@@ -756,3 +762,13 @@ export * from './vatRiskRowResult';
 export * from './vatRiskRowResultStatus';
 export * from './vatSettlementCheck';
 export * from './vatSettlementCheckUnsettledItem';
+export * from './whtCredit';
+export * from './whtCreditCreateInput';
+export * from './whtCreditList';
+export * from './whtCreditListTotals';
+export * from './whtCreditSource';
+export * from './whtCreditStatus';
+export * from './whtNoteInput';
+export * from './whtRemittance';
+export * from './whtRemittanceRow';
+export * from './whtRemittanceTotals';
