@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
-// The portfolio's "Filing cockpit" card (Filing Desk phase 3). The pins:
+// The portfolio's "Filing cockpit" card (Filing Desk phase 3; WHT column
+// since contract 0.69.0). The pins:
 //  - Cell words come from the shared filing-copy vocabulary, with null (the
 //    register hasn't minted that client's row) reading "Not minted" in a
-//    muted italic — never a blank cell, never a raw enum.
+//    muted italic — never a blank cell, never a raw enum. EXCEPT the WHT
+//    column, where null is the common no-withholding-duty case and reads
+//    the honest "No duty" instead.
 //  - Table order is unfiled-most-urgent first: any null/"upcoming" cell
 //    leads, prepared follows, all-filed sinks — client name breaks ties,
-//    and the server's array is never mutated.
+//    and the server's array is never mutated. A null WHT cell (no duty) is
+//    NOT unstarted work and drops out of the urgency read; a minted WHT
+//    row counts like any other.
 //  - Self-gating render-on-success: no data, or a firm with no clients
 //    (rows: []), renders nothing at all — no empty grid.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -51,6 +56,8 @@ function row(over: Partial<FilingMatrixRow> = {}): FilingMatrixRow {
     clientName: "Adaeze Foods",
     vat: "upcoming",
     paye: "upcoming",
+    // The common WHT cell: no withholding duty this period.
+    wht: null,
     ...over,
   };
 }
@@ -59,7 +66,7 @@ function matrix(over: Partial<FilingMatrix> = {}): FilingMatrix {
   return {
     period: "2026-07",
     periodLabel: "July 2026",
-    dueDates: { vat: "2026-08-21", paye: "2026-08-10" },
+    dueDates: { vat: "2026-08-21", paye: "2026-08-10", wht: "2026-08-21" },
     rows: [row()],
     totals: { clients: 1, filed: 0, unfiled: 2, overdue: 0 },
     ...over,
@@ -82,6 +89,14 @@ describe("matrixCellLabel", () => {
     // An off-catalogue status from a newer server degrades to a title-cased
     // word, never a crash.
     expect(matrixCellLabel("in_review")).toBe("In review");
+  });
+
+  test("the WHT column's null is the honest no-duty case, not Not minted", () => {
+    expect(matrixCellLabel(null, "wht")).toBe("No duty");
+    expect(matrixCellLabel(null, "paye")).toBe("Not minted");
+    // A minted WHT row speaks the ordinary vocabulary.
+    expect(matrixCellLabel("upcoming", "wht")).toBe("Upcoming");
+    expect(matrixCellLabel("filed", "wht")).toBe("Filed");
   });
 });
 
@@ -119,6 +134,43 @@ describe("sortMatrixRows", () => {
     sortMatrixRows(rows);
     expect(rows.map((r) => r.clientPartyId)).toEqual(["cp-done", "cp-up"]);
   });
+
+  test("a null WHT cell (no duty) never reads unstarted; a minted one counts", () => {
+    const sorted = sortMatrixRows([
+      // All filed with no withholding duty: done — the null wht cell must
+      // not drag the row back to unstarted the way a vat/paye null does.
+      row({ clientPartyId: "cp-noduty", vat: "filed", paye: "filed", wht: null }),
+      // All filed INCLUDING the WHT remittance: done as well (same client
+      // name, so input order holds inside the bucket via the stable sort).
+      row({
+        clientPartyId: "cp-whtdone",
+        vat: "filed",
+        paye: "filed",
+        wht: "filed",
+      }),
+      // Only the WHT remittance still upcoming: the minted row counts, so
+      // the client leads as unstarted work.
+      row({
+        clientPartyId: "cp-whtup",
+        vat: "filed",
+        paye: "filed",
+        wht: "upcoming",
+      }),
+      // WHT prepared with the rest filed: work in flight.
+      row({
+        clientPartyId: "cp-whtprep",
+        vat: "filed",
+        paye: "filed",
+        wht: "prepared",
+      }),
+    ]);
+    expect(sorted.map((r) => r.clientPartyId)).toEqual([
+      "cp-whtup",
+      "cp-whtprep",
+      "cp-noduty",
+      "cp-whtdone",
+    ]);
+  });
 });
 
 // ---- The card ---------------------------------------------------------------
@@ -144,15 +196,17 @@ describe("FilingMatrixCard", () => {
           clientName: "Zenith Retail",
           vat: "filed",
           paye: "filed",
+          wht: "filed",
         }),
         row({
           clientPartyId: "cp-mixed",
           clientName: "Adaeze Foods",
           vat: "prepared",
           paye: null,
+          wht: null,
         }),
       ],
-      totals: { clients: 2, filed: 2, unfiled: 1, overdue: 1 },
+      totals: { clients: 2, filed: 3, unfiled: 1, overdue: 1 },
     });
     render(<FilingMatrixCard />);
 
@@ -162,6 +216,7 @@ describe("FilingMatrixCard", () => {
     expect(card.textContent).toContain("Filing cockpit — July 2026");
     expect(card.textContent).toContain("VAT return due");
     expect(card.textContent).toContain("PAYE remittance due");
+    expect(card.textContent).toContain("WHT remittance due");
 
     // Unfiled-most-urgent first: the mixed row (a null cell) leads.
     const table = screen.getByTestId("table-filing-matrix");
@@ -185,10 +240,21 @@ describe("FilingMatrixCard", () => {
     expect(filedCell.textContent).toBe("Filed");
     expect(filedCell.className).toContain("emerald");
 
+    // The WHT column: null is the honest no-duty case (muted italic like
+    // the other nulls, but its own words), and a filed remittance reads
+    // the ordinary vocabulary in emerald.
+    const noDutyCell = screen.getByTestId("cell-filing-wht-cp-mixed");
+    expect(noDutyCell.textContent).toBe("No duty");
+    expect(noDutyCell.className).toContain("italic");
+    expect(noDutyCell.className).toContain("text-muted-foreground");
+    const whtFiledCell = screen.getByTestId("cell-filing-wht-cp-done");
+    expect(whtFiledCell.textContent).toBe("Filed");
+    expect(whtFiledCell.className).toContain("emerald");
+
     // Totals line, with the non-zero overdue chunk painted red.
     const totals = screen.getByTestId("text-filing-matrix-totals");
     expect(totals.textContent?.replace(/\s+/g, " ").trim()).toBe(
-      "2 clients · 2 filed · 1 unfiled · 1 overdue",
+      "2 clients · 3 filed · 1 unfiled · 1 overdue",
     );
     expect(totals.querySelector("span")?.className).toContain("red");
 

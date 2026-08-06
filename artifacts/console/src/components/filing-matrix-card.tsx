@@ -12,10 +12,10 @@ import { formatDate } from "@/lib/format";
 
 // Filing cockpit (Filing Desk phase 3): the firm-wide grid of the current
 // period's returns — one row per client, one cell per return kind (the VAT
-// return and the PAYE remittance), each cell reading the client's own
-// register status. The 21st-of-the-month question — "who has filed, who
-// hasn't?" — answered in one screen, from the same rows each client's
-// filings register walks, so the two can never disagree.
+// return, the PAYE remittance and the WHT remittance), each cell reading
+// the client's own register status. The 21st-of-the-month question — "who
+// has filed, who hasn't?" — answered in one screen, from the same rows each
+// client's filings register walks, so the two can never disagree.
 //
 // Render-on-success like the VAT positions card beside it: a 403 for roles
 // without the capability (or a 404 from an older server build) simply hides
@@ -24,23 +24,33 @@ import { formatDate } from "@/lib/format";
 // ---- Pure helpers (unit-tested directly) -----------------------------------
 
 /**
- * A cell's words. null means the register has not minted this period's row
- * for that client yet (the client isn't engaged for the kind, or sync hasn't
- * run) — "Not minted", distinct from an upcoming-but-tracked return. Every
+ * A cell's words. For vat/paye, null means the register has not minted this
+ * period's row for that client yet (the client isn't engaged for the kind,
+ * or sync hasn't run) — "Not minted", distinct from an upcoming-but-tracked
+ * return. For wht, null is the COMMON cell — the client withheld nothing in
+ * the period, so no remittance is owed — and reads the honest "No duty"
+ * (per the contract's FilingMatrixRow comment), never "Not minted". Every
  * real status speaks the shared filing-copy vocabulary.
  */
-export function matrixCellLabel(status: string | null): string {
-  return status === null ? "Not minted" : filingStatusLabel(status);
+export function matrixCellLabel(
+  status: string | null,
+  kind: "vat" | "paye" | "wht" = "vat",
+): string {
+  if (status === null) return kind === "wht" ? "No duty" : "Not minted";
+  return filingStatusLabel(status);
 }
 
 /**
  * A row's urgency bucket for the sort: 0 = something is unstarted (any cell
  * null or "upcoming"), 1 = work in flight (no unstarted cell, any cell
- * "prepared"), 2 = done (all cells filed). An off-catalogue status from a
- * newer server lands in the done bucket rather than crashing the sort.
+ * "prepared"), 2 = done (all cells filed). A null WHT cell is the
+ * no-withholding-duty case, not unstarted work, so it drops out of the read
+ * entirely — a minted WHT row counts like any other. An off-catalogue
+ * status from a newer server lands in the done bucket rather than crashing
+ * the sort.
  */
-function rowUrgency(row: Pick<FilingMatrixRow, "vat" | "paye">): number {
-  const cells = [row.vat, row.paye];
+function rowUrgency(row: Pick<FilingMatrixRow, "vat" | "paye" | "wht">): number {
+  const cells = [row.vat, row.paye, ...(row.wht === null ? [] : [row.wht])];
   if (cells.some((c) => c === null || c === "upcoming")) return 0;
   if (cells.some((c) => c === "prepared")) return 1;
   return 2;
@@ -95,7 +105,8 @@ export function FilingMatrixCard() {
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           {filingKindLabel("vat")} due {formatDate(data.dueDates.vat)} ·{" "}
-          {filingKindLabel("paye")} due {formatDate(data.dueDates.paye)}
+          {filingKindLabel("paye")} due {formatDate(data.dueDates.paye)} ·{" "}
+          {filingKindLabel("wht")} due {formatDate(data.dueDates.wht)}
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -107,7 +118,10 @@ export function FilingMatrixCard() {
                 <th className="py-2 pr-3 font-medium">
                   {filingKindLabel("vat")}
                 </th>
-                <th className="py-2 font-medium">{filingKindLabel("paye")}</th>
+                <th className="py-2 pr-3 font-medium">
+                  {filingKindLabel("paye")}
+                </th>
+                <th className="py-2 font-medium">{filingKindLabel("wht")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -126,10 +140,18 @@ export function FilingMatrixCard() {
                     {matrixCellLabel(r.vat)}
                   </td>
                   <td
-                    className={`py-2 ${matrixCellClass(r.paye)}`}
+                    className={`py-2 pr-3 ${matrixCellClass(r.paye)}`}
                     data-testid={`cell-filing-paye-${r.clientPartyId}`}
                   >
-                    {matrixCellLabel(r.paye)}
+                    {matrixCellLabel(r.paye, "paye")}
+                  </td>
+                  <td
+                    className={`py-2 ${matrixCellClass(r.wht)}`}
+                    data-testid={`cell-filing-wht-${r.clientPartyId}`}
+                  >
+                    {/* null = no withholding duty this period (the common
+                        cell), so it reads "No duty", not "Not minted". */}
+                    {matrixCellLabel(r.wht, "wht")}
                   </td>
                 </tr>
               ))}

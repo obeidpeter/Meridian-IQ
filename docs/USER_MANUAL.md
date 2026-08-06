@@ -561,8 +561,11 @@ directly.
 
 **Filings** is the read-only register of your statutory returns: one row
 per period for each return your business owes — the monthly **VAT return**
-(due the 21st of the following month) and the monthly **PAYE remittance**
-(due the 10th). Rows appear automatically each period; your accountant
+(due the 21st of the following month), the monthly **PAYE remittance**
+(due the 10th), and — in months where your business withheld tax on
+supplier bills — the **WHT remittance** (due the 21st; see [WHT
+credits](#wht-credits-withholding)). Rows appear automatically each
+period; your accountant
 walks each one from **Upcoming** to **Prepared** to **Filed**, and a filed
 row shows the filing date and the authority's acknowledgment reference.
 Unfiled rows past their date are flagged **Overdue**, ones inside the next
@@ -571,6 +574,41 @@ files anything with an authority itself. When a return's statutory date is
 inside the next 7 days — or has passed — the platform sends your business
 one deadline alert per threshold over your enabled channels (the same
 opt-outs as every deadline alert).
+
+### WHT credits (withholding)
+
+When a corporate buyer pays one of your invoices, Nigerian law may oblige
+it to **withhold** part of the amount and remit it to the authority on your
+behalf — leaving you owed a **credit note** as evidence of the deduction.
+MeridianIQ tracks that chase end to end:
+
+- **On the invoice form** — pick a **WHT category** when a deduction
+  applies: supply of goods (2%), construction & works (2%), services &
+  professional fees (5%), commission & brokerage (5%), rent & hire (10%),
+  royalties (10%) — the 2025 Deduction at Source catalogue. The default is
+  **No WHT** and nothing is ever pre-selected: a human names the deduction
+  type, and the invoice's detail page shows the category once set.
+- **WHT credits** (the page) — the read-only ledger of deductions buyers
+  took on your invoices: invoice, category, amount withheld, deduction
+  date, and whether the buyer's credit note is still **Awaiting** (amber)
+  or **Received** (emerald), with the awaiting count and amount up top.
+  Deductions are recorded by your firm on the console (or by an accepted
+  short-pay statement match during reconciliation); your firm also records
+  each credit note as it arrives — this page watches the record.
+- **The chase** — outstanding credit notes surface in your firm's
+  month-end close checklist, and the firm's weekly digest mentions how
+  many withholding credit notes are still outstanding.
+
+For your firm (console): the client drill-down's **WHT credits** card shows
+the same ledger with **Mark note received** (the credit note's reference
+and date, captured as evidence), plus the period's **remittance schedule**
+— the WHT-categorised supplier bills the client must remit withheld tax
+on, with the server-computed total and its statutory due date. The filing
+cockpit gains a third **WHT remittance** column (a client with no
+withholding duty in the period reads **No duty**). Evidence-only, like
+every register: the platform records deductions, credit notes and
+remittances as the firm sees them — it never claims or remits anything
+itself.
 
 ### Calendar and alerts
 
@@ -1777,7 +1815,7 @@ if the running server's version differs, every app shows a dismissible
   rollback test against a real Postgres, and all **five** production web
   builds.
 - **e2e** — boots the built API server and four built frontends behind a
-  path-router and drives **100 headless user-journey checks** on the
+  path-router and drives **107 headless user-journey checks** on the
   standard seeded run (a few legs adapt to what the database holds — e.g.
   an already-collected billing month). The journeys live as ordered groups
   in `scripts/src/e2e/journeys/` (roles, money, controls, lifecycle,
@@ -1797,7 +1835,10 @@ if the running server's version differs, every app shows a dismissible
   grants with its chosen daily limit, pauses, resumes and revokes — flags
   restored to dark as their own check), the Notice Desk obligation spine
   (record a paper notice → the open list → the month-end close item → the
-  response letter and bundle → responded → closed), the
+  response letter and bundle → responded → closed), the WHT Desk (a
+  categorised bill minting the period's remittance row and schedule, a
+  recorded deduction opening a credit whose note walks it to received, and
+  the month-end chase item), the
   credit-note lifecycle, the SME dashboard/search/bulk-submit/recurring
   flows, and the integration layer
   end-to-end (API-key mint / bearer auth / revocation, a webhook delivery

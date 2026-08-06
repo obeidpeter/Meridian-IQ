@@ -8,7 +8,8 @@
     "./action-copy": "./src/action-copy.ts",
     "./notice-copy": "./src/notice-copy.ts",
     "./source.css": "./src/source.css",
-    "./filing-copy": "./src/filing-copy.ts"
+    "./filing-copy": "./src/filing-copy.ts",
+    "./wht-copy": "./src/wht-copy.ts"
   },
   "scripts": {
     "test": "vitest run"

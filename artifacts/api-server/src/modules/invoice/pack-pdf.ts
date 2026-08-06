@@ -79,6 +79,20 @@ const KIND_LABELS: Record<string, string> = {
 const FILING_KIND_LABELS: Record<string, string> = {
   vat: "VAT return",
   paye: "PAYE remittance",
+  wht: "WHT remittance",
+};
+
+// WHT category display labels, hand-rolled server-side for the same
+// no-@workspace/format reason (the wording mirrors lib/format's wht-copy;
+// the percentage in each label is wording, not arithmetic — rates live in
+// modules/wht/rates.ts).
+const WHT_CATEGORY_LABELS: Record<string, string> = {
+  goods_2: "Supply of goods — 2%",
+  works_2: "Construction & works — 2%",
+  services_5: "Services & professional fees — 5%",
+  commission_5: "Commission & brokerage — 5%",
+  rent_10: "Rent & hire — 10%",
+  royalties_10: "Royalties — 10%",
 };
 
 const FILING_STATUS_LABELS: Record<string, string> = {
@@ -582,6 +596,37 @@ export async function renderCompliancePackPdf(
     if (facts.filings.unfiled > facts.filings.rows.length) {
       emptyLine(
         `Showing ${facts.filings.rows.length} of ${facts.filings.unfiled} unfiled returns — the full register lives in the app.`,
+      );
+    }
+  }
+  cursor.y += 8;
+
+  // --- WHT credits (WHT Desk) ------------------------------------------------
+  // As-of-render, not month-bound (the obligations rule): a recorded
+  // deduction awaits its buyer credit note until the note arrives, whichever
+  // month the pack describes.
+  section("WHT credits");
+  if (facts.wht.awaiting === 0) {
+    emptyLine("No withholding credit notes are outstanding.");
+  } else {
+    kvRow(
+      "Recorded withholding deductions awaiting the buyer's credit note",
+      String(facts.wht.awaiting),
+      true,
+    );
+    kvRow(
+      "Claimable credit awaiting documentation",
+      `NGN ${formatMoney(facts.wht.awaitingAmount)}`,
+    );
+    for (const row of facts.wht.rows) {
+      kvRow(
+        `  ${row.invoiceNumber} · ${WHT_CATEGORY_LABELS[row.category] ?? row.category} · deducted ${row.deductedDate}`,
+        `NGN ${formatMoney(row.amount)}`,
+      );
+    }
+    if (facts.wht.awaiting > facts.wht.rows.length) {
+      emptyLine(
+        `Showing ${facts.wht.rows.length} of ${facts.wht.awaiting} outstanding credits — the full ledger lives in the app.`,
       );
     }
   }

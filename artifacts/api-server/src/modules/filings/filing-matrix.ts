@@ -26,15 +26,18 @@ export interface FilingMatrixRow {
   clientPartyId: string;
   clientName: string;
   // Status per kind; null = no row minted for this client/period yet (a
-  // client onboarded after the mint — the sync button's case).
+  // client onboarded after the mint — the sync button's case; for wht ALSO
+  // the common "no withholding bills this period" case, since the mint only
+  // creates wht rows for clients with WHT-categorised bills).
   vat: FilingMatrixStatus;
   paye: FilingMatrixStatus;
+  wht: FilingMatrixStatus;
 }
 
 export interface FilingMatrix {
   period: string;
   periodLabel: string;
-  dueDates: { vat: string; paye: string };
+  dueDates: { vat: string; paye: string; wht: string };
   rows: FilingMatrixRow[];
   totals: {
     clients: number;
@@ -96,7 +99,7 @@ export async function computeFilingMatrix(
   let unfiled = 0;
   let overdue = 0;
   const rows: FilingMatrixRow[] = clients.map((c) => {
-    const statusFor = (taxType: "vat" | "paye"): FilingMatrixStatus => {
+    const statusFor = (taxType: "vat" | "paye" | "wht"): FilingMatrixStatus => {
       const cell = byCell.get(`${c.id}:${taxType}`);
       if (!cell) return null;
       if (cell.status === "filed") {
@@ -116,6 +119,10 @@ export async function computeFilingMatrix(
       clientName: c.legal_name,
       vat: statusFor("vat"),
       paye: statusFor("paye"),
+      // Null for most clients (the mint only creates wht rows for clients
+      // with withholding bills in the period); a minted cell counts in the
+      // totals exactly like the unconditional kinds.
+      wht: statusFor("wht"),
     };
   });
 
@@ -125,6 +132,7 @@ export async function computeFilingMatrix(
     dueDates: {
       vat: filingDueDate(period, "vat"),
       paye: filingDueDate(period, "paye"),
+      wht: filingDueDate(period, "wht"),
     },
     rows,
     totals: { clients: rows.length, filed, unfiled, overdue },

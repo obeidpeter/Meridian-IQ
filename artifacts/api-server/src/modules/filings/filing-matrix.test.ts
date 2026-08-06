@@ -95,11 +95,14 @@ before(async () => {
       title: `mx route ${SALT}`,
     },
   ]);
-  // The register cells: alpha filed VAT / upcoming PAYE; zulu prepared VAT
-  // and NO PAYE row (the null cell). Due dates as the mint would store them.
+  // The register cells: alpha filed VAT / upcoming PAYE / upcoming WHT (a
+  // withholding client — the conditional mint created a wht row for it);
+  // zulu prepared VAT and NO PAYE or WHT row (the null cells — for wht the
+  // COMMON case, since the mint only creates wht rows for clients with
+  // withholding bills). Due dates as the mint would store them.
   const seed = (
     clientPartyId: string,
-    taxType: "vat" | "paye",
+    taxType: "vat" | "paye" | "wht",
     status: "upcoming" | "prepared" | "filed",
   ) => ({
     firmId,
@@ -112,6 +115,7 @@ before(async () => {
   await db.insert(filingReturnsTable).values([
     seed(alphaParty, "vat", "filed"),
     seed(alphaParty, "paye", "upcoming"),
+    seed(alphaParty, "wht", "upcoming"),
     seed(zuluParty, "vat", "prepared"),
   ]);
 });
@@ -124,7 +128,11 @@ test("rows, nulls and calendar facts: one row per live client, name-ordered", as
   const matrix = await computeFilingMatrix(firmId, EARLY);
   assert.equal(matrix.period, PERIOD);
   assert.equal(matrix.periodLabel, "July 2098");
-  assert.deepEqual(matrix.dueDates, { vat: "2098-08-21", paye: "2098-08-10" });
+  assert.deepEqual(matrix.dueDates, {
+    vat: "2098-08-21",
+    paye: "2098-08-10",
+    wht: "2098-08-21",
+  });
 
   assert.deepEqual(matrix.rows, [
     {
@@ -132,12 +140,15 @@ test("rows, nulls and calendar facts: one row per live client, name-ordered", as
       clientName: `MX Alpha A ${SALT}`,
       vat: "filed",
       paye: "upcoming",
+      wht: "upcoming",
     },
     {
       clientPartyId: zuluParty,
       clientName: `MX Zulu Z ${SALT}`,
       vat: "prepared",
       paye: null,
+      // The common wht cell: no withholding bills, no minted row.
+      wht: null,
     },
   ]);
   assert.ok(
@@ -148,18 +159,19 @@ test("rows, nulls and calendar facts: one row per live client, name-ordered", as
 
 test("totals: filed/unfiled count minted cells; overdue flips past the statutory date", async () => {
   const early = await computeFilingMatrix(firmId, EARLY);
-  // 3 minted cells: 1 filed, 2 unfiled (upcoming + prepared — prepared still
-  // owes the authority a return); the null cell counts nowhere. Nothing is
-  // overdue while both due dates are ahead.
+  // 4 minted cells: 1 filed, 3 unfiled (upcoming ×2 + prepared — prepared
+  // still owes the authority a return; the withholding client's wht cell
+  // counts exactly like the unconditional kinds); the null cells count
+  // nowhere. Nothing is overdue while every due date is ahead.
   assert.deepEqual(early.totals, {
     clients: 2,
     filed: 1,
-    unfiled: 2,
+    unfiled: 3,
     overdue: 0,
   });
 
   const late = await computeFilingMatrix(firmId, LATE);
-  assert.deepEqual(late.totals, { clients: 2, filed: 1, unfiled: 2, overdue: 2 });
+  assert.deepEqual(late.totals, { clients: 2, filed: 1, unfiled: 3, overdue: 3 });
 });
 
 test("a foreign firm reads empty — rows and totals alike", async () => {
@@ -183,11 +195,11 @@ test("the route serves the caller's firm under the console rollup posture", asyn
   assert.equal(res.status, 200);
   const body = (await res.json()) as {
     period: string;
-    rows: { clientPartyId: string; vat: null; paye: null }[];
+    rows: { clientPartyId: string; vat: null; paye: null; wht: null }[];
     totals: { clients: number; filed: number; unfiled: number; overdue: number };
   };
   // The LIVE period (the route takes no clock): shape-pinned, not value-
-  // pinned. The route firm's client has no minted rows, so both cells are
+  // pinned. The route firm's client has no minted rows, so every cell is
   // null and no filing total moves — deterministic whatever today is.
   assert.match(body.period, /^\d{4}-\d{2}$/);
   assert.deepEqual(body.rows, [
@@ -196,6 +208,7 @@ test("the route serves the caller's firm under the console rollup posture", asyn
       clientName: `MX Route ${SALT}`,
       vat: null,
       paye: null,
+      wht: null,
     },
   ]);
   assert.deepEqual(body.totals, {

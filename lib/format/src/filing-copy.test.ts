@@ -15,7 +15,7 @@ describe("filing-copy vocabulary", () => {
       ["filed", "prepared", "upcoming"].sort(),
     );
     expect(Object.keys(FILING_KIND_LABELS).sort()).toEqual(
-      ["paye", "vat"].sort(),
+      ["paye", "vat", "wht"].sort(),
     );
   });
 
@@ -26,10 +26,11 @@ describe("filing-copy vocabulary", () => {
     // The KIND is the return's own name, distinct from the tax-type token.
     expect(filingKindLabel("vat")).toBe("VAT return");
     expect(filingKindLabel("paye")).toBe("PAYE remittance");
+    expect(filingKindLabel("wht")).toBe("WHT remittance");
     // Off-catalogue tokens from a newer server degrade to a title-cased
     // word, never a crash.
     expect(filingStatusLabel("in_review")).toBe("In review");
-    expect(filingKindLabel("wht_return")).toBe("Wht return");
+    expect(filingKindLabel("cit_return")).toBe("Cit return");
     expect(filingStatusLabel(null)).toBe("Unknown");
     expect(filingKindLabel("")).toBe("Unknown");
   });

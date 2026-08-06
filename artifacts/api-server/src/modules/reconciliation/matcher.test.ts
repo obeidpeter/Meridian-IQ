@@ -305,6 +305,97 @@ test("credits never propose against bills; debits never propose against receivab
   );
 });
 
+// ---------------------------------------------------------------------------
+// WHT short-pay basis (WHT Desk): a receivable candidate carrying expectedWht
+// ALSO scores the line against grandTotal − expectedWht and takes the better
+// basis, flagging the features when the adjusted basis wins.
+// ---------------------------------------------------------------------------
+
+const WHT_CANDIDATE: MatchCandidate = {
+  invoiceId: "wht-recv-1",
+  invoiceNumber: "INV-8801",
+  counterpartyName: "Zenith Retail Group",
+  orientation: "receivable",
+  grandTotal: 107_500,
+  issueDate: "2027-01-05",
+  dueDate: null,
+  expectedWht: 5_000, // 5% of the 100,000 subtotal
+};
+
+test("an exact WHT short-pay scores 1.0 via the adjusted basis and is flagged", () => {
+  const line: MatchableLine = {
+    lineId: "wht-l1",
+    valueDate: "2027-01-20",
+    amount: 102_500, // grandTotal − expectedWht, to the kobo
+    direction: "credit",
+    narration: "TRF INV-8801 ZENITH RETAIL",
+    counterpartyRef: null,
+  };
+  const { features } = scorePair(line, WHT_CANDIDATE);
+  assert.equal(features.amountScore, 1);
+  assert.equal(features.whtShortPay, true);
+  assert.equal(features.whtExpectedAmount, 5_000);
+
+  // The proposal survives the amount-agreement gate and carries the flag.
+  const proposals = proposeMatches([line], [WHT_CANDIDATE]);
+  assert.equal(proposals.length, 1);
+  assert.equal(proposals[0].features.whtShortPay, true);
+});
+
+test("a full-amount payment keeps the plain basis and never carries the flag", () => {
+  const line: MatchableLine = {
+    lineId: "wht-l2",
+    valueDate: "2027-01-20",
+    amount: 107_500,
+    direction: "credit",
+    narration: "TRF INV-8801",
+    counterpartyRef: null,
+  };
+  const { features } = scorePair(line, WHT_CANDIDATE);
+  assert.equal(features.amountScore, 1, "the plain basis already scores 1");
+  assert.equal(features.whtShortPay, undefined);
+  assert.equal(features.whtExpectedAmount, undefined);
+});
+
+test("a candidate without expectedWht scores a short-pay line as before", () => {
+  const plain: MatchCandidate = { ...WHT_CANDIDATE, expectedWht: undefined };
+  const { features } = scorePair(
+    {
+      lineId: "wht-l3",
+      valueDate: "2027-01-20",
+      amount: 102_500, // ~4.65% off the grand total — the 0.4 band
+      direction: "credit",
+      narration: "TRF INV-8801",
+      counterpartyRef: null,
+    },
+    plain,
+  );
+  assert.equal(features.amountScore, 0.4);
+  assert.equal(features.whtShortPay, undefined);
+});
+
+test("bill orientation never gets the WHT adjustment", () => {
+  const bill: MatchCandidate = {
+    ...WHT_CANDIDATE,
+    invoiceId: "wht-bill-1",
+    orientation: "bill",
+  };
+  const { features } = scorePair(
+    {
+      lineId: "wht-l4",
+      valueDate: "2027-01-20",
+      amount: 102_500,
+      direction: "debit",
+      narration: "OUTWARD TRF INV-8801",
+      counterpartyRef: null,
+    },
+    bill,
+  );
+  // The plain basis only: ~4.65% off lands in the 0.4 band, no flag.
+  assert.equal(features.amountScore, 0.4);
+  assert.equal(features.whtShortPay, undefined);
+});
+
 test("scoring bands behave at their edges", () => {
   assert.equal(amountScore(100_000, 100_000), 1);
   assert.equal(amountScore(99_600, 100_000), 1); // 0.4% off

@@ -46,6 +46,7 @@ import {
   FILING_DUE_SOON_DAYS,
   countOpenFilings,
 } from "../filings/filings";
+import { countWhtChase } from "../wht/credits";
 import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
 import { countFirmChasedTwice } from "../invoice/chase-log";
 import { assertFirmClerkBudget } from "./budget";
@@ -88,7 +89,9 @@ const DELIVERY_BATCH = 50;
 // (computeAutomationShadowPending), same reasoning.
 // v9 (Filing Desk Phase 2): + the statutory-returns deadline lines (due-soon
 // / overdue unfiled returns, countOpenFilings), same reasoning.
-const DIGEST_PROMPT_VERSION = "digest.v9";
+// v10 (WHT Desk): + the outstanding withholding-credit-note chase line
+// (countWhtChase), same reasoning.
+const DIGEST_PROMPT_VERSION = "digest.v10";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -181,6 +184,12 @@ export interface DigestFacts {
   // facts; builders default an absent value to 0.
   filingsDueSoon?: number;
   filingsOverdue?: number;
+  // WHT Desk: recorded withholding deductions whose buyer credit note is
+  // still outstanding (countWhtChase — the single WHT chase fact function,
+  // so the digest can never disagree with the ledger). OPTIONAL for the
+  // same snapshot/legacy-literal reasons; builders default an absent value
+  // to 0.
+  whtAwaitingNotes?: number;
 }
 
 // The monthly VAT-return countdown, PURE and Lagos-anchored (lagosParts /
@@ -274,6 +283,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const obligations = await countOpenObligations(firmId);
   const automationShadowPending = await computeAutomationShadowPending(firmId);
   const filings = await countOpenFilings(firmId);
+  const whtChase = await countWhtChase(firmId);
   // The penalty floor is DERIVED from the overdue count this query already
   // computed — a second COUNT under the same predicate could straddle a
   // Lagos midnight and let one digest say "0 overdue" next to a non-zero
@@ -307,6 +317,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     automationShadowPending,
     filingsDueSoon: filings.dueSoon,
     filingsOverdue: filings.overdue,
+    whtAwaitingNotes: whtChase.awaiting,
   };
 }
 
@@ -518,6 +529,20 @@ const DIGEST_FACT_LINES: readonly DigestFactLine[] = [
       const filingsOverdue = facts.filingsOverdue ?? 0;
       return filingsOverdue > 0
         ? `${plural(filingsOverdue, "statutory return")} ${isAre(filingsOverdue)} already past ${filingsOverdue === 1 ? "its" : "their"} filing date — prepare and file these first.`
+        : null;
+    },
+  },
+  // WHT Desk: the credit-note chase line. Vocabulary is deliberately
+  // "withholding credit note" — never a bare "credit note" (this digest
+  // reserves that phrase family for invoice credit_note documents) and never
+  // "VAT" (the quiet-week phrasing fixture forbids the countdown's phrase).
+  {
+    promptLine: (facts) =>
+      `- Withholding credit notes still outstanding: ${facts.whtAwaitingNotes ?? 0}`,
+    bullet: (facts) => {
+      const whtAwaitingNotes = facts.whtAwaitingNotes ?? 0;
+      return whtAwaitingNotes > 0
+        ? `${plural(whtAwaitingNotes, "withholding credit note")} from buyers ${isAre(whtAwaitingNotes)} still outstanding — chase these before they go stale.`
         : null;
     },
   },

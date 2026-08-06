@@ -502,6 +502,59 @@ it never files anything with an authority itself.
   (`open_filings` item), the compliance pack ("Statutory returns"
   section), and Ask Clerk (`data.open_filings`, client-safe).
 
+## WHT Desk (withholding-tax credits & remittances)
+
+Nigerian B2B buyers withhold 2–10% of the VAT-exclusive amount when
+paying an invoice and owe the supplier a credit note; on the other side a
+client paying WHT-liable vendor bills must remit what it withheld by the
+21st. The WHT Desk (contract 0.69.0, migration 0036) tracks both sides
+from data the platform already holds. Evidence-only posture throughout —
+the platform records what was withheld and whether the credit note
+arrived; it never claims or remits anything itself.
+
+- **The category is a human's call**: `invoices.wht_category` (nullable
+  text — catalogue key, the filings taxType rule) is set on the invoice
+  form or by PATCH; the platform never assigns one. The closed catalogue
+  and its basis-point rates have ONE home, `modules/wht/rates.ts` (2025
+  Deduction at Source regulations, corporate recipients: goods/works 2%,
+  services/commission 5%, rent/royalties 10%); display labels live in
+  `@workspace/format/wht-copy`. Expected WHT = `subtotal × rate` — the
+  VAT-exclusive base, computed in SQL wherever it is needed.
+- **The credit ledger** (`wht_credits`, unique per invoice): a row is
+  minted only when a deduction is RECORDED — a human accepting a
+  short-pay reconciliation match (`source: statement_match`) or recording
+  it by hand (`POST /wht/credits`, `source: manual`) — never
+  speculatively from the category alone. Lifecycle is forward-only:
+  `awaiting_note → note_received` via `POST /wht/credits/{id}/note`
+  (reference + date evidence, the filings idiom).
+- **The short-pay signal is deterministic** (no model): the matcher
+  scores a bank credit against `grandTotal − expectedWht` alongside the
+  full amount; when the WHT-adjusted figure scores better, the proposal's
+  `features` carry the flag (no contract change — features are open
+  jsonb) and SME reconciliation badges it. Accepting the proposal settles
+  the invoice AND mints the credit row in the same transaction; the
+  unique-per-invoice key keeps a later manual record from duplicating it.
+- **The chase** rides the shared claim-first reminder driver
+  (`wht_reminder_sends`, unique (credit, kind)): a credit still
+  `awaiting_note` approaches its chase deadline (deduction date + the
+  chase window) → due_soon, passes it → overdue; consent purpose
+  `deadline_alerts`, dark-claim under the messaging kill switch, stale
+  silent claims — the filings sweep's posture exactly.
+- **Remittance joins the filings register**: `wht` is a third
+  `FILING_KINDS` entry (due the 21st), minted ONLY for clients with ≥1
+  WHT-categorised bill issued in the period (deduct at the earlier of
+  payment or credit — the invoice-recognition basis, chosen because bill
+  payStatus is derived evidence, not a stored date). `GET
+  /wht/remittance` lists the period's schedule (bills × expected WHT);
+  the filing cockpit grows a WHT column where null = "no withholding
+  duty", the common cell.
+- **Authz**: credits and remittance reuse `invoice.read`/`invoice.write`
+  (they decorate invoices — the bills-routes precedent) with SEC-03
+  client narrowing; the register rows stay `filing.read`/`filing.write`.
+- **Clerk facts**: digest v10 chase line, month-end `wht_credits` item,
+  compliance-pack "WHT credits" section, `data.wht_credits` Ask intent
+  (client-safe) — all computed by SQL, the model only phrases.
+
 ## Monthly compliance pack
 
 One client's Lagos month as a single branded PDF

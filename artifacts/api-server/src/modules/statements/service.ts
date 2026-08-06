@@ -33,6 +33,9 @@ import {
   type MatchableLine,
 } from "../reconciliation/matcher.ts";
 import { BILL_OF_CLIENT, BILL_UNPAID } from "../invoice/payables.ts";
+import { whtExpectedSql } from "../wht/rates.ts";
+import { recordWhtCredit } from "../wht/credits.ts";
+import { lagosDateString } from "../../lib/lagos-time.ts";
 
 // Bank-statement ingestion and reconciliation v1 (INT-05, SME-07).
 //
@@ -208,6 +211,14 @@ async function loadCandidates(
       dueDate: invoicesTable.dueDate,
       status: invoicesTable.status,
       buyerName: partiesTable.legalName,
+      // WHT Desk: the expected withholding, computed IN SQL by the shared
+      // CASE builder (modules/wht/rates.ts — the one expected-WHT home).
+      // NULL for uncategorised invoices; the matcher then scores the plain
+      // basis only.
+      expectedWht: sql<string | null>`${whtExpectedSql(
+        sql`${invoicesTable.subtotal}`,
+        sql`${invoicesTable.whtCategory}`,
+      )}`,
     })
     .from(invoicesTable)
     .innerJoin(partiesTable, eq(partiesTable.id, invoicesTable.buyerPartyId))
@@ -228,6 +239,9 @@ async function loadCandidates(
       grandTotal: Number(r.grandTotal),
       issueDate: r.issueDate,
       dueDate: r.dueDate,
+      ...(r.expectedWht !== null
+        ? { expectedWht: Number(r.expectedWht) }
+        : {}),
     }));
 
   const billRows = (
@@ -496,6 +510,25 @@ export async function acceptProposal(
       actorRole: actor.role,
       reason: `statement_match:${line.id}`,
     });
+    // WHT Desk: an accepted SHORT-PAY match is the deduction evidence — the
+    // human accepting IS the disposal, so the wht_credits row mints in the
+    // SAME request transaction (accept-and-mint is atomic; a 4xx later in
+    // this request rolls both back together). Gated on the proposal's
+    // recorded whtShortPay feature AND the invoice still carrying a
+    // category; the AMOUNT is recomputed in SQL by recordWhtCredit's default
+    // (never trusted from the jsonb snapshot), and the unique invoiceId key
+    // dedupes against a manual record — onConflictDoNothing leaves exactly
+    // one credit either way.
+    const whtShortPay =
+      (proposal.features as { whtShortPay?: unknown } | null)?.whtShortPay ===
+      true;
+    if (whtShortPay && invoice.whtCategory !== null) {
+      await recordWhtCredit(invoice.firmId, invoice.id, {
+        deductedDate: line.valueDate ?? lagosDateString(),
+        source: "statement_match",
+        recordedBy: actor.userId,
+      });
+    }
   }
   await appendAudit({
     actorId: actor.userId,

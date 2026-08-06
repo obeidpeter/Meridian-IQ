@@ -36,6 +36,7 @@ export function filingStatusLabel(raw: string | null | undefined): string {
 export const FILING_KIND_LABELS: Record<string, string> = {
   vat: "VAT return",
   paye: "PAYE remittance",
+  wht: "WHT remittance",
 };
 
 export function filingKindLabel(raw: string | null | undefined): string {

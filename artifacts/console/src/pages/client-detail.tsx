@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ClerkActionsCard } from "@/components/clerk-actions-card";
 import { ClerkActionEffectivenessCard } from "@/components/clerk-action-effectiveness-card";
 import { FilingsCard } from "@/components/filings-card";
+import { WhtCard } from "@/components/wht-card";
 import { ObligationsCard } from "@/components/obligations-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -688,6 +689,11 @@ export function ClientDetail() {
             (the VAT return and PAYE remittance each period owes), not the
             authority's notices; minted by sync and walked to filed here. */}
         <FilingsCard clientPartyId={id} />
+        {/* WHT Desk: the withholding-credit ledger (deductions owed a
+            credit note, walked to received here) plus the period's
+            remittance schedule; renders only when the client has WHT
+            activity. */}
+        <WhtCard clientPartyId={id} />
         {/* Proposed actions (round 22): the firm-side approval surface —
             gates itself on the clerk_actions flag via its own query. */}
         <ClerkActionsCard clientPartyId={id} />

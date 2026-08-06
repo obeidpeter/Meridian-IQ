@@ -23,3 +23,4 @@ export * from "./governance.ts";
 export * from "./collections.ts";
 export * from "./obligations.ts";
 export * from "./filings.ts";
+export * from "./wht.ts";

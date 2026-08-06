@@ -51,6 +51,8 @@ import obligationsRouter from "./obligations";
 import filingsRouter from "./filings";
 // Filing Desk Phase 3: the current-period filing matrix (contract 0.68.0).
 import filingMatrixRouter from "./filing-matrix";
+// WHT Desk: the withholding credit ledger + remittance schedule (0.69.0).
+import whtRouter from "./wht";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 // Platform health watch (rails / dead letters / dead deliveries). Also
@@ -74,6 +76,8 @@ import "../modules/invoice/register";
 import "../modules/obligations/register";
 // Registers the filing mint sweep with the pipeline worker.
 import "../modules/filings/register";
+// Registers the WHT credit-note chase sweep with the pipeline worker.
+import "../modules/wht/register";
 import "../modules/messaging/retention";
 
 const router: IRouter = Router();
@@ -119,5 +123,6 @@ router.use(clientsRouter);
 router.use(obligationsRouter);
 router.use(filingsRouter);
 router.use(filingMatrixRouter);
+router.use(whtRouter);
 
 export default router;

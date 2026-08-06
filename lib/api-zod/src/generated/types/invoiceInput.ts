@@ -3,10 +3,11 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.68.0
+ * OpenAPI spec version: 0.69.0
  */
 import type { InvoiceInputCategory } from './invoiceInputCategory';
 import type { InvoiceInputKind } from './invoiceInputKind';
+import type { InvoiceInputWhtCategory } from './invoiceInputWhtCategory';
 import type { InvoiceLineInput } from './invoiceLineInput';
 
 export interface InvoiceInput {
@@ -20,6 +21,7 @@ export interface InvoiceInput {
   dueDate?: string;
   kind?: InvoiceInputKind;
   category?: InvoiceInputCategory;
+  whtCategory?: InvoiceInputWhtCategory;
   relatedInvoiceId?: string;
   notes?: string;
   lines: InvoiceLineInput[];

@@ -131,6 +131,20 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email", "push"],
     description: "Statutory return filing overdue",
   },
+  // WHT Desk: a withholding credit note the buyer owes is still outstanding
+  // past the chase window. Channels mirror filing_due_soon, the statutory
+  // twin. Pointer only (SEC-12): no buyer, invoice, amount or date rides the
+  // message — the app shows the credit itself.
+  wht_note_due_soon: {
+    key: "wht_note_due_soon",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "A withholding credit note is still outstanding — chase due soon",
+  },
+  wht_note_overdue: {
+    key: "wht_note_overdue",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "A withholding credit note is still outstanding — chase overdue",
+  },
 };
 
 // Channel failover order when a provider fails. Push is terminal: if the Expo

@@ -13,6 +13,7 @@ import {
   partiesTable,
   submissionAttemptsTable,
   usersTable,
+  whtCreditsTable,
 } from "@workspace/db";
 import compliancePackRouter from "../../routes/compliance-pack.ts";
 import { computeCompliancePack } from "./compliance-pack.ts";
@@ -216,6 +217,18 @@ before(async () => {
     dueDate: lagosDateOffset(3),
     status: "upcoming",
   });
+  // One recorded withholding deduction still awaiting its buyer credit note
+  // (WHT Desk): the pack's WHT section gets a row and exact totals. Rides
+  // the stamped invoice — 5% of its 1000.00 subtotal.
+  await db.insert(whtCreditsTable).values({
+    firmId: firmA,
+    clientPartyId: clientParty,
+    invoiceId: stampedId,
+    category: "services_5",
+    amount: "50.00",
+    deductedDate: lagosDateOffset(-6),
+    source: "manual",
+  });
 });
 
 after(async () => {
@@ -290,6 +303,19 @@ test("the pack computes register, snapshots, VAT and deadlines for one client mo
       status: "upcoming",
     },
   ]);
+
+  // WHT credits (WHT Desk): the seeded awaiting-note deduction, counted by
+  // the WHT module's single chase fact function and sampled oldest-first.
+  assert.equal(facts.wht.awaiting, 1);
+  assert.equal(facts.wht.awaitingAmount, "50.00");
+  assert.deepEqual(facts.wht.rows, [
+    {
+      invoiceNumber: `CP-INV-${SALT}`,
+      category: "services_5",
+      amount: "50.00",
+      deductedDate: lagosDateOffset(-6),
+    },
+  ]);
 });
 
 // ---------------------------------------------------------------------------
@@ -360,6 +386,13 @@ test("the renderer produces a real PDF and the route ships it as an attachment",
   assert.ok(text.includes("STATUTORY RETURNS"), "the filings section renders");
   assert.ok(text.includes("VAT return"), "the seeded row's kind label");
   assert.ok(text.includes("May 2097"), "the seeded row's period label");
+  // The WHT Desk section rides the same paper: heading plus the seeded
+  // credit's hand-rolled category label.
+  assert.ok(text.includes("WHT CREDITS"), "the wht section renders");
+  assert.ok(
+    text.includes("Services & professional fees"),
+    "the seeded credit's category label",
+  );
 });
 
 test("an off-list month is refused with BAD_MONTH", async () => {

@@ -109,7 +109,9 @@ const PINNED: Record<string, PinnedPolicy> = {
   "stamp_records/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "11ed828f35ee7357", withCheck: "11ed828f35ee7357" },
   "statement_connections/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
   "statement_sync_runs/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
-  "submission_attempts/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "06c8692ee8d2489d", withCheck: "06c8692ee8d2489d" },};
+  "submission_attempts/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "06c8692ee8d2489d", withCheck: "06c8692ee8d2489d" },
+  "wht_credits/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },
+  "wht_reminder_sends/meridian_tenant_isolation": { cmd: "ALL", roles: "public", qual: "5074b35259440c75", withCheck: "5074b35259440c75" },};
 
 test("every RLS policy's rendered qual matches its pinned hash", async () => {
   if (!process.env.DATABASE_URL) {

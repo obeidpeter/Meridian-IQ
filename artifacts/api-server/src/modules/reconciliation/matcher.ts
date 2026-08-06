@@ -23,6 +23,14 @@ export interface MatchCandidate {
   grandTotal: number;
   issueDate: string; // ISO yyyy-mm-dd
   dueDate: string | null;
+  // WHT Desk: the expected withholding on this invoice (SQL-computed from
+  // the invoice's category — modules/wht/rates.ts), for RECEIVABLE
+  // candidates only. A corporate buyer legally short-pays by exactly this
+  // amount, so the amount score ALSO tries grandTotal − expectedWht and
+  // takes the better basis (recorded in the features when it wins). Bills
+  // never get the adjustment — the deduction story belongs to the supplier
+  // side.
+  expectedWht?: number;
 }
 
 export interface MatchableLine {
@@ -39,6 +47,14 @@ export interface MatchFeatures {
   referenceScore: number;
   dateScore: number;
   nameScore: number;
+  // Present ONLY when the WHT-adjusted basis (grandTotal − expectedWht)
+  // scored strictly better than the full amount: the line looks like a legal
+  // withholding short-pay. Flows into match_proposals.features (open
+  // additionalProperties jsonb — no contract change); acceptProposal reads
+  // the flag to mint the wht_credits row, recomputing the money in SQL
+  // rather than trusting this snapshot.
+  whtShortPay?: boolean;
+  whtExpectedAmount?: number;
 }
 
 export interface ScoredMatch {
@@ -149,6 +165,27 @@ export function scorePair(
     dateScore: dateScore(line.valueDate, candidate.issueDate),
     nameScore: nameScore(candidate.counterpartyName, line.narration),
   };
+  // WHT short-pay basis (receivables only): a corporate buyer withholding at
+  // source legally pays grandTotal − expectedWht, so that basis is ALSO
+  // scored and wins when STRICTLY better — a full payment keeps the plain
+  // basis and never carries the flag. Deterministic arithmetic end to end; a
+  // model never decides this.
+  if (
+    candidate.orientation === "receivable" &&
+    candidate.expectedWht !== undefined &&
+    candidate.expectedWht > 0 &&
+    candidate.grandTotal - candidate.expectedWht > 0
+  ) {
+    const adjusted = amountScore(
+      line.amount,
+      candidate.grandTotal - candidate.expectedWht,
+    );
+    if (adjusted > features.amountScore) {
+      features.amountScore = adjusted;
+      features.whtShortPay = true;
+      features.whtExpectedAmount = candidate.expectedWht;
+    }
+  }
   const confidence =
     WEIGHTS.amount * features.amountScore +
     WEIGHTS.reference * features.referenceScore +

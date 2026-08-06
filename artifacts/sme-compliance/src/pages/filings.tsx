@@ -178,7 +178,7 @@ function FilingsContent() {
     <div className="space-y-6">
       <PageHeader
         title="Filings"
-        description="The VAT returns and PAYE remittances your firm tracks for each period, with their filing deadlines. Your accountant records each one as it is prepared and filed — the platform never files anything itself."
+        description="The VAT returns, PAYE remittances and WHT remittances your firm tracks for each period, with their filing deadlines. Your accountant records each one as it is prepared and filed — the platform never files anything itself."
       />
 
       <div className="flex flex-wrap items-center gap-2">

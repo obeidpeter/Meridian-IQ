@@ -7,6 +7,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Manual trigger — added when GitHub's webhook-event run creation wedged
+  # (deadlocked concurrency group + dead event pipeline); also useful for
+  # ad-hoc re-verification.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

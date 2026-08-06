@@ -10,6 +10,7 @@ import {
   firmsTable,
   invoicesTable,
   partiesTable,
+  whtCreditsTable,
 } from "@workspace/db";
 import { computeMonthEndClose } from "./month-end-close.ts";
 import { appendAudit } from "../audit/audit.ts";
@@ -71,6 +72,7 @@ test("one overdue draft turns exactly one line to attention", async () => {
     "unmatched_collections",
     "open_obligations",
     "open_filings",
+    "wht_credits",
   ]);
   assert.ok(
     !keys.includes("pending_approvals"),
@@ -132,6 +134,39 @@ test("an unmatched collection payment turns the collections line (honest count, 
   );
   assert.ok(siblingLine);
   assert.equal(siblingLine.count, 0);
+});
+
+test("an awaiting-note withholding credit turns the wht line (scope holds)", async () => {
+  // Seed a recorded deduction still awaiting its buyer credit note on the
+  // client's own paper — the WHT module's chase fact counts it.
+  const [invoice] = await getDb()
+    .select({ id: invoicesTable.id })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.invoiceNumber, `MC-OD-${SALT}`));
+  await getDb().insert(whtCreditsTable).values({
+    firmId,
+    clientPartyId: clientParty,
+    invoiceId: invoice.id,
+    category: "services_5",
+    amount: "2325.58",
+    deductedDate: daysAgo(5),
+    source: "manual",
+  });
+
+  const close = await computeMonthEndClose(firmId, clientParty);
+  const line = close.items.find((i) => i.key === "wht_credits");
+  assert.ok(line);
+  assert.equal(line.status, "attention");
+  assert.equal(line.count, 1);
+  assert.match(line.detail, /credit note/);
+  assert.match(line.detail, /2325\.58/);
+
+  // The sibling client's checklist stays clear — SEC-03-style scoping holds.
+  const sibling = await computeMonthEndClose(firmId, cleanParty);
+  const siblingLine = sibling.items.find((i) => i.key === "wht_credits");
+  assert.ok(siblingLine);
+  assert.equal(siblingLine.count, 0);
+  assert.equal(siblingLine.status, "clear");
 });
 
 test("turning the maker-checker policy on adds the approvals line", async () => {

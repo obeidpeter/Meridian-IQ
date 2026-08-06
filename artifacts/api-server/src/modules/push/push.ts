@@ -27,7 +27,9 @@ export type PushTemplateKey =
   | "obligation_due_soon"
   | "obligation_overdue"
   | "filing_due_soon"
-  | "filing_overdue";
+  | "filing_overdue"
+  | "wht_note_due_soon"
+  | "wht_note_overdue";
 
 const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   deadline_reminder: {
@@ -77,6 +79,14 @@ const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   filing_overdue: {
     title: "MeridianIQ",
     body: "A statutory return filing is overdue. Open the app for details.",
+  },
+  wht_note_due_soon: {
+    title: "MeridianIQ",
+    body: "A withholding credit note from a buyer is still outstanding. Open the app for details.",
+  },
+  wht_note_overdue: {
+    title: "MeridianIQ",
+    body: "A withholding credit note from a buyer is long outstanding. Open the app for details.",
   },
 };
 

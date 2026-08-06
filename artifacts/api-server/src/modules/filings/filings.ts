@@ -27,9 +27,11 @@ import {
 } from "../auth/rbac";
 import { DomainError } from "../errors";
 import { lagosTodaySql } from "../../lib/lagos-time";
+import { BILL_ORIENTATION } from "../invoice/receivables";
 import {
   FILING_KINDS,
   filingDueDate,
+  periodMonthBounds,
   previousLagosPeriod,
   type FilingTaxType,
 } from "./statutory-calendar";
@@ -114,8 +116,35 @@ export async function mintFilingsForFirm(
     .from(engagementsTable)
     .where(and(eq(engagementsTable.firmId, firmId), LIVE_ENGAGEMENT));
   if (clients.length === 0) return 0;
+  // WHT rows mint CONDITIONALLY (unlike vat/paye, which every live client
+  // owes unconditionally): only a client that actually took delivery of a
+  // withholding-categorised bill in the period has anything to remit, so a
+  // wht register row for anyone else would be permanent noise. One
+  // set-based pass: DISTINCT buyer parties over the period's
+  // WHT-categorised, non-cancelled bills (the BILL_ORIENTATION fragment,
+  // alias `i` — a captured vendor invoice, never the client's own paper),
+  // intersected with the live-client set above.
+  const { start, end } = periodMonthBounds(period);
+  const whtBuyers = new Set(
+    (
+      await getDb().execute<{ client_party_id: string }>(sql`
+        SELECT DISTINCT i.buyer_party_id AS client_party_id
+        FROM invoices i
+        WHERE i.firm_id = ${firmId}
+          AND i.kind = 'invoice'
+          AND i.wht_category IS NOT NULL
+          AND i.status <> 'cancelled'
+          AND ${BILL_ORIENTATION}
+          AND i.issue_date >= ${start}::date
+          AND i.issue_date < ${end}::date
+      `)
+    ).rows.map((r) => r.client_party_id),
+  );
   const rows = clients.flatMap((c) =>
-    FILING_KINDS.map((kind) => ({
+    FILING_KINDS.filter(
+      (kind) =>
+        kind.taxType !== "wht" || whtBuyers.has(c.clientPartyId),
+    ).map((kind) => ({
       firmId,
       clientPartyId: c.clientPartyId,
       taxType: kind.taxType,

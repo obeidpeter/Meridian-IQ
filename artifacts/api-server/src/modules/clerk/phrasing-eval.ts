@@ -131,6 +131,8 @@ function digestFacts(overrides: Partial<DigestFacts>): DigestFacts {
     // Filing Desk.
     filingsDueSoon: 0,
     filingsOverdue: 0,
+    // WHT Desk.
+    whtAwaitingNotes: 0,
   };
   return { ...base, ...overrides };
 }
@@ -210,6 +212,11 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
         pattern: "statutory return",
         flags: "i",
         label: "no filings due — do not mention",
+      },
+      {
+        pattern: "withholding",
+        flags: "i",
+        label: "no WHT chase — do not mention",
       },
     ],
   },

@@ -24,6 +24,11 @@ import {
   openObligationSamples,
 } from "../obligations/obligations";
 import { countOpenFilings, openFilingSamples } from "../filings/filings";
+import {
+  countWhtChase,
+  openWhtSamples,
+  type OpenWhtSample,
+} from "../wht/credits";
 
 // Monthly client compliance pack (contract 0.45.0): one client's Lagos month
 // as a single facts object — who they are, what they issued, who owes them,
@@ -93,6 +98,16 @@ export interface CompliancePackFacts {
       dueDate: string;
       status: string;
     }[];
+  };
+  // WHT Desk: the client's recorded withholding deductions still awaiting
+  // the buyer's credit note as of render time (countWhtChase /
+  // openWhtSamples — the WHT module owns every predicate; the pack only
+  // displays). `rows` is an oldest-deduction-first sample capped at the
+  // module's display limit.
+  wht: {
+    awaiting: number;
+    awaitingAmount: string;
+    rows: OpenWhtSample[];
   };
   deadlines: {
     // The first statutory VAT-return date (the Lagos 21st rule) strictly
@@ -232,6 +247,8 @@ export async function computeCompliancePack(
     obligationRows,
     filingCounts,
     filingRows,
+    whtChase,
+    whtRows,
   ] = await Promise.all([
     loadRegister(firmId, clientPartyId, monthStart),
     getReceivablesSummary(clientPartyId, firmId),
@@ -242,6 +259,8 @@ export async function computeCompliancePack(
     openObligationSamples(firmId, clientPartyId),
     countOpenFilings(firmId, clientPartyId),
     openFilingSamples(firmId, clientPartyId),
+    countWhtChase(firmId, clientPartyId),
+    openWhtSamples(firmId, clientPartyId),
   ]);
 
   return {
@@ -279,6 +298,11 @@ export async function computeCompliancePack(
         dueDate: r.dueDate,
         status: r.status,
       })),
+    },
+    wht: {
+      awaiting: whtChase.awaiting,
+      awaitingAmount: whtChase.awaitingAmount,
+      rows: whtRows,
     },
     deadlines: {
       nextVatReturnDue: nextVatReturnDue(),
