@@ -4,6 +4,8 @@ import {
   AbandonOnboardingRunResponse,
   CreateOnboardingRunBody,
   CreateOnboardingRunResponse,
+  GetOnboardingOpeningPositionParams,
+  GetOnboardingOpeningPositionResponse,
   GetOnboardingRunParams,
   GetOnboardingRunResponse,
   ListOnboardingRunsQueryParams,
@@ -31,6 +33,7 @@ import {
   skipOnboardingStep,
   type OnboardingStepKey,
 } from "../modules/onboarding/onboarding";
+import { computeOpeningPosition } from "../modules/onboarding/opening-position";
 import type { ClientOnboardingRun } from "@workspace/db";
 
 // Onboard with Clerk (contract 0.70.0): the evidence-based onboarding
@@ -122,6 +125,28 @@ router.post(
       req.principal.userId,
     );
     res.json(SkipOnboardingStepResponse.parse(await detailFor(req, run)));
+  },
+);
+
+// The day-one opening position (Phase 2): a completed run serves its FROZEN
+// baseline (written by the completion CAS); an active or abandoned run
+// computes a live PROVISIONAL picture on request. Read-only — same
+// engagement.read + SEC-03 posture as the run detail.
+router.get(
+  "/onboarding/runs/:id/opening-position",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "engagement.read");
+    const params = parseOrThrow(GetOnboardingOpeningPositionParams, req.params);
+    const firmId = requireFirmScope(req.principal);
+    const run = await getOnboardingRun(params.id, firmId);
+    assertClientPartyScope(req.principal, run.clientPartyId);
+    const position =
+      run.status === "completed" && run.openingPosition
+        ? run.openingPosition
+        : await computeOpeningPosition(firmId, run.clientPartyId, {
+            provisional: true,
+          });
+    res.json(GetOnboardingOpeningPositionResponse.parse(position));
   },
 );
 

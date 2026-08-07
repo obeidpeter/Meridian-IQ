@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.70.0
+  version: 0.71.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -6110,6 +6110,22 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /onboarding/runs/{id}/opening-position:
+    get:
+      operationId: getOnboardingOpeningPosition
+      summary: The client's day-one opening position (frozen at completion, provisional while active)
+      tags: [onboarding]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The run's frozen baseline once completed; a live provisional picture otherwise
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpeningPosition"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /wht/credits:
     get:
       operationId: listWhtCredits
@@ -12117,6 +12133,82 @@ components:
           type: string
           minLength: 3
           maxLength: 500
+    # The day-one opening position (Onboard with Clerk Phase 2): every
+    # section $refs the schema its owning module already speaks, so the
+    # baseline can never disagree with the dashboards it summarizes.
+    OpeningPosition:
+      type: object
+      required:
+        [
+          computedAt,
+          provisional,
+          history,
+          receivables,
+          payables,
+          vat,
+          filings,
+          wht,
+          obligations,
+          automation,
+        ]
+      properties:
+        computedAt:
+          type: string
+          format: date-time
+        # True while the run is still active: history is still landing, so
+        # the numbers are a moving picture, not the frozen baseline.
+        provisional:
+          type: boolean
+        history:
+          type: object
+          required: [invoiceCount, earliestIssueDate, latestIssueDate]
+          properties:
+            invoiceCount:
+              type: integer
+            earliestIssueDate:
+              type: ["string", "null"]
+            latestIssueDate:
+              type: ["string", "null"]
+        receivables:
+          $ref: "#/components/schemas/ReceivablesSummary"
+        payables:
+          $ref: "#/components/schemas/PayablesSummary"
+        vat:
+          $ref: "#/components/schemas/ClientVatPosition"
+        filings:
+          type: object
+          required: [unfiled, dueSoon, overdue, nextDueDate]
+          properties:
+            unfiled:
+              type: integer
+            dueSoon:
+              type: integer
+            overdue:
+              type: integer
+            nextDueDate:
+              type: ["string", "null"]
+        wht:
+          type: object
+          required: [awaiting, awaitingAmount]
+          properties:
+            awaiting:
+              type: integer
+            awaitingAmount:
+              type: string
+        obligations:
+          type: object
+          required: [open, dueSoon, overdue, nearestDue]
+          properties:
+            open:
+              type: integer
+            dueSoon:
+              type: integer
+            overdue:
+              type: integer
+            nearestDue:
+              type: ["string", "null"]
+        automation:
+          $ref: "#/components/schemas/AutomationEvidence"
     FilingMatrixRow:
       type: object
       required: [clientPartyId, clientName, vat, paye, wht]
