@@ -219,6 +219,11 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
         flags: "i",
         label: "no WHT chase — do not mention",
       },
+      {
+        pattern: "onboarding",
+        flags: "i",
+        label: "no active onboarding runs — do not mention",
+      },
     ],
   },
   {

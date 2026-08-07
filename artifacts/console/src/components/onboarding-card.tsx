@@ -456,7 +456,9 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                 onClick={() =>
                   triggerDownload(
                     getGetOnboardingReportUrl(run.id),
-                    "onboarding-readiness-report.pdf",
+                    // Matches the server's Content-Disposition name (which
+                    // governs anyway).
+                    `onboarding-readiness-${run.clientPartyId.slice(0, 8)}.pdf`,
                   )
                 }
                 data-testid="button-onboarding-report"

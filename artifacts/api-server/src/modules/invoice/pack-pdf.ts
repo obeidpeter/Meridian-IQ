@@ -73,8 +73,9 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 // Filing-row display labels, hand-rolled server-side (lib/format's
-// filing-copy is a frontend package the api-server deliberately does not
-// depend on). "VAT return"/"PAYE remittance" is fine HERE — this is the
+// the api-server now depends on @workspace/format (round 44,
+// onboarding-copy), so folding these onto filing-copy subpaths is an open
+// follow-up). "VAT return"/"PAYE remittance" is fine HERE — this is the
 // client-facing paper, not the digest's constrained vocabulary.
 const FILING_KIND_LABELS: Record<string, string> = {
   vat: "VAT return",

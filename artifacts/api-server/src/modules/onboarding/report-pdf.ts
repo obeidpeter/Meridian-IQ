@@ -1,10 +1,12 @@
 import PDFDocument from "pdfkit";
 import { onboardingStepLabel } from "@workspace/format/onboarding-copy";
 import {
+  CONTENT_WIDTH,
   MARGIN,
   collectPdf,
   drawBrandHeader,
   drawCoverIntro,
+  ensureRoom,
   packLayout,
   resolvePackTheme,
 } from "../invoice/pack-pdf";
@@ -33,7 +35,11 @@ export interface OnboardingReportInput {
 
 // The position as label/value report rows — the console kernel's reading
 // order, server-side (the two render different surfaces from the same
-// frozen object; each stays with its renderer).
+// frozen object; each stays with its renderer). The automation-evidence
+// rows the console shows are DELIBERATELY absent here: the report is the
+// certifying record of where the client started, and the backtest is
+// advisory consent copy, not a record fact — it stays on the screen
+// surfaces.
 export function openingReportRows(
   p: OpeningPosition,
 ): { label: string; value: string }[] {
@@ -80,7 +86,10 @@ export function stepEvidenceSummary(
   step: OnboardingRunView["steps"][number],
 ): string {
   if (step.status === "skipped") {
-    return step.skippedReason ?? "Skipped";
+    // The reason is free text up to 500 chars — far beyond kvRow's fixed
+    // row height. The checklist row points at the gaps section, where the
+    // full reason renders as a flowing paragraph.
+    return "Skipped — reason under Recorded gaps";
   }
   const e = step.evidence as Record<string, unknown>;
   switch (step.key) {
@@ -119,7 +128,21 @@ export async function renderOnboardingReportPdf(
   input: OnboardingReportInput,
 ): Promise<Buffer> {
   const theme = resolvePackTheme(input.theme);
-  const doc = new PDFDocument({ size: "A4", margin: 0 });
+  // The pack seam's determinism property: identical frozen inputs must
+  // render identical bytes, so CreationDate pins to the run's own
+  // completion instant (never the wall clock) and the margin matches the
+  // seam (the implicit-page-add safety net kvRow's fixed rows rely on).
+  const doc = new PDFDocument({
+    size: "A4",
+    margin: MARGIN,
+    info: {
+      Title: "Onboarding readiness report",
+      Author: theme.brandName,
+      CreationDate: input.run.completedAt
+        ? new Date(input.run.completedAt)
+        : new Date(0),
+    },
+  });
   const done = collectPdf(doc);
 
   const afterHeader = drawBrandHeader(
@@ -140,6 +163,10 @@ export async function renderOnboardingReportPdf(
     input.run.clientName,
     `Prepared by ${input.firmName} — ${settled.length} of ${input.run.steps.length} checklist steps settled, ${gaps.length} gap(s) on record.`,
   );
+  // drawCoverIntro leaves the cursor at the subline's start (the seam's
+  // "each caller keeps its own trailing advance" rule) — advance past it
+  // or the first section title overprints the subline.
+  layout.cursor.y = doc.y + 12;
 
   layout.section("Onboarding checklist");
   for (const step of input.run.steps) {
@@ -162,10 +189,11 @@ export async function renderOnboardingReportPdf(
     );
   } else {
     for (const gap of gaps) {
-      layout.kvRow(
-        onboardingStepLabel(gap.key),
-        gap.skippedReason ?? "Skipped",
-      );
+      // Label as a fixed row, the free-text reason (up to 500 chars) as a
+      // FLOWING paragraph — emptyLine advances by doc.y, so a long reason
+      // wraps instead of overprinting the next row.
+      layout.kvRow(onboardingStepLabel(gap.key), "", true);
+      layout.emptyLine(gap.skippedReason ?? "Skipped");
     }
   }
 
@@ -180,7 +208,7 @@ export async function renderOnboardingReportPdf(
     );
   }
 
-  layout.cursor.y += 10;
+  layout.cursor.y = ensureRoom(doc, layout.cursor.y + 10, 40);
   doc
     .font("Helvetica-Oblique")
     .fontSize(8)
@@ -189,7 +217,7 @@ export async function renderOnboardingReportPdf(
       "Every figure in this report was computed from the client's records at completion; the recorded gaps are steps the firm deliberately skipped, each with its reason. Nothing here was estimated.",
       MARGIN,
       layout.cursor.y,
-      { width: 499 },
+      { width: CONTENT_WIDTH },
     );
 
   doc.end();
