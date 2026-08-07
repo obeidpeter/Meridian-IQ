@@ -150,7 +150,13 @@ async function computeAskMemoryInner(
           ),
         ] as const,
     );
-    if (!questionsPopulated && !briefsPopulated) return undefined;
+    // A clientScoped caller with no party can never receive a brief item
+    // (the SEC-03 wall at the re-read fails closed) — so for them the
+    // briefs corpus counts as unsearchable HERE, before the embed: they
+    // must not be charged for a guaranteed-zero search.
+    const briefsSearchable =
+      briefsPopulated && !(params.clientScoped && !params.clientPartyId);
+    if (!questionsPopulated && !briefsSearchable) return undefined;
 
     const embedded = await embedWithLedger(embedder, {
       firmId: params.firmId,
@@ -179,7 +185,7 @@ async function computeAskMemoryInner(
       const questionMatches = questionsPopulated
         ? await searchCorpus("ask_questions")
         : [];
-      const briefMatches = briefsPopulated
+      const briefMatches = briefsSearchable
         ? await searchCorpus("advisory_briefs")
         : [];
       // One ranked list across both corpora — the similarity floor already
@@ -208,12 +214,11 @@ async function computeAskMemoryInner(
     const questionIds = matches
       .filter((m) => m.corpus === "ask_questions")
       .map((m) => m.refId);
-    const briefIds =
-      params.clientScoped && !params.clientPartyId
-        ? []
-        : matches
-            .filter((m) => m.corpus === "advisory_briefs")
-            .map((m) => m.refId);
+    // Brief matches only exist when briefsSearchable held above, so the
+    // party-less clientScoped case is already an empty list here.
+    const briefIds = matches
+      .filter((m) => m.corpus === "advisory_briefs")
+      .map((m) => m.refId);
     const caseRows =
       questionIds.length > 0
         ? await inClerkScope(params.firmId, () =>
@@ -245,7 +250,9 @@ async function computeAskMemoryInner(
               .select({
                 id: clerkAdvisoryBriefsTable.id,
                 headline: clerkAdvisoryBriefsTable.headline,
-                updatedAt: clerkAdvisoryBriefsTable.updatedAt,
+                // createdAt, deliberately: updatedAt is bumped by refresh
+                // and would date last month's brief as "today".
+                createdAt: clerkAdvisoryBriefsTable.createdAt,
               })
               .from(clerkAdvisoryBriefsTable)
               .where(
@@ -285,7 +292,7 @@ async function computeAskMemoryInner(
           items.push({
             caseId: row.id,
             question: row.headline,
-            askedAt: row.updatedAt.toISOString(),
+            askedAt: row.createdAt.toISOString(),
             kind: "advisory_brief",
           });
         }

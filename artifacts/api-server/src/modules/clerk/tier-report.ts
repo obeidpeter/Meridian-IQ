@@ -132,7 +132,10 @@ export async function computeTierReport(): Promise<TierReport> {
       await getDb().execute<{
         purpose: string;
         calls: number;
-        total_tokens: number;
+        // int8 over the wire — node-postgres serves it as a string; every
+        // consumer below goes through Number() (safe far beyond any real
+        // token total).
+        total_tokens: string | number;
         ok_count: number;
         invalid_count: number;
         error_count: number;
@@ -140,7 +143,11 @@ export async function computeTierReport(): Promise<TierReport> {
       }>(sql`
         SELECT purpose,
           COUNT(*)::int AS calls,
-          COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0)::int
+          -- bigint, NOT int (metrics.ts's spelling): a busy ledger's 90-day
+          -- token sum overflows int4 (~2.1B tokens) and 22003s the whole
+          -- report — first seen on a long-lived scratch DB, reachable in
+          -- production at scale.
+          COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0)::bigint
             AS total_tokens,
           COUNT(*) FILTER (WHERE outcome = 'ok')::int AS ok_count,
           COUNT(*) FILTER (WHERE outcome = 'invalid_discarded')::int AS invalid_count,

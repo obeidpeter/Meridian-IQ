@@ -316,6 +316,9 @@ export function computeChangesSection(
     const section = sections.find((s) => s?.key === sectionKey);
     const f = section?.facts?.find?.((x) => x?.key === factKey);
     if (!f) return null;
+    // Number("") is 0 — an empty stored value must read as absent, never
+    // as a real zero to diff against.
+    if (typeof f.value !== "string" || f.value.trim() === "") return null;
     const n = Number(f.value);
     return Number.isFinite(n) ? n : null;
   };
@@ -443,6 +446,20 @@ export async function generateAdvisoryBrief(
 ): Promise<ClerkAdvisoryBriefRow> {
   await assertEngagedClient(firmId, clientPartyId);
   const monthStart = lagosMonthStart(0, now);
+  // Closed months are IMMUTABLE BY CONSTRUCTION — the advisory memory
+  // corpus indexes every month before the live one on exactly that
+  // guarantee (pointer-only, no re-embed on change), so a caller-supplied
+  // historical (or future) clock must never mint or rewrite a non-live
+  // month's row. No production caller passes one (route and sweep both use
+  // the real clock); this makes the invariant unbreakable, not just
+  // observed.
+  if (monthStart !== lagosMonthStart(0)) {
+    throw new DomainError(
+      "INVALID_MONTH",
+      "Advisory briefs can only be generated for the live Lagos month",
+      400,
+    );
+  }
   const sections = await computeAdvisoryBriefSections(
     firmId,
     clientPartyId,
