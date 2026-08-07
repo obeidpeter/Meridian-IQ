@@ -1142,8 +1142,22 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
   deliberate difference from statements: no quiet suppression — an
   "on track" brief is still the firm's monthly deliverable. No mobile
   deep link yet (no mobile brief screen; the push opens the app home).
-- **Phase 3** adds continuity ("what changed since last brief"), the
-  `advisory_briefs` memory corpus and acted-on tracking.
+- **Continuity + advisory memory** (Phase 3, round 51, contract 0.76.0):
+  generation loads the previous month's STORED brief — last month's
+  frozen truth, never a recompute — and appends a deterministic
+  "Since last month's brief" section: per-key deltas over the tracked
+  attention positions (statutory overdue, unfiled, past-window
+  invoices, chase-worthy, books hygiene) with improved/worsened triage
+  counts, both numerals of every comparison riding fact lines so the
+  grounding gate accepts a phrased note that quotes them. A first brief
+  has no comparison (the omission rule); an unreadable old blob degrades
+  to the same silence. The `advisory_briefs` memory corpus indexes
+  CLOSED-month briefs (immutable by construction — regeneration is
+  live-month-only), and the Ask memory note now searches it beside
+  `ask_questions`: brief items carry `kind: "advisory_brief"`
+  (additive contract field), re-read live under the firm pin plus the
+  clientPartyId sibling wall for client askers (a party-less client
+  caller gets no brief items, fail closed).
 
 ## Digests, statements & delivery
 

@@ -314,6 +314,7 @@ export function AnswerCard({
                   month: "short",
                   year: "numeric",
                 })}
+                {m.kind === "advisory_brief" && " · from the advisory brief"}
               </p>
             ))}
           </div>

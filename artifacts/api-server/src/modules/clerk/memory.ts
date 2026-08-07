@@ -6,6 +6,7 @@ import {
   EMBEDDING_DIMS,
 } from "@workspace/db";
 import { logger } from "../../lib/logger";
+import { lagosMonthStart } from "./client-statement";
 import { isFeatureEnabled } from "../flags/flags";
 import { registerSweep } from "../pipeline/pipeline";
 import { atMostHourly } from "./watch-shared";
@@ -80,7 +81,21 @@ const MEMORY_LOCK_ID = 731_850;
 //    escalations are compliance records with no delete path (offboard
 //    retains them), the reason is immutable after creation, and a re-sent
 //    reply is picked up live because retrieval re-reads the source row.
-export const MEMORY_CORPORA = ["ask_questions", "escalation_replies"] as const;
+//  - advisory_briefs (round 51): CLOSED-MONTH advisory briefs, keyed by
+//    headline + adviser's note. The closed-month filter IS the
+//    immutability guarantee: regeneration only ever touches the LIVE
+//    month (generateAdvisoryBrief computes monthStart itself), so a past
+//    month's text is frozen forever and the existence anti-join stays
+//    honest — indexing the live month would serve stale vectors after
+//    every refresh. Sensitivity: firm work product (template or phrased
+//    note — platform-composed, never client-authored). Purge story:
+//    briefs have no delete path; retrieval re-reads the source row under
+//    scope, so an orphan embedding yields nothing.
+export const MEMORY_CORPORA = [
+  "ask_questions",
+  "escalation_replies",
+  "advisory_briefs",
+] as const;
 export type MemoryCorpusKey = (typeof MEMORY_CORPORA)[number];
 
 interface IndexCandidate {
@@ -95,7 +110,7 @@ interface IndexCandidate {
 // scratch DB's candidate pool); production passes never set it. The alias
 // must match the candidate query's source-table alias — typed as the
 // closed set of aliases in use so nothing dynamic can ever reach sql.raw.
-function firmPinClause(alias: "c" | "e", onlyFirmIds?: string[]) {
+function firmPinClause(alias: "c" | "e" | "b", onlyFirmIds?: string[]) {
   return onlyFirmIds && onlyFirmIds.length > 0
     ? sql`AND ${sql.raw(alias)}.firm_id IN (${sql.join(
         onlyFirmIds.map((id) => sql`${id}`),
@@ -189,6 +204,44 @@ async function escalationReplyCandidates(
   }));
 }
 
+// advisory_briefs candidates: CLOSED-month briefs only — regeneration is
+// live-month-only by construction, so a past month's headline + note are
+// frozen and the existence anti-join stays honest (see the catalogue).
+async function advisoryBriefCandidates(
+  model: string,
+  limit: number,
+  onlyFirmIds?: string[],
+): Promise<IndexCandidate[]> {
+  const liveMonth = lagosMonthStart(0);
+  const rows = (
+    await getDb().execute<{
+      firm_id: string;
+      id: string;
+      headline: string;
+      note: string;
+    }>(sql`
+      SELECT b.firm_id, b.id, b.headline, b.note
+      FROM clerk_advisory_briefs b
+      LEFT JOIN clerk_memory_embeddings m
+        ON m.firm_id = b.firm_id
+       AND m.corpus = 'advisory_briefs'
+       AND m.ref_id = b.id
+       AND m.model = ${model}
+      WHERE b.month_start < ${liveMonth}
+        AND m.id IS NULL
+        ${firmPinClause("b", onlyFirmIds)}
+      ORDER BY b.month_start DESC
+      LIMIT ${limit}
+    `)
+  ).rows;
+  return rows.map((r) => ({
+    firmId: r.firm_id,
+    corpus: "advisory_briefs" as const,
+    refId: r.id,
+    text: `${r.headline}\n${r.note}`.slice(0, MEMORY_TEXT_CAP),
+  }));
+}
+
 // One candidate source per catalogue entry, keyed by MEMORY_CORPORA's
 // union type — adding a corpus to the catalogue without wiring its
 // candidate query is a COMPILE error, never a silent no-op.
@@ -202,6 +255,7 @@ const CORPUS_CANDIDATES: Record<
 > = {
   ask_questions: askQuestionCandidates,
   escalation_replies: escalationReplyCandidates,
+  advisory_briefs: advisoryBriefCandidates,
 };
 
 // Index one batch: candidates in a short bypass read, then ONE embedding

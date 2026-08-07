@@ -436,6 +436,7 @@ function AnswerCard({
                   month: "short",
                   year: "numeric",
                 })}
+                {m.kind === "advisory_brief" && " · from your advisory brief"}
               </p>
             ))}
           </div>

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.75.0
+ * OpenAPI spec version: 0.76.0
  */
 import * as zod from 'zod';
 
@@ -5459,7 +5459,8 @@ export const ListClerkCasesResponseItem = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),
@@ -5624,7 +5625,8 @@ export const CreateClerkCaseResponse = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),
@@ -5772,7 +5774,8 @@ export const GetClerkCaseResponse = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),
@@ -5945,7 +5948,8 @@ export const DecideClerkCaseResponse = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),
@@ -6114,7 +6118,8 @@ export const DecideNoticeCaseResponse = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),
@@ -6333,7 +6338,8 @@ export const AskClerkResponse = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),
@@ -6580,7 +6586,8 @@ export const RetryClerkCaseResponse = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),
@@ -6731,7 +6738,8 @@ export const ClaimClerkCaseResponse = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),
@@ -6882,7 +6890,8 @@ export const ReleaseClerkCaseResponse = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),
@@ -7699,7 +7708,8 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "items": zod.array(zod.object({
   "caseId": zod.string().uuid(),
   "question": zod.string(),
-  "askedAt": zod.coerce.date()
+  "askedAt": zod.coerce.date(),
+  "kind": zod.enum(['question', 'advisory_brief']).optional()
 }))
 }).optional()
 }),zod.null()]).optional(),

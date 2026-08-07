@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.75.0
+ * OpenAPI spec version: 0.76.0
  */
 export interface HealthStatus {
   status: string;
@@ -3589,10 +3589,19 @@ export interface AskAnswerSection {
   action?: AskSectionAction;
 }
 
+export type AskAnswerMemoryItemsItemKind = typeof AskAnswerMemoryItemsItemKind[keyof typeof AskAnswerMemoryItemsItemKind];
+
+
+export const AskAnswerMemoryItemsItemKind = {
+  question: 'question',
+  advisory_brief: 'advisory_brief',
+} as const;
+
 export type AskAnswerMemoryItemsItem = {
   caseId: string;
   question: string;
   askedAt: string;
+  kind?: AskAnswerMemoryItemsItemKind;
 };
 
 export interface AskAnswerMemory {

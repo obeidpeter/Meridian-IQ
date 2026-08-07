@@ -1,5 +1,10 @@
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { getDb, clerkCasesTable, EMBEDDING_DIMS } from "@workspace/db";
+import {
+  getDb,
+  clerkAdvisoryBriefsTable,
+  clerkCasesTable,
+  EMBEDDING_DIMS,
+} from "@workspace/db";
 import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../flags/flags";
 import {
@@ -43,9 +48,12 @@ import { inClerkScope } from "./scope";
 //    memory note, never a failed answer.
 
 export interface AskAnswerMemoryItem {
+  // The source row's id: an Ask case, or (round 51) an advisory brief —
+  // `kind` says which surface the caller should open it in.
   caseId: string;
   question: string;
   askedAt: string;
+  kind: "question" | "advisory_brief";
 }
 
 // Mirrors components/schemas AskAnswerMemory in lib/api-spec/openapi.yaml
@@ -92,6 +100,12 @@ interface AskMemoryParams {
   question: string;
   actorId: string;
   clientScoped: boolean;
+  // The client asker's own party (round 51): advisory-brief items are
+  // client-scoped ROWS, so a client asker's brief re-read pins
+  // clientPartyId — the sibling wall for briefs, as createdBy is for
+  // question cases. A clientScoped caller without a party gets NO brief
+  // items (fail closed); firm callers see the firm's briefs.
+  clientPartyId?: string | null;
   // The case being answered RIGHT NOW: excluded from retrieval in SQL. It
   // is unanswered at this point so the indexer cannot have offered it, but
   // the exclusion is free and survives any future reordering.
@@ -116,13 +130,27 @@ async function computeAskMemoryInner(
     const embedder =
       params.embedder === undefined ? await embedderOrNull() : params.embedder;
     if (!embedder) return undefined;
-    // Cold-corpus guard (the R46 rule): an empty (firm, corpus, model)
-    // slice cannot match anything — never charge the firm for a
-    // guaranteed-no-match query embed.
-    const populated = await inClerkScope(params.firmId, () =>
-      memoryCorpusPopulated(params.firmId, "ask_questions", embedder.model),
+    // Cold-corpus guard (the R46 rule), per corpus: an empty (firm,
+    // corpus, model) slice cannot match anything — the embed is charged
+    // only when at least one corpus can answer, and only populated
+    // corpora are searched.
+    const [questionsPopulated, briefsPopulated] = await inClerkScope(
+      params.firmId,
+      async () =>
+        [
+          await memoryCorpusPopulated(
+            params.firmId,
+            "ask_questions",
+            embedder.model,
+          ),
+          await memoryCorpusPopulated(
+            params.firmId,
+            "advisory_briefs",
+            embedder.model,
+          ),
+        ] as const,
     );
-    if (!populated) return undefined;
+    if (!questionsPopulated && !briefsPopulated) return undefined;
 
     const embedded = await embedWithLedger(embedder, {
       firmId: params.firmId,
@@ -132,67 +160,135 @@ async function computeAskMemoryInner(
     });
     if (!embedded.ok) return undefined;
 
-    const matches = await inClerkScope(params.firmId, () =>
-      searchMemory({
-        firmId: params.firmId,
-        corpus: "ask_questions",
-        model: embedded.model,
-        vector: embedded.vectors[0],
-        // A client asker searches WIDER: the index has no creator
-        // dimension, so the own-cases pin below discards firm-staff
-        // matches post-search — with only k slots, the asker's own
-        // similar case at rank 4 would never surface. Exact per-firm
-        // scan; the wider k costs nothing.
-        k: params.clientScoped ? ASK_MEMORY_K * 3 : ASK_MEMORY_K,
-        minSimilarity: ASK_MEMORY_MIN_SIMILARITY,
-        excludeRefId: params.excludeCaseId,
-      }),
-    );
+    // A client asker searches WIDER: the index has no creator/party
+    // dimension, so the own-rows pins below discard out-of-scope matches
+    // post-search — with only k slots, the asker's own similar row at
+    // rank 4 would never surface. Exact per-firm scan; wider k is free.
+    const k = params.clientScoped ? ASK_MEMORY_K * 3 : ASK_MEMORY_K;
+    const matches = await inClerkScope(params.firmId, async () => {
+      const searchCorpus = (corpus: "ask_questions" | "advisory_briefs") =>
+        searchMemory({
+          firmId: params.firmId,
+          corpus,
+          model: embedded.model,
+          vector: embedded.vectors[0],
+          k,
+          minSimilarity: ASK_MEMORY_MIN_SIMILARITY,
+          excludeRefId: params.excludeCaseId,
+        });
+      const questionMatches = questionsPopulated
+        ? await searchCorpus("ask_questions")
+        : [];
+      const briefMatches = briefsPopulated
+        ? await searchCorpus("advisory_briefs")
+        : [];
+      // One ranked list across both corpora — the similarity floor already
+      // applied per search; the cap below picks the best of either kind.
+      return [
+        ...questionMatches.map((m) => ({
+          ...m,
+          corpus: "ask_questions" as const,
+        })),
+        ...briefMatches.map((m) => ({
+          ...m,
+          corpus: "advisory_briefs" as const,
+        })),
+      ].sort((a, b) => b.similarity - a.similarity);
+    });
     if (matches.length === 0) return undefined;
 
-    // Pointer-only re-read, ONE scope for the whole batch, then picked in
-    // rank order and capped: the index stores no text, so each item's
-    // question comes LIVE from the case row under the firm pin (+ the
-    // SEC-03 own-cases pin for a client asker) — an orphaned or
-    // out-of-scope embedding row yields nothing rather than leaking. The
-    // answered check is LOAD-BEARING here, not just in the candidate
-    // query: rows indexed before that filter existed (or under an older
-    // model) can still name a refused case, and a refusal is no precedent.
-    const rows = await inClerkScope(params.firmId, () =>
-      getDb()
-        .select({
-          id: clerkCasesTable.id,
-          question: clerkCasesTable.question,
-          createdAt: clerkCasesTable.createdAt,
-        })
-        .from(clerkCasesTable)
-        .where(
-          and(
-            inArray(
-              clerkCasesTable.id,
-              matches.map((m) => m.refId),
-            ),
-            eq(clerkCasesTable.firmId, params.firmId),
-            eq(clerkCasesTable.kind, "question"),
-            isNotNull(clerkCasesTable.answer),
-            sql`${clerkCasesTable.answer}->>'answered' = 'true'`,
-            ...(params.clientScoped
-              ? [eq(clerkCasesTable.createdBy, params.actorId)]
-              : []),
-          ),
-        ),
-    );
-    const byId = new Map(rows.map((r) => [r.id, r]));
+    // Pointer-only re-reads, ONE scope per corpus batch, then picked in
+    // rank order and capped: the index stores no text, so every item's
+    // display text comes LIVE from its source row under the firm pin plus
+    // the SEC-03 sibling wall for a client asker — createdBy for question
+    // cases, clientPartyId for briefs (a clientScoped caller without a
+    // party gets no brief items at all, fail closed). The answered check
+    // is LOAD-BEARING for question rows indexed before that filter
+    // existed: a refusal is no precedent.
+    const questionIds = matches
+      .filter((m) => m.corpus === "ask_questions")
+      .map((m) => m.refId);
+    const briefIds =
+      params.clientScoped && !params.clientPartyId
+        ? []
+        : matches
+            .filter((m) => m.corpus === "advisory_briefs")
+            .map((m) => m.refId);
+    const caseRows =
+      questionIds.length > 0
+        ? await inClerkScope(params.firmId, () =>
+            getDb()
+              .select({
+                id: clerkCasesTable.id,
+                question: clerkCasesTable.question,
+                createdAt: clerkCasesTable.createdAt,
+              })
+              .from(clerkCasesTable)
+              .where(
+                and(
+                  inArray(clerkCasesTable.id, questionIds),
+                  eq(clerkCasesTable.firmId, params.firmId),
+                  eq(clerkCasesTable.kind, "question"),
+                  isNotNull(clerkCasesTable.answer),
+                  sql`${clerkCasesTable.answer}->>'answered' = 'true'`,
+                  ...(params.clientScoped
+                    ? [eq(clerkCasesTable.createdBy, params.actorId)]
+                    : []),
+                ),
+              ),
+          )
+        : [];
+    const briefRows =
+      briefIds.length > 0
+        ? await inClerkScope(params.firmId, () =>
+            getDb()
+              .select({
+                id: clerkAdvisoryBriefsTable.id,
+                headline: clerkAdvisoryBriefsTable.headline,
+                updatedAt: clerkAdvisoryBriefsTable.updatedAt,
+              })
+              .from(clerkAdvisoryBriefsTable)
+              .where(
+                and(
+                  inArray(clerkAdvisoryBriefsTable.id, briefIds),
+                  eq(clerkAdvisoryBriefsTable.firmId, params.firmId),
+                  ...(params.clientScoped
+                    ? [
+                        eq(
+                          clerkAdvisoryBriefsTable.clientPartyId,
+                          params.clientPartyId!,
+                        ),
+                      ]
+                    : []),
+                ),
+              ),
+          )
+        : [];
+    const caseById = new Map(caseRows.map((r) => [r.id, r]));
+    const briefById = new Map(briefRows.map((r) => [r.id, r]));
     const items: AskAnswerMemoryItem[] = [];
     for (const match of matches) {
       if (items.length >= ASK_MEMORY_MAX_ITEMS) break;
-      const row = byId.get(match.refId);
-      if (row?.question) {
-        items.push({
-          caseId: row.id,
-          question: row.question,
-          askedAt: row.createdAt.toISOString(),
-        });
+      if (match.corpus === "ask_questions") {
+        const row = caseById.get(match.refId);
+        if (row?.question) {
+          items.push({
+            caseId: row.id,
+            question: row.question,
+            askedAt: row.createdAt.toISOString(),
+            kind: "question",
+          });
+        }
+      } else {
+        const row = briefById.get(match.refId);
+        if (row?.headline) {
+          items.push({
+            caseId: row.id,
+            question: row.headline,
+            askedAt: row.updatedAt.toISOString(),
+            kind: "advisory_brief",
+          });
+        }
       }
     }
     if (items.length === 0) return undefined;

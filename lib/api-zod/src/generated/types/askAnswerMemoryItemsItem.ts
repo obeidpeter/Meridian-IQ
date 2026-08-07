@@ -3,11 +3,13 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.75.0
+ * OpenAPI spec version: 0.76.0
  */
+import type { AskAnswerMemoryItemsItemKind } from './askAnswerMemoryItemsItemKind';
 
 export type AskAnswerMemoryItemsItem = {
   caseId: string;
   question: string;
   askedAt: Date;
+  kind?: AskAnswerMemoryItemsItemKind;
 };
