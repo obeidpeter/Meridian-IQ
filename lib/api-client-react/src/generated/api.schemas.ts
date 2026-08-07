@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.76.0
+ * OpenAPI spec version: 0.77.0
  */
 export interface HealthStatus {
   status: string;
@@ -5328,6 +5328,7 @@ export const PhrasingEvalFixtureResultSurface = {
   escalation_reply: 'escalation_reply',
   failure_explanation: 'failure_explanation',
   obligation_response: 'obligation_response',
+  advisory_brief: 'advisory_brief',
 } as const;
 
 export type PhrasingEvalFixtureResultRiskLabel = typeof PhrasingEvalFixtureResultRiskLabel[keyof typeof PhrasingEvalFixtureResultRiskLabel];
@@ -5417,6 +5418,7 @@ export const RunPhrasingEvalInputSurface = {
   escalation_reply: 'escalation_reply',
   failure_explanation: 'failure_explanation',
   obligation_response: 'obligation_response',
+  advisory_brief: 'advisory_brief',
 } as const;
 
 export interface RunPhrasingEvalInput {
@@ -5436,6 +5438,7 @@ export const PhrasingEvalOutcomeCanarySurface = {
   escalation_reply: 'escalation_reply',
   failure_explanation: 'failure_explanation',
   obligation_response: 'obligation_response',
+  advisory_brief: 'advisory_brief',
 } as const;
 
 export type PhrasingEvalOutcomeCanaryIncumbent = PhrasingEvalReport & {

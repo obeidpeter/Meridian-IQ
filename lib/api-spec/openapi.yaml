@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.76.0
+  version: 0.77.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -13885,7 +13885,7 @@ components:
           type: string
         surface:
           type: string
-          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response]
+          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response, advisory_brief]
         label:
           type: string
         riskLabel:
@@ -14044,7 +14044,7 @@ components:
           maxLength: 20000
         surface:
           type: string
-          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response]
+          enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response, advisory_brief]
     PhrasingEvalOutcome:
       type: object
       required: [canary, run]
@@ -14056,7 +14056,7 @@ components:
           properties:
             surface:
               type: string
-              enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response]
+              enum: [digest, chaser, statement, vat_note, escalation_reply, failure_explanation, obligation_response, advisory_brief]
             incumbent:
               allOf:
                 - $ref: "#/components/schemas/PhrasingEvalReport"

@@ -116,6 +116,7 @@ export type ClerkPurpose =
   | "eval_phrasing_reply"
   | "eval_phrasing_explain"
   | "eval_phrasing_response"
+  | "eval_phrasing_brief"
   // Scanned-bundle segmentation (batch-async): one vision call proposing
   // page ranges; the app validates coverage before anything else runs.
   | "segment_scan"

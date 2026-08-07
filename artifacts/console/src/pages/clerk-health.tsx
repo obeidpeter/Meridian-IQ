@@ -2734,9 +2734,10 @@ export function HealthPanel() {
           <CardContent className="space-y-2">
             <p className="text-xs text-muted-foreground">
               Every phrased surface (digest, statements, chasers, replies,
-              cover notes) is checked against its own facts: a numeral the
-              facts never stated forfeits the phrasing and the deterministic
-              template answers instead. Zero is the healthy reading.
+              cover notes, advisory briefs) is checked against its own facts:
+              a numeral the facts never stated forfeits the phrasing and the
+              deterministic template answers instead. Zero is the healthy
+              reading.
             </p>
             <p className="text-sm" data-testid="text-grounding-violations">
               {metrics.grounding.violations === 0
