@@ -578,7 +578,11 @@ Zero model calls anywhere.
   client's register rows for the backfill periods via
   `mintFilingsForFirm(firmId, pastInstant, onlyClientPartyId)`. The
   per-client pin exists precisely so a backfill can never backdate
-  unfiled rows onto the firm's whole book.
+  unfiled rows onto the firm's whole book — and the mint itself claims
+  the reminder slots of any row BORN overdue (created after its own
+  deadline), so opening an onboarding run never blasts the client with
+  "overdue return" alerts for pre-engagement periods (the reminder
+  sweep's no-day-one-blast rule, enforced at mint).
 - **Skips are the honest gaps**: the only human write is "skip with a
   reason" — refused when the facts already satisfy the step
   (`STEP_ALREADY_DONE`). The two jsonb columns split by writer

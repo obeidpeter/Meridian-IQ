@@ -17,6 +17,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { isDomainError } from "../../test-helpers/assertions.ts";
+import { lagosDateString } from "../../lib/lagos-time.ts";
 import { makeRunSalt } from "../../test-helpers/fixtures.ts";
 import { grantComplianceConsent } from "../../test-helpers/seeders.ts";
 import {
@@ -201,6 +202,32 @@ test("the journey: facts settle steps one by one; completion claims once", async
     ONBOARDING_BACKFILL_MONTHS,
     "all backfill periods minted",
   );
+
+  // The no-day-one-blast rule: every backfilled row BORN overdue (statutory
+  // date already past at mint) claimed both reminder slots silently, so the
+  // reminder sweep has nothing to send for pre-engagement periods; a row
+  // whose date is still ahead claimed nothing and keeps its lifecycle.
+  const ledger = (
+    await db.execute<{ due_date: string; slots: number }>(sql`
+      SELECT f.due_date::text AS due_date, COUNT(s.id)::int AS slots
+      FROM filing_returns f
+      LEFT JOIN filing_reminder_sends s ON s.filing_id = f.id
+      WHERE f.firm_id = ${firmId} AND f.client_party_id = ${clientA}
+      GROUP BY f.id, f.due_date
+    `)
+  ).rows;
+  const today = lagosDateString(new Date());
+  assert.ok(
+    ledger.some((r) => r.due_date < today),
+    "the backfill window always reaches at least one born-overdue row",
+  );
+  for (const r of ledger) {
+    assert.equal(
+      Number(r.slots),
+      r.due_date < today ? 2 : 0,
+      `row due ${r.due_date}: silent claim exactly when born overdue`,
+    );
+  }
 
   // Facts land: consent, history, statement coverage for all three months.
   await grantComplianceConsent(clientA, userId);

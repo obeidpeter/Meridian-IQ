@@ -16,6 +16,7 @@ import { and, asc, eq, sql, type SQL } from "drizzle-orm";
 import {
   getDb,
   engagementsTable,
+  filingReminderSendsTable,
   filingReturnsTable,
   type FilingReturn,
 } from "@workspace/db";
@@ -26,7 +27,7 @@ import {
   type Principal,
 } from "../auth/rbac";
 import { DomainError } from "../errors";
-import { lagosTodaySql } from "../../lib/lagos-time";
+import { lagosDateString, lagosTodaySql } from "../../lib/lagos-time";
 import { BILL_ORIENTATION } from "../invoice/receivables";
 import {
   FILING_KINDS,
@@ -150,6 +151,7 @@ export async function mintFilingsForFirm(
           AND ${BILL_ORIENTATION}
           AND i.issue_date >= ${start}::date
           AND i.issue_date < ${end}::date
+          ${onlyClientPartyId ? sql`AND i.buyer_party_id = ${onlyClientPartyId}` : sql``}
       `)
     ).rows.map((r) => r.client_party_id),
   );
@@ -170,7 +172,38 @@ export async function mintFilingsForFirm(
     .insert(filingReturnsTable)
     .values(rows)
     .onConflictDoNothing()
-    .returning({ id: filingReturnsTable.id });
+    .returning({
+      id: filingReturnsTable.id,
+      clientPartyId: filingReturnsTable.clientPartyId,
+      dueDate: filingReturnsTable.dueDate,
+    });
+  // A row BORN overdue (created after its own statutory deadline — an
+  // onboarding backfill of past periods, or a pipeline that sat dark past a
+  // month's due days) claims both reminder slots silently at birth: the
+  // reminder sweep's no-day-one-blast rule, enforced where the row is
+  // minted so a freshly onboarded client is never blasted with "overdue
+  // return" alerts for periods that predate the engagement. A row born
+  // pre-due (the healthy sweep path — always) claims nothing and keeps its
+  // full reminder lifecycle. Judged against the REAL present, not the `now`
+  // parameter: `now` is the period SELECTOR, which a backfill deliberately
+  // sets to a historical instant — but birth happens today.
+  const today = lagosDateString(new Date());
+  const bornOverdue = inserted.filter((r) => r.dueDate < today);
+  if (bornOverdue.length > 0) {
+    await getDb()
+      .insert(filingReminderSendsTable)
+      .values(
+        bornOverdue.flatMap((r) =>
+          (["due_soon", "overdue"] as const).map((kind) => ({
+            filingId: r.id,
+            clientPartyId: r.clientPartyId,
+            firmId,
+            kind,
+          })),
+        ),
+      )
+      .onConflictDoNothing();
+  }
   return inserted.length;
 }
 

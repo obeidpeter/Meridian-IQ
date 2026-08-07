@@ -208,6 +208,7 @@ async function detectStatements(
         WHERE s.firm_id = ${firmId}
           AND s.client_party_id = ${clientPartyId}
           AND s.status IN ('committed', 'reconciled')
+          AND l.parse_status = 'parsed'
           AND l.value_date IS NOT NULL
           AND l.value_date >= ${oldest}::date
           AND l.value_date < ${newest}::date
@@ -290,7 +291,10 @@ async function detectDuplicates(
 // The one machine-EXECUTING step: mint this client's register rows for the
 // backfill window (per-period, per-client — the natural unique key absorbs
 // re-runs), then read coverage back from the register itself so the
-// detection reports what exists, not what the mint claimed.
+// detection reports what exists, not what the mint claimed. Rows born
+// overdue claim their reminder slots silently inside the mint itself
+// (mintFilingsForFirm's no-day-one-blast rule), so this backfill can never
+// trigger a burst of "overdue return" alerts for pre-engagement periods.
 async function detectFilings(
   firmId: string,
   clientPartyId: string,
@@ -442,13 +446,22 @@ export async function refreshOnboardingRun(
 
   const now = new Date();
   const detection = await detectAll(firmId, run.clientPartyId, now);
+  // Status-guarded: a run that went terminal under this pass keeps its
+  // FROZEN checklist — later facts must not rewrite a completed run's
+  // evidence (the CAS transitions below are already once-only; this guard
+  // extends the same discipline to the derived state).
   const [updated] = await getDb()
     .update(clientOnboardingRunsTable)
     .set({ detection, updatedAt: now })
-    .where(eq(clientOnboardingRunsTable.id, runId))
+    .where(
+      and(
+        eq(clientOnboardingRunsTable.id, runId),
+        eq(clientOnboardingRunsTable.status, "active"),
+      ),
+    )
     .returning();
   if (!updated) {
-    throw new DomainError("NOT_FOUND", "Onboarding run not found", 404);
+    return getOnboardingRun(runId, firmId);
   }
 
   const skips = (updated.skips ?? {}) as Record<string, StepSkip>;
@@ -531,13 +544,28 @@ export async function skipOnboardingStep(
   };
   // Targeted jsonb_set on the human-only column: never read-modify-write the
   // whole object, so two staff skipping different steps cannot clobber each
-  // other.
-  await getDb().execute(sql`
-    UPDATE client_onboarding_runs
-    SET skips = jsonb_set(skips, ${sql.raw(`'{${stepKey}}'`)}, ${JSON.stringify(skip)}::jsonb),
-        updated_at = now()
-    WHERE id = ${runId} AND firm_id = ${firmId} AND status = 'active'
-  `);
+  // other. The path is a PARAMETER (ARRAY[$n]::text[]) — the type system
+  // already pins stepKey to the catalogue, but a raw fragment would make one
+  // future cast an injection, so the closed choice is enforced at the wire.
+  const written = (
+    await getDb().execute<{ id: string }>(sql`
+      UPDATE client_onboarding_runs
+      SET skips = jsonb_set(skips, ARRAY[${stepKey}]::text[], ${JSON.stringify(skip)}::jsonb),
+          updated_at = now()
+      WHERE id = ${runId} AND firm_id = ${firmId} AND status = 'active'
+      RETURNING id
+    `)
+  ).rows;
+  if (written.length === 0) {
+    // The run went terminal between the read above and this write (a
+    // colleague's settling skip, the sweep's abandon): the skip did NOT
+    // land, so neither may its audit — a 409 also rolls the request back.
+    throw new DomainError(
+      "RUN_NOT_ACTIVE",
+      "This onboarding run is no longer active",
+      409,
+    );
+  }
   await appendAudit({
     actorId: byUserId,
     firmId,
@@ -644,10 +672,11 @@ export async function getOnboardingRun(
   return run;
 }
 
-// Serialize a run for the contract: catalogue order, skip overlaying
-// detection (a skipped step stays skipped even when its facts later turn
-// done — the human decision is the record; refresh's completion check
-// treats done-or-skipped identically).
+// Serialize a run for the contract: catalogue order, detection-done taking
+// display precedence over a recorded skip — once the facts satisfy a step,
+// it reads "done" (the skip stays on the row as the history of the firm's
+// call; refresh's completion check treats done-or-skipped identically, so
+// the precedence never changes the run's outcome).
 export async function onboardingRunView(
   run: ClientOnboardingRun,
 ): Promise<OnboardingRunView> {
