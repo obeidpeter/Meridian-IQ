@@ -12,8 +12,18 @@
 // rollback with dependents leaves the extension in place (the ladder test
 // asserts exactly that).
 
+// TOLERANT up: on a cluster whose postgres lacks the pgvector binary,
+// CREATE EXTENSION raises an error whose class is NOT in the boot
+// runner's missing-dependency skip list — a bare statement would abort the
+// whole apply chain and stop every later migration from landing. The DO
+// block downgrades that to a warning; the memory rail feature-detects the
+// extension at runtime and stays dark without it.
 const up = `
-CREATE EXTENSION IF NOT EXISTS vector;
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS vector;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'pgvector extension unavailable: %', SQLERRM;
+END $$;
 `;
 
 const down = `

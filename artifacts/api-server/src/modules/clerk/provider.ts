@@ -1,9 +1,11 @@
+import { EMBEDDING_DIMS } from "@workspace/db";
 import { DomainError } from "../errors";
 import type {
   ClerkGateway,
   ClerkProvider,
   CompletionRequest,
   CompletionResult,
+  MemoryEmbedder,
 } from "./gateway";
 import { createGateway, recordExternalCall } from "./gateway";
 
@@ -196,6 +198,45 @@ export async function buildGatewayForModel(
     model,
     complete: (req: CompletionRequest) => completeWith(openai, model, req),
   });
+}
+
+// pgvector firm memory (round 45): the embedding model is its own env knob —
+// CLERK_MODEL's completion default is nonsense for an embedding call, and
+// CLERK_MODEL_TIERS routes completions by purpose, so the embedder resolves
+// its model here directly. Dimensions are NOT configurable: the pgvector
+// column's vector(N) typmod fixes them in DDL (EMBEDDING_DIMS in
+// @workspace/db), and the gateway lane discards a mis-sized response whole.
+export const CLERK_EMBEDDING_MODEL =
+  process.env.CLERK_EMBEDDING_MODEL ?? "text-embedding-3-small";
+
+// Best-effort embedder (the gatewayOrNull posture): the memory indexer is a
+// background sweep with no user waiting, so a provider that cannot be
+// constructed (missing AI-integration env) yields null and the sweep skips
+// this pass — never a crash loop.
+export async function embedderOrNull(): Promise<MemoryEmbedder | null> {
+  try {
+    const openai = await loadOpenAI();
+    return {
+      model: CLERK_EMBEDDING_MODEL,
+      async embed(texts: string[]) {
+        const response = await openai.embeddings.create({
+          model: CLERK_EMBEDDING_MODEL,
+          input: texts,
+          dimensions: EMBEDDING_DIMS,
+        });
+        return {
+          // index-sorted so vectors line up with the input order whatever
+          // the wire order was.
+          vectors: [...response.data]
+            .sort((a, b) => a.index - b.index)
+            .map((d) => d.embedding),
+          promptTokens: response.usage?.prompt_tokens ?? null,
+        };
+      },
+    };
+  } catch {
+    return null;
+  }
 }
 
 // Voice transcription (C1: English voice notes). Kept beside the completion

@@ -1475,6 +1475,49 @@ call the model.
   pre-flight price advisory — same SEC-03 sibling gate as the other history
   checks.
 
+## Firm memory (pgvector semantic index — round 45, Phase 1)
+
+The rail that lets Clerk's memories stop being exact-key lookups and start
+finding "the last time something like this happened". Unlike the memories
+above this one DOES spend tokens (embeddings), so the whole gateway
+discipline applies.
+
+- **The index** (`clerk_memory_embeddings`, schema/memory.ts; firm-keyed
+  RLS migration 0039): one row per (firm, corpus, source row) —
+  POINTER-ONLY, the embedded text is never stored, only a vector plus the
+  ref back to the source, so purging the source purges the meaning.
+  `content_hash` makes indexing incremental; `model` pins retrieval to
+  same-model comparisons (a model change re-indexes via the anti-join).
+  Deliberately NO ANN index: per-firm corpora are small, a firm-filtered
+  EXACT scan is fast and recall-perfect.
+- **The extension is infrastructure**: migration 0038 asserts it
+  tolerantly (a cluster without the pgvector binary logs a warning and the
+  rail stays dark — boot never breaks); the db package's push scripts
+  pre-create it (`ensure-extensions.ts`); CI runs `pgvector/pgvector:pg16`.
+- **Embedding calls ride the gateway** (`gateway.ts embedWithLedger`):
+  kill switch, per-firm budget backstop BEFORE the provider (a refused
+  firm writes NO ledger row — no call left the platform), append-only
+  ledger row on the raw pool charging `prompt_tokens` (so embedding spend
+  flows into the firm budget, the tier report and the economics meter with
+  zero extra wiring), and a mis-sized response is discarded whole —
+  `vector(1536)` is a DDL constant, never negotiated at runtime. Own
+  purpose (`embed_memory`), own prompt version (`embed.v1`), own env knob
+  (`CLERK_EMBEDDING_MODEL`, default `text-embedding-3-small`).
+- **The indexer sweep** (`modules/clerk/memory.ts`, hourly, lock 731_850):
+  the eval-growth shape — gating (try-lock + `clerk_ai` + the OPT-IN
+  `clerk_memory` flag + extension feature-detect) in a short bypass
+  transaction, embedding calls OUTSIDE it, `MEMORY_INDEX_BATCH = 20`
+  sources per pass grouped per firm, races absorbed by the natural unique
+  key. Phase 1's one corpus: `ask_questions` — resolved Ask questions
+  (never retention-purged, so the index cannot outlive its source).
+- **Retrieval** (`searchMemory`): exact cosine KNN over one firm's one
+  corpus, model-pinned, similarity-floored — returns ranked SOURCE IDS
+  only; what a caller does with them is deterministic app code (the app
+  picks, never the model). No retrieved text reaches any prompt in
+  Phase 1; Phase 2 upgrades an exemplar surface and Phase 3 adds the
+  retrieval-augmented Ask section, each with the fencing and
+  copy-backstop duties documented there.
+
 ## Watches & alerts (sweeps, zero model calls)
 
 All three share the posture: durable audit event as the dedup ledger (one
