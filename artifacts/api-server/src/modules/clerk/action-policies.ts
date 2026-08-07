@@ -13,6 +13,7 @@ import {
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
+import { isUniqueViolation } from "../../lib/pg-errors";
 import { isFeatureEnabled } from "../flags/flags";
 import { isPurposePermitted } from "../consent/consent";
 import { fanOutAlert } from "../messaging/fan-out";
@@ -100,19 +101,6 @@ function isPolicyKind(kind: string): kind is PolicyKind {
   return (POLICY_KINDS as readonly string[]).includes(kind);
 }
 
-// Same shape as billing/payments.ts — walk the cause chain for Postgres'
-// unique_violation, which drizzle may wrap.
-function isUniqueViolation(err: unknown): boolean {
-  const seen = new Set<unknown>();
-  let cur: unknown = err;
-  while (cur && typeof cur === "object" && !seen.has(cur)) {
-    seen.add(cur);
-    const e = cur as { code?: string; cause?: unknown };
-    if (e.code === "23505") return true;
-    cur = e.cause;
-  }
-  return false;
-}
 
 async function policiesEnabled(firmId: string): Promise<boolean> {
   return (

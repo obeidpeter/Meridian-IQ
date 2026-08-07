@@ -90,10 +90,10 @@ export const BILL_ORIENTATION = sql`(EXISTS (
 // sweeps and radars — the engagements enum also holds completed/archived, so
 // this is a real subset choice. COMPOSED like OUTSTANDING above so the SQL
 // and JS sides cannot fork. NOTE: the orientation fragments above deliberately
-// do NOT filter by engagement status — do not fold this into them. Two known
-// consumers still spell the pair inline pending follow-up:
-// compliance-scorecard.ts and the drizzle-flavored clerk/client-statement.ts
-// sweep enumeration.
+// do NOT filter by engagement status — do not fold this into them. The
+// remaining inline spellers are the drizzle-flavored sites (the statement /
+// brief sweep enumerations and filings' own LIVE_ENGAGEMENT const), which
+// cannot take this alias-`e` raw fragment verbatim.
 export const LIVE_ENGAGEMENT_STATUSES = ["open", "in_progress"] as const;
 export const LIVE_ENGAGEMENT = sql`e.status IN (${sql.raw(LIVE_ENGAGEMENT_STATUSES.map((s) => `'${s}'`).join(", "))})`;
 

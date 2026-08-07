@@ -20,6 +20,49 @@ const DEFAULT_MONTHLY_TOKENS = Number(
   process.env.CLERK_FIRM_MONTHLY_TOKENS ?? 2_000_000,
 );
 
+// THE token expression — what a call costs. One home (round 54): the spend
+// watch, tier report, platform spend meter and billing statement all promise
+// "the same token expression budget.ts charges", and the promise has already
+// been broken once (tier-report's ::int cast overflowed int4 on a busy
+// 90-day window, round 51). Two spellings for the two query styles; keep
+// casts at the call site — and prefer ::bigint on wide windows.
+export const LEDGER_TOKENS_SQL =
+  "COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)";
+// The Drizzle-typed aggregate the budget reads use directly.
+const ledgerTokensSum = () =>
+  sql<number>`coalesce(sum(coalesce(${clerkInferenceCallsTable.promptTokens}, 0) + coalesce(${clerkInferenceCallsTable.completionTokens}, 0)), 0)`;
+
+// The UTC month boundary the token allowance is enforced on — every surface
+// that meters Clerk spend must bucket on this exact Date.
+export function utcMonthStart(now: Date = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+// The linear month-pace rule shared by budgetPace and the platform spend
+// meter (metrics.ts) — two comments used to promise the copies stayed the
+// same; now there is one body. With nothing elapsed the projection is
+// undefined; report the total as-is.
+export function monthPace(
+  monthStart: Date,
+  total: number,
+  now: Date,
+): { elapsed: number; projected: number } {
+  const startMs = monthStart.getTime();
+  const endMs = Date.UTC(
+    monthStart.getUTCFullYear(),
+    monthStart.getUTCMonth() + 1,
+    1,
+  );
+  const elapsed = Math.min(
+    1,
+    Math.max(0, (now.getTime() - startMs) / (endMs - startMs)),
+  );
+  return {
+    elapsed,
+    projected: elapsed > 0 ? Math.round(total / elapsed) : total,
+  };
+}
+
 export interface FirmClerkUsage {
   monthStart: Date;
   usedTokens: number;
@@ -27,10 +70,7 @@ export interface FirmClerkUsage {
 }
 
 export async function firmClerkUsage(firmId: string): Promise<FirmClerkUsage> {
-  const now = new Date();
-  const monthStart = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-  );
+  const monthStart = utcMonthStart();
 
   const [tier] = await getDb()
     .select({ clerkMonthlyTokens: billingTiersTable.clerkMonthlyTokens })
@@ -44,7 +84,7 @@ export async function firmClerkUsage(firmId: string): Promise<FirmClerkUsage> {
 
   const [used] = await getDb()
     .select({
-      tokens: sql<number>`coalesce(sum(coalesce(${clerkInferenceCallsTable.promptTokens}, 0) + coalesce(${clerkInferenceCallsTable.completionTokens}, 0)), 0)`,
+      tokens: ledgerTokensSum(),
     })
     .from(clerkInferenceCallsTable)
     .where(
@@ -71,7 +111,7 @@ export async function firmClerkUsageByPurpose(
   firmId: string,
   monthStart: Date,
 ): Promise<{ purpose: string; tokens: number }[]> {
-  const tokens = sql<number>`coalesce(sum(coalesce(${clerkInferenceCallsTable.promptTokens}, 0) + coalesce(${clerkInferenceCallsTable.completionTokens}, 0)), 0)`;
+  const tokens = ledgerTokensSum();
   const rows = await getDb()
     .select({ purpose: clerkInferenceCallsTable.purpose, tokens })
     .from(clerkInferenceCallsTable)
@@ -104,19 +144,11 @@ export function budgetPace(
   usage: Pick<FirmClerkUsage, "monthStart" | "usedTokens" | "budgetTokens">,
   now: Date = new Date(),
 ): { projectedTokens: number; paceBand: BudgetPaceBand } {
-  const monthStart = usage.monthStart.getTime();
-  const monthEnd = Date.UTC(
-    usage.monthStart.getUTCFullYear(),
-    usage.monthStart.getUTCMonth() + 1,
-    1,
+  const { elapsed, projected: projectedTokens } = monthPace(
+    usage.monthStart,
+    usage.usedTokens,
+    now,
   );
-  const elapsed = Math.min(
-    1,
-    Math.max(0, (now.getTime() - monthStart) / (monthEnd - monthStart)),
-  );
-  // With nothing elapsed the projection is undefined; report the spend as-is.
-  const projectedTokens =
-    elapsed > 0 ? Math.round(usage.usedTokens / elapsed) : usage.usedTokens;
 
   if (usage.budgetTokens <= 0 || usage.usedTokens >= usage.budgetTokens) {
     return { projectedTokens, paceBand: "critical" };

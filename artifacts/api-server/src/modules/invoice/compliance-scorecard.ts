@@ -6,7 +6,11 @@ import {
   UNSUBMITTED_STATE,
   pastSubmissionDeadline,
 } from "./compliance-window";
-import { RECEIVABLE_ORIENTATION, BILL_ORIENTATION } from "./receivables";
+import {
+  RECEIVABLE_ORIENTATION,
+  BILL_ORIENTATION,
+  LIVE_ENGAGEMENT,
+} from "./receivables";
 
 // Client compliance scorecard (round-19 idea #3). Firms see per-client
 // detail everywhere but have no cross-client view of where their attention
@@ -89,7 +93,7 @@ export async function computeComplianceScorecard(
       WITH engaged AS (
         SELECT DISTINCT e.client_party_id
         FROM engagements e
-        WHERE e.firm_id = ${firmId} AND e.status IN ('open', 'in_progress')
+        WHERE e.firm_id = ${firmId} AND ${LIVE_ENGAGEMENT}
       ),
       window_invoices AS (
         SELECT i.id, i.supplier_party_id, i.issue_date,

@@ -3,8 +3,6 @@ import { z } from "zod/v4";
 import {
   getDb,
   runInBypassContext,
-  runRequestContext,
-  alertPreferencesTable,
   clerkClientStatementsTable,
   engagementsTable,
   type ClerkClientStatementRow,
@@ -12,11 +10,10 @@ import {
 } from "@workspace/db";
 import { isFeatureEnabled } from "../flags/flags";
 import { ensureGrounded } from "./grounding";
-import { fanOutAlert } from "../messaging/fan-out";
-import { pointerEntityRef } from "../messaging/recipient-ref";
+import { deliverPendingClientAlerts, runFirmPinnedPair } from "./monthly-rail";
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
-import { lagosParts, lagosWindowSql } from "../../lib/lagos-time";
+import { lagosMonthStart, lagosWindowSql } from "../../lib/lagos-time";
 import { assertFirmClerkBudget } from "./budget";
 import { CLERK_FLAG_KEY, inferPhrasing, type ClerkGateway } from "./gateway";
 import { gatewayOrNull } from "./provider";
@@ -71,15 +68,12 @@ const statementJsonSchema = {
   },
 };
 
-// The first day (YYYY-MM-01) of the Lagos month `monthsBack` months before
-// the one containing `now`. monthsBack=1 is the newest CLOSED month — the
+// lagosMonthStart lives in lib/lagos-time.ts since round 54 (it is a
+// platform-wide Lagos-calendar primitive, not a statement detail);
+// re-exported here so every existing import site — production and tests —
+// stays byte-identical. monthsBack=1 is the newest CLOSED month, the
 // statement period the sweep generates.
-export function lagosMonthStart(monthsBack: number, now: Date = new Date()): string {
-  const { year, monthIndex } = lagosParts(now);
-  const d = new Date(Date.UTC(year, monthIndex - monthsBack, 1));
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${mm}-01`;
-}
+export { lagosMonthStart };
 
 /** "2026-06-01" -> "June 2026" (the statement's display period). */
 export function monthLabel(monthStart: string): string {
@@ -393,86 +387,27 @@ export async function listClientStatements(
     .limit(limit);
 }
 
-// Offer generated statements to the client's alert channels through the SAME
-// party-scoped fan-out as the deadline reminders: consent-gated (CORE-03 —
-// fanOutAlert sends NOTHING without a live layer-1 grant), pointer-only
-// payloads (SEC-12 — the message names no month, amounts or counts). Returns
-// the number of rows CLAIMED this pass (sends may be fewer: quiet months,
-// dark flag and consent refusals claim silently); zero means the backlog is
-// drained, so callers can loop until then.
-//
-// Sweep-only: must run OUTSIDE any request context. The candidate read and
-// the sends run on the ambient-free raw pool (autocommit — each message/push
-// insert is individually durable); only the per-row claim opens a
-// transaction, and it COMMITS before any send leaves. Holding one bypass
-// transaction across the whole pass — claims, recipient reads AND the live
-// Expo push HTTP — meant a mid-pass failure rolled back every claim and
-// message row while pushes had already left the building, and sibling
-// instances blocked on the row locks for the duration.
+// Offer generated statements to the client's alert channels — the shared
+// monthly rail's claim-first delivery (monthly-rail.ts owns the posture:
+// per-row CAS committed before any send, PL-02 dark-flag claims, CORE-03 /
+// SEC-12 fan-out). Returns rows CLAIMED this pass (sends may be fewer:
+// quiet months, dark flag and consent refusals claim silently); zero means
+// the backlog is drained, so callers can loop until then. Sweep-only: must
+// run OUTSIDE any request context.
 export async function deliverClientStatements(
   limit = DELIVERY_BATCH,
 ): Promise<number> {
-  // Plain short read (raw pool): candidate rows, oldest first, so a backlog
-  // wider than one pass drains in generation order.
-  const pending = await getDb()
-    .select()
-    .from(clerkClientStatementsTable)
-    .where(isNull(clerkClientStatementsTable.deliveredAt))
-    .orderBy(clerkClientStatementsTable.createdAt)
-    .limit(limit);
-  if (pending.length === 0) return 0;
-
-  const messagingOn = await isFeatureEnabled("messaging_notifications", null);
-  let claimed = 0;
-  for (const row of pending) {
-    // Claim first, in its OWN short committed transaction: the compare-and-
-    // set on delivered_at is the atomic once-only gate (mirroring the
-    // deadline_reminder_sends ledger), and committing it before sending is
-    // the at-most-once trade — a claimed row whose sends then fail is NOT
-    // re-offered (better a missed nudge than a double alert; the SME
-    // dashboard shows the statement either way).
-    const claim = await runInBypassContext(() =>
-      getDb()
-        .update(clerkClientStatementsTable)
-        .set({ deliveredAt: new Date() })
-        .where(
-          and(
-            eq(clerkClientStatementsTable.id, row.id),
-            isNull(clerkClientStatementsTable.deliveredAt),
-          ),
-        )
-        .returning({ id: clerkClientStatementsTable.id }),
-    );
-    if (claim.length === 0) continue; // another instance won this row
-    claimed++;
-
-    // A quiet month is not worth a notification: mark it delivered (the
-    // claim above) so it stops rescanning forever, but send nothing.
-    if (statementIsQuiet(row.facts)) continue;
-    // The claim is written even while messaging is dark (PL-02): turning
-    // the flag on later must not blast a backlog of old statements.
-    if (!messagingOn) continue;
-
-    // Sends happen AFTER the claim committed, outside any open transaction:
-    // each fan-out write is an autocommit insert, so a crash here loses at
-    // most the remaining channels of one statement — never a committed claim.
-    const [prefs] = await getDb()
-      .select()
-      .from(alertPreferencesTable)
-      .where(eq(alertPreferencesTable.clientPartyId, row.clientPartyId))
-      .limit(1);
-    await fanOutAlert({
-      prefs,
-      clientPartyId: row.clientPartyId,
-      firmId: row.firmId,
-      templateKey: "client_statement_ready",
-      entityType: "clerk_client_statement",
-      entityId: pointerEntityRef("stmt", row.id),
-      // Same default as deadline reminders: with no prefs row, SMS is off.
-      smsDefaultWhenNoPrefs: false,
-    });
-  }
-  return claimed;
+  return deliverPendingClientAlerts({
+    table: clerkClientStatementsTable,
+    templateKey: "client_statement_ready",
+    entityType: "clerk_client_statement",
+    refPrefix: "stmt",
+    limit,
+    // A quiet month is not worth a notification: claimed (so it stops
+    // rescanning forever), nothing sent — the SME dashboard shows the
+    // statement either way.
+    skipSend: (row) => statementIsQuiet(row.facts),
+  });
 }
 
 export async function sweepClientStatements(): Promise<void> {
@@ -532,41 +467,20 @@ export async function sweepClientStatements(): Promise<void> {
       const gateway = await gatewayOrNull();
       let generated = 0;
       for (const pair of pairs) {
-        // Explicit privilege (round 53): each pair's generation runs in a
-        // firm-PINNED request context (meridian_app + app.firm_id), not on
-        // the raw pool — so it neither depends on the pool login's
-        // BYPASSRLS nor can a compute bug read or write another firm's
-        // rows mid-sweep; RLS walls the whole pair. The model call rides
-        // inside the pair's transaction — one background connection held
-        // per pair, never the shared request pool posture NO_CONTEXT
-        // protects. The ledger write is untouched: the gateway appends on
-        // the raw pool by design, so spend survives a rolled-back pair.
-        // Per-pair poison isolation (the brief sweep's rule, review R53-1):
-        // the context wrap adds real per-pair throw sources (role setup,
-        // RLS, a mid-pair DB error aborting the transaction), and one
-        // broken pair must not abort the rest of the pass — or, worse,
-        // skip the delivery step below.
+        // Firm-pinned generation (rounds 53-54; monthly-rail.ts owns the
+        // privilege + in-transaction-ceiling posture). Per-pair poison
+        // isolation: one broken pair must not abort the rest of the pass —
+        // or, worse, skip the delivery step below. The gateway's ledger
+        // append stays on the raw pool by design, so spend survives a
+        // rolled-back pair.
         try {
-          await runRequestContext(
-            { bypass: false, firmId: pair.firmId },
-            async () => {
-              // The transaction is idle while the provider phrases, so pin
-              // a finite in-transaction ceiling (review R53-2): a
-              // deployment default SHORTER than provider latency would
-              // kill every pair mid-call (spend kept, row lost, pair
-              // re-offered — a burn loop bounded only by the firm budget),
-              // and no default at all would let a hung provider hold the
-              // connection forever. SET LOCAL dies with the transaction.
-              await getDb().execute(
-                sql`SET LOCAL idle_in_transaction_session_timeout = '900s'`,
-              );
-              return generateClientStatement(
-                pair.firmId,
-                pair.clientPartyId,
-                monthStart,
-                gateway,
-              );
-            },
+          await runFirmPinnedPair(pair.firmId, () =>
+            generateClientStatement(
+              pair.firmId,
+              pair.clientPartyId,
+              monthStart,
+              gateway,
+            ),
           );
           generated += 1;
         } catch (err) {

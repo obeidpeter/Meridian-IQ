@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { LEDGER_TOKENS_SQL, monthPace, utcMonthStart } from "./budget";
 import {
   detectResistanceDrop,
   injectionResistanceMonths,
@@ -767,9 +768,7 @@ export async function getClerkMetrics(
   // boundary is the SAME UTC month-start Date the budget uses, passed as a
   // parameter so the two can never diverge.
   const spendNow = new Date();
-  const spendMonthStart = new Date(
-    Date.UTC(spendNow.getUTCFullYear(), spendNow.getUTCMonth(), 1),
-  );
+  const spendMonthStart = utcMonthStart(spendNow);
   const [spendRow] = (
     await db.execute<{
       prompt_tokens: string;
@@ -780,9 +779,9 @@ export async function getClerkMetrics(
       SELECT
         COALESCE(SUM(prompt_tokens), 0)::text AS prompt_tokens,
         COALESCE(SUM(completion_tokens), 0)::text AS completion_tokens,
-        COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0))
+        COALESCE(SUM(${sql.raw(LEDGER_TOKENS_SQL)})
           FILTER (WHERE firm_id IS NOT NULL), 0)::text AS firm_tokens,
-        COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0))
+        COALESCE(SUM(${sql.raw(LEDGER_TOKENS_SQL)})
           FILTER (WHERE firm_id IS NULL), 0)::text AS platform_tokens
       FROM clerk_inference_calls
       WHERE created_at >= ${spendMonthStart}
@@ -791,20 +790,13 @@ export async function getClerkMetrics(
   const spendPrompt = Number(spendRow?.prompt_tokens ?? 0);
   const spendCompletion = Number(spendRow?.completion_tokens ?? 0);
   const spendTotal = spendPrompt + spendCompletion;
-  // Same linear month-pace rule as budgetPace, on the same UTC boundary.
-  const nowMs = spendNow.getTime();
-  const monthStartMs = spendMonthStart.getTime();
-  const monthEndMs = Date.UTC(
-    spendNow.getUTCFullYear(),
-    spendNow.getUTCMonth() + 1,
-    1,
+  // budgetPace's own month-pace rule (monthPace — one body since round 54),
+  // on the same UTC boundary.
+  const { elapsed: monthElapsed, projected: projectedTokens } = monthPace(
+    spendMonthStart,
+    spendTotal,
+    spendNow,
   );
-  const monthElapsed = Math.min(
-    1,
-    Math.max(0, (nowMs - monthStartMs) / (monthEndMs - monthStartMs)),
-  );
-  const projectedTokens =
-    monthElapsed > 0 ? Math.round(spendTotal / monthElapsed) : spendTotal;
   const spendUsd = usdEstimate(spendPrompt, spendCompletion);
   const projectedUsd =
     spendUsd !== null && monthElapsed > 0

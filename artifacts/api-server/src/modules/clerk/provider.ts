@@ -3,6 +3,7 @@ import { DomainError } from "../errors";
 import type {
   ClerkGateway,
   ClerkProvider,
+  ClerkPurpose,
   CompletionRequest,
   CompletionResult,
   MemoryEmbedder,
@@ -43,6 +44,30 @@ export function parseModelTiers(
   return tiers;
 }
 
+// Every eval lane measures the model that actually serves its PRODUCTION
+// surface (the round-15 review M1 rule, generalized): each eval purpose
+// follows its production purpose's tier entry — digest fixtures ride the
+// digest tier, chaser fixtures the draft_chaser tier, and so on. A direct
+// tier entry for the eval purpose itself still wins (the lookup order in
+// modelForPurpose), so an operator can deliberately tier an eval lane
+// apart. Declared as a table (round 54) so a new phrasing surface adds ONE
+// line here next to its SURFACE_PURPOSE sibling instead of a hand-written
+// branch; typed over ClerkPurpose so a misspelled purpose fails to compile.
+const EVAL_TIER_FOLLOWS: Partial<Record<ClerkPurpose, ClerkPurpose>> = {
+  eval_extract: "extract_invoice",
+  eval_canary: "extract_invoice",
+  eval_extract_notice: "extract_notice",
+  eval_intent: "classify_intent",
+  eval_phrasing_digest: "digest",
+  eval_phrasing_chaser: "draft_chaser",
+  eval_phrasing_statement: "client_statement",
+  eval_phrasing_vat_note: "draft_vat_note",
+  eval_phrasing_reply: "draft_reply",
+  eval_phrasing_explain: "explain_failure",
+  eval_phrasing_response: "draft_response_letter",
+  eval_phrasing_brief: "advisory_brief",
+};
+
 export function modelForPurpose(
   purpose: string | undefined,
   tiers: Map<string, string>,
@@ -51,48 +76,10 @@ export function modelForPurpose(
   if (!purpose) return base;
   const direct = tiers.get(purpose);
   if (direct) return direct;
-  if (purpose === "eval_extract" || purpose === "eval_canary") {
-    return tiers.get("extract_invoice") ?? base;
-  }
-  // The notice-eval lane must measure the model that actually reads
-  // production notices (same rule as every eval purpose below).
-  if (purpose === "eval_extract_notice") {
-    return tiers.get("extract_notice") ?? base;
-  }
-  // The intent eval must measure the model that actually classifies
-  // production Ask traffic (round-15 review M1).
-  if (purpose === "eval_intent") {
-    return tiers.get("classify_intent") ?? base;
-  }
-  // The phrasing eval must measure the model that actually phrases each
-  // surface: digest fixtures ride the digest tier, chaser fixtures the
-  // draft_chaser tier — an operator who tiers the two surfaces apart must
-  // not have the eval silently measure the wrong model on either half.
-  if (purpose === "eval_phrasing_digest") {
-    return tiers.get("digest") ?? base;
-  }
-  if (purpose === "eval_phrasing_chaser") {
-    return tiers.get("draft_chaser") ?? base;
-  }
-  if (purpose === "eval_phrasing_statement") {
-    return tiers.get("client_statement") ?? base;
-  }
-  if (purpose === "eval_phrasing_vat_note") {
-    return tiers.get("draft_vat_note") ?? base;
-  }
-  if (purpose === "eval_phrasing_reply") {
-    return tiers.get("draft_reply") ?? base;
-  }
-  if (purpose === "eval_phrasing_explain") {
-    return tiers.get("explain_failure") ?? base;
-  }
-  if (purpose === "eval_phrasing_response") {
-    return tiers.get("draft_response_letter") ?? base;
-  }
-  if (purpose === "eval_phrasing_brief") {
-    return tiers.get("advisory_brief") ?? base;
-  }
-  return base;
+  const follows = (EVAL_TIER_FOLLOWS as Record<string, string | undefined>)[
+    purpose
+  ];
+  return (follows ? tiers.get(follows) : undefined) ?? base;
 }
 
 let cached: ClerkGateway | null = null;

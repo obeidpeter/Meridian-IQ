@@ -1,4 +1,5 @@
 // Monthly platform-billing statement (round-15): what MeridianIQ's own bill
+import { LEDGER_TOKENS_SQL } from "../clerk/budget";
 // for a closed month is made of, shown to the firm that pays it. The
 // vat-pack posture exactly — deterministic, computed on demand, nothing
 // stored — pointed at the platform's two meters:
@@ -154,7 +155,7 @@ export async function computeBillingStatement(
   const purposeRows = (
     await db.execute<{ purpose: string; tokens: number; calls: number }>(sql`
       SELECT purpose,
-        COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0)::int AS tokens,
+        COALESCE(SUM(${sql.raw(LEDGER_TOKENS_SQL)}), 0)::int AS tokens,
         COUNT(*)::int AS calls
       FROM clerk_inference_calls
       WHERE firm_id = ${firmId}

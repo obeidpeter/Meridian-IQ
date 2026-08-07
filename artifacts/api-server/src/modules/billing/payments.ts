@@ -9,6 +9,7 @@ import { computeBillingStatement } from "../invoice/billing-statement";
 import { closedLagosMonths } from "../clerk/vat-pack";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
+import { isUniqueViolation } from "../../lib/pg-errors";
 import type { Principal } from "../auth/rbac";
 import { initProviderPayment } from "./provider";
 
@@ -23,20 +24,6 @@ import { initProviderPayment } from "./provider";
 // pending→confirmed/failed CAS; the partial unique index
 // (payment_intents_one_live_per_month) is the duplicate-payment wall.
 
-// Walk err → cause for Postgres' unique-violation SQLSTATE. Drizzle's
-// node-postgres driver rethrows the pg error, but wrap-layers may nest it —
-// same defensive chain-walk as rls-isolation's isRlsViolation.
-function isUniqueViolation(err: unknown): boolean {
-  const seen = new Set<unknown>();
-  let cur: unknown = err;
-  while (cur && typeof cur === "object" && !seen.has(cur)) {
-    seen.add(cur);
-    const e = cur as { code?: string; cause?: unknown };
-    if (e.code === "23505") return true;
-    cur = e.cause;
-  }
-  return false;
-}
 
 const LIVE_STATUSES = ["pending", "confirmed"] as const;
 
