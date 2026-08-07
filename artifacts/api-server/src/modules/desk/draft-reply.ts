@@ -5,6 +5,7 @@ import {
   errorCatalogueTable,
   escalationsTable,
   submissionAttemptsTable,
+  EMBEDDING_DIMS,
   type Escalation,
 } from "@workspace/db";
 import { DomainError } from "../errors";
@@ -13,9 +14,19 @@ import { appendAudit } from "../audit/audit";
 import { isFeatureEnabled } from "../flags/flags";
 import {
   CLERK_FLAG_KEY,
+  embedWithLedger,
   inferPhrasing,
   type ClerkGateway,
+  type MemoryEmbedder,
 } from "../clerk/gateway";
+import {
+  EMBED_QUERY_PROMPT_VERSION,
+  MEMORY_FLAG_KEY,
+  MEMORY_TEXT_CAP,
+  memoryRailReady,
+  searchMemory,
+} from "../clerk/memory";
+import { embedderOrNull } from "../clerk/provider";
 import { fenceUntrusted } from "../clerk/prompts";
 
 // Drafted escalation replies (exhaust idea #5). The failure explainer's
@@ -34,6 +45,18 @@ const REPLY_PROMPT_VERSION = "draft-reply.v1";
 // the ledger cohorts separate so the exemplar's effect on kept-rate is
 // measurable, exactly like extraction's "+ex1".
 const REPLY_PROMPT_VERSION_EXEMPLAR = "draft-reply.v1+ex1";
+// Semantic reply memory (round 46, Phase 2): the exemplar was found by
+// similarity over the firm's escalation_replies corpus instead of the exact
+// error code — its own cohort so the two retrieval strategies' kept-rates
+// stay separable in the ledger. The prompt itself is IDENTICAL to +ex1
+// (same system, same fence, same copy backstop); only how the example was
+// chosen differs.
+const REPLY_PROMPT_VERSION_MEMORY = "draft-reply.v1+mx1";
+// Ranked neighbours considered per draft, and the floor below which the
+// past simply was not similar enough to borrow style from — the exact-code
+// fallback below still applies.
+const REPLY_MEMORY_K = 3;
+const REPLY_MEMORY_MIN_SIMILARITY = 0.3;
 const REPLY_SYSTEM_BASE = [
   "You draft a short reply from an accounting firm's compliance desk to a Nigerian small-business client whose invoice submission was escalated.",
   "Use ONLY the facts provided: the catalogue cause and fix, and the submission-attempt summary. Never invent rules, rates, deadlines or promises that are not in them.",
@@ -159,9 +182,14 @@ async function loadEscalation(escalationId: string): Promise<Escalation> {
 // gateway may be null when the provider integration is unavailable — the
 // deterministic template still answers (routes pass null on gateway
 // construction failure, mirroring the narrative/reconcile-assist routes).
+// memoryEmbedder: tests inject a deterministic embedder; production call
+// sites omit it and the configured provider embedder is resolved lazily —
+// only after the memory-rail gates pass. Passing null explicitly means "no
+// embedder" (the semantic path is skipped, the exact-code fallback answers).
 export async function draftEscalationReply(
   escalationId: string,
   gateway: ClerkGateway | null,
+  memoryEmbedder?: MemoryEmbedder | null,
 ): Promise<EscalationReplyDraft> {
   const escalation = await loadEscalation(escalationId);
 
@@ -219,13 +247,87 @@ export async function draftEscalationReply(
 
   if (!gateway || !(await isFeatureEnabled(CLERK_FLAG_KEY))) return fallback;
 
-  // Reply memory: the newest reply this desk actually SENT for the same
-  // catalogue code, same firm — deterministic retrieval, best-effort (a
-  // lookup failure means "no example", never a blocked draft). The example
-  // is operator-authored text about ANOTHER client's case, so it travels
-  // fenced and the system prompt forbids copying its specifics.
+  // Semantic reply memory (round 46, Phase 2): preferred exemplar source —
+  // the newest-indexed reply whose ESCALATION looked like this one, found
+  // by similarity over the firm's escalation_replies corpus (memory.ts), so
+  // an unmapped or first-of-its-code escalation can still borrow the desk's
+  // established tone. Gates, in order: the rail globally ready (both flags
+  // + the pgvector extension — memoryRailReady never throws), the FIRM lit
+  // on both flags (override-aware: a firm dark on either must not have its
+  // budget charged for a query embed), and an embedder available. The query
+  // embed is FIRM-funded through embedWithLedger — the memory is the firm's
+  // asset — and every refusal (budget exhausted, provider down, wrong
+  // shape) is typed, so this whole path degrades to the exact-code fallback
+  // below, never to an error. The completion stays platform-funded.
   let example: string | null = null;
-  if (errorCode) {
+  let viaMemory = false;
+  if (
+    (await memoryRailReady()) &&
+    (await isFeatureEnabled(CLERK_FLAG_KEY, escalation.firmId)) &&
+    (await isFeatureEnabled(MEMORY_FLAG_KEY, escalation.firmId))
+  ) {
+    try {
+      const embedder =
+        memoryEmbedder === undefined ? await embedderOrNull() : memoryEmbedder;
+      if (embedder) {
+        const embedded = await embedWithLedger(embedder, {
+          firmId: escalation.firmId,
+          texts: [escalation.reason.slice(0, MEMORY_TEXT_CAP)],
+          promptVersion: EMBED_QUERY_PROMPT_VERSION,
+          dims: EMBEDDING_DIMS,
+        });
+        if (embedded.ok) {
+          const matches = await searchMemory({
+            firmId: escalation.firmId,
+            corpus: "escalation_replies",
+            model: embedded.model,
+            vector: embedded.vectors[0],
+            k: REPLY_MEMORY_K,
+            minSimilarity: REPLY_MEMORY_MIN_SIMILARITY,
+          });
+          for (const match of matches) {
+            // A re-draft of an already-replied escalation finds its own
+            // indexed reason at similarity 1 — never its own exemplar.
+            if (match.refId === escalationId) continue;
+            // Pointer-only re-read: the index stores no text, so the reply
+            // is fetched LIVE from the source row under the firm pin — a
+            // re-sent reply serves its current text, and an orphaned or
+            // mis-filed embedding row yields nothing rather than leaking.
+            const [past] = await getDb()
+              .select({ reply: escalationsTable.operatorReply })
+              .from(escalationsTable)
+              .where(
+                and(
+                  eq(escalationsTable.id, match.refId),
+                  eq(escalationsTable.firmId, escalation.firmId),
+                  isNotNull(escalationsTable.operatorReply),
+                ),
+              )
+              .limit(1);
+            if (past?.reply) {
+              example = past.reply;
+              viaMemory = true;
+              break;
+            }
+          }
+        }
+      }
+    } catch {
+      // Best-effort like the exact-code lookup below: a retrieval failure
+      // means "no semantic example", never a blocked draft.
+      example = null;
+      viaMemory = false;
+    }
+  }
+
+  // Exact-code reply memory (round 11): the newest reply this desk actually
+  // SENT for the same catalogue code, same firm — deterministic retrieval,
+  // best-effort (a lookup failure means "no example", never a blocked
+  // draft), and the fallback when the semantic rail is dark or found
+  // nothing similar enough. Either way the example is operator-authored
+  // text about ANOTHER client's case, so it travels fenced and the system
+  // prompt forbids copying its specifics.
+  if (!example && errorCode) {
     try {
       const [past] = await getDb()
         .select({ reply: escalationsTable.operatorReply })
@@ -267,9 +369,11 @@ export async function draftEscalationReply(
       caseId: null,
       // Operator desk tooling: platform-funded, like claims/catalogue drafting.
       firmId: null,
-      promptVersion: example
-        ? REPLY_PROMPT_VERSION_EXEMPLAR
-        : REPLY_PROMPT_VERSION,
+      promptVersion: viaMemory
+        ? REPLY_PROMPT_VERSION_MEMORY
+        : example
+          ? REPLY_PROMPT_VERSION_EXEMPLAR
+          : REPLY_PROMPT_VERSION,
       system: example ? REPLY_SYSTEM_EXEMPLAR : REPLY_SYSTEM,
       user,
       schemaName: "escalation_reply",

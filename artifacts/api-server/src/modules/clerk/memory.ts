@@ -34,14 +34,22 @@ import { embedderOrNull } from "./provider";
 //    Firm-keyed RLS is NOT a sibling wall — any client-facing retrieval
 //    surface must additionally pin the caller's own party (Phase 2's duty).
 //  - THE APP PICKS, NEVER THE MODEL: retrieval returns ranked source ids;
-//    what happens with them is deterministic caller code. No retrieved text
-//    reaches a prompt in Phase 1 at all.
+//    what happens with them is deterministic caller code. Where retrieved
+//    text DOES ride a prompt (Phase 2's escalation-reply exemplar), the
+//    caller re-reads it from the source row under its own firm filter and
+//    inherits the surface's existing fence + deterministic copy backstop —
+//    the index itself never hands text to anyone.
 //  - Dark by default: the clerk_memory flag ships off (layered on
 //    clerk_ai), and the rail also feature-detects the pgvector extension —
 //    a cluster without it simply never indexes.
 
 export const MEMORY_FLAG_KEY = "clerk_memory";
 export const EMBED_PROMPT_VERSION = "embed.v1";
+// Query-time embeds (a retrieval surface embedding ONE incoming text to
+// search with, e.g. the reply-draft's escalation reason) carry their own
+// version suffix so the ledger separates index spend from query spend —
+// the "+ex1" cohort convention applied to the embedding lane.
+export const EMBED_QUERY_PROMPT_VERSION = "embed.v1+q";
 // Sources per indexer pass — the eval-growth batch discipline: slices, not
 // marathons; the sweep's hourly cadence drains a backlog across passes.
 export const MEMORY_INDEX_BATCH = 20;
@@ -52,20 +60,46 @@ export const MEMORY_TEXT_CAP = 6_000;
 // 731_848 onboarding refresh).
 const MEMORY_LOCK_ID = 731_850;
 
-// The CLOSED corpus catalogue. Phase 1 indexes one corpus — resolved Ask
-// questions (kind='question' cases with an answer): the question text is
-// firm-authored, never retention-purged (unlike extraction source_text, so
-// the index can never outlive its source), and it is the corpus Phase 3's
-// retrieval-augmented Ask reads. Growing this list is a design decision,
-// not a data change: every corpus needs a candidate query, a text builder,
-// a sensitivity call and a purge story.
-export const MEMORY_CORPORA = ["ask_questions"] as const;
+// The CLOSED corpus catalogue. Growing this list is a design decision, not
+// a data change: every corpus needs a candidate query, a text builder, a
+// sensitivity call and a purge story.
+//  - ask_questions (Phase 1): resolved Ask questions (kind='question' cases
+//    with an answer). The question text is firm-authored, never
+//    retention-purged (unlike extraction source_text, so the index can
+//    never outlive its source), and it is the corpus Phase 3's
+//    retrieval-augmented Ask reads.
+//  - escalation_replies (Phase 2): REPLIED escalations, keyed by the
+//    client-authored `reason` text — the retrieval question at draft time
+//    is "which past escalation LOOKED like this one", so the situation is
+//    the key and the operator's reply is what the caller re-reads from the
+//    source row. Sensitivity: the reason is untrusted client text, but it
+//    is only EMBEDDED here (vectors neither execute nor reproduce
+//    instructions); the fence + copy-backstop duties live where the
+//    SOURCE text rides a prompt (draft-reply.ts, unchanged). Purge story:
+//    escalations are compliance records with no delete path (offboard
+//    retains them), the reason is immutable after creation, and a re-sent
+//    reply is picked up live because retrieval re-reads the source row.
+export const MEMORY_CORPORA = ["ask_questions", "escalation_replies"] as const;
 export type MemoryCorpusKey = (typeof MEMORY_CORPORA)[number];
 
 interface IndexCandidate {
   firmId: string;
+  corpus: MemoryCorpusKey;
   refId: string;
   text: string;
+}
+
+// The optional firm pin exists for TESTS (a suite indexes only its own
+// salted firms instead of draining — and spending against — the whole
+// scratch DB's candidate pool); production passes never set it. The alias
+// must match the candidate query's source-table alias.
+function firmPinClause(alias: string, onlyFirmIds?: string[]) {
+  return onlyFirmIds && onlyFirmIds.length > 0
+    ? sql`AND ${sql.raw(alias)}.firm_id IN (${sql.join(
+        onlyFirmIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})`
+    : sql``;
 }
 
 // The "not yet indexed" anti-join (the eval-growth discipline), model-aware:
@@ -78,16 +112,6 @@ async function askQuestionCandidates(
   limit: number,
   onlyFirmIds?: string[],
 ): Promise<IndexCandidate[]> {
-  // The optional firm pin exists for TESTS (a suite indexes only its own
-  // salted firms instead of draining — and spending against — the whole
-  // scratch DB's candidate pool); production passes never set it.
-  const firmPin =
-    onlyFirmIds && onlyFirmIds.length > 0
-      ? sql`AND c.firm_id IN (${sql.join(
-          onlyFirmIds.map((id) => sql`${id}`),
-          sql`, `,
-        )})`
-      : sql``;
   const rows = (
     await getDb().execute<{
       firm_id: string;
@@ -106,15 +130,53 @@ async function askQuestionCandidates(
         AND c.question IS NOT NULL
         AND c.answer IS NOT NULL
         AND m.id IS NULL
-        ${firmPin}
+        ${firmPinClause("c", onlyFirmIds)}
       ORDER BY c.created_at DESC
       LIMIT ${limit}
     `)
   ).rows;
   return rows.map((r) => ({
     firmId: r.firm_id,
+    corpus: "ask_questions" as const,
     refId: r.id,
     text: r.question.slice(0, MEMORY_TEXT_CAP),
+  }));
+}
+
+// escalation_replies candidates: replied escalations, newest reply first
+// (both operator_reply and replied_at are written together by the one
+// reply writer, sendEscalationReply). The embedded text is the immutable
+// client-authored reason — see the corpus catalogue above for why.
+async function escalationReplyCandidates(
+  model: string,
+  limit: number,
+  onlyFirmIds?: string[],
+): Promise<IndexCandidate[]> {
+  const rows = (
+    await getDb().execute<{
+      firm_id: string;
+      id: string;
+      reason: string;
+    }>(sql`
+      SELECT e.firm_id, e.id, e.reason
+      FROM escalations e
+      LEFT JOIN clerk_memory_embeddings m
+        ON m.firm_id = e.firm_id
+       AND m.corpus = 'escalation_replies'
+       AND m.ref_id = e.id
+       AND m.model = ${model}
+      WHERE e.operator_reply IS NOT NULL
+        AND m.id IS NULL
+        ${firmPinClause("e", onlyFirmIds)}
+      ORDER BY e.replied_at DESC NULLS LAST
+      LIMIT ${limit}
+    `)
+  ).rows;
+  return rows.map((r) => ({
+    firmId: r.firm_id,
+    corpus: "escalation_replies" as const,
+    refId: r.id,
+    text: r.reason.slice(0, MEMORY_TEXT_CAP),
   }));
 }
 
@@ -130,9 +192,17 @@ export async function indexMemoryBatch(
   limit = MEMORY_INDEX_BATCH,
   opts: { onlyFirmIds?: string[] } = {},
 ): Promise<{ indexed: number; skippedFirms: number }> {
-  const candidates = await runInBypassContext(() =>
-    askQuestionCandidates(embedder.model, limit, opts.onlyFirmIds),
-  );
+  // Each corpus contributes up to `limit` candidates per pass (a fat
+  // backlog in one corpus must not starve the other); one firm's mixed-
+  // corpus texts still share ONE embedding call below.
+  const candidates = await runInBypassContext(async () => [
+    ...(await askQuestionCandidates(embedder.model, limit, opts.onlyFirmIds)),
+    ...(await escalationReplyCandidates(
+      embedder.model,
+      limit,
+      opts.onlyFirmIds,
+    )),
+  ]);
   if (candidates.length === 0) return { indexed: 0, skippedFirms: 0 };
 
   const byFirm = new Map<string, IndexCandidate[]>();
@@ -180,7 +250,7 @@ export async function indexMemoryBatch(
             .insert(clerkMemoryEmbeddingsTable)
             .values({
               firmId: c.firmId,
-              corpus: "ask_questions",
+              corpus: c.corpus,
               refId: c.refId,
               contentHash: sha256(c.text),
               model: result.model,
