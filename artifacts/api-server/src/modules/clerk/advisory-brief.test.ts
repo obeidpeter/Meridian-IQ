@@ -369,13 +369,20 @@ test("sweep: live month once per engaged client, anti-join idempotent, per-firm 
     assert.equal(overridden.length, 0, "the overridden-dark firm is skipped");
 
     // Second pass: the anti-join re-offers nothing (clientId's brief from
-    // the earlier tests also keeps that pair out).
+    // the earlier tests also keeps that pair out). Pinning updatedAt — not
+    // just the row count — proves the pair was SKIPPED, not silently
+    // regenerated through the upsert (which would double-spend monthly).
     await sweepAdvisoryBriefs({ onlyFirmIds: [firmId, overrideFirmId] });
     const all = await getDb()
       .select()
       .from(clerkAdvisoryBriefsTable)
       .where(eq(clerkAdvisoryBriefsTable.clientPartyId, sweepClientId));
     assert.equal(all.length, 1, "idempotent across passes");
+    assert.equal(
+      all[0].updatedAt.getTime(),
+      swept.updatedAt.getTime(),
+      "the second pass never touched the row",
+    );
   } finally {
     await runInBypassContext(async () => {
       await getDb()
@@ -392,14 +399,20 @@ test("sweep: live month once per engaged client, anti-join idempotent, per-firm 
 });
 
 test("sweep: flag dark generates nothing (delivery still runs)", async () => {
-  // The guard restored the seeded-dark state above; a fresh engaged pair
-  // would be a candidate, but the global flag wall stops the whole pass.
-  const before = await getDb()
-    .select({ id: clerkAdvisoryBriefsTable.id })
-    .from(clerkAdvisoryBriefsTable);
-  await sweepAdvisoryBriefs({ onlyFirmIds: [firmId, overrideFirmId] });
-  const after = await getDb()
-    .select({ id: clerkAdvisoryBriefsTable.id })
-    .from(clerkAdvisoryBriefsTable);
-  assert.equal(after.length, before.length, "dark flag = no generation");
+  // FORCE the dark state (the statement-suite discipline) instead of
+  // trusting ambient seed state — a dev DB with the flag lit must not
+  // flip this assertion.
+  await briefFlagGuard.saveAndSet(false);
+  try {
+    const before = await getDb()
+      .select({ id: clerkAdvisoryBriefsTable.id })
+      .from(clerkAdvisoryBriefsTable);
+    await sweepAdvisoryBriefs({ onlyFirmIds: [firmId, overrideFirmId] });
+    const after = await getDb()
+      .select({ id: clerkAdvisoryBriefsTable.id })
+      .from(clerkAdvisoryBriefsTable);
+    assert.equal(after.length, before.length, "dark flag = no generation");
+  } finally {
+    await briefFlagGuard.restore();
+  }
 });

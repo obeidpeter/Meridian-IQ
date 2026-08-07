@@ -81,7 +81,7 @@ const FLAGS: {
   // opt-in and dark. Delivery is deliberately NOT gated by this flag (the
   // statement-rail rule); the on-demand console generate button works
   // regardless — this only governs the background sweep.
-  { key: "clerk_advisory_briefs", enabled: false, releaseTag: "R3", description: "Advisory brief sweep: generates each engaged client's monthly brief (spends firm tokens on the phrased note; template fallback) and offers it on the client's alert channels" },
+  { key: "clerk_advisory_briefs", enabled: false, releaseTag: "R3", description: "Advisory brief sweep: monthly GENERATION of each engaged client's brief (spends firm tokens on the phrased note; template fallback). Delivery of already-generated briefs runs regardless of this flag" },
   // Round 47 (retrieval eval lane): seeded — unlike its phrasing sibling,
   // which is dark-by-absence and can only be lit by a manual row insert
   // (setFlag is UPDATE-only) — so operators can enable the nightly run

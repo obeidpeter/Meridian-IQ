@@ -361,6 +361,13 @@ export async function generateAdvisoryBrief(
   gateway: ClerkGateway | null,
   generatedBy: string | null,
   now: Date = new Date(),
+  // Conflict posture (review R50-2). "refresh" (the route's default): the
+  // live-month upsert — regenerating replaces the row. "yield" (the
+  // sweep): a row that appeared since the sweep's candidate read means a
+  // HUMAN pressed generate in the window — their row wins; the sweep
+  // neither clobbers generatedBy back to null nor stores over their note
+  // (the statement sweep's onConflictDoNothing + read-winner shape).
+  opts: { conflictMode?: "refresh" | "yield" } = {},
 ): Promise<ClerkAdvisoryBriefRow> {
   await assertEngagedClient(firmId, clientPartyId);
   const monthStart = lagosMonthStart(0, now);
@@ -415,34 +422,63 @@ export async function generateAdvisoryBrief(
     }
   }
 
-  const [row] = await getDb()
-    .insert(clerkAdvisoryBriefsTable)
-    .values({
-      firmId,
-      clientPartyId,
-      monthStart,
-      sections: sections as unknown as Record<string, unknown>[],
-      headline,
-      note,
-      source,
-      generatedBy,
-    })
-    .onConflictDoUpdate({
-      target: [
-        clerkAdvisoryBriefsTable.firmId,
-        clerkAdvisoryBriefsTable.clientPartyId,
-        clerkAdvisoryBriefsTable.monthStart,
-      ],
-      set: {
-        sections: sections as unknown as Record<string, unknown>[],
-        headline,
-        note,
-        source,
-        generatedBy,
-        updatedAt: new Date(),
-      },
-    })
-    .returning();
+  const values = {
+    firmId,
+    clientPartyId,
+    monthStart,
+    sections: sections as unknown as Record<string, unknown>[],
+    headline,
+    note,
+    source,
+    generatedBy,
+  };
+  let row: ClerkAdvisoryBriefRow;
+  if (opts.conflictMode === "yield") {
+    const inserted = await getDb()
+      .insert(clerkAdvisoryBriefsTable)
+      .values(values)
+      .onConflictDoNothing()
+      .returning();
+    if (inserted.length === 0) {
+      // Another writer won the (firm, client, month) row since our caller
+      // looked — return the winner's row, append no audit (nothing of ours
+      // was stored; the winner's own generate audited itself).
+      const [winner] = await getDb()
+        .select()
+        .from(clerkAdvisoryBriefsTable)
+        .where(
+          and(
+            eq(clerkAdvisoryBriefsTable.firmId, firmId),
+            eq(clerkAdvisoryBriefsTable.clientPartyId, clientPartyId),
+            eq(clerkAdvisoryBriefsTable.monthStart, monthStart),
+          ),
+        )
+        .limit(1);
+      return winner;
+    }
+    row = inserted[0];
+  } else {
+    const [upserted] = await getDb()
+      .insert(clerkAdvisoryBriefsTable)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          clerkAdvisoryBriefsTable.firmId,
+          clerkAdvisoryBriefsTable.clientPartyId,
+          clerkAdvisoryBriefsTable.monthStart,
+        ],
+        set: {
+          sections: sections as unknown as Record<string, unknown>[],
+          headline,
+          note,
+          source,
+          generatedBy,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    row = upserted;
+  }
   await appendAudit({
     actorId: generatedBy,
     firmId,
@@ -624,11 +660,16 @@ export async function sweepAdvisoryBriefs(
         // generate 404s, a section compute error) must not abort the rest
         // of the pass.
         try {
+          // "yield": a firm generate in the candidate-read → loop-turn
+          // window wins the row (attribution and note intact); the sweep's
+          // compute for that pair is discarded rather than clobbering.
           await generateAdvisoryBrief(
             pair.firmId,
             pair.clientPartyId,
             gateway,
             null,
+            new Date(),
+            { conflictMode: "yield" },
           );
           generated += 1;
         } catch (err) {
