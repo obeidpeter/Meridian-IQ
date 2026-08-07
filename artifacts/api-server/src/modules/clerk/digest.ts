@@ -46,13 +46,14 @@ import {
   FILING_DUE_SOON_DAYS,
   countOpenFilings,
 } from "../filings/filings";
+import { statutoryDueDay } from "../filings/statutory-calendar";
 import { countWhtChase } from "../wht/credits";
 import { countFirmUnmatchedCredits } from "../invoice/unmatched-credits";
 import { countFirmChasedTwice } from "../invoice/chase-log";
 import { assertFirmClerkBudget } from "./budget";
 import { CLERK_FLAG_KEY, inferPhrasing, type ClerkGateway } from "./gateway";
 import { gatewayOrNull } from "./provider";
-import { isAre, plural } from "./text";
+import { isAre, ordinal, plural } from "./text";
 
 // Weekly firm digest (Clerk power D). Every fact in a digest — counts of
 // unsubmitted, due-soon, overdue and failed invoices, aged receivables — is
@@ -143,9 +144,10 @@ export interface DigestFacts {
   // already overdue (payables.ts countFirmPayablesDue).
   payablesDueCount: number;
   // VAT-position round: days from Lagos-today until the monthly VAT return
-  // deadline — the 21st of the current Lagos month, or of the next month once
-  // the 21st has passed. Null when more than 7 days away (the digest is
-  // weekly; a farther deadline is noise). Pure calendar arithmetic, no SQL.
+  // deadline — the statutory due day of the current Lagos month, or of the
+  // next month once it has passed. Null when more than 7 days away (the
+  // digest is weekly; a farther deadline is noise). Pure calendar
+  // arithmetic, no SQL.
   vatReturnInDays: number | null;
   // Round-17 governance facts: pre-submission invoices blocked on a
   // colleague's approval under the maker-checker policy (BOTH null when the
@@ -195,18 +197,20 @@ export interface DigestFacts {
 // The monthly VAT-return countdown, PURE and Lagos-anchored (lagosParts /
 // lagosMidnightFor — WAT is a fixed +01:00, so this is plain offset
 // arithmetic, never local Date math): days from the Lagos calendar today to
-// the NEXT 21st — this month's while today is on or before it, otherwise next
-// month's (month overflow carries into the year like Date.UTC). Returns null
-// when the deadline is more than 7 days out, so the weekly digest only speaks
-// up when the clock is actually close.
+// the NEXT statutory due day (the Filing Desk one-home owns the number;
+// round 41 folded this surface onto it) — this month's while today is on or
+// before it, otherwise next month's (month overflow carries into the year
+// like Date.UTC). Returns null when the deadline is more than 7 days out, so
+// the weekly digest only speaks up when the clock is actually close.
 export function vatReturnInDays(now: Date = new Date()): number | null {
   const { year, monthIndex } = lagosParts(now);
   const day = Number(lagosDateString(now).slice(8, 10));
   const today = lagosMidnightFor(year, monthIndex, day);
+  const dueDay = statutoryDueDay("vat");
   const due =
-    day <= 21
-      ? lagosMidnightFor(year, monthIndex, 21)
-      : lagosMidnightFor(year, monthIndex + 1, 21);
+    day <= dueDay
+      ? lagosMidnightFor(year, monthIndex, dueDay)
+      : lagosMidnightFor(year, monthIndex + 1, dueDay);
   const days = Math.round((due.getTime() - today.getTime()) / 86_400_000);
   return days > 7 ? null : days;
 }
@@ -428,10 +432,10 @@ const DIGEST_FACT_LINES: readonly DigestFactLine[] = [
   },
   {
     promptLine: (facts) =>
-      `- Days until the monthly VAT return deadline (the 21st): ${facts.vatReturnInDays ?? "more than 7 — do not mention"}`,
+      `- Days until the monthly VAT return deadline (the ${ordinal(statutoryDueDay("vat"))}): ${facts.vatReturnInDays ?? "more than 7 — do not mention"}`,
     bullet: (facts) =>
       facts.vatReturnInDays !== null
-        ? `Monthly VAT return due ${facts.vatReturnInDays === 0 ? "today" : `in ${plural(facts.vatReturnInDays, "day")}`} — VAT returns fall due on the 21st.`
+        ? `Monthly VAT return due ${facts.vatReturnInDays === 0 ? "today" : `in ${plural(facts.vatReturnInDays, "day")}`} — VAT returns fall due on the ${ordinal(statutoryDueDay("vat"))}.`
         : null,
   },
   {

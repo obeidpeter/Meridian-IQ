@@ -74,7 +74,7 @@ test("periodMonthBounds: the half-open month window, December carrying the year"
   });
 });
 
-// Round 41: the three pre-register surfaces that once open-coded the VAT
+// Round 41: the four pre-register surfaces that once open-coded the VAT
 // due day now draw it from statutoryDueDay — pinned so the number can
 // never fork again. A literal day inside a lagosMidnightFor call in any
 // of them means the fold regressed. (sme.ts's B2C placeholder day 10 is a
@@ -87,6 +87,7 @@ test("statutoryDueDay is the one home; no folded surface open-codes a due day", 
     "routes/sme.ts",
     "modules/invoice/compliance-calendar.ts",
     "modules/invoice/compliance-pack.ts",
+    "modules/clerk/digest.ts",
   ];
   for (const rel of folded) {
     const source = src(rel);

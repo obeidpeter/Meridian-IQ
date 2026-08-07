@@ -120,8 +120,9 @@ export async function computeComplianceCalendar(
   // return for last month's period) — a true statutory date the calendar
   // must not skip; past dates filter out below.
   const { year, monthIndex } = lagosParts(now);
+  const dueDay = statutoryDueDay("vat");
   for (const offset of [0, 1, 2]) {
-    const due = lagosMidnightFor(year, monthIndex + offset, statutoryDueDay("vat"));
+    const due = lagosMidnightFor(year, monthIndex + offset, dueDay);
     const dueDate = lagosDateString(due);
     if (dueDate <= today || dueDate > horizonEnd) continue;
     const list = byDate.get(dueDate) ?? [];

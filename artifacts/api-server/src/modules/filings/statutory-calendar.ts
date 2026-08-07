@@ -1,8 +1,9 @@
 // Filing Desk statutory calendar: the ONE home for "which return covers which
-// period and when is it due". The three older surfaces that predated this
+// period and when is it due". The four older surfaces that predated this
 // module (routes/sme.ts client deadlines, modules/invoice/compliance-calendar,
-// the pack's nextVatReturnDue) draw their due day from statutoryDueDay below
-// (round 41) — the literal day numbers exist in exactly this file. Everything
+// the pack's nextVatReturnDue, the digest's vatReturnInDays) draw their due
+// day from statutoryDueDay below (round 41) — the literal day numbers exist
+// in exactly this file. Everything
 // here is pure calendar arithmetic on the LAGOS calendar (lib/lagos-time.ts):
 // statutory clocks are local-day questions, and WAT's fixed +01:00 makes the
 // conversion plain offset math.
@@ -30,10 +31,11 @@ export type FilingTaxType = (typeof FILING_KINDS)[number]["taxType"];
 
 // The due day-of-month for a return kind — exported so the older
 // next-due-from-now surfaces (sme.ts deadlines, the compliance calendar,
-// the pack's nextVatReturnDue) share the ONE number without adopting the
-// period→dueDate formulation: their "first due date strictly ahead of
-// now" arithmetic is deliberately their own (and sme.ts deliberately
-// always points at NEXT month), so only the statute's day folds here.
+// the pack's nextVatReturnDue, the digest's vatReturnInDays) share the ONE
+// number without adopting the period→dueDate formulation: their "first due
+// date strictly ahead of now" arithmetic is deliberately their own (and
+// sme.ts deliberately always points at NEXT month), so only the statute's
+// day folds here.
 export function statutoryDueDay(taxType: FilingTaxType): number {
   const kind = FILING_KINDS.find((k) => k.taxType === taxType);
   if (!kind) {
