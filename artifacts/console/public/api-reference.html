@@ -1166,7 +1166,7 @@ request's writes were rolled back.</li>
 </details>
 <details class="op" id="generateAdvisoryBrief">
 <summary><span class="method m-post">POST</span><code class="path">/api/clerk/advisory-briefs</code><span class="sum">Generate (or refresh) the LIVE month's advisory brief for one client — deterministic sections, one digest-posture phrasing call for the note</span></summary>
-<div class="opbody"><div class="req">Request body: <code>GenerateAdvisoryBriefInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>AdvisoryBrief</code> <span class="dim">The stored (upserted) brief</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li></ul></div>
+<div class="opbody"><div class="req">Request body: <code>GenerateAdvisoryBriefInput</code></div><ul class="responses"><li><span class="status s2xx">200</span> <code>AdvisoryBrief</code> <span class="dim">The stored (upserted) brief</span></li><li><span class="status s4xx">400</span> <span class="err">BadRequest</span> <span class="dim">— invalid input</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
 <details class="op" id="draftClaimWithClerk">
 <summary><span class="method m-post">POST</span><code class="path">/api/clerk/claims/draft</code><span class="sum">Draft a structured claim record from pasted source text (enters the normal maker-checker flow)</span></summary>
