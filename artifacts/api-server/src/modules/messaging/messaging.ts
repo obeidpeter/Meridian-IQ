@@ -52,6 +52,14 @@ export const TEMPLATES: Record<string, MessageTemplate> = {
     channels: ["whatsapp", "sms", "email", "push"],
     description: "Monthly compliance pack is ready",
   },
+  // Advise with Clerk (round 50): the firm's monthly advisory brief is
+  // ready. Pointer only (SEC-12): the message names no findings, numbers
+  // or deadlines — the client opens the app to read the brief itself.
+  advisory_brief_ready: {
+    key: "advisory_brief_ready",
+    channels: ["whatsapp", "sms", "email", "push"],
+    description: "The month's advisory brief is ready to view.",
+  },
   // Weekly firm digest delivery to OPTED-IN firm staff (see
   // staff_notification_preferences; not the CORE-03 client-alert model).
   // Pointer only (SEC-12): the message names no counts or amounts — the staff

@@ -1,12 +1,20 @@
-import { desc, eq, and, sql } from "drizzle-orm";
+import { desc, eq, and, isNull, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   getDb,
+  runInBypassContext,
+  alertPreferencesTable,
   clerkAdvisoryBriefsTable,
+  engagementsTable,
   partiesTable,
   type ClerkAdvisoryBriefRow,
   type ProtectedFact,
 } from "@workspace/db";
+import { logger } from "../../lib/logger";
+import { fanOutAlert } from "../messaging/fan-out";
+import { pointerEntityRef } from "../messaging/recipient-ref";
+import { registerSweep } from "../pipeline/pipeline";
+import { gatewayOrNull } from "./provider";
 import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
 import { appendAudit } from "../audit/audit";
@@ -472,3 +480,187 @@ export async function listAdvisoryBriefs(
     .limit(limit);
   return rows.map((r) => ({ ...r.brief, clientName: r.clientName }));
 }
+
+// ---- Phase 2: monthly sweep + delivery (the statement rail) -----------------
+
+// Opt-in GENERATION flag (seeded dark): the sweep can spend firm tokens on
+// every engaged client's note, so it must be turned on deliberately. Like
+// the statement flag it deliberately does NOT gate delivery — turning it
+// off must not strand generated rows, and re-enabling must not blast a
+// stale backlog.
+export const BRIEF_FLAG_KEY = "clerk_advisory_briefs";
+// Fresh advisory lock id (731_850 memory indexer, 731_851 retrieval eval).
+const BRIEF_SWEEP_LOCK_ID = 731_852;
+// (firm, client) pairs per sweep pass; generated pairs drop out of the
+// missing-brief anti-join, so the loop resumes where it left off.
+const BRIEF_BATCH = 20;
+// Undelivered rows offered per delivery pass (the statement discipline).
+const BRIEF_DELIVERY_BATCH = 50;
+
+// Offer generated briefs to the client's alert channels — the statement
+// delivery verbatim: claim-first CAS on delivered_at in its OWN committed
+// transaction BEFORE any send leaves (at-most-once), consent-gated
+// (CORE-03 — fanOutAlert sends nothing without a live layer-1 grant),
+// pointer-only (SEC-12 — the message names no month, numbers or findings).
+// ONE deliberate difference from statements: no quiet suppression — an
+// "on track" brief is still the firm's monthly advisory deliverable, and
+// telling the client so is the deliverable's point.
+export async function deliverAdvisoryBriefs(
+  limit = BRIEF_DELIVERY_BATCH,
+): Promise<number> {
+  const pending = await getDb()
+    .select()
+    .from(clerkAdvisoryBriefsTable)
+    .where(isNull(clerkAdvisoryBriefsTable.deliveredAt))
+    .orderBy(clerkAdvisoryBriefsTable.createdAt)
+    .limit(limit);
+  if (pending.length === 0) return 0;
+
+  const messagingOn = await isFeatureEnabled("messaging_notifications", null);
+  let claimed = 0;
+  for (const row of pending) {
+    const claim = await runInBypassContext(() =>
+      getDb()
+        .update(clerkAdvisoryBriefsTable)
+        .set({ deliveredAt: new Date() })
+        .where(
+          and(
+            eq(clerkAdvisoryBriefsTable.id, row.id),
+            isNull(clerkAdvisoryBriefsTable.deliveredAt),
+          ),
+        )
+        .returning({ id: clerkAdvisoryBriefsTable.id }),
+    );
+    if (claim.length === 0) continue; // another instance won this row
+    claimed++;
+
+    // The claim is written even while messaging is dark (PL-02): turning
+    // the flag on later must not blast a backlog of old briefs.
+    if (!messagingOn) continue;
+
+    const [prefs] = await getDb()
+      .select()
+      .from(alertPreferencesTable)
+      .where(eq(alertPreferencesTable.clientPartyId, row.clientPartyId))
+      .limit(1);
+    await fanOutAlert({
+      prefs,
+      clientPartyId: row.clientPartyId,
+      firmId: row.firmId,
+      templateKey: "advisory_brief_ready",
+      entityType: "clerk_advisory_brief",
+      entityId: pointerEntityRef("brief", row.id),
+      smsDefaultWhenNoPrefs: false,
+    });
+  }
+  return claimed;
+}
+
+// Monthly generation sweep: every client the firm actively serves gets the
+// LIVE month's brief once — the natural (firm, client, month) key is the
+// cross-instance idempotency anchor, and a firm-generated brief earlier in
+// the month simply removes the pair from the anti-join. Candidate
+// selection is a SHORT bypass transaction under a try-lock; generation —
+// up to one model call per pair — runs OUTSIDE it (the digest/statement
+// shape: a slow provider must not stall the shared minute loop).
+export async function sweepAdvisoryBriefs(
+  // The optional firm pin exists for TESTS (a suite generates only its own
+  // salted firms instead of minting briefs across the whole scratch DB);
+  // production passes never set it.
+  opts: { onlyFirmIds?: string[] } = {},
+): Promise<void> {
+  if (await isFeatureEnabled(BRIEF_FLAG_KEY)) {
+    const monthStart = lagosMonthStart(0);
+    const pairs = await runInBypassContext(async () => {
+      const [{ locked }] = (
+        await getDb().execute<{ locked: boolean }>(
+          sql`SELECT pg_try_advisory_xact_lock(${BRIEF_SWEEP_LOCK_ID}) AS locked`,
+        )
+      ).rows;
+      if (!locked) return [];
+      return getDb()
+        .selectDistinct({
+          firmId: engagementsTable.firmId,
+          clientPartyId: engagementsTable.clientPartyId,
+        })
+        .from(engagementsTable)
+        .leftJoin(
+          clerkAdvisoryBriefsTable,
+          and(
+            eq(clerkAdvisoryBriefsTable.firmId, engagementsTable.firmId),
+            eq(
+              clerkAdvisoryBriefsTable.clientPartyId,
+              engagementsTable.clientPartyId,
+            ),
+            eq(clerkAdvisoryBriefsTable.monthStart, monthStart),
+          ),
+        )
+        .where(
+          and(
+            sql`${engagementsTable.status} IN ('open', 'in_progress')`,
+            isNull(clerkAdvisoryBriefsTable.id),
+            ...(opts.onlyFirmIds && opts.onlyFirmIds.length > 0
+              ? [
+                  sql`${engagementsTable.firmId} IN (${sql.join(
+                    opts.onlyFirmIds.map((id) => sql`${id}`),
+                    sql`, `,
+                  )})`,
+                ]
+              : []),
+          ),
+        )
+        .limit(BRIEF_BATCH);
+    });
+    if (pairs.length > 0) {
+      const gateway = await gatewayOrNull();
+      let generated = 0;
+      for (const pair of pairs) {
+        // PER-FIRM flag wall (the firm-spending-sweep rule from the memory
+        // indexer): an operator override can darken one firm mid-month —
+        // its clients must not have notes phrased on its budget by a
+        // background pass.
+        if (!(await isFeatureEnabled(BRIEF_FLAG_KEY, pair.firmId))) continue;
+        // One broken pair (an engagement archived between select and
+        // generate 404s, a section compute error) must not abort the rest
+        // of the pass.
+        try {
+          await generateAdvisoryBrief(
+            pair.firmId,
+            pair.clientPartyId,
+            gateway,
+            null,
+          );
+          generated += 1;
+        } catch (err) {
+          logger.warn(
+            {
+              firmId: pair.firmId,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            "advisory brief sweep: pair failed",
+          );
+        }
+      }
+      if (generated > 0) {
+        logger.info(
+          { generated, monthStart },
+          "advisory brief sweep: monthly briefs generated",
+        );
+      }
+    }
+  }
+
+  // Delivery runs every pass — even when nothing was generated and even
+  // while the generation flag is dark (the statement rationale: stragglers
+  // and pre-flag rows still get offered; delivered_at CAS keeps it
+  // idempotent without the generation lock).
+  const delivered = await deliverAdvisoryBriefs();
+  if (delivered > 0) {
+    logger.info(
+      { delivered },
+      "advisory brief sweep: briefs offered to alert channels",
+    );
+  }
+}
+
+registerSweep(() => sweepAdvisoryBriefs());
