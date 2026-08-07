@@ -176,6 +176,11 @@ export type ClerkPurpose =
   // lane. Abstain and every failure mode fall back to the invoice lane —
   // today's behavior exactly; triage can never drop a document.
   | "triage_document"
+  // Advise with Clerk (round 49): the per-client advisory brief's ONE
+  // phrasing call — the adviser's-note lead-in over the assembled
+  // deterministic sections (digest posture: template fallback, grounded,
+  // firm-funded).
+  | "advisory_brief"
   // pgvector firm memory (round 45): embed a firm's own Clerk records for
   // semantic retrieval. NOT a completion — the vectors flow through the
   // dedicated embedWithLedger lane below (same kill switch, budget and

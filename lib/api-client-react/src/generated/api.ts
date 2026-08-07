@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.74.0
+ * OpenAPI spec version: 0.75.0
  */
 import {
   useMutation,
@@ -25,6 +25,7 @@ import type {
   ActionEffectivenessReport,
   ActionPolicyList,
   ActionProposals,
+  AdvisoryBrief,
   AlertDeliveryResult,
   AlertPreferences,
   AlertPreferencesInput,
@@ -191,6 +192,7 @@ import type {
   FirmWebhookDelivery,
   ForbiddenResponse,
   GateMetrics,
+  GenerateAdvisoryBriefInput,
   GenerateStatementsInput,
   GetActionDecisionsParams,
   GetActionEffectivenessParams,
@@ -244,6 +246,7 @@ import type {
   InvoiceInput,
   InvoiceUpdateInput,
   LineItemSuggestion,
+  ListAdvisoryBriefsParams,
   ListB2cReportsParams,
   ListBankStatementsParams,
   ListBillsParams,
@@ -20180,6 +20183,160 @@ export function useListClientStatements<TData = Awaited<ReturnType<typeof listCl
 
 
 
+
+export const getListAdvisoryBriefsUrl = (params?: ListAdvisoryBriefsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/clerk/advisory-briefs?${stringifiedParams}` : `/api/clerk/advisory-briefs`
+}
+
+/**
+ * @summary Per-client advisory briefs, newest first (sections composed by app code from the platform's own reports; only the adviser's note is phrased)
+ */
+export const listAdvisoryBriefs = async (params?: ListAdvisoryBriefsParams, options?: RequestInit): Promise<AdvisoryBrief[]> => {
+
+  return customFetch<AdvisoryBrief[]>(getListAdvisoryBriefsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdvisoryBriefsQueryKey = (params?: ListAdvisoryBriefsParams,) => {
+    return [
+    `/api/clerk/advisory-briefs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAdvisoryBriefsQueryOptions = <TData = Awaited<ReturnType<typeof listAdvisoryBriefs>>, TError = ErrorType<unknown>>(params?: ListAdvisoryBriefsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdvisoryBriefs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdvisoryBriefsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdvisoryBriefs>>> = ({ signal }) => listAdvisoryBriefs(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdvisoryBriefs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdvisoryBriefsQueryResult = NonNullable<Awaited<ReturnType<typeof listAdvisoryBriefs>>>
+export type ListAdvisoryBriefsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Per-client advisory briefs, newest first (sections composed by app code from the platform's own reports; only the adviser's note is phrased)
+ */
+
+export function useListAdvisoryBriefs<TData = Awaited<ReturnType<typeof listAdvisoryBriefs>>, TError = ErrorType<unknown>>(
+ params?: ListAdvisoryBriefsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdvisoryBriefs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdvisoryBriefsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGenerateAdvisoryBriefUrl = () => {
+
+
+
+
+  return `/api/clerk/advisory-briefs`
+}
+
+/**
+ * @summary Generate (or refresh) the LIVE month's advisory brief for one client — deterministic sections, one digest-posture phrasing call for the note
+ */
+export const generateAdvisoryBrief = async (generateAdvisoryBriefInput: GenerateAdvisoryBriefInput, options?: RequestInit): Promise<AdvisoryBrief> => {
+
+  return customFetch<AdvisoryBrief>(getGenerateAdvisoryBriefUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(generateAdvisoryBriefInput)
+  }
+);}
+
+
+
+
+export const getGenerateAdvisoryBriefMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateAdvisoryBrief>>, TError,{data: BodyType<GenerateAdvisoryBriefInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateAdvisoryBrief>>, TError,{data: BodyType<GenerateAdvisoryBriefInput>}, TContext> => {
+
+const mutationKey = ['generateAdvisoryBrief'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateAdvisoryBrief>>, {data: BodyType<GenerateAdvisoryBriefInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateAdvisoryBrief(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateAdvisoryBriefMutationResult = NonNullable<Awaited<ReturnType<typeof generateAdvisoryBrief>>>
+    export type GenerateAdvisoryBriefMutationBody = BodyType<GenerateAdvisoryBriefInput>
+    export type GenerateAdvisoryBriefMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Generate (or refresh) the LIVE month's advisory brief for one client — deterministic sections, one digest-posture phrasing call for the note
+ */
+export const useGenerateAdvisoryBrief = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateAdvisoryBrief>>, TError,{data: BodyType<GenerateAdvisoryBriefInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateAdvisoryBrief>>,
+        TError,
+        {data: BodyType<GenerateAdvisoryBriefInput>},
+        TContext
+      > => {
+      return useMutation(getGenerateAdvisoryBriefMutationOptions(options));
+    }
 
 export const getDraftClaimWithClerkUrl = () => {
 

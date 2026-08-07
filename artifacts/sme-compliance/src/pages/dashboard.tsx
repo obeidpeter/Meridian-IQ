@@ -15,6 +15,8 @@ import {
   getGetClientAutomationEvidenceQueryKey,
   useListClientStatements,
   getListClientStatementsQueryKey,
+  useListAdvisoryBriefs,
+  getListAdvisoryBriefsQueryKey,
   useGetDashboardSummary,
   getGetDashboardSummaryQueryKey,
   useGetReceivablesSummary,
@@ -556,6 +558,73 @@ function ClientStatementCard({ clientPartyId }: { clientPartyId: string }) {
         <p className="text-xs text-muted-foreground pt-3 border-t">
           {statementMonthLabel(statement.monthStart)}
           {statement.source === "clerk" && " · Written by Clerk"}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Advisory brief (Advise with Clerk, round 49): the firm's monthly
+// advisory work product for this client — deterministic evidence-cited
+// sections, adviser's note phrased at most once (source says which path).
+// Client-scoped exactly like the statement card (SEC-03 is server-side:
+// the route pins a client_user to its own party); renders only when the
+// firm has generated one.
+function AdvisoryBriefCard({ clientPartyId }: { clientPartyId: string }) {
+  const { data: briefs, isSuccess } = useListAdvisoryBriefs(
+    { clientPartyId },
+    {
+      query: {
+        enabled: !!clientPartyId,
+        queryKey: getListAdvisoryBriefsQueryKey({ clientPartyId }),
+        retry: false,
+      },
+    },
+  );
+  const brief = briefs?.[0];
+  if (!isSuccess || !brief) return null;
+  return (
+    <Card data-testid="advisory-brief">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CalendarCheck className="w-5 h-5" aria-hidden="true" /> Your
+          adviser's brief
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="font-semibold" data-testid="text-brief-headline">
+          {brief.headline}
+        </p>
+        <p className="text-sm text-muted-foreground">{brief.note}</p>
+        <div className="space-y-2">
+          {brief.sections.map((section) => (
+            <div
+              key={section.key}
+              className="border rounded-md p-3 space-y-1"
+              data-testid={`brief-section-${section.key}`}
+            >
+              <p className="text-sm font-medium">{section.title}</p>
+              <p className="text-sm">{section.text}</p>
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                {section.facts.map((f) => (
+                  <p key={f.key}>
+                    {f.label}:{" "}
+                    <span className="font-medium tabular-nums">
+                      {f.value}
+                      {f.unit ? ` ${f.unit}` : ""}
+                    </span>
+                  </p>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Source: {section.sourceReport}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground pt-3 border-t">
+          {statementMonthLabel(brief.monthStart)}
+          {brief.source === "clerk" && " · Note written by Clerk"}
         </p>
       </CardContent>
     </Card>
@@ -1608,7 +1677,10 @@ export function Dashboard() {
               {canAskClerk && <ClerkDigestCard />}
 
               {canSeeStatement && me?.clientPartyId && (
-                <ClientStatementCard clientPartyId={me.clientPartyId} />
+                <>
+                  <ClientStatementCard clientPartyId={me.clientPartyId} />
+                  <AdvisoryBriefCard clientPartyId={me.clientPartyId} />
+                </>
               )}
 
               {me?.clientPartyId && (

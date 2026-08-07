@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.74.0
+  version: 0.75.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -4922,6 +4922,49 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ClerkClientStatement"
+
+  /clerk/advisory-briefs:
+    get:
+      operationId: listAdvisoryBriefs
+      tags: [clerk]
+      summary: Per-client advisory briefs, newest first (sections composed by app code from the platform's own reports; only the adviser's note is phrased)
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Newest-first briefs for the resolved client (client_users are pinned to their own party)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdvisoryBrief"
+    post:
+      operationId: generateAdvisoryBrief
+      tags: [clerk]
+      summary: Generate (or refresh) the LIVE month's advisory brief for one client — deterministic sections, one digest-posture phrasing call for the note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateAdvisoryBriefInput"
+      responses:
+        "200":
+          description: The stored (upserted) brief
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvisoryBrief"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /clerk/claims/draft:
     post:
@@ -14917,6 +14960,81 @@ components:
         email:
           type: ["string", "null"]
           format: email
+    # Advise with Clerk (round 49). Every number in a section is computed by
+    # the SAME platform report the section cites (sourceReport); the model
+    # only phrases the short adviser's note (source records whether it did).
+    # STORED DURABLY as the brief's jsonb — additive-optional changes only;
+    # readers safeParse and degrade.
+    GenerateAdvisoryBriefInput:
+      type: object
+      required: [clientPartyId]
+      properties:
+        clientPartyId:
+          type: string
+          format: uuid
+    AdvisoryBriefSection:
+      type: object
+      required: [key, title, text, facts, sourceReport]
+      properties:
+        # Closed section catalogue key (append-only), e.g. "statutory",
+        # "penalties", "money", "hygiene".
+        key:
+          type: string
+        title:
+          type: string
+        # Deterministic template sentence(s) — never model text.
+        text:
+          type: string
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProtectedFact"
+        # The platform surface these numbers come from, for the evidence
+        # trail (a human-readable report name, not a URL).
+        sourceReport:
+          type: string
+    AdvisoryBrief:
+      type: object
+      required:
+        [
+          id,
+          clientPartyId,
+          clientName,
+          monthStart,
+          headline,
+          note,
+          source,
+          sections,
+          updatedAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+        clientName:
+          type: string
+        # First day (YYYY-MM-01) of the LIVE Lagos month the brief covers —
+        # regenerating within the month refreshes the same row.
+        monthStart:
+          type: string
+        headline:
+          type: string
+        # The adviser's-note lead-in (phrased or template; source says which).
+        note:
+          type: string
+        source:
+          type: string
+          enum: [clerk, template]
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdvisoryBriefSection"
+        updatedAt:
+          type: string
+          format: date-time
     ClerkClientStatement:
       type: object
       required: [clientPartyId, monthStart, headline, bullets, facts, source]

@@ -1093,6 +1093,44 @@ entries.
   cross-firm, specifics forbidden by the system prompt, variant ledger
   version `draft-reply.v1+ex1`, `viaExample` in the response).
 
+## Advise with Clerk (round 49, Phase 1 — the per-client advisory brief)
+
+The firm's monthly advisory work product, stored and evidence-cited
+(`modules/clerk/advisory-brief.ts`, table `clerk_advisory_briefs`,
+firm-keyed RLS via migration 0041, contract 0.75.0):
+
+- **Composition, never computation**: the module contains zero predicates
+  of its own. Five closed sections — statutory position (`countOpenFilings`
+  + `openFilingSamples` + `countOpenObligations`), penalty exposure
+  (`computePenaltyExposure`), VAT for the last closed month
+  (`computeVatPosition` + the statutory calendar's due date), money
+  position (`computeCashflowOutlook` + `listChaseRows`, dominant currency
+  group), books hygiene (unbilled income, missing recurring bills,
+  unmatched credits, unmatched collections) — each reusing the exact
+  compute function its cited `sourceReport` serves, all sharing one `now`.
+- **One phrasing call** (digest posture): the adviser's-note lead-in only —
+  purpose `advisory_brief`, prompt `advisory-brief.v1`, firm-funded,
+  number-grounded against the fact lines (`buildBriefUser`), template
+  fallback on every failure mode, `source` recording which path answered.
+- **Live-month upsert**: one brief per (firm, client, Lagos month),
+  regenerated in place — the natural unique key absorbs the refresh and
+  `updatedAt` records it; every generate appends an audit row
+  (`advisory.brief.generate`). The stored sections jsonb mirrors the
+  contract's `AdvisoryBriefSection` (stored-durably: additive-optional
+  changes only).
+- **Routes** (`routes/clerk/advisory.ts`): `POST /clerk/advisory-briefs`
+  is FIRM work product (`engagement.write` — a client never triggers the
+  firm's advisory spend; MODEL rate class, in-transaction digest posture);
+  `GET /clerk/advisory-briefs` follows the client-statements route's exact
+  SEC-03 shape (a client_user pinned to its own party). An un-engaged
+  party id 404s before anything is stored. Console renders the brief on
+  the client detail page (generate/refresh button); the SME dashboard
+  shows the client's own latest brief read-only.
+- **Phase 2** adds the monthly sweep + delivery on the statement rail
+  (the `deliveredAt` claim cell is already in place); **Phase 3** adds
+  continuity ("what changed since last brief"), the `advisory_briefs`
+  memory corpus and acted-on tracking.
+
 ## Digests, statements & delivery
 
 - **Weekly digest** (`modules/clerk/digest.ts`, opt-in `clerk_digest` flag,

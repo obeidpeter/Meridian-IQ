@@ -629,6 +629,65 @@ export const clerkClientStatementsTable = pgTable(
 export type ClerkClientStatementRow =
   typeof clerkClientStatementsTable.$inferSelect;
 
+// ============ Advise with Clerk (round 49) — per-client advisory brief ======
+// The client-statement pattern widened: one stored, evidence-cited brief per
+// (firm, client, Lagos month) COMPOSING the platform's per-client
+// deterministic computations (statutory clocks, penalty exposure, money
+// position, hygiene findings) — every number in a section is the same number
+// its source report serves. The model only phrases the short adviser's-note
+// lead-in (template fallback, recorded via `source`); the sections
+// themselves never touch a model. Unlike a statement (a closed month,
+// generated once), a brief covers the LIVE month and REGENERATES on demand —
+// the natural key absorbs the upsert; updatedAt records the refresh.
+// Firm-keyed RLS via migration 0041; client routes must ALSO narrow to the
+// caller's party (SEC-03), as everywhere else. The stored jsonb mirrors the
+// contract's AdvisoryBrief sections shape (stored-durably: additive-optional
+// changes only; readers safeParse and degrade).
+
+export const clerkAdvisoryBriefsTable = pgTable(
+  "clerk_advisory_briefs",
+  {
+    id: id(),
+    firmId: uuid("firm_id")
+      .notNull()
+      .references(() => firmsTable.id),
+    clientPartyId: uuid("client_party_id")
+      .notNull()
+      .references(() => partiesTable.id),
+    // First day of the Lagos calendar month the brief covers (the LIVE
+    // month at generation time — "as of now", not a closed period).
+    monthStart: date("month_start").notNull(),
+    // Assembled sections + their fact snapshots (contract mirror).
+    sections: jsonb("sections").$type<Record<string, unknown>[]>().notNull(),
+    headline: text("headline").notNull(),
+    // The adviser's-note lead-in (phrased or template; `source` says which).
+    note: text("note").notNull(),
+    source: clerkDigestSourceEnum("source").notNull(),
+    // Who pressed generate; null when the Phase 2 sweep generated it.
+    generatedBy: uuid("generated_by").references(() => usersTable.id),
+    // Phase 2's delivery claim cell (the statement discipline): claim-first
+    // UPDATE, null means "not yet offered".
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    // Explicit short name (the statements lesson: auto-generated names
+    // exceed the 63-char cap and silently truncate).
+    unique("clerk_advisory_briefs_firm_client_month_unique").on(
+      t.firmId,
+      t.clientPartyId,
+      t.monthStart,
+    ),
+    index("clerk_advisory_briefs_client_idx").on(t.clientPartyId, t.monthStart),
+    index("clerk_advisory_briefs_undelivered_idx")
+      .on(t.createdAt)
+      .where(sql`delivered_at IS NULL`),
+  ],
+);
+export type ClerkAdvisoryBriefRow =
+  typeof clerkAdvisoryBriefsTable.$inferSelect;
+
 // ============ Clerk idea #8 — async batch intake ============
 // One row per month-end bundle: the route only QUEUES (no model call in the
 // request), the processor segments and walks each segment through the normal

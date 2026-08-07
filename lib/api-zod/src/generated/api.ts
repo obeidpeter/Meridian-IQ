@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.74.0
+ * OpenAPI spec version: 0.75.0
  */
 import * as zod from 'zod';
 
@@ -7905,6 +7905,71 @@ export const ListClientStatementsResponseItem = zod.object({
   "source": zod.enum(['clerk', 'template'])
 })
 export const ListClientStatementsResponse = zod.array(ListClientStatementsResponseItem)
+
+
+/**
+ * @summary Per-client advisory briefs, newest first (sections composed by app code from the platform's own reports; only the adviser's note is phrased)
+ */
+export const ListAdvisoryBriefsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional()
+})
+
+export const ListAdvisoryBriefsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "monthStart": zod.string(),
+  "headline": zod.string(),
+  "note": zod.string(),
+  "source": zod.enum(['clerk', 'template']),
+  "sections": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "text": zod.string(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "sourceReport": zod.string()
+})),
+  "updatedAt": zod.coerce.date()
+})
+export const ListAdvisoryBriefsResponse = zod.array(ListAdvisoryBriefsResponseItem)
+
+
+/**
+ * @summary Generate (or refresh) the LIVE month's advisory brief for one client — deterministic sections, one digest-posture phrasing call for the note
+ */
+export const GenerateAdvisoryBriefBody = zod.object({
+  "clientPartyId": zod.string().uuid()
+})
+
+export const GenerateAdvisoryBriefResponse = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "monthStart": zod.string(),
+  "headline": zod.string(),
+  "note": zod.string(),
+  "source": zod.enum(['clerk', 'template']),
+  "sections": zod.array(zod.object({
+  "key": zod.string(),
+  "title": zod.string(),
+  "text": zod.string(),
+  "facts": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "kind": zod.enum(['rate', 'amount', 'duration', 'date', 'count', 'text']),
+  "value": zod.string(),
+  "unit": zod.string().optional()
+})),
+  "sourceReport": zod.string()
+})),
+  "updatedAt": zod.coerce.date()
+})
 
 
 /**
