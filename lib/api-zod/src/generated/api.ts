@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.71.0
+ * OpenAPI spec version: 0.72.0
  */
 import * as zod from 'zod';
 
@@ -9470,6 +9470,16 @@ export const AbandonOnboardingRunResponse = zod.object({
   "createdAt": zod.coerce.date(),
   "completedAt": zod.coerce.date().nullable()
 })
+
+
+/**
+ * @summary The readiness report PDF — the completion deliverable, from the frozen record only
+ */
+export const GetOnboardingReportParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetOnboardingReportResponse = zod.unknown()
 
 
 /**

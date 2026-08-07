@@ -9,7 +9,8 @@
     "./notice-copy": "./src/notice-copy.ts",
     "./source.css": "./src/source.css",
     "./filing-copy": "./src/filing-copy.ts",
-    "./wht-copy": "./src/wht-copy.ts"
+    "./wht-copy": "./src/wht-copy.ts",
+    "./onboarding-copy": "./src/onboarding-copy.ts"
   },
   "scripts": {
     "test": "vitest run"

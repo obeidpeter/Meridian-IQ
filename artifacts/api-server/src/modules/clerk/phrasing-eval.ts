@@ -133,6 +133,7 @@ function digestFacts(overrides: Partial<DigestFacts>): DigestFacts {
     filingsOverdue: 0,
     // WHT Desk.
     whtAwaitingNotes: 0,
+    onboardingActiveRuns: 0,
   };
   return { ...base, ...overrides };
 }

@@ -6,6 +6,7 @@ import {
   CreateOnboardingRunResponse,
   GetOnboardingOpeningPositionParams,
   GetOnboardingOpeningPositionResponse,
+  GetOnboardingReportParams,
   GetOnboardingRunParams,
   GetOnboardingRunResponse,
   ListOnboardingRunsQueryParams,
@@ -34,6 +35,12 @@ import {
   type OnboardingStepKey,
 } from "../modules/onboarding/onboarding";
 import { computeOpeningPosition } from "../modules/onboarding/opening-position";
+import type { OpeningPosition } from "../modules/onboarding/opening-position";
+import { renderOnboardingReportPdf } from "../modules/onboarding/report-pdf";
+import { sendPdfAttachment } from "../modules/invoice/pdf";
+import { DomainError } from "../modules/errors";
+import { eq } from "drizzle-orm";
+import { getDb, firmsTable } from "@workspace/db";
 import type { ClientOnboardingRun } from "@workspace/db";
 
 // Onboard with Clerk (contract 0.70.0): the evidence-based onboarding
@@ -158,6 +165,54 @@ router.get(
       provisional: true,
     });
     res.json(GetOnboardingOpeningPositionResponse.parse(position));
+  },
+);
+
+// The readiness report (Phase 3): the completion deliverable, rendered from
+// the FROZEN record only — the final checklist plus the frozen opening
+// position. Completed runs only (an unfinished checklist has nothing to
+// certify); zero model calls, so the route stays in the ambient request
+// transaction. Same read posture as the run detail — a client may download
+// its own report.
+router.get(
+  "/onboarding/runs/:id/report",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "engagement.read");
+    const params = parseOrThrow(GetOnboardingReportParams, req.params);
+    const firmId = requireFirmScope(req.principal);
+    const run = await getOnboardingRun(params.id, firmId);
+    assertClientPartyScope(req.principal, run.clientPartyId);
+    if (run.status !== "completed") {
+      throw new DomainError(
+        "REPORT_NOT_READY",
+        "The readiness report exists once the onboarding run completes",
+        409,
+      );
+    }
+    // The frozen baseline, defensively parsed (the opening-position route's
+    // drift rule); an unreadable or pre-Phase-2 blob renders as the honest
+    // "no baseline" section rather than failing the report.
+    const frozen = run.openingPosition
+      ? GetOnboardingOpeningPositionResponse.safeParse(run.openingPosition)
+      : null;
+    const [firm] = await getDb()
+      .select({ name: firmsTable.name, theme: firmsTable.theme })
+      .from(firmsTable)
+      .where(eq(firmsTable.id, firmId))
+      .limit(1);
+    const pdf = await renderOnboardingReportPdf({
+      run: await onboardingRunView(run),
+      position: frozen?.success
+        ? (frozen.data as unknown as OpeningPosition)
+        : null,
+      firmName: firm?.name ?? "",
+      theme: firm?.theme ?? null,
+    });
+    sendPdfAttachment(
+      res,
+      `onboarding-readiness-${run.clientPartyId.slice(0, 8)}.pdf`,
+      pdf,
+    );
   },
 );
 

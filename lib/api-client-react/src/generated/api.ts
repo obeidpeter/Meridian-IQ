@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.71.0
+ * OpenAPI spec version: 0.72.0
  */
 import {
   useMutation,
@@ -24128,6 +24128,83 @@ export const useAbandonOnboardingRun = <TError = ErrorType<NotFoundResponse | Co
       > => {
       return useMutation(getAbandonOnboardingRunMutationOptions(options));
     }
+
+export const getGetOnboardingReportUrl = (id: string,) => {
+
+
+
+
+  return `/api/onboarding/runs/${id}/report`
+}
+
+/**
+ * @summary The readiness report PDF — the completion deliverable, from the frozen record only
+ */
+export const getOnboardingReport = async (id: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetOnboardingReportUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingReportQueryKey = (id: string,) => {
+    return [
+    `/api/onboarding/runs/${id}/report`
+    ] as const;
+    }
+
+
+export const getGetOnboardingReportQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingReport>>, TError = ErrorType<NotFoundResponse | ConflictResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingReportQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingReport>>> = ({ signal }) => getOnboardingReport(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingReportQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingReport>>>
+export type GetOnboardingReportQueryError = ErrorType<NotFoundResponse | ConflictResponse>
+
+
+/**
+ * @summary The readiness report PDF — the completion deliverable, from the frozen record only
+ */
+
+export function useGetOnboardingReport<TData = Awaited<ReturnType<typeof getOnboardingReport>>, TError = ErrorType<NotFoundResponse | ConflictResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingReportQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetOnboardingOpeningPositionUrl = (id: string,) => {
 

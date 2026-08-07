@@ -10,6 +10,7 @@ import {
   useGetOnboardingOpeningPosition,
   getListOnboardingRunsQueryKey,
   getGetOnboardingOpeningPositionQueryKey,
+  getGetOnboardingReportUrl,
 } from "@workspace/api-client-react";
 import type {
   OnboardingRun,
@@ -25,7 +26,9 @@ import { QueryError } from "@/components/query-error";
 import { useToast } from "@/hooks/use-toast";
 import { serverErrorToast } from "@/lib/errors";
 import { pillClasses, type BadgeTone } from "@/lib/format";
-import { ClipboardCheck, RefreshCw } from "lucide-react";
+import { ClipboardCheck, Download, RefreshCw } from "lucide-react";
+import { onboardingStepLabel as sharedOnboardingStepLabel } from "@workspace/format/onboarding-copy";
+import { triggerDownload } from "@/lib/download";
 
 // Client onboarding checklist (Onboard with Clerk Phase 1): the run the firm
 // opens when it takes on a new client. Every step's state is DETECTED
@@ -38,16 +41,11 @@ import { ClipboardCheck, RefreshCw } from "lucide-react";
 
 // ---- Pure helpers (unit-tested directly) -----------------------------------
 
-const STEP_LABELS: Record<OnboardingStep["key"], string> = {
-  consent_captured: "Consent captured",
-  history_imported: "Invoice history imported",
-  statements_backfilled: "Bank statements backfilled",
-  duplicates_reviewed: "Duplicate check clean",
-  filings_synced: "Filings register backfilled",
-};
-
+// Labels come from the shared vocabulary (@workspace/format/onboarding-copy
+// — one home with the server-side readiness report), narrowed here to the
+// contract's key type; re-exported so the card's tests keep their surface.
 export function onboardingStepLabel(key: OnboardingStep["key"]): string {
-  return STEP_LABELS[key] ?? key;
+  return sharedOnboardingStepLabel(key);
 }
 
 /**
@@ -450,6 +448,22 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                   </p>
                 ))}
               </div>
+            )}
+            {run.status === "completed" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  triggerDownload(
+                    getGetOnboardingReportUrl(run.id),
+                    "onboarding-readiness-report.pdf",
+                  )
+                }
+                data-testid="button-onboarding-report"
+              >
+                <Download className="w-4 h-4 mr-1" aria-hidden="true" />
+                Readiness report (PDF)
+              </Button>
             )}
             {canWrite && run.status === "active" && (
               <Button

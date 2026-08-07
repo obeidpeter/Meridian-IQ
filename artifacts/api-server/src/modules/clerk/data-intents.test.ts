@@ -1270,9 +1270,9 @@ test("data.open_obligations counts open notices, pins to a client and stays clie
     "client-safe: the forced own-party pin reduces it to the caller's own notices",
   );
   assert.equal(
-    DATA_INTENTS[DATA_INTENTS.length - 3].key,
+    DATA_INTENTS[DATA_INTENTS.length - 4].key,
     "data.open_obligations",
-    "the Notice Desk group keeps its append-only position (the Filing and WHT Desk groups joined after it)",
+    "the Notice Desk group keeps its append-only position (the Filing, WHT and onboarding groups joined after it)",
   );
 
   // Seed: an open due-soon notice for partyA, an open overdue one for
@@ -1417,9 +1417,9 @@ test("data.open_filings counts unfiled returns, pins to a client and stays clien
     "client-safe: the forced own-party pin reduces it to the caller's own register rows",
   );
   assert.equal(
-    DATA_INTENTS[DATA_INTENTS.length - 2].key,
+    DATA_INTENTS[DATA_INTENTS.length - 3].key,
     "data.open_filings",
-    "the Filing Desk group keeps its append-only position (the WHT Desk group joined after it)",
+    "the Filing Desk group keeps its append-only position (the WHT Desk and onboarding groups joined after it)",
   );
 
   // Seed: a due-soon unfiled return for partyA, an overdue prepared one for
@@ -1529,9 +1529,9 @@ test("data.wht_credits counts the chase ledger, pins to a client and stays clien
     "client-safe: the forced own-party pin reduces it to the caller's own ledger rows",
   );
   assert.equal(
-    DATA_INTENTS[DATA_INTENTS.length - 1].key,
+    DATA_INTENTS[DATA_INTENTS.length - 2].key,
     "data.wht_credits",
-    "the WHT Desk group joined at the END of the append-only catalogue",
+    "the WHT Desk group keeps its append-only position (the onboarding group joined after it)",
   );
 
   // Seed: two receivables carrying credits — partyA's awaiting its note,
@@ -1635,4 +1635,27 @@ test("data.wht_credits counts the chase ledger, pins to a client and stays clien
     foreign?.facts.find((f) => f.key === "wht_note_received")?.value,
     "0",
   );
+});
+
+// ---- Onboarding (Onboard with Clerk) ----------------------------------------
+
+test("data.onboarding_status joined at the END of the append-only catalogue and stays client-safe", () => {
+  const intent = getDataIntent("data.onboarding_status");
+  assert.ok(intent, "the catalogue carries the onboarding intent");
+  assert.deepEqual(
+    intent.accepts,
+    { client: true },
+    "as-of-today only: no month parameter, ever",
+  );
+  assert.ok(
+    CLIENT_SAFE_DATA_INTENTS.some((i) => i.key === "data.onboarding_status"),
+    "client-safe: the forced own-party pin reduces it to the caller's own run",
+  );
+  assert.equal(
+    DATA_INTENTS[DATA_INTENTS.length - 1].key,
+    "data.onboarding_status",
+    "the onboarding group joined at the END of the append-only catalogue",
+  );
+  // The behavioral coverage (pinned checklist answer, firm-wide counts)
+  // lives with the run fixtures in modules/onboarding/onboarding.test.ts.
 });
