@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.74.0
+ * OpenAPI spec version: 0.75.0
  */
 export interface HealthStatus {
   status: string;
@@ -6102,6 +6102,38 @@ export interface UpdateStaffNotificationPreferencesInput {
   email?: string | null;
 }
 
+export interface GenerateAdvisoryBriefInput {
+  clientPartyId: string;
+}
+
+export interface AdvisoryBriefSection {
+  key: string;
+  title: string;
+  text: string;
+  facts: ProtectedFact[];
+  sourceReport: string;
+}
+
+export type AdvisoryBriefSource = typeof AdvisoryBriefSource[keyof typeof AdvisoryBriefSource];
+
+
+export const AdvisoryBriefSource = {
+  clerk: 'clerk',
+  template: 'template',
+} as const;
+
+export interface AdvisoryBrief {
+  id: string;
+  clientPartyId: string;
+  clientName: string;
+  monthStart: string;
+  headline: string;
+  note: string;
+  source: AdvisoryBriefSource;
+  sections: AdvisoryBriefSection[];
+  updatedAt: string;
+}
+
 export type ClerkClientStatementFacts = {
   issuedCount: number;
   issuedTotal: string;
@@ -6943,6 +6975,10 @@ limit?: number;
 };
 
 export type ListClientStatementsParams = {
+clientPartyId?: string;
+};
+
+export type ListAdvisoryBriefsParams = {
 clientPartyId?: string;
 };
 

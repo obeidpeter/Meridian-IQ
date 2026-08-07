@@ -403,6 +403,11 @@ const LADDER: LadderStep[] = [
     atTop: [bypass("clerk_retrieval_eval_runs")],
     afterRollback: [not(bypass("clerk_retrieval_eval_runs"))],
   },
+  {
+    version: 41, // advisory brief guardrails
+    atTop: [clerkTenant("clerk_advisory_briefs")],
+    afterRollback: [not(clerkTenant("clerk_advisory_briefs"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

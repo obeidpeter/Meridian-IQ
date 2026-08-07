@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.74.0
+ * OpenAPI spec version: 0.75.0
  */
 
 export * from './acceptInvitationInput';
@@ -21,6 +21,9 @@ export * from './actionTargetOutcome';
 export * from './actionTargetOutcomeOutcome';
 export * from './activityItem';
 export * from './activityItemKind';
+export * from './advisoryBrief';
+export * from './advisoryBriefSection';
+export * from './advisoryBriefSource';
 export * from './alertDeliveryResult';
 export * from './alertDeliveryResultChannel';
 export * from './alertDeliveryResultStatus';
@@ -393,6 +396,7 @@ export * from './forbiddenResponse';
 export * from './gapItem';
 export * from './gapItemSeverity';
 export * from './gateMetrics';
+export * from './generateAdvisoryBriefInput';
 export * from './generateStatementsInput';
 export * from './getActionDecisionsParams';
 export * from './getActionEffectivenessParams';
@@ -476,6 +480,7 @@ export * from './invoiceStatus';
 export * from './invoiceUpdateInput';
 export * from './invoiceUpdateInputWhtCategory';
 export * from './lineItemSuggestion';
+export * from './listAdvisoryBriefsParams';
 export * from './listB2cReportsParams';
 export * from './listB2cReportsStatus';
 export * from './listBankStatementsParams';

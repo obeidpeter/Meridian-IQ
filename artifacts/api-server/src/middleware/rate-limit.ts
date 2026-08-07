@@ -70,6 +70,9 @@ export const MODEL_RATE_LIMITED_ROUTES: ReadonlySet<string> = new Set([
   "POST /api/clerk/explain-failure",
   "POST /api/clerk/draft-chaser",
   "POST /api/clerk/reconciliation-assist",
+  // Advisory brief (round 49): one digest-posture completion for the
+  // adviser's note, inside the ordinary transaction.
+  "POST /api/clerk/advisory-briefs",
   "POST /api/vat-pack/cover-note",
   "POST /api/quarterly-review/cover-note",
   // Statement import: the PDF branch is one bounded extract_statement call

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.74.0
+ * OpenAPI spec version: 0.75.0
  */
 
 export interface NarrationSuggestionsInput {
