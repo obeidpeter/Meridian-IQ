@@ -1368,7 +1368,6 @@ export async function decideCase(
   return row;
 }
 
-
 export interface NoticeDecisionInput {
   action: "approve" | "reject" | "escalate";
   reason?: string | null;

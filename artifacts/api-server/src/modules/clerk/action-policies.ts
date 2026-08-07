@@ -101,7 +101,6 @@ function isPolicyKind(kind: string): kind is PolicyKind {
   return (POLICY_KINDS as readonly string[]).includes(kind);
 }
 
-
 async function policiesEnabled(firmId: string): Promise<boolean> {
   return (
     (await isFeatureEnabled(ACTIONS_FLAG_KEY, firmId)) &&

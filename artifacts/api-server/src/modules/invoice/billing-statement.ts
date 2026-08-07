@@ -1,5 +1,4 @@
 // Monthly platform-billing statement (round-15): what MeridianIQ's own bill
-import { LEDGER_TOKENS_SQL } from "../clerk/budget";
 // for a closed month is made of, shown to the firm that pays it. The
 // vat-pack posture exactly — deterministic, computed on demand, nothing
 // stored — pointed at the platform's two meters:
@@ -14,6 +13,7 @@ import { LEDGER_TOKENS_SQL } from "../clerk/budget";
 //    429 gate would "prove" the gate wrong at every month edge.
 // The fee is tier config applied to the accepted count: base subscription +
 // max(0, accepted − included) × overage price, 2dp numeric strings (kobo).
+import { LEDGER_TOKENS_SQL } from "../clerk/budget";
 import { eq, sql } from "drizzle-orm";
 import {
   getDb,

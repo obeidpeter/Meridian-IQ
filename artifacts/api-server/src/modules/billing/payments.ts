@@ -24,7 +24,6 @@ import { initProviderPayment } from "./provider";
 // pending→confirmed/failed CAS; the partial unique index
 // (payment_intents_one_live_per_month) is the duplicate-payment wall.
 
-
 const LIVE_STATUSES = ["pending", "confirmed"] as const;
 
 export async function createPaymentIntent(

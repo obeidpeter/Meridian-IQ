@@ -96,7 +96,6 @@ async function hasLiveEngagement(
   return rows.length > 0;
 }
 
-
 // ---- Lifecycle -------------------------------------------------------------
 
 export interface PlanPolicyList {

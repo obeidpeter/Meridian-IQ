@@ -123,7 +123,6 @@ export const OPTIONAL_PLAN_KINDS: ReadonlySet<PlanStepKind> = new Set([
   "reconcile_matches",
 ]);
 
-
 function capabilityFor(
   kind: PlanStepKind,
 ): "invoice.submit" | "clerk.capture" | "invoice.write" | "reconciliation.act" {
