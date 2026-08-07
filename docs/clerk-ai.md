@@ -1142,8 +1142,22 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
   deliberate difference from statements: no quiet suppression — an
   "on track" brief is still the firm's monthly deliverable. No mobile
   deep link yet (no mobile brief screen; the push opens the app home).
-- **Phase 3** adds continuity ("what changed since last brief"), the
-  `advisory_briefs` memory corpus and acted-on tracking.
+- **Continuity + advisory memory** (Phase 3, round 51, contract 0.76.0):
+  generation loads the previous month's STORED brief — last month's
+  frozen truth, never a recompute — and appends a deterministic
+  "Since last month's brief" section: per-key deltas over the tracked
+  attention positions (statutory overdue, unfiled, past-window
+  invoices, chase-worthy, books hygiene) with improved/worsened triage
+  counts, both numerals of every comparison riding fact lines so the
+  grounding gate accepts a phrased note that quotes them. A first brief
+  has no comparison (the omission rule); an unreadable old blob degrades
+  to the same silence. The `advisory_briefs` memory corpus indexes
+  CLOSED-month briefs (immutable by construction — regeneration is
+  live-month-only), and the Ask memory note now searches it beside
+  `ask_questions`: brief items carry `kind: "advisory_brief"`
+  (additive contract field), re-read live under the firm pin plus the
+  clientPartyId sibling wall for client askers (a party-less client
+  caller gets no brief items, fail closed).
 
 ## Digests, statements & delivery
 
@@ -1568,11 +1582,14 @@ discipline applies.
   firm even across corpora), races absorbed by the natural unique key.
   The closed corpus catalogue: `ask_questions` (Phase 1) — resolved Ask
   questions (never retention-purged, so the index cannot outlive its
-  source) — and `escalation_replies` (Phase 2, round 46) — REPLIED
+  source) — `escalation_replies` (Phase 2, round 46) — REPLIED
   escalations keyed by the client-authored `reason` (the situation is the
   key; the operator's reply is what the caller re-reads live; escalations
   have no delete path and the reason is immutable, so the purge story is
-  clean).
+  clean) — and `advisory_briefs` (round 51) — CLOSED-month briefs only
+  (`month_start` before the live Lagos month), headline + note as the
+  indexed text; immutability is BY CONSTRUCTION because regeneration is
+  live-month-only, so the index never has to chase an edit.
 - **Retrieval** (`searchMemory`): exact cosine KNN over one firm's one
   corpus, model-pinned, similarity-floored — returns ranked SOURCE IDS
   only; what a caller does with them is deterministic app code (the app
@@ -1596,19 +1613,23 @@ discipline applies.
   platform-funded operator tooling.
 - **Retrieval-augmented Ask** (Phase 3, round 47, contract 0.73.0,
   `modules/clerk/ask-memory.ts`): after an Ask answer is COMPLETE, app
-  code — never the model — searches the firm's `ask_questions` corpus
-  with the incoming question (firm-funded query embed, same gates and
-  cold-corpus guard as the reply surface; k=3 — widened ×3 for client
-  askers, whose own-cases pin filters post-search — floor 0.35, the
-  current case excluded) and attaches an optional `memory` field to the
-  stored answer: title + up to 2 pointer-first items (caseId, question,
-  askedAt — never the past answer, which lives one click away in Ask
-  history). Only questions whose stored answer actually ANSWERED count —
-  a refusal stores an answer blob too and is no precedent (filtered in
-  the candidate query AND at the re-read, which is the load-bearing
-  check for legacy-indexed rows). Because the stored answer IS the API
-  answer, SEC-03 is enforced at ASSEMBLY: a client asker's items re-read
-  only cases that asker created (the multi-turn `createdBy` pin). The
+  code — never the model — searches the firm's `ask_questions` and
+  (round 51) `advisory_briefs` corpora with ONE firm-funded query embed
+  (same gates and per-corpus cold guards as the reply surface; k=3 —
+  widened ×3 for client askers, whose own-rows pins filter post-search —
+  floor 0.35, the current case excluded), merges the two searches into
+  one similarity-ranked list, and attaches an optional `memory` field to
+  the stored answer: title + up to 2 pointer-first items (caseId,
+  question, askedAt, and a `kind` — "question" or "advisory_brief" — so
+  the UI opens the right surface and labels brief items). Only questions
+  whose stored answer actually ANSWERED count — a refusal stores an
+  answer blob too and is no precedent (filtered in the candidate query
+  AND at the re-read, which is the load-bearing check for legacy-indexed
+  rows). Because the stored answer IS the API answer, SEC-03 is enforced
+  at ASSEMBLY: a client asker's items re-read only cases that asker
+  created (the multi-turn `createdBy` pin) and only briefs pinned to
+  that asker's own party — a party-less client asker gets no brief
+  search at all (fail closed, before the embed is charged). The
   whole note races a 2s deadline — garnish must not hold the answer
   hostage to a slow embedding endpoint — and any failure means no note,
   never a failed answer. `buildIntentUser` is untouched — nothing here

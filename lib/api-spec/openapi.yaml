@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.75.0
+  version: 0.76.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -11468,6 +11468,8 @@ components:
             type: object
             required: [caseId, question, askedAt]
             properties:
+              # The source row's id — an Ask case, or (round 51) an
+              # advisory brief; `kind` says which surface to open it in.
               caseId:
                 type: string
                 format: uuid
@@ -11476,6 +11478,10 @@ components:
               askedAt:
                 type: string
                 format: date-time
+              # Absent means "question" (pre-0.76 rows/clients).
+              kind:
+                type: string
+                enum: [question, advisory_brief]
     AskAnswerSection:
       type: object
       required: [title, text, facts]

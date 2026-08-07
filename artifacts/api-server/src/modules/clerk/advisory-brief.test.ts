@@ -19,6 +19,7 @@ import {
 import {
   BRIEF_FLAG_KEY,
   buildBriefTemplate,
+  computeChangesSection,
   buildBriefUser,
   computeAdvisoryBriefSections,
   deliverAdvisoryBriefs,
@@ -32,6 +33,7 @@ import {
   restoreClerkFlag,
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
+import { lagosMonthStart } from "./client-statement.ts";
 import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
@@ -415,4 +417,107 @@ test("sweep: flag dark generates nothing (delivery still runs)", async () => {
   } finally {
     await briefFlagGuard.restore();
   }
+});
+
+// ---- Phase 3: continuity ("since last brief") -------------------------------
+
+test("computeChangesSection: deltas, triage counts, honest skips", () => {
+  const section = (
+    key: AdvisoryBriefSection["key"],
+    facts: [string, string][],
+  ): AdvisoryBriefSection => ({
+    key,
+    title: "t",
+    text: "x.",
+    facts: facts.map(([k, v]) => ({
+      key: k,
+      label: k,
+      kind: "count" as const,
+      value: v,
+    })),
+    sourceReport: "s",
+  });
+  const prev = [
+    section("statutory", [["statutory_overdue_total", "3"], ["unfiled", "2"]]),
+    section("hygiene", [["hygiene_attention_total", "1"]]),
+  ];
+  const cur = [
+    section("statutory", [["statutory_overdue_total", "1"], ["unfiled", "2"]]),
+    section("hygiene", [["hygiene_attention_total", "2"]]),
+  ];
+  const changes = computeChangesSection(prev, cur);
+  assert.ok(changes);
+  assert.equal(changes.key, "changes");
+  const fv = (k: string) => changes.facts.find((f) => f.key === k)?.value;
+  assert.equal(fv("improved_count"), "1", "overdue 3 -> 1 improved");
+  assert.equal(fv("worsened_count"), "1", "hygiene 1 -> 2 worsened");
+  assert.equal(fv("delta_statutory_overdue_total"), "1 now (was 3)");
+  assert.equal(
+    fv("delta_unfiled"),
+    "2 now (was 2)",
+    "an unchanged nonzero pair still shows",
+  );
+  assert.ok(changes.text.includes("1 position improved"));
+
+  // Zero-to-zero everywhere (or missing keys): nothing worth saying.
+  assert.equal(
+    computeChangesSection(
+      [section("statutory", [["statutory_overdue_total", "0"]])],
+      [section("statutory", [["statutory_overdue_total", "0"]])],
+    ),
+    null,
+  );
+  // A key the older blob never had is skipped, not treated as zero.
+  const partial = computeChangesSection(
+    [section("statutory", [])],
+    [section("statutory", [["statutory_overdue_total", "4"]])],
+  );
+  assert.equal(partial, null, "no comparable pair, no section");
+});
+
+test("generate picks up last month's stored brief as the changes baseline", async () => {
+  // Plant last month's frozen truth directly (a stored snapshot, never a
+  // recompute): statutory_overdue_total was 3; today's seed computes 2.
+  await getDb()
+    .insert(clerkAdvisoryBriefsTable)
+    .values({
+      firmId,
+      clientPartyId: clientId,
+      monthStart: lagosMonthStart(1),
+      sections: [
+        {
+          key: "statutory",
+          title: "Statutory position",
+          text: "x.",
+          facts: [
+            {
+              key: "statutory_overdue_total",
+              label: "Statutory items overdue",
+              kind: "count",
+              value: "3",
+            },
+          ],
+          sourceReport: "s",
+        },
+      ] as unknown as Record<string, unknown>[],
+      headline: `prev headline ${SALT}`,
+      note: `prev note ${SALT}`,
+      source: "template",
+      generatedBy: userId,
+    })
+    .onConflictDoNothing();
+
+  const row = await generateAdvisoryBrief(firmId, clientId, null, userId);
+  const sections = row.sections as unknown as AdvisoryBriefSection[];
+  const changes = sections.find((s) => s.key === "changes");
+  assert.ok(changes, "the delta section rides the live brief");
+  assert.equal(
+    changes.facts.find((f) => f.key === "delta_statutory_overdue_total")?.value,
+    "2 now (was 3)",
+    "current register value vs last month's frozen snapshot",
+  );
+  assert.ok(
+    row.note.includes(changes.text),
+    "the template note speaks the delta",
+  );
 });

@@ -90,7 +90,7 @@ const briefJsonSchema = {
 
 // The closed section catalogue (contract key is an open string — append-only).
 export interface AdvisoryBriefSection {
-  key: "statutory" | "penalties" | "vat" | "money" | "hygiene";
+  key: "statutory" | "penalties" | "vat" | "money" | "hygiene" | "changes";
   title: string;
   text: string;
   facts: ProtectedFact[];
@@ -282,6 +282,81 @@ export async function computeAdvisoryBriefSections(
   return sections;
 }
 
+// Continuity + acted-on tracking (Phase 3, round 51): the tracked
+// attention positions compared month over month. Pure app arithmetic over
+// the STORED fact snapshots — no model, no re-query (last month's numbers
+// are last month's frozen truth, not a recompute that would shift under
+// today's data).
+const TRACKED_DELTAS: {
+  section: AdvisoryBriefSection["key"];
+  fact: string;
+  label: string;
+}[] = [
+  { section: "statutory", fact: "statutory_overdue_total", label: "Statutory items overdue" },
+  { section: "statutory", fact: "unfiled", label: "Returns not yet filed" },
+  { section: "penalties", fact: "overdue_invoices", label: "Invoices past the window" },
+  { section: "money", fact: "chase_count", label: "Invoices worth chasing" },
+  { section: "hygiene", fact: "hygiene_attention_total", label: "Books items needing attention" },
+];
+
+// The month-over-month delta section, or null when there is nothing worth
+// saying (every tracked pair zero-to-zero, or the older blob predates the
+// tracked keys). Both numerals of every comparison ride in fact lines so
+// the grounding gate accepts a phrased note that quotes them. Pure,
+// exported for tests.
+export function computeChangesSection(
+  previous: AdvisoryBriefSection[],
+  current: AdvisoryBriefSection[],
+): AdvisoryBriefSection | null {
+  const val = (
+    sections: AdvisoryBriefSection[],
+    sectionKey: string,
+    factKey: string,
+  ): number | null => {
+    const section = sections.find((s) => s?.key === sectionKey);
+    const f = section?.facts?.find?.((x) => x?.key === factKey);
+    if (!f) return null;
+    // Number("") is 0 — an empty stored value must read as absent, never
+    // as a real zero to diff against.
+    if (typeof f.value !== "string" || f.value.trim() === "") return null;
+    const n = Number(f.value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const deltas: ProtectedFact[] = [];
+  let improved = 0;
+  let worsened = 0;
+  for (const t of TRACKED_DELTAS) {
+    const prev = val(previous, t.section, t.fact);
+    const cur = val(current, t.section, t.fact);
+    // A key absent on either side (an older stored blob, a future shape)
+    // is skipped honestly rather than treated as zero.
+    if (prev === null || cur === null) continue;
+    if (prev === 0 && cur === 0) continue;
+    if (cur < prev) improved += 1;
+    else if (cur > prev) worsened += 1;
+    deltas.push(fact(`delta_${t.fact}`, t.label, "text", `${cur} now (was ${prev})`));
+  }
+  if (deltas.length === 0) return null;
+  const facts: ProtectedFact[] = [
+    fact("improved_count", "Tracked positions improved", "count", String(improved)),
+    fact("worsened_count", "Tracked positions worsened", "count", String(worsened)),
+    ...deltas,
+  ];
+  const text =
+    worsened === 0 && improved > 0
+      ? `Progress since last month: ${plural(improved, "tracked position")} improved and none worsened.`
+      : worsened > 0
+        ? `Since last month: ${plural(improved, "position")} improved, ${plural(worsened, "position")} worsened.`
+        : "The tracked positions are unchanged since last month's brief.";
+  return {
+    key: "changes",
+    title: "Since last month's brief",
+    text,
+    facts,
+    sourceReport: "Previous month's advisory brief",
+  };
+}
+
 // The deterministic fallback note — also what the grounding check compares
 // against. Pure, exported for tests.
 export function buildBriefTemplate(sections: AdvisoryBriefSection[]): {
@@ -371,11 +446,53 @@ export async function generateAdvisoryBrief(
 ): Promise<ClerkAdvisoryBriefRow> {
   await assertEngagedClient(firmId, clientPartyId);
   const monthStart = lagosMonthStart(0, now);
+  // Closed months are IMMUTABLE BY CONSTRUCTION — the advisory memory
+  // corpus indexes every month before the live one on exactly that
+  // guarantee (pointer-only, no re-embed on change), so a caller-supplied
+  // historical (or future) clock must never mint or rewrite a non-live
+  // month's row. No production caller passes one (route and sweep both use
+  // the real clock); this makes the invariant unbreakable, not just
+  // observed.
+  if (monthStart !== lagosMonthStart(0)) {
+    throw new DomainError(
+      "INVALID_MONTH",
+      "Advisory briefs can only be generated for the live Lagos month",
+      400,
+    );
+  }
   const sections = await computeAdvisoryBriefSections(
     firmId,
     clientPartyId,
     now,
   );
+  // Continuity + acted-on (Phase 3): the previous month's STORED brief —
+  // last month's frozen truth, never a recompute — yields a deterministic
+  // delta section. A first brief simply has no comparison (the
+  // month-end-close omission rule), and an unreadable old blob degrades
+  // to the same silence.
+  const [previousBrief] = await getDb()
+    .select({ sections: clerkAdvisoryBriefsTable.sections })
+    .from(clerkAdvisoryBriefsTable)
+    .where(
+      and(
+        eq(clerkAdvisoryBriefsTable.firmId, firmId),
+        eq(clerkAdvisoryBriefsTable.clientPartyId, clientPartyId),
+        eq(clerkAdvisoryBriefsTable.monthStart, lagosMonthStart(1, now)),
+      ),
+    )
+    .limit(1);
+  if (previousBrief && Array.isArray(previousBrief.sections)) {
+    try {
+      const changes = computeChangesSection(
+        previousBrief.sections as unknown as AdvisoryBriefSection[],
+        sections,
+      );
+      if (changes) sections.push(changes);
+    } catch {
+      // Stored-durably degrade: a blob this build cannot read adds no
+      // section, never a failed generation.
+    }
+  }
   const template = buildBriefTemplate(sections);
   let headline = template.headline;
   let note = template.note;

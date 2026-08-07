@@ -5,11 +5,13 @@ import { and, desc, eq } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
+  clerkAdvisoryBriefsTable,
   clerkCasesTable,
   clerkInferenceCallsTable,
   clerkMemoryEmbeddingsTable,
   featureFlagsTable,
   firmsTable,
+  partiesTable,
   usersTable,
   EMBEDDING_DIMS,
 } from "@workspace/db";
@@ -44,6 +46,8 @@ const vatCase = randomUUID();
 const payeCase = randomUUID();
 const ownCase = randomUUID();
 const refusedCase = randomUUID(); // stored answer has answered: false
+const briefPartyId = randomUUID(); // the closed-month brief's client
+const briefId = randomUUID();
 
 function axisVector(i: number, scale = 1): number[] {
   const v = new Array<number>(EMBEDDING_DIMS).fill(0);
@@ -66,6 +70,12 @@ const OWN_VECTOR = (() => {
   return v;
 })();
 const PAYE_VECTOR = axisVector(3);
+const BRIEF_VECTOR = (() => {
+  const v = new Array<number>(EMBEDDING_DIMS).fill(0);
+  v[0] = 0.8;
+  v[5] = 0.6;
+  return v;
+})();
 
 function fakeEmbedder(): MemoryEmbedder & { calls: number } {
   const embedder = {
@@ -75,13 +85,15 @@ function fakeEmbedder(): MemoryEmbedder & { calls: number } {
       embedder.calls += 1;
       return {
         vectors: texts.map((t) =>
-          t.includes("VAT position")
-            ? VAT_VECTOR
-            : t.includes("my own filings")
-              ? OWN_VECTOR
-              : t.includes("payroll")
-                ? PAYE_VECTOR
-                : QUERY_VECTOR,
+          t.includes("brief-marker")
+            ? BRIEF_VECTOR
+            : t.includes("VAT position")
+              ? VAT_VECTOR
+              : t.includes("my own filings")
+                ? OWN_VECTOR
+                : t.includes("payroll")
+                  ? PAYE_VECTOR
+                  : QUERY_VECTOR,
         ),
         promptTokens: 21,
       };
@@ -328,5 +340,101 @@ test("cold corpus (unknown model): no note, no embed spend", async () => {
     embedder.calls,
     0,
     "the cold-corpus guard fires BEFORE the embed",
+  );
+});
+
+// ---- Round 51: the advisory_briefs corpus rides the same note ---------------
+
+test("a closed-month brief surfaces as an advisory_brief item; SEC-03 pins it to its own client", async () => {
+  const { lagosMonthStart } = await import("./client-statement.ts");
+  const db = getDb();
+  await db.insert(partiesTable).values({
+    id: briefPartyId,
+    type: "client_business",
+    legalName: `AskMem Brief Party ${SALT}`,
+  });
+  // A CLOSED month's brief (immutable by construction) — the corpus's
+  // candidate window. The headline carries the fake embedder's marker.
+  await db.insert(clerkAdvisoryBriefsTable).values({
+    id: briefId,
+    firmId,
+    clientPartyId: briefPartyId,
+    monthStart: lagosMonthStart(1),
+    sections: [],
+    headline: `brief-marker: VAT position tightened ${SALT}`,
+    note: `brief note ${SALT}`,
+    source: "template",
+    generatedBy: null,
+  });
+  const embedder = fakeEmbedder();
+  const pass = await indexMemoryBatch(embedder, 20, { onlyFirmIds: [firmId] });
+  assert.equal(pass.indexed, 1, "only the new closed-month brief is offered");
+
+  // Firm asker: the ranked note now mixes corpora — vatCase (0.9) leads,
+  // the brief (0.8) second, each labeled with its kind.
+  const memory = await computeAskMemory({
+    firmId,
+    question: `how do we stand on VAT right now? ${SALT}`,
+    actorId: firmUserId,
+    clientScoped: false,
+    excludeCaseId: randomUUID(),
+    embedder,
+  });
+  assert.ok(memory);
+  assert.equal(memory.items.length, 2);
+  assert.equal(memory.items[0].caseId, vatCase);
+  assert.equal(memory.items[0].kind, "question");
+  assert.equal(memory.items[1].caseId, briefId);
+  assert.equal(memory.items[1].kind, "advisory_brief");
+  assert.ok(memory.items[1].question.includes("VAT position tightened"));
+
+  // A client asker from ANOTHER party: the brief is the second-best match
+  // but belongs to briefPartyId — the party pin drops it (and the createdBy
+  // pin keeps only the asker's own question case).
+  const sibling = await computeAskMemory({
+    firmId,
+    question: `how do we stand on VAT right now? ${SALT}`,
+    actorId: clientUserId,
+    clientScoped: true,
+    clientPartyId: randomUUID(), // not the brief's party
+    excludeCaseId: randomUUID(),
+    embedder,
+  });
+  assert.ok(sibling);
+  assert.ok(
+    sibling.items.every((i) => i.kind !== "advisory_brief"),
+    "a sibling's brief never crosses the party wall",
+  );
+
+  // The brief's OWN client sees it.
+  const owner = await computeAskMemory({
+    firmId,
+    question: `how do we stand on VAT right now? ${SALT}`,
+    actorId: clientUserId,
+    clientScoped: true,
+    clientPartyId: briefPartyId,
+    excludeCaseId: randomUUID(),
+    embedder,
+  });
+  assert.ok(owner);
+  assert.ok(
+    owner.items.some((i) => i.caseId === briefId && i.kind === "advisory_brief"),
+    "the client's own brief surfaces",
+  );
+
+  // A clientScoped caller with NO party gets no brief items (fail closed).
+  const partyless = await computeAskMemory({
+    firmId,
+    question: `how do we stand on VAT right now? ${SALT}`,
+    actorId: clientUserId,
+    clientScoped: true,
+    clientPartyId: null,
+    excludeCaseId: randomUUID(),
+    embedder,
+  });
+  assert.ok(
+    !partyless ||
+      partyless.items.every((i) => i.kind !== "advisory_brief"),
+    "no party, no brief items",
   );
 });

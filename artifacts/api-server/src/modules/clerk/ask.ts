@@ -284,6 +284,7 @@ export async function askClerk(
               question,
               actorId,
               clientScoped: ctx.clientScoped === true,
+              clientPartyId: ctx.clientPartyId,
               excludeCaseId: created.id,
               embedder: ctx.memoryEmbedder,
             });

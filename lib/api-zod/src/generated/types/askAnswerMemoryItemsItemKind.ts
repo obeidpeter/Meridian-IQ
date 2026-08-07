@@ -6,11 +6,10 @@
  * OpenAPI spec version: 0.76.0
  */
 
-export type ListClerkCasesKind = typeof ListClerkCasesKind[keyof typeof ListClerkCasesKind];
+export type AskAnswerMemoryItemsItemKind = typeof AskAnswerMemoryItemsItemKind[keyof typeof AskAnswerMemoryItemsItemKind];
 
 
-export const ListClerkCasesKind = {
-  extraction: 'extraction',
+export const AskAnswerMemoryItemsItemKind = {
   question: 'question',
-  notice: 'notice',
+  advisory_brief: 'advisory_brief',
 } as const;
