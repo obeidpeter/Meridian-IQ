@@ -1512,16 +1512,37 @@ discipline applies.
   the eval-growth shape — gating (try-lock + `clerk_ai` + the OPT-IN
   `clerk_memory` flag + extension feature-detect) in a short bypass
   transaction, embedding calls OUTSIDE it, `MEMORY_INDEX_BATCH = 20`
-  sources per pass grouped per firm, races absorbed by the natural unique
-  key. Phase 1's one corpus: `ask_questions` — resolved Ask questions
-  (never retention-purged, so the index cannot outlive its source).
+  sources per corpus per pass grouped per firm (one embedding call per
+  firm even across corpora), races absorbed by the natural unique key.
+  The closed corpus catalogue: `ask_questions` (Phase 1) — resolved Ask
+  questions (never retention-purged, so the index cannot outlive its
+  source) — and `escalation_replies` (Phase 2, round 46) — REPLIED
+  escalations keyed by the client-authored `reason` (the situation is the
+  key; the operator's reply is what the caller re-reads live; escalations
+  have no delete path and the reason is immutable, so the purge story is
+  clean).
 - **Retrieval** (`searchMemory`): exact cosine KNN over one firm's one
   corpus, model-pinned, similarity-floored — returns ranked SOURCE IDS
   only; what a caller does with them is deterministic app code (the app
-  picks, never the model). No retrieved text reaches any prompt in
-  Phase 1; Phase 2 upgrades an exemplar surface and Phase 3 adds the
-  retrieval-augmented Ask section, each with the fencing and
-  copy-backstop duties documented there.
+  picks, never the model).
+- **Semantic reply exemplars** (Phase 2, `modules/desk/draft-reply.ts`):
+  the reply-draft surface prefers a similarity-retrieved exemplar — embed
+  the incoming escalation's reason (FIRM-funded, ledger cohort
+  `embed.v1+q`), `searchMemory` over `escalation_replies` (k=3, floor
+  0.3 applied before the k cut, self-match excluded in SQL), re-read each
+  candidate's reply LIVE from the source row under the firm pin
+  (pointer-only: an orphaned embedding yields nothing) — and falls back
+  to the round-11 exact-error-code query when the rail is dark, the firm
+  is overridden off either flag, the firm's (corpus, model) slice is
+  empty (checked BEFORE the embed, so a cold corpus never charges the
+  firm for a guaranteed-no-match query), budget is exhausted, or nothing
+  was similar enough. The exemplar prompt is
+  IDENTICAL either way (PAST_REPLY fence, style-only system rules,
+  `copiesExampleSpecifics` deterministic discard); only the ledger cohort
+  differs — `draft-reply.v1+mx1` vs `+ex1` — so the two retrieval
+  strategies' kept-rates stay separable. The completion itself remains
+  platform-funded operator tooling. Phase 3 adds the
+  retrieval-augmented Ask section with its own fencing duties.
 
 ## Watches & alerts (sweeps, zero model calls)
 

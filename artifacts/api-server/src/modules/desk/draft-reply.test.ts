@@ -1,7 +1,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
@@ -12,15 +12,19 @@ import {
   errorCatalogueTable,
   submissionAttemptsTable,
   clerkInferenceCallsTable,
+  clerkMemoryEmbeddingsTable,
+  EMBEDDING_DIMS,
 } from "@workspace/db";
 import {
   copiesExampleSpecifics,
   draftEscalationReply,
   sendEscalationReply,
 } from "./draft-reply.ts";
-import { CLERK_FLAG_KEY } from "../clerk/gateway.ts";
+import { CLERK_FLAG_KEY, sha256 } from "../clerk/gateway.ts";
+import { indexMemoryBatch, MEMORY_FLAG_KEY } from "../clerk/memory.ts";
 import { setFlag } from "../flags/flags.ts";
-import type { CompletionRequest } from "../clerk/gateway.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
+import type { CompletionRequest, MemoryEmbedder } from "../clerk/gateway.ts";
 import {
   fakeGateway,
   restoreClerkFlag,
@@ -297,6 +301,217 @@ test("reply memory: same-firm same-code sent replies ride along fenced", async (
   );
   assert.equal(copying.source, "template");
   assert.equal(copying.viaExample, false);
+});
+
+const memoryFlagGuard = makeFlagGuard(MEMORY_FLAG_KEY);
+
+test("semantic reply memory: similar situations preferred over exact code, firm-pinned, self-skipped", async () => {
+  const db = getDb();
+  // Light the memory flag globally; the guard conserves whatever state the
+  // row had (the seed ships it dark) and the finally restores it.
+  await memoryFlagGuard.saveAndSet(true);
+  try {
+    // A same-firm replied escalation with NO error code — reachable only
+    // semantically — plus a foreign-firm ringer whose reason embeds to the
+    // exact query vector (similarity 1): the firm wall must beat similarity.
+    const similarId = randomUUID();
+    await db.insert(escalationsTable).values({
+      id: similarId,
+      invoiceId,
+      firmId,
+      clientPartyId: partyId,
+      reason: `VAT registration bounced ${SALT}`,
+      operatorReply: `We re-registered the VAT profile and resubmitted. ${SALT}`,
+      repliedAt: new Date(),
+      status: "resolved",
+    });
+    const ringerFirm = randomUUID();
+    const ringerParty = randomUUID();
+    const ringerInvoice = randomUUID();
+    await db
+      .insert(firmsTable)
+      .values({ id: ringerFirm, name: `Ringer Firm ${SALT}` });
+    await db.insert(partiesTable).values({
+      id: ringerParty,
+      type: "client_business",
+      legalName: `Ringer Party ${SALT}`,
+    });
+    await db.insert(invoicesTable).values({
+      id: ringerInvoice,
+      firmId: ringerFirm,
+      supplierPartyId: ringerParty,
+      buyerPartyId: ringerParty,
+      invoiceNumber: `RINGER-${SALT}`,
+      issueDate: "2026-07-01",
+    });
+    await db.insert(escalationsTable).values({
+      invoiceId: ringerInvoice,
+      firmId: ringerFirm,
+      clientPartyId: ringerParty,
+      reason: `ringer twin ${SALT}`,
+      operatorReply: `RINGER reply ${SALT}`,
+      repliedAt: new Date(),
+      status: "resolved",
+    });
+
+    // Deterministic embedder: the current escalation's reason (the query
+    // AND its own indexed row) and the ringer's reason share axis 0; the
+    // similar row sits at cosine 0.8; every other reason is orthogonal
+    // (below the similarity floor).
+    const axis = (i: number): number[] => {
+      const v = new Array<number>(EMBEDDING_DIMS).fill(0);
+      v[i] = 1;
+      return v;
+    };
+    let embeds = 0;
+    const embedder: MemoryEmbedder = {
+      model: `fake-embed-${SALT}`,
+      async embed(texts) {
+        embeds += 1;
+        return {
+          vectors: texts.map((t) => {
+            if (t.includes("VAT registration bounced")) {
+              const v = new Array<number>(EMBEDDING_DIMS).fill(0);
+              v[0] = 0.8;
+              v[1] = 0.6;
+              return v;
+            }
+            if (
+              t.includes("Submission keeps failing") ||
+              t.includes("ringer twin")
+            ) {
+              return axis(0);
+            }
+            return axis(2);
+          }),
+          promptTokens: texts.length * 3,
+        };
+      },
+    };
+
+    // The generalized indexer picks up the escalation_replies corpus end to
+    // end: this suite's four replied escalations for our firm plus the
+    // ringer's one (the foreign firm from the exact-code test stays outside
+    // the pin and is never embedded or charged).
+    const pass = await indexMemoryBatch(embedder, 20, {
+      onlyFirmIds: [firmId, ringerFirm],
+    });
+    // 5 = the two send tests' replies + the exact-code test's past row +
+    // similarId + the ringer — this count DEPENDS on the earlier tests in
+    // this file having run (node:test executes a file serially in
+    // declaration order); a --test-name-pattern run of this test alone
+    // would see fewer replied rows.
+    assert.equal(pass.indexed, 5, "all replied escalations indexed");
+    assert.equal(pass.skippedFirms, 0);
+    assert.equal(embeds, 2, "one embedding call per firm");
+    const [indexedRow] = await runInBypassContext(() =>
+      getDb()
+        .select()
+        .from(clerkMemoryEmbeddingsTable)
+        .where(
+          and(
+            eq(clerkMemoryEmbeddingsTable.firmId, firmId),
+            eq(clerkMemoryEmbeddingsTable.corpus, "escalation_replies"),
+            eq(clerkMemoryEmbeddingsTable.refId, similarId),
+          ),
+        ),
+    );
+    assert.ok(indexedRow, "similar row indexed under escalation_replies");
+    assert.equal(
+      indexedRow.contentHash,
+      sha256(`VAT registration bounced ${SALT}`),
+      "provenance hash over the embedded reason",
+    );
+    assert.equal(indexedRow.model, `fake-embed-${SALT}`);
+    const again = await indexMemoryBatch(embedder, 20, {
+      onlyFirmIds: [firmId, ringerFirm],
+    });
+    assert.equal(again.indexed, 0, "anti-join: nothing re-embedded");
+    assert.equal(embeds, 2, "no embedding call on an empty pass");
+
+    // The draft: the fake reply copies nothing from the example (the copy
+    // guard would otherwise correctly discard it and mask the retrieval).
+    const calls: CompletionRequest[] = [];
+    const gw = fakeGateway((req) => {
+      calls.push(req);
+      return JSON.stringify({
+        reply:
+          "Thanks for flagging this — we have handled this before and will resubmit shortly.",
+      });
+    });
+    const draft = await draftEscalationReply(escalationId, gw, embedder);
+    assert.equal(draft.source, "clerk");
+    assert.equal(draft.viaExample, true, "semantic exemplar rode along");
+    assert.equal(embeds, 3, "the query reason was embedded once");
+    const user = calls[0].user as string;
+    assert.ok(user.includes("-----BEGIN PAST_REPLY-----"), "example fenced");
+    assert.ok(
+      user.includes(`We re-registered the VAT profile and resubmitted. ${SALT}`),
+      "the SIMILAR reply was chosen — self at similarity 1 skipped",
+    );
+    assert.ok(
+      !user.includes(`RINGER reply ${SALT}`),
+      "the foreign twin never crosses the firm wall",
+    );
+    assert.ok(
+      !user.includes(`Past reply ${SALT}`),
+      "semantic retrieval preferred over the exact-code fallback",
+    );
+    const [memoryLedger] = await runInBypassContext(() =>
+      getDb()
+        .select({ promptVersion: clerkInferenceCallsTable.promptVersion })
+        .from(clerkInferenceCallsTable)
+        .where(eq(clerkInferenceCallsTable.purpose, "draft_reply"))
+        .orderBy(desc(clerkInferenceCallsTable.createdAt))
+        .limit(1),
+    );
+    assert.equal(memoryLedger.promptVersion, "draft-reply.v1+mx1");
+    // Existence under the exact (purpose, firm, cohort) filter — firm and
+    // prompt version in the WHERE, so neither a concurrent suite's embeds
+    // nor a same-millisecond createdAt tie with this test's own INDEX
+    // embeds (cohort "embed.v1") can shadow the assertion.
+    const [embedLedger] = await runInBypassContext(() =>
+      getDb()
+        .select({ id: clerkInferenceCallsTable.id })
+        .from(clerkInferenceCallsTable)
+        .where(
+          and(
+            eq(clerkInferenceCallsTable.purpose, "embed_memory"),
+            eq(clerkInferenceCallsTable.firmId, firmId),
+            eq(clerkInferenceCallsTable.promptVersion, "embed.v1+q"),
+          ),
+        )
+        .limit(1),
+    );
+    assert.ok(
+      embedLedger,
+      "the query embed is firm-funded and carries its own ledger cohort",
+    );
+
+    // Rail dark: the exact-code exemplar answers, and no embed call is made.
+    // The fake embedder IS passed here — its untouched counter is what
+    // proves the gate short-circuits, not the absence of an embedder.
+    await setFlag(MEMORY_FLAG_KEY, false);
+    const fallback = await draftEscalationReply(escalationId, gw, embedder);
+    assert.equal(fallback.viaExample, true);
+    const fallbackUser = calls[1].user as string;
+    assert.ok(
+      fallbackUser.includes(`Past reply ${SALT}`),
+      "rail dark: the exact-code exemplar rides instead",
+    );
+    assert.equal(embeds, 3, "no embed spend while the rail is dark");
+    const [exLedger] = await runInBypassContext(() =>
+      getDb()
+        .select({ promptVersion: clerkInferenceCallsTable.promptVersion })
+        .from(clerkInferenceCallsTable)
+        .where(eq(clerkInferenceCallsTable.purpose, "draft_reply"))
+        .orderBy(desc(clerkInferenceCallsTable.createdAt))
+        .limit(1),
+    );
+    assert.equal(exLedger.promptVersion, "draft-reply.v1+ex1");
+  } finally {
+    await memoryFlagGuard.restore();
+  }
 });
 
 test("copiesExampleSpecifics: identifiers and long runs trip, style does not", () => {

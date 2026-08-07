@@ -48,10 +48,13 @@ export const clerkMemoryEmbeddingsTable = pgTable(
     // an opaque direction in vector space.
     refId: uuid("ref_id").notNull(),
     // Hash of the embedded text at indexing time — PROVENANCE, not a live
-    // change detector: Phase 1's one corpus (ask questions) is immutable,
-    // so the indexer's anti-join checks existence + model only. A future
-    // mutable-text corpus must compare this hash in its candidate query
-    // before reusing the indexer, or it will serve stale vectors.
+    // change detector: both current corpora embed IMMUTABLE text (an Ask
+    // question is never edited; an escalation's reason is written once at
+    // creation — the reply path only ever touches operator_reply/
+    // replied_at/status), so the indexer's anti-join checks existence +
+    // model only. A future mutable-text corpus must compare this hash in
+    // its candidate query before reusing the indexer, or it will serve
+    // stale vectors.
     contentHash: text("content_hash").notNull(),
     // The embedding model that produced the vector; retrieval only ever
     // compares vectors from the SAME model (a model change re-indexes).
