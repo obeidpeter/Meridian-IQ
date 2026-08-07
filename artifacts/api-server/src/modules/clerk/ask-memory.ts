@@ -1,5 +1,6 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { getDb, clerkCasesTable, EMBEDDING_DIMS } from "@workspace/db";
+import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../flags/flags";
 import {
   CLERK_FLAG_KEY,
@@ -61,13 +62,32 @@ export const ASK_MEMORY_K = 3;
 export const ASK_MEMORY_MIN_SIMILARITY = 0.35;
 export const ASK_MEMORY_MAX_ITEMS = 2;
 export const ASK_MEMORY_TITLE = "Last time something like this happened";
+// The note is garnish on the USER-FACING Ask response path: a degraded
+// embedding endpoint must delay the answer by at most this much, not by
+// the provider SDK's minutes-long default timeout. The raced-out compute
+// keeps running to completion in the background — its ledger row still
+// lands, nothing is half-written (the note performs no writes) — we
+// simply stop waiting for it.
+export const ASK_MEMORY_DEADLINE_MS = 2_000;
 
 // ask.ts runs OUTSIDE the per-request transaction (NO_CONTEXT route), so
 // every tenant-data read here opens its own short firm scope (inClerkScope)
 // — the memory table's firm-keyed RLS applies exactly as a request would
 // have it. embedWithLedger is called bare, precisely like ask.ts's own
 // gateway.infer (flags and ledger surfaces carry their own posture).
-export async function computeAskMemory(params: {
+export async function computeAskMemory(
+  params: AskMemoryParams,
+): Promise<AskAnswerMemory | undefined> {
+  return Promise.race([
+    computeAskMemoryInner(params),
+    new Promise<undefined>((resolve) => {
+      const timer = setTimeout(() => resolve(undefined), ASK_MEMORY_DEADLINE_MS);
+      timer.unref();
+    }),
+  ]);
+}
+
+interface AskMemoryParams {
   firmId: string;
   question: string;
   actorId: string;
@@ -80,7 +100,11 @@ export async function computeAskMemory(params: {
   // provider embedder resolves lazily, only after the gates pass. An
   // explicit null means "no embedder" — the note is skipped.
   embedder?: MemoryEmbedder | null;
-}): Promise<AskAnswerMemory | undefined> {
+}
+
+async function computeAskMemoryInner(
+  params: AskMemoryParams,
+): Promise<AskAnswerMemory | undefined> {
   try {
     if (!(await memoryRailReady())) return undefined;
     if (!(await isFeatureEnabled(CLERK_FLAG_KEY, params.firmId))) {
@@ -114,41 +138,55 @@ export async function computeAskMemory(params: {
         corpus: "ask_questions",
         model: embedded.model,
         vector: embedded.vectors[0],
-        k: ASK_MEMORY_K,
+        // A client asker searches WIDER: the index has no creator
+        // dimension, so the own-cases pin below discards firm-staff
+        // matches post-search — with only k slots, the asker's own
+        // similar case at rank 4 would never surface. Exact per-firm
+        // scan; the wider k costs nothing.
+        k: params.clientScoped ? ASK_MEMORY_K * 3 : ASK_MEMORY_K,
         minSimilarity: ASK_MEMORY_MIN_SIMILARITY,
         excludeRefId: params.excludeCaseId,
       }),
     );
     if (matches.length === 0) return undefined;
 
-    // Pointer-only re-read, ranked order, capped: the index stores no text,
-    // so each item's question comes LIVE from the case row under the firm
-    // pin (+ the SEC-03 own-cases pin for a client asker) — an orphaned or
-    // out-of-scope embedding row yields nothing rather than leaking.
+    // Pointer-only re-read, ONE scope for the whole batch, then picked in
+    // rank order and capped: the index stores no text, so each item's
+    // question comes LIVE from the case row under the firm pin (+ the
+    // SEC-03 own-cases pin for a client asker) — an orphaned or
+    // out-of-scope embedding row yields nothing rather than leaking. The
+    // answered check is LOAD-BEARING here, not just in the candidate
+    // query: rows indexed before that filter existed (or under an older
+    // model) can still name a refused case, and a refusal is no precedent.
+    const rows = await inClerkScope(params.firmId, () =>
+      getDb()
+        .select({
+          id: clerkCasesTable.id,
+          question: clerkCasesTable.question,
+          createdAt: clerkCasesTable.createdAt,
+        })
+        .from(clerkCasesTable)
+        .where(
+          and(
+            inArray(
+              clerkCasesTable.id,
+              matches.map((m) => m.refId),
+            ),
+            eq(clerkCasesTable.firmId, params.firmId),
+            eq(clerkCasesTable.kind, "question"),
+            isNotNull(clerkCasesTable.answer),
+            sql`${clerkCasesTable.answer}->>'answered' = 'true'`,
+            ...(params.clientScoped
+              ? [eq(clerkCasesTable.createdBy, params.actorId)]
+              : []),
+          ),
+        ),
+    );
+    const byId = new Map(rows.map((r) => [r.id, r]));
     const items: AskAnswerMemoryItem[] = [];
     for (const match of matches) {
       if (items.length >= ASK_MEMORY_MAX_ITEMS) break;
-      const [row] = await inClerkScope(params.firmId, () =>
-        getDb()
-          .select({
-            id: clerkCasesTable.id,
-            question: clerkCasesTable.question,
-            createdAt: clerkCasesTable.createdAt,
-          })
-          .from(clerkCasesTable)
-          .where(
-            and(
-              eq(clerkCasesTable.id, match.refId),
-              eq(clerkCasesTable.firmId, params.firmId),
-              eq(clerkCasesTable.kind, "question"),
-              isNotNull(clerkCasesTable.answer),
-              ...(params.clientScoped
-                ? [eq(clerkCasesTable.createdBy, params.actorId)]
-                : []),
-            ),
-          )
-          .limit(1),
-      );
+      const row = byId.get(match.refId);
       if (row?.question) {
         items.push({
           caseId: row.id,
@@ -159,9 +197,14 @@ export async function computeAskMemory(params: {
     }
     if (items.length === 0) return undefined;
     return { title: ASK_MEMORY_TITLE, items };
-  } catch {
+  } catch (err) {
     // Best-effort: a retrieval failure means "no memory note", never a
-    // failed answer.
+    // failed answer — but a SYSTEMIC breakage (a bad column, a broken
+    // scope) should not be invisible forever, so it leaves a debug trace.
+    logger.debug(
+      { err: err instanceof Error ? err.message : String(err) },
+      "ask memory note skipped (retrieval failure)",
+    );
     return undefined;
   }
 }

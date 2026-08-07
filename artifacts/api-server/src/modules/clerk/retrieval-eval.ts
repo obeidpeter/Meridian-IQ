@@ -118,7 +118,15 @@ export function scoreRetrieval(
   const results: RetrievalEvalFixtureResult[] = queryVectors.map(
     ({ query, vector }) => {
       const ranked = docVectors
-        .map((d, i) => ({ key: d.key, sim: cosine(vector, d.vector), i }))
+        .map((d, i) => {
+          // Standalone safety: a NaN cosine (degenerate input) would fall
+          // through the sort comparator to the index tiebreak and READ AS
+          // a hit for early docs — pin it to the bottom instead. Not
+          // reachable via runRetrievalEval (embedWithLedger discards
+          // non-finite vectors), but the scorer is exported.
+          const raw = cosine(vector, d.vector);
+          return { key: d.key, sim: Number.isFinite(raw) ? raw : -Infinity, i };
+        })
         .sort((a, b) => b.sim - a.sim || a.i - b.i);
       const idx = ranked.findIndex((r) => r.key === query.expectedDoc);
       const rank = idx === -1 ? null : idx + 1;
@@ -237,8 +245,10 @@ registerSweep(async function sweepRetrievalAutoEval(): Promise<void> {
 // ---- Drop watch -------------------------------------------------------------
 
 const MAX_BASELINE_RUNS = 5;
+// Floored: a fractional env value must not smuggle in an off-by-one
+// through the `< MIN + 1` comparison.
 const MIN_BASELINE_RUNS = Math.min(
-  envThreshold(process.env.RETRIEVAL_ALERT_MIN_RUNS, 3),
+  Math.floor(envThreshold(process.env.RETRIEVAL_ALERT_MIN_RUNS, 3)),
   MAX_BASELINE_RUNS,
 );
 const DROP_POINTS = envThreshold(process.env.RETRIEVAL_ALERT_DROP, 0.15);

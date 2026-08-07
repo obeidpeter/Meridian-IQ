@@ -63,11 +63,12 @@ const MEMORY_LOCK_ID = 731_850;
 // The CLOSED corpus catalogue. Growing this list is a design decision, not
 // a data change: every corpus needs a candidate query, a text builder, a
 // sensitivity call and a purge story.
-//  - ask_questions (Phase 1): resolved Ask questions (kind='question' cases
-//    with an answer). The question text is firm-authored, never
-//    retention-purged (unlike extraction source_text, so the index can
-//    never outlive its source), and it is the corpus Phase 3's
-//    retrieval-augmented Ask reads.
+//  - ask_questions (Phase 1): resolved Ask questions — kind='question'
+//    cases whose stored answer actually ANSWERED (a refusal stores an
+//    answer blob too; it is no precedent). The question text is
+//    firm-authored, never retention-purged (unlike extraction source_text,
+//    so the index can never outlive its source), and it is the corpus
+//    Phase 3's retrieval-augmented Ask reads.
 //  - escalation_replies (Phase 2): REPLIED escalations, keyed by the
 //    client-authored `reason` text — the retrieval question at draft time
 //    is "which past escalation LOOKED like this one", so the situation is
@@ -130,6 +131,13 @@ async function askQuestionCandidates(
         AND c.firm_id IS NOT NULL
         AND c.question IS NOT NULL
         AND c.answer IS NOT NULL
+        -- ANSWERED, not merely carrying an answer blob: a refusal stores
+        -- {answered: false, refusalReason} too (ask.ts refuse()), and a
+        -- refused question is no precedent — it must not consume k slots
+        -- or be cited as "last time". Readers still re-check this on the
+        -- source row (ask-memory.ts): rows indexed before this filter
+        -- existed stay in the index until re-modeled.
+        AND c.answer->>'answered' = 'true'
         AND m.id IS NULL
         ${firmPinClause("c", onlyFirmIds)}
       ORDER BY c.created_at DESC

@@ -7,6 +7,7 @@ import {
   runInBypassContext,
   clerkCasesTable,
   clerkInferenceCallsTable,
+  clerkMemoryEmbeddingsTable,
   featureFlagsTable,
   firmsTable,
   usersTable,
@@ -42,6 +43,7 @@ const clientUserId = randomUUID(); // client user — created ownCase only
 const vatCase = randomUUID();
 const payeCase = randomUUID();
 const ownCase = randomUUID();
+const refusedCase = randomUUID(); // stored answer has answered: false
 
 function axisVector(i: number, scale = 1): number[] {
   const v = new Array<number>(EMBEDDING_DIMS).fill(0);
@@ -137,6 +139,17 @@ before(async () => {
       question: `Are my own filings up to date? ${SALT}`,
       answer,
     },
+    {
+      // A REFUSAL also stores a non-null answer blob — it must neither be
+      // indexed (the candidates filter) nor cited (the re-read filter).
+      id: refusedCase,
+      firmId,
+      kind: "question",
+      status: "escalated",
+      createdBy: firmUserId,
+      question: `Refused VAT ask ${SALT}`,
+      answer: { answered: false, refusalReason: `refused ${SALT}` },
+    },
   ]);
 });
 
@@ -153,7 +166,9 @@ after(async () => {
 test("firm asker: similarity-ranked pointer items, capped, firm-funded query embed", async () => {
   const embedder = fakeEmbedder();
   const pass = await indexMemoryBatch(embedder, 20, { onlyFirmIds: [firmId] });
-  assert.equal(pass.indexed, 3, "the three answered questions indexed");
+  // 3, not 4: the refused case's non-null answer blob does NOT make it a
+  // candidate — only questions whose answer actually answered are indexed.
+  assert.equal(pass.indexed, 3, "the three ANSWERED questions indexed");
 
   const memory = await computeAskMemory({
     firmId,
@@ -226,6 +241,45 @@ test("the current case never cites itself", async () => {
   assert.ok(
     !memory || memory.items.every((i) => i.caseId !== vatCase),
     "the excluded case id is never an item",
+  );
+});
+
+test("a refused question is never cited — even when legacy-indexed", async () => {
+  const embedder = fakeEmbedder();
+  // Simulate a row indexed BEFORE the answered-only candidate filter
+  // existed: hand-inserted at similarity 1 with the query, so it would be
+  // the TOP match if only the index were consulted. The re-read's answered
+  // check is the load-bearing wall.
+  await runInBypassContext(async () => {
+    await getDb()
+      .insert(clerkMemoryEmbeddingsTable)
+      .values({
+        firmId,
+        corpus: "ask_questions",
+        refId: refusedCase,
+        contentHash: `legacy-${SALT}`,
+        model: embedder.model,
+        embedding: QUERY_VECTOR,
+      })
+      .onConflictDoNothing();
+  });
+  const memory = await computeAskMemory({
+    firmId,
+    question: `how do we stand on VAT right now? ${SALT}`,
+    actorId: firmUserId,
+    clientScoped: false,
+    excludeCaseId: randomUUID(),
+    embedder,
+  });
+  assert.ok(memory, "the answered matches still yield a note");
+  assert.ok(
+    memory.items.every((i) => i.caseId !== refusedCase),
+    "a refusal is no precedent",
+  );
+  assert.equal(
+    memory.items[0].caseId,
+    vatCase,
+    "the top ANSWERED match leads",
   );
 });
 
