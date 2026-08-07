@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.70.0
+ * OpenAPI spec version: 0.71.0
  */
 
 export type NoticeDecisionInputNoticeType = typeof NoticeDecisionInputNoticeType[keyof typeof NoticeDecisionInputNoticeType];

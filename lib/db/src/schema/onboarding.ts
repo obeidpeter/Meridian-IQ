@@ -66,6 +66,13 @@ export const clientOnboardingRunsTable = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
+    // The day-one OPENING POSITION (Phase 2), frozen by the completion CAS
+    // in the same UPDATE that terminalizes the run — the permanent "where
+    // we started" baseline (modules/onboarding/opening-position.ts). Null
+    // until completion; never rewritten after (the frozen-checklist rule).
+    openingPosition: jsonb("opening_position").$type<
+      Record<string, unknown>
+    >(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

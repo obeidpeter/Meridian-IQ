@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.70.0
+ * OpenAPI spec version: 0.71.0
  */
 import {
   useMutation,
@@ -300,6 +300,7 @@ import type {
   OnboardingProspect,
   OnboardingRun,
   OnboardingRunList,
+  OpeningPosition,
   OperatorBrief,
   OperatorCaseView,
   OperatorQueueStats,
@@ -24127,6 +24128,83 @@ export const useAbandonOnboardingRun = <TError = ErrorType<NotFoundResponse | Co
       > => {
       return useMutation(getAbandonOnboardingRunMutationOptions(options));
     }
+
+export const getGetOnboardingOpeningPositionUrl = (id: string,) => {
+
+
+
+
+  return `/api/onboarding/runs/${id}/opening-position`
+}
+
+/**
+ * @summary The client's day-one opening position (frozen at completion, provisional while active)
+ */
+export const getOnboardingOpeningPosition = async (id: string, options?: RequestInit): Promise<OpeningPosition> => {
+
+  return customFetch<OpeningPosition>(getGetOnboardingOpeningPositionUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingOpeningPositionQueryKey = (id: string,) => {
+    return [
+    `/api/onboarding/runs/${id}/opening-position`
+    ] as const;
+    }
+
+
+export const getGetOnboardingOpeningPositionQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingOpeningPosition>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingOpeningPosition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingOpeningPositionQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingOpeningPosition>>> = ({ signal }) => getOnboardingOpeningPosition(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingOpeningPosition>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingOpeningPositionQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingOpeningPosition>>>
+export type GetOnboardingOpeningPositionQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary The client's day-one opening position (frozen at completion, provisional while active)
+ */
+
+export function useGetOnboardingOpeningPosition<TData = Awaited<ReturnType<typeof getOnboardingOpeningPosition>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingOpeningPosition>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingOpeningPositionQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListWhtCreditsUrl = (params?: ListWhtCreditsParams,) => {
   const normalizedParams = new URLSearchParams();

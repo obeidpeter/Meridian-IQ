@@ -7,11 +7,14 @@ import {
   useRefreshOnboardingRun,
   useSkipOnboardingStep,
   useAbandonOnboardingRun,
+  useGetOnboardingOpeningPosition,
   getListOnboardingRunsQueryKey,
+  getGetOnboardingOpeningPositionQueryKey,
 } from "@workspace/api-client-react";
 import type {
   OnboardingRun,
   OnboardingStep,
+  OpeningPosition,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -74,6 +77,77 @@ export function pickOnboardingRun(
   return runs.find((r) => r.status === "active") ?? runs[0] ?? null;
 }
 
+const AUTOMATION_LABELS: Record<string, string> = {
+  reconcile_matches: "Receipt matching",
+  submit_overdue: "Overdue submission",
+  retry_failed: "Failed-submission retry",
+  draft_recurring: "Recurring drafts",
+};
+
+/**
+ * The opening position as compact label/value lines, in reading order.
+ * The core day-one facts always render — "0 invoices" and "None" are
+ * honest baseline statements. Receivables emit ONE LINE PER CURRENCY
+ * (cross-currency totals cannot be summed, and dropping a currency would
+ * understate the book). The conditional sections (WHT, notices,
+ * automation evidence) render only when there is something to report.
+ */
+export function openingSummaryLines(
+  p: OpeningPosition,
+): { label: string; value: string }[] {
+  const lines: { label: string; value: string }[] = [];
+  lines.push({
+    label: "Invoice history",
+    value:
+      p.history.invoiceCount > 0
+        ? `${p.history.invoiceCount} invoice(s), ${p.history.earliestIssueDate} → ${p.history.latestIssueDate}`
+        : "0 invoices on record",
+  });
+  for (const group of p.receivables.groups) {
+    lines.push({
+      label:
+        p.receivables.groups.length > 1
+          ? `Outstanding receivables (${group.currency})`
+          : "Outstanding receivables",
+      value: `${group.currency} ${group.outstandingTotal} across ${group.invoiceCount} invoice(s)`,
+    });
+  }
+  lines.push({
+    // All VAT-position amounts are NGN by module doctrine (non-NGN
+    // documents convert at their captured rate) — say so.
+    label: "Net VAT (this month)",
+    value: `NGN ${p.vat.netVat}`,
+  });
+  lines.push({
+    label: "Unfiled returns",
+    value:
+      p.filings.unfiled > 0
+        ? `${p.filings.unfiled} unfiled (${p.filings.overdue} overdue)`
+        : "None",
+  });
+  if (p.wht.awaiting > 0) {
+    lines.push({
+      label: "WHT credit notes awaited",
+      value: `${p.wht.awaiting} (${p.wht.awaitingAmount})`,
+    });
+  }
+  if (p.obligations.open > 0) {
+    lines.push({
+      label: "Open authority notices",
+      value: `${p.obligations.open} (${p.obligations.overdue} overdue)`,
+    });
+  }
+  for (const kind of p.automation.kinds) {
+    if (kind.sample > 0 && kind.agreementRate !== null) {
+      lines.push({
+        label: `${AUTOMATION_LABELS[kind.kind] ?? kind.kind} evidence`,
+        value: `${Math.round(kind.agreementRate * 100)}% agreement over ${kind.sample} decision(s)`,
+      });
+    }
+  }
+  return lines;
+}
+
 // ---- The card ---------------------------------------------------------------
 
 export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
@@ -90,10 +164,32 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
     },
   });
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({
+  const run = pickOnboardingRun(data?.runs ?? []);
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({
       queryKey: getListOnboardingRunsQueryKey(),
     });
+    if (run) {
+      void queryClient.invalidateQueries({
+        queryKey: getGetOnboardingOpeningPositionQueryKey(run.id),
+      });
+    }
+  };
+
+  // The day-one position: frozen once the run completes, a live provisional
+  // picture while it is active. NOT fetched for an abandoned run — its
+  // picture would stay "provisional" forever at full recompute cost, a
+  // baseline pending nothing.
+  const wantPosition = !!run && run.status !== "abandoned";
+  const { data: position } = useGetOnboardingOpeningPosition(run?.id ?? "", {
+    query: {
+      enabled: wantPosition,
+      queryKey: getGetOnboardingOpeningPositionQueryKey(run?.id ?? ""),
+      staleTime: 60_000,
+      retry: false,
+    },
+  });
 
   const { data: me } = useGetMe();
   const canWrite = !!me?.capabilities.includes("engagement.write");
@@ -140,8 +236,6 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
       onError: onError("Could not close the run"),
     },
   });
-
-  const run = pickOnboardingRun(data?.runs ?? []);
 
   return (
     <Card data-testid="card-onboarding">
@@ -326,6 +420,37 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                 );
               })}
             </div>
+            {wantPosition && position && (
+              <div
+                className="border rounded-md p-3 space-y-1"
+                data-testid="section-onboarding-position"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium text-sm">Day-one position</p>
+                  {position.provisional && (
+                    <span
+                      className={pillClasses("slate")}
+                      data-testid="pill-onboarding-position-provisional"
+                    >
+                      Provisional
+                    </span>
+                  )}
+                </div>
+                {openingSummaryLines(position).map((line) => (
+                  <p
+                    key={line.label}
+                    className="text-xs text-muted-foreground"
+                    data-testid={`line-onboarding-position-${line.label
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, "-")
+                      .replace(/^-|-$/g, "")}`}
+                  >
+                    {line.label}:{" "}
+                    <span className="text-foreground">{line.value}</span>
+                  </p>
+                ))}
+              </div>
+            )}
             {canWrite && run.status === "active" && (
               <Button
                 size="sm"

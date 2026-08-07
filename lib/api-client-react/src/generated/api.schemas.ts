@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.70.0
+ * OpenAPI spec version: 0.71.0
  */
 export interface HealthStatus {
   status: string;
@@ -4239,6 +4239,60 @@ export interface SkipOnboardingStepInput {
      * @maxLength 500
      */
   reason: string;
+}
+
+export type OpeningPositionHistory = {
+  invoiceCount: number;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  earliestIssueDate: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  latestIssueDate: string | null;
+};
+
+export type OpeningPositionFilings = {
+  unfiled: number;
+  dueSoon: number;
+  overdue: number;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  nextDueDate: string | null;
+};
+
+export type OpeningPositionWht = {
+  awaiting: number;
+  awaitingAmount: string;
+};
+
+export type OpeningPositionObligations = {
+  open: number;
+  dueSoon: number;
+  overdue: number;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  nearestDue: string | null;
+};
+
+export interface OpeningPosition {
+  computedAt: string;
+  provisional: boolean;
+  history: OpeningPositionHistory;
+  receivables: ReceivablesSummary;
+  payables: PayablesSummary;
+  vat: ClientVatPosition;
+  filings: OpeningPositionFilings;
+  wht: OpeningPositionWht;
+  obligations: OpeningPositionObligations;
+  automation: AutomationEvidence;
 }
 
 /**

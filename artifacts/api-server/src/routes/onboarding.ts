@@ -4,6 +4,8 @@ import {
   AbandonOnboardingRunResponse,
   CreateOnboardingRunBody,
   CreateOnboardingRunResponse,
+  GetOnboardingOpeningPositionParams,
+  GetOnboardingOpeningPositionResponse,
   GetOnboardingRunParams,
   GetOnboardingRunResponse,
   ListOnboardingRunsQueryParams,
@@ -31,6 +33,7 @@ import {
   skipOnboardingStep,
   type OnboardingStepKey,
 } from "../modules/onboarding/onboarding";
+import { computeOpeningPosition } from "../modules/onboarding/opening-position";
 import type { ClientOnboardingRun } from "@workspace/db";
 
 // Onboard with Clerk (contract 0.70.0): the evidence-based onboarding
@@ -122,6 +125,39 @@ router.post(
       req.principal.userId,
     );
     res.json(SkipOnboardingStepResponse.parse(await detailFor(req, run)));
+  },
+);
+
+// The day-one opening position (Phase 2): a completed run serves its FROZEN
+// baseline (written by the completion CAS); an active or abandoned run
+// computes a live PROVISIONAL picture on request. Read-only — same
+// engagement.read + SEC-03 posture as the run detail.
+router.get(
+  "/onboarding/runs/:id/opening-position",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "engagement.read");
+    const params = parseOrThrow(GetOnboardingOpeningPositionParams, req.params);
+    const firmId = requireFirmScope(req.principal);
+    const run = await getOnboardingRun(params.id, firmId);
+    assertClientPartyScope(req.principal, run.clientPartyId);
+    if (run.status === "completed" && run.openingPosition) {
+      // A frozen blob outlives the contract that wrote it: the shared
+      // $ref'd schemas keep evolving for their own dashboards, and a
+      // stored snapshot must never become a permanent 500. Parse
+      // defensively; on drift, degrade to an honest live recompute
+      // (marked provisional — it is no longer the frozen baseline).
+      const frozen = GetOnboardingOpeningPositionResponse.safeParse(
+        run.openingPosition,
+      );
+      if (frozen.success) {
+        res.json(frozen.data);
+        return;
+      }
+    }
+    const position = await computeOpeningPosition(firmId, run.clientPartyId, {
+      provisional: true,
+    });
+    res.json(GetOnboardingOpeningPositionResponse.parse(position));
   },
 );
 

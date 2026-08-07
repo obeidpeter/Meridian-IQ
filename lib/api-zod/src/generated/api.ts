@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.70.0
+ * OpenAPI spec version: 0.71.0
  */
 import * as zod from 'zod';
 
@@ -9469,6 +9469,141 @@ export const AbandonOnboardingRunResponse = zod.object({
 })),
   "createdAt": zod.coerce.date(),
   "completedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary The client's day-one opening position (frozen at completion, provisional while active)
+ */
+export const GetOnboardingOpeningPositionParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const getOnboardingOpeningPositionResponseHistoryEarliestIssueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getOnboardingOpeningPositionResponseHistoryLatestIssueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getOnboardingOpeningPositionResponseFilingsNextDueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getOnboardingOpeningPositionResponseObligationsNearestDueRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getOnboardingOpeningPositionResponseAutomationAsOfRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetOnboardingOpeningPositionResponse = zod.object({
+  "computedAt": zod.coerce.date(),
+  "provisional": zod.boolean(),
+  "history": zod.object({
+  "invoiceCount": zod.number(),
+  "earliestIssueDate": zod.string().regex(getOnboardingOpeningPositionResponseHistoryEarliestIssueDateRegExp).nullable(),
+  "latestIssueDate": zod.string().regex(getOnboardingOpeningPositionResponseHistoryLatestIssueDateRegExp).nullable()
+}),
+  "receivables": zod.object({
+  "asOf": zod.string(),
+  "groups": zod.array(zod.object({
+  "currency": zod.string(),
+  "outstandingTotal": zod.string(),
+  "invoiceCount": zod.number(),
+  "buckets": zod.object({
+  "current": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "days31to60": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "days61to90": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "days90plus": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+})
+})
+})),
+  "topDebtors": zod.array(zod.object({
+  "buyerPartyId": zod.string(),
+  "buyerName": zod.string(),
+  "currency": zod.string(),
+  "outstanding": zod.string(),
+  "invoiceCount": zod.number(),
+  "oldestDueDate": zod.string().nullable()
+}))
+}),
+  "payables": zod.object({
+  "clientPartyId": zod.string(),
+  "groups": zod.array(zod.object({
+  "currency": zod.string(),
+  "overdue": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "dueWeeks": zod.array(zod.object({
+  "startDate": zod.string(),
+  "amount": zod.string(),
+  "count": zod.number()
+})),
+  "later": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+}),
+  "total": zod.object({
+  "amount": zod.string(),
+  "count": zod.number()
+})
+})),
+  "topSuppliers": zod.array(zod.object({
+  "supplierPartyId": zod.string(),
+  "supplierName": zod.string(),
+  "amount": zod.string(),
+  "count": zod.number()
+}))
+}),
+  "vat": zod.object({
+  "clientPartyId": zod.string(),
+  "monthStart": zod.string(),
+  "monthLabel": zod.string(),
+  "months": zod.array(zod.string()),
+  "outputVat": zod.string(),
+  "outputInvoiceCount": zod.number(),
+  "inputVat": zod.string(),
+  "inputVatVerified": zod.string(),
+  "inputVatUnverified": zod.string(),
+  "billCount": zod.number(),
+  "netVat": zod.string(),
+  "defensibleNetVat": zod.string(),
+  "excludedForFx": zod.number(),
+  "note": zod.string()
+}),
+  "filings": zod.object({
+  "unfiled": zod.number(),
+  "dueSoon": zod.number(),
+  "overdue": zod.number(),
+  "nextDueDate": zod.string().regex(getOnboardingOpeningPositionResponseFilingsNextDueDateRegExp).nullable()
+}),
+  "wht": zod.object({
+  "awaiting": zod.number(),
+  "awaitingAmount": zod.string()
+}),
+  "obligations": zod.object({
+  "open": zod.number(),
+  "dueSoon": zod.number(),
+  "overdue": zod.number(),
+  "nearestDue": zod.string().regex(getOnboardingOpeningPositionResponseObligationsNearestDueRegExp).nullable()
+}),
+  "automation": zod.object({
+  "windowMonths": zod.number(),
+  "asOf": zod.string().regex(getOnboardingOpeningPositionResponseAutomationAsOfRegExp),
+  "kinds": zod.array(zod.object({
+  "kind": zod.enum(['reconcile_matches', 'submit_overdue', 'retry_failed', 'draft_recurring']),
+  "sample": zod.number(),
+  "agreed": zod.number(),
+  "disagreed": zod.number(),
+  "pending": zod.number(),
+  "agreementRate": zod.number().nullable(),
+  "medianLeadDays": zod.number().nullable(),
+  "exposureFloorNgn": zod.string().nullable(),
+  "note": zod.string()
+}))
+})
 })
 
 

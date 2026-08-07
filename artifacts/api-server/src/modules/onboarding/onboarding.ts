@@ -17,6 +17,10 @@ import {
   periodMonthBounds,
   previousLagosPeriod,
 } from "../filings/statutory-calendar";
+import {
+  computeOpeningPosition,
+  invoiceHistorySpan,
+} from "./opening-position";
 
 // Onboard with Clerk (Phase 1): the client onboarding run — an evidence-based
 // checklist a firm opens when it takes on a new SME client. The one rule that
@@ -144,28 +148,11 @@ async function detectHistory(
   firmId: string,
   clientPartyId: string,
 ): Promise<StepDetection> {
-  const [row] = (
-    await getDb().execute<{
-      n: number;
-      earliest: string | null;
-      latest: string | null;
-    }>(sql`
-      SELECT COUNT(*)::int AS n,
-             MIN(i.issue_date)::text AS earliest,
-             MAX(i.issue_date)::text AS latest
-      FROM invoices i
-      WHERE i.firm_id = ${firmId}
-        AND i.supplier_party_id = ${clientPartyId}
-    `)
-  ).rows;
-  const count = Number(row?.n ?? 0);
+  const span = await invoiceHistorySpan(firmId, clientPartyId);
+  const count = span.invoiceCount;
   return {
     done: count > 0,
-    evidence: {
-      invoiceCount: count,
-      earliestIssueDate: row?.earliest ?? null,
-      latestIssueDate: row?.latest ?? null,
-    },
+    evidence: { ...span },
     gaps:
       count > 0
         ? []
@@ -469,9 +456,23 @@ export async function refreshOnboardingRun(
     (key) => detection[key].done || skips[key],
   );
   if (!allSettled || updated.status !== "active") return updated;
+  // Freeze the day-one opening position in the SAME update that
+  // terminalizes the run: the CAS winner writes the baseline atomically
+  // with the completion, so a completed run always carries it and a CAS
+  // loser's compute is discarded whole (never a half-written snapshot).
+  const openingPosition = await computeOpeningPosition(
+    firmId,
+    run.clientPartyId,
+    { provisional: false, now },
+  );
   const [completed] = await getDb()
     .update(clientOnboardingRunsTable)
-    .set({ status: "completed", completedAt: now, updatedAt: now })
+    .set({
+      status: "completed",
+      completedAt: now,
+      updatedAt: now,
+      openingPosition: openingPosition as unknown as Record<string, unknown>,
+    })
     .where(
       and(
         eq(clientOnboardingRunsTable.id, runId),

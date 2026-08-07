@@ -32,6 +32,7 @@ import {
   onboardingRunView,
 } from "./onboarding.ts";
 import { sweepOnboardingRuns } from "./sweep.ts";
+import { computeOpeningPosition } from "./opening-position.ts";
 import { periodMonthBounds } from "../filings/statutory-calendar.ts";
 
 // Onboard with Clerk Phase 1: the evidence-based checklist. What matters
@@ -281,6 +282,56 @@ test("the journey: facts settle steps one by one; completion claims once", async
   );
   assert.equal(settled.status, "completed");
   assert.ok(settled.completedAt);
+
+  // Phase 2: the completion CAS froze the day-one opening position in the
+  // same UPDATE that terminalized the run.
+  const frozen = settled.openingPosition as {
+    provisional: boolean;
+    history: { invoiceCount: number };
+  } | null;
+  assert.ok(frozen, "a completed run carries its frozen baseline");
+  assert.equal(frozen.provisional, false);
+  assert.equal(frozen.history.invoiceCount, 1);
+
+  // The baseline is permanent: later facts move the LIVE picture, never
+  // the frozen one.
+  await db.insert(invoicesTable).values({
+    firmId,
+    supplierPartyId: clientA,
+    buyerPartyId: clientDupe,
+    invoiceNumber: `ONB-LATER-${SALT}`,
+    status: "draft",
+    issueDate: "2026-08-01",
+    subtotal: "50000.00",
+    vatTotal: "3750.00",
+    grandTotal: "53750.00",
+  });
+  await refreshOnboardingRun(run.id, firmId);
+  const [afterRefresh] = await db
+    .select()
+    .from(clientOnboardingRunsTable)
+    .where(eq(clientOnboardingRunsTable.id, run.id));
+  assert.equal(
+    (afterRefresh.openingPosition as { history: { invoiceCount: number } })
+      .history.invoiceCount,
+    1,
+    "the frozen baseline never rewrites",
+  );
+  const live = await computeOpeningPosition(firmId, clientA, {
+    provisional: true,
+  });
+  assert.equal(live.provisional, true);
+  assert.equal(live.history.invoiceCount, 2, "the live picture moves");
+
+  // Contract lockstep: both lives of the position must parse under the
+  // generated response schema — the module shape and the spec's $ref
+  // composition (ClientVatPosition, ReceivablesSummary, …) drift apart
+  // silently otherwise, and the route would 500 on the first real read.
+  const { GetOnboardingOpeningPositionResponse } = await import(
+    "@workspace/api-zod"
+  );
+  GetOnboardingOpeningPositionResponse.parse(frozen);
+  GetOnboardingOpeningPositionResponse.parse(live);
   view = await onboardingRunView(settled);
   assert.equal(view.steps.find((s) => s.key === "duplicates_reviewed")?.status, "skipped");
 

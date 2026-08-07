@@ -603,8 +603,23 @@ Zero model calls anywhere.
   client_user sees its own party's run); writes are `engagement.write`
   (firm staff — a client cannot open, skip or abandon its own
   onboarding). Console surface: the onboarding card on the client detail
-  page. Phase 2 (day-one opening position) and Phase 3 (the readiness
-  report) build on this run.
+  page.
+- **The day-one opening position (Phase 2, contract 0.71.0)**:
+  `modules/onboarding/opening-position.ts` — where the client stands the
+  moment the firm takes them on. Every section reuses the module that
+  owns its numbers (receivables summary, payables, current-month VAT
+  position, open filings/WHT/obligation counts, the invoice-history
+  span) plus the per-client automation-evidence backtest replayed over
+  the imported history. PROVISIONAL while the run is active (recomputed
+  on request via `GET /onboarding/runs/{id}/opening-position`), then
+  FROZEN onto the run row by the completion CAS — written atomically
+  with the terminal transition, never rewritten after — as the permanent
+  "where we started" baseline the readiness report (Phase 3) will read.
+  The frozen blob outlives the contract that wrote it, so the route
+  `safeParse`s it and degrades to a live provisional recompute on drift
+  (and the spec marks the $ref'd schemas as stored-durably:
+  additive-optional changes only); the console card does not fetch a
+  position for an abandoned run — a picture pending nothing.
 
 ## Monthly compliance pack
 
