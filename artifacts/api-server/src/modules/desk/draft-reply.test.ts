@@ -13,7 +13,6 @@ import {
   submissionAttemptsTable,
   clerkInferenceCallsTable,
   clerkMemoryEmbeddingsTable,
-  featureFlagsTable,
   EMBEDDING_DIMS,
 } from "@workspace/db";
 import {
@@ -24,6 +23,7 @@ import {
 import { CLERK_FLAG_KEY, sha256 } from "../clerk/gateway.ts";
 import { indexMemoryBatch, MEMORY_FLAG_KEY } from "../clerk/memory.ts";
 import { setFlag } from "../flags/flags.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import type { CompletionRequest, MemoryEmbedder } from "../clerk/gateway.ts";
 import {
   fakeGateway,
@@ -303,16 +303,13 @@ test("reply memory: same-firm same-code sent replies ride along fenced", async (
   assert.equal(copying.viaExample, false);
 });
 
+const memoryFlagGuard = makeFlagGuard(MEMORY_FLAG_KEY);
+
 test("semantic reply memory: similar situations preferred over exact code, firm-pinned, self-skipped", async () => {
   const db = getDb();
-  // Light the memory flag globally (seeded dark; re-darkened in finally).
-  await db
-    .insert(featureFlagsTable)
-    .values({ key: MEMORY_FLAG_KEY, enabled: true, releaseTag: "R3" })
-    .onConflictDoUpdate({
-      target: featureFlagsTable.key,
-      set: { enabled: true },
-    });
+  // Light the memory flag globally; the guard conserves whatever state the
+  // row had (the seed ships it dark) and the finally restores it.
+  await memoryFlagGuard.saveAndSet(true);
   try {
     // A same-firm replied escalation with NO error code — reachable only
     // semantically — plus a foreign-firm ringer whose reason embeds to the
@@ -399,6 +396,11 @@ test("semantic reply memory: similar situations preferred over exact code, firm-
     const pass = await indexMemoryBatch(embedder, 20, {
       onlyFirmIds: [firmId, ringerFirm],
     });
+    // 5 = the two send tests' replies + the exact-code test's past row +
+    // similarId + the ringer — this count DEPENDS on the earlier tests in
+    // this file having run (node:test executes a file serially in
+    // declaration order); a --test-name-pattern run of this test alone
+    // would see fewer replied rows.
     assert.equal(pass.indexed, 5, "all replied escalations indexed");
     assert.equal(pass.skippedFirms, 0);
     assert.equal(embeds, 2, "one embedding call per firm");
@@ -464,28 +466,33 @@ test("semantic reply memory: similar situations preferred over exact code, firm-
         .limit(1),
     );
     assert.equal(memoryLedger.promptVersion, "draft-reply.v1+mx1");
+    // Existence under the exact (purpose, firm, cohort) filter — firm and
+    // prompt version in the WHERE, so neither a concurrent suite's embeds
+    // nor a same-millisecond createdAt tie with this test's own INDEX
+    // embeds (cohort "embed.v1") can shadow the assertion.
     const [embedLedger] = await runInBypassContext(() =>
       getDb()
-        .select({
-          promptVersion: clerkInferenceCallsTable.promptVersion,
-          firmId: clerkInferenceCallsTable.firmId,
-        })
+        .select({ id: clerkInferenceCallsTable.id })
         .from(clerkInferenceCallsTable)
-        .where(eq(clerkInferenceCallsTable.purpose, "embed_memory"))
-        .orderBy(desc(clerkInferenceCallsTable.createdAt))
+        .where(
+          and(
+            eq(clerkInferenceCallsTable.purpose, "embed_memory"),
+            eq(clerkInferenceCallsTable.firmId, firmId),
+            eq(clerkInferenceCallsTable.promptVersion, "embed.v1+q"),
+          ),
+        )
         .limit(1),
     );
-    assert.equal(
-      embedLedger.promptVersion,
-      "embed.v1+q",
-      "query embeds carry their own ledger cohort",
+    assert.ok(
+      embedLedger,
+      "the query embed is firm-funded and carries its own ledger cohort",
     );
-    assert.equal(embedLedger.firmId, firmId, "the query embed is firm-funded");
 
-    // Rail dark: the exact-code exemplar answers, and no embed call is made
-    // (the gate short-circuits before any embedder is even resolved).
+    // Rail dark: the exact-code exemplar answers, and no embed call is made.
+    // The fake embedder IS passed here — its untouched counter is what
+    // proves the gate short-circuits, not the absence of an embedder.
     await setFlag(MEMORY_FLAG_KEY, false);
-    const fallback = await draftEscalationReply(escalationId, gw);
+    const fallback = await draftEscalationReply(escalationId, gw, embedder);
     assert.equal(fallback.viaExample, true);
     const fallbackUser = calls[1].user as string;
     assert.ok(
@@ -503,7 +510,7 @@ test("semantic reply memory: similar situations preferred over exact code, firm-
     );
     assert.equal(exLedger.promptVersion, "draft-reply.v1+ex1");
   } finally {
-    await setFlag(MEMORY_FLAG_KEY, false);
+    await memoryFlagGuard.restore();
   }
 });
 

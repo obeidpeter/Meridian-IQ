@@ -1529,11 +1529,14 @@ discipline applies.
   the reply-draft surface prefers a similarity-retrieved exemplar — embed
   the incoming escalation's reason (FIRM-funded, ledger cohort
   `embed.v1+q`), `searchMemory` over `escalation_replies` (k=3, floor
-  0.3, self-match skipped), re-read each candidate's reply LIVE from the
-  source row under the firm pin (pointer-only: an orphaned embedding
-  yields nothing) — and falls back to the round-11 exact-error-code query
-  when the rail is dark, the firm is overridden off either flag, budget
-  is exhausted, or nothing was similar enough. The exemplar prompt is
+  0.3 applied before the k cut, self-match excluded in SQL), re-read each
+  candidate's reply LIVE from the source row under the firm pin
+  (pointer-only: an orphaned embedding yields nothing) — and falls back
+  to the round-11 exact-error-code query when the rail is dark, the firm
+  is overridden off either flag, the firm's (corpus, model) slice is
+  empty (checked BEFORE the embed, so a cold corpus never charges the
+  firm for a guaranteed-no-match query), budget is exhausted, or nothing
+  was similar enough. The exemplar prompt is
   IDENTICAL either way (PAST_REPLY fence, style-only system rules,
   `copiesExampleSpecifics` deterministic discard); only the ledger cohort
   differs — `draft-reply.v1+mx1` vs `+ex1` — so the two retrieval

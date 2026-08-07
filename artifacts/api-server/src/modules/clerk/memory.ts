@@ -92,8 +92,9 @@ interface IndexCandidate {
 // The optional firm pin exists for TESTS (a suite indexes only its own
 // salted firms instead of draining — and spending against — the whole
 // scratch DB's candidate pool); production passes never set it. The alias
-// must match the candidate query's source-table alias.
-function firmPinClause(alias: string, onlyFirmIds?: string[]) {
+// must match the candidate query's source-table alias — typed as the
+// closed set of aliases in use so nothing dynamic can ever reach sql.raw.
+function firmPinClause(alias: "c" | "e", onlyFirmIds?: string[]) {
   return onlyFirmIds && onlyFirmIds.length > 0
     ? sql`AND ${sql.raw(alias)}.firm_id IN (${sql.join(
         onlyFirmIds.map((id) => sql`${id}`),
@@ -180,6 +181,21 @@ async function escalationReplyCandidates(
   }));
 }
 
+// One candidate source per catalogue entry, keyed by MEMORY_CORPORA's
+// union type — adding a corpus to the catalogue without wiring its
+// candidate query is a COMPILE error, never a silent no-op.
+const CORPUS_CANDIDATES: Record<
+  MemoryCorpusKey,
+  (
+    model: string,
+    limit: number,
+    onlyFirmIds?: string[],
+  ) => Promise<IndexCandidate[]>
+> = {
+  ask_questions: askQuestionCandidates,
+  escalation_replies: escalationReplyCandidates,
+};
+
 // Index one batch: candidates in a short bypass read, then ONE embedding
 // call per firm (the budget is per-firm, so the batch groups by firm), then
 // upserts under bypass. Idempotent and multi-instance safe: the natural
@@ -195,14 +211,19 @@ export async function indexMemoryBatch(
   // Each corpus contributes up to `limit` candidates per pass (a fat
   // backlog in one corpus must not starve the other); one firm's mixed-
   // corpus texts still share ONE embedding call below.
-  const candidates = await runInBypassContext(async () => [
-    ...(await askQuestionCandidates(embedder.model, limit, opts.onlyFirmIds)),
-    ...(await escalationReplyCandidates(
-      embedder.model,
-      limit,
-      opts.onlyFirmIds,
-    )),
-  ]);
+  const candidates = await runInBypassContext(async () => {
+    const all: IndexCandidate[] = [];
+    for (const corpus of MEMORY_CORPORA) {
+      all.push(
+        ...(await CORPUS_CANDIDATES[corpus](
+          embedder.model,
+          limit,
+          opts.onlyFirmIds,
+        )),
+      );
+    }
+    return all;
+  });
   if (candidates.length === 0) return { indexed: 0, skippedFirms: 0 };
 
   const byFirm = new Map<string, IndexCandidate[]>();
@@ -301,10 +322,21 @@ export async function searchMemory(params: {
   vector: number[];
   k: number;
   // Similarity floor: below it, the past simply was not similar enough to
-  // mention — an empty result is the honest answer, never padding.
+  // mention — an empty result is the honest answer, never padding. Applied
+  // in the WHERE clause, BEFORE the k cut, so sub-floor rows never crowd a
+  // viable match out of the k slots.
   minSimilarity?: number;
+  // Exclude one source row in SQL — a caller searching with a text that is
+  // itself indexed (a re-draft of a replied escalation) would otherwise
+  // find itself at similarity 1. uuid-typed comparison, so caller-supplied
+  // casing cannot defeat it, and the excluded row never wastes a k slot.
+  excludeRefId?: string;
 }): Promise<MemoryMatch[]> {
   const vectorLiteral = `[${params.vector.join(",")}]`;
+  const floor = params.minSimilarity ?? 0;
+  const exclusion = params.excludeRefId
+    ? sql`AND ref_id <> ${params.excludeRefId}::uuid`
+    : sql``;
   const rows = (
     await getDb().execute<{ ref_id: string; similarity: number }>(sql`
       SELECT ref_id,
@@ -313,14 +345,36 @@ export async function searchMemory(params: {
       WHERE firm_id = ${params.firmId}
         AND corpus = ${params.corpus}
         AND model = ${params.model}
+        AND 1 - (embedding <=> ${vectorLiteral}::vector) >= ${floor}
+        ${exclusion}
       ORDER BY embedding <=> ${vectorLiteral}::vector
       LIMIT ${params.k}
     `)
   ).rows;
-  const floor = params.minSimilarity ?? 0;
-  return rows
-    .map((r) => ({ refId: r.ref_id, similarity: Number(r.similarity) }))
-    .filter((m) => m.similarity >= floor);
+  return rows.map((r) => ({
+    refId: r.ref_id,
+    similarity: Number(r.similarity),
+  }));
+}
+
+// Existence probe for one (firm, corpus, model) slice — retrieval surfaces
+// call this BEFORE spending the firm's tokens on a query embed: an empty
+// slice cannot match anything, so the honest and free answer is "no".
+export async function memoryCorpusPopulated(
+  firmId: string,
+  corpus: MemoryCorpusKey,
+  model: string,
+): Promise<boolean> {
+  const rows = (
+    await getDb().execute(sql`
+      SELECT 1 FROM clerk_memory_embeddings
+      WHERE firm_id = ${firmId}
+        AND corpus = ${corpus}
+        AND model = ${model}
+      LIMIT 1
+    `)
+  ).rows;
+  return rows.length > 0;
 }
 
 // The rail's runtime availability: both flags lit AND the extension
