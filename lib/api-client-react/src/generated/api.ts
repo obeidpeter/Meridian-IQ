@@ -20293,7 +20293,7 @@ export const generateAdvisoryBrief = async (generateAdvisoryBriefInput: Generate
 
 
 
-export const getGenerateAdvisoryBriefMutationOptions = <TError = ErrorType<BadRequestResponse>,
+export const getGenerateAdvisoryBriefMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateAdvisoryBrief>>, TError,{data: BodyType<GenerateAdvisoryBriefInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof generateAdvisoryBrief>>, TError,{data: BodyType<GenerateAdvisoryBriefInput>}, TContext> => {
 
@@ -20322,12 +20322,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type GenerateAdvisoryBriefMutationResult = NonNullable<Awaited<ReturnType<typeof generateAdvisoryBrief>>>
     export type GenerateAdvisoryBriefMutationBody = BodyType<GenerateAdvisoryBriefInput>
-    export type GenerateAdvisoryBriefMutationError = ErrorType<BadRequestResponse>
+    export type GenerateAdvisoryBriefMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
 
     /**
  * @summary Generate (or refresh) the LIVE month's advisory brief for one client — deterministic sections, one digest-posture phrasing call for the note
  */
-export const useGenerateAdvisoryBrief = <TError = ErrorType<BadRequestResponse>,
+export const useGenerateAdvisoryBrief = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateAdvisoryBrief>>, TError,{data: BodyType<GenerateAdvisoryBriefInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof generateAdvisoryBrief>>,

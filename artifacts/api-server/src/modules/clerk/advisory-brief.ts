@@ -97,9 +97,13 @@ const fact = (
   unit?: string,
 ): ProtectedFact => ({ key, label, kind, value, ...(unit ? { unit } : {}) });
 
-// Assemble the deterministic sections — one call per source report, all
-// sharing ONE `now` so the brief is a single instant's position (the
-// net-position round-15 discipline). Exported for tests.
+// Assemble the deterministic sections — one call per source report. The
+// JS-clocked functions (VAT, money, hygiene) share ONE `now` (the
+// net-position round-15 discipline); the SQL-clocked ones (filings,
+// obligations, penalties) read the DB's Lagos today exactly as their own
+// reports do — so every number still equals its report's, though a
+// request straddling Lagos midnight can mix the two days across section
+// families. Exported for tests.
 export async function computeAdvisoryBriefSections(
   firmId: string,
   clientPartyId: string,
@@ -126,6 +130,23 @@ export async function computeAdvisoryBriefSections(
     title: "Statutory position",
     text: statutoryText,
     facts: [
+      // Derived TOTALS ride as fact lines too (review R49-2): the section
+      // text and the template headline lead with these sums, and the
+      // grounding gate only accepts numerals present in buildBriefUser's
+      // fact lines — a model phrasing the natural triage lead must not be
+      // bounced for repeating the surface's own arithmetic.
+      fact(
+        "statutory_overdue_total",
+        "Statutory items overdue (returns + notices)",
+        "count",
+        String(filings.overdue + obligations.overdue),
+      ),
+      fact(
+        "statutory_due_soon_total",
+        "Statutory items due within 7 days (returns + notices)",
+        "count",
+        String(filings.dueSoon + obligations.dueSoon),
+      ),
       fact("unfiled", "Returns not yet filed", "count", String(filings.unfiled)),
       fact("filings_due_soon", "Returns due within 7 days", "count", String(filings.dueSoon)),
       fact("filings_overdue", "Returns overdue", "count", String(filings.overdue)),
@@ -236,6 +257,9 @@ export async function computeAdvisoryBriefSections(
           } a look before month-end.`
         : "The books look clean — nothing is waiting on an explanation.",
     facts: [
+      // The derived total leads for the same grounding reason as the
+      // statutory sums (review R49-2).
+      fact("hygiene_attention_total", "Books items needing attention", "count", String(hygieneAttention)),
       fact("unbilled_patterns", "Expected-but-unbilled income patterns", "count", String(unbilled.length)),
       fact("missing_bills", "Recurring bills not yet received", "count", String(missingBills.length)),
       fact("unmatched_credits", "Bank credits with no matching invoice", "count", String(credits.count)),
@@ -260,10 +284,11 @@ export function buildBriefTemplate(sections: AdvisoryBriefSection[]): {
   const factNum = (s: AdvisoryBriefSection | undefined, key: string): number =>
     Number(s?.facts.find((f) => f.key === key)?.value ?? 0);
   const statutory = byKey.get("statutory");
-  const overdue =
-    factNum(statutory, "filings_overdue") +
-    factNum(statutory, "obligations_overdue");
-  const dueSoon = factNum(statutory, "filings_due_soon");
+  // The DERIVED-TOTAL facts, not re-summed here: the headline's numeral
+  // must be a numeral the grounding gate can find in a fact line, and the
+  // due-soon triage counts notices exactly like the section text does.
+  const overdue = factNum(statutory, "statutory_overdue_total");
+  const dueSoon = factNum(statutory, "statutory_due_soon_total");
   const headline =
     overdue > 0
       ? `${plural(overdue, "statutory item")} ${overdue === 1 ? "is" : "are"} overdue — start there.`
@@ -297,10 +322,18 @@ async function assertEngagedClient(
   firmId: string,
   clientPartyId: string,
 ): Promise<void> {
+  // LIVE engagements only (review R49-3): the statement sweep, filings
+  // mint and every reminder rail scope to open/in_progress — an archived
+  // or offboarded client must stop accumulating advisory work product
+  // too, and Phase 2's delivery sweep claims on deliveredAt NULL, so a
+  // brief minted here for an archived client would otherwise get
+  // DELIVERED later.
   const rows = (
     await getDb().execute(sql`
       SELECT 1 FROM engagements
-      WHERE firm_id = ${firmId} AND client_party_id = ${clientPartyId}
+      WHERE firm_id = ${firmId}
+        AND client_party_id = ${clientPartyId}
+        AND status IN ('open', 'in_progress')
       LIMIT 1
     `)
   ).rows;

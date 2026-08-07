@@ -4,6 +4,7 @@ import {
   GenerateAdvisoryBriefResponse,
   ListAdvisoryBriefsQueryParams,
   ListAdvisoryBriefsResponse,
+  ListAdvisoryBriefsResponseItem,
 } from "@workspace/api-zod";
 import type { ClerkAdvisoryBriefRow } from "@workspace/db";
 import { parseOrThrow } from "../../lib/parse";
@@ -69,7 +70,16 @@ router.get("/clerk/advisory-briefs", async (req, res): Promise<void> => {
   }
   assertClientPartyScope(req.principal, target);
   const rows = await listAdvisoryBriefs(tenant, target);
-  res.json(ListAdvisoryBriefsResponse.parse(rows.map(briefView)));
+  // Stored-durably read posture (the onboarding opening-position rule): a
+  // brief's sections jsonb outlives the contract that wrote it. Per-row
+  // safeParse — a row a future contract can no longer represent is
+  // DROPPED from the list (regenerating refreshes it in place) rather
+  // than 500ing every brief the client can see.
+  const views = rows
+    .map((row) => ListAdvisoryBriefsResponseItem.safeParse(briefView(row)))
+    .filter((parsed) => parsed.success)
+    .map((parsed) => parsed.data);
+  res.json(ListAdvisoryBriefsResponse.parse(views));
 });
 
 router.post("/clerk/advisory-briefs", async (req, res): Promise<void> => {

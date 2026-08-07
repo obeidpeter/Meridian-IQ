@@ -128,6 +128,14 @@ test("sections compose the platform's own numbers, evidence-cited", async () => 
   assert.equal(factValue("filings_due_soon"), "1");
   assert.equal(factValue("obligations_open"), "1");
   assert.equal(factValue("obligations_overdue"), "1");
+  // The derived totals the headline/section text lead with are fact lines
+  // too, so the grounding gate accepts the surface's own arithmetic.
+  assert.equal(factValue("statutory_overdue_total"), "2");
+  assert.equal(factValue("statutory_due_soon_total"), "1");
+  assert.ok(
+    sections[4].facts.some((f) => f.key === "hygiene_attention_total"),
+    "the hygiene sum is a groundable fact line",
+  );
   const vat = sections[2];
   const vatDue = vat.facts.find((f) => f.key === "vat_due");
   assert.ok(vatDue && /^\d{4}-\d{2}-\d{2}$/.test(vatDue.value));
@@ -146,10 +154,11 @@ test("template headline triage: overdue beats due-soon beats clear", () => {
       key: "statutory",
       title: "Statutory position",
       text: "t.",
+      // The DERIVED-TOTAL facts are what the template triages on (they are
+      // also what makes the headline's numeral groundable).
       facts: [
-        { key: "filings_overdue", label: "x", kind: "count", value: String(overdue) },
-        { key: "filings_due_soon", label: "x", kind: "count", value: String(dueSoon) },
-        { key: "obligations_overdue", label: "x", kind: "count", value: "0" },
+        { key: "statutory_overdue_total", label: "x", kind: "count", value: String(overdue) },
+        { key: "statutory_due_soon_total", label: "x", kind: "count", value: String(dueSoon) },
       ],
       sourceReport: "s",
     },

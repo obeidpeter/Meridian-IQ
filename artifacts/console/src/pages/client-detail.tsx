@@ -326,7 +326,11 @@ function AdvisoryBriefCard({ clientPartyId }: { clientPartyId: string }) {
               </div>
             ))}
             <p className="text-xs text-muted-foreground">
-              Covers the month of {brief.monthStart}
+              Covers{" "}
+              {new Date(`${brief.monthStart.slice(0, 7)}-15`).toLocaleDateString(
+                "en-NG",
+                { month: "long", year: "numeric" },
+              )}
               {brief.source === "clerk" && " · note written by Clerk"} · last
               refreshed {new Date(brief.updatedAt).toLocaleString()}
             </p>
