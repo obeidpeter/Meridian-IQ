@@ -247,17 +247,19 @@ const answerOf = (kase: { answer: ClerkAnswer | null }): AskAnswer => {
 
 // ---- Catalogue posture ------------------------------------------------------
 
-test("the catalogue tail keeps its append-only order (deltas, obligations, returns, then wht)", () => {
+test("the catalogue tail keeps its append-only order (deltas, obligations, returns, wht, then onboarding)", () => {
   // The model-facing list is APPEND-ONLY: groups keep the position they
   // joined at. The deltas were appended by Ask 2.0, the obligations group by
-  // Notice Desk, the returns group by Filing Desk, the wht group by WHT Desk
-  // — a reorder here means the append-only rule was broken.
+  // Notice Desk, the returns group by Filing Desk, the wht group by WHT
+  // Desk, the onboarding group by Onboard with Clerk — a reorder here means
+  // the append-only rule was broken.
   const keys = DATA_INTENTS.map((i) => i.key);
-  assert.deepEqual(keys.slice(-4), [
+  assert.deepEqual(keys.slice(-5), [
     "data.client_breakdown",
     "data.open_obligations",
     "data.open_filings",
     "data.wht_credits",
+    "data.onboarding_status",
   ]);
 });
 

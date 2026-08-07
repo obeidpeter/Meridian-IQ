@@ -332,6 +332,36 @@ test("the journey: facts settle steps one by one; completion claims once", async
   );
   GetOnboardingOpeningPositionResponse.parse(frozen);
   GetOnboardingOpeningPositionResponse.parse(live);
+
+  // Phase 3: the readiness report renders from the frozen record (zero
+  // model calls — a real PDF buffer with no gateway in sight), and the Ask
+  // intent answers from the same rows the checklist maintains.
+  const { renderOnboardingReportPdf } = await import("./report-pdf.ts");
+  const pdf = await renderOnboardingReportPdf({
+    run: view,
+    position: frozen as unknown as Parameters<
+      typeof renderOnboardingReportPdf
+    >[0]["position"],
+    firmName: `Onboarding Firm ${SALT}`,
+    theme: null,
+  });
+  assert.ok(pdf.length > 1000, "a substantive PDF rendered");
+  assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
+
+  const { runDataIntent } = await import("../clerk/data-intents/index.ts");
+  const pinned = await runDataIntent("data.onboarding_status", firmId, {
+    clientPartyId: clientA,
+    clientName: `Adaeyemi`,
+  });
+  assert.ok(pinned);
+  assert.ok(
+    pinned.text.includes("completed"),
+    "the pinned answer speaks the run's status",
+  );
+  assert.ok(pinned.facts.some((f) => f.key === "onboarding_settled"));
+  const firmWide = await runDataIntent("data.onboarding_status", firmId);
+  assert.ok(firmWide);
+  assert.ok(firmWide.facts.some((f) => f.key === "onboarding_active"));
   view = await onboardingRunView(settled);
   assert.equal(view.steps.find((s) => s.key === "duplicates_reviewed")?.status, "skipped");
 

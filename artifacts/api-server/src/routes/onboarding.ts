@@ -6,6 +6,7 @@ import {
   CreateOnboardingRunResponse,
   GetOnboardingOpeningPositionParams,
   GetOnboardingOpeningPositionResponse,
+  GetOnboardingReportParams,
   GetOnboardingRunParams,
   GetOnboardingRunResponse,
   ListOnboardingRunsQueryParams,
@@ -20,9 +21,12 @@ import { parseOrThrow } from "../lib/parse";
 import {
   assertCan,
   assertClientPartyScope,
+  clientPartyScope,
   narrowToClientPartyScope,
   requireFirmScope,
 } from "../modules/auth/rbac";
+import { appendAudit } from "../modules/audit/audit";
+import { themeWithBrandFallback } from "../modules/invoice/pdf";
 import {
   abandonOnboardingRun,
   createOnboardingRun,
@@ -34,6 +38,12 @@ import {
   type OnboardingStepKey,
 } from "../modules/onboarding/onboarding";
 import { computeOpeningPosition } from "../modules/onboarding/opening-position";
+import type { OpeningPosition } from "../modules/onboarding/opening-position";
+import { renderOnboardingReportPdf } from "../modules/onboarding/report-pdf";
+import { sendPdfAttachment } from "../modules/invoice/pdf";
+import { DomainError } from "../modules/errors";
+import { eq } from "drizzle-orm";
+import { getDb, firmsTable } from "@workspace/db";
 import type { ClientOnboardingRun } from "@workspace/db";
 
 // Onboard with Clerk (contract 0.70.0): the evidence-based onboarding
@@ -51,13 +61,43 @@ import type { ClientOnboardingRun } from "@workspace/db";
 
 const router: IRouter = Router();
 
+type RunView = Awaited<ReturnType<typeof onboardingRunView>>;
+
+// SEC-03 content redaction: the duplicate scan's evidence names the firm's
+// OTHER clients (candidate party ids + legal names) and its gaps repeat
+// them — firm-internal content a client_user must never read, even inside
+// its own run. The firm view keeps the full evidence; a client view carries
+// the count and a neutral gap line.
+function redactViewForClient(view: RunView): RunView {
+  return {
+    ...view,
+    steps: view.steps.map((step) => {
+      if (step.key !== "duplicates_reviewed") return step;
+      const raw = (step.evidence as Record<string, unknown>).suggestions;
+      const count = Array.isArray(raw) ? raw.length : 0;
+      return {
+        ...step,
+        evidence: { suggestionCount: count },
+        gaps:
+          count > 0
+            ? [
+                "A possible duplicate record was flagged — your accountant is reviewing it",
+              ]
+            : [],
+      };
+    }),
+  };
+}
+
 async function detailFor(
   req: { principal: Parameters<typeof assertClientPartyScope>[0] },
   run: ClientOnboardingRun,
 ) {
-  // SEC-03: a client_user may read only its own party's run.
+  // SEC-03: a client_user may read only its own party's run — and even
+  // there, sibling-naming evidence is redacted.
   assertClientPartyScope(req.principal, run.clientPartyId);
-  return onboardingRunView(run);
+  const view = await onboardingRunView(run);
+  return clientPartyScope(req.principal) ? redactViewForClient(view) : view;
 }
 
 router.get("/onboarding/runs", async (req, res): Promise<void> => {
@@ -69,11 +109,13 @@ router.get("/onboarding/runs", async (req, res): Promise<void> => {
     query.clientPartyId,
   );
   const runs = await listOnboardingRuns(firmId, clientPartyId);
-  res.json(
-    ListOnboardingRunsResponse.parse({
-      runs: await Promise.all(runs.map((r) => onboardingRunView(r))),
-    }),
-  );
+  const clientScoped = clientPartyScope(req.principal) !== null;
+  const views = [];
+  for (const r of runs) {
+    const view = await onboardingRunView(r);
+    views.push(clientScoped ? redactViewForClient(view) : view);
+  }
+  res.json(ListOnboardingRunsResponse.parse({ runs: views }));
 });
 
 router.post("/onboarding/runs", async (req, res): Promise<void> => {
@@ -158,6 +200,66 @@ router.get(
       provisional: true,
     });
     res.json(GetOnboardingOpeningPositionResponse.parse(position));
+  },
+);
+
+// The readiness report (Phase 3): the completion deliverable, rendered from
+// the FROZEN record only — the final checklist plus the frozen opening
+// position. Completed runs only (an unfinished checklist has nothing to
+// certify); zero model calls, so the route stays in the ambient request
+// transaction. Same read posture as the run detail — a client may download
+// its own report.
+router.get(
+  "/onboarding/runs/:id/report",
+  async (req, res): Promise<void> => {
+    assertCan(req.principal, "engagement.read");
+    const params = parseOrThrow(GetOnboardingReportParams, req.params);
+    const firmId = requireFirmScope(req.principal);
+    const run = await getOnboardingRun(params.id, firmId);
+    assertClientPartyScope(req.principal, run.clientPartyId);
+    if (run.status !== "completed") {
+      throw new DomainError(
+        "REPORT_NOT_READY",
+        "The readiness report exists once the onboarding run completes",
+        409,
+      );
+    }
+    // The frozen baseline, defensively parsed (the opening-position route's
+    // drift rule); an unreadable or pre-Phase-2 blob renders as the honest
+    // "no baseline" section rather than failing the report.
+    const frozen = run.openingPosition
+      ? GetOnboardingOpeningPositionResponse.safeParse(run.openingPosition)
+      : null;
+    const [firm] = await getDb()
+      .select({ name: firmsTable.name, theme: firmsTable.theme })
+      .from(firmsTable)
+      .where(eq(firmsTable.id, firmId))
+      .limit(1);
+    const pdf = await renderOnboardingReportPdf({
+      run: await onboardingRunView(run),
+      position: frozen?.success
+        ? (frozen.data as unknown as OpeningPosition)
+        : null,
+      firmName: firm?.name ?? "",
+      // A firm without an explicit brandName gets its own name in the brand
+      // header — themeWithBrandFallback, the one home every paper route uses.
+      theme: themeWithBrandFallback(firm?.theme, firm?.name),
+    });
+    // Pointer-only download audit (SEC-12): who pulled which run's report —
+    // never the content (the pack-download precedent).
+    await appendAudit({
+      actorId: req.principal.userId,
+      firmId,
+      action: "onboarding.report_downloaded",
+      entityType: "onboarding_run",
+      entityId: run.id,
+      after: { clientPartyId: run.clientPartyId },
+    });
+    sendPdfAttachment(
+      res,
+      `onboarding-readiness-${run.clientPartyId.slice(0, 8)}.pdf`,
+      pdf,
+    );
   },
 );
 

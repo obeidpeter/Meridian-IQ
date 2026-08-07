@@ -10,6 +10,7 @@ import { DELTA_INTENTS } from "./deltas";
 import { OBLIGATION_INTENTS } from "./obligations";
 import { RETURNS_INTENTS } from "./returns";
 import { WHT_INTENTS } from "./wht";
+import { ONBOARDING_INTENTS } from "./onboarding";
 
 // Grounded firm-data Q&A (Clerk idea #6). Ask Clerk gains a SECOND closed
 // catalogue next to the claims register: data intents — live lookups over the
@@ -69,6 +70,8 @@ export const DATA_INTENTS: readonly DataIntent[] = [
   ...RETURNS_INTENTS,
   // APPEND ONLY, same rule: the WHT Desk group joins at the very end.
   ...WHT_INTENTS,
+  // APPEND ONLY, same rule: the onboarding group joins after it (round 44).
+  ...ONBOARDING_INTENTS,
 ];
 
 // Client-facing Ask (SEC-03). clerk.ask is open to client_users, but the
@@ -158,6 +161,12 @@ const CLIENT_SAFE_INTENT_KEYS: ReadonlySet<string> = new Set([
   // reduces to the caller's OWN ledger rows under the pin — counts and the
   // caller's own naira sum only, no other client is ever named, linkless.
   "data.wht_credits",
+  // Onboarding progress with the forced own-party pin: listOnboardingRuns
+  // is (firm, party)-scoped, so the answer reduces to the caller's OWN
+  // run's checklist — step labels, counts and a status word; the firm-wide
+  // counts branch is unreachable under the pin, no other client is ever
+  // named, linkless.
+  "data.onboarding_status",
 ]);
 
 export const CLIENT_SAFE_DATA_INTENTS: readonly DataIntent[] =

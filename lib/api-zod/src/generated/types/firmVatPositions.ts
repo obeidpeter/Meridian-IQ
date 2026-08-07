@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.71.0
+ * OpenAPI spec version: 0.72.0
  */
 import type { FirmVatPositionRow } from './firmVatPositionRow';
 import type { FirmVatPositionsTotals } from './firmVatPositionsTotals';

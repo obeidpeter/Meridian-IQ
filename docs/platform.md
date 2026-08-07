@@ -620,6 +620,22 @@ Zero model calls anywhere.
   (and the spec marks the $ref'd schemas as stored-durably:
   additive-optional changes only); the console card does not fetch a
   position for an abandoned run — a picture pending nothing.
+- **The readiness report (Phase 3, contract 0.72.0)**: the completion
+  deliverable — `GET /onboarding/runs/{id}/report` renders a branded
+  PDF (`modules/onboarding/report-pdf.ts`, the pack-pdf seam) from the
+  FROZEN record only: the final checklist with per-step evidence
+  summaries, the recorded gaps section (each skip with its reason,
+  named honestly), and the frozen opening position. Deliberately ZERO
+  model calls — no cover-note surface at all; every word is
+  deterministic. Completed runs only (409 `REPORT_NOT_READY`); an
+  unreadable or pre-Phase-2 frozen blob renders as an honest
+  "no baseline" section. Step labels come from the shared
+  `@workspace/format/onboarding-copy` vocabulary (one home with the
+  console card). Awareness: the client-safe `data.onboarding_status`
+  Ask intent (appended at the end of the closed catalogue) answers the
+  pinned caller's own checklist or the firm's book-level counts, and
+  the weekly digest (v11) carries an active-onboarding-runs line on the
+  optional-fact pattern.
 
 ## Monthly compliance pack
 

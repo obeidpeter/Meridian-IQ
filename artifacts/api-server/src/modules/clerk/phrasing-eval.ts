@@ -133,6 +133,7 @@ function digestFacts(overrides: Partial<DigestFacts>): DigestFacts {
     filingsOverdue: 0,
     // WHT Desk.
     whtAwaitingNotes: 0,
+    onboardingActiveRuns: 0,
   };
   return { ...base, ...overrides };
 }
@@ -217,6 +218,11 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
         pattern: "withholding",
         flags: "i",
         label: "no WHT chase — do not mention",
+      },
+      {
+        pattern: "onboarding",
+        flags: "i",
+        label: "no active onboarding runs — do not mention",
       },
     ],
   },

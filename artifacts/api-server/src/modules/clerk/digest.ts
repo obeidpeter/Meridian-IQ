@@ -92,7 +92,9 @@ const DELIVERY_BATCH = 50;
 // / overdue unfiled returns, countOpenFilings), same reasoning.
 // v10 (WHT Desk): + the outstanding withholding-credit-note chase line
 // (countWhtChase), same reasoning.
-const DIGEST_PROMPT_VERSION = "digest.v10";
+// v11 (Onboard with Clerk): + the active-onboarding-runs line, same
+// reasoning.
+const DIGEST_PROMPT_VERSION = "digest.v11";
 const DIGEST_SYSTEM = [
   "You write a short weekly compliance digest for a Nigerian accounting firm, from facts computed by the platform.",
   "Use ONLY the facts provided. Never add, change or estimate a number, date, deadline or rule that is not in them.",
@@ -192,6 +194,9 @@ export interface DigestFacts {
   // same snapshot/legacy-literal reasons; builders default an absent value
   // to 0.
   whtAwaitingNotes?: number;
+  // Onboard with Clerk (round 44): client onboarding runs still in
+  // progress. Optional for the same snapshot/legacy reasons.
+  onboardingActiveRuns?: number;
 }
 
 // The monthly VAT-return countdown, PURE and Lagos-anchored (lagosParts /
@@ -288,6 +293,16 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
   const automationShadowPending = await computeAutomationShadowPending(firmId);
   const filings = await countOpenFilings(firmId);
   const whtChase = await countWhtChase(firmId);
+  // Onboard with Clerk (round 44): active onboarding runs — one indexed
+  // count; the checklist's own facts stay with the run, the digest only
+  // says how many books are still landing.
+  const onboarding = (
+    await getDb().execute<{ active: number }>(sql`
+      SELECT COUNT(*)::int AS active
+      FROM client_onboarding_runs
+      WHERE firm_id = ${firmId} AND status = 'active'
+    `)
+  ).rows;
   // The penalty floor is DERIVED from the overdue count this query already
   // computed — a second COUNT under the same predicate could straddle a
   // Lagos midnight and let one digest say "0 overdue" next to a non-zero
@@ -322,6 +337,7 @@ export async function computeDigestFacts(firmId: string): Promise<DigestFacts> {
     filingsDueSoon: filings.dueSoon,
     filingsOverdue: filings.overdue,
     whtAwaitingNotes: whtChase.awaiting,
+    onboardingActiveRuns: Number(onboarding[0]?.active ?? 0),
   };
 }
 
@@ -547,6 +563,18 @@ const DIGEST_FACT_LINES: readonly DigestFactLine[] = [
       const whtAwaitingNotes = facts.whtAwaitingNotes ?? 0;
       return whtAwaitingNotes > 0
         ? `${plural(whtAwaitingNotes, "withholding credit note")} from buyers ${isAre(whtAwaitingNotes)} still outstanding — chase these before they go stale.`
+        : null;
+    },
+  },
+  // Onboard with Clerk (v11): how many client books are still landing. The
+  // checklist's own facts stay with the run — the digest only counts.
+  {
+    promptLine: (facts) =>
+      `- Client onboarding runs still in progress: ${facts.onboardingActiveRuns ?? 0}`,
+    bullet: (facts) => {
+      const onboardingActiveRuns = facts.onboardingActiveRuns ?? 0;
+      return onboardingActiveRuns > 0
+        ? `${plural(onboardingActiveRuns, "client onboarding run")} ${isAre(onboardingActiveRuns)} still in progress — the checklist settles itself as history, statements and consent land.`
         : null;
     },
   },
