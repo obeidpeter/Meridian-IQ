@@ -4243,9 +4243,15 @@ export interface SkipOnboardingStepInput {
 
 export type OpeningPositionHistory = {
   invoiceCount: number;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   earliestIssueDate: string | null;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   latestIssueDate: string | null;
 };
 
@@ -4253,7 +4259,10 @@ export type OpeningPositionFilings = {
   unfiled: number;
   dueSoon: number;
   overdue: number;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   nextDueDate: string | null;
 };
 
@@ -4266,7 +4275,10 @@ export type OpeningPositionObligations = {
   open: number;
   dueSoon: number;
   overdue: number;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   nearestDue: string | null;
 };
 

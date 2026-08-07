@@ -10,6 +10,9 @@ export type OpeningPositionFilings = {
   unfiled: number;
   dueSoon: number;
   overdue: number;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   nextDueDate: string | null;
 };

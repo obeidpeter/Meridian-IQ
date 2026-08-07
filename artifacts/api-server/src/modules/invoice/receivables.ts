@@ -156,6 +156,10 @@ async function queryTopDebtors(
 export async function getReceivablesSummary(
   clientPartyId: string,
   firmId: string | null,
+  // Injectable so a frozen artifact (the onboarding opening position) can
+  // stamp one consistent instant across its sections; every live caller
+  // omits it.
+  now: Date = new Date(),
 ): Promise<ReceivablesSummary> {
   const db = getDb();
   const firmCond = firmId ? sql`AND i.firm_id = ${firmId}` : sql``;
@@ -235,7 +239,7 @@ export async function getReceivablesSummary(
   );
 
   return {
-    asOf: lagosDateString(),
+    asOf: lagosDateString(now),
     groups,
     topDebtors,
   };

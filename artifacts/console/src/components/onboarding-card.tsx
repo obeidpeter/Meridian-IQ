@@ -86,10 +86,11 @@ const AUTOMATION_LABELS: Record<string, string> = {
 
 /**
  * The opening position as compact label/value lines, in reading order.
- * Only sections with something to say render: an empty book shows the
- * history line ("0 invoices") and nothing else pretends otherwise.
- * Automation lines appear only for kinds with decided history — a day-one
- * client usually has none until the import lands.
+ * The core day-one facts always render — "0 invoices" and "None" are
+ * honest baseline statements. Receivables emit ONE LINE PER CURRENCY
+ * (cross-currency totals cannot be summed, and dropping a currency would
+ * understate the book). The conditional sections (WHT, notices,
+ * automation evidence) render only when there is something to report.
  */
 export function openingSummaryLines(
   p: OpeningPosition,
@@ -102,16 +103,20 @@ export function openingSummaryLines(
         ? `${p.history.invoiceCount} invoice(s), ${p.history.earliestIssueDate} → ${p.history.latestIssueDate}`
         : "0 invoices on record",
   });
-  const firstGroup = p.receivables.groups[0];
-  if (firstGroup) {
+  for (const group of p.receivables.groups) {
     lines.push({
-      label: "Outstanding receivables",
-      value: `${firstGroup.currency} ${firstGroup.outstandingTotal} across ${firstGroup.invoiceCount} invoice(s)`,
+      label:
+        p.receivables.groups.length > 1
+          ? `Outstanding receivables (${group.currency})`
+          : "Outstanding receivables",
+      value: `${group.currency} ${group.outstandingTotal} across ${group.invoiceCount} invoice(s)`,
     });
   }
   lines.push({
+    // All VAT-position amounts are NGN by module doctrine (non-NGN
+    // documents convert at their captured rate) — say so.
     label: "Net VAT (this month)",
-    value: `${p.vat.netVat}`,
+    value: `NGN ${p.vat.netVat}`,
   });
   lines.push({
     label: "Unfiled returns",
@@ -173,10 +178,13 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
   };
 
   // The day-one position: frozen once the run completes, a live provisional
-  // picture while it is active — fetched only when a run exists.
+  // picture while it is active. NOT fetched for an abandoned run — its
+  // picture would stay "provisional" forever at full recompute cost, a
+  // baseline pending nothing.
+  const wantPosition = !!run && run.status !== "abandoned";
   const { data: position } = useGetOnboardingOpeningPosition(run?.id ?? "", {
     query: {
-      enabled: !!run,
+      enabled: wantPosition,
       queryKey: getGetOnboardingOpeningPositionQueryKey(run?.id ?? ""),
       staleTime: 60_000,
       retry: false,
@@ -412,7 +420,7 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                 );
               })}
             </div>
-            {position && (
+            {wantPosition && position && (
               <div
                 className="border rounded-md p-3 space-y-1"
                 data-testid="section-onboarding-position"
@@ -432,7 +440,10 @@ export function OnboardingCard({ clientPartyId }: { clientPartyId: string }) {
                   <p
                     key={line.label}
                     className="text-xs text-muted-foreground"
-                    data-testid={`line-onboarding-position-${line.label}`}
+                    data-testid={`line-onboarding-position-${line.label
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, "-")
+                      .replace(/^-|-$/g, "")}`}
                   >
                     {line.label}:{" "}
                     <span className="text-foreground">{line.value}</span>

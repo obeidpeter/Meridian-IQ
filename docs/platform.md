@@ -615,6 +615,11 @@ Zero model calls anywhere.
   FROZEN onto the run row by the completion CAS — written atomically
   with the terminal transition, never rewritten after — as the permanent
   "where we started" baseline the readiness report (Phase 3) will read.
+  The frozen blob outlives the contract that wrote it, so the route
+  `safeParse`s it and degrades to a live provisional recompute on drift
+  (and the spec marks the $ref'd schemas as stored-durably:
+  additive-optional changes only); the console card does not fetch a
+  position for an abandoned run — a picture pending nothing.
 
 ## Monthly compliance pack
 

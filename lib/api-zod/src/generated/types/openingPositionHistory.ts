@@ -8,8 +8,14 @@
 
 export type OpeningPositionHistory = {
   invoiceCount: number;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   earliestIssueDate: string | null;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   latestIssueDate: string | null;
 };

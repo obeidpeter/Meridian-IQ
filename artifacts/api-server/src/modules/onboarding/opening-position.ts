@@ -104,12 +104,16 @@ export async function computeOpeningPosition(
   // Sequential on one connection (the onboarding module's detectAll note:
   // parallel awaits only queue on the client, and pg deprecates overlap).
   const history = await invoiceHistorySpan(firmId, clientPartyId);
-  const receivables = await getReceivablesSummary(clientPartyId, firmId);
+  // `now` threads into every section that stamps a date (asOf, the months
+  // list, the note) so a frozen baseline carries ONE consistent instant
+  // even when completion straddles a Lagos midnight.
+  const receivables = await getReceivablesSummary(clientPartyId, firmId, now);
   const payables = await payablesSummary(firmId, clientPartyId);
   const vat = await computeVatPosition(
     firmId,
     clientPartyId,
     vatPositionMonths(1, now)[0],
+    now,
   );
   const filings = await countOpenFilings(firmId, clientPartyId);
   const wht = await countWhtChase(firmId, clientPartyId);

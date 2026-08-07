@@ -140,12 +140,23 @@ router.get(
     const firmId = requireFirmScope(req.principal);
     const run = await getOnboardingRun(params.id, firmId);
     assertClientPartyScope(req.principal, run.clientPartyId);
-    const position =
-      run.status === "completed" && run.openingPosition
-        ? run.openingPosition
-        : await computeOpeningPosition(firmId, run.clientPartyId, {
-            provisional: true,
-          });
+    if (run.status === "completed" && run.openingPosition) {
+      // A frozen blob outlives the contract that wrote it: the shared
+      // $ref'd schemas keep evolving for their own dashboards, and a
+      // stored snapshot must never become a permanent 500. Parse
+      // defensively; on drift, degrade to an honest live recompute
+      // (marked provisional — it is no longer the frozen baseline).
+      const frozen = GetOnboardingOpeningPositionResponse.safeParse(
+        run.openingPosition,
+      );
+      if (frozen.success) {
+        res.json(frozen.data);
+        return;
+      }
+    }
+    const position = await computeOpeningPosition(firmId, run.clientPartyId, {
+      provisional: true,
+    });
     res.json(GetOnboardingOpeningPositionResponse.parse(position));
   },
 );

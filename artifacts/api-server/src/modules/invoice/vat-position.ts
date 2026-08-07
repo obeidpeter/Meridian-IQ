@@ -244,13 +244,13 @@ async function inputAggregates(
 
 // The disclosure every position surface carries — one paragraph, the whole
 // basis, no soft-pedalling.
-function positionNote(label: string, scopeLine: string): string {
+function positionNote(label: string, scopeLine: string, now: Date = new Date()): string {
   return (
     `VAT position for ${label} by issue date (Lagos calendar), month to date${scopeLine}. ` +
     `Output VAT: invoices and credit notes issued in the month that cleared the e-invoicing rails (an accepted submission attempt, whenever it happened), net of credits, cancelled documents excluded — the VAT pack's basis. ` +
     `Input VAT: captured supplier bills issued in the month, paid or not (bills never enter the stamping lifecycle, so no rails basis exists for them); "verified" means the bill's NEWEST stamp verification found the stamp valid on the national record, and the defensible net deducts verified input only. ` +
     `All amounts are NGN: non-NGN documents convert at their captured FX rate; a non-NGN document WITHOUT a captured rate is excluded from every total and every count except excludedForFx — a rate of 1 is never assumed. ` +
-    `A preparation aid, not a return — reconcile before filing. Generated ${lagosDateString()}.`
+    `A preparation aid, not a return — reconcile before filing. Generated ${lagosDateString(now)}.`
   );
 }
 
@@ -258,6 +258,8 @@ export async function computeVatPosition(
   firmId: string,
   clientPartyId: string,
   monthStart: string,
+  // Injectable for the same frozen-artifact reason as getReceivablesSummary.
+  now: Date = new Date(),
 ): Promise<VatPosition> {
   const out =
     (
@@ -279,7 +281,7 @@ export async function computeVatPosition(
     clientPartyId,
     monthStart,
     monthLabel: monthLabel(monthStart),
-    months: vatPositionMonths(),
+    months: vatPositionMonths(VAT_POSITION_MONTHS, now),
     outputVat: out.outputVat.toFixed(2),
     outputInvoiceCount: out.invoiceCount,
     inputVat: inp.inputVat.toFixed(2),
@@ -289,7 +291,7 @@ export async function computeVatPosition(
     netVat: (out.outputVat - inp.inputVat).toFixed(2),
     defensibleNetVat: (out.outputVat - inp.inputVatVerified).toFixed(2),
     excludedForFx: out.excluded + inp.excluded,
-    note: positionNote(monthLabel(monthStart), ""),
+    note: positionNote(monthLabel(monthStart), "", now),
   };
 }
 

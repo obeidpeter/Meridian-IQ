@@ -12136,6 +12136,13 @@ components:
     # The day-one opening position (Onboard with Clerk Phase 2): every
     # section $refs the schema its owning module already speaks, so the
     # baseline can never disagree with the dashboards it summarizes.
+    # STORED DURABLY: completed onboarding runs freeze this whole object
+    # (including the $ref'd ClientVatPosition / ReceivablesSummary /
+    # PayablesSummary / AutomationEvidence shapes) as jsonb — changes to
+    # any of those schemas must stay ADDITIVE-OPTIONAL or old snapshots
+    # stop parsing; the route degrades such snapshots to a live
+    # provisional recompute rather than 500ing, but the frozen baseline
+    # is then effectively lost.
     OpeningPosition:
       type: object
       required:
@@ -12167,8 +12174,10 @@ components:
               type: integer
             earliestIssueDate:
               type: ["string", "null"]
+              pattern: '^\d{4}-\d{2}-\d{2}$'
             latestIssueDate:
               type: ["string", "null"]
+              pattern: '^\d{4}-\d{2}-\d{2}$'
         receivables:
           $ref: "#/components/schemas/ReceivablesSummary"
         payables:
@@ -12187,6 +12196,7 @@ components:
               type: integer
             nextDueDate:
               type: ["string", "null"]
+              pattern: '^\d{4}-\d{2}-\d{2}$'
         wht:
           type: object
           required: [awaiting, awaitingAmount]
@@ -12207,6 +12217,7 @@ components:
               type: integer
             nearestDue:
               type: ["string", "null"]
+              pattern: '^\d{4}-\d{2}-\d{2}$'
         automation:
           $ref: "#/components/schemas/AutomationEvidence"
     FilingMatrixRow:

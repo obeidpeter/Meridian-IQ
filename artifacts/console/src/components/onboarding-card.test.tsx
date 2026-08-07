@@ -182,8 +182,25 @@ describe("openingSummaryLines", () => {
     ]);
     expect(lines[0].value).toBe("12 invoice(s), 2026-05-03 → 2026-08-01");
     expect(lines[1].value).toBe("NGN 450000.00 across 4 invoice(s)");
+    expect(lines[2].value).toBe("NGN 12000.00");
     expect(lines[3].value).toBe("3 unfiled (2 overdue)");
     expect(lines[4].value).toBe("88% agreement over 40 decision(s)");
+  });
+
+  test("multi-currency receivables emit one labeled line per currency — no silent drop", () => {
+    const p = position();
+    (p.receivables.groups as unknown as {
+      currency: string;
+      outstandingTotal: string;
+      invoiceCount: number;
+    }[]) = [
+      { currency: "NGN", outstandingTotal: "450000.00", invoiceCount: 4 },
+      { currency: "USD", outstandingTotal: "50000.00", invoiceCount: 2 },
+    ];
+    const labels = openingSummaryLines(p).map((l) => l.label);
+    expect(labels).toContain("Outstanding receivables (NGN)");
+    expect(labels).toContain("Outstanding receivables (USD)");
+    expect(labels).not.toContain("Outstanding receivables");
   });
 
   test("an empty book reads honestly and WHT/notices appear only when present", () => {

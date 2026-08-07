@@ -9479,6 +9479,10 @@ export const GetOnboardingOpeningPositionParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const getOnboardingOpeningPositionResponseHistoryEarliestIssueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getOnboardingOpeningPositionResponseHistoryLatestIssueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getOnboardingOpeningPositionResponseFilingsNextDueDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getOnboardingOpeningPositionResponseObligationsNearestDueRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const getOnboardingOpeningPositionResponseAutomationAsOfRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 
 
@@ -9487,8 +9491,8 @@ export const GetOnboardingOpeningPositionResponse = zod.object({
   "provisional": zod.boolean(),
   "history": zod.object({
   "invoiceCount": zod.number(),
-  "earliestIssueDate": zod.string().nullable(),
-  "latestIssueDate": zod.string().nullable()
+  "earliestIssueDate": zod.string().regex(getOnboardingOpeningPositionResponseHistoryEarliestIssueDateRegExp).nullable(),
+  "latestIssueDate": zod.string().regex(getOnboardingOpeningPositionResponseHistoryLatestIssueDateRegExp).nullable()
 }),
   "receivables": zod.object({
   "asOf": zod.string(),
@@ -9573,7 +9577,7 @@ export const GetOnboardingOpeningPositionResponse = zod.object({
   "unfiled": zod.number(),
   "dueSoon": zod.number(),
   "overdue": zod.number(),
-  "nextDueDate": zod.string().nullable()
+  "nextDueDate": zod.string().regex(getOnboardingOpeningPositionResponseFilingsNextDueDateRegExp).nullable()
 }),
   "wht": zod.object({
   "awaiting": zod.number(),
@@ -9583,7 +9587,7 @@ export const GetOnboardingOpeningPositionResponse = zod.object({
   "open": zod.number(),
   "dueSoon": zod.number(),
   "overdue": zod.number(),
-  "nearestDue": zod.string().nullable()
+  "nearestDue": zod.string().regex(getOnboardingOpeningPositionResponseObligationsNearestDueRegExp).nullable()
 }),
   "automation": zod.object({
   "windowMonths": zod.number(),
