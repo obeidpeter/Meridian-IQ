@@ -76,6 +76,12 @@ const FLAGS: {
   // it rides its own opt-in beside clerk_ai — dark means the indexer never
   // runs and retrieval surfaces fall back to today's exact-key behavior.
   { key: "clerk_memory", enabled: false, releaseTag: "R3", description: "Clerk firm memory: pgvector semantic index over the firm's own Clerk records (embedding indexer + retrieval; layered on clerk_ai). Requires the pgvector extension; spends firm tokens on embeddings" },
+  // Round 50 (Advise with Clerk Phase 2): the monthly brief sweep can spend
+  // firm tokens on every engaged client's adviser's note, so generation is
+  // opt-in and dark. Delivery is deliberately NOT gated by this flag (the
+  // statement-rail rule); the on-demand console generate button works
+  // regardless — this only governs the background sweep.
+  { key: "clerk_advisory_briefs", enabled: false, releaseTag: "R3", description: "Advisory brief sweep: monthly GENERATION of each engaged client's brief (spends firm tokens on the phrased note; template fallback). Delivery of already-generated briefs runs regardless of this flag" },
   // Round 47 (retrieval eval lane): seeded — unlike its phrasing sibling,
   // which is dark-by-absence and can only be lit by a manual row insert
   // (setFlag is UPDATE-only) — so operators can enable the nightly run

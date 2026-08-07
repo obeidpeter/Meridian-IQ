@@ -20,6 +20,7 @@ export type PushTemplateKey =
   | "b2c_window_alert"
   | "client_statement_ready"
   | "compliance_pack_ready"
+  | "advisory_brief_ready"
   | "firm_digest_ready"
   | "automation_paused"
   | "automation_granted"
@@ -47,6 +48,10 @@ const PUSH_COPY: Record<PushTemplateKey, { title: string; body: string }> = {
   compliance_pack_ready: {
     title: "MeridianIQ",
     body: "Your monthly compliance pack is ready. Open the app to view it.",
+  },
+  advisory_brief_ready: {
+    title: "MeridianIQ",
+    body: "Your adviser's monthly brief is ready. Open the app to view it.",
   },
   firm_digest_ready: {
     title: "MeridianIQ",

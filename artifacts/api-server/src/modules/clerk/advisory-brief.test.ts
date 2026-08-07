@@ -4,21 +4,27 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import {
   getDb,
+  runInBypassContext,
   auditEventsTable,
   clerkAdvisoryBriefsTable,
   engagementsTable,
+  featureFlagOverridesTable,
   filingReturnsTable,
   firmsTable,
+  messagesTable,
   obligationsTable,
   partiesTable,
   usersTable,
 } from "@workspace/db";
 import {
+  BRIEF_FLAG_KEY,
   buildBriefTemplate,
   buildBriefUser,
   computeAdvisoryBriefSections,
+  deliverAdvisoryBriefs,
   generateAdvisoryBrief,
   listAdvisoryBriefs,
+  sweepAdvisoryBriefs,
   type AdvisoryBriefSection,
 } from "./advisory-brief.ts";
 import {
@@ -26,6 +32,7 @@ import {
   restoreClerkFlag,
   saveAndEnableClerkFlag,
 } from "./test-support.ts";
+import { makeFlagGuard } from "../../test-helpers/flags.ts";
 import { lagosDateOffset, makeRunSalt } from "../../test-helpers/fixtures.ts";
 
 // Advise with Clerk Phase 1: the advisory brief. Pinned invariants:
@@ -44,6 +51,9 @@ const SALT = makeRunSalt();
 const firmId = randomUUID();
 const clientId = randomUUID();
 const strangerId = randomUUID(); // a party with NO engagement to this firm
+const sweepClientId = randomUUID(); // engaged, briefless until the sweep test
+const overrideFirmId = randomUUID(); // firm dark via per-firm override
+const overrideClientId = randomUUID();
 const userId = randomUUID();
 
 before(async () => {
@@ -65,14 +75,44 @@ before(async () => {
       type: "client_business" as const,
       legalName: `Brief Stranger ${SALT}`,
     },
+    {
+      id: sweepClientId,
+      type: "client_business" as const,
+      legalName: `Brief Sweep Client ${SALT}`,
+    },
+    {
+      id: overrideClientId,
+      type: "client_business" as const,
+      legalName: `Brief Override Client ${SALT}`,
+    },
   ]);
-  await db.insert(engagementsTable).values({
-    firmId,
-    clientPartyId: clientId,
-    type: "retainer" as const,
-    status: "open" as const,
-    title: `brief engagement ${SALT}`,
+  await db.insert(firmsTable).values({
+    id: overrideFirmId,
+    name: `Brief Override Firm ${SALT}`,
   });
+  await db.insert(engagementsTable).values([
+    {
+      firmId,
+      clientPartyId: clientId,
+      type: "retainer" as const,
+      status: "open" as const,
+      title: `brief engagement ${SALT}`,
+    },
+    {
+      firmId,
+      clientPartyId: sweepClientId,
+      type: "retainer" as const,
+      status: "in_progress" as const,
+      title: `brief sweep engagement ${SALT}`,
+    },
+    {
+      firmId: overrideFirmId,
+      clientPartyId: overrideClientId,
+      type: "retainer" as const,
+      status: "open" as const,
+      title: `brief override engagement ${SALT}`,
+    },
+  ]);
   // Statutory seed: one overdue return, one due-soon return, one overdue
   // authority notice — the numbers the statutory section must restate.
   await db.insert(filingReturnsTable).values([
@@ -264,4 +304,115 @@ test("list joins the client's legal name, newest first", async () => {
   const rows = await listAdvisoryBriefs(firmId, clientId);
   assert.ok(rows.length >= 1);
   assert.equal(rows[0].clientName, `Brief Client ${SALT}`);
+});
+
+// ---- Phase 2: delivery + sweep ----------------------------------------------
+
+test("delivery: claim-first once-only; no consent claims but sends nothing", async () => {
+  const before = await getDb()
+    .select({ id: messagesTable.id })
+    .from(messagesTable)
+    .where(eq(messagesTable.templateKey, "advisory_brief_ready"));
+  // The Phase 1 tests left clientId's brief undelivered — this suite owns
+  // every row in clerk_advisory_briefs, so counts here are exact.
+  const first = await deliverAdvisoryBriefs();
+  assert.ok(first >= 1, "the undelivered brief is claimed");
+  const [row] = await getDb()
+    .select()
+    .from(clerkAdvisoryBriefsTable)
+    .where(
+      and(
+        eq(clerkAdvisoryBriefsTable.firmId, firmId),
+        eq(clerkAdvisoryBriefsTable.clientPartyId, clientId),
+      ),
+    );
+  assert.ok(row.deliveredAt, "claim-first CAS set deliveredAt");
+  assert.equal(
+    await deliverAdvisoryBriefs(),
+    0,
+    "a claimed row is never re-offered",
+  );
+  // CORE-03: no consent fixtures exist in this suite, so the claim wrote no
+  // message on any channel.
+  const after = await getDb()
+    .select({ id: messagesTable.id })
+    .from(messagesTable)
+    .where(eq(messagesTable.templateKey, "advisory_brief_ready"));
+  assert.equal(after.length, before.length, "no consent, no sends");
+});
+
+const briefFlagGuard = makeFlagGuard(BRIEF_FLAG_KEY);
+
+test("sweep: live month once per engaged client, anti-join idempotent, per-firm override honored", async () => {
+  await briefFlagGuard.saveAndSet(true);
+  // Darken ONE firm via the operator override surface: its client must not
+  // have a note generated on its budget by a background pass.
+  await runInBypassContext(async () => {
+    await getDb()
+      .insert(featureFlagOverridesTable)
+      .values({ flagKey: BRIEF_FLAG_KEY, firmId: overrideFirmId, enabled: false })
+      .onConflictDoNothing();
+  });
+  try {
+    await sweepAdvisoryBriefs({ onlyFirmIds: [firmId, overrideFirmId] });
+    const [swept] = await getDb()
+      .select()
+      .from(clerkAdvisoryBriefsTable)
+      .where(eq(clerkAdvisoryBriefsTable.clientPartyId, sweepClientId));
+    assert.ok(swept, "the sweep generated the missing client's brief");
+    assert.equal(swept.generatedBy, null, "sweep rows carry no actor");
+    assert.equal(swept.source, "template", "no provider in tests");
+    const overridden = await getDb()
+      .select()
+      .from(clerkAdvisoryBriefsTable)
+      .where(eq(clerkAdvisoryBriefsTable.firmId, overrideFirmId));
+    assert.equal(overridden.length, 0, "the overridden-dark firm is skipped");
+
+    // Second pass: the anti-join re-offers nothing (clientId's brief from
+    // the earlier tests also keeps that pair out). Pinning updatedAt — not
+    // just the row count — proves the pair was SKIPPED, not silently
+    // regenerated through the upsert (which would double-spend monthly).
+    await sweepAdvisoryBriefs({ onlyFirmIds: [firmId, overrideFirmId] });
+    const all = await getDb()
+      .select()
+      .from(clerkAdvisoryBriefsTable)
+      .where(eq(clerkAdvisoryBriefsTable.clientPartyId, sweepClientId));
+    assert.equal(all.length, 1, "idempotent across passes");
+    assert.equal(
+      all[0].updatedAt.getTime(),
+      swept.updatedAt.getTime(),
+      "the second pass never touched the row",
+    );
+  } finally {
+    await runInBypassContext(async () => {
+      await getDb()
+        .delete(featureFlagOverridesTable)
+        .where(
+          and(
+            eq(featureFlagOverridesTable.flagKey, BRIEF_FLAG_KEY),
+            eq(featureFlagOverridesTable.firmId, overrideFirmId),
+          ),
+        );
+    });
+    await briefFlagGuard.restore();
+  }
+});
+
+test("sweep: flag dark generates nothing (delivery still runs)", async () => {
+  // FORCE the dark state (the statement-suite discipline) instead of
+  // trusting ambient seed state — a dev DB with the flag lit must not
+  // flip this assertion.
+  await briefFlagGuard.saveAndSet(false);
+  try {
+    const before = await getDb()
+      .select({ id: clerkAdvisoryBriefsTable.id })
+      .from(clerkAdvisoryBriefsTable);
+    await sweepAdvisoryBriefs({ onlyFirmIds: [firmId, overrideFirmId] });
+    const after = await getDb()
+      .select({ id: clerkAdvisoryBriefsTable.id })
+      .from(clerkAdvisoryBriefsTable);
+    assert.equal(after.length, before.length, "dark flag = no generation");
+  } finally {
+    await briefFlagGuard.restore();
+  }
 });

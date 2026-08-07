@@ -1126,10 +1126,24 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
   party id 404s before anything is stored. Console renders the brief on
   the client detail page (generate/refresh button); the SME dashboard
   shows the client's own latest brief read-only.
-- **Phase 2** adds the monthly sweep + delivery on the statement rail
-  (the `deliveredAt` claim cell is already in place); **Phase 3** adds
-  continuity ("what changed since last brief"), the `advisory_briefs`
-  memory corpus and acted-on tracking.
+- **Monthly sweep + delivery** (Phase 2, round 50 — the statement rail
+  verbatim): generation rides the shared sweep behind the opt-in
+  `clerk_advisory_briefs` flag (seeded dark; it spends firm tokens on
+  every engaged client's note) — try-lock 731_852, live-engagement
+  candidates missing the LIVE month's row via the natural-key anti-join
+  (a firm-generated brief simply removes the pair), a PER-FIRM
+  override-aware flag wall inside the loop (the firm-spending-sweep
+  rule) and per-pair try/catch poison isolation; sweep rows carry
+  `generatedBy null`. Delivery runs every pass regardless of the flag
+  (stranded-backlog rule): claim-first CAS on `deliveredAt` committed
+  BEFORE any send, `messaging_notifications` dark still claims (PL-02),
+  then `fanOutAlert` — consent-gated (CORE-03), pointer-only (SEC-12,
+  `advisory_brief_ready`, `pointerEntityRef("brief", id)`). ONE
+  deliberate difference from statements: no quiet suppression — an
+  "on track" brief is still the firm's monthly deliverable. No mobile
+  deep link yet (no mobile brief screen; the push opens the app home).
+- **Phase 3** adds continuity ("what changed since last brief"), the
+  `advisory_briefs` memory corpus and acted-on tracking.
 
 ## Digests, statements & delivery
 
