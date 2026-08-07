@@ -24,6 +24,7 @@ import {
   openObligationSamples,
 } from "../obligations/obligations";
 import { countOpenFilings, openFilingSamples } from "../filings/filings";
+import { statutoryDueDay } from "../filings/statutory-calendar";
 import {
   countWhtChase,
   openWhtSamples,
@@ -173,22 +174,24 @@ async function loadRegister(
   };
 }
 
-// The next statutory VAT-return date: due the 21st of the month following
-// each period — the compliance-calendar.ts rule (which the SME deadline card
-// shares), reduced to "the first 21st strictly after the Lagos today". Offset
-// 0 covers THIS month's 21st while it is still ahead; once it has passed (or
-// is today — a date due today is not "next", matching the calendar's
-// `dueDate <= today` skip), next month's 21st is always strictly ahead, so
-// the two-offset walk is total.
+// The next statutory VAT-return date: due on the statutory-calendar day of
+// the month following each period (the Filing Desk one-home owns the
+// number; round 41 folded this surface onto it) — the compliance-calendar
+// rule (which the SME deadline card shares), reduced to "the first due day
+// strictly after the Lagos today". Offset 0 covers THIS month's due day
+// while it is still ahead; once it has passed (or is today — a date due
+// today is not "next", matching the calendar's `dueDate <= today` skip),
+// next month's is always strictly ahead, so the two-offset walk is total.
 export function nextVatReturnDue(now: Date = new Date()): string {
   const today = lagosDateString(now);
   const { year, monthIndex } = lagosParts(now);
+  const dueDay = statutoryDueDay("vat");
   for (const offset of [0, 1]) {
-    const due = lagosDateString(lagosMidnightFor(year, monthIndex + offset, 21));
+    const due = lagosDateString(lagosMidnightFor(year, monthIndex + offset, dueDay));
     if (due > today) return due;
   }
-  /* c8 ignore next — unreachable: next month's 21st is always ahead */
-  return lagosDateString(lagosMidnightFor(year, monthIndex + 1, 21));
+  /* c8 ignore next — unreachable: next month's due day is always ahead */
+  return lagosDateString(lagosMidnightFor(year, monthIndex + 1, dueDay));
 }
 
 // The submission backlog, pinned to ONE client: the compliance-calendar.ts

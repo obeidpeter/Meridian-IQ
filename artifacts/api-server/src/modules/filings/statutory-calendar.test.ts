@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { src } from "../../test-helpers/source-pins.ts";
 import {
+  statutoryDueDay,
   FILING_KINDS,
   filingDueDate,
   periodMonthBounds,
@@ -70,4 +72,31 @@ test("periodMonthBounds: the half-open month window, December carrying the year"
     start: "2026-12-01",
     end: "2027-01-01",
   });
+});
+
+// Round 41: the three pre-register surfaces that once open-coded the VAT
+// due day now draw it from statutoryDueDay — pinned so the number can
+// never fork again. A literal day inside a lagosMidnightFor call in any
+// of them means the fold regressed. (sme.ts's B2C placeholder day 10 is a
+// DIFFERENT statute — B2C reporting, not PAYE — and stays put.)
+test("statutoryDueDay is the one home; no folded surface open-codes a due day", () => {
+  assert.equal(statutoryDueDay("vat"), 21);
+  assert.equal(statutoryDueDay("paye"), 10);
+  assert.equal(statutoryDueDay("wht"), 21);
+  const folded = [
+    "routes/sme.ts",
+    "modules/invoice/compliance-calendar.ts",
+    "modules/invoice/compliance-pack.ts",
+  ];
+  for (const rel of folded) {
+    const source = src(rel);
+    assert.ok(
+      source.includes('statutoryDueDay("vat")'),
+      `${rel} draws the VAT due day from the statutory calendar`,
+    );
+    assert.ok(
+      !/lagosMidnightFor\([^)]*,\s*21\)/.test(source),
+      `${rel} must not open-code the VAT due day`,
+    );
+  }
 });
