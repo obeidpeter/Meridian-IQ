@@ -107,6 +107,11 @@ const LIVE_ENGAGEMENT: SQL = sql`${engagementsTable.status} IN ('open', 'in_prog
 export async function mintFilingsForFirm(
   firmId: string,
   now = new Date(),
+  // Onboarding backfill (round 42) pins ONE client: minting a past period
+  // for a whole firm would backdate unfiled rows onto every client's
+  // register at once — a book-wide behavior change no onboarding should
+  // trigger. Absent, the enumeration is unchanged (the sweep's shape).
+  onlyClientPartyId?: string,
 ): Promise<number> {
   const period = previousLagosPeriod(now);
   // selectDistinct because a client can hold several engagements with the
@@ -114,7 +119,15 @@ export async function mintFilingsForFirm(
   const clients = await getDb()
     .selectDistinct({ clientPartyId: engagementsTable.clientPartyId })
     .from(engagementsTable)
-    .where(and(eq(engagementsTable.firmId, firmId), LIVE_ENGAGEMENT));
+    .where(
+      and(
+        eq(engagementsTable.firmId, firmId),
+        LIVE_ENGAGEMENT,
+        ...(onlyClientPartyId
+          ? [eq(engagementsTable.clientPartyId, onlyClientPartyId)]
+          : []),
+      ),
+    );
   if (clients.length === 0) return 0;
   // WHT rows mint CONDITIONALLY (unlike vat/paye, which every live client
   // owes unconditionally): only a client that actually took delivery of a

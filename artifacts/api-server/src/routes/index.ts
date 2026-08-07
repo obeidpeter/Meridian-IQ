@@ -53,6 +53,7 @@ import filingsRouter from "./filings";
 import filingMatrixRouter from "./filing-matrix";
 // WHT Desk: the withholding credit ledger + remittance schedule (0.69.0).
 import whtRouter from "./wht";
+import onboardingRouter from "./onboarding";
 // Registers the INT-02 unmapped-code sweep with the pipeline worker.
 import "../modules/desk/sweeps";
 // Platform health watch (rails / dead letters / dead deliveries). Also
@@ -78,6 +79,8 @@ import "../modules/obligations/register";
 import "../modules/filings/register";
 // Registers the WHT credit-note chase sweep with the pipeline worker.
 import "../modules/wht/register";
+// Registers the onboarding checklist refresh sweep with the pipeline worker.
+import "../modules/onboarding/register";
 import "../modules/messaging/retention";
 
 const router: IRouter = Router();
@@ -124,5 +127,6 @@ router.use(obligationsRouter);
 router.use(filingsRouter);
 router.use(filingMatrixRouter);
 router.use(whtRouter);
+router.use(onboardingRouter);
 
 export default router;

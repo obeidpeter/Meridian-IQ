@@ -35,6 +35,7 @@ import { migration0033 } from "./0033_plan_policy_guardrails.ts";
 import { migration0034 } from "./0034_filing_returns_guardrails.ts";
 import { migration0035 } from "./0035_filing_reminder_guardrails.ts";
 import { migration0036 } from "./0036_wht_guardrails.ts";
+import { migration0037 } from "./0037_onboarding_guardrails.ts";
 
 export interface Migration {
   version: number;
@@ -83,6 +84,7 @@ export const migrations: Migration[] = [
   migration0034,
   migration0035,
   migration0036,
+  migration0037,
 ];
 
 type Executor = Pick<pg.Pool, "query">;

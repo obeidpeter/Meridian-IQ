@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.69.0
+ * OpenAPI spec version: 0.70.0
  */
 import * as zod from 'zod';
 
@@ -9307,6 +9307,168 @@ export const UpdateFilingStatusResponse = zod.object({
   "filedBy": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary The firm's client onboarding runs (client-scoped for client users)
+ */
+export const ListOnboardingRunsQueryParams = zod.object({
+  "clientPartyId": zod.coerce.string().uuid().optional()
+})
+
+export const ListOnboardingRunsResponse = zod.object({
+  "runs": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "status": zod.enum(['active', 'completed', 'abandoned']),
+  "steps": zod.array(zod.object({
+  "key": zod.enum(['consent_captured', 'history_imported', 'statements_backfilled', 'duplicates_reviewed', 'filings_synced']),
+  "status": zod.enum(['pending', 'done', 'skipped']),
+  "evidence": zod.record(zod.string(), zod.unknown()),
+  "gaps": zod.array(zod.string()),
+  "skippedReason": zod.string().nullable(),
+  "checkedAt": zod.coerce.date().nullable()
+})),
+  "createdAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+}))
+})
+
+
+/**
+ * @summary Open an evidence-based onboarding checklist for a newly engaged client
+ */
+export const CreateOnboardingRunBody = zod.object({
+  "clientPartyId": zod.string().uuid()
+})
+
+export const CreateOnboardingRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "status": zod.enum(['active', 'completed', 'abandoned']),
+  "steps": zod.array(zod.object({
+  "key": zod.enum(['consent_captured', 'history_imported', 'statements_backfilled', 'duplicates_reviewed', 'filings_synced']),
+  "status": zod.enum(['pending', 'done', 'skipped']),
+  "evidence": zod.record(zod.string(), zod.unknown()),
+  "gaps": zod.array(zod.string()),
+  "skippedReason": zod.string().nullable(),
+  "checkedAt": zod.coerce.date().nullable()
+})),
+  "createdAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary One onboarding run's checklist, evidence and recorded gaps
+ */
+export const GetOnboardingRunParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetOnboardingRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "status": zod.enum(['active', 'completed', 'abandoned']),
+  "steps": zod.array(zod.object({
+  "key": zod.enum(['consent_captured', 'history_imported', 'statements_backfilled', 'duplicates_reviewed', 'filings_synced']),
+  "status": zod.enum(['pending', 'done', 'skipped']),
+  "evidence": zod.record(zod.string(), zod.unknown()),
+  "gaps": zod.array(zod.string()),
+  "skippedReason": zod.string().nullable(),
+  "checkedAt": zod.coerce.date().nullable()
+})),
+  "createdAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Re-detect every step from the record now (idempotent)
+ */
+export const RefreshOnboardingRunParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RefreshOnboardingRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "status": zod.enum(['active', 'completed', 'abandoned']),
+  "steps": zod.array(zod.object({
+  "key": zod.enum(['consent_captured', 'history_imported', 'statements_backfilled', 'duplicates_reviewed', 'filings_synced']),
+  "status": zod.enum(['pending', 'done', 'skipped']),
+  "evidence": zod.record(zod.string(), zod.unknown()),
+  "gaps": zod.array(zod.string()),
+  "skippedReason": zod.string().nullable(),
+  "checkedAt": zod.coerce.date().nullable()
+})),
+  "createdAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Record a deliberate gap (a step the facts do not satisfy, skipped with a reason)
+ */
+export const SkipOnboardingStepParams = zod.object({
+  "id": zod.coerce.string(),
+  "stepKey": zod.enum(['consent_captured', 'history_imported', 'statements_backfilled', 'duplicates_reviewed', 'filings_synced'])
+})
+
+export const skipOnboardingStepBodyReasonMin = 3;
+export const skipOnboardingStepBodyReasonMax = 500;
+
+
+
+export const SkipOnboardingStepBody = zod.object({
+  "reason": zod.string().min(skipOnboardingStepBodyReasonMin).max(skipOnboardingStepBodyReasonMax)
+})
+
+export const SkipOnboardingStepResponse = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "status": zod.enum(['active', 'completed', 'abandoned']),
+  "steps": zod.array(zod.object({
+  "key": zod.enum(['consent_captured', 'history_imported', 'statements_backfilled', 'duplicates_reviewed', 'filings_synced']),
+  "status": zod.enum(['pending', 'done', 'skipped']),
+  "evidence": zod.record(zod.string(), zod.unknown()),
+  "gaps": zod.array(zod.string()),
+  "skippedReason": zod.string().nullable(),
+  "checkedAt": zod.coerce.date().nullable()
+})),
+  "createdAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary Close an onboarding run without completing it
+ */
+export const AbandonOnboardingRunParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AbandonOnboardingRunResponse = zod.object({
+  "id": zod.string().uuid(),
+  "clientPartyId": zod.string().uuid(),
+  "clientName": zod.string(),
+  "status": zod.enum(['active', 'completed', 'abandoned']),
+  "steps": zod.array(zod.object({
+  "key": zod.enum(['consent_captured', 'history_imported', 'statements_backfilled', 'duplicates_reviewed', 'filings_synced']),
+  "status": zod.enum(['pending', 'done', 'skipped']),
+  "evidence": zod.record(zod.string(), zod.unknown()),
+  "gaps": zod.array(zod.string()),
+  "skippedReason": zod.string().nullable(),
+  "checkedAt": zod.coerce.date().nullable()
+})),
+  "createdAt": zod.coerce.date(),
+  "completedAt": zod.coerce.date().nullable()
 })
 
 

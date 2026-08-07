@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ClerkActionsCard } from "@/components/clerk-actions-card";
 import { ClerkActionEffectivenessCard } from "@/components/clerk-action-effectiveness-card";
 import { FilingsCard } from "@/components/filings-card";
+import { OnboardingCard } from "@/components/onboarding-card";
 import { WhtCard } from "@/components/wht-card";
 import { ObligationsCard } from "@/components/obligations-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -681,6 +682,10 @@ export function ClientDetail() {
             itself render-on-success. */}
         <CollectionAccountsCard clientPartyId={id} />
         <CompliancePackCard clientPartyId={id} />
+        {/* Onboard with Clerk: the evidence-based onboarding checklist —
+            steps settle from the record (history, statements, consent,
+            duplicates, filings), skips record honest gaps. */}
+        <OnboardingCard clientPartyId={id} />
         {/* Notice Desk: this client's tax-authority notices and their
             response deadlines — obligations from approved Clerk notice
             cases plus the inline paper-notice recorder. */}

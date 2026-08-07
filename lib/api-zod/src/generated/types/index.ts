@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.69.0
+ * OpenAPI spec version: 0.70.0
  */
 
 export * from './acceptInvitationInput';
@@ -274,6 +274,7 @@ export * from './createObligationInput';
 export * from './createObligationInputAuthority';
 export * from './createObligationInputNoticeType';
 export * from './createObligationInputTaxType';
+export * from './createOnboardingRunInput';
 export * from './createPasswordResetInput';
 export * from './createPaymentIntentInput';
 export * from './createPlanRunInput';
@@ -496,6 +497,7 @@ export * from './listMissingRecurringBillsParams';
 export * from './listNotificationsParams';
 export * from './listObligationsParams';
 export * from './listObligationsStatus';
+export * from './listOnboardingRunsParams';
 export * from './listOperatorCasesParams';
 export * from './listOperatorCasesStatus';
 export * from './listPartiesParams';
@@ -564,6 +566,13 @@ export * from './offboardClientInput';
 export * from './offboardClientResult';
 export * from './onboardingProspect';
 export * from './onboardingProspectStage';
+export * from './onboardingRun';
+export * from './onboardingRunList';
+export * from './onboardingRunStatus';
+export * from './onboardingStep';
+export * from './onboardingStepEvidence';
+export * from './onboardingStepKey';
+export * from './onboardingStepStatus';
 export * from './operatorBrief';
 export * from './operatorBriefOpenCases';
 export * from './operatorBriefOpenCasesByPriorityItem';
@@ -693,6 +702,7 @@ export * from './settlementEventPaymentStatus';
 export * from './settlementEventSource';
 export * from './settlementInput';
 export * from './settlementInputSource';
+export * from './skipOnboardingStepInput';
 export * from './staffNotificationPreferences';
 export * from './stampRecord';
 export * from './stampRecordRail';

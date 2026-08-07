@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.69.0
+ * OpenAPI spec version: 0.70.0
  */
 export interface HealthStatus {
   status: string;
@@ -4172,6 +4172,75 @@ export interface UpdateFilingStatusInput {
   notes?: string;
 }
 
+export type OnboardingStepKey = typeof OnboardingStepKey[keyof typeof OnboardingStepKey];
+
+
+export const OnboardingStepKey = {
+  consent_captured: 'consent_captured',
+  history_imported: 'history_imported',
+  statements_backfilled: 'statements_backfilled',
+  duplicates_reviewed: 'duplicates_reviewed',
+  filings_synced: 'filings_synced',
+} as const;
+
+export type OnboardingStepStatus = typeof OnboardingStepStatus[keyof typeof OnboardingStepStatus];
+
+
+export const OnboardingStepStatus = {
+  pending: 'pending',
+  done: 'done',
+  skipped: 'skipped',
+} as const;
+
+export type OnboardingStepEvidence = { [key: string]: unknown };
+
+export interface OnboardingStep {
+  key: OnboardingStepKey;
+  status: OnboardingStepStatus;
+  evidence: OnboardingStepEvidence;
+  gaps: string[];
+  /** @nullable */
+  skippedReason: string | null;
+  /** @nullable */
+  checkedAt: string | null;
+}
+
+export type OnboardingRunStatus = typeof OnboardingRunStatus[keyof typeof OnboardingRunStatus];
+
+
+export const OnboardingRunStatus = {
+  active: 'active',
+  completed: 'completed',
+  abandoned: 'abandoned',
+} as const;
+
+export interface OnboardingRun {
+  id: string;
+  clientPartyId: string;
+  clientName: string;
+  status: OnboardingRunStatus;
+  steps: OnboardingStep[];
+  createdAt: string;
+  /** @nullable */
+  completedAt: string | null;
+}
+
+export interface OnboardingRunList {
+  runs: OnboardingRun[];
+}
+
+export interface CreateOnboardingRunInput {
+  clientPartyId: string;
+}
+
+export interface SkipOnboardingStepInput {
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  reason: string;
+}
+
 /**
  * @nullable
  */
@@ -6922,6 +6991,10 @@ export const ListFilingsTaxType = {
   paye: 'paye',
   wht: 'wht',
 } as const;
+
+export type ListOnboardingRunsParams = {
+clientPartyId?: string;
+};
 
 export type ListWhtCreditsParams = {
 clientPartyId?: string;

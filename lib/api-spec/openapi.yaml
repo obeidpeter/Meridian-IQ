@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.69.0
+  version: 0.70.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -5979,6 +5979,137 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+  /onboarding/runs:
+    get:
+      operationId: listOnboardingRuns
+      summary: The firm's client onboarding runs (client-scoped for client users)
+      tags: [onboarding]
+      parameters:
+        - name: clientPartyId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Onboarding runs, active first then newest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingRunList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      operationId: createOnboardingRun
+      summary: Open an evidence-based onboarding checklist for a newly engaged client
+      tags: [onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOnboardingRunInput"
+      responses:
+        "201":
+          description: The new run, with its first detection pass already applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /onboarding/runs/{id}:
+    get:
+      operationId: getOnboardingRun
+      summary: One onboarding run's checklist, evidence and recorded gaps
+      tags: [onboarding]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /onboarding/runs/{id}/refresh:
+    post:
+      operationId: refreshOnboardingRun
+      summary: Re-detect every step from the record now (idempotent)
+      tags: [onboarding]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The refreshed run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /onboarding/runs/{id}/steps/{stepKey}/skip:
+    post:
+      operationId: skipOnboardingStep
+      summary: Record a deliberate gap (a step the facts do not satisfy, skipped with a reason)
+      tags: [onboarding]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: stepKey
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              [
+                consent_captured,
+                history_imported,
+                statements_backfilled,
+                duplicates_reviewed,
+                filings_synced,
+              ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkipOnboardingStepInput"
+      responses:
+        "200":
+          description: The updated run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /onboarding/runs/{id}/abandon:
+    post:
+      operationId: abandonOnboardingRun
+      summary: Close an onboarding run without completing it
+      tags: [onboarding]
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: The abandoned run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /wht/credits:
     get:
       operationId: listWhtCredits
@@ -11903,6 +12034,89 @@ components:
         notes:
           type: string
           maxLength: 2000
+    OnboardingStep:
+      type: object
+      required: [key, status, evidence, gaps, skippedReason, checkedAt]
+      properties:
+        key:
+          type: string
+          enum:
+            [
+              consent_captured,
+              history_imported,
+              statements_backfilled,
+              duplicates_reviewed,
+              filings_synced,
+            ]
+        # "done" and "skipped" both settle a step; the difference is the
+        # record — done is detected from facts, skipped carries the firm's
+        # reason (the gap the readiness report will name).
+        status:
+          type: string
+          enum: [pending, done, skipped]
+        # Step-specific detection facts (counts, month coverage, duplicate
+        # suggestions) — shaped per step, deliberately open.
+        evidence:
+          type: object
+          additionalProperties: true
+        gaps:
+          type: array
+          items:
+            type: string
+        skippedReason:
+          type: ["string", "null"]
+        checkedAt:
+          type: ["string", "null"]
+          format: date-time
+    OnboardingRun:
+      type: object
+      required:
+        [id, clientPartyId, clientName, status, steps, createdAt, completedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientPartyId:
+          type: string
+          format: uuid
+        clientName:
+          type: string
+        status:
+          type: string
+          enum: [active, completed, abandoned]
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnboardingStep"
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+    OnboardingRunList:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnboardingRun"
+    CreateOnboardingRunInput:
+      type: object
+      required: [clientPartyId]
+      properties:
+        clientPartyId:
+          type: string
+          format: uuid
+    SkipOnboardingStepInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 500
     FilingMatrixRow:
       type: object
       required: [clientPartyId, clientName, vat, paye, wht]
