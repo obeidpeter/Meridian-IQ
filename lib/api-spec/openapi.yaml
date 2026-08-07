@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.73.0
+  version: 0.74.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -4517,6 +4517,32 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/PhrasingEvalRun"
+  /clerk/eval/retrieval:
+    post:
+      operationId: runRetrievalEval
+      tags: [clerk]
+      summary: Run the retrieval eval — embed the fixed labeled corpus with the live embedding model and score recall@k / MRR deterministically in app code; the run is stored
+      responses:
+        "200":
+          description: The stored retrieval eval run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetrievalEvalRun"
+  /clerk/eval/retrieval-runs:
+    get:
+      operationId: listRetrievalEvalRuns
+      tags: [clerk]
+      summary: Stored retrieval eval runs, newest first
+      responses:
+        "200":
+          description: Retrieval eval runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RetrievalEvalRun"
   /clerk/eval/intent-fixtures:
     get:
       operationId: listIntentFixtures
@@ -13855,6 +13881,63 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PhrasingEvalFixtureResult"
+    RetrievalEvalFixtureResult:
+      type: object
+      required: [key, expectedDoc, rank, hit]
+      properties:
+        key:
+          type: string
+        expectedDoc:
+          type: string
+        # 1-based rank of the expected document in the full similarity
+        # ordering; null when it could not be ranked at all.
+        rank:
+          nullable: true
+          type: integer
+        hit:
+          type: boolean
+    RetrievalEvalRun:
+      type: object
+      required:
+        [
+          id,
+          model,
+          promptVersion,
+          k,
+          fixtureCount,
+          hits,
+          mrr,
+          results,
+          durationMs,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        model:
+          type: string
+        promptVersion:
+          type: string
+        k:
+          type: integer
+        # recall@k numerator: queries whose expected document ranked within k.
+        hits:
+          type: integer
+        fixtureCount:
+          type: integer
+        # Mean reciprocal rank over the full ordering, 0..1.
+        mrr:
+          type: number
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/RetrievalEvalFixtureResult"
+        durationMs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
     PhrasingEvalRun:
       type: object
       required:

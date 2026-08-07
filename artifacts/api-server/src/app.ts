@@ -73,6 +73,11 @@ const NO_CONTEXT_ROUTES = new Set([
   // The phrasing corpus is one completion per fixture (double in canary
   // mode) — the intent eval's posture exactly.
   "POST /api/clerk/eval/phrasing",
+  // The retrieval eval is ONE embedding call, but still an in-request
+  // provider round-trip; its run row commits under its own bypass scope
+  // (retrieval-eval.ts), so it must not nest inside the request
+  // transaction — the eval-lane posture.
+  "POST /api/clerk/eval/retrieval",
   // Inbound webhooks (routes/inbound.ts): each handler responds 202 and
   // then runs sender resolution + extraction in a detached promise whose DB
   // stages commit in their own short transactions (clerk scope.ts) — nothing

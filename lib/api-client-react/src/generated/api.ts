@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.73.0
+ * OpenAPI spec version: 0.74.0
  */
 import {
   useMutation,
@@ -345,6 +345,7 @@ import type {
   ReplyToEscalationInput,
   ResetPasswordInput,
   ResolveCaseInput,
+  RetrievalEvalRun,
   RevenueShareStatement,
   RunAssessmentInput,
   RunIntentEvalInput,
@@ -18474,6 +18475,153 @@ export function useListPhrasingEvalRuns<TData = Awaited<ReturnType<typeof listPh
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListPhrasingEvalRunsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRunRetrievalEvalUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/retrieval`
+}
+
+/**
+ * @summary Run the retrieval eval — embed the fixed labeled corpus with the live embedding model and score recall@k / MRR deterministically in app code; the run is stored
+ */
+export const runRetrievalEval = async ( options?: RequestInit): Promise<RetrievalEvalRun> => {
+
+  return customFetch<RetrievalEvalRun>(getRunRetrievalEvalUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRunRetrievalEvalMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runRetrievalEval>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runRetrievalEval>>, TError,void, TContext> => {
+
+const mutationKey = ['runRetrievalEval'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runRetrievalEval>>, void> = () => {
+
+
+          return  runRetrievalEval(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunRetrievalEvalMutationResult = NonNullable<Awaited<ReturnType<typeof runRetrievalEval>>>
+
+    export type RunRetrievalEvalMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Run the retrieval eval — embed the fixed labeled corpus with the live embedding model and score recall@k / MRR deterministically in app code; the run is stored
+ */
+export const useRunRetrievalEval = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runRetrievalEval>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runRetrievalEval>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRunRetrievalEvalMutationOptions(options));
+    }
+
+export const getListRetrievalEvalRunsUrl = () => {
+
+
+
+
+  return `/api/clerk/eval/retrieval-runs`
+}
+
+/**
+ * @summary Stored retrieval eval runs, newest first
+ */
+export const listRetrievalEvalRuns = async ( options?: RequestInit): Promise<RetrievalEvalRun[]> => {
+
+  return customFetch<RetrievalEvalRun[]>(getListRetrievalEvalRunsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRetrievalEvalRunsQueryKey = () => {
+    return [
+    `/api/clerk/eval/retrieval-runs`
+    ] as const;
+    }
+
+
+export const getListRetrievalEvalRunsQueryOptions = <TData = Awaited<ReturnType<typeof listRetrievalEvalRuns>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRetrievalEvalRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRetrievalEvalRunsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRetrievalEvalRuns>>> = ({ signal }) => listRetrievalEvalRuns({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRetrievalEvalRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRetrievalEvalRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listRetrievalEvalRuns>>>
+export type ListRetrievalEvalRunsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Stored retrieval eval runs, newest first
+ */
+
+export function useListRetrievalEvalRuns<TData = Awaited<ReturnType<typeof listRetrievalEvalRuns>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRetrievalEvalRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRetrievalEvalRunsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

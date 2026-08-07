@@ -28,11 +28,17 @@ import {
   RunPhrasingEvalBody,
   RunPhrasingEvalResponse,
   ListPhrasingEvalRunsResponse,
+  RunRetrievalEvalResponse,
+  ListRetrievalEvalRunsResponse,
 } from "@workspace/api-zod";
 import { parseOrThrow } from "../../lib/parse";
 import { assertCan } from "../../modules/auth/rbac";
 import { DomainError } from "../../modules/errors";
-import { getClerkGateway } from "../../modules/clerk/provider";
+import { embedderOrNull, getClerkGateway } from "../../modules/clerk/provider";
+import {
+  listRetrievalEvalRuns,
+  runRetrievalEval,
+} from "../../modules/clerk/retrieval-eval";
 import {
   listEvalRuns,
   runEvalCorpus,
@@ -145,6 +151,36 @@ router.get("/clerk/eval/phrasing-runs", async (req, res): Promise<void> => {
   assertCan(req.principal, "clerk.use");
   const runs = await listPhrasingEvalRuns();
   res.json(ListPhrasingEvalRunsResponse.parse(runs));
+});
+
+// Retrieval eval lane (round 47; on-demand route round 48): embed the fixed
+// labeled corpus with the LIVE embedding model, score recall@k/MRR
+// deterministically in app code, store the run — the nightly sweep's exact
+// pass, operator-triggered. No canary variant: there is no prompt to
+// candidate — the thing under test is the embedding model itself, and model
+// changes flow through CLERK_EMBEDDING_MODEL with the drop watch as the
+// evidence trail. One platform-funded embedding call per run.
+router.post("/clerk/eval/retrieval", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const embedder = await embedderOrNull();
+  // Fail-closed like the other eval lanes: evals exist to measure the live
+  // provider, so an unconfigured/unavailable embedder is an error the
+  // operator should see, never a silently skipped run.
+  if (!embedder) {
+    throw new DomainError(
+      "PROVIDER_UNAVAILABLE",
+      "The embedding provider is not configured or unavailable; the retrieval eval cannot run.",
+      503,
+    );
+  }
+  const run = await runRetrievalEval(req.principal.userId, embedder);
+  res.json(RunRetrievalEvalResponse.parse(run));
+});
+
+router.get("/clerk/eval/retrieval-runs", async (req, res): Promise<void> => {
+  assertCan(req.principal, "clerk.use");
+  const runs = await listRetrievalEvalRuns();
+  res.json(ListRetrievalEvalRunsResponse.parse(runs));
 });
 
 // Grown intent corpus (round 16): promote a real question case into the

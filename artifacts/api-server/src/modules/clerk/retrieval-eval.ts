@@ -191,6 +191,22 @@ export async function runRetrievalEval(
   return run;
 }
 
+// Newest first, capped — the health card's trend material (the phrasing
+// list's shape). Callers are operator-bypass requests or tests; the table
+// is bypass-only (0040).
+export async function listRetrievalEvalRuns(): Promise<
+  ClerkRetrievalEvalRun[]
+> {
+  return getDb()
+    .select()
+    .from(clerkRetrievalEvalRunsTable)
+    .orderBy(
+      desc(clerkRetrievalEvalRunsTable.createdAt),
+      desc(clerkRetrievalEvalRunsTable.id),
+    )
+    .limit(20);
+}
+
 // ---- Nightly sweep (the phrasing-watch shape verbatim) ----------------------
 
 const AUTO_RETRIEVAL_FLAG_KEY = "clerk_auto_retrieval_eval";

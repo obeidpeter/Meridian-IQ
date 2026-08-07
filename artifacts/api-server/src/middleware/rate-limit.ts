@@ -58,6 +58,7 @@ export const MODEL_RATE_LIMITED_ROUTES: ReadonlySet<string> = new Set([
   // but was never mirrored here; the phrasing eval joins both lists at once.
   "POST /api/clerk/eval/intent",
   "POST /api/clerk/eval/phrasing",
+  "POST /api/clerk/eval/retrieval",
   "POST /api/clerk/format-draft",
   "POST /api/clerk/draft-invoice",
   // Narration match sweep: up to 20 classification calls per request — the

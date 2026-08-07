@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.73.0
+ * OpenAPI spec version: 0.74.0
  */
 import * as zod from 'zod';
 
@@ -7247,6 +7247,51 @@ export const ListPhrasingEvalRunsResponseItem = zod.object({
   "createdAt": zod.coerce.date()
 })
 export const ListPhrasingEvalRunsResponse = zod.array(ListPhrasingEvalRunsResponseItem)
+
+
+/**
+ * @summary Run the retrieval eval — embed the fixed labeled corpus with the live embedding model and score recall@k / MRR deterministically in app code; the run is stored
+ */
+export const RunRetrievalEvalResponse = zod.object({
+  "id": zod.string().uuid(),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "k": zod.number(),
+  "hits": zod.number(),
+  "fixtureCount": zod.number(),
+  "mrr": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "expectedDoc": zod.string(),
+  "rank": zod.number().nullable(),
+  "hit": zod.boolean()
+})),
+  "durationMs": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Stored retrieval eval runs, newest first
+ */
+export const ListRetrievalEvalRunsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "model": zod.string(),
+  "promptVersion": zod.string(),
+  "k": zod.number(),
+  "hits": zod.number(),
+  "fixtureCount": zod.number(),
+  "mrr": zod.number(),
+  "results": zod.array(zod.object({
+  "key": zod.string(),
+  "expectedDoc": zod.string(),
+  "rank": zod.number().nullable(),
+  "hit": zod.boolean()
+})),
+  "durationMs": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListRetrievalEvalRunsResponse = zod.array(ListRetrievalEvalRunsResponseItem)
 
 
 /**
