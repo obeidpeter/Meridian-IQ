@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import { getDb, runInBypassContext } from "@workspace/db";
-import { CLERK_MODEL, modelForPurpose, parseModelTiers } from "./provider";
+import {
+  CLERK_EMBEDDING_MODEL,
+  CLERK_MODEL,
+  modelForPurpose,
+  parseModelTiers,
+} from "./provider";
 
 // Tier-suggestion report (round-9 idea #3). Round 7 shipped the per-purpose
 // model-tier MECHANISM (CLERK_MODEL_TIERS); this ships the evidence for
@@ -169,14 +174,29 @@ export async function computeTierReport(): Promise<TierReport> {
       const judged = ok + invalid + error;
       const validRate =
         judged === 0 ? 1 : Number((ok / judged).toFixed(4));
-      const currentModel = modelForPurpose(r.purpose, tiers, CLERK_MODEL);
-      const tiered = currentModel !== CLERK_MODEL;
-      const rec = tierRecommendation({
-        purpose: r.purpose,
-        judged,
-        validRate,
-        tiered,
-      });
+      // embed_memory is served by the embedding provider, not the tiered
+      // completion router: modelForPurpose would report CLERK_MODEL (never
+      // true) and the validity-based recommendation is meaningless for a
+      // lane with no schema to be invalid against (every embed row is "ok"
+      // or an outright error) — so the row reports the REAL model and a
+      // fixed keep, and never suggests a canary that cannot run.
+      const isEmbedding = r.purpose === "embed_memory";
+      const currentModel = isEmbedding
+        ? CLERK_EMBEDDING_MODEL
+        : modelForPurpose(r.purpose, tiers, CLERK_MODEL);
+      const tiered = !isEmbedding && currentModel !== CLERK_MODEL;
+      const rec = isEmbedding
+        ? {
+            recommendation: "keep" as const,
+            reason:
+              "Embedding lane (CLERK_EMBEDDING_MODEL) — not routed by CLERK_MODEL_TIERS; validity-based tiering does not apply.",
+          }
+        : tierRecommendation({
+            purpose: r.purpose,
+            judged,
+            validRate,
+            tiered,
+          });
       return {
         purpose: r.purpose,
         calls,

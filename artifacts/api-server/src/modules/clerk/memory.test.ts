@@ -82,6 +82,19 @@ function fakeEmbedder(): MemoryEmbedder & { calls: number } {
 
 before(async () => {
   await saveAndEnableClerkFlag();
+  // The indexer's per-firm wall consults the override-aware flag, which
+  // falls back to the GLOBAL clerk_memory row — light it for the suite
+  // (production only reaches the indexer with it lit); the flag-gating
+  // test toggles it itself and the after() hook re-darkens it.
+  await runInBypassContext(async () => {
+    await getDb()
+      .insert(featureFlagsTable)
+      .values({ key: MEMORY_FLAG_KEY, enabled: true, releaseTag: "R3" })
+      .onConflictDoUpdate({
+        target: featureFlagsTable.key,
+        set: { enabled: true },
+      });
+  });
   const db = getDb();
   await db.insert(firmsTable).values([
     { id: firmA, name: `Memory Firm A ${SALT}` },
@@ -148,16 +161,24 @@ before(async () => {
 });
 
 after(async () => {
+  await runInBypassContext(async () => {
+    await getDb()
+      .update(featureFlagsTable)
+      .set({ enabled: false })
+      .where(eq(featureFlagsTable.key, MEMORY_FLAG_KEY));
+  });
   await restoreClerkFlag();
 });
 
+const OUR_FIRMS = [firmA, firmB, firmBudget];
+
 test("the indexer embeds resolved questions per firm, charges the ledger, and is incremental", async () => {
   const embedder = fakeEmbedder();
-  const first = await indexMemoryBatch(embedder, 50);
-  // Batch enumeration is global (salted sibling suites may add candidates),
-  // so assert OUR rows landed rather than exact totals.
-  assert.ok(first.indexed >= 3, "our three in-budget cases indexed");
-  assert.equal(first.skippedFirms >= 1, true, "the exhausted firm skipped");
+  // Pinned to this suite's own salted firms: the indexer must not drain —
+  // or spend against — other suites' candidates in the shared scratch DB.
+  const first = await indexMemoryBatch(embedder, 50, { onlyFirmIds: OUR_FIRMS });
+  assert.equal(first.indexed, 3, "exactly our three in-budget cases indexed");
+  assert.equal(first.skippedFirms, 1, "exactly the exhausted firm skipped");
 
   const rows = await runInBypassContext(() =>
     getDb()
@@ -193,7 +214,11 @@ test("the indexer embeds resolved questions per firm, charges the ledger, and is
   // Incremental: a second pass finds nothing for the same model, and the
   // provider is never touched.
   const callsBefore = embedder.calls;
-  const second = await indexMemoryBatch(embedder, 50);
+  const second = await indexMemoryBatch(embedder, 50, {
+    onlyFirmIds: OUR_FIRMS,
+  });
+  assert.equal(second.indexed, 0, "anti-join re-offers nothing");
+  assert.equal(embedder.calls, callsBefore, "no provider call on a no-op pass");
   const oursAgain = await runInBypassContext(() =>
     getDb()
       .select({ n: sql<number>`count(*)::int` })
@@ -201,21 +226,62 @@ test("the indexer embeds resolved questions per firm, charges the ledger, and is
       .where(eq(clerkMemoryEmbeddingsTable.firmId, firmA)),
   );
   assert.equal(Number(oursAgain[0]?.n), 2, "no duplicate rows");
-  // Our firms contributed no candidates; other suites' cases may have.
-  assert.ok(second.indexed >= 0);
-  const aCandidatesLeft = await runInBypassContext(async () =>
-    (
-      await getDb().execute<{ n: number }>(sql`
-        SELECT COUNT(*)::int AS n FROM clerk_cases c
-        LEFT JOIN clerk_memory_embeddings m
-          ON m.firm_id = c.firm_id AND m.corpus = 'ask_questions'
-         AND m.ref_id = c.id AND m.model = ${embedder.model}
-        WHERE c.firm_id = ${firmA} AND c.kind = 'question' AND m.id IS NULL
-      `)
-    ).rows,
+});
+
+test("a per-firm flag override darkens ONE firm's indexing without a ledger row", async () => {
+  const { featureFlagOverridesTable } = await import("@workspace/db");
+  await runInBypassContext(async () => {
+    await getDb()
+      .insert(featureFlagOverridesTable)
+      .values({ flagKey: "clerk_ai", firmId: firmB, enabled: false })
+      .onConflictDoNothing();
+  });
+  try {
+    // Force firm B back into the candidate pool under a NEW model so the
+    // anti-join offers it again.
+    const embedder = fakeEmbedder();
+    embedder.model = `fake-embed-override-${SALT}`;
+    const result = await indexMemoryBatch(embedder, 50, {
+      onlyFirmIds: [firmB],
+    });
+    assert.equal(result.indexed, 0);
+    assert.equal(result.skippedFirms, 1, "the overridden firm is skipped");
+    assert.equal(embedder.calls, 0, "no call left the platform");
+  } finally {
+    await runInBypassContext(async () => {
+      await getDb()
+        .delete(featureFlagOverridesTable)
+        .where(
+          and(
+            eq(featureFlagOverridesTable.flagKey, "clerk_ai"),
+            eq(featureFlagOverridesTable.firmId, firmB),
+          ),
+        );
+    });
+  }
+});
+
+test("a model change re-indexes through the conflict-update path", async () => {
+  const embedder = fakeEmbedder();
+  embedder.model = `fake-embed-v2-${SALT}`;
+  const result = await indexMemoryBatch(embedder, 50, {
+    onlyFirmIds: [firmA],
+  });
+  assert.equal(result.indexed, 2, "both firm A rows re-offered for the new model");
+  const rows = await runInBypassContext(() =>
+    getDb()
+      .select()
+      .from(clerkMemoryEmbeddingsTable)
+      .where(eq(clerkMemoryEmbeddingsTable.firmId, firmA)),
   );
-  assert.equal(Number(aCandidatesLeft[0]?.n), 0, "firm A fully indexed");
-  assert.ok(embedder.calls >= callsBefore, "sanity");
+  assert.equal(rows.length, 2, "updated in place, never duplicated");
+  for (const row of rows) {
+    assert.equal(row.model, embedder.model);
+  }
+  // Restore the original model so the search test's pin still matches.
+  const original = fakeEmbedder();
+  const back = await indexMemoryBatch(original, 50, { onlyFirmIds: [firmA] });
+  assert.equal(back.indexed, 2);
 });
 
 test("the exhausted firm was skipped with NO ledger row — no call left the platform", async () => {
@@ -244,7 +310,10 @@ test("search is firm-isolated, model-pinned, ranked and floored", async () => {
   const embedder = fakeEmbedder();
   // A query pointing mostly at the VAT direction.
   const query = baseVector(1, 0.2, 0);
-  const matches = await runInBypassContext(() =>
+  // Under the caller's own FIRM SCOPE (not bypass): the RLS policy must
+  // admit the firm's own rows — the posture every retrieval surface runs in.
+  const { inClerkScope } = await import("./scope.ts");
+  const matches = await inClerkScope(firmA, () =>
     searchMemory({
       firmId: firmA,
       corpus: "ask_questions",

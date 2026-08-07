@@ -48,8 +48,8 @@ export const MEMORY_INDEX_BATCH = 20;
 // The exemplar cap, reused: embedding input is capped the same way prompt
 // injection of the same text would be.
 export const MEMORY_TEXT_CAP = 6_000;
-// Fresh advisory lock id (731_842..849 taken: clerk watches, filing mint,
-// onboarding refresh).
+// Fresh advisory lock id (731_842..846 clerk watches, 731_847 filing mint,
+// 731_848 onboarding refresh).
 const MEMORY_LOCK_ID = 731_850;
 
 // The CLOSED corpus catalogue. Phase 1 indexes one corpus — resolved Ask
@@ -76,7 +76,18 @@ interface IndexCandidate {
 async function askQuestionCandidates(
   model: string,
   limit: number,
+  onlyFirmIds?: string[],
 ): Promise<IndexCandidate[]> {
+  // The optional firm pin exists for TESTS (a suite indexes only its own
+  // salted firms instead of draining — and spending against — the whole
+  // scratch DB's candidate pool); production passes never set it.
+  const firmPin =
+    onlyFirmIds && onlyFirmIds.length > 0
+      ? sql`AND c.firm_id IN (${sql.join(
+          onlyFirmIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})`
+      : sql``;
   const rows = (
     await getDb().execute<{
       firm_id: string;
@@ -95,6 +106,7 @@ async function askQuestionCandidates(
         AND c.question IS NOT NULL
         AND c.answer IS NOT NULL
         AND m.id IS NULL
+        ${firmPin}
       ORDER BY c.created_at DESC
       LIMIT ${limit}
     `)
@@ -116,9 +128,10 @@ async function askQuestionCandidates(
 export async function indexMemoryBatch(
   embedder: MemoryEmbedder,
   limit = MEMORY_INDEX_BATCH,
+  opts: { onlyFirmIds?: string[] } = {},
 ): Promise<{ indexed: number; skippedFirms: number }> {
   const candidates = await runInBypassContext(() =>
-    askQuestionCandidates(embedder.model, limit),
+    askQuestionCandidates(embedder.model, limit, opts.onlyFirmIds),
   );
   if (candidates.length === 0) return { indexed: 0, skippedFirms: 0 };
 
@@ -132,47 +145,70 @@ export async function indexMemoryBatch(
   let indexed = 0;
   let skippedFirms = 0;
   for (const [firmId, firmCandidates] of byFirm) {
-    const result = await embedWithLedger(embedder, {
-      firmId,
-      texts: firmCandidates.map((c) => c.text),
-      promptVersion: EMBED_PROMPT_VERSION,
-      dims: EMBEDDING_DIMS,
-    });
-    if (!result.ok) {
-      // Budget exhausted / provider failure: nothing stored for this firm
-      // this pass; the anti-join re-offers the same rows next pass.
+    // PER-FIRM flag wall: the operator override surface can turn clerk_ai
+    // or clerk_memory off for ONE firm (an incident, a consent withdrawal)
+    // — a firm dark on either flag must not have its questions embedded or
+    // its budget charged by a background sweep the request paths would
+    // refuse (the agreement-watch precedent for firm-spending sweeps).
+    if (
+      !(await isFeatureEnabled(CLERK_FLAG_KEY, firmId)) ||
+      !(await isFeatureEnabled(MEMORY_FLAG_KEY, firmId))
+    ) {
       skippedFirms += 1;
       continue;
     }
-    await runInBypassContext(async () => {
-      for (let i = 0; i < firmCandidates.length; i++) {
-        const c = firmCandidates[i];
-        await getDb()
-          .insert(clerkMemoryEmbeddingsTable)
-          .values({
-            firmId: c.firmId,
-            corpus: "ask_questions",
-            refId: c.refId,
-            contentHash: sha256(c.text),
-            model: result.model,
-            embedding: result.vectors[i],
-          })
-          .onConflictDoUpdate({
-            target: [
-              clerkMemoryEmbeddingsTable.firmId,
-              clerkMemoryEmbeddingsTable.corpus,
-              clerkMemoryEmbeddingsTable.refId,
-            ],
-            set: {
+    // One broken firm (a storage error, a poisoned vector) must not abort
+    // the rest of the pass — and must not starve the firms sorted after it
+    // on every retry.
+    try {
+      const result = await embedWithLedger(embedder, {
+        firmId,
+        texts: firmCandidates.map((c) => c.text),
+        promptVersion: EMBED_PROMPT_VERSION,
+        dims: EMBEDDING_DIMS,
+      });
+      if (!result.ok) {
+        // Budget exhausted / provider failure: nothing stored for this firm
+        // this pass; the anti-join re-offers the same rows next pass.
+        skippedFirms += 1;
+        continue;
+      }
+      await runInBypassContext(async () => {
+        for (let i = 0; i < firmCandidates.length; i++) {
+          const c = firmCandidates[i];
+          await getDb()
+            .insert(clerkMemoryEmbeddingsTable)
+            .values({
+              firmId: c.firmId,
+              corpus: "ask_questions",
+              refId: c.refId,
               contentHash: sha256(c.text),
               model: result.model,
               embedding: result.vectors[i],
-              updatedAt: new Date(),
-            },
-          });
-      }
-    });
-    indexed += firmCandidates.length;
+            })
+            .onConflictDoUpdate({
+              target: [
+                clerkMemoryEmbeddingsTable.firmId,
+                clerkMemoryEmbeddingsTable.corpus,
+                clerkMemoryEmbeddingsTable.refId,
+              ],
+              set: {
+                contentHash: sha256(c.text),
+                model: result.model,
+                embedding: result.vectors[i],
+                updatedAt: new Date(),
+              },
+            });
+        }
+      });
+      indexed += firmCandidates.length;
+    } catch (err) {
+      skippedFirms += 1;
+      logger.warn(
+        { firmId, err: err instanceof Error ? err.message : String(err) },
+        "memory indexer: firm batch failed",
+      );
+    }
   }
   return { indexed, skippedFirms };
 }

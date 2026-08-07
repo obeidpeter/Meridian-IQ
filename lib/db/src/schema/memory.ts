@@ -47,8 +47,11 @@ export const clerkMemoryEmbeddingsTable = pgTable(
     // the only way back to content, so this table can never leak more than
     // an opaque direction in vector space.
     refId: uuid("ref_id").notNull(),
-    // Hash of the embedded text at indexing time — the incremental
-    // indexer's change detector (unchanged hash = skip, no re-spend).
+    // Hash of the embedded text at indexing time — PROVENANCE, not a live
+    // change detector: Phase 1's one corpus (ask questions) is immutable,
+    // so the indexer's anti-join checks existence + model only. A future
+    // mutable-text corpus must compare this hash in its candidate query
+    // before reusing the indexer, or it will serve stale vectors.
     contentHash: text("content_hash").notNull(),
     // The embedding model that produced the vector; retrieval only ever
     // compares vectors from the SAME model (a model change re-indexes).
@@ -60,7 +63,8 @@ export const clerkMemoryEmbeddingsTable = pgTable(
   (t) => [
     // The natural key IS the cross-instance indexing gate (the filings
     // minting discipline): concurrent indexer passes race to one row per
-    // source, updates go through content-hash CAS.
+    // source; the upsert overwrites unconditionally (last writer wins over
+    // identical inputs).
     uniqueIndex("clerk_memory_natural_uq").on(t.firmId, t.corpus, t.refId),
     // NO ANN index on purpose: per-firm corpora are small (hundreds to low
     // thousands), so a firm-filtered EXACT scan is both fast and

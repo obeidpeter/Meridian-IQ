@@ -1498,8 +1498,13 @@ discipline applies.
   kill switch, per-firm budget backstop BEFORE the provider (a refused
   firm writes NO ledger row — no call left the platform), append-only
   ledger row on the raw pool charging `prompt_tokens` (so embedding spend
-  flows into the firm budget, the tier report and the economics meter with
-  zero extra wiring), and a mis-sized response is discarded whole —
+  flows into the firm budget and the economics meter with zero extra
+  wiring; the tier report special-cases the lane — it reports
+  `CLERK_EMBEDDING_MODEL` and a fixed "keep", since `CLERK_MODEL_TIERS`
+  cannot route embeddings and validity-based tiering does not apply; the
+  USD estimate prices embed tokens at the completion input rate, a
+  documented over-approximation), and a mis-sized response is discarded
+  whole —
   `vector(1536)` is a DDL constant, never negotiated at runtime. Own
   purpose (`embed_memory`), own prompt version (`embed.v1`), own env knob
   (`CLERK_EMBEDDING_MODEL`, default `text-embedding-3-small`).

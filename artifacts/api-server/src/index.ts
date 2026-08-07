@@ -108,6 +108,21 @@ async function verifyProductionGuardrails(): Promise<void> {
     const uncovered = (uncoveredRes.rows as { table_name: string }[])
       .map((r) => r.table_name)
       .filter((t) => t !== "audit_events");
+    // pgvector presence (round 45): migration 0038's tolerant DO block
+    // downgrades a missing-extension error to a pg NOTICE nothing surfaces,
+    // so THIS is the operator-visible signal. Not a security gap — the
+    // memory rail feature-detects and stays dark — but a silently-absent
+    // extension would otherwise read as "memory just never indexes".
+    const extRes = await pool.query(
+      "SELECT 1 FROM pg_extension WHERE extname = 'vector' LIMIT 1",
+    );
+    if (extRes.rowCount === 0) {
+      logger.warn(
+        "pgvector extension is not installed on this database; the Clerk " +
+          "firm-memory rail stays dark until the cluster provides it " +
+          "(migration 0038 could not create it).",
+      );
+    }
     if (policies === 0 || triggers === 0 || uncovered.length > 0) {
       logger.error(
         { policies, triggers, uncovered },

@@ -476,7 +476,8 @@ export async function embedWithLedger(
     promptVersion: params.promptVersion,
     // One hash over the batch — auditable without retaining a second copy
     // of the embedded text in the ledger (the infer() inputRef rule).
-    inputRef: sha256(params.texts.join(" ")),
+    // JSON-encoded so batch boundaries hash distinctly.
+    inputRef: sha256(JSON.stringify(params.texts)),
   };
   const ledger = (
     row: Omit<typeof clerkInferenceCallsTable.$inferInsert, keyof typeof base>,
@@ -485,7 +486,13 @@ export async function embedWithLedger(
     const { vectors, promptTokens } = await embedder.embed(params.texts);
     if (
       vectors.length !== params.texts.length ||
-      vectors.some((v) => v.length !== params.dims)
+      // Length AND finiteness: a NaN/Infinity entry would survive a length
+      // check only to break the pgvector literal at insert — discarding
+      // here keeps a poisoned response from failing the store step
+      // downstream (and re-charging the firm on every retry).
+      vectors.some(
+        (v) => v.length !== params.dims || v.some((n) => !Number.isFinite(n)),
+      )
     ) {
       await ledger({
         outputJson: null,
