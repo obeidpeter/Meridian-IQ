@@ -291,6 +291,33 @@ export function AnswerCard({
             )}
           </p>
         )}
+        {/* Firm memory (round 47): similar past questions the server attached
+            — pointer-first (the answers live in Ask history), quiet, below
+            the source line. */}
+        {answer.memory && answer.memory.items.length > 0 && (
+          <div
+            className="border rounded-md p-3 space-y-1"
+            data-testid="card-answer-memory"
+          >
+            <p className="text-xs font-medium text-muted-foreground">
+              {answer.memory.title}
+            </p>
+            {answer.memory.items.map((m) => (
+              <p
+                key={m.caseId}
+                className="text-xs text-muted-foreground"
+                data-testid={`text-memory-${m.caseId}`}
+              >
+                “{m.question}” ·{" "}
+                {new Date(m.askedAt).toLocaleDateString("en-NG", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </p>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

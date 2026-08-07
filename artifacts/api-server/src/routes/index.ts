@@ -83,6 +83,8 @@ import "../modules/wht/register";
 import "../modules/onboarding/register";
 // Registers the firm-memory embedding indexer sweep with the pipeline worker.
 import "../modules/clerk/memory";
+// Registers the retrieval eval nightly sweep + drop watch (round 47).
+import "../modules/clerk/retrieval-eval";
 import "../modules/messaging/retention";
 
 const router: IRouter = Router();

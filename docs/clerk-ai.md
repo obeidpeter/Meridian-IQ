@@ -1541,8 +1541,42 @@ discipline applies.
   `copiesExampleSpecifics` deterministic discard); only the ledger cohort
   differs — `draft-reply.v1+mx1` vs `+ex1` — so the two retrieval
   strategies' kept-rates stay separable. The completion itself remains
-  platform-funded operator tooling. Phase 3 adds the
-  retrieval-augmented Ask section with its own fencing duties.
+  platform-funded operator tooling.
+- **Retrieval-augmented Ask** (Phase 3, round 47, contract 0.73.0,
+  `modules/clerk/ask-memory.ts`): after an Ask answer is COMPLETE, app
+  code — never the model — searches the firm's `ask_questions` corpus
+  with the incoming question (firm-funded query embed, same gates and
+  cold-corpus guard as the reply surface; k=3 — widened ×3 for client
+  askers, whose own-cases pin filters post-search — floor 0.35, the
+  current case excluded) and attaches an optional `memory` field to the
+  stored answer: title + up to 2 pointer-first items (caseId, question,
+  askedAt — never the past answer, which lives one click away in Ask
+  history). Only questions whose stored answer actually ANSWERED count —
+  a refusal stores an answer blob too and is no precedent (filtered in
+  the candidate query AND at the re-read, which is the load-bearing
+  check for legacy-indexed rows). Because the stored answer IS the API
+  answer, SEC-03 is enforced at ASSEMBLY: a client asker's items re-read
+  only cases that asker created (the multi-turn `createdBy` pin). The
+  whole note races a 2s deadline — garnish must not hold the answer
+  hostage to a slow embedding endpoint — and any failure means no note,
+  never a failed answer. `buildIntentUser` is untouched — nothing here
+  rides a prompt, so the intent eval's frozen contract holds. Console
+  and SME Ask render the note as a quiet card.
+- **Retrieval eval lane** (Phase 3, `modules/clerk/retrieval-eval.ts`,
+  runs table migration 0040, bypass-only): measures whether the LIVE
+  embedding model still ranks the right memory first — a fixed labeled
+  corpus (12 docs, 10 queries), ONE platform-funded embed per run
+  (`eval_retrieval` purpose, firmId null — the gateway's embed lane
+  grew the infer() attribution rule for exactly this), a deterministic
+  in-process scorer (recall@3 + MRR; the real index is never touched),
+  an opt-in nightly sweep (`clerk_auto_retrieval_eval`, SEEDED dark —
+  unlike its dark-by-absence phrasing sibling, so the platform flags
+  surface can light it; lock 731_851) and a trailing-
+  baseline drop watch (`clerk.retrieval_quality.dropped`, env knobs
+  `RETRIEVAL_ALERT_DROP`/`RETRIEVAL_ALERT_MIN_RUNS`). A model change
+  is deliberately not excluded from the baseline — re-pointing
+  `CLERK_EMBEDDING_MODEL` at a weaker model is precisely a drop an
+  operator should hear about.
 
 ## Watches & alerts (sweeps, zero model calls)
 

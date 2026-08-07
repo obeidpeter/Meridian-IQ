@@ -180,7 +180,12 @@ export type ClerkPurpose =
   // semantic retrieval. NOT a completion — the vectors flow through the
   // dedicated embedWithLedger lane below (same kill switch, budget and
   // ledger discipline), never through infer().
-  | "embed_memory";
+  | "embed_memory"
+  // Retrieval eval lane (round 47): the fixed labeled corpus embedded with
+  // the live embedding model, scored deterministically in app code. Its own
+  // purpose so eval embedding spend (platform-funded, firmId null) never
+  // blends into the firm-funded memory cohort.
+  | "eval_retrieval";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;
@@ -437,15 +442,22 @@ export interface MemoryEmbedder {
 }
 
 export interface EmbedParams {
-  // Always firm-attributed: firm memory has no operator/platform lane, so
-  // unlike infer() the firm id (and therefore the budget) is mandatory.
-  firmId: string;
+  // The infer() attribution rule (round 47): a firm id charges that firm's
+  // budget (the memory indexer and every retrieval surface — firm memory
+  // is the firm's asset); null is the PLATFORM lane, reserved for the
+  // retrieval eval's fixed corpus, which belongs to no tenant. As with
+  // infer(), a null-firm call skips the per-firm budget backstop — the
+  // platform spend meter still sees the ledger row.
+  firmId: string | null;
   texts: string[];
   promptVersion: string;
   // The width every vector must have — the pgvector column's typmod
   // (EMBEDDING_DIMS in @workspace/db); a mis-sized response is discarded
   // whole, never stored truncated or padded.
   dims: number;
+  // Ledger cohort selector; defaults to the firm-memory purpose. The eval
+  // lane passes eval_retrieval so its spend never blends into memory's.
+  purpose?: "embed_memory" | "eval_retrieval";
 }
 
 export type EmbedResult =
@@ -457,21 +469,24 @@ export async function embedWithLedger(
   params: EmbedParams,
 ): Promise<EmbedResult> {
   await assertClerkEnabled();
-  // Budget backstop, the infer() rule: a typed failure with NO ledger row —
-  // no call left the platform, no tokens were spent.
-  const usage = await firmClerkUsage(params.firmId);
-  if (usage.usedTokens >= usage.budgetTokens) {
-    return {
-      ok: false,
-      message:
-        "The firm's monthly Clerk token allowance is exhausted; the embedding call was not made.",
-    };
+  // Budget backstop, the infer() rule: firm-attributed calls only, a typed
+  // failure with NO ledger row — no call left the platform, no tokens were
+  // spent. A null-firm (platform) call has no per-firm budget to check.
+  if (params.firmId) {
+    const usage = await firmClerkUsage(params.firmId);
+    if (usage.usedTokens >= usage.budgetTokens) {
+      return {
+        ok: false,
+        message:
+          "The firm's monthly Clerk token allowance is exhausted; the embedding call was not made.",
+      };
+    }
   }
   const startedAt = Date.now();
   const base = {
     caseId: null,
     firmId: params.firmId,
-    purpose: "embed_memory" as const,
+    purpose: params.purpose ?? ("embed_memory" as const),
     model: embedder.model,
     promptVersion: params.promptVersion,
     // One hash over the batch — auditable without retaining a second copy

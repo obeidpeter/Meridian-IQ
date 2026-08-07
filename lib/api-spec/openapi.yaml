@@ -6,7 +6,7 @@ info:
   # both generated clients AND the server (via @workspace/api-zod), /healthz
   # reports the server's copy, and the web apps show a "stale server build"
   # banner on mismatch. Bump it whenever the contract changes.
-  version: 0.72.0
+  version: 0.73.0
   description: MeridianIQ platform API — data spine, compliance rails and consent.
 servers:
   - url: /api
@@ -11378,6 +11378,35 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AskAnswerSection"
+        # pgvector firm memory (round 47, Phase 3): similar past questions,
+        # assembled by APP CODE (no model involvement) from the firm's own
+        # answered Ask cases after the answer is complete. Pointer-first:
+        # each item names the past case by id and repeats only its question
+        # text; the answer itself is one click away in the asker's own Ask
+        # history, which re-enforces scope on read. For a client asker the
+        # items are drawn only from cases that asker created (SEC-03).
+        memory:
+          $ref: "#/components/schemas/AskAnswerMemory"
+    AskAnswerMemory:
+      type: object
+      required: [title, items]
+      properties:
+        title:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            required: [caseId, question, askedAt]
+            properties:
+              caseId:
+                type: string
+                format: uuid
+              question:
+                type: string
+              askedAt:
+                type: string
+                format: date-time
     AskAnswerSection:
       type: object
       required: [title, text, facts]

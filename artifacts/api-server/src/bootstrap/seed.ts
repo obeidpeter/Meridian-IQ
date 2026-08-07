@@ -76,6 +76,11 @@ const FLAGS: {
   // it rides its own opt-in beside clerk_ai — dark means the indexer never
   // runs and retrieval surfaces fall back to today's exact-key behavior.
   { key: "clerk_memory", enabled: false, releaseTag: "R3", description: "Clerk firm memory: pgvector semantic index over the firm's own Clerk records (embedding indexer + retrieval; layered on clerk_ai). Requires the pgvector extension; spends firm tokens on embeddings" },
+  // Round 47 (retrieval eval lane): seeded — unlike its phrasing sibling,
+  // which is dark-by-absence and can only be lit by a manual row insert
+  // (setFlag is UPDATE-only) — so operators can enable the nightly run
+  // through the ordinary platform flags surface.
+  { key: "clerk_auto_retrieval_eval", enabled: false, releaseTag: "R3", description: "Clerk retrieval eval: nightly embedding-retrieval eval run (recall@k/MRR over the fixed labeled corpus) plus the quality-drop watch. Spends platform tokens (one embedding batch per day)" },
 ];
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [

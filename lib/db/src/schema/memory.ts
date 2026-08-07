@@ -1,5 +1,14 @@
-import { customType, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { firmsTable } from "./organizations.ts";
+import {
+  customType,
+  integer,
+  jsonb,
+  pgTable,
+  real,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
+import { firmsTable, usersTable } from "./organizations.ts";
 import { createdAt, id, updatedAt } from "./columns.ts";
 
 // pgvector firm memory (Phase 1): one embedding per (firm, corpus, source
@@ -77,3 +86,42 @@ export const clerkMemoryEmbeddingsTable = pgTable(
 );
 
 export type ClerkMemoryEmbedding = typeof clerkMemoryEmbeddingsTable.$inferSelect;
+
+// Retrieval eval lane (round 47, Phase 3): per-fixture outcome of one
+// labeled query — which document it should have found and where that
+// document actually ranked (null = not found at all). Stored whole so a
+// drop can be diagnosed fixture by fixture.
+export interface RetrievalEvalFixtureResult {
+  key: string;
+  expectedDoc: string;
+  // 1-based rank of the expected document in the full similarity ordering.
+  rank: number | null;
+  hit: boolean;
+}
+
+// One run of the retrieval eval: the fixed labeled corpus embedded with the
+// LIVE embedding model, scored deterministically in app code (recall@k +
+// MRR — no model judges anything). Operator tooling with no tenant reads —
+// bypass-only RLS (migration 0040), the phrasing-eval runs posture.
+// startedBy null = the nightly sweep.
+export const clerkRetrievalEvalRunsTable = pgTable(
+  "clerk_retrieval_eval_runs",
+  {
+    id: id(),
+    startedBy: uuid("started_by").references(() => usersTable.id),
+    model: text("model").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    k: integer("k").notNull(),
+    fixtureCount: integer("fixture_count").notNull(),
+    // recall@k numerator: queries whose expected document ranked within k.
+    hits: integer("hits").notNull(),
+    // Mean reciprocal rank over the FULL ordering (a miss contributes 0).
+    mrr: real("mrr").notNull(),
+    results: jsonb("results").$type<RetrievalEvalFixtureResult[]>().notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    createdAt: createdAt(),
+  },
+);
+
+export type ClerkRetrievalEvalRun =
+  typeof clerkRetrievalEvalRunsTable.$inferSelect;

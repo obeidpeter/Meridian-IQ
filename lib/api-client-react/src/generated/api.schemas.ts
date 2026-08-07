@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.72.0
+ * OpenAPI spec version: 0.73.0
  */
 export interface HealthStatus {
   status: string;
@@ -3589,6 +3589,17 @@ export interface AskAnswerSection {
   action?: AskSectionAction;
 }
 
+export type AskAnswerMemoryItemsItem = {
+  caseId: string;
+  question: string;
+  askedAt: string;
+};
+
+export interface AskAnswerMemory {
+  title: string;
+  items: AskAnswerMemoryItemsItem[];
+}
+
 export interface ClerkAnswer {
   answered: boolean;
   claimId?: string;
@@ -3604,6 +3615,7 @@ export interface ClerkAnswer {
   plan?: ClerkAnswerPlanItem[];
   pins?: ClerkAnswerPins;
   sections?: AskAnswerSection[];
+  memory?: AskAnswerMemory;
 }
 
 /**
