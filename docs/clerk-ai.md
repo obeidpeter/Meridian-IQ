@@ -1571,7 +1571,11 @@ discipline applies.
   in-process scorer (recall@3 + MRR; the real index is never touched),
   an opt-in nightly sweep (`clerk_auto_retrieval_eval`, SEEDED dark —
   unlike its dark-by-absence phrasing sibling, so the platform flags
-  surface can light it; lock 731_851) and a trailing-
+  surface can light it; lock 731_851), an on-demand operator route +
+  Clerk-health card (round 48, contract 0.74.0: `POST
+  /clerk/eval/retrieval` — NO_CONTEXT + MODEL rate class, 503 when the
+  embedder is unconfigured — and `GET /clerk/eval/retrieval-runs`
+  feeding the console's recall/MRR trend card) and a trailing-
   baseline drop watch (`clerk.retrieval_quality.dropped`, env knobs
   `RETRIEVAL_ALERT_DROP`/`RETRIEVAL_ALERT_MIN_RUNS`). A model change
   is deliberately not excluded from the baseline — re-pointing

@@ -23,6 +23,9 @@ import {
   fixtureAccuracy,
   fixtureSourceLabel,
   retireDisabledReason,
+  retrievalMissLine,
+  retrievalRunLine,
+  retrievalTrendLine,
   visibleFixtureCount,
 } from "./clerk-health";
 
@@ -350,5 +353,41 @@ describe("visibleFixtureCount", () => {
   test("a short corpus never truncates", () => {
     expect(visibleFixtureCount(6, false)).toBe(6);
     expect(visibleFixtureCount(6, true)).toBe(6);
+  });
+});
+
+// Retrieval eval card headless core (round 48): the line builders the card
+// renders — recall/MRR summary, per-miss diagnosis, newest-first trend.
+describe("retrieval eval card lines", () => {
+  test("run line: recall@k and two-decimal MRR", () => {
+    expect(
+      retrievalRunLine({ hits: 9, fixtureCount: 10, k: 3, mrr: 0.875 }),
+    ).toBe("9/10 recall@3 · MRR 0.88");
+  });
+
+  test("miss line: names each missed query, its wanted doc and actual rank; null when clean", () => {
+    expect(
+      retrievalMissLine({
+        results: [
+          { key: "q_a", expectedDoc: "d_a", rank: 1, hit: true },
+          { key: "q_b", expectedDoc: "d_b", rank: 4, hit: false },
+          { key: "q_c", expectedDoc: "d_c", rank: null, hit: false },
+        ],
+      }),
+    ).toBe("Missed: q_b (wanted d_b, ranked 4), q_c (wanted d_c)");
+    expect(
+      retrievalMissLine({
+        results: [{ key: "q_a", expectedDoc: "d_a", rank: 1, hit: true }],
+      }),
+    ).toBeNull();
+  });
+
+  test("trend line: newest-first, capped at six, null below two runs", () => {
+    const run = (hits: number) => ({ hits, fixtureCount: 10 });
+    expect(retrievalTrendLine([run(9)])).toBeNull();
+    expect(retrievalTrendLine([run(9), run(10)])).toBe("9/10 ← 10/10");
+    expect(
+      retrievalTrendLine([9, 10, 10, 8, 10, 9, 7].map(run)),
+    ).toBe("9/10 ← 10/10 ← 10/10 ← 8/10 ← 10/10 ← 9/10");
   });
 });

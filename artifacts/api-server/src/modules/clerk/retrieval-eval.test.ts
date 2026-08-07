@@ -16,6 +16,7 @@ import {
   RETRIEVAL_K,
   RETRIEVAL_QUERIES,
   detectRetrievalQualityDrop,
+  listRetrievalEvalRuns,
   runRetrievalEval,
   scoreRetrieval,
   sweepRetrievalWatch,
@@ -131,6 +132,9 @@ test("runRetrievalEval: one platform-funded embed call, stored run row", async (
       .where(eq(clerkRetrievalEvalRunsTable.id, run.id)),
   );
   assert.ok(stored, "run row durably stored");
+  // The health card's list source (round 48): newest first, our run leads.
+  const listed = await runInBypassContext(() => listRetrievalEvalRuns());
+  assert.equal(listed[0]?.id, run.id, "the list serves the newest run first");
 
   const [ledger] = await runInBypassContext(() =>
     getDb()

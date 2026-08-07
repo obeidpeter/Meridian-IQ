@@ -9,6 +9,9 @@ import {
   useRunPhrasingEval,
   useListPhrasingEvalRuns,
   getListPhrasingEvalRunsQueryKey,
+  useRunRetrievalEval,
+  useListRetrievalEvalRuns,
+  getListRetrievalEvalRunsQueryKey,
   useGetDigestImpact,
   getGetDigestImpactQueryKey,
   useListIntentFixtures,
@@ -476,6 +479,126 @@ function PhrasingEvalCard() {
                   .filter((r) => !r.correct)
                   .map((r) => `${r.key} (${r.failures.join("; ")})`)
                   .join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Retrieval eval card headless core (the R27 convention): pure line
+// builders the vitest suite pins without rendering.
+export function retrievalRunLine(run: {
+  hits: number;
+  fixtureCount: number;
+  k: number;
+  mrr: number;
+}): string {
+  return `${run.hits}/${run.fixtureCount} recall@${run.k} · MRR ${run.mrr.toFixed(2)}`;
+}
+
+export function retrievalMissLine(run: {
+  results: { key: string; expectedDoc: string; rank?: number | null; hit: boolean }[];
+}): string | null {
+  const missed = run.results.filter((r) => !r.hit);
+  if (missed.length === 0) return null;
+  return `Missed: ${missed
+    .map(
+      (r) =>
+        `${r.key} (wanted ${r.expectedDoc}${r.rank ? `, ranked ${r.rank}` : ""})`,
+    )
+    .join(", ")}`;
+}
+
+// Newest-first recall trend, capped at six runs — reads right-to-left like
+// the runs list itself (newest on the left).
+export function retrievalTrendLine(
+  runs: { hits: number; fixtureCount: number }[],
+): string | null {
+  if (runs.length < 2) return null;
+  return runs
+    .slice(0, 6)
+    .map((r) => `${r.hits}/${r.fixtureCount}`)
+    .join(" ← ");
+}
+
+// Retrieval eval lane (rounds 47-48): the memory rail's regression card —
+// embed the fixed labeled corpus with the LIVE embedding model and score
+// recall@k / MRR deterministically in app code (no model judges anything,
+// the real index is untouched). One platform-funded embedding call per
+// run; the nightly sweep (clerk_auto_retrieval_eval) stores the same runs
+// this card trends.
+function RetrievalEvalCard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: runs, isSuccess } = useListRetrievalEvalRuns({
+    query: { queryKey: getListRetrievalEvalRunsQueryKey(), retry: false },
+  });
+  const runEval = useRunRetrievalEval({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: getListRetrievalEvalRunsQueryKey(),
+        });
+      },
+      onError: (e) =>
+        toast({
+          title: "Retrieval eval failed",
+          description:
+            serverErrorMessage(e) ??
+            "The embedding provider may not be configured.",
+          variant: "destructive",
+        }),
+    },
+  });
+  if (!isSuccess) return null;
+  const newest = runs?.[0];
+  return (
+    <Card data-testid="section-retrieval-eval">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base">Memory retrieval evaluation</CardTitle>
+        <Button
+          size="sm"
+          onClick={() => runEval.mutate()}
+          disabled={runEval.isPending}
+          data-testid="button-run-retrieval-eval"
+        >
+          {runEval.isPending ? "Running…" : "Run retrieval eval"}
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Embeds a fixed labeled corpus with the live embedding model and
+          scores whether each query ranks its right document first —
+          recall@k and mean reciprocal rank, computed deterministically in
+          app code. A drop means the embedding model changed or regressed;
+          the firm-memory surfaces (semantic reply exemplars, Ask memory
+          notes) inherit whatever this measures.
+        </p>
+        {!newest ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="text-retrieval-eval-empty"
+          >
+            No retrieval eval runs yet — run one to baseline the embedding
+            model.
+          </p>
+        ) : (
+          <div className="space-y-1" data-testid="retrieval-eval-latest">
+            <p className="text-sm">
+              Latest: {retrievalRunLine(newest)} · <code>{newest.model}</code>{" "}
+              · {formatDateTime(newest.createdAt)}
+            </p>
+            {retrievalMissLine(newest) && (
+              <p className="text-xs text-muted-foreground">
+                {retrievalMissLine(newest)}
+              </p>
+            )}
+            {retrievalTrendLine(runs) && (
+              <p className="text-xs text-muted-foreground">
+                Trend: {retrievalTrendLine(runs)}
               </p>
             )}
           </div>
@@ -2428,6 +2551,7 @@ export function HealthPanel() {
       <IntentEvalCard />
 
       <PhrasingEvalCard />
+      <RetrievalEvalCard />
 
       <DigestImpactCard />
 

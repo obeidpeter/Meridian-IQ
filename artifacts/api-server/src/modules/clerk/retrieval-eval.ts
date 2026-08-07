@@ -9,6 +9,8 @@ import {
 } from "@workspace/db";
 import { registerSweep } from "../pipeline/pipeline";
 import { logger } from "../../lib/logger";
+import { appendAudit } from "../audit/audit";
+import { DomainError } from "../errors";
 import { isFeatureEnabled } from "../flags/flags";
 import { CLERK_FLAG_KEY, embedWithLedger, type MemoryEmbedder } from "./gateway";
 import { embedderOrNull } from "./provider";
@@ -149,9 +151,9 @@ export function scoreRetrieval(
 
 // One run: embed the whole labeled corpus with the live embedder (ONE
 // platform-funded call), score deterministically, store the run row under
-// bypass (the 0040 posture). Throws on an embed refusal — the sweep's
-// catch turns that into a quiet skip, and a future on-demand route would
-// surface it as the provider error it is.
+// bypass (the 0040 posture). An embed refusal is a typed 502 — the
+// on-demand route surfaces it as the provider error it is (never an
+// opaque 500), and the sweep's catch turns it into a quiet skip.
 export async function runRetrievalEval(
   startedBy: string | null,
   embedder: MemoryEmbedder,
@@ -169,7 +171,11 @@ export async function runRetrievalEval(
     dims: EMBEDDING_DIMS,
   });
   if (!embedded.ok) {
-    throw new Error(`Retrieval eval embedding failed: ${embedded.message}`);
+    throw new DomainError(
+      "EMBED_FAILED",
+      `Retrieval eval embedding failed: ${embedded.message}`,
+      502,
+    );
   }
   const { results, hits, mrr } = scoreRetrieval(embedded.vectors);
   const [run] = await runInBypassContext(() =>
@@ -188,7 +194,39 @@ export async function runRetrievalEval(
       })
       .returning(),
   );
+  // Audit parity with the sibling eval lanes (eval/intent/phrasing): a
+  // stored run — operator-triggered platform spend — leaves a ledger row;
+  // the nightly sweep's runs carry a null actor exactly like theirs.
+  await appendAudit({
+    actorId: startedBy,
+    action: "clerk.retrieval-eval.run",
+    entityType: "clerk_retrieval_eval_run",
+    entityId: run.id,
+    after: {
+      model: run.model,
+      k: run.k,
+      fixtureCount: run.fixtureCount,
+      hits: run.hits,
+      mrr: run.mrr,
+    },
+  });
   return run;
+}
+
+// Newest first, capped — the health card's trend material (the phrasing
+// list's shape). Callers are operator-bypass requests or tests; the table
+// is bypass-only (0040).
+export async function listRetrievalEvalRuns(): Promise<
+  ClerkRetrievalEvalRun[]
+> {
+  return getDb()
+    .select()
+    .from(clerkRetrievalEvalRunsTable)
+    .orderBy(
+      desc(clerkRetrievalEvalRunsTable.createdAt),
+      desc(clerkRetrievalEvalRunsTable.id),
+    )
+    .limit(20);
 }
 
 // ---- Nightly sweep (the phrasing-watch shape verbatim) ----------------------

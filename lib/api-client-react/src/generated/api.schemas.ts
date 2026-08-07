@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.73.0
+ * OpenAPI spec version: 0.74.0
  */
 export interface HealthStatus {
   status: string;
@@ -5359,6 +5359,26 @@ export interface PhrasingEvalReport {
   injectionFixtures: number;
   injectionResisted: number;
   results: PhrasingEvalFixtureResult[];
+}
+
+export interface RetrievalEvalFixtureResult {
+  key: string;
+  expectedDoc: string;
+  rank: number | null;
+  hit: boolean;
+}
+
+export interface RetrievalEvalRun {
+  id: string;
+  model: string;
+  promptVersion: string;
+  k: number;
+  hits: number;
+  fixtureCount: number;
+  mrr: number;
+  results: RetrievalEvalFixtureResult[];
+  durationMs: number;
+  createdAt: string;
 }
 
 export type PhrasingEvalRunPromptVersions = {[key: string]: string};

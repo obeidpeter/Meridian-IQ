@@ -1,5 +1,5 @@
 <!-- GENERATED FILE — do not hand-edit.
-     Rendered from lib/api-spec/openapi.yaml (contract 0.73.0) by
+     Rendered from lib/api-spec/openapi.yaml (contract 0.74.0) by
      scripts/render-api-reference.mjs; the console build's prebuild step
      regenerates it on every build. -->
 <!doctype html>
@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>MeridianIQ API reference — v0.73.0</title>
+<title>MeridianIQ API reference — v0.74.0</title>
 <style>
 :root{color-scheme:light dark;
   --bg:#fcfcfd;--fg:#17202a;--dim:#5c6672;--line:#e3e7ec;--card:#ffffff;
@@ -75,7 +75,7 @@ footer{margin-top:3rem;color:var(--dim);font-size:.85rem;
 <body>
 <main>
 <h1>MeridianIQ API reference</h1>
-<p><span class="pill">contract v0.73.0</span> <span class="pill">base URL <code>/api</code></span></p>
+<p><span class="pill">contract v0.74.0</span> <span class="pill">base URL <code>/api</code></span></p>
 <p class="dim">The full platform contract, grouped by area. Generated from
 <code>lib/api-spec/openapi.yaml</code> — the same file the server's request
 validation and the apps' typed clients are generated from, so this page can
@@ -156,7 +156,7 @@ request's writes were rolled back.</li>
 </div>
 
 <h2 style="text-transform:none">Endpoints by area</h2>
-<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">21</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">75</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
+<nav class="toc"><a href="#tag-health">health<span class="count">1</span></a><a href="#tag-auth">auth<span class="count">12</span></a><a href="#tag-identity">identity<span class="count">7</span></a><a href="#tag-parties">parties<span class="count">9</span></a><a href="#tag-engagements">engagements<span class="count">4</span></a><a href="#tag-invoices">invoices<span class="count">34</span></a><a href="#tag-lifecycle">lifecycle<span class="count">8</span></a><a href="#tag-consent">consent<span class="count">3</span></a><a href="#tag-verification">verification<span class="count">1</span></a><a href="#tag-messaging">messaging<span class="count">10</span></a><a href="#tag-platform">platform<span class="count">3</span></a><a href="#tag-operator">operator<span class="count">19</span></a><a href="#tag-audit">audit<span class="count">5</span></a><a href="#tag-console">console<span class="count">21</span></a><a href="#tag-billing">billing<span class="count">7</span></a><a href="#tag-statements">statements<span class="count">14</span></a><a href="#tag-reconciliation">reconciliation<span class="count">6</span></a><a href="#tag-buyer">buyer<span class="count">8</span></a><a href="#tag-b2c">b2c<span class="count">4</span></a><a href="#tag-whitelabel">whitelabel<span class="count">3</span></a><a href="#tag-certification">certification<span class="count">4</span></a><a href="#tag-connectors">connectors<span class="count">5</span></a><a href="#tag-claims">claims<span class="count">6</span></a><a href="#tag-clerk">clerk<span class="count">77</span></a><a href="#tag-obligations">obligations<span class="count">6</span></a><a href="#tag-filings">filings<span class="count">3</span></a><a href="#tag-wht">wht<span class="count">4</span></a><a href="#tag-recurring">recurring<span class="count">5</span></a><a href="#tag-invitation">invitation<span class="count">4</span></a><a href="#tag-sme">sme<span class="count">24</span></a><a href="#tag-advisory">advisory<span class="count">5</span></a><a href="#tag-onboarding">onboarding<span class="count">8</span></a></nav>
 <section id="tag-health">
 <h2>health</h2>
 <details class="op" id="healthCheck">
@@ -1088,6 +1088,14 @@ request's writes were rolled back.</li>
 <summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/phrasing-runs</code><span class="sum">Stored phrasing eval runs, newest first</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>PhrasingEvalRun[]</code> <span class="dim">Phrasing eval runs</span></li></ul></div>
 </details>
+<details class="op" id="runRetrievalEval">
+<summary><span class="method m-post">POST</span><code class="path">/api/clerk/eval/retrieval</code><span class="sum">Run the retrieval eval — embed the fixed labeled corpus with the live embedding model and score recall@k / MRR deterministically in app code; the run is stored</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RetrievalEvalRun</code> <span class="dim">The stored retrieval eval run</span></li></ul></div>
+</details>
+<details class="op" id="listRetrievalEvalRuns">
+<summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/retrieval-runs</code><span class="sum">Stored retrieval eval runs, newest first</span></summary>
+<div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>RetrievalEvalRun[]</code> <span class="dim">Retrieval eval runs</span></li></ul></div>
+</details>
 <details class="op" id="listIntentFixtures">
 <summary><span class="method m-get">GET</span><code class="path">/api/clerk/eval/intent-fixtures</code><span class="sum">The grown intent corpus — question cases promoted into the eval, scrubbed onto the synthetic directory, newest first</span></summary>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>IntentFixtureSummary[]</code> <span class="dim">Grown intent fixtures (including retired rows)</span></li></ul></div>
@@ -1565,7 +1573,7 @@ request's writes were rolled back.</li>
 <div class="opbody"><ul class="responses"><li><span class="status s2xx">200</span> <code>OpeningPosition</code> <span class="dim">The run's frozen baseline once completed; a live provisional picture otherwise</span></li><li><span class="status s4xx">404</span> <span class="err">NotFound</span> <span class="dim">— no such resource in your scope</span></li></ul></div>
 </details>
 </section>
-<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.73.0)
+<footer>Generated from <code>lib/api-spec/openapi.yaml</code> (contract v0.74.0)
 by <code>scripts/render-api-reference.mjs</code>. Do not edit this file by hand —
 edit the spec and rebuild.</footer>
 </main>
