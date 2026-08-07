@@ -1134,7 +1134,11 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
   (a firm-generated brief simply removes the pair), a PER-FIRM
   override-aware flag wall inside the loop (the firm-spending-sweep
   rule) and per-pair try/catch poison isolation; sweep rows carry
-  `generatedBy null`. Delivery runs every pass regardless of the flag
+  `generatedBy null`. Since round 53 each pair generates inside an
+  explicit firm-PINNED request context (`runRequestContext` —
+  `meridian_app` + `app.firm_id`, the byte-same posture the POST route
+  gives the function), so generation neither depends on the pool
+  login's `BYPASSRLS` nor can cross firms mid-pass. Delivery runs every pass regardless of the flag
   (stranded-backlog rule): claim-first CAS on `deliveredAt` committed
   BEFORE any send, `messaging_notifications` dark still claims (PL-02),
   then `fanOutAlert` — consent-gated (CORE-03), pointer-only (SEC-12,
@@ -1201,7 +1205,12 @@ firm-keyed RLS via migration 0041, contract 0.75.0):
   CLOSED Lagos month for every OPEN/in-progress engaged client, firm-keyed
   RLS via migration 0015, unique on firm+client+month) — the digest posture
   per client: facts in SQL, model only phrases, quiet months never call the
-  model, template fallback always answers. Its read route
+  model, template fallback always answers. Since round 53 the sweep
+  generates each pair inside an explicit firm-PINNED request context
+  (`runRequestContext` — `meridian_app` + `app.firm_id`), so generation
+  neither depends on the pool login's `BYPASSRLS` nor can cross firms
+  mid-pass; only the gateway's ledger append stays on the raw pool (spend
+  must survive any rollback). Its read route
   (`GET /clerk/client-statements`, `clerk.capture`) pins a `client_user` to
   its OWN party (SEC-03; firm RLS is not a sibling wall); the SME dashboard
   shows the client their own card. Generated statements are also OFFERED

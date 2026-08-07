@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import {
   getDb,
   runInBypassContext,
+  runRequestContext,
   alertPreferencesTable,
   clerkAdvisoryBriefsTable,
   engagementsTable,
@@ -551,7 +552,10 @@ export async function generateAdvisoryBrief(
         source = "clerk";
       }
     } catch {
-      // The template note stands; the row below stores it as-is.
+      // The template note stands; the row below stores it as-is. (AI-path
+      // failures only — inside a sweep pair's transaction a genuine PG
+      // error aborts the pair, template insert included; the per-pair
+      // catch re-offers it next pass.)
     }
   }
 
@@ -796,13 +800,31 @@ export async function sweepAdvisoryBriefs(
           // "yield": a firm generate in the candidate-read → loop-turn
           // window wins the row (attribution and note intact); the sweep's
           // compute for that pair is discarded rather than clobbering.
-          await generateAdvisoryBrief(
-            pair.firmId,
-            pair.clientPartyId,
-            gateway,
-            null,
-            new Date(),
-            { conflictMode: "yield" },
+          // Explicit privilege (round 53): the pair generates in a
+          // firm-PINNED request context (meridian_app + app.firm_id) — the
+          // same GUC posture the POST route gives this function — so the
+          // sweep neither depends on the pool login's BYPASSRLS nor lets a
+          // compute bug cross firms mid-pass; RLS walls the whole pair.
+          // The gateway's ledger append stays on the raw pool by design.
+          await runRequestContext(
+            { bypass: false, firmId: pair.firmId },
+            async () => {
+              // Finite in-transaction ceiling for the idle-while-phrasing
+              // window (review R53-2 — the statement sweep's rationale
+              // verbatim): override any shorter deployment default that
+              // would kill pairs mid-call, and bound a hung provider.
+              await getDb().execute(
+                sql`SET LOCAL idle_in_transaction_session_timeout = '900s'`,
+              );
+              return generateAdvisoryBrief(
+                pair.firmId,
+                pair.clientPartyId,
+                gateway,
+                null,
+                new Date(),
+                { conflictMode: "yield" },
+              );
+            },
           );
           generated += 1;
         } catch (err) {
