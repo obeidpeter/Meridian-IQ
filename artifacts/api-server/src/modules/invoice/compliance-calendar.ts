@@ -7,6 +7,7 @@ import {
 } from "../../lib/lagos-time";
 import { SUBMISSION_WINDOW_DAYS, UNSUBMITTED_STATE } from "./compliance-window";
 import { RECEIVABLE_ORIENTATION } from "./receivables";
+import { statutoryDueDay } from "../filings/statutory-calendar";
 
 // Firm-level compliance calendar (round-6 idea #5). The SME dashboard already
 // computes per-client deadlines (routes/sme.ts computeDeadlines); this is the
@@ -112,14 +113,16 @@ export async function computeComplianceCalendar(
     `)
   ).rows;
 
-  // Statutory VAT filing dates inside the horizon: due the 21st of the month
-  // following each period (same rule as the SME dashboard's deadline card).
-  // Offset 0 covers THIS month's 21st while it is still ahead (the return
-  // for last month's period) — a true statutory date the calendar must not
-  // skip; past dates filter out below.
+  // Statutory VAT filing dates inside the horizon: due on the
+  // statutory-calendar day of the month following each period (the Filing
+  // Desk one-home owns the number; round 41 folded this surface onto it).
+  // Offset 0 covers THIS month's due day while it is still ahead (the
+  // return for last month's period) — a true statutory date the calendar
+  // must not skip; past dates filter out below.
   const { year, monthIndex } = lagosParts(now);
+  const dueDay = statutoryDueDay("vat");
   for (const offset of [0, 1, 2]) {
-    const due = lagosMidnightFor(year, monthIndex + offset, 21);
+    const due = lagosMidnightFor(year, monthIndex + offset, dueDay);
     const dueDate = lagosDateString(due);
     if (dueDate <= today || dueDate > horizonEnd) continue;
     const list = byDate.get(dueDate) ?? [];

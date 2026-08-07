@@ -467,10 +467,12 @@ it never files anything with an authority itself.
   `modules/filings/statutory-calendar.ts` — VAT due the 21st of the month
   after the period (FIRS), PAYE the 10th (introduced here; the date
   existed nowhere in code before this round). A return covers a CLOSED
-  Lagos month: in August the register carries July's rows. The VAT 21st
-  is still open-coded in three older surfaces (sme.ts deadlines, the
-  compliance calendar, the pack's nextVatReturnDue) — folding them onto
-  this module is a noted follow-up.
+  Lagos month: in August the register carries July's rows. The four
+  older surfaces that predated the module (sme.ts deadlines, the
+  compliance calendar, the pack's nextVatReturnDue, the digest's
+  vatReturnInDays countdown) draw their due day from `statutoryDueDay`
+  (round 41) — the literal day numbers exist in exactly one file, pinned
+  by a lockstep test.
 - **Minting is deterministic and idempotent**: the natural unique key
   (firm, client, tax type, period) is the cross-instance gate (the
   recurring materializer's discipline); the hourly sweep enumerates firms

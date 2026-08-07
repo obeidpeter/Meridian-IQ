@@ -1,11 +1,12 @@
 // Filing Desk statutory calendar: the ONE home for "which return covers which
-// period and when is it due". The VAT 21st rule is today also open-coded in
-// routes/sme.ts (client deadlines), modules/invoice/compliance-calendar.ts and
-// modules/invoice/compliance-pack.ts — those predate this module and are left
-// untouched for now; a follow-up folds them onto FILING_KINDS so the number 21
-// exists in exactly one place. Everything here is pure calendar arithmetic on
-// the LAGOS calendar (lib/lagos-time.ts): statutory clocks are local-day
-// questions, and WAT's fixed +01:00 makes the conversion plain offset math.
+// period and when is it due". The four older surfaces that predated this
+// module (routes/sme.ts client deadlines, modules/invoice/compliance-calendar,
+// the pack's nextVatReturnDue, the digest's vatReturnInDays) draw their due
+// day from statutoryDueDay below (round 41) — the literal day numbers exist
+// in exactly this file. Everything
+// here is pure calendar arithmetic on the LAGOS calendar (lib/lagos-time.ts):
+// statutory clocks are local-day questions, and WAT's fixed +01:00 makes the
+// conversion plain offset math.
 import { lagosParts } from "../../lib/lagos-time";
 
 // The closed set of return kinds the register mints (Phase 1). Due days:
@@ -27,6 +28,22 @@ export const FILING_KINDS = [
 ] as const;
 
 export type FilingTaxType = (typeof FILING_KINDS)[number]["taxType"];
+
+// The due day-of-month for a return kind — exported so the older
+// next-due-from-now surfaces (sme.ts deadlines, the compliance calendar,
+// the pack's nextVatReturnDue, the digest's vatReturnInDays) share the ONE
+// number without adopting the period→dueDate formulation: their "first due
+// date strictly ahead of now" arithmetic is deliberately their own (and
+// sme.ts deliberately always points at NEXT month), so only the statute's
+// day folds here.
+export function statutoryDueDay(taxType: FilingTaxType): number {
+  const kind = FILING_KINDS.find((k) => k.taxType === taxType);
+  if (!kind) {
+    // Unreachable through typed callers; guards a raw string sneaking in.
+    throw new Error(`Unknown filing taxType: ${taxType}`);
+  }
+  return kind.dueDayOfFollowingMonth;
+}
 
 // "YYYY-MM" of the last CLOSED Lagos month — the period a firm is filing for
 // right now (in August you file July's returns). Date.UTC's month arithmetic

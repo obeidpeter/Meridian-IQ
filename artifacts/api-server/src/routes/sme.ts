@@ -53,6 +53,7 @@ import {
   type Principal,
 } from "../modules/auth/rbac";
 import { loadForTenant } from "./invoices";
+import { statutoryDueDay } from "../modules/filings/statutory-calendar";
 import { createDraft, bulkCreateDrafts } from "../modules/invoice/service";
 import {
   getReceivablesSummary,
@@ -121,11 +122,14 @@ function computeDeadlines(
   const now = new Date();
   const deadlines: Deadline[] = [];
 
-  // Monthly VAT return + remittance: due the 21st of the following month.
-  // Statutory dates live on the LAGOS calendar (lib/lagos-time.ts): both the
-  // "which month is it" question and the due instant use local wall time.
+  // Monthly VAT return + remittance: due on the statutory-calendar day of
+  // the following month (the Filing Desk one-home owns the number; round 41
+  // folded this surface onto it). Statutory dates live on the LAGOS calendar
+  // (lib/lagos-time.ts): both the "which month is it" question and the due
+  // instant use local wall time. Deliberately ALWAYS next month — this
+  // legacy deadline card predates the register and keeps its shape.
   const { year, monthIndex } = lagosParts(now);
-  const vatDue = lagosMidnightFor(year, monthIndex + 1, 21);
+  const vatDue = lagosMidnightFor(year, monthIndex + 1, statutoryDueDay("vat"));
   const vatDays = daysUntil(vatDue, now);
   deadlines.push({
     id: `vat-${lagosDateString(vatDue)}`,
