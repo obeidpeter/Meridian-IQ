@@ -29,6 +29,18 @@ catalog:
   wouter: ^3.3.5
   zod: ^3.25.76
 
+# Supply-chain gate ignores, each with a reason. image-size: metro (the Expo
+# dev-time bundler) pins the v1 line and calls the package's callable default
+# export, which v2 (the only patched line, >=2.0.3) removed — forcing the
+# major would break image bundling at `expo start`. The advisories are
+# infinite-loop DoS in ICNS/JXL/HEIF parsers fed only by the app's own
+# bundled assets, never untrusted input. Drop these when Expo/metro ship an
+# image-size v2 bump.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-w3rx-r6r6-pgpr
+    - GHSA-5p2g-fcmc-qvqq
+
 minimumReleaseAge: 1440
 
 minimumReleaseAgeExclude:
