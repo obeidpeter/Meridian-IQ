@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
   getDb,
+  runRequestContext,
   firmsTable,
   partiesTable,
   invoicesTable,
@@ -499,4 +500,36 @@ test("delivery: no layer-1 consent claims the row but sends nothing (CORE-03)", 
   const claimed = await statementById(row.id);
   assert.ok(claimed.deliveredAt);
   assert.equal((await statementMessagesFor(noConsentClient)).length, 0);
+});
+
+test("sweep-posture generation is walled by RLS: a mismatched firm pin cannot store a statement", async () => {
+  // Round 53: the sweep generates each pair inside a firm-PINNED request
+  // context (meridian_app + app.firm_id) instead of on the raw pool. Under
+  // firmB's pin, firmA's row fails the statements table's firm-keyed WITH
+  // CHECK — a cross-firm bug in a sweep loop can no longer mint another
+  // firm's rows, with or without the pool login's BYPASSRLS. A fresh month
+  // keeps the probe off every other test's rows.
+  const wallMonth = lagosMonthStart(7);
+  await assert.rejects(
+    runRequestContext({ bypass: false, firmId: firmB }, () =>
+      generateClientStatement(firmA, clientA, wallMonth, null),
+    ),
+  );
+  const foreign = await getDb()
+    .select()
+    .from(clerkClientStatementsTable)
+    .where(
+      and(
+        eq(clerkClientStatementsTable.firmId, firmA),
+        eq(clerkClientStatementsTable.monthStart, wallMonth),
+      ),
+    );
+  assert.equal(foreign.length, 0, "nothing was stored under the wrong pin");
+
+  // The correctly pinned context — the sweep's actual posture — generates.
+  const row = await runRequestContext({ bypass: false, firmId: firmA }, () =>
+    generateClientStatement(firmA, clientA, wallMonth, null),
+  );
+  assert.equal(row.firmId, firmA);
+  assert.equal(row.source, "template");
 });

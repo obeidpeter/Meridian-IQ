@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import {
   getDb,
   runInBypassContext,
+  runRequestContext,
   alertPreferencesTable,
   clerkClientStatementsTable,
   engagementsTable,
@@ -528,11 +529,23 @@ export async function sweepClientStatements(): Promise<void> {
       const gateway = await gatewayOrNull();
       let generated = 0;
       for (const pair of pairs) {
-        await generateClientStatement(
-          pair.firmId,
-          pair.clientPartyId,
-          monthStart,
-          gateway,
+        // Explicit privilege (round 53): each pair's generation runs in a
+        // firm-PINNED request context (meridian_app + app.firm_id), not on
+        // the raw pool — so it neither depends on the pool login's
+        // BYPASSRLS nor can a compute bug read or write another firm's
+        // rows mid-sweep; RLS walls the whole pair. The model call rides
+        // inside the pair's transaction, exactly as the in-transaction
+        // brief route already does — one background connection held per
+        // pair, never the shared request pool posture NO_CONTEXT protects.
+        // The ledger write is untouched: the gateway appends on the raw
+        // pool by design, so spend survives a rolled-back pair.
+        await runRequestContext({ bypass: false, firmId: pair.firmId }, () =>
+          generateClientStatement(
+            pair.firmId,
+            pair.clientPartyId,
+            monthStart,
+            gateway,
+          ),
         );
         generated += 1;
       }

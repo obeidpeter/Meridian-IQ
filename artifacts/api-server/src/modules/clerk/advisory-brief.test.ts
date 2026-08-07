@@ -5,6 +5,7 @@ import { and, desc, eq } from "drizzle-orm";
 import {
   getDb,
   runInBypassContext,
+  runRequestContext,
   auditEventsTable,
   clerkAdvisoryBriefsTable,
   engagementsTable,
@@ -520,4 +521,31 @@ test("generate picks up last month's stored brief as the changes baseline", asyn
     row.note.includes(changes.text),
     "the template note speaks the delta",
   );
+});
+
+test("sweep-posture generation is walled by RLS: a mismatched firm pin fails closed", async () => {
+  // Round 53: the sweep generates each pair inside a firm-PINNED request
+  // context (meridian_app + app.firm_id) instead of on the raw pool. Under
+  // the WRONG firm's pin, this firm's engagement rows are invisible to the
+  // firm-keyed policies, so generation dies at the engagement gate — a
+  // cross-firm bug in a sweep loop can no longer read or mint another
+  // firm's rows, with or without the pool login's BYPASSRLS.
+  await assert.rejects(
+    runRequestContext({ bypass: false, firmId: overrideFirmId }, () =>
+      generateAdvisoryBrief(firmId, clientId, null, null),
+    ),
+    /No such client engagement/,
+  );
+  const strangers = await getDb()
+    .select()
+    .from(clerkAdvisoryBriefsTable)
+    .where(eq(clerkAdvisoryBriefsTable.firmId, overrideFirmId));
+  assert.equal(strangers.length, 0, "nothing was minted under the wrong pin");
+
+  // The correctly pinned context — the sweep's actual posture — generates.
+  const row = await runRequestContext({ bypass: false, firmId }, () =>
+    generateAdvisoryBrief(firmId, clientId, null, userId),
+  );
+  assert.equal(row.firmId, firmId);
+  assert.equal(row.clientPartyId, clientId);
 });

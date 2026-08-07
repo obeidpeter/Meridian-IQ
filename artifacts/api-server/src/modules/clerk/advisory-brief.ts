@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import {
   getDb,
   runInBypassContext,
+  runRequestContext,
   alertPreferencesTable,
   clerkAdvisoryBriefsTable,
   engagementsTable,
@@ -796,13 +797,21 @@ export async function sweepAdvisoryBriefs(
           // "yield": a firm generate in the candidate-read → loop-turn
           // window wins the row (attribution and note intact); the sweep's
           // compute for that pair is discarded rather than clobbering.
-          await generateAdvisoryBrief(
-            pair.firmId,
-            pair.clientPartyId,
-            gateway,
-            null,
-            new Date(),
-            { conflictMode: "yield" },
+          // Explicit privilege (round 53): the pair generates in a
+          // firm-PINNED request context (meridian_app + app.firm_id) — the
+          // byte-same posture the POST route gives this function — so the
+          // sweep neither depends on the pool login's BYPASSRLS nor lets a
+          // compute bug cross firms mid-pass; RLS walls the whole pair.
+          // The gateway's ledger append stays on the raw pool by design.
+          await runRequestContext({ bypass: false, firmId: pair.firmId }, () =>
+            generateAdvisoryBrief(
+              pair.firmId,
+              pair.clientPartyId,
+              gateway,
+              null,
+              new Date(),
+              { conflictMode: "yield" },
+            ),
           );
           generated += 1;
         } catch (err) {
