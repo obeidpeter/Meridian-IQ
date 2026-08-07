@@ -412,6 +412,34 @@ function AnswerCard({
             )}
           </p>
         )}
+        {/* Firm memory (round 47): similar past questions the server attached
+            — for a client asker these are only the asker's OWN past cases
+            (SEC-03 is enforced server-side at assembly). Pointer-first: the
+            answers live one tap away in Ask history. */}
+        {answer.memory && answer.memory.items.length > 0 && (
+          <div
+            className="border rounded-md p-3 space-y-1"
+            data-testid="card-answer-memory"
+          >
+            <p className="text-xs font-medium text-muted-foreground">
+              {answer.memory.title}
+            </p>
+            {answer.memory.items.map((m) => (
+              <p
+                key={m.caseId}
+                className="text-xs text-muted-foreground"
+                data-testid={`text-memory-${m.caseId}`}
+              >
+                “{m.question}” ·{" "}
+                {new Date(m.askedAt).toLocaleDateString("en-NG", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </p>
+            ))}
+          </div>
+        )}
         {caseId && (
           <div className="flex items-center gap-1.5 pt-1">
             <span className="text-xs text-muted-foreground">

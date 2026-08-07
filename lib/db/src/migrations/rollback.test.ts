@@ -398,6 +398,11 @@ const LADDER: LadderStep[] = [
     atTop: [clerkTenant("clerk_memory_embeddings")],
     afterRollback: [not(clerkTenant("clerk_memory_embeddings"))],
   },
+  {
+    version: 40, // retrieval eval run guardrails
+    atTop: [bypass("clerk_retrieval_eval_runs")],
+    afterRollback: [not(bypass("clerk_retrieval_eval_runs"))],
+  },
 ];
 
 // Markers that hold in the fully-migrated state: every step's atTop except

@@ -180,7 +180,8 @@ export async function computeTierReport(): Promise<TierReport> {
       // lane with no schema to be invalid against (every embed row is "ok"
       // or an outright error) — so the row reports the REAL model and a
       // fixed keep, and never suggests a canary that cannot run.
-      const isEmbedding = r.purpose === "embed_memory";
+      const isEmbedding =
+        r.purpose === "embed_memory" || r.purpose === "eval_retrieval";
       const currentModel = isEmbedding
         ? CLERK_EMBEDDING_MODEL
         : modelForPurpose(r.purpose, tiers, CLERK_MODEL);

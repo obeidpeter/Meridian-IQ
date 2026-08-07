@@ -13,7 +13,12 @@ import {
 import { appendAudit } from "../audit/audit";
 import { lagosDateString } from "../../lib/lagos-time";
 import { logger } from "../../lib/logger";
-import { assertClerkEnabled, type ClerkGateway } from "./gateway";
+import {
+  assertClerkEnabled,
+  type ClerkGateway,
+  type MemoryEmbedder,
+} from "./gateway";
+import { computeAskMemory, type AskAnswerMemory } from "./ask-memory";
 import { inClerkScope } from "./scope";
 import { getActiveClaims } from "./claims";
 import {
@@ -110,6 +115,11 @@ export type AskAnswer = ClerkAnswer & {
   plan?: { key: string; title: string }[];
   pins?: AskAnswerPins;
   sections?: AskAnswerSection[];
+  // Retrieval-augmented Ask (round 47, contract 0.73.0): similar past
+  // questions, attached by app code AFTER the answer is complete — see
+  // ask-memory.ts for the posture (pointer-first, SEC-03 own-cases pin for
+  // client askers, best-effort).
+  memory?: AskAnswerMemory;
 };
 
 export function formatFact(fact: ProtectedFact): string {
@@ -230,6 +240,10 @@ export async function askClerk(
     clientScoped?: boolean;
     clientPartyId?: string | null;
     actionKinds?: ActionKind[];
+    // Round 47 (test injection only): the memory note's embedder. Omitted
+    // in production — ask-memory resolves the provider embedder lazily,
+    // after the memory-rail gates pass.
+    memoryEmbedder?: MemoryEmbedder | null;
   } = {},
 ): Promise<ClerkCase> {
   await assertClerkEnabled();
@@ -256,12 +270,32 @@ export async function askClerk(
     answer: AskAnswer,
     status: "approved" | "escalated",
   ): Promise<ClerkCase> => {
+    // Retrieval-augmented Ask (round 47): the memory note attaches ONLY to
+    // an ANSWERED, firm-scoped case, after the answer is fully assembled —
+    // best-effort app code with no model involvement (ask-memory.ts owns
+    // the gates, the SEC-03 own-cases pin for client askers, and the
+    // pointer-first shape). A refusal carries no note: an escalated case's
+    // operator should not inherit a similarity guess.
+    const withMemory: AskAnswer =
+      status === "approved" && answer.answered && ctx.firmId
+        ? await (async () => {
+            const memory = await computeAskMemory({
+              firmId: ctx.firmId!,
+              question,
+              actorId,
+              clientScoped: ctx.clientScoped === true,
+              excludeCaseId: created.id,
+              embedder: ctx.memoryEmbedder,
+            });
+            return memory ? { ...answer, memory } : answer;
+          })()
+        : answer;
     const [row] = await inClerkScope(ctx.firmId, () =>
       getDb()
         .update(clerkCasesTable)
         // The stored jsonb type has not grown the 0.56.0 plan/pins/sections
         // fields yet — AskAnswer above is the contract-mirroring superset.
-        .set({ status, answer: answer as ClerkAnswer })
+        .set({ status, answer: withMemory as ClerkAnswer })
         .where(eq(clerkCasesTable.id, created.id))
         .returning(),
     );

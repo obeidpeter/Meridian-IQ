@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.72.0
+ * OpenAPI spec version: 0.73.0
  */
 import * as zod from 'zod';
 
@@ -5453,7 +5453,15 @@ export const ListClerkCasesResponseItem = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(listClerkCasesResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -5610,7 +5618,15 @@ export const CreateClerkCaseResponse = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(createClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -5750,7 +5766,15 @@ export const GetClerkCaseResponse = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(getClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -5915,7 +5939,15 @@ export const DecideClerkCaseResponse = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(decideClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -6076,7 +6108,15 @@ export const DecideNoticeCaseResponse = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(decideNoticeCaseResponseCaseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -6287,7 +6327,15 @@ export const AskClerkResponse = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(askClerkResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -6526,7 +6574,15 @@ export const RetryClerkCaseResponse = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(retryClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -6669,7 +6725,15 @@ export const ClaimClerkCaseResponse = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(claimClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -6812,7 +6876,15 @@ export const ReleaseClerkCaseResponse = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(releaseClerkCaseResponseAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
@@ -7576,7 +7648,15 @@ export const CreateClerkCaseBatchResponse = zod.object({
   "truncated": zod.boolean(),
   "invoiceIds": zod.array(zod.string().uuid()).max(createClerkCaseBatchResponseCasesItemAnswerOneSectionsItemActionInvoiceIdsMax)
 }).optional().describe('Do with Clerk (round 31) — an action PROPOSAL assembled from an act.\* plan step. Everything the approval surface needs to drive the existing execute route; nothing in an answer executes, and the execute route re-asserts capability, flag, consent and every target at approval time.')
-})).optional()
+})).optional(),
+  "memory": zod.object({
+  "title": zod.string(),
+  "items": zod.array(zod.object({
+  "caseId": zod.string().uuid(),
+  "question": zod.string(),
+  "askedAt": zod.coerce.date()
+}))
+}).optional()
 }),zod.null()]).optional(),
   "firmId": zod.string().nullish(),
   "batchId": zod.string().nullish(),
