@@ -127,6 +127,20 @@ const not = (probe: Probe): Probe => ({
   expect: !probe.expect,
   check: probe.check,
 });
+// 0038: the pgvector extension. Its down is GUARDED — with the pushed
+// vector column depending on it, rollback leaves the extension in place
+// (dropping it would cascade into data), so the probe expects presence on
+// BOTH sides of the ladder step.
+const vectorExtension = (): Probe => ({
+  desc: "pgvector extension present",
+  expect: true,
+  check: async (pool) =>
+    (
+      await pool.query(
+        "SELECT 1 FROM pg_extension WHERE extname = 'vector' LIMIT 1",
+      )
+    ).rowCount! > 0,
+});
 
 interface LadderStep {
   version: number;
@@ -373,6 +387,16 @@ const LADDER: LadderStep[] = [
     version: 37, // Onboard with Clerk run guardrails
     atTop: [pol("client_onboarding_runs")],
     afterRollback: [not(pol("client_onboarding_runs"))],
+  },
+  {
+    version: 38, // pgvector extension (guarded down — see vectorExtension)
+    atTop: [vectorExtension()],
+    afterRollback: [vectorExtension()],
+  },
+  {
+    version: 39, // firm-memory embeddings guardrails
+    atTop: [clerkTenant("clerk_memory_embeddings")],
+    afterRollback: [not(clerkTenant("clerk_memory_embeddings"))],
   },
 ];
 
