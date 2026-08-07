@@ -557,6 +557,55 @@ arrived; it never claims or remits anything itself.
   compliance-pack "WHT credits" section, `data.wht_credits` Ask intent
   (client-safe) — all computed by SQL, the model only phrases.
 
+## Onboard with Clerk (the client onboarding run)
+
+An evidence-based checklist a firm opens when it takes on a new SME
+client (`client_onboarding_runs`, round 42; guardrails migration 0037;
+contract 0.70.0, `/onboarding/runs*`). The one rule: **a step is never
+self-attested** — `modules/onboarding/onboarding.ts` recomputes every
+step from SQL facts, so the checklist only claims what the record shows.
+Zero model calls anywhere.
+
+- **The closed step catalogue** (`ONBOARDING_STEP_KEYS`, mirrored as a
+  contract enum): `consent_captured` (latest layer-1 consent event),
+  `history_imported` (invoices on record for the client),
+  `statements_backfilled` (a committed statement LINE in each of the
+  last `ONBOARDING_BACKFILL_MONTHS = 3` closed Lagos periods; reports
+  the honest dark-rail gap when the reconciliation flag is off),
+  `duplicates_reviewed` (the party-match scorer over the firm's other
+  engaged clients — advisory, since `party.merge` is operator-only), and
+  `filings_synced` — the one machine-EXECUTING step: it mints the
+  client's register rows for the backfill periods via
+  `mintFilingsForFirm(firmId, pastInstant, onlyClientPartyId)`. The
+  per-client pin exists precisely so a backfill can never backdate
+  unfiled rows onto the firm's whole book — and the mint itself claims
+  the reminder slots of any row BORN overdue (created after its own
+  deadline), so opening an onboarding run never blasts the client with
+  "overdue return" alerts for pre-engagement periods (the reminder
+  sweep's no-day-one-blast rule, enforced at mint).
+- **Skips are the honest gaps**: the only human write is "skip with a
+  reason" — refused when the facts already satisfy the step
+  (`STEP_ALREADY_DONE`). The two jsonb columns split by writer
+  (`detection`: machine, rewritten whole each refresh; `skips`: human,
+  written by targeted `jsonb_set`), so a skip can never be lost to a
+  concurrent detection pass. Audits are pointer-only — the free-text
+  reason stays on the row.
+- **Deliberately NOT the plan-run chassis**: an onboarding run waits on
+  humans for days, so it shares the discipline (partial unique index
+  `one live run per firm × client` as the creation gate, status-guarded
+  CAS terminal transitions so exactly one pass audits
+  completed/abandoned, idempotent recomputation instead of claim/fence)
+  but not the 72-hour expiry or drive-to-terminal processor. The hourly
+  sweep (`modules/onboarding/sweep.ts`, lock 731_848) re-detects active
+  runs and auto-abandons a run whose engagement closed; a run whose
+  every step is done-or-skipped completes itself.
+- **Authz**: reads are `engagement.read` with SEC-03 client narrowing (a
+  client_user sees its own party's run); writes are `engagement.write`
+  (firm staff — a client cannot open, skip or abandon its own
+  onboarding). Console surface: the onboarding card on the client detail
+  page. Phase 2 (day-one opening position) and Phase 3 (the readiness
+  report) build on this run.
+
 ## Monthly compliance pack
 
 One client's Lagos month as a single branded PDF

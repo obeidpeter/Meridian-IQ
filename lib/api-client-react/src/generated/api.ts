@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.69.0
+ * OpenAPI spec version: 0.70.0
  */
 import {
   useMutation,
@@ -122,6 +122,7 @@ import type {
   CreateFirmWebhookInput,
   CreateInvitationInput,
   CreateObligationInput,
+  CreateOnboardingRunInput,
   CreatePasswordResetInput,
   CreatePaymentIntentInput,
   CreatePlanRunInput,
@@ -259,6 +260,7 @@ import type {
   ListMissingRecurringBillsParams,
   ListNotificationsParams,
   ListObligationsParams,
+  ListOnboardingRunsParams,
   ListOperatorCasesParams,
   ListPartiesParams,
   ListPaymentBehaviourParams,
@@ -296,6 +298,8 @@ import type {
   OffboardClientInput,
   OffboardClientResult,
   OnboardingProspect,
+  OnboardingRun,
+  OnboardingRunList,
   OperatorBrief,
   OperatorCaseView,
   OperatorQueueStats,
@@ -349,6 +353,7 @@ import type {
   ScoreboardRow,
   SettlementEvent,
   SettlementInput,
+  SkipOnboardingStepInput,
   StaffNotificationPreferences,
   StampRecord,
   StampVerifyInput,
@@ -23677,6 +23682,450 @@ export const useUpdateFilingStatus = <TError = ErrorType<BadRequestResponse | No
         TContext
       > => {
       return useMutation(getUpdateFilingStatusMutationOptions(options));
+    }
+
+export const getListOnboardingRunsUrl = (params?: ListOnboardingRunsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/onboarding/runs?${stringifiedParams}` : `/api/onboarding/runs`
+}
+
+/**
+ * @summary The firm's client onboarding runs (client-scoped for client users)
+ */
+export const listOnboardingRuns = async (params?: ListOnboardingRunsParams, options?: RequestInit): Promise<OnboardingRunList> => {
+
+  return customFetch<OnboardingRunList>(getListOnboardingRunsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOnboardingRunsQueryKey = (params?: ListOnboardingRunsParams,) => {
+    return [
+    `/api/onboarding/runs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListOnboardingRunsQueryOptions = <TData = Awaited<ReturnType<typeof listOnboardingRuns>>, TError = ErrorType<BadRequestResponse>>(params?: ListOnboardingRunsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOnboardingRunsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOnboardingRuns>>> = ({ signal }) => listOnboardingRuns(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOnboardingRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListOnboardingRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listOnboardingRuns>>>
+export type ListOnboardingRunsQueryError = ErrorType<BadRequestResponse>
+
+
+/**
+ * @summary The firm's client onboarding runs (client-scoped for client users)
+ */
+
+export function useListOnboardingRuns<TData = Awaited<ReturnType<typeof listOnboardingRuns>>, TError = ErrorType<BadRequestResponse>>(
+ params?: ListOnboardingRunsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listOnboardingRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListOnboardingRunsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateOnboardingRunUrl = () => {
+
+
+
+
+  return `/api/onboarding/runs`
+}
+
+/**
+ * @summary Open an evidence-based onboarding checklist for a newly engaged client
+ */
+export const createOnboardingRun = async (createOnboardingRunInput: CreateOnboardingRunInput, options?: RequestInit): Promise<OnboardingRun> => {
+
+  return customFetch<OnboardingRun>(getCreateOnboardingRunUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createOnboardingRunInput)
+  }
+);}
+
+
+
+
+export const getCreateOnboardingRunMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingRun>>, TError,{data: BodyType<CreateOnboardingRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createOnboardingRun>>, TError,{data: BodyType<CreateOnboardingRunInput>}, TContext> => {
+
+const mutationKey = ['createOnboardingRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createOnboardingRun>>, {data: BodyType<CreateOnboardingRunInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createOnboardingRun(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateOnboardingRunMutationResult = NonNullable<Awaited<ReturnType<typeof createOnboardingRun>>>
+    export type CreateOnboardingRunMutationBody = BodyType<CreateOnboardingRunInput>
+    export type CreateOnboardingRunMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Open an evidence-based onboarding checklist for a newly engaged client
+ */
+export const useCreateOnboardingRun = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createOnboardingRun>>, TError,{data: BodyType<CreateOnboardingRunInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createOnboardingRun>>,
+        TError,
+        {data: BodyType<CreateOnboardingRunInput>},
+        TContext
+      > => {
+      return useMutation(getCreateOnboardingRunMutationOptions(options));
+    }
+
+export const getGetOnboardingRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/onboarding/runs/${id}`
+}
+
+/**
+ * @summary One onboarding run's checklist, evidence and recorded gaps
+ */
+export const getOnboardingRun = async (id: string, options?: RequestInit): Promise<OnboardingRun> => {
+
+  return customFetch<OnboardingRun>(getGetOnboardingRunUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOnboardingRunQueryKey = (id: string,) => {
+    return [
+    `/api/onboarding/runs/${id}`
+    ] as const;
+    }
+
+
+export const getGetOnboardingRunQueryOptions = <TData = Awaited<ReturnType<typeof getOnboardingRun>>, TError = ErrorType<NotFoundResponse>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOnboardingRunQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOnboardingRun>>> = ({ signal }) => getOnboardingRun(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOnboardingRun>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOnboardingRunQueryResult = NonNullable<Awaited<ReturnType<typeof getOnboardingRun>>>
+export type GetOnboardingRunQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary One onboarding run's checklist, evidence and recorded gaps
+ */
+
+export function useGetOnboardingRun<TData = Awaited<ReturnType<typeof getOnboardingRun>>, TError = ErrorType<NotFoundResponse>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOnboardingRun>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOnboardingRunQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRefreshOnboardingRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/onboarding/runs/${id}/refresh`
+}
+
+/**
+ * @summary Re-detect every step from the record now (idempotent)
+ */
+export const refreshOnboardingRun = async (id: string, options?: RequestInit): Promise<OnboardingRun> => {
+
+  return customFetch<OnboardingRun>(getRefreshOnboardingRunUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRefreshOnboardingRunMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshOnboardingRun>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshOnboardingRun>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['refreshOnboardingRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshOnboardingRun>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  refreshOnboardingRun(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshOnboardingRunMutationResult = NonNullable<Awaited<ReturnType<typeof refreshOnboardingRun>>>
+
+    export type RefreshOnboardingRunMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Re-detect every step from the record now (idempotent)
+ */
+export const useRefreshOnboardingRun = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshOnboardingRun>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshOnboardingRun>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRefreshOnboardingRunMutationOptions(options));
+    }
+
+export const getSkipOnboardingStepUrl = (id: string,
+    stepKey: 'consent_captured' | 'history_imported' | 'statements_backfilled' | 'duplicates_reviewed' | 'filings_synced',) => {
+
+
+
+
+  return `/api/onboarding/runs/${id}/steps/${stepKey}/skip`
+}
+
+/**
+ * @summary Record a deliberate gap (a step the facts do not satisfy, skipped with a reason)
+ */
+export const skipOnboardingStep = async (id: string,
+    stepKey: 'consent_captured' | 'history_imported' | 'statements_backfilled' | 'duplicates_reviewed' | 'filings_synced',
+    skipOnboardingStepInput: SkipOnboardingStepInput, options?: RequestInit): Promise<OnboardingRun> => {
+
+  return customFetch<OnboardingRun>(getSkipOnboardingStepUrl(id,stepKey),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(skipOnboardingStepInput)
+  }
+);}
+
+
+
+
+export const getSkipOnboardingStepMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof skipOnboardingStep>>, TError,{id: string;stepKey: 'consent_captured' | 'history_imported' | 'statements_backfilled' | 'duplicates_reviewed' | 'filings_synced';data: BodyType<SkipOnboardingStepInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof skipOnboardingStep>>, TError,{id: string;stepKey: 'consent_captured' | 'history_imported' | 'statements_backfilled' | 'duplicates_reviewed' | 'filings_synced';data: BodyType<SkipOnboardingStepInput>}, TContext> => {
+
+const mutationKey = ['skipOnboardingStep'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof skipOnboardingStep>>, {id: string;stepKey: 'consent_captured' | 'history_imported' | 'statements_backfilled' | 'duplicates_reviewed' | 'filings_synced';data: BodyType<SkipOnboardingStepInput>}> = (props) => {
+          const {id,stepKey,data} = props ?? {};
+
+          return  skipOnboardingStep(id,stepKey,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SkipOnboardingStepMutationResult = NonNullable<Awaited<ReturnType<typeof skipOnboardingStep>>>
+    export type SkipOnboardingStepMutationBody = BodyType<SkipOnboardingStepInput>
+    export type SkipOnboardingStepMutationError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Record a deliberate gap (a step the facts do not satisfy, skipped with a reason)
+ */
+export const useSkipOnboardingStep = <TError = ErrorType<BadRequestResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof skipOnboardingStep>>, TError,{id: string;stepKey: 'consent_captured' | 'history_imported' | 'statements_backfilled' | 'duplicates_reviewed' | 'filings_synced';data: BodyType<SkipOnboardingStepInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof skipOnboardingStep>>,
+        TError,
+        {id: string;stepKey: 'consent_captured' | 'history_imported' | 'statements_backfilled' | 'duplicates_reviewed' | 'filings_synced';data: BodyType<SkipOnboardingStepInput>},
+        TContext
+      > => {
+      return useMutation(getSkipOnboardingStepMutationOptions(options));
+    }
+
+export const getAbandonOnboardingRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/onboarding/runs/${id}/abandon`
+}
+
+/**
+ * @summary Close an onboarding run without completing it
+ */
+export const abandonOnboardingRun = async (id: string, options?: RequestInit): Promise<OnboardingRun> => {
+
+  return customFetch<OnboardingRun>(getAbandonOnboardingRunUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getAbandonOnboardingRunMutationOptions = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof abandonOnboardingRun>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof abandonOnboardingRun>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['abandonOnboardingRun'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof abandonOnboardingRun>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  abandonOnboardingRun(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AbandonOnboardingRunMutationResult = NonNullable<Awaited<ReturnType<typeof abandonOnboardingRun>>>
+
+    export type AbandonOnboardingRunMutationError = ErrorType<NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Close an onboarding run without completing it
+ */
+export const useAbandonOnboardingRun = <TError = ErrorType<NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof abandonOnboardingRun>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof abandonOnboardingRun>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAbandonOnboardingRunMutationOptions(options));
     }
 
 export const getListWhtCreditsUrl = (params?: ListWhtCreditsParams,) => {
