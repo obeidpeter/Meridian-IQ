@@ -83,3 +83,21 @@ export function lagosParts(at: Date = new Date()): {
   const shifted = new Date(at.getTime() + LAGOS_OFFSET_MS);
   return { year: shifted.getUTCFullYear(), monthIndex: shifted.getUTCMonth() };
 }
+
+/**
+ * The first day (YYYY-MM-01) of the Lagos month `monthsBack` months before
+ * the one containing `now`. monthsBack=0 is the LIVE month (the advisory
+ * brief's period), monthsBack=1 the newest CLOSED month (the statement
+ * period). Born in clerk/client-statement.ts; moved here (round 54) because
+ * it is a platform-wide Lagos-calendar primitive — VAT position, quarterly
+ * packs and the memory corpus all bucket on it — not a statement detail.
+ */
+export function lagosMonthStart(
+  monthsBack: number,
+  now: Date = new Date(),
+): string {
+  const { year, monthIndex } = lagosParts(now);
+  const d = new Date(Date.UTC(year, monthIndex - monthsBack, 1));
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${mm}-01`;
+}

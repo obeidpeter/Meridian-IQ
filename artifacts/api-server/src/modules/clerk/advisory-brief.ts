@@ -3,8 +3,6 @@ import { z } from "zod/v4";
 import {
   getDb,
   runInBypassContext,
-  runRequestContext,
-  alertPreferencesTable,
   clerkAdvisoryBriefsTable,
   engagementsTable,
   partiesTable,
@@ -12,8 +10,7 @@ import {
   type ProtectedFact,
 } from "@workspace/db";
 import { logger } from "../../lib/logger";
-import { fanOutAlert } from "../messaging/fan-out";
-import { pointerEntityRef } from "../messaging/recipient-ref";
+import { deliverPendingClientAlerts, runFirmPinnedPair } from "./monthly-rail";
 import { registerSweep } from "../pipeline/pipeline";
 import { gatewayOrNull } from "./provider";
 import { DomainError } from "../errors";
@@ -670,63 +667,23 @@ const BRIEF_BATCH = 20;
 // Undelivered rows offered per delivery pass (the statement discipline).
 const BRIEF_DELIVERY_BATCH = 50;
 
-// Offer generated briefs to the client's alert channels — the statement
-// delivery verbatim: claim-first CAS on delivered_at in its OWN committed
-// transaction BEFORE any send leaves (at-most-once), consent-gated
-// (CORE-03 — fanOutAlert sends nothing without a live layer-1 grant),
-// pointer-only (SEC-12 — the message names no month, numbers or findings).
-// ONE deliberate difference from statements: no quiet suppression — an
-// "on track" brief is still the firm's monthly advisory deliverable, and
-// telling the client so is the deliverable's point.
+// Offer generated briefs to the client's alert channels — the shared
+// monthly rail's claim-first delivery (monthly-rail.ts owns the posture:
+// per-row CAS committed before any send, PL-02 dark-flag claims, CORE-03 /
+// SEC-12 fan-out). ONE deliberate difference from statements: no quiet
+// suppression (no skipSend) — an "on track" brief is still the firm's
+// monthly advisory deliverable, and telling the client so is the
+// deliverable's point.
 export async function deliverAdvisoryBriefs(
   limit = BRIEF_DELIVERY_BATCH,
 ): Promise<number> {
-  const pending = await getDb()
-    .select()
-    .from(clerkAdvisoryBriefsTable)
-    .where(isNull(clerkAdvisoryBriefsTable.deliveredAt))
-    .orderBy(clerkAdvisoryBriefsTable.createdAt)
-    .limit(limit);
-  if (pending.length === 0) return 0;
-
-  const messagingOn = await isFeatureEnabled("messaging_notifications", null);
-  let claimed = 0;
-  for (const row of pending) {
-    const claim = await runInBypassContext(() =>
-      getDb()
-        .update(clerkAdvisoryBriefsTable)
-        .set({ deliveredAt: new Date() })
-        .where(
-          and(
-            eq(clerkAdvisoryBriefsTable.id, row.id),
-            isNull(clerkAdvisoryBriefsTable.deliveredAt),
-          ),
-        )
-        .returning({ id: clerkAdvisoryBriefsTable.id }),
-    );
-    if (claim.length === 0) continue; // another instance won this row
-    claimed++;
-
-    // The claim is written even while messaging is dark (PL-02): turning
-    // the flag on later must not blast a backlog of old briefs.
-    if (!messagingOn) continue;
-
-    const [prefs] = await getDb()
-      .select()
-      .from(alertPreferencesTable)
-      .where(eq(alertPreferencesTable.clientPartyId, row.clientPartyId))
-      .limit(1);
-    await fanOutAlert({
-      prefs,
-      clientPartyId: row.clientPartyId,
-      firmId: row.firmId,
-      templateKey: "advisory_brief_ready",
-      entityType: "clerk_advisory_brief",
-      entityId: pointerEntityRef("brief", row.id),
-      smsDefaultWhenNoPrefs: false,
-    });
-  }
-  return claimed;
+  return deliverPendingClientAlerts({
+    table: clerkAdvisoryBriefsTable,
+    templateKey: "advisory_brief_ready",
+    entityType: "clerk_advisory_brief",
+    refPrefix: "brief",
+    limit,
+  });
 }
 
 // Monthly generation sweep: every client the firm actively serves gets the
@@ -800,31 +757,18 @@ export async function sweepAdvisoryBriefs(
           // "yield": a firm generate in the candidate-read → loop-turn
           // window wins the row (attribution and note intact); the sweep's
           // compute for that pair is discarded rather than clobbering.
-          // Explicit privilege (round 53): the pair generates in a
-          // firm-PINNED request context (meridian_app + app.firm_id) — the
-          // same GUC posture the POST route gives this function — so the
-          // sweep neither depends on the pool login's BYPASSRLS nor lets a
-          // compute bug cross firms mid-pass; RLS walls the whole pair.
-          // The gateway's ledger append stays on the raw pool by design.
-          await runRequestContext(
-            { bypass: false, firmId: pair.firmId },
-            async () => {
-              // Finite in-transaction ceiling for the idle-while-phrasing
-              // window (review R53-2 — the statement sweep's rationale
-              // verbatim): override any shorter deployment default that
-              // would kill pairs mid-call, and bound a hung provider.
-              await getDb().execute(
-                sql`SET LOCAL idle_in_transaction_session_timeout = '900s'`,
-              );
-              return generateAdvisoryBrief(
-                pair.firmId,
-                pair.clientPartyId,
-                gateway,
-                null,
-                new Date(),
-                { conflictMode: "yield" },
-              );
-            },
+          // Firm-pinned generation (rounds 53-54; monthly-rail.ts owns the
+          // privilege + in-transaction-ceiling posture); the gateway's
+          // ledger append stays on the raw pool by design.
+          await runFirmPinnedPair(pair.firmId, () =>
+            generateAdvisoryBrief(
+              pair.firmId,
+              pair.clientPartyId,
+              gateway,
+              null,
+              new Date(),
+              { conflictMode: "yield" },
+            ),
           );
           generated += 1;
         } catch (err) {

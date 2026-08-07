@@ -258,6 +258,37 @@ export async function recordExternalCall(input: {
   });
 }
 
+// Budget backstop shared by the two firm-attributed lanes (infer/embed,
+// round 54): true when the firm's monthly allowance is spent. Callers keep
+// their own typed-failure objects and message strings — a refused call
+// writes NO ledger row (no call left the platform, no tokens were spent).
+async function firmBudgetExhausted(firmId: string): Promise<boolean> {
+  const usage = await firmClerkUsage(firmId);
+  return usage.usedTokens >= usage.budgetTokens;
+}
+
+// The identity fields every ledger row of one call shares. `model` is
+// deliberately mutable: infer() reassigns it when a tiered provider reports
+// the model that actually served the call, and the appender closure reads
+// the object at append time, so the reassignment lands in the row.
+interface LedgerBase {
+  caseId: string | null;
+  firmId: string | null;
+  purpose: ClerkPurpose;
+  model: string;
+  promptVersion: string;
+  inputRef: string;
+}
+
+// Append one ledger row: the call's identity (base) plus the outcome
+// fields, which stay explicit at each call site. Writes on the raw `db` by
+// design — spend accounting must survive any ambient rollback.
+function ledgerAppender(base: LedgerBase) {
+  return (
+    row: Omit<typeof clerkInferenceCallsTable.$inferInsert, keyof LedgerBase>,
+  ) => db.insert(clerkInferenceCallsTable).values({ ...base, ...row });
+}
+
 // Throws CLERK_DISABLED (503) when the kill switch is off. Routes call this
 // before doing any Clerk work; the gateway also enforces it before each call.
 export async function assertClerkEnabled(): Promise<void> {
@@ -279,22 +310,18 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
       // Budget backstop for firm-attributed calls. A typed failure, not a
       // throw: every caller already has a fail-closed path for a model that
       // did not run (capture marks the case failed, digest/explain fall back
-      // to template text), and no ledger row is written — no call left the
-      // platform, no tokens were spent.
-      if (params.firmId) {
-        const usage = await firmClerkUsage(params.firmId);
-        if (usage.usedTokens >= usage.budgetTokens) {
-          return {
-            ok: false,
-            outcome: "error",
-            message:
-              "The firm's monthly Clerk token allowance is exhausted; the call was not made.",
-          };
-        }
+      // to template text).
+      if (params.firmId && (await firmBudgetExhausted(params.firmId))) {
+        return {
+          ok: false,
+          outcome: "error",
+          message:
+            "The firm's monthly Clerk token allowance is exhausted; the call was not made.",
+        };
       }
 
       const startedAt = Date.now();
-      const base = {
+      const base: LedgerBase = {
         caseId: params.caseId ?? null,
         firmId: params.firmId ?? null,
         purpose: params.purpose,
@@ -304,14 +331,7 @@ export function createGateway(provider: ClerkProvider): ClerkGateway {
         promptVersion: params.promptVersion,
         inputRef: sha256(params.inputForHash),
       };
-      // Append one ledger row: the call's identity (base) plus the outcome
-      // fields, which stay explicit at each call site below.
-      const ledger = (
-        row: Omit<
-          typeof clerkInferenceCallsTable.$inferInsert,
-          keyof typeof base
-        >,
-      ) => db.insert(clerkInferenceCallsTable).values({ ...base, ...row });
+      const ledger = ledgerAppender(base);
 
       let raw: string;
       let promptTokens: number | null = null;
@@ -476,23 +496,20 @@ export async function embedWithLedger(
 ): Promise<EmbedResult> {
   await assertClerkEnabled();
   // Budget backstop, the infer() rule: firm-attributed calls only, a typed
-  // failure with NO ledger row — no call left the platform, no tokens were
-  // spent. A null-firm (platform) call has no per-firm budget to check.
-  if (params.firmId) {
-    const usage = await firmClerkUsage(params.firmId);
-    if (usage.usedTokens >= usage.budgetTokens) {
-      return {
-        ok: false,
-        message:
-          "The firm's monthly Clerk token allowance is exhausted; the embedding call was not made.",
-      };
-    }
+  // failure with NO ledger row. A null-firm (platform) call has no per-firm
+  // budget to check.
+  if (params.firmId && (await firmBudgetExhausted(params.firmId))) {
+    return {
+      ok: false,
+      message:
+        "The firm's monthly Clerk token allowance is exhausted; the embedding call was not made.",
+    };
   }
   const startedAt = Date.now();
-  const base = {
+  const base: LedgerBase = {
     caseId: null,
     firmId: params.firmId,
-    purpose: params.purpose ?? ("embed_memory" as const),
+    purpose: params.purpose ?? "embed_memory",
     model: embedder.model,
     promptVersion: params.promptVersion,
     // One hash over the batch — auditable without retaining a second copy
@@ -500,9 +517,7 @@ export async function embedWithLedger(
     // JSON-encoded so batch boundaries hash distinctly.
     inputRef: sha256(JSON.stringify(params.texts)),
   };
-  const ledger = (
-    row: Omit<typeof clerkInferenceCallsTable.$inferInsert, keyof typeof base>,
-  ) => db.insert(clerkInferenceCallsTable).values({ ...base, ...row });
+  const ledger = ledgerAppender(base);
   try {
     const { vectors, promptTokens } = await embedder.embed(params.texts);
     if (

@@ -12,6 +12,7 @@ import {
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
+import { isUniqueViolation } from "../../lib/pg-errors";
 import { logger } from "../../lib/logger";
 import { lagosDateString } from "../../lib/lagos-time";
 import {
@@ -93,13 +94,6 @@ async function hasLiveEngagement(
     )
     .limit(1);
   return rows.length > 0;
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  for (let e = err; e; e = (e as { cause?: unknown }).cause) {
-    if ((e as { code?: string }).code === "23505") return true;
-  }
-  return false;
 }
 
 // ---- Lifecycle -------------------------------------------------------------

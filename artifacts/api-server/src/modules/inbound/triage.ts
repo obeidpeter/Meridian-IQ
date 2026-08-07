@@ -49,8 +49,6 @@ export const triageOutputSchema = z.object({
   kind: z.enum(["invoice", "notice", "unknown"]),
 });
 
-export type TriageOutput = z.infer<typeof triageOutputSchema>;
-
 // OpenAI strict json_schema for the same shape (the notice-prompts.ts style).
 export const TRIAGE_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",

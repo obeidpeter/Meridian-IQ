@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { LEDGER_TOKENS_SQL } from "./budget";
 import { getDb, runInBypassContext } from "@workspace/db";
 import {
   CLERK_EMBEDDING_MODEL,
@@ -143,11 +144,11 @@ export async function computeTierReport(): Promise<TierReport> {
       }>(sql`
         SELECT purpose,
           COUNT(*)::int AS calls,
-          -- bigint, NOT int (metrics.ts's spelling): a busy ledger's 90-day
-          -- token sum overflows int4 (~2.1B tokens) and 22003s the whole
-          -- report — first seen on a long-lived scratch DB, reachable in
-          -- production at scale.
-          COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0)::bigint
+          -- bigint, NOT int: a busy ledger's 90-day token sum overflows
+          -- int4 (~2.1B tokens) and 22003s the whole report — first seen on
+          -- a long-lived scratch DB, reachable in production at scale. The
+          -- token expression itself is budget.ts's (one home, round 54).
+          COALESCE(SUM(${sql.raw(LEDGER_TOKENS_SQL)}), 0)::bigint
             AS total_tokens,
           COUNT(*) FILTER (WHERE outcome = 'ok')::int AS ok_count,
           COUNT(*) FILTER (WHERE outcome = 'invalid_discarded')::int AS invalid_count,

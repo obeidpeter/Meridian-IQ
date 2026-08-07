@@ -377,37 +377,17 @@ export function planValidator(
 }
 
 // ---------------------------------------------------------------------------
-// Legacy v5 single-intent builders. planValidator's compatibility branch
-// mirrors this shape; the builders themselves stay because clerk.test.ts pins
-// the closed-enum behaviour through intentValidator directly. Production and
-// the eval lane both classify with the plan builders above.
+// Legacy v5 single-intent validator. planValidator's compatibility branch
+// mirrors this shape; the validator stays because clerk.test.ts pins the
+// closed-enum behaviour through it directly. Production and the eval lane
+// both classify with the plan builders above. (The sibling JSON-schema
+// builder and output type had no consumers left and were removed, round 54.)
 // ---------------------------------------------------------------------------
 
 // Every enum is CLOSED over what the app offered — the active register plus,
 // for firm-scoped askers, the data-intent catalogue, month keys and client
 // keys (each plus "none") — so the model can only ever name a real key. The
 // caller re-verifies membership after the call (fail-closed) — see ask.ts.
-// Params are REQUIRED in the JSON schema (strict mode demands it; "none" is
-// the no-param value) but optional-with-default in the zod validator so
-// param-less outputs stay valid.
-export function intentJsonSchema(
-  activeClaimKeys: string[],
-  monthKeys: string[] = [],
-  clientKeys: string[] = [],
-): Record<string, unknown> {
-  return {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      claimKey: { type: "string", enum: [...activeClaimKeys, "none"] },
-      category: { type: "string", enum: [...INTENT_CATEGORIES] },
-      month: { type: "string", enum: [...monthKeys, "none"] },
-      client: { type: "string", enum: [...clientKeys, "none"] },
-    },
-    required: ["claimKey", "category", "month", "client"],
-  };
-}
-
 export function intentValidator(
   activeClaimKeys: string[],
   monthKeys: string[] = [],
@@ -427,11 +407,3 @@ export function intentValidator(
       .default("none"),
   });
 }
-
-// The legacy v5 output shape (see planValidator's compatibility branch).
-export type IntentOutput = {
-  claimKey: string;
-  category: (typeof INTENT_CATEGORIES)[number];
-  month?: string;
-  client?: string;
-};

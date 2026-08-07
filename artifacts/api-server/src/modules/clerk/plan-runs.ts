@@ -12,6 +12,7 @@ import {
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import { DomainError } from "../errors";
+import { isUniqueViolation } from "../../lib/pg-errors";
 import { logger } from "../../lib/logger";
 import {
   ROLE_CAPABILITIES,
@@ -121,16 +122,6 @@ export const PLAN_TEMPLATES: Record<
 export const OPTIONAL_PLAN_KINDS: ReadonlySet<PlanStepKind> = new Set([
   "reconcile_matches",
 ]);
-
-// Postgres unique-violation detection (the action-policies cause-chain
-// walk): the live-case unique index turns concurrent whole-plan approvals
-// of one case into a clean 409 instead of duplicate runs.
-function isUniqueViolation(err: unknown): boolean {
-  for (let e = err; e; e = (e as { cause?: unknown }).cause) {
-    if ((e as { code?: string }).code === "23505") return true;
-  }
-  return false;
-}
 
 function capabilityFor(
   kind: PlanStepKind,

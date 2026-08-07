@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { LEDGER_TOKENS_SQL } from "./budget";
 import { getDb, runInBypassContext } from "@workspace/db";
 import { registerSweep } from "../pipeline/pipeline";
 import { alertOnceViaAuditLedger, atMostHourly, envThreshold } from "./watch-shared";
@@ -44,14 +45,15 @@ export interface SpendAnomaly {
 // traffic has no budget owner to alert about); UTC days pinned explicitly
 // (`AT TIME ZONE 'UTC'` — bare date_trunc on a timestamptz follows the
 // SESSION timezone, not UTC), the same boundary posture as the per-firm
-// budgets, and the same token expression budget.ts charges, so the watch
-// counts exactly what the budget counts.
+// budgets, and the same token expression budget.ts charges (imported —
+// LEDGER_TOKENS_SQL, round 54), so the watch counts exactly what the budget
+// counts by construction.
 export async function firmSpendDays(days = 15): Promise<FirmSpendDay[]> {
   const rows = (
     await getDb().execute<{ firm_id: string; day: string; tokens: number }>(sql`
       SELECT firm_id,
         to_char(date_trunc('day', created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
-        SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0))::int AS tokens
+        SUM(${sql.raw(LEDGER_TOKENS_SQL)})::int AS tokens
       FROM clerk_inference_calls
       WHERE firm_id IS NOT NULL
         AND created_at >= (date_trunc('day', now() AT TIME ZONE 'UTC') - make_interval(days => ${days})) AT TIME ZONE 'UTC'

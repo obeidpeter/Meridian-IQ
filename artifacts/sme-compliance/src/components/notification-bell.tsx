@@ -7,7 +7,6 @@ import {
   useMarkNotificationsRead,
   getListNotificationsQueryKey,
   type ListNotificationsParams,
-  type NotificationFeed,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,37 +17,20 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime } from "@/lib/format";
 import {
+  badgeText,
   channelBadgeClasses,
   channelLabel,
+  markReadTimestamp,
   NOTIFICATION_FEED_LIMIT,
   relativeTime,
 } from "@/lib/notifications";
 
+// Re-exported so this component's test keeps pinning the (shared) bodies —
+// the local shadow copies were deleted in round 54; @workspace/format's
+// notifications module is the one home.
+export { badgeText, markReadTimestamp };
+
 const FEED_PARAMS: ListNotificationsParams = { limit: NOTIFICATION_FEED_LIMIT };
-
-/**
- * The bell badge (mirror of the console's — the two apps have no shared UI
- * lib): null hides it entirely when nothing is unread (a zero would read as
- * noise), and the capped "20+" says "at least this many" once the server's
- * unread count reaches the feed's page size.
- */
-export function badgeText(count: number): string | null {
-  if (count <= 0) return null;
-  if (count >= NOTIFICATION_FEED_LIMIT) return `${NOTIFICATION_FEED_LIMIT}+`;
-  return String(count);
-}
-
-/**
- * The timestamp handed to mark-read: the newest item's createdAt (the feed is
- * newest-first), so "mark all read" covers exactly what the user has seen —
- * an item that lands mid-click stays unread. Null when there is nothing to
- * mark.
- */
-export function markReadTimestamp(
-  feed: NotificationFeed | undefined,
-): string | null {
-  return feed?.items[0]?.createdAt ?? null;
-}
 
 /**
  * Bell + popover for the signed-in user's own notification feed (the alerts

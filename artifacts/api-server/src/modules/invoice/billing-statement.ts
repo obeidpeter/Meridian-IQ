@@ -13,6 +13,7 @@
 //    429 gate would "prove" the gate wrong at every month edge.
 // The fee is tier config applied to the accepted count: base subscription +
 // max(0, accepted − included) × overage price, 2dp numeric strings (kobo).
+import { LEDGER_TOKENS_SQL } from "../clerk/budget";
 import { eq, sql } from "drizzle-orm";
 import {
   getDb,
@@ -154,7 +155,7 @@ export async function computeBillingStatement(
   const purposeRows = (
     await db.execute<{ purpose: string; tokens: number; calls: number }>(sql`
       SELECT purpose,
-        COALESCE(SUM(COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0)), 0)::int AS tokens,
+        COALESCE(SUM(${sql.raw(LEDGER_TOKENS_SQL)}), 0)::int AS tokens,
         COUNT(*)::int AS calls
       FROM clerk_inference_calls
       WHERE firm_id = ${firmId}

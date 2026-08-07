@@ -17,6 +17,7 @@ import {
   type Obligation,
 } from "@workspace/db";
 import { DomainError } from "../errors";
+import { isUniqueViolation } from "../../lib/pg-errors";
 import { appendAudit } from "../audit/audit";
 import { createDraft, type LineInput } from "../invoice/service";
 import {
@@ -1365,21 +1366,6 @@ export async function decideCase(
     },
   ]);
   return row;
-}
-
-// Unwrap driver/ORM nesting to find a Postgres unique_violation. Same walk as
-// modules/billing/payments.ts and action-policies.ts (each keeps a local copy
-// — the helper is three lines of error-shape knowledge, not domain logic).
-function isUniqueViolation(err: unknown): boolean {
-  const seen = new Set<object>();
-  let cur: unknown = err;
-  while (cur && typeof cur === "object" && !seen.has(cur)) {
-    seen.add(cur);
-    const e = cur as { code?: string; cause?: unknown };
-    if (e.code === "23505") return true;
-    cur = e.cause;
-  }
-  return false;
 }
 
 export interface NoticeDecisionInput {
