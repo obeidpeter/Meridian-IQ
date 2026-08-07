@@ -1755,8 +1755,8 @@ shared computation as the corresponding chart.
   message, the explainer's rail-returned error code); the statement's and
   the advisory brief's facts are all platform-computed (even the brief's
   Phase 3 delta strings are app-built), so their fixtures are clean-only
-  — the brief's exercise triage emphasis, the quiet "on track" month and
-  grounding over the continuity delta facts. The
+  — the brief's fixtures exercise triage emphasis, the quiet "on track"
+  month and grounding over the continuity delta facts. The
   lane is SELF-ENFORCING since round 20: an opt-in nightly sweep run
   (`clerk_auto_phrasing_eval` flag, once per UTC day, the eval-growth
   discipline) plus a quality-drop watch (`phrasing-watch.ts`) that

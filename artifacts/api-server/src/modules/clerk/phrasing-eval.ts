@@ -870,9 +870,13 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
         briefFact("unfiled", "Returns not yet filed", "count", "2"),
         briefFact("filings_due_soon", "Returns due within 7 days", "count", "1"),
         briefFact("filings_overdue", "Returns overdue", "count", "1"),
-        briefFact("next_due", "Next return due", "date", "2026-07-21"),
+        // next_due is MIN(due) over unfiled rows — the overdue May return.
+        briefFact("next_due", "Next return due", "date", "2026-06-21"),
         briefFact("obligations_open", "Open authority notices", "count", "1"),
         briefFact("obligations_overdue", "Notices past response deadline", "count", "1"),
+        // unfiled >= 1 GUARANTEES sample facts in production; soonest first.
+        briefFact("open_filing_1", "VAT 2026-05", "text", "due 2026-06-21 (upcoming)"),
+        briefFact("open_filing_2", "VAT 2026-06", "text", "due 2026-07-21 (prepared)"),
       ]),
       briefSection("penalties", "Penalty exposure", "Penalty exposure report", [
         briefFact("overdue_invoices", "Invoices past the window", "count", "3"),
@@ -881,6 +885,7 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
       briefSection("vat", "VAT — June 2026", "VAT position", [
         briefFact("output_vat", "Output VAT", "amount", "90000.00", "NGN"),
         briefFact("input_vat", "Input VAT", "amount", "15000.00", "NGN"),
+        briefFact("input_vat_verified", "Input VAT (verified bills)", "amount", "10000.00", "NGN"),
         briefFact("net_vat", "Net VAT position", "amount", "75000.00", "NGN"),
         briefFact("vat_due", "Return due", "date", "2026-07-21"),
       ]),
@@ -926,6 +931,7 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
       briefSection("vat", "VAT — June 2026", "VAT position", [
         briefFact("output_vat", "Output VAT", "amount", "45000.00", "NGN"),
         briefFact("input_vat", "Input VAT", "amount", "9000.00", "NGN"),
+        briefFact("input_vat_verified", "Input VAT (verified bills)", "amount", "6000.00", "NGN"),
         briefFact("net_vat", "Net VAT position", "amount", "36000.00", "NGN"),
         briefFact("vat_due", "Return due", "date", "2026-07-21"),
       ]),
@@ -953,8 +959,10 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
         briefFact("unfiled", "Returns not yet filed", "count", "1"),
         briefFact("filings_due_soon", "Returns due within 7 days", "count", "0"),
         briefFact("filings_overdue", "Returns overdue", "count", "1"),
+        briefFact("next_due", "Next return due", "date", "2026-06-21"),
         briefFact("obligations_open", "Open authority notices", "count", "0"),
         briefFact("obligations_overdue", "Notices past response deadline", "count", "0"),
+        briefFact("open_filing_1", "VAT 2026-05", "text", "due 2026-06-21 (upcoming)"),
       ]),
       briefSection("penalties", "Penalty exposure", "Penalty exposure report", [
         briefFact("overdue_invoices", "Invoices past the window", "count", "0"),
@@ -963,6 +971,7 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
       briefSection("vat", "VAT — June 2026", "VAT position", [
         briefFact("output_vat", "Output VAT", "amount", "60000.00", "NGN"),
         briefFact("input_vat", "Input VAT", "amount", "12000.00", "NGN"),
+        briefFact("input_vat_verified", "Input VAT (verified bills)", "amount", "8000.00", "NGN"),
         briefFact("net_vat", "Net VAT position", "amount", "48000.00", "NGN"),
         briefFact("vat_due", "Return due", "date", "2026-07-21"),
       ]),

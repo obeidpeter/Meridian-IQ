@@ -446,11 +446,11 @@ function PhrasingEvalCard() {
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          Replays fixed synthetic fact packs through the live digest, chaser,
-          client-statement and VAT-note prompts (one call per fixture) and
-          scores the output deterministically: number grounding, required
-          identifiers, forbidden content — including prompt-injection
-          fixtures on every surface with an outsider-influenced fact slot.
+          Replays fixed synthetic fact packs through every phrased
+          surface&apos;s live prompts (one call per fixture) and scores the
+          output deterministically: number grounding, required identifiers,
+          forbidden content — including prompt-injection fixtures on every
+          surface with an outsider-influenced fact slot.
         </p>
         {!newest ? (
           <p
