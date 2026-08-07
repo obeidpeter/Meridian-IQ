@@ -514,6 +514,16 @@ test("sweep-posture generation is walled by RLS: a mismatched firm pin cannot st
     runRequestContext({ bypass: false, firmId: firmB }, () =>
       generateClientStatement(firmA, clientA, wallMonth, null),
     ),
+    // Self-diagnosing (review R53-5): the rejection must BE the RLS wall —
+    // a context-setup failure would otherwise pass this half vacuously.
+    // Drizzle wraps the PG error ("Failed query: …"), so the policy
+    // message rides err.cause, not err.message.
+    (err: unknown) => {
+      const cause = (err as { cause?: { message?: string } }).cause;
+      return /row-level security/.test(
+        cause?.message ?? (err instanceof Error ? err.message : String(err)),
+      );
+    },
   );
   const foreign = await getDb()
     .select()

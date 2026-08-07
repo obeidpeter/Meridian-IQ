@@ -312,7 +312,10 @@ export async function generateClientStatement(
     // to null → template; the outer try keeps the stronger draft-reply.ts
     // guarantee that even a ledger-insert failure after the provider
     // answered, or a grounding-check crash, stores the template row with
-    // source tagged honestly.
+    // source tagged honestly. (Scope of the guarantee, round 53: it covers
+    // AI-path failures. Inside a sweep pair's transaction a genuine PG
+    // error aborts the whole pair — template insert included — and the
+    // sweep's per-pair catch re-offers it next pass.)
     try {
       const data = await inferPhrasing<z.infer<typeof statementOutput>>(
         gateway,
@@ -534,20 +537,47 @@ export async function sweepClientStatements(): Promise<void> {
         // the raw pool — so it neither depends on the pool login's
         // BYPASSRLS nor can a compute bug read or write another firm's
         // rows mid-sweep; RLS walls the whole pair. The model call rides
-        // inside the pair's transaction, exactly as the in-transaction
-        // brief route already does — one background connection held per
-        // pair, never the shared request pool posture NO_CONTEXT protects.
-        // The ledger write is untouched: the gateway appends on the raw
-        // pool by design, so spend survives a rolled-back pair.
-        await runRequestContext({ bypass: false, firmId: pair.firmId }, () =>
-          generateClientStatement(
-            pair.firmId,
-            pair.clientPartyId,
-            monthStart,
-            gateway,
-          ),
-        );
-        generated += 1;
+        // inside the pair's transaction — one background connection held
+        // per pair, never the shared request pool posture NO_CONTEXT
+        // protects. The ledger write is untouched: the gateway appends on
+        // the raw pool by design, so spend survives a rolled-back pair.
+        // Per-pair poison isolation (the brief sweep's rule, review R53-1):
+        // the context wrap adds real per-pair throw sources (role setup,
+        // RLS, a mid-pair DB error aborting the transaction), and one
+        // broken pair must not abort the rest of the pass — or, worse,
+        // skip the delivery step below.
+        try {
+          await runRequestContext(
+            { bypass: false, firmId: pair.firmId },
+            async () => {
+              // The transaction is idle while the provider phrases, so pin
+              // a finite in-transaction ceiling (review R53-2): a
+              // deployment default SHORTER than provider latency would
+              // kill every pair mid-call (spend kept, row lost, pair
+              // re-offered — a burn loop bounded only by the firm budget),
+              // and no default at all would let a hung provider hold the
+              // connection forever. SET LOCAL dies with the transaction.
+              await getDb().execute(
+                sql`SET LOCAL idle_in_transaction_session_timeout = '900s'`,
+              );
+              return generateClientStatement(
+                pair.firmId,
+                pair.clientPartyId,
+                monthStart,
+                gateway,
+              );
+            },
+          );
+          generated += 1;
+        } catch (err) {
+          logger.warn(
+            {
+              firmId: pair.firmId,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            "client statement sweep: pair failed",
+          );
+        }
       }
       logger.info(
         { generated, monthStart },

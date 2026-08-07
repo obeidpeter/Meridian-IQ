@@ -530,17 +530,36 @@ test("sweep-posture generation is walled by RLS: a mismatched firm pin fails clo
   // firm-keyed policies, so generation dies at the engagement gate — a
   // cross-firm bug in a sweep loop can no longer read or mint another
   // firm's rows, with or without the pool login's BYPASSRLS.
+  // The row a wrong-pin write would actually touch is the ARGUMENT firm's
+  // live-month row (every write path stores values.firmId = the argument),
+  // so pin that row untouched — not a structurally impossible
+  // overrideFirmId row (review R53-4).
+  const liveMonthRow = () =>
+    getDb()
+      .select()
+      .from(clerkAdvisoryBriefsTable)
+      .where(
+        and(
+          eq(clerkAdvisoryBriefsTable.firmId, firmId),
+          eq(clerkAdvisoryBriefsTable.clientPartyId, clientId),
+          eq(clerkAdvisoryBriefsTable.monthStart, lagosMonthStart(0)),
+        ),
+      )
+      .limit(1);
+  const [before] = await liveMonthRow();
+  assert.ok(before, "earlier tests minted the live-month brief");
   await assert.rejects(
     runRequestContext({ bypass: false, firmId: overrideFirmId }, () =>
       generateAdvisoryBrief(firmId, clientId, null, null),
     ),
     /No such client engagement/,
   );
-  const strangers = await getDb()
-    .select()
-    .from(clerkAdvisoryBriefsTable)
-    .where(eq(clerkAdvisoryBriefsTable.firmId, overrideFirmId));
-  assert.equal(strangers.length, 0, "nothing was minted under the wrong pin");
+  const [after] = await liveMonthRow();
+  assert.equal(
+    after.updatedAt.getTime(),
+    before.updatedAt.getTime(),
+    "the wrong pin refreshed nothing",
+  );
 
   // The correctly pinned context — the sweep's actual posture — generates.
   const row = await runRequestContext({ bypass: false, firmId }, () =>
