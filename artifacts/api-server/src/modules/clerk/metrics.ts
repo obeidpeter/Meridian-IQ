@@ -637,6 +637,10 @@ export async function getClerkMetrics(
   // than a misleading partial figure. ONE spelling of the pricing rule — the
   // headline cost, platform spend and per-purpose economics all price through
   // this closure, so a rounding or rate-handling tweak lands everywhere.
+  // Known approximation (round 45): embed_memory prompt tokens are priced at
+  // the COMPLETION input rate, which overstates embedding cost (~10x at
+  // current list prices). Acceptable while embedding spend is a sliver of
+  // the total; add a per-purpose rate if it ever becomes material.
   const inputRate = Number(process.env.CLERK_COST_PER_1M_INPUT_USD);
   const outputRate = Number(process.env.CLERK_COST_PER_1M_OUTPUT_USD);
   const usdEstimate = (pt: number, ct: number): number | null =>

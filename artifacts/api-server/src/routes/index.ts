@@ -81,6 +81,8 @@ import "../modules/filings/register";
 import "../modules/wht/register";
 // Registers the onboarding checklist refresh sweep with the pipeline worker.
 import "../modules/onboarding/register";
+// Registers the firm-memory embedding indexer sweep with the pipeline worker.
+import "../modules/clerk/memory";
 import "../modules/messaging/retention";
 
 const router: IRouter = Router();

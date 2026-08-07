@@ -175,7 +175,12 @@ export type ClerkPurpose =
   // document-kind catalogue so notices stop misrouting down the invoice
   // lane. Abstain and every failure mode fall back to the invoice lane —
   // today's behavior exactly; triage can never drop a document.
-  | "triage_document";
+  | "triage_document"
+  // pgvector firm memory (round 45): embed a firm's own Clerk records for
+  // semantic retrieval. NOT a completion — the vectors flow through the
+  // dedicated embedWithLedger lane below (same kill switch, budget and
+  // ledger discipline), never through infer().
+  | "embed_memory";
 
 export interface InferParams<T> {
   purpose: ClerkPurpose;
@@ -411,5 +416,116 @@ export async function inferPhrasing<T>(
     return result.ok ? result.data : null;
   } catch {
     return null;
+  }
+}
+
+// ---- Embeddings lane (pgvector firm memory, round 45) -----------------------
+// An embedding call IS a model call, so the whole gateway discipline applies
+// — kill switch, budget backstop, append-only ledger on the raw pool, fail
+// closed — but it is NOT a completion: there is no JSON to parse and no
+// schema to validate, so it gets its own lane instead of contorting infer().
+// The embedder is injected exactly like the completion provider (production
+// impl in provider.ts embedderOrNull; tests inject a fake), and the ledger
+// row charges the firm budget through the SAME prompt_tokens column every
+// budget/economics surface already sums — embedding spend is never free.
+
+export interface MemoryEmbedder {
+  model: string;
+  embed(
+    texts: string[],
+  ): Promise<{ vectors: number[][]; promptTokens: number | null }>;
+}
+
+export interface EmbedParams {
+  // Always firm-attributed: firm memory has no operator/platform lane, so
+  // unlike infer() the firm id (and therefore the budget) is mandatory.
+  firmId: string;
+  texts: string[];
+  promptVersion: string;
+  // The width every vector must have — the pgvector column's typmod
+  // (EMBEDDING_DIMS in @workspace/db); a mis-sized response is discarded
+  // whole, never stored truncated or padded.
+  dims: number;
+}
+
+export type EmbedResult =
+  | { ok: true; vectors: number[][]; model: string }
+  | { ok: false; message: string };
+
+export async function embedWithLedger(
+  embedder: MemoryEmbedder,
+  params: EmbedParams,
+): Promise<EmbedResult> {
+  await assertClerkEnabled();
+  // Budget backstop, the infer() rule: a typed failure with NO ledger row —
+  // no call left the platform, no tokens were spent.
+  const usage = await firmClerkUsage(params.firmId);
+  if (usage.usedTokens >= usage.budgetTokens) {
+    return {
+      ok: false,
+      message:
+        "The firm's monthly Clerk token allowance is exhausted; the embedding call was not made.",
+    };
+  }
+  const startedAt = Date.now();
+  const base = {
+    caseId: null,
+    firmId: params.firmId,
+    purpose: "embed_memory" as const,
+    model: embedder.model,
+    promptVersion: params.promptVersion,
+    // One hash over the batch — auditable without retaining a second copy
+    // of the embedded text in the ledger (the infer() inputRef rule).
+    // JSON-encoded so batch boundaries hash distinctly.
+    inputRef: sha256(JSON.stringify(params.texts)),
+  };
+  const ledger = (
+    row: Omit<typeof clerkInferenceCallsTable.$inferInsert, keyof typeof base>,
+  ) => db.insert(clerkInferenceCallsTable).values({ ...base, ...row });
+  try {
+    const { vectors, promptTokens } = await embedder.embed(params.texts);
+    if (
+      vectors.length !== params.texts.length ||
+      // Length AND finiteness: a NaN/Infinity entry would survive a length
+      // check only to break the pgvector literal at insert — discarding
+      // here keeps a poisoned response from failing the store step
+      // downstream (and re-charging the firm on every retry).
+      vectors.some(
+        (v) => v.length !== params.dims || v.some((n) => !Number.isFinite(n)),
+      )
+    ) {
+      await ledger({
+        outputJson: null,
+        schemaValid: false,
+        outcome: "invalid_discarded",
+        errorText: `Embedding shape mismatch: ${vectors.length} vector(s), expected ${params.texts.length} of ${params.dims} dims`,
+        latencyMs: Date.now() - startedAt,
+        promptTokens,
+      });
+      return {
+        ok: false,
+        message: "Embedding response had the wrong shape and was discarded",
+      };
+    }
+    await ledger({
+      // Never the vectors: the ledger records spend and outcome, the memory
+      // table is the one home of the embeddings themselves.
+      outputJson: { vectors: vectors.length },
+      schemaValid: true,
+      outcome: "ok",
+      latencyMs: Date.now() - startedAt,
+      promptTokens,
+    });
+    return { ok: true, vectors, model: embedder.model };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await ledger({
+      outputJson: null,
+      schemaValid: false,
+      outcome: "error",
+      errorText: message.slice(0, 2000),
+      latencyMs: Date.now() - startedAt,
+    });
+    return { ok: false, message: "Embedding call failed" };
   }
 }

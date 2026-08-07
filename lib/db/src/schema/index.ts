@@ -25,3 +25,4 @@ export * from "./obligations.ts";
 export * from "./filings.ts";
 export * from "./wht.ts";
 export * from "./onboarding.ts";
+export * from "./memory.ts";

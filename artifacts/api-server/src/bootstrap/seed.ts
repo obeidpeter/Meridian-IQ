@@ -71,6 +71,11 @@ const FLAGS: {
   // beside clerk_actions — dark means the reconcile step simply never
   // assembles.
   { key: "clerk_auto_reconcile", enabled: false, releaseTag: "R3", description: "Clerk auto-reconcile: HUMAN-APPROVED plan runs may accept high-confidence RECEIVABLE statement matches (threshold 0.9, capped 20, layered on the reconciliation flag) through the ordinary acceptProposal path; never rides recurring policies" },
+  // Round 45 (pgvector firm memory): the semantic index over a firm's own
+  // Clerk records. Spends firm tokens on embeddings (the indexer sweep), so
+  // it rides its own opt-in beside clerk_ai — dark means the indexer never
+  // runs and retrieval surfaces fall back to today's exact-key behavior.
+  { key: "clerk_memory", enabled: false, releaseTag: "R3", description: "Clerk firm memory: pgvector semantic index over the firm's own Clerk records (embedding indexer + retrieval; layered on clerk_ai). Requires the pgvector extension; spends firm tokens on embeddings" },
 ];
 
 const SCHEMA_VERSIONS: { version: number; description: string }[] = [
