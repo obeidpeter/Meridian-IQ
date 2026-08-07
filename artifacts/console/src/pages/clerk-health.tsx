@@ -446,11 +446,11 @@ function PhrasingEvalCard() {
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          Replays fixed synthetic fact packs through the live digest, chaser,
-          client-statement and VAT-note prompts (one call per fixture) and
-          scores the output deterministically: number grounding, required
-          identifiers, forbidden content — including prompt-injection
-          fixtures on every surface with an outsider-influenced fact slot.
+          Replays fixed synthetic fact packs through every phrased
+          surface&apos;s live prompts (one call per fixture) and scores the
+          output deterministically: number grounding, required identifiers,
+          forbidden content — including prompt-injection fixtures on every
+          surface with an outsider-influenced fact slot.
         </p>
         {!newest ? (
           <p
@@ -2734,9 +2734,10 @@ export function HealthPanel() {
           <CardContent className="space-y-2">
             <p className="text-xs text-muted-foreground">
               Every phrased surface (digest, statements, chasers, replies,
-              cover notes) is checked against its own facts: a numeral the
-              facts never stated forfeits the phrasing and the deterministic
-              template answers instead. Zero is the healthy reading.
+              cover notes, advisory briefs) is checked against its own facts:
+              a numeral the facts never stated forfeits the phrasing and the
+              deterministic template answers instead. Zero is the healthy
+              reading.
             </p>
             <p className="text-sm" data-testid="text-grounding-violations">
               {metrics.grounding.violations === 0

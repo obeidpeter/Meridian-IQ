@@ -15,6 +15,7 @@ import { STATEMENT_PHRASING } from "./client-statement.ts";
 import { VAT_NOTE_PHRASING } from "./vat-note.ts";
 import { EXPLAIN_PHRASING } from "./explain.ts";
 import { RESPONSE_PHRASING } from "./response-letter.ts";
+import { BRIEF_PHRASING } from "./advisory-brief.ts";
 import { REPLY_PHRASING } from "../desk/draft-reply.ts";
 import { DomainError } from "../errors.ts";
 import {
@@ -157,6 +158,29 @@ const RESPONDERS: Record<
           `We remain available to provide any further information required before ${due}.`,
         ].join("\n\n"),
       });
+    },
+  },
+  advisory_brief: {
+    pack: BRIEF_PHRASING,
+    respond(_fixture, user) {
+      // A compliant note: leads with the overdue total from the prompt's
+      // own fact line, or says "on track" plainly (numeral-free) when it
+      // is zero — exactly the triage BRIEF_SYSTEM demands.
+      const overdue = user.match(
+        /Statutory items overdue \(returns \+ notices\): (\d+)/,
+      )?.[1];
+      if (!overdue) throw new Error("unknown advisory brief eval prompt");
+      return JSON.stringify(
+        Number(overdue) > 0
+          ? {
+              headline: `${overdue} statutory items need your attention first.`,
+              note: `Start with the ${overdue} overdue statutory items — clearing them stops the position worsening. The rest of the month's numbers are set out below.`,
+            }
+          : {
+              headline: "You're on track this month: nothing statutory is overdue.",
+              note: "Nothing needs urgent attention right now. Keep an eye on the next return due date and keep capturing paper as it arrives.",
+            },
+      );
     },
   },
   weekly_digest: {
@@ -322,6 +346,7 @@ test("a clean run scores full marks and stores the run", async () => {
     escalation_reply: REPLY_PHRASING.promptVersion,
     failure_explanation: EXPLAIN_PHRASING.promptVersion,
     obligation_response: RESPONSE_PHRASING.promptVersion,
+    advisory_brief: BRIEF_PHRASING.promptVersion,
   });
 
   // Every prompt is the production assembly for its surface.
@@ -341,6 +366,8 @@ test("a clean run scores full marks and stores the run", async () => {
     } else if (p.schemaName === "response_letter") {
       assert.match(user, /-----BEGIN NOTICE-----/);
       assert.match(user, /Period covered by the enclosed figures: /);
+    } else if (p.schemaName === "advisory_brief") {
+      assert.match(user, /Advisory facts for the client this month:/);
     } else {
       assert.equal(p.schemaName, "payment_chaser");
       assert.match(user, /Invoice number: INV-78\d\d/);

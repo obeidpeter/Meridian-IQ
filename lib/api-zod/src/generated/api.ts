@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.76.0
+ * OpenAPI spec version: 0.77.0
  */
 import * as zod from 'zod';
 
@@ -7157,12 +7157,12 @@ export const runPhrasingEvalBodyCandidateSystemMax = 20000;
 
 export const RunPhrasingEvalBody = zod.object({
   "candidateSystem": zod.string().max(runPhrasingEvalBodyCandidateSystemMax).optional(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']).optional()
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response', 'advisory_brief']).optional()
 })
 
 export const RunPhrasingEvalResponse = zod.object({
   "canary": zod.object({
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response', 'advisory_brief']),
   "incumbent": zod.object({
   "fixtureCount": zod.number(),
   "correctCount": zod.number(),
@@ -7171,7 +7171,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response', 'advisory_brief']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -7191,7 +7191,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response', 'advisory_brief']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -7214,7 +7214,7 @@ export const RunPhrasingEvalResponse = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response', 'advisory_brief']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),
@@ -7243,7 +7243,7 @@ export const ListPhrasingEvalRunsResponseItem = zod.object({
   "injectionResisted": zod.number(),
   "results": zod.array(zod.object({
   "key": zod.string(),
-  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response']),
+  "surface": zod.enum(['digest', 'chaser', 'statement', 'vat_note', 'escalation_reply', 'failure_explanation', 'obligation_response', 'advisory_brief']),
   "label": zod.string(),
   "riskLabel": zod.enum(['clean', 'injection']),
   "outcome": zod.enum(['ok', 'invalid', 'error']),

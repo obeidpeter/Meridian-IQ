@@ -401,6 +401,22 @@ export function buildBriefUser(sections: AdvisoryBriefSection[]): string {
   ].join("\n");
 }
 
+// The phrasing-eval seam (round 52): MUST reference the same objects
+// production sends (cover-note.ts rule) so the eval replays the exact
+// prompt bytes generateAdvisoryBrief assembles.
+export const BRIEF_PHRASING = {
+  surface: "advisory_brief" as const,
+  promptVersion: BRIEF_PROMPT_VERSION,
+  system: BRIEF_SYSTEM,
+  schemaName: "advisory_brief",
+  jsonSchema: briefJsonSchema,
+  validator: briefOutput,
+  buildUser: (sections: AdvisoryBriefSection[]): string =>
+    buildBriefUser(sections),
+  joinOutput: (data: z.infer<typeof briefOutput>): string =>
+    `${data.headline}\n${data.note}`,
+};
+
 async function assertEngagedClient(
   firmId: string,
   clientPartyId: string,
@@ -516,7 +532,7 @@ export async function generateAdvisoryBrief(
         promptVersion: BRIEF_PROMPT_VERSION,
         system: BRIEF_SYSTEM,
         user,
-        schemaName: "advisory_brief",
+        schemaName: BRIEF_PHRASING.schemaName,
         jsonSchema: briefJsonSchema,
         validator: briefOutput,
         inputForHash: `${firmId}:${clientPartyId}:${monthStart}:${JSON.stringify(sections)}`,
@@ -526,7 +542,7 @@ export async function generateAdvisoryBrief(
         (await ensureGrounded(
           "advisory_brief",
           firmId,
-          `${data.headline}\n${data.note}`,
+          BRIEF_PHRASING.joinOutput(data),
           user,
         ))
       ) {

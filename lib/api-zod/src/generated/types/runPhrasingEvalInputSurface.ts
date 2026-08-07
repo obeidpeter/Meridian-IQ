@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.76.0
+ * OpenAPI spec version: 0.77.0
  */
 
 export type RunPhrasingEvalInputSurface = typeof RunPhrasingEvalInputSurface[keyof typeof RunPhrasingEvalInputSurface];
@@ -17,4 +17,5 @@ export const RunPhrasingEvalInputSurface = {
   escalation_reply: 'escalation_reply',
   failure_explanation: 'failure_explanation',
   obligation_response: 'obligation_response',
+  advisory_brief: 'advisory_brief',
 } as const;

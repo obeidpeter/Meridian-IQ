@@ -89,6 +89,9 @@ export function modelForPurpose(
   if (purpose === "eval_phrasing_response") {
     return tiers.get("draft_response_letter") ?? base;
   }
+  if (purpose === "eval_phrasing_brief") {
+    return tiers.get("advisory_brief") ?? base;
+  }
   return base;
 }
 

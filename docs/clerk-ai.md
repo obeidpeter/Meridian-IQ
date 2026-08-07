@@ -1740,18 +1740,23 @@ shared computation as the corresponding chart.
   surfaces, which shipped every prompt change blind until round 18. Fixed
   synthetic fact packs replay through the BYTE-IDENTICAL production prompt
   builders — `DIGEST_PHRASING` / `CHASER_PHRASING` / `STATEMENT_PHRASING`
-  / `VAT_NOTE_PHRASING` / `REPLY_PHRASING` / `EXPLAIN_PHRASING` (rounds
-  19-20 grew the corpus to the client statement, VAT cover note,
-  escalation reply and failure explanation — every phrased surface where
-  a regression touches money, filings or a client conversation), each
+  / `VAT_NOTE_PHRASING` / `REPLY_PHRASING` / `EXPLAIN_PHRASING` /
+  `RESPONSE_PHRASING` / `BRIEF_PHRASING` (rounds 19-20 grew the corpus to
+  the client statement, VAT cover note, escalation reply and failure
+  explanation; the Response Desk added the obligation response letter and
+  round 52 the advisory brief — every phrased surface where a regression
+  touches money, filings or a client conversation), each
   surface's system prompt, version, schema, validator and user-prompt
   assembly exported as one descriptor — via the gateway, one purpose PER
   SURFACE so each slice of the corpus rides the model tier its production
   surface actually uses. Every surface with an outsider-influenced fact
   slot carries an injection fixture riding it (the chaser's buyer name,
   the VAT note's client legal names, the escalation reply's fenced client
-  message, the explainer's rail-returned error code); the statement's
-  facts are all platform-computed, so its fixtures are clean-only. The
+  message, the explainer's rail-returned error code); the statement's and
+  the advisory brief's facts are all platform-computed (even the brief's
+  Phase 3 delta strings are app-built), so their fixtures are clean-only
+  — the brief's fixtures exercise triage emphasis, the quiet "on track"
+  month and grounding over the continuity delta facts. The
   lane is SELF-ENFORCING since round 20: an opt-in nightly sweep run
   (`clerk_auto_phrasing_eval` flag, once per UTC day, the eval-growth
   discipline) plus a quality-drop watch (`phrasing-watch.ts`) that

@@ -4,6 +4,7 @@ import {
   clerkPhrasingEvalRunsTable,
   type ClerkPhrasingEvalRun,
   type PhrasingEvalFixtureResult,
+  type ProtectedFact,
 } from "@workspace/db";
 import { appendAudit } from "../audit/audit";
 import {
@@ -20,6 +21,7 @@ import { STATEMENT_PHRASING } from "./client-statement";
 import { VAT_NOTE_PHRASING } from "./vat-note";
 import { EXPLAIN_PHRASING } from "./explain";
 import { RESPONSE_PHRASING } from "./response-letter";
+import { BRIEF_PHRASING, type AdvisoryBriefSection } from "./advisory-brief";
 import { REPLY_PHRASING } from "../desk/draft-reply";
 
 // Phrasing eval lane (round-18 idea #1). Extraction and intent
@@ -59,6 +61,7 @@ const PHRASING_PACKS = [
   REPLY_PHRASING,
   EXPLAIN_PHRASING,
   RESPONSE_PHRASING,
+  BRIEF_PHRASING,
 ] as const;
 
 export type PhrasingSurface = (typeof PHRASING_PACKS)[number]["surface"];
@@ -137,6 +140,27 @@ function digestFacts(overrides: Partial<DigestFacts>): DigestFacts {
   };
   return { ...base, ...overrides };
 }
+
+// Advisory-brief fixture builders (round 52): the corpus freezes fact
+// snapshots in computeAdvisoryBriefSections' shape. `text` is the
+// deterministic section line the CLIENT sees, not part of the phrasing
+// input — buildBriefUser assembles titles + fact lines only — so the
+// fixtures leave it empty rather than pretend a display string matters
+// to the prompt bytes.
+const briefFact = (
+  key: string,
+  label: string,
+  kind: ProtectedFact["kind"],
+  value: string,
+  unit?: string,
+): ProtectedFact => ({ key, label, kind, value, ...(unit ? { unit } : {}) });
+
+const briefSection = (
+  key: AdvisoryBriefSection["key"],
+  title: string,
+  sourceReport: string,
+  facts: ProtectedFact[],
+): AdvisoryBriefSection => ({ key, title, text: "", facts, sourceReport });
 
 const NO_THREATS = {
   // Both boundaries on "sue": without the leading one the pattern would
@@ -828,6 +852,152 @@ export const PHRASING_FIXTURES: PhrasingFixture[] = [
     },
     mustInclude: ["LIRS/DM/88-2026"],
   },
+  // ---- Advisory brief (round 52). Like the statement, no fact slot on
+  // this surface carries outsider text (labels are hard-coded, values are
+  // platform-computed numbers/dates/enums — even the Phase 3 delta strings
+  // are app-built), so the fixtures are clean-only: grounding, triage
+  // emphasis and vacuity are what can regress. Sections are hand-frozen
+  // snapshots of computeAdvisoryBriefSections' shape.
+  {
+    key: "brief-overdue",
+    surface: "advisory_brief",
+    label: "brief: overdue statutory items must lead",
+    riskLabel: "clean",
+    facts: [
+      briefSection("statutory", "Statutory position", "Filings register & compliance calendar", [
+        briefFact("statutory_overdue_total", "Statutory items overdue (returns + notices)", "count", "2"),
+        briefFact("statutory_due_soon_total", "Statutory items due within 7 days (returns + notices)", "count", "1"),
+        briefFact("unfiled", "Returns not yet filed", "count", "2"),
+        briefFact("filings_due_soon", "Returns due within 7 days", "count", "1"),
+        briefFact("filings_overdue", "Returns overdue", "count", "1"),
+        // next_due is MIN(due) over unfiled rows — the overdue May return.
+        briefFact("next_due", "Next return due", "date", "2026-06-21"),
+        briefFact("obligations_open", "Open authority notices", "count", "1"),
+        briefFact("obligations_overdue", "Notices past response deadline", "count", "1"),
+        // unfiled >= 1 GUARANTEES sample facts in production; soonest first.
+        briefFact("open_filing_1", "VAT 2026-05", "text", "due 2026-06-21 (upcoming)"),
+        briefFact("open_filing_2", "VAT 2026-06", "text", "due 2026-07-21 (prepared)"),
+      ]),
+      briefSection("penalties", "Penalty exposure", "Penalty exposure report", [
+        briefFact("overdue_invoices", "Invoices past the window", "count", "3"),
+        briefFact("exposure_floor", "Exposure floor (small band)", "amount", "30000", "NGN"),
+      ]),
+      briefSection("vat", "VAT — June 2026", "VAT position", [
+        briefFact("output_vat", "Output VAT", "amount", "90000.00", "NGN"),
+        briefFact("input_vat", "Input VAT", "amount", "15000.00", "NGN"),
+        briefFact("input_vat_verified", "Input VAT (verified bills)", "amount", "10000.00", "NGN"),
+        briefFact("net_vat", "Net VAT position", "amount", "75000.00", "NGN"),
+        briefFact("vat_due", "Return due", "date", "2026-07-21"),
+      ]),
+      briefSection("money", "Money position", "Cash-flow outlook & chase list", [
+        briefFact("expected_total", "Expected inflows outstanding", "amount", "820000.00", "NGN"),
+        briefFact("overdue_expected", "Past expected date", "amount", "250000.00", "NGN"),
+        briefFact("overdue_expected_count", "Invoices past expected date", "count", "2"),
+        briefFact("chase_count", "Worth chasing now", "count", "2"),
+      ]),
+      briefSection("hygiene", "Books hygiene", "Month-end close advisories", [
+        briefFact("hygiene_attention_total", "Books items needing attention", "count", "3"),
+        briefFact("unbilled_patterns", "Expected-but-unbilled income patterns", "count", "1"),
+        briefFact("missing_bills", "Recurring bills not yet received", "count", "1"),
+        briefFact("unmatched_credits", "Bank credits with no matching invoice", "count", "1"),
+        briefFact("unmatched_credits_total", "Unmatched credits total", "amount", "45000.00", "NGN"),
+        briefFact("unmatched_collections", "Collection-rail payments unmatched", "count", "0"),
+      ]),
+    ],
+    requireAnyNumeral: true,
+  },
+  {
+    key: "brief-ontrack",
+    surface: "advisory_brief",
+    label: "brief: quiet month says so plainly",
+    riskLabel: "clean",
+    // No numeral requirement: an all-clear note may legitimately carry no
+    // figures — grounding is the measured property (any numeral the model
+    // does state must be one of these facts).
+    facts: [
+      briefSection("statutory", "Statutory position", "Filings register & compliance calendar", [
+        briefFact("statutory_overdue_total", "Statutory items overdue (returns + notices)", "count", "0"),
+        briefFact("statutory_due_soon_total", "Statutory items due within 7 days (returns + notices)", "count", "0"),
+        briefFact("unfiled", "Returns not yet filed", "count", "0"),
+        briefFact("filings_due_soon", "Returns due within 7 days", "count", "0"),
+        briefFact("filings_overdue", "Returns overdue", "count", "0"),
+        briefFact("obligations_open", "Open authority notices", "count", "0"),
+        briefFact("obligations_overdue", "Notices past response deadline", "count", "0"),
+      ]),
+      briefSection("penalties", "Penalty exposure", "Penalty exposure report", [
+        briefFact("overdue_invoices", "Invoices past the window", "count", "0"),
+        briefFact("exposure_floor", "Exposure floor (small band)", "amount", "0", "NGN"),
+      ]),
+      briefSection("vat", "VAT — June 2026", "VAT position", [
+        briefFact("output_vat", "Output VAT", "amount", "45000.00", "NGN"),
+        briefFact("input_vat", "Input VAT", "amount", "9000.00", "NGN"),
+        briefFact("input_vat_verified", "Input VAT (verified bills)", "amount", "6000.00", "NGN"),
+        briefFact("net_vat", "Net VAT position", "amount", "36000.00", "NGN"),
+        briefFact("vat_due", "Return due", "date", "2026-07-21"),
+      ]),
+      briefSection("money", "Money position", "Cash-flow outlook & chase list", [
+        briefFact("expected_total", "Expected inflows outstanding", "count", "0"),
+      ]),
+      briefSection("hygiene", "Books hygiene", "Month-end close advisories", [
+        briefFact("hygiene_attention_total", "Books items needing attention", "count", "0"),
+        briefFact("unbilled_patterns", "Expected-but-unbilled income patterns", "count", "0"),
+        briefFact("missing_bills", "Recurring bills not yet received", "count", "0"),
+        briefFact("unmatched_credits", "Bank credits with no matching invoice", "count", "0"),
+        briefFact("unmatched_collections", "Collection-rail payments unmatched", "count", "0"),
+      ]),
+    ],
+  },
+  {
+    key: "brief-changes",
+    surface: "advisory_brief",
+    label: "brief: continuity month with delta facts",
+    riskLabel: "clean",
+    facts: [
+      briefSection("statutory", "Statutory position", "Filings register & compliance calendar", [
+        briefFact("statutory_overdue_total", "Statutory items overdue (returns + notices)", "count", "1"),
+        briefFact("statutory_due_soon_total", "Statutory items due within 7 days (returns + notices)", "count", "0"),
+        briefFact("unfiled", "Returns not yet filed", "count", "1"),
+        briefFact("filings_due_soon", "Returns due within 7 days", "count", "0"),
+        briefFact("filings_overdue", "Returns overdue", "count", "1"),
+        briefFact("next_due", "Next return due", "date", "2026-06-21"),
+        briefFact("obligations_open", "Open authority notices", "count", "0"),
+        briefFact("obligations_overdue", "Notices past response deadline", "count", "0"),
+        briefFact("open_filing_1", "VAT 2026-05", "text", "due 2026-06-21 (upcoming)"),
+      ]),
+      briefSection("penalties", "Penalty exposure", "Penalty exposure report", [
+        briefFact("overdue_invoices", "Invoices past the window", "count", "0"),
+        briefFact("exposure_floor", "Exposure floor (small band)", "amount", "0", "NGN"),
+      ]),
+      briefSection("vat", "VAT — June 2026", "VAT position", [
+        briefFact("output_vat", "Output VAT", "amount", "60000.00", "NGN"),
+        briefFact("input_vat", "Input VAT", "amount", "12000.00", "NGN"),
+        briefFact("input_vat_verified", "Input VAT (verified bills)", "amount", "8000.00", "NGN"),
+        briefFact("net_vat", "Net VAT position", "amount", "48000.00", "NGN"),
+        briefFact("vat_due", "Return due", "date", "2026-07-21"),
+      ]),
+      briefSection("money", "Money position", "Cash-flow outlook & chase list", [
+        briefFact("expected_total", "Expected inflows outstanding", "amount", "300000.00", "NGN"),
+        briefFact("overdue_expected", "Past expected date", "amount", "0.00", "NGN"),
+        briefFact("overdue_expected_count", "Invoices past expected date", "count", "0"),
+        briefFact("chase_count", "Worth chasing now", "count", "1"),
+      ]),
+      briefSection("hygiene", "Books hygiene", "Month-end close advisories", [
+        briefFact("hygiene_attention_total", "Books items needing attention", "count", "2"),
+        briefFact("unbilled_patterns", "Expected-but-unbilled income patterns", "count", "1"),
+        briefFact("missing_bills", "Recurring bills not yet received", "count", "1"),
+        briefFact("unmatched_credits", "Bank credits with no matching invoice", "count", "0"),
+        briefFact("unmatched_collections", "Collection-rail payments unmatched", "count", "0"),
+      ]),
+      briefSection("changes", "Since last month's brief", "Previous month's advisory brief", [
+        briefFact("improved_count", "Tracked positions improved", "count", "2"),
+        briefFact("worsened_count", "Tracked positions worsened", "count", "1"),
+        briefFact("delta_statutory_overdue_total", "Statutory items overdue", "text", "1 now (was 3)"),
+        briefFact("delta_unfiled", "Returns not yet filed", "text", "1 now (was 2)"),
+        briefFact("delta_hygiene_attention_total", "Books items needing attention", "text", "2 now (was 1)"),
+      ]),
+    ],
+    requireAnyNumeral: true,
+  },
 ];
 
 // Derived from the registry: surface -> its own pack.
@@ -852,6 +1022,7 @@ const SURFACE_PURPOSE: Record<PhrasingSurface, ClerkPurpose> = {
   escalation_reply: "eval_phrasing_reply",
   failure_explanation: "eval_phrasing_explain",
   obligation_response: "eval_phrasing_response",
+  advisory_brief: "eval_phrasing_brief",
 };
 
 // Deterministic scoring, exported for tests. `failures` names every rule the
