@@ -97,7 +97,9 @@
 
 .mi-metric-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* --mi-metric-count is set inline by MetricStrip from its child count, so
+     strips with three or five metrics still get one column per metric. */
+  grid-template-columns: repeat(var(--mi-metric-count, 4), minmax(0, 1fr));
   overflow: hidden;
   border: 1px solid var(--mi-line);
   border-radius: var(--mi-radius);
@@ -521,15 +523,23 @@
   font-size: 0.6875rem;
 }
 
-@media (max-width: 900px) {
+/* Two-column range only: below 641px the single-column block owns borders,
+   and these higher-specificity rules must not leak into it. */
+@media (min-width: 641px) and (max-width: 900px) {
   .mi-metric-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .mi-metric:nth-child(2) {
+  .mi-metric:nth-child(even) {
     border-right: 0;
   }
-  .mi-metric:nth-child(-n + 2) {
+  .mi-metric {
     border-bottom: 1px solid var(--mi-line);
+  }
+  /* No bottom border on the last row: the last metric, plus its left-hand
+     neighbour when they share a row (second-to-last at an odd position). */
+  .mi-metric:last-child,
+  .mi-metric:nth-last-child(2):nth-child(odd) {
+    border-bottom: 0;
   }
 }
 

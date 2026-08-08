@@ -163,7 +163,7 @@ const RAIL_CONFIG_ENTRIES: {
     key: "sweep_token",
     label: "Sweep trigger token",
     env: "SWEEP_TOKEN",
-    note: "Open when unset: setting it closes /api/internal/sweep behind the secret.",
+    note: "Fail-closed: /api/internal/sweep answers 404 until this is set; the scheduler must present it as x-op-token.",
   },
   {
     key: "totp_required_roles",

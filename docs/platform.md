@@ -44,9 +44,12 @@ The AI-assistant side lives in `docs/clerk-ai.md`.
 - Production identity is Clerk (the identity provider — unrelated to the AI
   assistant of the same name); a first-party email+password cookie session
   (`modules/auth/session.ts`) serves the web apps and demo. Session tokens
-  are stateless HMACs carrying `userId.expiry.epoch`; `users.session_epoch`
-  is bumped on password change AND password reset to revoke outstanding
-  tokens. Recovery (IDN-02) is operator-assisted: `POST /password-resets`
+  are stateless HMACs carrying `userId.expiry.epoch`, signed by an env
+  key-ring — `SESSION_SIGNING_KEYS` (`id:secret,…`, newest first, enables
+  rotation) or a single `SESSION_SECRET` — and production REFUSES TO BOOT
+  without one (the DB-persisted secret is a dev-only fallback);
+  `users.session_epoch` is bumped on password change AND password reset to
+  revoke outstanding tokens. Recovery (IDN-02) is operator-assisted: `POST /password-resets`
   (`identity.write`) issues a single-use 24h link (sha256-only stored,
   migration 0012 keeps the table bypass-only) redeemed at the public
   `/auth/reset-password`; the landing page's "Forgot your password?" routes
@@ -88,7 +91,13 @@ The AI-assistant side lives in `docs/clerk-ai.md`.
   via the raw pool (a 429 can't erase its own evidence): GENERAL 600/min per
   principal (IP fallback) and MODEL 60/min across every model-calling route;
   `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_MODEL_PER_MIN` tune, 0 disables
-  a class; PUBLIC_PATHS exempt (they carry their own gates).
+  a class; PUBLIC_PATHS exempt (they carry their own gates). Login is
+  additionally capped per IP in aggregate (30 attempts / 15 min,
+  `LOGIN_IP_ATTEMPT_MAX`) BEFORE any account lookup, and the scrypt
+  password KDF runs behind a bounded semaphore (`PASSWORD_KDF_CONCURRENCY`
+  / `PASSWORD_KDF_MAX_QUEUE`, 503 on overflow) so a login flood cannot
+  exhaust CPU; `/api/internal/sweep` carries its own per-IP limiter
+  (`SWEEP_RATE_LIMIT_PER_MIN`).
 
 ## Background work (the pipeline worker)
 

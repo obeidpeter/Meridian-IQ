@@ -1,8 +1,11 @@
 import {
+  Children,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
@@ -67,6 +70,9 @@ export function MetricStrip({
     <section
       className={joinClasses("mi-metric-strip", className)}
       aria-label={label}
+      style={
+        { "--mi-metric-count": Children.count(children) } as CSSProperties
+      }
     >
       {children}
     </section>
@@ -273,10 +279,13 @@ export function CommandMenu({
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const open = controlledOpen ?? internalOpen;
 
-  const setOpen = (nextOpen: boolean) => {
-    if (controlledOpen === undefined) setInternalOpen(nextOpen);
-    onOpenChange?.(nextOpen);
-  };
+  const setOpen = useCallback(
+    (nextOpen: boolean) => {
+      if (controlledOpen === undefined) setInternalOpen(nextOpen);
+      onOpenChange?.(nextOpen);
+    },
+    [controlledOpen, onOpenChange],
+  );
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -288,17 +297,17 @@ export function CommandMenu({
     );
   }, [items, query]);
 
-  const show = () => {
+  const show = useCallback(() => {
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
     setOpen(true);
-  };
+  }, [setOpen]);
 
-  const hide = () => {
+  const hide = useCallback(() => {
     setOpen(false);
     setQuery("");
     setActiveIndex(0);
     window.setTimeout(() => restoreFocusRef.current?.focus(), 0);
-  };
+  }, [setOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -310,7 +319,7 @@ export function CommandMenu({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  });
+  }, [open, hide, show]);
 
   useEffect(() => {
     if (!open) return;

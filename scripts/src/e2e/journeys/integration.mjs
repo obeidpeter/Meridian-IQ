@@ -40,6 +40,7 @@ async function journeyIntegrationLayer(
   check,
   hookReceiver,
   paymentWebhookToken,
+  sweepToken,
 ) {
   // The reset journey leaves an ops session in the browser context (API
   // login); drop it so the portal shows the demo buttons again.
@@ -104,8 +105,10 @@ async function journeyIntegrationLayer(
   // driven after registration: a fresh draft on the seeded, consented demo
   // client's party pair (proven stampable by the credit-note journey), then
   // validate → submit → the pipeline stamps it. GET /api/internal/sweep runs
-  // one full worker pass synchronously (public wake-up trigger), so the poll
-  // forces drain + webhook fan-out/dispatch instead of waiting out timers.
+  // one full worker pass synchronously, so the poll forces drain + webhook
+  // fan-out/dispatch instead of waiting out timers. The trigger is fail-closed
+  // behind SWEEP_TOKEN (run.mjs sets it on the api-server env and threads the
+  // same value in here), presented as x-op-token like the other machine rails.
   // The pattern MUST be a demo-CLIENT invoice (supplier = the seeded client
   // party): since the payables round the book also carries BILLS — captured
   // vendor invoices whose supplier is NOT an engaged client — and copying a
@@ -152,7 +155,9 @@ async function journeyIntegrationLayer(
     });
   await pollUntil(
     async () => {
-      await page.request.get(BASE + "/api/internal/sweep");
+      await page.request.get(BASE + "/api/internal/sweep", {
+        headers: { "x-op-token": sweepToken },
+      });
       return Boolean(findDelivery());
     },
     { tries: 15, delayMs: 1000, page },

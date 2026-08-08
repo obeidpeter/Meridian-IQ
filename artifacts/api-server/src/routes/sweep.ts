@@ -29,7 +29,7 @@ async function limitSweep(
   next();
 }
 
-// Public wake-up trigger for the Autoscale deployment (SME-08 reliability).
+// Wake-up trigger for the Autoscale deployment (SME-08 reliability).
 //
 // Autoscale scales to zero when idle, which freezes the in-process worker
 // timers (outbox drain, reconciliation, and the 1-minute compliance sweep that
@@ -40,7 +40,9 @@ async function limitSweep(
 // pass of the timer work synchronously so it completes before the instance can
 // be suspended again.
 //
-// Deliberately unauthenticated and safe to expose:
+// Fail-closed behind SWEEP_TOKEN (lib/op-token.ts): unset means the trigger
+// 404s, and the scheduler must present the secret as x-op-token. Even with
+// the token, the handler is built to be safe against over-calling:
 // - Idempotent: pre-breach alerts guard with preBreachAlertAt, breach marking
 //   is a status transition, batch collection uses onConflictDoNothing, and the
 //   outbox drain claims with FOR UPDATE SKIP LOCKED.
@@ -48,11 +50,8 @@ async function limitSweep(
 //   returns no tenant data — only booleans saying which passes ran. This is
 //   the same work the server already runs on its own timers.
 // - Hammering it is a cheap no-op: module-level guards collapse concurrent
-//   triggers, and a pass with nothing due does no writes.
-//
-// A deployment that still wants the trigger closed sets SWEEP_TOKEN (opt-in;
-// unset keeps today's open behaviour so existing schedulers are unaffected) —
-// see lib/op-token.ts.
+//   triggers, a pass with nothing due does no writes, and limitSweep bounds
+//   the per-IP call rate on top.
 //
 // GET (not POST) so any dumb pinger/cron can call it, and it stays exempt from
 // the cookie-CSRF guard by construction. The path is listed in

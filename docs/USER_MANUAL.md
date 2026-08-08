@@ -1861,8 +1861,17 @@ unreachable (404), not broken:
 | `RATE_LIMIT_GENERAL_PER_MIN` / `RATE_LIMIT_MODEL_PER_MIN`       | Per-principal rate limits (defaults 600 / 60; `0` disables a class).                                                                                       |
 | `CLERK_MODEL`, `CLERK_MODEL_TIERS`, `CLERK_FIRM_MONTHLY_TOKENS` | Clerk's model, optional per-purpose model routing, and the default per-firm monthly token allowance.                                                       |
 | `METRICS_TOKEN` / `SWEEP_TOKEN`                                 | Optional metrics secret and required sweep secret. Send either only in the `x-op-token` header; the sweep endpoint is unavailable when its token is unset. |
+| `CLERK_SECRET_KEY` (+ `CLERK_AUTHORIZED_PARTIES`)               | The hosted identity provider (unrelated to the AI assistant). In production the key without authorized parties (or `REPLIT_DOMAINS`) disables it.          |
 | `FRAME_ANCESTORS`                                               | (Build-time, web apps) the clickjacking `frame-ancestors` allowlist.                                                                                       |
 | `ENABLE_DEV_AUTH`                                               | The `x-mock-*` dev identity shim — a full auth bypass, honoured only outside production.                                                                   |
+
+Security and capacity knobs (not feature switches): `SESSION_SIGNING_KEYS`
+(`id:secret,…` key-ring; or a single `SESSION_SECRET`) signs session cookies
+— **production refuses to start without one**; `PASSWORD_KDF_CONCURRENCY` /
+`PASSWORD_KDF_MAX_QUEUE` bound concurrent password hashing (503 on
+overflow); `LOGIN_IP_ATTEMPT_MAX` caps aggregate login attempts per IP per
+15 minutes (default 30); `SWEEP_RATE_LIMIT_PER_MIN` bounds sweep-trigger
+calls per IP.
 
 ### The frontends
 
