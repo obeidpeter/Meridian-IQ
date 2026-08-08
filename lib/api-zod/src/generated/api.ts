@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.77.0
+ * OpenAPI spec version: 0.78.0
  */
 import * as zod from 'zod';
 
@@ -2240,19 +2240,203 @@ export const GetRailConfigResponse = zod.array(GetRailConfigResponseItem)
 
 
 /**
- * @summary Live measurements of the roadmap release-gate metrics
+ * @summary Live evidence and activation measurements for roadmap release gates
  */
 export const GetGateMetricsResponse = zod.object({
   "subscribedFirms": zod.number(),
   "activeClients": zod.number(),
+  "namedProspects": zod.number(),
+  "onboardingProspects": zod.number(),
+  "convertedProspects": zod.number(),
+  "prospectConversionRate": zod.number().nullable(),
   "stampedInvoices": zod.number(),
   "medianHoursToStamp": zod.number().nullable(),
   "failedInvoicesTotal": zod.number(),
   "failureSelfResolutionRate": zod.number().nullable(),
   "creditObservableCount": zod.number(),
   "confirmationsLast30d": zod.number(),
+  "confirmationRequests30d": zod.number(),
+  "confirmationResponses30d": zod.number(),
+  "buyerResponseRate30d": zod.number().nullable(),
+  "anchorBuyers": zod.number(),
   "reconciliationAcceptRate": zod.number().nullable(),
-  "openEscalations": zod.number()
+  "openEscalations": zod.number(),
+  "featureFlagsEnabled": zod.number(),
+  "featureFlagsTotal": zod.number(),
+  "releaseReadiness": zod.array(zod.object({
+  "releaseTag": zod.string(),
+  "enabledFlags": zod.number(),
+  "totalFlags": zod.number(),
+  "status": zod.enum(['ready', 'partial', 'dark'])
+}))
+})
+
+
+/**
+ * @summary Anchor-buyer pilot readiness and participation evidence
+ */
+export const listBuyerPilotsResponsePilotsItemReadinessScoreMin = 0;
+export const listBuyerPilotsResponsePilotsItemReadinessScoreMax = 100;
+
+
+
+export const ListBuyerPilotsResponse = zod.object({
+  "generatedAt": zod.coerce.date(),
+  "anchorBuyers": zod.number(),
+  "activeBuyers30d": zod.number(),
+  "pendingConfirmations": zod.number(),
+  "confirmationResponses30d": zod.number(),
+  "buyerResponseRate30d": zod.number().nullable(),
+  "medianResponseHours": zod.number().nullable(),
+  "pilots": zod.array(zod.object({
+  "buyerPartyId": zod.string(),
+  "buyerName": zod.string(),
+  "tinValidated": zod.boolean(),
+  "supplierCount": zod.number(),
+  "invoiceCount": zod.number(),
+  "stampedCount": zod.number(),
+  "pendingConfirmations": zod.number(),
+  "responseCount": zod.number(),
+  "confirmedCount": zod.number(),
+  "responseRate": zod.number().nullable(),
+  "paidSignals": zod.number(),
+  "medianResponseHours": zod.number().nullable(),
+  "lastActivityAt": zod.coerce.date().nullable(),
+  "readinessScore": zod.number().min(listBuyerPilotsResponsePilotsItemReadinessScoreMin).max(listBuyerPilotsResponsePilotsItemReadinessScoreMax),
+  "stage": zod.enum(['discovery', 'invited', 'live', 'proving', 'scale_ready']),
+  "blockers": zod.array(zod.string())
+}))
+})
+
+
+/**
+ * @summary Cross-domain compliance exceptions ordered by operational SLA
+ */
+export const getComplianceOperationsResponseItemsMax = 80;
+
+
+
+export const GetComplianceOperationsResponse = zod.object({
+  "generatedAt": zod.coerce.date(),
+  "openItems": zod.number(),
+  "overdueItems": zod.number(),
+  "dueSoonItems": zod.number(),
+  "highPriorityItems": zod.number(),
+  "unassignedCases": zod.number(),
+  "items": zod.array(zod.object({
+  "key": zod.string(),
+  "entityId": zod.string(),
+  "kind": zod.enum(['operator_case', 'filing', 'obligation', 'buyer_confirmation']),
+  "title": zod.string(),
+  "firmName": zod.string().nullable(),
+  "clientName": zod.string().nullable(),
+  "priority": zod.enum(['low', 'medium', 'high']),
+  "status": zod.string(),
+  "dueAt": zod.coerce.date(),
+  "ageHours": zod.number(),
+  "slaState": zod.enum(['healthy', 'due_soon', 'overdue']),
+  "detail": zod.string(),
+  "actionHref": zod.string()
+})).max(getComplianceOperationsResponseItemsMax)
+})
+
+
+/**
+ * @summary Connector reliability and data-quality signals across tenants
+ */
+export const GetIntegrationReliabilityResponse = zod.object({
+  "generatedAt": zod.coerce.date(),
+  "totalConnections": zod.number(),
+  "healthyConnections": zod.number(),
+  "attentionConnections": zod.number(),
+  "failedRuns24h": zod.number(),
+  "invalidRows30d": zod.number(),
+  "deadLetters": zod.number(),
+  "openRails": zod.number(),
+  "connections": zod.array(zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['erp', 'bank_feed']),
+  "connectorKey": zod.string(),
+  "firmName": zod.string(),
+  "clientName": zod.string(),
+  "connectionStatus": zod.string(),
+  "operationalState": zod.enum(['healthy', 'stale', 'incident']),
+  "lastSyncAt": zod.coerce.date().nullable(),
+  "latestRunStatus": zod.string().nullable(),
+  "recordsRead": zod.number(),
+  "recordsWritten": zod.number(),
+  "errorCount": zod.number(),
+  "issue": zod.string().nullable()
+})),
+  "qualitySignals": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "count": zod.number(),
+  "severity": zod.enum(['info', 'warning', 'critical']),
+  "detail": zod.string(),
+  "actionHref": zod.string()
+}))
+})
+
+
+/**
+ * @summary Indexed compliance evidence and enterprise trust controls
+ */
+export const getEvidenceVaultResponseItemsMax = 80;
+
+
+
+export const GetEvidenceVaultResponse = zod.object({
+  "generatedAt": zod.coerce.date(),
+  "totalArtifacts": zod.number(),
+  "artifactsLast30d": zod.number(),
+  "auditChainValid": zod.boolean(),
+  "auditEventCount": zod.number(),
+  "retentionCoverageRate": zod.number().nullable(),
+  "legalHolds": zod.number(),
+  "items": zod.array(zod.object({
+  "key": zod.string(),
+  "entityId": zod.string(),
+  "kind": zod.enum(['invoice_stamp', 'filing_acknowledgement', 'obligation_resolution', 'settlement_signal']),
+  "title": zod.string(),
+  "firmName": zod.string(),
+  "clientName": zod.string(),
+  "reference": zod.string().nullable(),
+  "recordedAt": zod.coerce.date(),
+  "integrity": zod.enum(['tamper_evident', 'append_only', 'recorded']),
+  "actionHref": zod.string()
+})).max(getEvidenceVaultResponseItemsMax),
+  "trustControls": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['healthy', 'watch', 'critical']),
+  "detail": zod.string()
+}))
+})
+
+
+/**
+ * @summary Clerk operational readiness, guardrails and human-review posture
+ */
+export const GetClerkAssuranceResponse = zod.object({
+  "generatedAt": zod.coerce.date(),
+  "calls30d": zod.number(),
+  "pendingReview": zod.number(),
+  "decidedCases30d": zod.number(),
+  "invalidRate30d": zod.number(),
+  "errorRate30d": zod.number(),
+  "latencyP95Ms": zod.number().nullable(),
+  "tokens30d": zod.number(),
+  "latestEvalAccuracy": zod.number().nullable(),
+  "latestInjectionResistance": zod.number().nullable(),
+  "groundingViolations30d": zod.number(),
+  "guardrails": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "status": zod.enum(['healthy', 'watch', 'critical']),
+  "detail": zod.string(),
+  "actionHref": zod.string()
+}))
 })
 
 

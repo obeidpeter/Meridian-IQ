@@ -3,12 +3,18 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.77.0
+ * OpenAPI spec version: 0.78.0
  */
+import type { ReleaseReadiness } from './releaseReadiness';
 
 export interface GateMetrics {
   subscribedFirms: number;
   activeClients: number;
+  namedProspects: number;
+  onboardingProspects: number;
+  convertedProspects: number;
+  /** @nullable */
+  prospectConversionRate: number | null;
   stampedInvoices: number;
   /** @nullable */
   medianHoursToStamp: number | null;
@@ -17,7 +23,15 @@ export interface GateMetrics {
   failureSelfResolutionRate: number | null;
   creditObservableCount: number;
   confirmationsLast30d: number;
+  confirmationRequests30d: number;
+  confirmationResponses30d: number;
+  /** @nullable */
+  buyerResponseRate30d: number | null;
+  anchorBuyers: number;
   /** @nullable */
   reconciliationAcceptRate: number | null;
   openEscalations: number;
+  featureFlagsEnabled: number;
+  featureFlagsTotal: number;
+  releaseReadiness: ReleaseReadiness[];
 }

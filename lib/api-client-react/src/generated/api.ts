@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * MeridianIQ platform API — data spine, compliance rails and consent.
- * OpenAPI spec version: 0.77.0
+ * OpenAPI spec version: 0.78.0
  */
 import {
   useMutation,
@@ -59,6 +59,7 @@ import type {
   BuyerExposure,
   BuyerInvoice,
   BuyerPaymentBehaviour,
+  BuyerPilotWorkspace,
   BuyerSupplier,
   BuyerSupplierDetail,
   CacCheckInput,
@@ -78,6 +79,7 @@ import type {
   ClaimUpdateInput,
   ClerkActionPolicy,
   ClerkAdoptionReport,
+  ClerkAssuranceWorkspace,
   ClerkBatchView,
   ClerkBulkApproveInput,
   ClerkBulkApproveReport,
@@ -103,6 +105,7 @@ import type {
   CollectionAccount,
   ComplianceCalendar,
   ComplianceDeadline,
+  ComplianceOperationsWorkspace,
   CompliancePackNotifyInput,
   ComplianceScorecard,
   ConfirmStaffEmailInput,
@@ -160,6 +163,7 @@ import type {
   EscalationReplyDraft,
   EvalFixtureReport,
   EvalFixtureSummary,
+  EvidenceVaultWorkspace,
   ExecuteActionInput,
   ExecuteActionResult,
   ExplainFailureInput,
@@ -232,6 +236,7 @@ import type {
   HealthAlert,
   HealthStatus,
   IdentifierCheck,
+  IntegrationReliabilityWorkspace,
   IntentEvalOutcome,
   IntentEvalRun,
   IntentFixtureSummary,
@@ -7772,7 +7777,7 @@ export const getGetGateMetricsUrl = () => {
 }
 
 /**
- * @summary Live measurements of the roadmap release-gate metrics
+ * @summary Live evidence and activation measurements for roadmap release gates
  */
 export const getGateMetrics = async ( options?: RequestInit): Promise<GateMetrics> => {
 
@@ -7819,7 +7824,7 @@ export type GetGateMetricsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Live measurements of the roadmap release-gate metrics
+ * @summary Live evidence and activation measurements for roadmap release gates
  */
 
 export function useGetGateMetrics<TData = Awaited<ReturnType<typeof getGateMetrics>>, TError = ErrorType<unknown>>(
@@ -7828,6 +7833,391 @@ export function useGetGateMetrics<TData = Awaited<ReturnType<typeof getGateMetri
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetGateMetricsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListBuyerPilotsUrl = () => {
+
+
+
+
+  return `/api/operator/buyer-pilots`
+}
+
+/**
+ * @summary Anchor-buyer pilot readiness and participation evidence
+ */
+export const listBuyerPilots = async ( options?: RequestInit): Promise<BuyerPilotWorkspace> => {
+
+  return customFetch<BuyerPilotWorkspace>(getListBuyerPilotsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBuyerPilotsQueryKey = () => {
+    return [
+    `/api/operator/buyer-pilots`
+    ] as const;
+    }
+
+
+export const getListBuyerPilotsQueryOptions = <TData = Awaited<ReturnType<typeof listBuyerPilots>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBuyerPilots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBuyerPilotsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBuyerPilots>>> = ({ signal }) => listBuyerPilots({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBuyerPilots>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBuyerPilotsQueryResult = NonNullable<Awaited<ReturnType<typeof listBuyerPilots>>>
+export type ListBuyerPilotsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Anchor-buyer pilot readiness and participation evidence
+ */
+
+export function useListBuyerPilots<TData = Awaited<ReturnType<typeof listBuyerPilots>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBuyerPilots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBuyerPilotsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetComplianceOperationsUrl = () => {
+
+
+
+
+  return `/api/operator/compliance-operations`
+}
+
+/**
+ * @summary Cross-domain compliance exceptions ordered by operational SLA
+ */
+export const getComplianceOperations = async ( options?: RequestInit): Promise<ComplianceOperationsWorkspace> => {
+
+  return customFetch<ComplianceOperationsWorkspace>(getGetComplianceOperationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetComplianceOperationsQueryKey = () => {
+    return [
+    `/api/operator/compliance-operations`
+    ] as const;
+    }
+
+
+export const getGetComplianceOperationsQueryOptions = <TData = Awaited<ReturnType<typeof getComplianceOperations>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceOperations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetComplianceOperationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getComplianceOperations>>> = ({ signal }) => getComplianceOperations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getComplianceOperations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetComplianceOperationsQueryResult = NonNullable<Awaited<ReturnType<typeof getComplianceOperations>>>
+export type GetComplianceOperationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Cross-domain compliance exceptions ordered by operational SLA
+ */
+
+export function useGetComplianceOperations<TData = Awaited<ReturnType<typeof getComplianceOperations>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getComplianceOperations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetComplianceOperationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetIntegrationReliabilityUrl = () => {
+
+
+
+
+  return `/api/operator/integration-reliability`
+}
+
+/**
+ * @summary Connector reliability and data-quality signals across tenants
+ */
+export const getIntegrationReliability = async ( options?: RequestInit): Promise<IntegrationReliabilityWorkspace> => {
+
+  return customFetch<IntegrationReliabilityWorkspace>(getGetIntegrationReliabilityUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetIntegrationReliabilityQueryKey = () => {
+    return [
+    `/api/operator/integration-reliability`
+    ] as const;
+    }
+
+
+export const getGetIntegrationReliabilityQueryOptions = <TData = Awaited<ReturnType<typeof getIntegrationReliability>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIntegrationReliability>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetIntegrationReliabilityQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getIntegrationReliability>>> = ({ signal }) => getIntegrationReliability({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getIntegrationReliability>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetIntegrationReliabilityQueryResult = NonNullable<Awaited<ReturnType<typeof getIntegrationReliability>>>
+export type GetIntegrationReliabilityQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Connector reliability and data-quality signals across tenants
+ */
+
+export function useGetIntegrationReliability<TData = Awaited<ReturnType<typeof getIntegrationReliability>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIntegrationReliability>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetIntegrationReliabilityQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetEvidenceVaultUrl = () => {
+
+
+
+
+  return `/api/operator/evidence-vault`
+}
+
+/**
+ * @summary Indexed compliance evidence and enterprise trust controls
+ */
+export const getEvidenceVault = async ( options?: RequestInit): Promise<EvidenceVaultWorkspace> => {
+
+  return customFetch<EvidenceVaultWorkspace>(getGetEvidenceVaultUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEvidenceVaultQueryKey = () => {
+    return [
+    `/api/operator/evidence-vault`
+    ] as const;
+    }
+
+
+export const getGetEvidenceVaultQueryOptions = <TData = Awaited<ReturnType<typeof getEvidenceVault>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEvidenceVault>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEvidenceVaultQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEvidenceVault>>> = ({ signal }) => getEvidenceVault({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEvidenceVault>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEvidenceVaultQueryResult = NonNullable<Awaited<ReturnType<typeof getEvidenceVault>>>
+export type GetEvidenceVaultQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Indexed compliance evidence and enterprise trust controls
+ */
+
+export function useGetEvidenceVault<TData = Awaited<ReturnType<typeof getEvidenceVault>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEvidenceVault>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEvidenceVaultQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetClerkAssuranceUrl = () => {
+
+
+
+
+  return `/api/operator/clerk-assurance`
+}
+
+/**
+ * @summary Clerk operational readiness, guardrails and human-review posture
+ */
+export const getClerkAssurance = async ( options?: RequestInit): Promise<ClerkAssuranceWorkspace> => {
+
+  return customFetch<ClerkAssuranceWorkspace>(getGetClerkAssuranceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClerkAssuranceQueryKey = () => {
+    return [
+    `/api/operator/clerk-assurance`
+    ] as const;
+    }
+
+
+export const getGetClerkAssuranceQueryOptions = <TData = Awaited<ReturnType<typeof getClerkAssurance>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkAssurance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClerkAssuranceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClerkAssurance>>> = ({ signal }) => getClerkAssurance({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClerkAssurance>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClerkAssuranceQueryResult = NonNullable<Awaited<ReturnType<typeof getClerkAssurance>>>
+export type GetClerkAssuranceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Clerk operational readiness, guardrails and human-review posture
+ */
+
+export function useGetClerkAssurance<TData = Awaited<ReturnType<typeof getClerkAssurance>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClerkAssurance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClerkAssuranceQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
