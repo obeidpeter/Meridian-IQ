@@ -195,6 +195,7 @@ async function journeyPasswordRoundTrip(page, BASE, check) {
   });
   const oldPw = await page.request.post(BASE + "/api/auth/login", {
     data: { email: "demo.staff@meridianiq.example", password: DEMO_PASSWORD },
+    headers: CSRF,
   });
   check("old password rejected after change", oldPw.status() === 401);
   // restore
@@ -252,10 +253,12 @@ async function journeyPasswordReset(page, BASE, check) {
 
   const oldPw = await page.request.post(BASE + "/api/auth/login", {
     data: { email: STAFF, password: DEMO_PASSWORD },
+    headers: CSRF,
   });
   check("old password rejected after reset", oldPw.status() === 401);
   const newPw = await page.request.post(BASE + "/api/auth/login", {
     data: { email: STAFF, password: "reset-temp-pw-1" },
+    headers: CSRF,
   });
   check("new password signs in after reset", newPw.status() === 200);
 

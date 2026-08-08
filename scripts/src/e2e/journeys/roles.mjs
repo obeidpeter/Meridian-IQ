@@ -2,7 +2,7 @@
 // firm-admin advisory tooling, the auditor's read-only boundary, the SME
 // owner's consent round trip, and the buyer TOTP enrolment lifecycle.
 import { totpStep, totpCodeAtStep } from "../totp.mjs";
-import { DEMO_PASSWORD, signIn, signOutFromApp } from "./shared.mjs";
+import { CSRF, DEMO_PASSWORD, signIn, signOutFromApp } from "./shared.mjs";
 import { checkPageAccessibility } from "../accessibility.mjs";
 
 // ---------- public landing + portal ----------
@@ -66,6 +66,7 @@ async function journeyPortalAuth(page, BASE, check) {
   for (let i = 0; i < 6; i++) {
     const r = await page.request.post(BASE + "/api/auth/login", {
       data: { email: "probe@nowhere.example", password: "x".repeat(8) },
+      headers: CSRF,
     });
     if (r.status() === 429) {
       throttled = true;
