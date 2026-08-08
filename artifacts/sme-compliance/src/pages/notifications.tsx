@@ -56,7 +56,7 @@ export function Notifications() {
       },
     },
   });
-  const items = query.data?.items ?? [];
+  const items = useMemo(() => query.data?.items ?? [], [query.data?.items]);
   const filtered = useMemo(() => {
     if (view === "unread") return items.filter((item) => !item.read);
     if (view === "email")

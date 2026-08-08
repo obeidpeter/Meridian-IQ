@@ -450,27 +450,6 @@ function PortfolioSection({
   );
 }
 
-function PortfolioAnchorRow({ groups }: { groups: PortfolioGroup[] }) {
-  return (
-    <nav
-      aria-label="Portfolio sections"
-      className="flex flex-wrap gap-2"
-      data-testid="portfolio-anchor-row"
-    >
-      {groups.map((g) => (
-        <a
-          key={g.id}
-          href={`#${g.id}`}
-          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 dark:border-slate-800 dark:bg-card dark:text-muted-foreground dark:hover:text-foreground"
-          data-testid={`anchor-${g.id}`}
-        >
-          {g.label}
-        </a>
-      ))}
-    </nav>
-  );
-}
-
 // "2026-06-01" -> "June 2026" for the VAT pack month picker.
 const PACK_MONTHS = [
   "January",

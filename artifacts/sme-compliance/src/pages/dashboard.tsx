@@ -102,58 +102,6 @@ import {
   summaryPillClasses,
 } from "@/lib/format";
 
-function StatCard({
-  label,
-  value,
-  sub,
-  icon: Icon,
-  href,
-  danger,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  icon: typeof Clock;
-  href: string;
-  danger?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-    >
-      <Card
-        className={`h-full transition-colors hover:border-primary/40 ${
-          danger ? "border-destructive/35 bg-destructive/5" : ""
-        }`}
-      >
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-muted-foreground">{label}</p>
-              <p className="mt-2 text-2xl font-extrabold tabular-nums">
-                {value}
-              </p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {sub}
-              </p>
-            </div>
-            <span
-              className={`grid size-10 shrink-0 place-items-center rounded-md ${
-                danger
-                  ? "bg-red-50 text-destructive dark:bg-red-950/50"
-                  : "bg-teal-50 text-primary dark:bg-teal-950/50"
-              }`}
-            >
-              <Icon className="size-5" aria-hidden="true" />
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}
-
 function AgingBucketRow({
   label,
   bucket,
