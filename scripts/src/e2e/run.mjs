@@ -35,6 +35,7 @@ const BASE = `http://127.0.0.1:${WEB_PORT}`;
 // threaded into runJourneys, so the server and the journeys cannot drift.
 const PAYMENT_WEBHOOK_TOKEN = "e2e-pay-hook";
 const COLLECTION_WEBHOOK_TOKEN = "e2e-collect-hook";
+const SWEEP_TOKEN = "e2e-sweep-trigger";
 
 const REQUIRED = [
   "artifacts/api-server/dist/index.mjs",
@@ -118,6 +119,10 @@ const api = spawn(
       // rail 404s while unset). The collections journey presents this token as
       // x-op-token to settle a receivable through a collection account.
       COLLECTION_WEBHOOK_TOKEN,
+      // Lights /api/internal/sweep (fail-closed: 404 while unset). The
+      // integration journey polls the sweep to drain the pipeline + webhook
+      // outbox synchronously, presenting this token as x-op-token.
+      SWEEP_TOKEN,
     },
     stdio: ["ignore", "pipe", "pipe"],
   },
@@ -147,6 +152,7 @@ try {
     hookReceiver,
     paymentWebhookToken: PAYMENT_WEBHOOK_TOKEN,
     collectionWebhookToken: COLLECTION_WEBHOOK_TOKEN,
+    sweepToken: SWEEP_TOKEN,
   });
 
   const failed = results.filter((r) => !r.ok);

@@ -49,7 +49,7 @@ export async function runJourneys(
   page,
   BASE,
   check,
-  { hookReceiver, paymentWebhookToken, collectionWebhookToken } = {},
+  { hookReceiver, paymentWebhookToken, collectionWebhookToken, sweepToken } = {},
 ) {
   await journeyPortalAuth(page, BASE, check);
   await journeyOperatorDesk(page, BASE, check);
@@ -80,5 +80,5 @@ export async function runJourneys(
   await journeyStaffCreditNoteAndWorkflow(page, BASE, check);
   await journeyPasswordRoundTrip(page, BASE, check);
   await journeyPasswordReset(page, BASE, check);
-  await journeyIntegrationLayer(page, BASE, check, hookReceiver, paymentWebhookToken);
+  await journeyIntegrationLayer(page, BASE, check, hookReceiver, paymentWebhookToken, sweepToken);
 }

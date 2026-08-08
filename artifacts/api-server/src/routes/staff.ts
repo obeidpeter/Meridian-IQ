@@ -308,7 +308,6 @@ router.post(
       row.emailVerifyExpiresAt.getTime() > Date.now() &&
       digestEquals(presentedHash, row.emailVerifyCodeHash);
     if (!valid) {
-      // Raw-pool counter: survives this 400's transaction rollback.
       res.status(400).json({ error: "Invalid or expired code" });
       return;
     }

@@ -70,8 +70,11 @@ router.post("/inbound/email", async (req, res): Promise<void> => {
   // whether or not the sender resolves to a client — a caller who has the
   // shared secret still must not be able to enumerate which email addresses
   // belong to platform users. Commit the deduplicated outbox row BEFORE the
-  // 202; a worker then performs resolution and capture. An unresolvable
-  // sender is audit-logged inside processInboundEmail and creates nothing.
+  // 202 — true only while this route stays in NO_CONTEXT_ROUTES, where the
+  // enqueue commits on the pool instead of riding a buffered request
+  // transaction. A worker then performs resolution and capture; an
+  // unresolvable sender is audit-logged inside processInboundEmail and
+  // creates nothing.
   await enqueueInboundEmail(parsed.data);
   res.status(202).json({ received: parsed.data.attachments.length });
 });
@@ -126,7 +129,9 @@ router.post("/inbound/whatsapp", async (req, res): Promise<void> => {
   // on the request shape, never on whether the phone number resolves — a
   // caller holding the shared secret still must not be able to enumerate
   // which numbers belong to platform clients. Commit the durable queue item
-  // before the 202; a worker performs resolution and capture afterward.
+  // before the 202 (like the email rail, this depends on the route staying
+  // in NO_CONTEXT_ROUTES); a worker performs resolution and capture
+  // afterward.
   await enqueueInboundWhatsApp(parsed.data);
   res.status(202).json({
     received: parsed.data.attachments.length || 1,

@@ -477,7 +477,7 @@ function SignInPanel() {
               maxLength={32}
               aria-invalid={totpError ? true : undefined}
               aria-describedby={totpError ? "totp-error" : "totp-help"}
-              className="h-12 border-slate-300 bg-white px-4 font-mono text-lg shadow-sm"
+              className="h-12 border-slate-300 bg-white px-4 font-mono text-lg tracking-[0.25em] shadow-sm"
               data-testid="input-totp-code"
             />
             <p id="totp-help" className="text-xs text-slate-500">
